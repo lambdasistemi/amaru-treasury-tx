@@ -59,6 +59,7 @@ library
     Amaru.Treasury.Redeemer
     Amaru.Treasury.Scope
     Amaru.Treasury.Summary
+    Amaru.Treasury.Validity
 
   build-depends:
     , aeson
@@ -71,6 +72,7 @@ library
     , ouroboros-network:api
     , plutus-core
     , text
+    , time
 
 executable amaru-treasury-tx
   import:           warnings

@@ -56,6 +56,7 @@ library
     Amaru.Treasury.Backend.N2C
     Amaru.Treasury.Constants
     Amaru.Treasury.Metadata
+    Amaru.Treasury.PParams
     Amaru.Treasury.Redeemer
     Amaru.Treasury.Scope
     Amaru.Treasury.Summary
@@ -68,6 +69,8 @@ library
     , async
     , base                   <5
     , bytestring
+    , cardano-ledger-conway
+    , cardano-ledger-core
     , cardano-node-clients
     , containers
     , ouroboros-network:api
@@ -94,6 +97,7 @@ test-suite unit-tests
   default-language:   GHC2021
   other-modules:
     Amaru.Treasury.MetadataSpec
+    Amaru.Treasury.PParamsSpec
     Amaru.Treasury.RedeemerSpec
     Amaru.Treasury.ScopeSpec
     Amaru.Treasury.SummarySpec

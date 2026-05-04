@@ -61,6 +61,7 @@ library
     Amaru.Treasury.Redeemer
     Amaru.Treasury.Scope
     Amaru.Treasury.Summary
+    Amaru.Treasury.Tx.Withdraw
     Amaru.Treasury.UtxoSelect
     Amaru.Treasury.Validity
 
@@ -74,10 +75,12 @@ library
     , cardano-crypto-class
     , cardano-ledger-conway
     , cardano-ledger-core
+    , cardano-ledger-mary
     , cardano-node-clients
     , containers
     , ouroboros-network:api
     , plutus-core
+    , plutus-tx
     , text
     , time
 
@@ -105,17 +108,26 @@ test-suite unit-tests
     Amaru.Treasury.RedeemerSpec
     Amaru.Treasury.ScopeSpec
     Amaru.Treasury.SummarySpec
+    Amaru.Treasury.Tx.WithdrawSpec
     Amaru.Treasury.UtxoSelectSpec
     PlaceholderSpec
 
   build-depends:
     , amaru-treasury-tx
-    , base               <5
+    , base                    <5
     , base16-bytestring
     , bytestring
+    , cardano-crypto-class
+    , cardano-ledger-allegra
+    , cardano-ledger-api
+    , cardano-ledger-conway
+    , cardano-ledger-core
+    , cardano-node-clients
+    , cardano-slotting
     , containers
     , hspec
     , hspec-discover
+    , microlens
     , plutus-core
     , QuickCheck
     , serialise

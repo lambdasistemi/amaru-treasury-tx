@@ -29,10 +29,15 @@ module Amaru.Treasury.Redeemer
 
       -- * Permissions / withdraw redeemer
     , emptyListRedeemer
+
+      -- * 'ToData'-compatible wrapper
+    , RawPlutusData (..)
     ) where
 
 import Data.ByteString (ByteString)
 import PlutusCore.Data (Data (..))
+import PlutusTx.Builtins.Internal (BuiltinData (..))
+import PlutusTx.IsData.Class (ToData (..))
 
 {- | @Constr 3 [Map [(B policy, Map [(B asset, I qty)])]]@.
 
@@ -86,3 +91,13 @@ list is the canonical form chosen by the bash recipes.
 -}
 emptyListRedeemer :: Data
 emptyListRedeemer = List []
+
+{- | A 'PlutusCore.Data.Data' value with a 'ToData'
+instance. Use to pass our hand-written redeemers to the
+@cardano-node-clients@ TxBuild combinators that expect
+@ToData r => r@.
+-}
+newtype RawPlutusData = RawPlutusData {getRawPlutusData :: Data}
+
+instance ToData RawPlutusData where
+    toBuiltinData (RawPlutusData d) = BuiltinData d

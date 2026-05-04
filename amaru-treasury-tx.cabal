@@ -111,6 +111,7 @@ test-suite unit-tests
     Amaru.Treasury.ScopeSpec
     Amaru.Treasury.SummarySpec
     Amaru.Treasury.Tx.DisburseSpec
+    Amaru.Treasury.Tx.SwapSpec
     Amaru.Treasury.Tx.WithdrawSpec
     Amaru.Treasury.UtxoSelectSpec
     PlaceholderSpec
@@ -125,6 +126,7 @@ test-suite unit-tests
     , cardano-ledger-api
     , cardano-ledger-conway
     , cardano-ledger-core
+    , cardano-ledger-mary
     , cardano-node-clients
     , cardano-slotting
     , containers

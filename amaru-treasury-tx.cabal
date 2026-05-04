@@ -37,6 +37,7 @@ common warnings
     FlexibleContexts
     GADTs
     ImportQualifiedPost
+    LambdaCase
     OverloadedStrings
     PatternSynonyms
     ScopedTypeVariables
@@ -49,8 +50,14 @@ library
   import:           warnings
   hs-source-dirs:   lib
   default-language: GHC2021
-  exposed-modules:  Amaru.Treasury
-  build-depends:    base <5
+  exposed-modules:
+    Amaru.Treasury
+    Amaru.Treasury.Scope
+
+  build-depends:
+    , aeson
+    , base   <5
+    , text
 
 executable amaru-treasury-tx
   import:           warnings
@@ -69,6 +76,10 @@ test-suite unit-tests
   hs-source-dirs:     test/unit
   main-is:            Spec.hs
   default-language:   GHC2021
+  other-modules:
+    Amaru.Treasury.ScopeSpec
+    PlaceholderSpec
+
   build-depends:
     , amaru-treasury-tx
     , base               <5

@@ -16,5 +16,50 @@ jobs:
     runs-on: nixos
     steps:
       - uses: actions/checkout@v4
-      - name: Stub CI
-        run: echo "CI stub — will be replaced by real CI"
+      - uses: cachix/cachix-action@v15
+        with:
+          name: paolino
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Build all derivations
+        run: >-
+          nix build --quiet
+          .#checks.x86_64-linux.build
+          .#checks.x86_64-linux.unit
+          .#checks.x86_64-linux.golden
+          .#checks.x86_64-linux.lint
+
+  unit:
+    needs: build-gate
+    runs-on: nixos
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/cachix-action@v15
+        with:
+          name: paolino
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Unit tests
+        run: nix run --quiet .#unit
+
+  golden:
+    needs: build-gate
+    runs-on: nixos
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/cachix-action@v15
+        with:
+          name: paolino
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Golden tests
+        run: nix run --quiet .#golden
+
+  lint:
+    needs: build-gate
+    runs-on: nixos
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/cachix-action@v15
+        with:
+          name: paolino
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      - name: Lint
+        run: nix run --quiet .#lint

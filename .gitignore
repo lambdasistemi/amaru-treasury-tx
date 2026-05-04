@@ -7,3 +7,6 @@ result-*
 .direnv/
 .envrc.local
 .llm/
+
+# LLM investigation notes (local only)
+.llm/

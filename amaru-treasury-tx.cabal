@@ -55,10 +55,12 @@ library
     Amaru.Treasury.Constants
     Amaru.Treasury.Metadata
     Amaru.Treasury.Scope
+    Amaru.Treasury.Summary
 
   build-depends:
     , aeson
-    , base        <5
+    , aeson-pretty
+    , base          <5
     , bytestring
     , containers
     , text
@@ -83,11 +85,13 @@ test-suite unit-tests
   other-modules:
     Amaru.Treasury.MetadataSpec
     Amaru.Treasury.ScopeSpec
+    Amaru.Treasury.SummarySpec
     PlaceholderSpec
 
   build-depends:
     , amaru-treasury-tx
     , base               <5
+    , bytestring
     , containers
     , hspec
 

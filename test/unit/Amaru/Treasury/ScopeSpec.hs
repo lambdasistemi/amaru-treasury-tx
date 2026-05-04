@@ -8,11 +8,11 @@ module Amaru.Treasury.ScopeSpec (spec) where
 
 import Test.Hspec (Spec, describe, it, shouldBe)
 
-import Amaru.Treasury.Scope (
-    allScopes,
-    scopeFromText,
-    scopeText,
- )
+import Amaru.Treasury.Scope
+    ( allScopes
+    , scopeFromText
+    , scopeText
+    )
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Scope" $ do

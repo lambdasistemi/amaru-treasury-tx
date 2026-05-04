@@ -61,6 +61,7 @@ library
     Amaru.Treasury.Redeemer
     Amaru.Treasury.Scope
     Amaru.Treasury.Summary
+    Amaru.Treasury.Tx.Disburse
     Amaru.Treasury.Tx.Withdraw
     Amaru.Treasury.UtxoSelect
     Amaru.Treasury.Validity
@@ -108,6 +109,7 @@ test-suite unit-tests
     Amaru.Treasury.RedeemerSpec
     Amaru.Treasury.ScopeSpec
     Amaru.Treasury.SummarySpec
+    Amaru.Treasury.Tx.DisburseSpec
     Amaru.Treasury.Tx.WithdrawSpec
     Amaru.Treasury.UtxoSelectSpec
     PlaceholderSpec

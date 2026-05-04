@@ -62,6 +62,7 @@ library
     Amaru.Treasury.Scope
     Amaru.Treasury.Summary
     Amaru.Treasury.Tx.Disburse
+    Amaru.Treasury.Tx.Swap
     Amaru.Treasury.Tx.Withdraw
     Amaru.Treasury.UtxoSelect
     Amaru.Treasury.Validity

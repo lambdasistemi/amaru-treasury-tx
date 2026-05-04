@@ -52,6 +52,8 @@ library
   default-language: GHC2021
   exposed-modules:
     Amaru.Treasury
+    Amaru.Treasury.Backend
+    Amaru.Treasury.Backend.N2C
     Amaru.Treasury.Constants
     Amaru.Treasury.Metadata
     Amaru.Treasury.Redeemer
@@ -61,9 +63,12 @@ library
   build-depends:
     , aeson
     , aeson-pretty
-    , base          <5
+    , async
+    , base                   <5
     , bytestring
+    , cardano-node-clients
     , containers
+    , ouroboros-network:api
     , plutus-core
     , text
 

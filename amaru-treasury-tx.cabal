@@ -55,6 +55,7 @@ library
     Amaru.Treasury.Backend
     Amaru.Treasury.Backend.N2C
     Amaru.Treasury.Constants
+    Amaru.Treasury.LedgerParse
     Amaru.Treasury.Metadata
     Amaru.Treasury.PParams
     Amaru.Treasury.Redeemer
@@ -68,7 +69,9 @@ library
     , aeson-pretty
     , async
     , base                   <5
+    , base16-bytestring
     , bytestring
+    , cardano-crypto-class
     , cardano-ledger-conway
     , cardano-ledger-core
     , cardano-node-clients
@@ -96,6 +99,7 @@ test-suite unit-tests
   main-is:            Spec.hs
   default-language:   GHC2021
   other-modules:
+    Amaru.Treasury.LedgerParseSpec
     Amaru.Treasury.MetadataSpec
     Amaru.Treasury.PParamsSpec
     Amaru.Treasury.RedeemerSpec
@@ -115,6 +119,7 @@ test-suite unit-tests
     , plutus-core
     , QuickCheck
     , serialise
+    , text
 
   build-tool-depends: hspec-discover:hspec-discover
 

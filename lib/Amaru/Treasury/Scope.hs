@@ -9,15 +9,15 @@ The five Amaru treasury scopes per the
 The scope set is fixed by the on-chain deployment and is
 never extended at the CLI level.
 -}
-module Amaru.Treasury.Scope (
-    -- * Scope identifier
-    ScopeId (..),
+module Amaru.Treasury.Scope
+    ( -- * Scope identifier
+      ScopeId (..)
 
-    -- * Conversion
-    scopeText,
-    scopeFromText,
-    allScopes,
-) where
+      -- * Conversion
+    , scopeText
+    , scopeFromText
+    , allScopes
+    ) where
 
 import Data.Aeson (FromJSON (..), ToJSON (..), withText)
 import Data.Aeson.Types (Parser)

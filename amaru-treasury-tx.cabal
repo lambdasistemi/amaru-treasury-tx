@@ -1,0 +1,90 @@
+cabal-version:   3.4
+name:            amaru-treasury-tx
+version:         0.1.0.0
+synopsis:        Build unsigned Amaru treasury transactions
+description:
+  Haskell port of the Amaru treasury bash recipes
+  ('disburse', 'reorganize', 'withdraw') from
+  pragma-org/amaru-treasury/journal/2026/. The CLI
+  emits unsigned Conway transactions for offline
+  signing.
+
+license:         Apache-2.0
+license-file:    LICENSE
+author:          Paolo Veronelli
+maintainer:      paolo.veronelli@gmail.com
+category:        Cardano
+build-type:      Simple
+extra-doc-files: CHANGELOG.md
+
+flag werror
+  description: Enable -Werror
+  manual:      True
+  default:     False
+
+common warnings
+  ghc-options:
+    -Wall -Wunused-imports -Wmissing-export-lists -Wname-shadowing
+    -Wredundant-constraints
+
+  if flag(werror)
+    ghc-options: -Werror
+
+  default-extensions:
+    DataKinds
+    DerivingStrategies
+    DuplicateRecordFields
+    FlexibleContexts
+    GADTs
+    ImportQualifiedPost
+    OverloadedStrings
+    PatternSynonyms
+    ScopedTypeVariables
+    StrictData
+    TypeApplications
+    TypeOperators
+    ViewPatterns
+
+library
+  import:           warnings
+  hs-source-dirs:   lib
+  default-language: GHC2021
+  exposed-modules:  Amaru.Treasury
+  build-depends:    base <5
+
+executable amaru-treasury-tx
+  import:           warnings
+  hs-source-dirs:   app/amaru-treasury-tx
+  main-is:          Main.hs
+  default-language: GHC2021
+  build-depends:
+    , amaru-treasury-tx
+    , base               <5
+
+  ghc-options:      -threaded -rtsopts -with-rtsopts=-N
+
+test-suite unit-tests
+  import:             warnings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test/unit
+  main-is:            Spec.hs
+  default-language:   GHC2021
+  build-depends:
+    , amaru-treasury-tx
+    , base               <5
+    , hspec
+
+  build-tool-depends: hspec-discover:hspec-discover
+
+test-suite golden-tests
+  import:             warnings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test/golden
+  main-is:            Spec.hs
+  default-language:   GHC2021
+  build-depends:
+    , amaru-treasury-tx
+    , base               <5
+    , hspec
+
+  build-tool-depends: hspec-discover:hspec-discover

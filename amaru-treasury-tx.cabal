@@ -54,6 +54,7 @@ library
     Amaru.Treasury
     Amaru.Treasury.Constants
     Amaru.Treasury.Metadata
+    Amaru.Treasury.Redeemer
     Amaru.Treasury.Scope
     Amaru.Treasury.Summary
 
@@ -63,6 +64,7 @@ library
     , base          <5
     , bytestring
     , containers
+    , plutus-core
     , text
 
 executable amaru-treasury-tx
@@ -84,6 +86,7 @@ test-suite unit-tests
   default-language:   GHC2021
   other-modules:
     Amaru.Treasury.MetadataSpec
+    Amaru.Treasury.RedeemerSpec
     Amaru.Treasury.ScopeSpec
     Amaru.Treasury.SummarySpec
     PlaceholderSpec
@@ -91,9 +94,12 @@ test-suite unit-tests
   build-depends:
     , amaru-treasury-tx
     , base               <5
+    , base16-bytestring
     , bytestring
     , containers
     , hspec
+    , plutus-core
+    , serialise
 
   build-tool-depends: hspec-discover:hspec-discover
 

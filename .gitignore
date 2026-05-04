@@ -1,0 +1,9 @@
+dist-newstyle/
+.ghc.environment.*
+*.tix
+.hpc/
+result
+result-*
+.direnv/
+.envrc.local
+.llm/

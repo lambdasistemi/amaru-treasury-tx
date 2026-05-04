@@ -10,3 +10,6 @@ result-*
 
 # LLM investigation notes (local only)
 .llm/
+
+# MkDocs build output
+site/

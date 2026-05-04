@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lambdasistemi/amaru-treasury-tx/specs/001-treasury-tx-cli/contracts/summary-schema.json",
+  "title": "Amaru treasury tx summary",
+  "description": "Sidecar JSON written next to the unsigned tx CBOR.",
+  "type": "object",
+  "required": ["txid", "fee_lovelace", "redeemers"],
+  "additionalProperties": false,
+  "properties": {
+    "txid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "32-byte transaction hash as hex."
+    },
+    "fee_lovelace": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Computed fee in lovelace."
+    },
+    "redeemers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/redeemer" }
+    }
+  },
+  "$defs": {
+    "redeemer": {
+      "type": "object",
+      "required": ["purpose", "index", "ex_units"],
+      "additionalProperties": false,
+      "properties": {
+        "purpose": {
+          "type": "string",
+          "enum": ["spend", "withdraw", "mint", "publish"]
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Index of the script-using item in the canonical order (sorted inputs for spend, sorted withdrawals for withdraw, etc.)."
+        },
+        "ex_units": {
+          "type": "object",
+          "required": ["mem", "steps"],
+          "additionalProperties": false,
+          "properties": {
+            "mem": { "type": "integer", "minimum": 0 },
+            "steps": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    }
+  }
+}

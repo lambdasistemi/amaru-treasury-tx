@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/lambdasistemi/amaru-treasury-tx/specs/001-treasury-tx-cli/contracts/metadata-schema.json",
+  "title": "Amaru treasury metadata",
+  "description": "Mirrors pragma-org/amaru-treasury/journal/2026/metadata.json. The shape is the input contract for amaru-treasury-tx; do not extend without aligning upstream.",
+  "type": "object",
+  "required": ["scope_owners", "treasuries"],
+  "additionalProperties": false,
+  "properties": {
+    "scope_owners": {
+      "$ref": "#/$defs/utxoRef",
+      "description": "UTxO holding the scope-owners NFT; read-only reference input on every disburse and reorganize transaction."
+    },
+    "treasuries": {
+      "type": "object",
+      "description": "Per-scope deployment metadata. Keys must be one of the five known scope identifiers.",
+      "additionalProperties": false,
+      "properties": {
+        "core_development": { "$ref": "#/$defs/scope" },
+        "ops_and_use_cases": { "$ref": "#/$defs/scope" },
+        "network_compliance": { "$ref": "#/$defs/scope" },
+        "middleware": { "$ref": "#/$defs/scope" },
+        "contingency": { "$ref": "#/$defs/scope" }
+      }
+    }
+  },
+  "$defs": {
+    "utxoRef": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}#[0-9a-f]+$",
+      "description": "Canonical txid#ix where txid is 32 bytes hex and ix is base16."
+    },
+    "keyhash": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{56}$",
+      "description": "28-byte verification-key hash as hex; null only allowed for the contingency scope."
+    },
+    "address": {
+      "type": "string",
+      "pattern": "^addr[1-9a-zA-Z]+$|^addr_test[1-9a-zA-Z]+$",
+      "description": "Bech32-encoded Cardano address."
+    },
+    "scriptHash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{56}$",
+      "description": "28-byte script hash as hex."
+    },
+    "scriptDeployment": {
+      "type": "object",
+      "required": ["hash", "deployed_at"],
+      "additionalProperties": false,
+      "properties": {
+        "hash": { "$ref": "#/$defs/scriptHash" },
+        "deployed_at": { "$ref": "#/$defs/utxoRef" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "required": ["owner", "address", "treasury_script", "permissions_script", "registry_script"],
+      "additionalProperties": true,
+      "properties": {
+        "owner": { "$ref": "#/$defs/keyhash" },
+        "budget": {
+          "type": "integer",
+          "description": "Informational only — not consumed by the CLI."
+        },
+        "address": { "$ref": "#/$defs/address" },
+        "treasury_script": { "$ref": "#/$defs/scriptDeployment" },
+        "permissions_script": { "$ref": "#/$defs/scriptDeployment" },
+        "registry_script": { "$ref": "#/$defs/scriptDeployment" }
+      }
+    }
+  }
+}

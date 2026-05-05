@@ -99,6 +99,30 @@ executable amaru-treasury-tx
 
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
 
+executable swap-probe
+  import:           warnings
+  hs-source-dirs:   app/swap-probe
+  main-is:          Main.hs
+  default-language: GHC2021
+  build-depends:
+    , amaru-treasury-tx
+    , base                   <5
+    , base16-bytestring
+    , bytestring
+    , cardano-crypto-class
+    , cardano-ledger-api
+    , cardano-ledger-binary
+    , cardano-ledger-conway
+    , cardano-ledger-core
+    , cardano-ledger-mary
+    , cardano-node-clients
+    , cardano-slotting
+    , containers
+    , microlens
+    , ouroboros-network:api
+
+  ghc-options:      -threaded -rtsopts -with-rtsopts=-N
+
 test-suite unit-tests
   import:             warnings
   type:               exitcode-stdio-1.0

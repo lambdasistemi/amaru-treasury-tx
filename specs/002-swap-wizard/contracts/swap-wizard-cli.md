@@ -12,14 +12,19 @@ options, prompt order, exit codes, and stdout shape.
 amaru-treasury-tx swap-wizard
     --network preprod|mainnet
     --wallet-addr ADDR
-    --registry-utxo TXIN
+    --registry PATH
     --out PATH
-    [--scope core|ops|netc|middleware]
-    [--amount-ada N]
-    [--chunk-ada N]
-    [--rate-num N --rate-den N]
-    [--validity-hours N]
-    [--signers HEX28[,HEX28...]]
+    --scope core_development|ops_and_use_cases|network_compliance|middleware
+    --ada DECIMAL
+    --chunks INT
+    --min-rate DECIMAL
+    --validity-hours INT
+    --description TEXT
+    --justification TEXT
+    --destination-label TEXT
+    [--event TEXT]
+    [--label TEXT]
+    [--signer HEX28]      (repeat for each)
     [--yes]
     [--dry-run]
     [--verbose]
@@ -28,15 +33,24 @@ amaru-treasury-tx swap-wizard
 
 Notes:
 
-- `--network`, `--wallet-addr`, `--registry-utxo`, and `--out` are
-  required. Everything else is interactive when omitted.
-- A flag-supplied answer skips the corresponding prompt; remaining
-  prompts run interactively unless `--yes` is also set, in which
-  case missing answers cause a non-zero exit.
-- `--scope` accepts the same short forms as the existing CLI. The
-  wizard never silently picks a scope.
-- `--signers` is comma-separated 28-byte hex; an explicit empty
-  string is rejected.
+- All non-`[bracketed]` flags are required.
+- v1 takes every answer from flags; per-field interactive prompts
+  are deferred. Only the final confirmation is interactive (skipped
+  by `--yes`).
+- `--ada` accepts a decimal value (e.g. `408163.265306`). Internally
+  multiplied by 1_000_000 and rounded to lovelace.
+- `--chunks` is a positive integer. Internal `chunkSizeLovelace =
+  amountLovelace / chunks` (integer division). If the division is
+  not exact, the underlying `mkChunks` produces one extra small
+  remainder chunk.
+- `--min-rate` accepts a decimal USDM-per-ADA value (e.g. `0.245`).
+  Internally rendered as numerator/denominator with denominator
+  fixed at 1_000_000 (USDM precision).
+- `--scope` takes the canonical name from `Amaru.Treasury.Scope`.
+- `--signer` is repeated for each override key hash; absent flags
+  mean "use the scope default".
+- `--registry` is a JSON file matching the `RegistryView` schema.
+  The v1 resolver does **not** walk the registry NFT on-chain.
 - `--dry-run` writes the JSON to stdout and skips file write; useful
   for piping into review tooling.
 - `--verbose` prints the resolved `WizardEnv` summary (on stderr)

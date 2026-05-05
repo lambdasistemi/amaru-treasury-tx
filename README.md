@@ -46,14 +46,15 @@ amaru-treasury-tx swap-wizard \
     --wallet-addr addr_test1q... \
     --registry test/fixtures/swap-wizard/registry.example.json \
     --scope core_development \
-    --amount-ada 408163265306 \
-    --chunk-ada 12500000000 \
-    --rate-num 245 --rate-den 1000 \
+    --ada 408163.265306 \
+    --chunks 32 \
+    --min-rate 0.245 \
     --validity-hours 6 \
     --description 'Swapping ADA for USDM' \
     --justification 'Required to pay vendor X' \
     --destination-label 'Network Compliance treasury' \
-    --signers f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e,8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1 \
+    --signer f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e \
+    --signer 8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1 \
     --out intent.json \
     --verbose --yes
 ```

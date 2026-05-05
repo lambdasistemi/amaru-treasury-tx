@@ -27,6 +27,15 @@ changelog_has_release() {
   grep -Eq "^## \\[$version\\]|^## $version( |$)" CHANGELOG.md
 }
 
+open_release_pr_number() {
+  gh pr list \
+    --repo "$owner_repo" \
+    --state open \
+    --head "$release_branch" \
+    --json number \
+    --jq '.[0].number // empty'
+}
+
 if ! git rev-parse -q --verify "refs/tags/$current_tag" >/dev/null \
   && changelog_has_release "$current_version"; then
   if [[ "$dry_run" == "1" ]]; then
@@ -145,11 +154,13 @@ done <"$commits_tsv"
 
 if [[ "$bump" == "none" ]]; then
   echo "no releasable commits since ${latest_tag:-repository start}"
-  if [[ "$dry_run" != "1" ]] \
-    && gh pr view "$release_branch" --repo "$owner_repo" >/dev/null 2>&1; then
-    gh pr close "$release_branch" \
-      --repo "$owner_repo" \
-      --comment "Closing: no releasable commits remain since ${latest_tag:-repository start}."
+  if [[ "$dry_run" != "1" ]]; then
+    open_pr_number="$(open_release_pr_number)"
+    if [[ -n "$open_pr_number" ]]; then
+      gh pr close "$open_pr_number" \
+        --repo "$owner_repo" \
+        --comment "Closing: no releasable commits remain since ${latest_tag:-repository start}."
+    fi
   fi
   exit 0
 fi
@@ -293,18 +304,32 @@ fi
 
 body_file="$tmpdir/pr-body.md"
 {
-  echo "Automated Cabal-aware release PR."
+  echo "## Summary"
+  echo
+  echo "- Bump \`amaru-treasury-tx\` to \`$next_version\`."
+  echo "- Add generated release notes for the $bump_label release."
+  echo
+  echo "## Release notes"
+  echo
+  awk '/^#/ { print "#" $0; next } { print }' "$release_section"
+  echo
+  echo "## Publishing"
   echo
   echo "- Version source of truth: \`amaru-treasury-tx.cabal\`"
   echo "- Proposed version: \`$next_version\`"
   echo "- Bump class: $bump_label"
   echo "- Previous tag: \`${latest_tag:-none}\`"
   echo
+  echo "## Verification"
+  echo
+  echo "The release planner validated Cabal and CHANGELOG version consistency before pushing this proposal."
+  echo
   echo "Merging this PR does not publish directly. The next main-branch run tags \`$next_tag\`, and the tag workflows publish the release artifacts."
 } >"$body_file"
 
-if gh pr view "$release_branch" --repo "$owner_repo" >/dev/null 2>&1; then
-  gh pr edit "$release_branch" \
+open_pr_number="$(open_release_pr_number)"
+if [[ -n "$open_pr_number" ]]; then
+  gh pr edit "$open_pr_number" \
     --repo "$owner_repo" \
     --title "chore(release): $next_version" \
     --body-file "$body_file"

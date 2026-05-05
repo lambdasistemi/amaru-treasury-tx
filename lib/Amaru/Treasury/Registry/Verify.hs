@@ -85,7 +85,6 @@ import PlutusCore.Data (Data (..))
 import Amaru.Treasury.Backend
     ( Provider (..)
     , queryUTxOByTxInH
-    , queryUTxOsAtH
     )
 import Amaru.Treasury.LedgerParse
     ( addrFromText
@@ -285,12 +284,14 @@ verifyWithAnchors metadata anchors requested = do
                 scope
                 permissionsHash
                 (tePermissionsScript entry)
+        -- registry_script.deployed_at IS the registry NFT UTxO
+        -- (inline datum, no reference script). NFT presence is
+        -- already enforced via 'requireUnique' on rnaMatches.
         registryScriptRef <-
-            verifyReferenceScript
+            parseTxInRef
                 "registry_script.deployed_at"
-                scope
-                registryHash
-                (teRegistryScript entry)
+                (Just scope)
+                (sdDeployedAt (teRegistryScript entry))
 
         registryNftUtxo <-
             parseTxInRef "registry_nft" (Just scope) registryRef
@@ -381,74 +382,97 @@ extractRegistryAnchors provider metadata requested =
     case buildAnchorPlan metadata requested of
         Left err -> pure (Left err)
         Right (network, scopesPolicy, scopePlans) ->
-            let scopesAddress =
-                    scriptAddress network scopesPolicy
-                registryAddresses =
-                    ( \plan ->
-                        ( sapScope plan
-                        , scriptAddress network (sapRegistryPolicy plan)
-                        )
-                    )
-                        <$> scopePlans
-            in  withAcquired provider $ \handle -> do
-                    byAddress <-
-                        queryUTxOsAtH handle $
-                            Set.fromList $
-                                scopesAddress
-                                    : ( snd <$> registryAddresses
-                                      )
-                    referenceUtxos <-
-                        queryUTxOByTxInH
-                            handle
-                            (deploymentRefs metadata requested)
-                    let scopesUtxos =
-                            Map.findWithDefault [] scopesAddress byAddress
-                        registryUtxos =
-                            ( \(scope, address) ->
-                                ( scope
-                                , Map.findWithDefault [] address byAddress
-                                )
-                            )
-                                <$> registryAddresses
-                    pure $
-                        buildAnchors
-                            network
-                            scopesPolicy
-                            scopePlans
-                            scopesUtxos
-                            registryUtxos
-                            referenceUtxos
+            case parseRegistryRefs metadata requested of
+                Left err -> pure (Left err)
+                Right registryRefs -> do
+                    scopesRef <-
+                        either (pure . Left) (fmap Right . fetchScopes) $
+                            parseTxInRef
+                                "scope_owners"
+                                Nothing
+                                (umScopeOwners metadata)
+                    case scopesRef of
+                        Left err -> pure (Left err)
+                        Right (scopesTxIn, fetched) ->
+                            pure $
+                                buildAnchors
+                                    network
+                                    scopesPolicy
+                                    scopePlans
+                                    scopesTxIn
+                                    registryRefs
+                                    fetched
   where
+    fetchScopes scopesTxIn =
+        withAcquired provider $ \handle -> do
+            utxos <-
+                queryUTxOByTxInH handle $
+                    Set.insert scopesTxIn $
+                        deploymentRefs metadata requested
+            pure (scopesTxIn, utxos)
+
     buildAnchors
         network
         scopesPolicy
         scopePlans
-        scopesUtxos
-        registryUtxos
-        referenceUtxos =
+        scopesTxIn
+        registryRefs
+        fetched =
             do
                 owners <-
                     extractScopeOwners
-                        (nftOutputs scopesPolicy scopesTokenName scopesUtxos)
+                        scopesPolicy
+                        scopesTxIn
+                        fetched
                 registries <-
                     Map.fromList
                         <$> traverse
-                            (uncurry (extractRegistryAnchor network scopePlans))
-                            registryUtxos
-                references <- extractReferenceScripts referenceUtxos
+                            (extractRegistryAnchor network scopePlans fetched)
+                            registryRefs
+                references <- extractReferenceScripts fetched
                 pure
                     RegistryAnchors
                         { raScopesNftPolicy = scriptHashToHex scopesPolicy
                         , raScopesNftMatches =
-                            renderTxInRef . fst
-                                <$> nftOutputs
+                            renderTxInRef
+                                <$> nftMatches
                                     scopesPolicy
                                     scopesTokenName
-                                    scopesUtxos
+                                    scopesTxIn
+                                    fetched
                         , raOwners = owners
                         , raRegistries = registries
                         , raReferenceScripts = references
                         }
+
+parseRegistryRefs
+    :: UpstreamMetadata
+    -> Set ScopeId
+    -> Either RegistryWalkError [(ScopeId, TxIn)]
+parseRegistryRefs metadata requested =
+    traverse parseEntry $
+        Map.toList (requestedTreasuries metadata requested)
+  where
+    parseEntry (scope, entry) =
+        fmap
+            (scope,)
+            ( parseTxInRef
+                "registry_script.deployed_at"
+                (Just scope)
+                (sdDeployedAt (teRegistryScript entry))
+            )
+
+-- | Single-element match list when the named UTxO holds the NFT.
+nftMatches
+    :: ScriptHash
+    -> ByteString
+    -> TxIn
+    -> Map TxIn (TxOut ConwayEra)
+    -> [TxIn]
+nftMatches policy tokenName txIn fetched =
+    case Map.lookup txIn fetched of
+        Just txOut | hasNft policy tokenName txOut -> [txIn]
+        _ -> []
 
 buildAnchorPlan
     :: UpstreamMetadata
@@ -538,14 +562,6 @@ scriptAddress network scriptHash =
         (ScriptHashObj scriptHash)
         (StakeRefBase (ScriptHashObj scriptHash))
 
-nftOutputs
-    :: ScriptHash
-    -> ByteString
-    -> [(TxIn, TxOut ConwayEra)]
-    -> [(TxIn, TxOut ConwayEra)]
-nftOutputs policy tokenName =
-    filter (hasNft policy tokenName . snd)
-
 hasNft :: ScriptHash -> ByteString -> TxOut ConwayEra -> Bool
 hasNft policy tokenName txOut =
     lookupMultiAsset
@@ -555,11 +571,16 @@ hasNft policy tokenName txOut =
         == 1
 
 extractScopeOwners
-    :: [(TxIn, TxOut ConwayEra)]
+    :: ScriptHash
+    -> TxIn
+    -> Map TxIn (TxOut ConwayEra)
     -> Either RegistryWalkError (Map ScopeId (Maybe Text))
-extractScopeOwners scopesMatches =
-    case scopesMatches of
-        [(_txIn, txOut)] -> parseOwnersDatum =<< inlineDatum "scope_owners" Nothing txOut
+extractScopeOwners policy scopesTxIn fetched =
+    case Map.lookup scopesTxIn fetched of
+        Just txOut
+            | hasNft policy scopesTokenName txOut ->
+                parseOwnersDatum
+                    =<< inlineDatum "scope_owners" Nothing txOut
         _ -> Right Map.empty
 
 parseOwnersDatum
@@ -598,50 +619,54 @@ parseOwnerDatum scope = \case
 extractRegistryAnchor
     :: Network
     -> [ScopeAnchorPlan]
-    -> ScopeId
-    -> [(TxIn, TxOut ConwayEra)]
+    -> Map TxIn (TxOut ConwayEra)
+    -> (ScopeId, TxIn)
     -> Either RegistryWalkError (ScopeId, RegistryNftAnchor)
-extractRegistryAnchor network plans scope registryUtxos = do
+extractRegistryAnchor network plans fetched (scope, registryTxIn) = do
     plan <-
         maybe
-            ( Left (ChainQueryError ("missing registry plan: " <> scopeText scope))
+            ( Left
+                (ChainQueryError ("missing registry plan: " <> scopeText scope))
             )
             Right
             (findPlan scope plans)
     let matches =
-            nftOutputs
+            nftMatches
                 (sapRegistryPolicy plan)
                 registryTokenName
-                registryUtxos
-    treasuryHashText <-
+                registryTxIn
+                fetched
+    (treasuryHashText, addressText) <-
         case matches of
-            [(_txIn, txOut)] ->
-                extractRegistryTreasuryHash
-                    scope
-                    =<< inlineDatum "registry_nft" (Just scope) txOut
-            _ -> Right ""
-    if T.null treasuryHashText
-        then Right ()
-        else
-            assertText
-                "treasury_script.hash"
-                (Just scope)
-                (scriptHashToHex (sapTreasuryHash plan))
-                treasuryHashText
-    addressText <-
-        if T.null treasuryHashText
-            then Right ""
-            else do
+            [_] -> do
+                txOut <-
+                    maybe
+                        (Left (ChainQueryError "registry_nft: missing utxo"))
+                        Right
+                        (Map.lookup registryTxIn fetched)
+                hashText <-
+                    extractRegistryTreasuryHash scope
+                        =<< inlineDatum "registry_nft" (Just scope) txOut
+                assertText
+                    "treasury_script.hash"
+                    (Just scope)
+                    (scriptHashToHex (sapTreasuryHash plan))
+                    hashText
                 treasuryHash <-
                     parseScriptHash
                         "treasury_script.hash"
                         (Just scope)
-                        treasuryHashText
-                renderAddress (scriptAddress network treasuryHash)
+                        hashText
+                pure
+                    ( hashText
+                    , renderAddressUnchecked
+                        (scriptAddress network treasuryHash)
+                    )
+            _ -> Right ("", "")
     pure
         ( scope
         , RegistryNftAnchor
-            { rnaMatches = renderTxInRef . fst <$> matches
+            { rnaMatches = renderTxInRef <$> matches
             , rnaTreasuryScriptHash = treasuryHashText
             , rnaRegistryScriptHash =
                 scriptHashToHex (sapRegistryPolicy plan)
@@ -740,21 +765,10 @@ referenceScriptEntry (txIn, txOut) =
             SNothing -> ""
         )
 
-renderAddress :: Addr -> Either RegistryWalkError Text
-renderAddress addr = do
-    hrp <-
-        case Bech32.humanReadablePartFromText (addrPrefix addr) of
-            Right value -> Right value
-            Left err ->
-                Left $
-                    ChainQueryError $
-                        "bech32 address prefix: " <> T.pack (show err)
-    pure $
-        Bech32.encodeLenient
-            hrp
-            (Bech32.dataPartFromBytes (serialiseAddr addr))
-
--- | Same as 'renderAddress' but with a static prefix that cannot fail.
+{- | Bech32 render the address using the prefix derived from its
+network discriminator. The prefix is always one of @addr@ or
+@addr_test@, so 'humanReadablePartFromText' cannot fail in practice.
+-}
 renderAddressUnchecked :: Addr -> Text
 renderAddressUnchecked addr =
     Bech32.encodeLenient

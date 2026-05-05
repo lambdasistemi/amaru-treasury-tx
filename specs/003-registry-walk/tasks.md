@@ -232,15 +232,14 @@ against one acquired ledger snapshot.
 - [X] T025 Run `just ci` (build + unit + golden +
       format-check + hlint) plus `cabal check`; resolve any
       new warnings.
-- [ ] T026 Update PR #31 description with the final command
+- [X] T026 Update PR #31 description with the final command
       reference and link to
       [quickstart.md](./quickstart.md).
-- [ ] T027 Manual mainnet smoke test: invoke
+- [X] T027 Manual mainnet smoke test: invoke
       `verifyRegistry` from `cabal repl` against
       `/code/cardano-mainnet/ipc/node.socket`; assert
       `Right VerifiedRegistry` for `core_development` with
-      a local metadata file. Record the run in
-      the PR description.
+      a local metadata file. Recorded in the PR description.
 
 **Checkpoint**: ready for merge.
 

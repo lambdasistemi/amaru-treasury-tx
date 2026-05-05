@@ -228,23 +228,13 @@ spec =
                 expectMismatch "permissions_script.deployed_at" $
                     verify metadata anchors
 
-        it "rejects a spent registry_script.deployed_at" $ do
+        it "rejects a spent registry NFT" $ do
             metadata <- loadMetadata
             anchors <-
-                removeReference
-                    (sdDeployedAt . teRegistryScript)
+                mutateRegistryAnchor
+                    (\anchor -> anchor{rnaMatches = []})
                     <$> loadAnchors
             verify metadata anchors `shouldSatisfy` isSpent
-
-        it "rejects a wrong reference script at registry_script.deployed_at" $ do
-            metadata <- loadMetadata
-            anchors <-
-                overwriteReference
-                    (sdDeployedAt . teRegistryScript)
-                    badHash
-                    <$> loadAnchors
-            expectMismatch "registry_script.deployed_at" $
-                verify metadata anchors
 
         it "rejects ambiguous registry NFT anchors" $ do
             metadata <- loadMetadata
@@ -339,22 +329,17 @@ liveProvider metadata = do
                 & referenceScriptTxOutL .~ SJust registryScript
         treasuryOut = refScriptTxOut refAddr treasuryScript
         permissionsOut = refScriptTxOut refAddr permissionsScript
-        byAddress =
-            Map.fromList
-                [ (scopesAddr, [(scopesRef, scopesOut)])
-                , (registryAddr, [(registryRef, registryOut)])
-                ]
         byTxIn =
             Map.fromList
-                [ (treasuryRef, treasuryOut)
+                [ (scopesRef, scopesOut)
+                , (treasuryRef, treasuryOut)
                 , (permissionsRef, permissionsOut)
                 , (registryRef, registryOut)
                 ]
         provider =
             Provider
                 { withAcquired = singleShotWithAcquired provider
-                , queryUTxOs =
-                    \addr -> pure (Map.findWithDefault [] addr byAddress)
+                , queryUTxOs = \_ -> pure []
                 , queryUTxOByTxIn =
                     pure . Map.restrictKeys byTxIn
                 , queryProtocolParams = fail "unused queryProtocolParams"

@@ -6,9 +6,13 @@ on:
     branches:
       - main
   pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, closed]
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -16,6 +20,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.event.action != 'closed'
     runs-on: nixos
     steps:
       - uses: actions/checkout@v6
@@ -23,12 +28,30 @@ jobs:
         with:
           name: paolino
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
       - name: Build docs
         run: >-
           nix develop github:paolino/dev-assets?dir=mkdocs --quiet
           -c mkdocs build --strict
+
+      - name: Publish PR preview
+        if: github.event_name == 'pull_request'
+        uses: paolino/dev-assets/static-preview@main
+        with:
+          path: site
+          comment-marker: "<!-- docs-preview-url -->"
+
       - name: Deploy docs
         if: github.ref == 'refs/heads/main'
         run: >-
           nix develop github:paolino/dev-assets?dir=mkdocs --quiet
           -c mkdocs gh-deploy --force
+
+  pr-preview-cleanup:
+    name: Remove PR Preview
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: nixos
+    steps:
+      - uses: paolino/dev-assets/static-preview@main
+        with:
+          mode: cleanup

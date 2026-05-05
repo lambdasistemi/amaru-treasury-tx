@@ -339,7 +339,6 @@ main = do
                             registryPolicyId
                     , sbiWalletTxIn = walletInput
                     , sbiWalletAddr = walletAddr
-                    , sbiCollateralPercent = 150
                     }
         SwapBuildResult{..} <- runSwapBuild ctx inputs
         let cborStrict = BSL.toStrict sbrCborBytes

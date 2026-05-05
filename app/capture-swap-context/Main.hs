@@ -163,7 +163,6 @@ main = do
                     , sbiRationale = tiRationale
                     , sbiWalletTxIn = tiWalletTxIn
                     , sbiWalletAddr = tiWalletAddr
-                    , sbiCollateralPercent = 150
                     }
         let exUnitsMap =
                 Map.fromList

@@ -62,7 +62,6 @@ spec =
                         , sbiRationale = tiRationale ti
                         , sbiWalletTxIn = tiWalletTxIn ti
                         , sbiWalletAddr = tiWalletAddr ti
-                        , sbiCollateralPercent = 150
                         }
             let actualHex =
                     B16.encode

@@ -213,7 +213,6 @@ runSwap g SwapOpts{..} = do
                                         tiWalletTxIn
                                     , sbiWalletAddr =
                                         tiWalletAddr
-                                    , sbiCollateralPercent = 150
                                     }
                         SwapBuildResult{..} <-
                             runSwapBuild ctx inputs

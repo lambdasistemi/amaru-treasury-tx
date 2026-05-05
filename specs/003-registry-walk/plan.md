@@ -4,29 +4,28 @@
 **Input**: Feature specification from `/specs/003-registry-walk/spec.md`
 **Tracking issue**: [#30](https://github.com/lambdasistemi/amaru-treasury-tx/issues/30)
 **Unblocks**: [PR #28](https://github.com/lambdasistemi/amaru-treasury-tx/pull/28)
-**Upstream follow-up**: [lambdasistemi/cardano-node-clients#126](https://github.com/lambdasistemi/cardano-node-clients/issues/126)
+**Upstream dependency**: [lambdasistemi/cardano-node-clients#128](https://github.com/lambdasistemi/cardano-node-clients/pull/128)
 
 ## Summary
 
 Land a registry walker that verifies every claim from an
-operator-supplied (or upstream-fetched) `metadata.json`
-against on-chain anchors and build-time-pinned constants. The
-metadata becomes an untrusted hint, not a trust source. The
-work also extends `Provider IO` with a batched address-set
-query so the chain check is two LSQ round-trips per run.
+operator-supplied local `metadata.json` against on-chain
+anchors and build-time-pinned constants. The metadata becomes
+an untrusted hint, not a trust source. The work consumes
+`Provider IO` acquired sessions so the chain check runs two
+LSQ-backed queries against one acquired ledger snapshot.
 
 ## Technical Context
 
-**Language/Version**: Haskell, GHC 9.6+.
+**Language/Version**: Haskell, GHC 9.12.3.
 **Primary Dependencies**:
-- `http-client` + `http-client-tls` for the metadata HTTPS
-  fetch.
-- `aeson` for parsing.
+- `aeson` for parsing the local metadata file.
 - `plutus-ledger-api` (or `cardano-ledger-plutus`) for
   parameter-applying compiled Plutus blobs and computing
   script hashes.
-- existing `Cardano.Node.Client.Provider` extended with
-  `queryUTxOsAt :: Set Addr -> m (Map Addr [...])`.
+- existing `Cardano.Node.Client.Provider` with
+  `withAcquired` and the acquired handle selectors
+  `queryUTxOsAtH` / `queryUTxOByTxInH`.
 - `file-embed` (Template Haskell) for embedding the Plutus
   blobs in non-Nix builds.
 
@@ -34,15 +33,16 @@ query so the chain check is two LSQ round-trips per run.
 `assets/` or pulled by Nix into `$out`.
 **Testing**: Hspec unit tests + a mutation table that flips
 each verifiable field and asserts the matching
-`AnchorMismatch` constructor. Stub `MetadataFetcher` and stub
-`Provider IO` (no HTTPS or socket in tests).
+`AnchorMismatch` constructor. Use a local metadata fixture and
+stub `Provider IO` (no HTTPS or socket in tests).
 **Target Platform**: Linux + macOS.
 **Project Type**: library + (downstream) CLI consumer.
-**Performance Goals**: ≤ 2 LSQ round-trips per run (FR-011).
+**Performance Goals**: one acquired Provider session and ≤ 2
+LSQ-backed queries per run (FR-011).
 Sub-second on a warm socket.
 **Constraints**:
 - Constitution II/III: pure verification, IO confined to
-  metadata fetch + Provider calls.
+  local file read + Provider calls.
 - Constitution V: test-first; mutation table is the safety
   property made executable.
 - Constitution VI: Hackage-ready; new exports get Haddock.
@@ -60,7 +60,7 @@ test code.
 |-----------|--------|-------|
 | I. Faithful port of bash recipes | ✅ | The wizard's behaviour mirrors the bash recipes' use of `metadata.json`; we just refuse to trust it without verification. |
 | II. Pure builders, impure shell | ✅ | `verifyRegistry` is the only IO entry point; everything inside is parameter-application + comparison. |
-| III. Pluggable data source | ✅ | `MetadataFetcher` and `Provider` are records-of-functions, stub-friendly. |
+| III. Pluggable data source | ✅ | The only data-source surface in this PR is the local metadata file plus stub-friendly `Provider`. |
 | IV. Build, never sign or submit | ✅ | This module produces typed values; no tx logic. |
 | V. Test-first with golden fixtures | ✅ | The mutation table on every verifiable field is the spec made executable. |
 | VI. Hackage-ready Haskell | ✅ | New module follows `/haskell` style. |
@@ -90,7 +90,7 @@ lib/Amaru/Treasury/Registry/
                        # Plutus blobs (TH-embedded)
 ├── Derive.hs          # NEW: parameter-apply + hash helpers
 ├── Metadata.hs        # NEW: UpstreamMetadata + FromJSON +
-                       # MetadataFetcher
+                       # local file reader
 └── Verify.hs          # NEW: VerifiedRegistry + verifyRegistry
 
 assets/plutus/
@@ -112,14 +112,16 @@ test/fixtures/registry-walk/
 ### Provider IO extension
 
 `lambdasistemi/cardano-node-clients/lib/Cardano/Node/Client/Provider.hs`
-gains:
+gained, via
+[`cardano-node-clients#128`](https://github.com/lambdasistemi/cardano-node-clients/pull/128):
 
 ```haskell
-queryUTxOsAt :: Provider m -> Set Addr -> m (Map Addr [(TxIn, TxOut ConwayEra)])
+withAcquired :: Provider m -> (QueryHandle m -> m a) -> m a
+queryUTxOsAtH :: QueryHandle m -> Set Addr -> m (Map Addr [(TxIn, TxOut ConwayEra)])
+queryUTxOByTxInH :: QueryHandle m -> Set TxIn -> m (Map TxIn (TxOut ConwayEra))
 ```
 
-Lands as a separate small PR in `cardano-node-clients`. This
-branch's `cabal.project` bumps the SRP pin once that lands.
+This branch's `cabal.project` pins the merged upstream commit.
 
 ## Branch interaction
 
@@ -127,7 +129,7 @@ This branch lands on `main` first. Then PR #28 rebases:
 - replaces its file-loading `loadRegistry` with
   `verifyRegistry`,
 - drops `--registry PATH`,
-- adds `[--metadata-url <url> | --metadata-file <path>]`.
+- adds `--metadata <path>`.
 
 That rebase is a separate PR step.
 

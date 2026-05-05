@@ -15,20 +15,20 @@
 
 Tracking issue: [#30](https://github.com/lambdasistemi/amaru-treasury-tx/issues/30).
 Unblocks: [PR #28](https://github.com/lambdasistemi/amaru-treasury-tx/pull/28).
-Upstream follow-up: [lambdasistemi/cardano-node-clients#126](https://github.com/lambdasistemi/cardano-node-clients/issues/126)
-(LSQ single-Acquired multi-query session — a v2 atomicity
-enhancement, not a v1 blocker).
+Upstream dependency:
+[lambdasistemi/cardano-node-clients#128](https://github.com/lambdasistemi/cardano-node-clients/pull/128)
+closed
+[lambdasistemi/cardano-node-clients#126](https://github.com/lambdasistemi/cardano-node-clients/issues/126)
+with Provider acquired query sessions.
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Wizard rejects every kind of metadata tampering or staleness (Priority: P1)
 
-The wizard is given a `metadata.json` (from any source — default
-URL, `--metadata-url`, `--metadata-file`). The wizard reads it
-but treats every claim as untrusted. For each field, it
+The wizard is given a local `metadata.json` file. The wizard
+reads it but treats every claim as untrusted. For each field, it
 cross-checks against an on-chain anchor or recomputes the value
-from build-time constants. Any mismatch aborts before any
-output.
+from build-time constants. Any mismatch aborts before any output.
 
 **Why this priority**: This is the safety property #30 exists
 for. Tens of millions of ADA flow through the wizard's output;
@@ -66,35 +66,25 @@ error naming the offending field, and produce no JSON output.
 
 ---
 
-### User Story 2 - Metadata source is interchangeable (Priority: P1)
+### User Story 2 - Operator supplies a local metadata snapshot (Priority: P1)
 
-The wizard can read `metadata.json` from a default URL, an
-operator-supplied URL, or an operator-supplied file path. None
-of these is treated as more trustworthy than the others — every
-claim is verified against chain regardless. The default URL is
-upstream's raw `main` for `pragma-org/amaru-treasury/journal/2026/metadata.json`.
+The wizard reads `metadata.json` from a local path supplied by
+the operator. The file is only a hint: every claim is still
+verified against chain before any downstream value is used.
 
-**Why this priority**: Removes the "metadata file is dangerous"
-framing entirely. Once verification is field-by-field, the
-source doesn't matter for safety.
+**Why this priority**: This keeps the first implementation small
+and auditable. URL/default fetch support is an ergonomic
+refinement for a later request, not a safety requirement.
 
-**Independent Test**: Run the wizard three ways: against a stub
-HTTP server that serves the fixture (URL mode), against a local
-file (path mode), and against the bake-in-default URL with a
-network stub returning the same fixture. All three produce
-byte-equal verified `RegistryView` projections.
+**Independent Test**: Run the wizard against the checked-in
+local fixture and a network stub returning matching anchors;
+assert the verified projection is produced.
 
 **Acceptance Scenarios**:
 
-1. **Given** `--metadata-file /tmp/metadata.json`, **When** the
+1. **Given** `--metadata /tmp/metadata.json`, **When** the
    wizard runs, **Then** the file is loaded; verification
    proceeds normally.
-2. **Given** `--metadata-url https://example.com/metadata.json`,
-   **When** the wizard runs, **Then** the URL is fetched;
-   verification proceeds normally.
-3. **Given** neither flag, **When** the wizard runs, **Then**
-   the default upstream URL is fetched; verification proceeds
-   normally.
 
 ---
 
@@ -128,9 +118,9 @@ embedding sources point to that same commit.
 
 ### Edge Cases
 
-- The metadata-source HTTP fetch returns 404 / times out / fails
-  TLS → typed `MetadataFetchError`. The wizard does NOT silently
-  fall back to a different source.
+- The metadata file is missing or unreadable → typed
+  `MetadataReadError`. The wizard does NOT silently fall back to
+  a different source.
 - The metadata is correct but the chain has a re-deployment in
   flight (one `deployed_at` is being consumed in the mempool):
   the verifier sees the UTxO unspent, the wizard runs; the next
@@ -150,10 +140,8 @@ embedding sources point to that same commit.
 - **FR-001**: System MUST treat `metadata.json` content as
   untrusted. Every claim MUST be verified against an on-chain
   anchor or recomputed from build-time constants.
-- **FR-002**: System MUST source `metadata.json` from one of:
-  default upstream URL, `--metadata-url <url>`, or
-  `--metadata-file <path>`. Exactly one source per run; flags
-  are mutually exclusive.
+- **FR-002**: System MUST source `metadata.json` from a local
+  operator-supplied `--metadata <path>` file.
 - **FR-003**: System MUST verify scope-owner key hashes against
   the on-chain `Scopes` NFT inline datum.
 - **FR-004**: System MUST verify per-scope treasury script
@@ -174,11 +162,12 @@ embedding sources point to that same commit.
   upstream commit.
 - **FR-009**: System MUST drop the `--registry PATH` flag
   introduced on PR #28.
-- **FR-010**: `Provider IO` MUST gain a batched address-set
-  query: `queryUTxOsAt :: Set Addr -> m (Map Addr [...])`.
-- **FR-011**: The chain-side verification MUST issue at most two
-  LSQ round-trips against the node (one batched address query +
-  one batched TxIn query).
+- **FR-010**: `Provider IO` MUST expose an acquired query
+  session with a batched address-set handle query:
+  `queryUTxOsAtH :: Set Addr -> m (Map Addr [...])`.
+- **FR-011**: The chain-side verification MUST issue at most
+  two LSQ-backed queries inside one acquired Provider session
+  (one batched address query + one batched TxIn query).
 
 ### Key Entities
 
@@ -189,9 +178,8 @@ embedding sources point to that same commit.
   derivation.
 - **AnchorMismatch**: typed error tagged with the
   field name + scope.
-- **MetadataFetchError**: HTTP/parse failure mode (still typed,
-  still loud, but does not affect trust — even if the fetch
-  succeeded, content is verified).
+- **MetadataReadError**: local file read failure mode (still
+  typed, still loud, and distinct from metadata parse failure).
 - **Build-time constants**: `scopesSeedOutputReference`,
   `registrySeedOutputReference`, `scopesTokenName`,
   `registryTokenName`, `treasuryExpiration`,
@@ -206,8 +194,9 @@ embedding sources point to that same commit.
   derived from build-time constants (and recomputed).
 - **SC-002**: Tampering with any verifiable field in
   `metadata.json` is detected by the unit tests.
-- **SC-003**: A wizard run completes with at most two LSQ
-  round-trips against the node (FR-011).
+- **SC-003**: A wizard run completes with one acquired
+  Provider session and at most two LSQ-backed queries against
+  that snapshot (FR-011).
 - **SC-004**: Advancing build-time pins requires a PR; the diff
   shows the SHA / seed / blob delta.
 - **SC-005**: PR #28 rebases on top of this and merges with no
@@ -225,8 +214,9 @@ embedding sources point to that same commit.
   audit failure and the wizard refusing to run is correct.
 - The local `Provider IO` is reachable. Offline operation is
   not supported in v1.
-- Cross-call LSQ atomicity is acceptable to defer to upstream
-  ([lambdasistemi/cardano-node-clients#126](https://github.com/lambdasistemi/cardano-node-clients/issues/126));
-  the per-call atomicity LSQ already provides is sufficient for
-  v1 because chain advance during a few hundred ms is rare and
-  next-run verification catches any state torn read.
+- Provider acquired query sessions from
+  [lambdasistemi/cardano-node-clients#128](https://github.com/lambdasistemi/cardano-node-clients/pull/128)
+  are available to keep the registry walk's chain reads on one
+  acquired ledger snapshot.
+- Fetching metadata over HTTP(S) or from a baked-in default URL
+  is deferred until there is an explicit product request for it.

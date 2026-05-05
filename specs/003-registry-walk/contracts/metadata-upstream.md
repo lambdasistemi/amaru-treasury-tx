@@ -8,20 +8,15 @@ outside this is a breaking change.
 
 ## 1. Metadata source
 
-The verifier reads `metadata.json` from one of three
-interchangeable sources, picked by CLI flag:
+The verifier reads `metadata.json` from a local filesystem path
+supplied by the operator:
 
-- **Default**:
-  `https://raw.githubusercontent.com/pragma-org/amaru-treasury/main/journal/2026/metadata.json`.
-  Used when no flag is given.
-- **`--metadata-url <url>`**: an arbitrary URL. No restriction.
-- **`--metadata-file <path>`**: a local filesystem path.
+- **`--metadata <path>`**: local metadata snapshot.
 
-`--metadata-url` and `--metadata-file` are mutually exclusive.
-Passing both produces `MetadataSourceConflict` at parse time.
-
-The metadata's *content* is treated as untrusted regardless of
-source.
+The metadata's *content* is treated as untrusted. HTTP(S)
+fetching, default upstream URLs, and mirror selection are
+deferred until there is an explicit request for that
+ergonomics.
 
 ## 2. JSON schema
 
@@ -63,37 +58,48 @@ scriptHash(applyParams(treasuryRegistryValidatorBlob,
 scriptHash(applyParams(permissionsValidatorBlob,
 [scopesNftPolicy, scope]))`.
 
-The per-scope treasury validator hash is recoverable in
-principle by parameter-applying the SundaeSwap
-treasury-contracts validator with a `TreasuryConfiguration`,
-but the cleaner path is to read it from the per-scope registry
-NFT's inline datum (anchored).
+`treasuryScriptHash[scope] =
+scriptHash(applyParams(treasuryValidatorBlob,
+[TreasuryConfiguration registryToken permissionsScriptHash]))`.
+
+The per-scope registry NFT datum must commit to the same
+treasury script hash.
 
 ## 4. Provider IO requirement
 
 `Provider IO` must expose:
 
 ```haskell
-queryUTxOsAt
+withAcquired
     :: Provider IO
+    -> (QueryHandle IO -> IO a)
+    -> IO a
+
+queryUTxOsAtH
+    :: QueryHandle IO
     -> Set Addr
     -> IO (Map Addr [(TxIn, TxOut ConwayEra)])
+
+queryUTxOByTxInH
+    :: QueryHandle IO
+    -> Set TxIn
+    -> IO (Map TxIn (TxOut ConwayEra))
 ```
 
 Each `Addr` in the set produces one entry in the result map
 (empty list if no UTxOs at that address). Backed by LSQ
 `GetUTxOByAddress` accepting a `Set Addr` natively.
 
-The verifier consumes this twice in total per run alongside
-the existing `queryUTxOByTxIn`:
+The verifier consumes one acquired session per run:
 
-- Round-trip 1: `queryUTxOsAt` over the scopes-validator
+- Query 1: `queryUTxOsAtH` over the scopes-validator
   address + each requested scope's registry-validator address.
-- Round-trip 2: `queryUTxOByTxIn` over `scope_owners` +
+- Query 2: `queryUTxOByTxInH` over `scope_owners` +
   every requested-scope's `*.deployed_at` TxIn.
 
-Cross-call atomicity (single Acquired session for both) is
-tracked at
+Implemented upstream by
+[lambdasistemi/cardano-node-clients#128](https://github.com/lambdasistemi/cardano-node-clients/pull/128),
+closing
 [lambdasistemi/cardano-node-clients#126](https://github.com/lambdasistemi/cardano-node-clients/issues/126).
 
 ## 5. Build-time pin
@@ -108,7 +114,6 @@ constants (non-Nix). Advancing the pin is one PR.
 
 - Discovering `*_deployed_at` from chain alone (would require
   an indexer or whole-UTxO-set walk).
-- Air-gapped operation. `--metadata-file` accommodates pre-
-  fetched files but the chain check still runs against
-  `Provider IO`.
-- Cross-call LSQ atomicity (see §4).
+- HTTP(S) metadata fetching and default upstream URLs.
+- Fully air-gapped operation. A local file can be pre-fetched,
+  but the chain check still runs against `Provider IO`.

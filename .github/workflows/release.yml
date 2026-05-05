@@ -140,9 +140,10 @@ jobs:
           set -euo pipefail
           notes="$(mktemp)"
           scripts/release/extract-notes "$TAG" > "$notes"
-          gh release view "$TAG" >/dev/null 2>&1 \
-            || gh release create "$TAG" \
+          gh=(nix --quiet shell nixpkgs#gh -c gh)
+          "${gh[@]}" release view "$TAG" >/dev/null 2>&1 \
+            || "${gh[@]}" release create "$TAG" \
               --title "amaru-treasury-tx $TAG" \
               --notes-file "$notes" \
-            || gh release view "$TAG" >/dev/null
-          gh release upload "$TAG" artifacts/* --clobber
+            || "${gh[@]}" release view "$TAG" >/dev/null
+          "${gh[@]}" release upload "$TAG" artifacts/* --clobber

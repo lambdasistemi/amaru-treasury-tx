@@ -80,6 +80,7 @@ library
     Amaru.Treasury.Tx.SwapBuild
     Amaru.Treasury.Tx.SwapIntentJSON
     Amaru.Treasury.Tx.SwapWizard
+    Amaru.Treasury.Tx.SwapWizard.Trace
     Amaru.Treasury.Tx.Withdraw
     Amaru.Treasury.UtxoSelect
     Amaru.Treasury.Validity
@@ -103,6 +104,7 @@ library
     , cardano-node-clients
     , cardano-slotting
     , containers
+    , contra-tracer
     , file-embed
     , filepath
     , microlens
@@ -132,6 +134,7 @@ executable amaru-treasury-tx
     , cardano-node-clients
     , cardano-slotting
     , containers
+    , contra-tracer
     , directory
     , microlens
     , optparse-applicative

@@ -19,7 +19,7 @@ Subcommands:
 * @swap --intent path\/to\/intent.json [--out path\/swap.cbor]@ —
   builds the SundaeSwap order tx for a treasury scope.
   See [@docs\/swap.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/docs/swap.md).
-* @swap-wizard --network <preprod|mainnet> --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --usdm N.NN --split N --min-rate N.NN --validity-hours N --description ... --justification ... --destination-label ... [--signer HEX]... --out path\/intent.json [--yes] [--dry-run] [--verbose] [--force]@
+* @swap-wizard --network <preprod|mainnet> --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --usdm N.NN --split N --min-rate N.NN --validity-hours N --description ... --justification ... --destination-label ... [--signer HEX]... [--out path\/intent.json] [--log path\/wizard.log]@
   produces a swap @intent.json@ from a typed questionnaire.
   See [@specs\/002-swap-wizard\/quickstart.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/002-swap-wizard/quickstart.md).
 -}
@@ -27,7 +27,6 @@ module Main (main) where
 
 import Control.Applicative ((<|>))
 import Control.Exception (throwIO)
-import Control.Monad (unless, when)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
@@ -53,10 +52,8 @@ import Options.Applicative
     , progDesc
     , short
     , strOption
-    , switch
     , (<**>)
     )
-import System.Directory (doesFileExist)
 import System.Environment (lookupEnv)
 import System.Exit (ExitCode (..), exitFailure, exitWith)
 import System.IO (stderr)
@@ -98,16 +95,24 @@ import Amaru.Treasury.Tx.SwapBuild
     , runSwapBuild
     )
 import Amaru.Treasury.Tx.SwapIntentJSON
-    ( TranslatedIntent (..)
+    ( SwapInputs (..)
+    , SwapIntentJSON (..)
+    , TranslatedIntent (..)
     , decodeSwapIntentFile
     , parseAddr
     , translateIntent
     )
 import Amaru.Treasury.Tx.SwapWizard
-    ( RationaleAnswers (..)
+    ( NetworkConstants (..)
+    , RationaleAnswers (..)
+    , RegistryView (..)
     , ResolverEnv (..)
     , ResolverInput (..)
+    , ScopeOwners (..)
+    , ScopeView (..)
     , SwapWizardQ (..)
+    , TreasuryRefs (..)
+    , TreasurySelection (..)
     , WalletSelection (..)
     , WizardEnv (..)
     , WizardError
@@ -117,6 +122,11 @@ import Amaru.Treasury.Tx.SwapWizard
     , txInToText
     , wizardToIntentJSON
     )
+import Amaru.Treasury.Tx.SwapWizard.Trace
+    ( WizardEvent (..)
+    , eventTracer
+    )
+import Control.Tracer (Tracer (..), traceWith)
 
 data GlobalOpts = GlobalOpts
     { goSocketPath :: !(Maybe FilePath)
@@ -153,7 +163,10 @@ Mirrors @specs/002-swap-wizard/contracts/swap-wizard-cli.md §1@.
 data WizardOpts = WizardOpts
     { wOptsWalletAddr :: !Text
     , wOptsMetadataPath :: !FilePath
-    , wOptsOut :: !FilePath
+    , wOptsOut :: !(Maybe FilePath)
+    -- ^ where to write @intent.json@. 'Nothing' = stdout.
+    , wOptsLog :: !(Maybe FilePath)
+    -- ^ where to send 'WizardEvent' lines. 'Nothing' = stderr.
     , wOptsScope :: !ScopeId
     , wOptsUsdm :: !Double
     -- ^ target USDM amount (whole USDM, decimals OK).
@@ -171,10 +184,6 @@ data WizardOpts = WizardOpts
     , wOptsLabel :: !(Maybe Text)
     , wOptsSigners :: ![Text]
     -- ^ accumulated @--signer@ flags; empty = use scope default
-    , wOptsYes :: !Bool
-    , wOptsDryRun :: !Bool
-    , wOptsVerbose :: !Bool
-    , wOptsForce :: !Bool
     }
 
 globalOptsP :: Parser GlobalOpts
@@ -312,11 +321,22 @@ wizardOptsP =
                 <> metavar "PATH"
                 <> help "Path to local journal/2026 metadata.json"
             )
-        <*> strOption
-            ( long "out"
-                <> short 'o'
-                <> metavar "PATH"
-                <> help "Where to write intent.json"
+        <*> optional
+            ( strOption
+                ( long "out"
+                    <> short 'o'
+                    <> metavar "PATH"
+                    <> help
+                        "Where to write intent.json (defaults to stdout)"
+                )
+            )
+        <*> optional
+            ( strOption
+                ( long "log"
+                    <> metavar "PATH"
+                    <> help
+                        "Where to write step-by-step trace lines (defaults to stderr)"
+                )
             )
         <*> option
             scopeReader
@@ -396,22 +416,6 @@ wizardOptsP =
                     <> metavar "HEX"
                     <> help "Repeat for each override signer (28-byte hex)"
                 )
-            )
-        <*> switch
-            ( long "yes"
-                <> help "Skip confirmation"
-            )
-        <*> switch
-            ( long "dry-run"
-                <> help "Print JSON to stdout, skip file write"
-            )
-        <*> switch
-            ( long "verbose"
-                <> help "Print resolved env summary on stderr"
-            )
-        <*> switch
-            ( long "force"
-                <> help "Overwrite --out if it exists"
             )
 
 {- | Convert a USDM amount + USDM\/ADA rate to lovelace:
@@ -595,132 +599,208 @@ runSwap g SwapOpts{..} = do
 -- ----------------------------------------------------
 
 runWizard :: GlobalOpts -> WizardOpts -> IO ()
-runWizard g wo@WizardOpts{..} = do
+runWizard g WizardOpts{..} = do
     let socket = fromMaybe "(unset)" (goSocketPath g)
-    network <- case resolveNetworkName g of
-        Right t -> pure t
-        Left e -> do
-            wizardErr e
-            exitWith (ExitFailure 3)
-    -- 1. Convert human-friendly answers to wire types.
-    --    The user buys USDM at rate 'min-rate' (USDM/ADA);
-    --    ADA spend = usdm / rate.
-    let amountLov = usdmToLovelace wOptsUsdm wOptsMinRate
-        chunkSize = case wOptsChunkSpec of
-            -- 'positiveSplit' rejects N < 1 at parse time.
-            SplitCount n -> amountLov `div` toInteger n
-            ChunkUsdm x -> usdmToLovelace x wOptsMinRate
-        (rateNum, rateDen) = rateToFraction wOptsMinRate
-        signersOverride =
-            if null wOptsSigners
-                then Nothing
-                else Just wOptsSigners
-        answers =
-            SwapWizardQ
-                { wqScope = wOptsScope
-                , wqAmountLovelace = amountLov
-                , wqChunkSizeLovelace = chunkSize
-                , wqRateNumerator = rateNum
-                , wqRateDenominator = rateDen
-                , wqValidityHours = wOptsValidityHours
-                , wqRationale =
-                    RationaleAnswers
-                        { raDescription = wOptsDescription
-                        , raJustification = wOptsJustification
-                        , raDestinationLabel =
-                            wOptsDestinationLabel
-                        , raEvent = wOptsEvent
-                        , raLabel = wOptsLabel
-                        }
-                , wqSignersOverride = signersOverride
+    -- Open log handle and build the typed tracer first;
+    -- every subsequent step is one trace event.
+    withLogHandle wOptsLog $ \logH -> do
+        let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
+            tr = eventTracer textTracer
+        networkName <- case resolveNetworkName g of
+            Right t -> pure t
+            Left e -> abortTr tr (T.pack e)
+        let NetworkMagic magic = goNetworkMagic g
+        traceWith tr (WeNetwork networkName (fromIntegral magic))
+        traceWith tr (WeMetadata wOptsMetadataPath)
+
+        -- Convert human-friendly answers to wire types.
+        let amountLov = usdmToLovelace wOptsUsdm wOptsMinRate
+            chunkSize = case wOptsChunkSpec of
+                -- 'positiveSplit' rejects N < 1 at parse time.
+                SplitCount n -> amountLov `div` toInteger n
+                ChunkUsdm x -> usdmToLovelace x wOptsMinRate
+            (rateNum, rateDen) = rateToFraction wOptsMinRate
+            signersOverride =
+                if null wOptsSigners
+                    then Nothing
+                    else Just wOptsSigners
+            answers =
+                SwapWizardQ
+                    { wqScope = wOptsScope
+                    , wqAmountLovelace = amountLov
+                    , wqChunkSizeLovelace = chunkSize
+                    , wqRateNumerator = rateNum
+                    , wqRateDenominator = rateDen
+                    , wqValidityHours = wOptsValidityHours
+                    , wqRationale =
+                        RationaleAnswers
+                            { raDescription = wOptsDescription
+                            , raJustification = wOptsJustification
+                            , raDestinationLabel =
+                                wOptsDestinationLabel
+                            , raEvent = wOptsEvent
+                            , raLabel = wOptsLabel
+                            }
+                    , wqSignersOverride = signersOverride
+                    }
+
+        withLocalNodeBackend (goNetworkMagic g) socket $
+            \backend -> do
+                verified <-
+                    verifyRegistry
+                        backend
+                        wOptsMetadataPath
+                        (Set.singleton wOptsScope)
+                rv <- case verified of
+                    Left e ->
+                        abortTr tr ("verify: " <> T.pack (show e))
+                    Right registry ->
+                        case registryViewFromVerified
+                            wOptsScope
+                            registry of
+                            Left e ->
+                                abortTr
+                                    tr
+                                    ("project: " <> T.pack (show e))
+                            Right view -> pure view
+                traceRegistryView tr wOptsScope rv
+                let ri =
+                        ResolverInput
+                            { riNetwork = networkName
+                            , riWalletAddrBech32 = wOptsWalletAddr
+                            , riScope = wOptsScope
+                            , riAmountLovelace = amountLov
+                            , riRegistry = rv
+                            }
+                let renv =
+                        traceResolverEnv tr $
+                            providerToResolverEnv backend
+                er <- resolveWizardEnv renv ri
+                env <- case er of
+                    Left e ->
+                        abortTr tr ("resolve: " <> T.pack (show e))
+                    Right e -> pure e
+                traceEnv tr env
+                intent <- case wizardToIntentJSON env answers of
+                    Left we ->
+                        abortTr
+                            tr
+                            ("translate: " <> T.pack (show (we :: WizardError)))
+                    Right i -> pure i
+                let total = swAmountLovelace (sijSwap intent)
+                    cs = swChunkSizeLovelace (sijSwap intent)
+                    full = total `div` cs
+                    rem' = total `mod` cs
+                traceWith tr $
+                    WeValidityComputed
+                        (weCurrentTip env)
+                        (sijValidityUpperBoundSlot intent)
+                traceWith tr $
+                    WeChunksComputed total cs (fromInteger full) rem'
+                traceWith tr (WeIntentReady wOptsOut)
+                let bytes = encodeIntentJSON intent
+                case wOptsOut of
+                    Nothing -> BSL.putStr bytes
+                    Just p -> BSL.writeFile p bytes
+
+{- | Open the log handle indicated by '--log' (or stderr if absent),
+run the action, and close the handle on exit.
+-}
+withLogHandle :: Maybe FilePath -> (IO.Handle -> IO a) -> IO a
+withLogHandle Nothing k = k stderr
+withLogHandle (Just p) k =
+    IO.withFile p IO.WriteMode $ \h -> do
+        IO.hSetBuffering h IO.LineBuffering
+        k h
+
+-- | Trace and abort with exit code 3 (mirrors the previous error path).
+abortTr :: Tracer IO WizardEvent -> Text -> IO a
+abortTr tr msg = do
+    traceWith tr (WeAborted msg)
+    exitWith (ExitFailure 3)
+
+-- | Wrap a 'ResolverEnv' with tracing for each IO method.
+traceResolverEnv
+    :: Tracer IO WizardEvent
+    -> ResolverEnv IO
+    -> ResolverEnv IO
+traceResolverEnv tr renv =
+    ResolverEnv
+        { reEnvQueryWalletUtxos = \addr -> do
+            us <- reEnvQueryWalletUtxos renv addr
+            traceWith tr (WeWalletUtxosQueried (length us))
+            pure us
+        , reEnvQueryTreasuryUtxos = \addr -> do
+            us <- reEnvQueryTreasuryUtxos renv addr
+            traceWith
+                tr
+                ( WeTreasuryUtxosQueried
+                    (length us)
+                    (sum (map (\(_, l, _) -> l) us))
+                )
+            pure us
+        , reEnvCurrentTip = do
+            t <- reEnvCurrentTip renv
+            traceWith tr (WeTipRead t)
+            pure t
+        }
+
+-- | Trace verifier outcome and on-chain owners for the requested scope.
+traceRegistryView
+    :: Tracer IO WizardEvent
+    -> ScopeId
+    -> RegistryView
+    -> IO ()
+traceRegistryView tr scope rv = do
+    let refs = svRefs (mkScopeView scope rv)
+    traceWith tr $
+        WeRegistryVerified
+            scope
+            (trAddress refs)
+            (trScriptHash refs)
+            (rvRegistryPolicyId rv)
+            (trPermissionsRewardAccount refs)
+    let os = rvOwners rv
+    traceWith tr $
+        WeOwners
+            (soCore os)
+            (soOps os)
+            (soNetworkCompliance os)
+            (soMiddleware os)
+
+-- | Project a per-scope 'ScopeView' out of a 'RegistryView' for tracing.
+mkScopeView :: ScopeId -> RegistryView -> ScopeView
+mkScopeView scope rv =
+    case Map.lookup scope (rvTreasuryByScope rv) of
+        Just refs ->
+            ScopeView
+                { svScope = scope
+                , svRefs = refs
+                , svDefaultSigners = []
                 }
-    -- 2. Refuse to overwrite without --force.
-    unless wOptsDryRun $
-        whenM (doesFileExist wOptsOut) $
-            unless wOptsForce $ do
-                wizardErr ("output exists: " <> wOptsOut)
-                exitWith (ExitFailure 5)
-    -- 3. Connect to node, verify the local metadata, run resolver.
-    IO.hPutStrLn stderr $
-        "swap-wizard: connecting to " <> socket
-    withLocalNodeBackend (goNetworkMagic g) socket $
-        \backend -> do
-            verified <-
-                verifyRegistry
-                    backend
-                    wOptsMetadataPath
-                    (Set.singleton wOptsScope)
-            rv <- case verified of
-                Left e -> do
-                    wizardErr ("metadata: " <> show e)
-                    exitWith (ExitFailure 3)
-                Right registry ->
-                    case registryViewFromVerified wOptsScope registry of
-                        Left e -> do
-                            wizardErr ("metadata: " <> show e)
-                            exitWith (ExitFailure 3)
-                        Right view -> pure view
-            let ri =
-                    ResolverInput
-                        { riNetwork = network
-                        , riWalletAddrBech32 = wOptsWalletAddr
-                        , riScope = wOptsScope
-                        , riAmountLovelace = amountLov
-                        , riRegistry = rv
-                        }
-            let renv = providerToResolverEnv backend
-            er <- resolveWizardEnv renv ri
-            case er of
-                Left e -> do
-                    wizardErr (show e)
-                    exitWith (ExitFailure 3)
-                Right env -> do
-                    when wOptsVerbose (printEnvSummary env)
-                    case wizardToIntentJSON env answers of
-                        Left we -> do
-                            wizardErr (show (we :: WizardError))
-                            exitWith (ExitFailure 4)
-                        Right intent -> do
-                            confirmed <- askConfirm wo
-                            unless confirmed $
-                                exitWith (ExitFailure 1)
-                            let bytes = encodeIntentJSON intent
-                            if wOptsDryRun
-                                then BSL.putStr bytes
-                                else do
-                                    BSL.writeFile wOptsOut bytes
-                                    putStrLn $
-                                        "wrote intent.json to "
-                                            <> wOptsOut
+        Nothing ->
+            error "swap-wizard: missing scope in RegistryView (post-verify)"
 
-wizardErr :: String -> IO ()
-wizardErr s = IO.hPutStrLn stderr ("swap-wizard: " <> s)
-
-printEnvSummary :: WizardEnv -> IO ()
-printEnvSummary e = do
-    let l = T.unpack
-    IO.hPutStrLn stderr "swap-wizard: resolved environment"
-    IO.hPutStrLn stderr $
-        "  network        = " <> l (weNetwork e)
-    IO.hPutStrLn stderr $
-        "  currentTip     = " <> show (weCurrentTip e)
-    IO.hPutStrLn stderr $
-        "  walletTxIn     = "
-            <> l (wsTxIn (weWalletSelection e))
-    IO.hPutStrLn stderr $
-        "  walletAddr     = "
-            <> l (wsAddress (weWalletSelection e))
-
-askConfirm :: WizardOpts -> IO Bool
-askConfirm WizardOpts{..}
-    | wOptsYes = pure True
-    | otherwise = do
-        IO.hPutStr
-            stderr
-            "Confirm and write intent.json? [y/N] "
-        IO.hFlush stderr
-        ln <- TIO.hGetLine IO.stdin
-        pure $ T.toLower (T.strip ln) == "y"
+{- | Trace post-resolve env data: NetworkConstants row,
+selected wallet UTxO, selected treasury UTxOs + leftover.
+-}
+traceEnv :: Tracer IO WizardEvent -> WizardEnv -> IO ()
+traceEnv tr env = do
+    let nc = weNetworkConstants env
+    traceWith tr $
+        WeNetworkConstants
+            (ncSwapOrderAddress nc)
+            (ncUsdmPolicy nc)
+            (ncUsdmToken nc)
+            (ncSundaeProtocolFeeLovelace nc)
+    let wsel = weWalletSelection env
+    traceWith tr $
+        WeWalletUtxoSelected (wsTxIn wsel)
+    let tsel = weTreasurySelection env
+    traceWith tr $
+        WeTreasuryUtxosSelected
+            (tsInputs tsel)
+            (tsLeftoverLovelace tsel)
 
 {- | Adapter: project the lower-level 'Provider' interface
 into the 'ResolverEnv' shape the wizard consumes.
@@ -768,6 +848,3 @@ nowTip p = do
     let nowMs = round (realToFrac nowSec * (1000 :: Double))
     SlotNo s <- posixMsToSlot p nowMs
     pure s
-
-whenM :: (Monad m) => m Bool -> m () -> m ()
-whenM cond act = cond >>= \b -> when b act

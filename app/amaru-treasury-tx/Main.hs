@@ -128,6 +128,10 @@ import Amaru.Treasury.Tx.SwapWizard
 data GlobalOpts = GlobalOpts
     { goSocketPath :: !(Maybe FilePath)
     , goNetworkMagic :: !NetworkMagic
+    , goNetworkName :: !(Maybe Text)
+    -- ^ canonical name when known
+    --   ('Nothing' for magics like @42@ that have no
+    --   well-known name).
     }
 
 data Cmd
@@ -182,7 +186,7 @@ data WizardOpts = WizardOpts
 
 globalOptsP :: Parser GlobalOpts
 globalOptsP =
-    GlobalOpts
+    mkOpts
         <$> optional
             ( strOption
                 ( long "node-socket"
@@ -191,15 +195,61 @@ globalOptsP =
                         "cardano-node N2C socket (defaults to CARDANO_NODE_SOCKET_PATH)"
                 )
             )
-        <*> ( NetworkMagic
-                <$> option
-                    auto
-                    ( long "network-magic"
-                        <> metavar "WORD32"
-                        <> help "Network magic (mainnet=764824073)"
-                        <> value 764_824_073
-                    )
+        <*> ( byName <|> byMagic <|> pure defaultMainnet
             )
+  where
+    byName =
+        option
+            (eitherReader networkNameToPair)
+            ( long "network"
+                <> metavar "NAME"
+                <> help
+                    "mainnet | preprod | preview (alternative to --network-magic)"
+            )
+    byMagic =
+        (\m -> (NetworkMagic m, networkMagicNameMaybe (NetworkMagic m)))
+            <$> option
+                auto
+                ( long "network-magic"
+                    <> metavar "WORD32"
+                    <> help
+                        "Custom network magic (mainnet=764824073, preprod=1, preview=2)"
+                )
+    defaultMainnet =
+        ( NetworkMagic 764_824_073
+        , Just "mainnet"
+        )
+    mkOpts socket (magic, name) =
+        GlobalOpts
+            { goSocketPath = socket
+            , goNetworkMagic = magic
+            , goNetworkName = name
+            }
+
+{- | Parse a canonical network name to its
+@(magic, Just name)@ pair.
+-}
+networkNameToPair
+    :: String -> Either String (NetworkMagic, Maybe Text)
+networkNameToPair s = case s of
+    "mainnet" ->
+        Right (NetworkMagic 764_824_073, Just "mainnet")
+    "preprod" -> Right (NetworkMagic 1, Just "preprod")
+    "preview" -> Right (NetworkMagic 2, Just "preview")
+    _ ->
+        Left
+            ( "unknown network name: "
+                <> s
+                <> " (expected mainnet|preprod|preview)"
+            )
+
+-- | Reverse lookup: known magics to canonical names.
+networkMagicNameMaybe :: NetworkMagic -> Maybe Text
+networkMagicNameMaybe (NetworkMagic m) = case m of
+    764824073 -> Just "mainnet"
+    1 -> Just "preprod"
+    2 -> Just "preview"
+    _ -> Nothing
 
 swapOptsP :: Parser SwapOpts
 swapOptsP =
@@ -394,22 +444,22 @@ rateToFraction :: Double -> (Integer, Integer)
 rateToFraction r =
     (round (toRational r * 1_000_000), 1_000_000)
 
-{- | Translate the on-the-wire 'NetworkMagic' to the
-canonical network name the wizard uses for
-'NetworkConstants' lookup and HRP validation. The user
-passes only @--network-magic@; the network name is
-derived (no separate @--network@ flag).
+{- | Resolve the canonical network name from
+'GlobalOpts'. Returns 'Left' if the user passed a custom
+@--network-magic@ that does not match any known network.
 -}
-networkMagicName :: NetworkMagic -> Either String Text
-networkMagicName (NetworkMagic m) = case m of
-    764824073 -> Right "mainnet"
-    1 -> Right "preprod"
-    2 -> Right "preview"
-    _ ->
-        Left
-            ( "swap-wizard: unrecognised --network-magic "
-                <> show m
-            )
+resolveNetworkName :: GlobalOpts -> Either String Text
+resolveNetworkName g = case goNetworkName g of
+    Just n -> Right n
+    Nothing ->
+        let NetworkMagic m = goNetworkMagic g
+        in  Left
+                ( "swap-wizard: --network-magic "
+                    <> show m
+                    <> " is not a known network; pass "
+                    <> "--network mainnet|preprod|preview "
+                    <> "or a known magic"
+                )
 
 opts :: ParserInfo (GlobalOpts, Cmd)
 opts =
@@ -554,7 +604,7 @@ runSwap g SwapOpts{..} = do
 runWizard :: GlobalOpts -> WizardOpts -> IO ()
 runWizard g wo@WizardOpts{..} = do
     let socket = fromMaybe "(unset)" (goSocketPath g)
-    network <- case networkMagicName (goNetworkMagic g) of
+    network <- case resolveNetworkName g of
         Right t -> pure t
         Left e -> do
             wizardErr e

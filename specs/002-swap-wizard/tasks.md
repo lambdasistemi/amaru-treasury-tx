@@ -282,9 +282,11 @@ resolver + pure translation + file write, never invokes
       codes per
       [contract §4](./contracts/swap-wizard-cli.md). Format
       messages as `swap-wizard: <message>` on stderr.
-- [ ] T029 [US1] Update `README.md` and `quickstart.md` with the
+- [X] T029 [US1] Update `README.md` and `quickstart.md` with the
       `swap-wizard` invocation. Link from the README to
-      [quickstart.md](./quickstart.md).
+      [quickstart.md](./quickstart.md). Sample registry JSON
+      checked in at
+      [`test/fixtures/swap-wizard/registry.example.json`](../../test/fixtures/swap-wizard/registry.example.json).
 - [ ] T030 [US3] Integration test in
       `test/unit/SwapWizardSpec.hs`: drive the subcommand with
       flags-only inputs against the stub `Provider IO`, assert

@@ -11,51 +11,56 @@ build.
 
 ## 1. Prerequisites
 
-- A running cardano-node socket reachable by `Provider IO` (or your
-  configured backend).
-- `amaru-treasury-tx` built from the `002-swap-wizard` branch.
-- Knowing your wallet bech32 address and the registry-NFT UTxO for
-  your network.
+- A running cardano-node socket reachable by the local-node
+  `Provider` (preprod or mainnet).
+- `amaru-treasury-tx` built from the `002-swap-wizard` branch
+  (e.g. `nix build .#default`).
+- Your wallet bech32 address (the wallet must hold a pure-ADA UTxO
+  to use as fuel + collateral).
+- A `registry.json` file describing the registry refs, scope owner
+  key hashes, and per-scope treasury addresses. A working preprod
+  example is checked in at
+  [`test/fixtures/swap-wizard/registry.example.json`](../../test/fixtures/swap-wizard/registry.example.json) —
+  copy it and adapt to your network/scope state.
+
+> **MVP note**: the v1 resolver does *not* walk the registry NFT
+> on-chain. It loads the file you pass via `--registry`. The
+> on-chain walk is tracked as a follow-up.
 
 ## 2. Run the wizard
 
 ```bash
 amaru-treasury-tx swap-wizard \
+    --node-socket /path/to/node.socket \
+    --network-magic 1 \
     --network preprod \
-    --wallet-addr addr1q... \
-    --registry-utxo <txid>#<ix> \
+    --wallet-addr addr_test1q... \
+    --registry test/fixtures/swap-wizard/registry.example.json \
+    --scope core_development \
+    --amount-ada 408163265306 \
+    --chunk-ada 12500000000 \
+    --rate-num 245 --rate-den 1000 \
+    --validity-hours 6 \
+    --description 'Swapping ADA for USDM' \
+    --justification 'Required to pay vendor X' \
+    --destination-label 'Network Compliance treasury' \
+    --signers f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e,8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1 \
     --out intent.json \
-    --verbose
+    --verbose --yes
 ```
 
 The wizard:
 
-1. Walks the registry, builds `WizardEnv`.
-2. Asks the ~7 questions (scope, total ADA, chunk size, rate
-   numerator/denominator, validity hours, rationale fields,
-   optional signer override).
-3. Prints a verbose summary of every resolved field.
-4. Asks for confirmation.
-5. Writes `intent.json` to the path you gave.
+1. Loads the registry view from `--registry`.
+2. Connects to the node, resolves wallet + treasury UTxOs and the
+   current chain tip.
+3. With `--verbose`, prints a summary of every resolved field on
+   stderr.
+4. Asks for confirmation (skipped under `--yes`).
+5. Writes `intent.json` to the path given to `--out`.
 
-For scripted use, supply the answers as flags and pass `--yes`:
-
-```bash
-amaru-treasury-tx swap-wizard \
-    --network preprod \
-    --wallet-addr addr1q... \
-    --registry-utxo <txid>#<ix> \
-    --scope core \
-    --amount-ada 50000000000 \
-    --chunk-ada 5000000000 \
-    --rate-num 425000 --rate-den 1000000 \
-    --validity-hours 6 \
-    --signers <hex28>,<hex28>,<hex28> \
-    --out intent.json \
-    --yes
-```
-
-Add `--dry-run` to print the JSON to stdout instead of writing.
+`--dry-run` prints the JSON to stdout instead of writing the file.
+`--force` overwrites an existing `--out` path; without it, exit 5.
 
 ## 3. Build the swap transaction
 

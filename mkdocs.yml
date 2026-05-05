@@ -34,14 +34,17 @@ theme:
 markdown_extensions:
   - admonition
   - pymdownx.superfences:
-      # Hand the ``` ``mermaid `` fence to mkdocs-mermaid2 instead
-      # of letting Material's superfences swallow it as a plain
-      # code block. Without this custom fence, diagrams render as
-      # raw text on the published site.
+      # Hand the ``` ``mermaid `` fence to mkdocs-mermaid2. Use
+      # 'fence_mermaid' (not '_custom'): the custom variant wraps
+      # the source in <pre><code>...</code></pre>, which causes
+      # markdown to escape literal '-->' arrows to '--&gt;' inside
+      # the <code>; mermaid then can't parse the edges. The
+      # non-custom variant emits <div class="mermaid">...</div>
+      # with the source intact, which is what mermaid.init expects.
       custom_fences:
         - name: mermaid
           class: mermaid
-          format: !!python/name:mermaid2.fence_mermaid_custom
+          format: !!python/name:mermaid2.fence_mermaid
   - pymdownx.details
   - pymdownx.highlight
   - pymdownx.inlinehilite

@@ -97,52 +97,40 @@ Per-scope registry NFT discovery: derive
 script address → `queryUTxOs <addr>` → filter for the unique
 UTxO holding the `(derived_policy_id, "REGISTRY")` token.
 
-## R5. The metadata source is interchangeable
+## R5. The metadata source is local-only for v1
 
-**Decision**: Read metadata from one of three interchangeable
-sources, picked by flag:
-
-- Default: upstream raw URL at `main`
-  (`https://raw.githubusercontent.com/pragma-org/amaru-treasury/main/journal/2026/metadata.json`).
-- `--metadata-url <url>`: any URL.
-- `--metadata-file <path>`: a local file.
+**Decision**: Read metadata from a local path supplied as
+`--metadata <path>`.
 
 **Rationale**: After per-field verification, the source's
-trustworthiness is irrelevant to safety. The default is the
-ergonomic choice. The flags exist because operators may have
-pre-fetched / mirrored / hand-edited copies for legitimate
-reasons (CI sandboxes, air-gapped environments, etc.) — none
-of which weaken safety.
+trustworthiness is irrelevant to safety, but URL fetching and
+default-source selection add implementation and UX surface that
+is not needed for the first request. Operators can pre-fetch or
+edit a local snapshot, and every field is still checked against
+chain before use.
 
-**Alternatives considered**:
-- Drop the URL default; require an explicit source. Rejected:
-  bad ergonomics for the common case.
-- Allow only the official upstream URL. Rejected: artificially
-  restrictive for no safety benefit.
+**Deferred**:
+- Default upstream URL.
+- URL-sourced metadata.
+- Mirror/source selection.
 
-## R6. LSQ round-trip count
+## R6. LSQ query shape
 
-**Decision**: Two LSQ round-trips per wizard run:
+**Decision**: One acquired Provider session per wizard run,
+containing two LSQ-backed queries:
 
-1. `queryUTxOsAt :: Set Addr` over the scopes-validator address
-   plus each requested scope's registry-validator address →
-   all NFT UTxOs in one shot.
-2. `queryUTxOByTxIn :: Set TxIn` over all `*_deployed_at`
-   refs (and the metadata's `scope_owners` TxIn if not already
-   covered by #1) → all reference UTxOs in one shot.
+1. `queryUTxOsAtH :: Set Addr` over the scopes-validator
+   address plus each requested scope's registry-validator
+   address → all NFT UTxOs in one shot.
+2. `queryUTxOByTxInH :: Set TxIn` over all `*_deployed_at`
+   refs → all reference UTxOs in one shot.
 
 **Rationale**: LSQ's `GetUTxOByAddress` and `GetUTxOByTxIn`
-both accept sets natively. The current `Provider IO` exposes
-the TxIn batched form already; we need a batched address form
-(`queryUTxOsAt`) added to `Provider`.
-
-**Single-Acquired multi-query** is a stronger guarantee
-(atomic across both queries) but requires a Provider redesign;
-filed upstream as
-[lambdasistemi/cardano-node-clients#126](https://github.com/lambdasistemi/cardano-node-clients/issues/126).
-For v1 the per-round-trip atomicity LSQ gives is sufficient:
-chain advance during the ~ms gap is rare, and re-running the
-wizard after a torn read is a benign retry.
+both accept sets natively. `cardano-node-clients#128` adds
+`Provider.withAcquired` and acquired `QueryHandle` selectors,
+so both queries are evaluated against one acquired ledger
+snapshot. That closes the atomicity follow-up tracked in
+`cardano-node-clients#126`.
 
 ## R7. Permissions script parameterisation
 

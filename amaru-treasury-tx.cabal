@@ -1,7 +1,7 @@
-cabal-version:   3.4
-name:            amaru-treasury-tx
-version:         0.1.0.0
-synopsis:        Build unsigned Amaru treasury transactions
+cabal-version:      3.4
+name:               amaru-treasury-tx
+version:            0.1.0.0
+synopsis:           Build unsigned Amaru treasury transactions
 description:
   Haskell port of the Amaru treasury bash recipes
   ('disburse', 'reorganize', 'withdraw') from
@@ -9,13 +9,19 @@ description:
   emits unsigned Conway transactions for offline
   signing.
 
-license:         Apache-2.0
-license-file:    LICENSE
-author:          Paolo Veronelli
-maintainer:      paolo.veronelli@gmail.com
-category:        Cardano
-build-type:      Simple
-extra-doc-files: CHANGELOG.md
+license:            Apache-2.0
+license-file:       LICENSE
+author:             Paolo Veronelli
+maintainer:         paolo.veronelli@gmail.com
+category:           Cardano
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+extra-source-files:
+  assets/plutus/permissions.cbor
+  assets/plutus/README.md
+  assets/plutus/scopes.cbor
+  assets/plutus/treasury.cbor
+  assets/plutus/treasury_registry.cbor
 
 flag werror
   description: Enable -Werror
@@ -62,6 +68,10 @@ library
     Amaru.Treasury.Metadata
     Amaru.Treasury.PParams
     Amaru.Treasury.Redeemer
+    Amaru.Treasury.Registry.Constants
+    Amaru.Treasury.Registry.Derive
+    Amaru.Treasury.Registry.Metadata
+    Amaru.Treasury.Registry.Verify
     Amaru.Treasury.Scope
     Amaru.Treasury.Summary
     Amaru.Treasury.Tx.Disburse
@@ -91,10 +101,12 @@ library
     , cardano-node-clients
     , cardano-slotting
     , containers
+    , file-embed
     , filepath
     , microlens
     , ouroboros-network:api
     , plutus-core
+    , plutus-ledger-api
     , plutus-tx
     , text
     , time
@@ -163,6 +175,10 @@ test-suite unit-tests
     Amaru.Treasury.MetadataSpec
     Amaru.Treasury.PParamsSpec
     Amaru.Treasury.RedeemerSpec
+    Amaru.Treasury.Registry.ConstantsSpec
+    Amaru.Treasury.Registry.DeriveSpec
+    Amaru.Treasury.Registry.MetadataSpec
+    Amaru.Treasury.Registry.VerifySpec
     Amaru.Treasury.ScopeSpec
     Amaru.Treasury.SummarySpec
     Amaru.Treasury.Tx.DisburseSpec
@@ -172,12 +188,14 @@ test-suite unit-tests
     PlaceholderSpec
 
   build-depends:
+    , aeson
     , amaru-treasury-tx
     , base                    <5
     , base16-bytestring
     , bytestring
     , cardano-crypto-class
     , cardano-ledger-allegra
+    , cardano-ledger-alonzo
     , cardano-ledger-api
     , cardano-ledger-conway
     , cardano-ledger-core

@@ -130,12 +130,8 @@ private to the verifier — there is no exported `Constructor` or
 
 ```haskell
 data RegistryWalkError
-    = MetadataFetchHttp !Int !Text
-    | MetadataFetchTimeout !Text
-    | MetadataFetchTransport !Text
+    = MetadataReadError !FilePath !Text
     | MetadataParse !String
-    | MetadataSourceConflict
-    -- ^ both --metadata-url and --metadata-file passed
 
     -- | The metadata's claim does not match the on-chain
     -- anchor or the locally-derived value. Field is one of:
@@ -165,26 +161,26 @@ data RegistryWalkError
 ```haskell
 verifyRegistry
     :: Provider IO
-    -> MetadataFetcher IO
-    -> MetadataSource          -- default URL | --url ... | --file ...
+    -> FilePath                -- local metadata.json
     -> Set ScopeId             -- which scopes to verify
     -> IO (Either RegistryWalkError VerifiedRegistry)
 ```
 
 Behaviour, in order:
 
-1. Resolve metadata bytes from `MetadataSource`. Fetch errors
-   ⇒ `MetadataFetchHttp/Timeout/Transport`.
+1. Read metadata bytes from the local file. Read errors ⇒
+   `MetadataReadError`.
 2. Parse to `UpstreamMetadata`. Parse errors ⇒
    `MetadataParse`.
 3. Recompute Scopes NFT policy id from
    `scopes(scopesSeed)` blob. Compute its script address.
 4. For each requested scope, recompute the per-scope registry
    NFT policy id and script address.
-5. Issue **LSQ round-trip 1**: `queryUTxOsAt {scopes_addr,
-   each_registry_addr}`. Filter for the unique NFT-bearing
-   UTxO at each address. Multi-match ⇒ `AnchorAmbiguous`.
-   Empty ⇒ `AnchorSpent`.
+5. Enter one Provider `withAcquired` session. Inside that
+   acquired snapshot, issue the batched address query
+   `queryUTxOsAtH {scopes_addr, each_registry_addr}`. Filter
+   for the unique NFT-bearing UTxO at each address.
+   Multi-match ⇒ `AnchorAmbiguous`. Empty ⇒ `AnchorSpent`.
 6. Parse the Scopes NFT inline datum → owner key hashes.
    Verify every metadata `owner` claim. Mismatch ⇒
    `AnchorMismatch "owner" scope`.
@@ -198,55 +194,56 @@ Behaviour, in order:
 10. Recompute the bech32 address from
     `vsTreasuryScriptHash` for the configured network. Verify
     metadata's `address`.
-11. Issue **LSQ round-trip 2**:
-    `queryUTxOByTxIn {scope_owners, each per-scope deployed-at}`.
-    Empty result for any TxIn ⇒
-    `AnchorSpent`. For every returned UTxO, verify its reference
-    script hash equals the verified script hash for that field.
-    Mismatch ⇒ `AnchorMismatch "*.deployed_at" scope`.
+11. In the same acquired session, issue
+    `queryUTxOByTxInH {scope_owners, each per-scope deployed-at}`.
+    Empty result for any TxIn ⇒ `AnchorSpent`. For every
+    returned UTxO, verify its reference script hash equals the
+    verified script hash for that field. Mismatch ⇒
+    `AnchorMismatch "*.deployed_at" scope`.
 12. Build `VerifiedRegistry`. Return `Right`.
 
-Total: pure validation surrounded by exactly two LSQ
-round-trips against the node. Cross-call atomicity is a v2
-upstream enhancement
-([cardano-node-clients#126](https://github.com/lambdasistemi/cardano-node-clients/issues/126)).
+Total: pure validation surrounded by one acquired Provider
+session and two LSQ-backed queries against the same acquired
+ledger snapshot.
 
-## 6. MetadataSource and MetadataFetcher
+## 6. Metadata file reader
 
 ```haskell
-data MetadataSource
-    = MetadataSourceDefaultUrl
-    | MetadataSourceUrl !Text
-    | MetadataSourceFile !FilePath
+readUpstreamMetadataFile
+    :: FilePath
+    -> IO (Either RegistryWalkError UpstreamMetadata)
 
-newtype MetadataFetcher m = MetadataFetcher
-    { runFetcher
-        :: MetadataSource
-        -> m (Either RegistryWalkError ByteString)
-    }
-
-defaultMetadataUrl :: Text
-defaultMetadataUrl =
-    "https://raw.githubusercontent.com/pragma-org/amaru-treasury/main/journal/2026/metadata.json"
+decodeUpstreamMetadata
+    :: ByteString
+    -> Either RegistryWalkError UpstreamMetadata
 ```
 
-`MetadataSource` is constructed once from the CLI flags;
-mutual exclusion between `--metadata-url` and `--metadata-file`
-is checked at parse time and produces
-`MetadataSourceConflict`.
+The first PR supports only a local operator-supplied metadata
+file. HTTP(S), default upstream URLs, and mirror selection are
+deferred until there is an explicit request for those ergonomics.
 
 ## 7. Provider IO addition
 
 ```haskell
--- to be added to cardano-node-clients/Provider.hs:
-queryUTxOsAt
+withAcquired
     :: Provider m
+    -> (QueryHandle m -> m a)
+    -> m a
+
+queryUTxOsAtH
+    :: QueryHandle m
     -> Set Addr
     -> m (Map Addr [(TxIn, TxOut ConwayEra)])
+
+queryUTxOByTxInH
+    :: QueryHandle m
+    -> Set TxIn
+    -> m (Map TxIn (TxOut ConwayEra))
 ```
 
-A small change upstream. If it's blocked on review, this
-branch can ship with a sequential fallback (one
-`queryUTxOs` per address) and migrate to the batched form in a
-patch release. Adding to the FR-011 round-trip count is the
-only consequence; safety is unchanged.
+Implemented upstream by
+[`cardano-node-clients#128`](https://github.com/lambdasistemi/cardano-node-clients/pull/128),
+closing
+[`cardano-node-clients#126`](https://github.com/lambdasistemi/cardano-node-clients/issues/126).
+The one-shot `Provider` fields remain for existing callers;
+registry verification uses the acquired handle API.

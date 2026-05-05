@@ -10,21 +10,16 @@ import Amaru.Treasury.Registry.Verify
     ( verifyRegistry
     , VerifiedRegistry
     , RegistryWalkError
-    , MetadataSource (MetadataSourceDefaultUrl)
     )
-import Amaru.Treasury.Registry.Metadata (httpFetcher)
 import Amaru.Treasury.Backend (Provider)
 import Amaru.Treasury.Scope (ScopeId (..))
-import Network.HTTP.Client.TLS (newTlsManager)
 import qualified Data.Set as Set
 
 example :: Provider IO -> IO (Either RegistryWalkError VerifiedRegistry)
-example backend = do
-    mgr <- newTlsManager
+example backend =
     verifyRegistry
         backend
-        (httpFetcher mgr)
-        MetadataSourceDefaultUrl
+        "metadata.json"
         (Set.singleton CoreDevelopment)
 ```
 
@@ -39,7 +34,7 @@ amaru-treasury-tx \
     --node-socket /code/cardano-mainnet/ipc/node.socket \
     --network mainnet \
     swap-wizard \
-    [--metadata-url <url> | --metadata-file <path>] \
+    --metadata /path/to/metadata.json \
     --wallet-addr addr1q... \
     --scope core_development \
     --usdm 100000 --chunk-usdm 3062.5 --min-rate 0.245 \
@@ -48,9 +43,8 @@ amaru-treasury-tx \
     --out intent.json --verbose --yes
 ```
 
-No `--registry PATH`. Default metadata source is upstream raw
-`main`. Both metadata flags are optional and mutually
-exclusive.
+No `--registry PATH`. Metadata is a required local file for
+this PR; URL/default fetching is deferred.
 
 ## 3. What "verified" actually checks
 
@@ -74,7 +68,7 @@ operation; ambiguity = abort).
 
 | Exit | Wizard says | Action |
 |------|-------------|--------|
-| 3 | `metadata: <url>: HTTP 404` | check `--metadata-url` is reachable |
+| 3 | `metadata: read error: <msg>` | check `--metadata` points to a readable file |
 | 3 | `metadata: parse error: <msg>` | upstream schema may have shifted; update parser |
 | 3 | `chain: AnchorMismatch <field> <scope>: expected <X>, got <Y>` | metadata's claim disagrees with chain or build-time derivation; investigate before trusting either |
 | 3 | `chain: AnchorSpent <field> <scope>: <txin>` | the named reference UTxO has been consumed — likely a re-deployment; bump metadata source to a post-redeploy version |

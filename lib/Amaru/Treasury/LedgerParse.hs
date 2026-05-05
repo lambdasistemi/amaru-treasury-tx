@@ -11,18 +11,14 @@ builders need:
 
 * 'TxIn' from a @\"txid#ix\"@ string,
 * 'KeyHash' \''Witness' from 28-byte hex,
-* 'ScriptHash' from 28-byte hex.
-
-Bech32 address decoding is deliberately left to the
-consumer module that needs it (will land alongside the
-first builder in Phase 3 US1 — adding @bech32@ as a dep
-prematurely would gate this PR on a feature it doesn't
-need).
+* 'ScriptHash' from 28-byte hex,
+* 'Addr' from bech32 text.
 -}
 module Amaru.Treasury.LedgerParse
     ( txInFromText
     , keyHashFromHex
     , scriptHashFromHex
+    , addrFromText
     ) where
 
 import Data.ByteString (ByteString)
@@ -38,6 +34,7 @@ import Cardano.Crypto.Hash.Class
     , HashAlgorithm
     , hashFromBytes
     )
+import Cardano.Ledger.Address (Addr, decodeAddrEither)
 import Cardano.Ledger.BaseTypes (mkTxIxPartial)
 import Cardano.Ledger.Hashes
     ( KeyHash (..)
@@ -46,6 +43,7 @@ import Cardano.Ledger.Hashes
     )
 import Cardano.Ledger.Keys (KeyRole (..))
 import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
+import Codec.Binary.Bech32 qualified as Bech32
 
 -- | Parse a @"txid#ix"@ reference (matches @journal\/2026\/metadata.json@).
 txInFromText :: Text -> Either String TxIn
@@ -72,6 +70,20 @@ keyHashFromHex t = KeyHash <$> hashFromHex 28 t
 -- | Parse a 28-byte script hash (hex).
 scriptHashFromHex :: Text -> Either String ScriptHash
 scriptHashFromHex t = ScriptHash <$> hashFromHex 28 t
+
+-- | Parse a bech32 Cardano address.
+addrFromText :: Text -> Either String Addr
+addrFromText t = do
+    raw <-
+        case Bech32.decodeLenient t of
+            Right (_hrp, dp) ->
+                case Bech32.dataPartToBytes dp of
+                    Just bs -> Right bs
+                    Nothing -> Left "bech32 data-part decode"
+            Left e -> Left ("bech32: " <> show e)
+    case decodeAddrEither raw of
+        Right a -> Right a
+        Left e -> Left ("address: " <> e)
 
 -- ------------------------------------------------------------
 -- Helpers

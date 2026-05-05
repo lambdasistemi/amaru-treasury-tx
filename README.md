@@ -46,7 +46,6 @@ amaru-treasury-tx \
     --node-socket /code/cardano-mainnet/ipc/node.socket \
     --network-magic 764824073 \
     swap-wizard \
-    --network mainnet \
     --wallet-addr addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu \
     --registry test/fixtures/swap-wizard/registry.example.json \
     --scope core_development \

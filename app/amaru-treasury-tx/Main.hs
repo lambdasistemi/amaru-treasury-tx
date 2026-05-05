@@ -25,6 +25,7 @@ Subcommands:
 -}
 module Main (main) where
 
+import Control.Applicative ((<|>))
 import Control.Exception (throwIO)
 import Control.Monad (unless, when)
 import Data.ByteString qualified as BS
@@ -138,6 +139,16 @@ data SwapOpts = SwapOpts
     , soOutPath :: !(Maybe FilePath)
     }
 
+{- | Two ways to express how a swap is sliced:
+  * @ChunkCount n@: split into @n@ approximately equal chunks
+    (chunk size = @amount `div` n@; one extra small remainder
+    chunk if not exact).
+  * @ChunkAda d@: a fixed per-chunk ADA size.
+-}
+data ChunkSpec
+    = ChunkCount !Int
+    | ChunkAda !Double
+
 {- | Flags for the @swap-wizard@ subcommand.
 Mirrors @specs/002-swap-wizard/contracts/swap-wizard-cli.md §1@.
 -}
@@ -149,8 +160,8 @@ data WizardOpts = WizardOpts
     , wOptsScope :: !ScopeId
     , wOptsAda :: !Double
     -- ^ total ADA to swap (whole ADA, decimals OK)
-    , wOptsChunks :: !Int
-    -- ^ number of chunks; chunk size is @amount \`div\` chunks@
+    , wOptsChunkSpec :: !ChunkSpec
+    -- ^ how to split the amount into chunks
     , wOptsMinRate :: !Double
     -- ^ minimum acceptable USDM per ADA, decimal
     , wOptsValidityHours :: !Word8
@@ -269,11 +280,22 @@ wizardOptsP =
                 <> metavar "ADA"
                 <> help "Total ADA to swap (decimals OK, e.g. 408163.265306)"
             )
-        <*> option
-            auto
-            ( long "chunks"
-                <> metavar "INT"
-                <> help "Number of chunks (chunk size = amount / chunks)"
+        <*> ( ChunkCount
+                <$> option
+                    auto
+                    ( long "chunks"
+                        <> metavar "INT"
+                        <> help
+                            "Number of chunks (chunk size = amount / chunks)"
+                    )
+                <|> ChunkAda
+                    <$> option
+                        auto
+                        ( long "chunk-ada"
+                            <> metavar "ADA"
+                            <> help
+                                "Per-chunk ADA size (decimals OK; alternative to --chunks)"
+                        )
             )
         <*> option
             auto
@@ -499,10 +521,11 @@ runWizard g wo@WizardOpts{..} = do
     rv <- loadRegistry wOptsRegistryPath
     -- 2. Convert human-friendly answers to wire types.
     let amountLov = adaToLovelace wOptsAda
-        chunkSize =
-            if wOptsChunks <= 0
-                then amountLov
-                else amountLov `div` toInteger wOptsChunks
+        chunkSize = case wOptsChunkSpec of
+            ChunkCount n
+                | n <= 0 -> amountLov
+                | otherwise -> amountLov `div` toInteger n
+            ChunkAda x -> adaToLovelace x
         (rateNum, rateDen) = rateToFraction wOptsMinRate
         signersOverride =
             if null wOptsSigners

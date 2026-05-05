@@ -221,8 +221,8 @@ spec = describe "SwapWizard" $ do
                 answers{wqSignersOverride = Just ["zz"]}
 
     describe "networkConstants" $ do
-        it "returns a row for preprod" $
-            case networkConstants "preprod" of
+        it "returns a row for mainnet" $
+            case networkConstants "mainnet" of
                 Right _ -> pure ()
                 Left e -> expectationFailure' e
         it "rejects unknown networks" $
@@ -309,9 +309,9 @@ spec = describe "SwapWizard" $ do
                         }
                 ri =
                     ResolverInput
-                        { riNetwork = "preprod"
+                        { riNetwork = "mainnet"
                         , riWalletAddrBech32 =
-                            "addr_test1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+                            "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
                         , riScope = CoreDevelopment
                         , riAmountLovelace = 408163265306
                         , riRegistry = weRegistry env
@@ -326,9 +326,9 @@ spec = describe "SwapWizard" $ do
                     -- the fixture env has, so feeding it
                     -- through wizardToIntentJSON yields the
                     -- same byte-for-byte golden output.
-                    let envOverPreprod =
+                    let envOverMainnet =
                             env'
-                                { weNetwork = "preprod"
+                                { weNetwork = "mainnet"
                                 , weWalletSelection =
                                     (weWalletSelection env')
                                         { wsAddress =
@@ -339,7 +339,7 @@ spec = describe "SwapWizard" $ do
                                                 )
                                         }
                                 }
-                    case wizardToIntentJSON envOverPreprod answers of
+                    case wizardToIntentJSON envOverMainnet answers of
                         Left e ->
                             expectationFailure'
                                 (show e)
@@ -366,10 +366,10 @@ spec = describe "SwapWizard" $ do
                         }
                 ri =
                     ResolverInput
-                        { riNetwork = "preprod"
-                        , -- mainnet wallet on preprod request
+                        { riNetwork = "mainnet"
+                        , -- preprod wallet on mainnet request
                           riWalletAddrBech32 =
-                            "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+                            "addr_test1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
                         , riScope = CoreDevelopment
                         , riAmountLovelace = 1
                         , riRegistry = weRegistry env
@@ -378,8 +378,8 @@ spec = describe "SwapWizard" $ do
             r
                 `shouldBe` Left
                     ( ResolverNetworkMismatch
-                        "preprod"
                         "mainnet"
+                        "preprod"
                     )
 
 tShow :: (Show a) => a -> Text

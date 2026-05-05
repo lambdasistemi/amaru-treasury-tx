@@ -24,6 +24,7 @@ import Control.Monad (unless)
 import Data.Aeson
     ( FromJSON (..)
     , ToJSON (..)
+    , Value
     , object
     , withObject
     , (.:)
@@ -910,38 +911,52 @@ parseScopeKey (key, value) =
         Right scope -> pure (scope, value)
         Left err -> fail err
 
+{- | Mirrors the upstream @metadata.json@ schema so a reviewer can
+diff "claimed in metadata" against "verified on chain" side by side.
+Only the verified fields are emitted (no @budget@ — the verifier
+does not bind it).
+-}
 instance ToJSON VerifiedRegistry where
     toJSON vr =
         object
-            [ "scopesNftPolicy"
-                .= scriptHashToHex (vrScopesNftPolicy vr)
-            , "scopesDeployedAt"
-                .= renderTxIn (vrScopesNftUtxo vr)
-            , "owners"
-                .= Map.mapKeys
-                    scopeText
-                    (Map.map renderKeyHashWitness (vrOwners vr))
-            , "scopes"
-                .= Map.mapKeys scopeText (vrTreasuriesByScope vr)
+            [ "scope_owners" .= renderTxIn (vrScopesNftUtxo vr)
+            , "treasuries"
+                .= Map.fromList
+                    [ ( scopeText scope
+                      , verifiedScopeJson scope (vrOwners vr) vs
+                      )
+                    | (scope, vs) <-
+                        Map.toList (vrTreasuriesByScope vr)
+                    ]
             ]
 
-instance ToJSON VerifiedScope where
-    toJSON vs =
-        object
-            [ "treasuryAddress"
-                .= renderAddressUnchecked (vsAddress vs)
-            , "treasuryScriptHash"
-                .= scriptHashToHex (vsTreasuryScriptHash vs)
-            , "registryPolicyId"
-                .= scriptHashToHex (vsRegistryScriptHash vs)
-            , "permissionsRewardAccount"
-                .= scriptHashToHex (vsPermissionsScriptHash vs)
-            , "registryNftUtxo"
-                .= renderTxIn (vsRegistryNftUtxo vs)
-            , "treasuryDeployedAt"
-                .= renderTxIn (vsTreasuryDeployedAt vs)
-            , "permissionsDeployedAt"
-                .= renderTxIn (vsPermissionsDeployedAt vs)
-            , "registryDeployedAt"
-                .= renderTxIn (vsRegistryDeployedAt vs)
-            ]
+verifiedScopeJson
+    :: ScopeId
+    -> Map ScopeId (KeyHash Witness)
+    -> VerifiedScope
+    -> Value
+verifiedScopeJson scope owners vs =
+    object
+        [ "owner"
+            .= fmap renderKeyHashWitness (Map.lookup scope owners)
+        , "address" .= renderAddressUnchecked (vsAddress vs)
+        , "treasury_script"
+            .= scriptDeploymentJson
+                (vsTreasuryScriptHash vs)
+                (vsTreasuryDeployedAt vs)
+        , "permissions_script"
+            .= scriptDeploymentJson
+                (vsPermissionsScriptHash vs)
+                (vsPermissionsDeployedAt vs)
+        , "registry_script"
+            .= scriptDeploymentJson
+                (vsRegistryScriptHash vs)
+                (vsRegistryDeployedAt vs)
+        ]
+
+scriptDeploymentJson :: ScriptHash -> TxIn -> Value
+scriptDeploymentJson hash deployedAt =
+    object
+        [ "hash" .= scriptHashToHex hash
+        , "deployed_at" .= renderTxIn deployedAt
+        ]

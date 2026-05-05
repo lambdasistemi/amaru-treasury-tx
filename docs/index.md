@@ -10,9 +10,10 @@ DSL][txbuild].
 
 ## Quick links
 
+- [**Quickstart**](quickstart.md) — the `swap-wizard | swap` pipe in one go.
 - [Architecture overview](architecture.md)
-- [Quickstart](quickstart.md)
-- [Swap recipe](swap.md)
+- [Trust model](trust-model.md) — what the wizard verifies, what the operator must assert.
+- [Swap recipe](swap.md) — the `swap` subcommand on its own.
 - [ChainContext](chain-context.md)
 - [Parity report](parity.md)
 - [Release automation](release.md)
@@ -23,6 +24,8 @@ DSL][txbuild].
 
 | Subcommand   | Purpose                                                |
 | :----------- | :----------------------------------------------------- |
+| `swap-wizard`| Verify metadata on chain, resolve UTxOs + tip, emit `intent.json` (typed step trace). |
+| `swap`       | Turn an `intent.json` into unsigned Conway CBOR (typed step trace). |
 | `disburse`   | Pay a vendor in ADA or USDM from a scope's treasury.   |
 | `reorganize` | Merge fragmented treasury UTxOs into a single output.  |
 | `withdraw`   | Pull rewards from the treasury reward account.         |

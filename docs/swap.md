@@ -20,20 +20,32 @@ exactly — same redeemers, same datums, same output ordering.
 
 ## CLI usage
 
+The recommended path is to pipe the wizard's output straight in
+(see [Quickstart §4](quickstart.md#4-the-famous-swap-end-to-end)
+for the full pipe). For an `intent.json` you already have on
+disk:
+
 ```bash
 amaru-treasury-tx \
   --node-socket /path/to/cardano-node.socket \
   swap \
-  --intent path/to/intent.json \
-  --out swap.cbor
+    --intent path/to/intent.json \
+    --out swap.cbor.hex \
+    --log swap.log
 ```
 
-Or read socket from `$CARDANO_NODE_SOCKET_PATH`, output to stdout:
+Or read socket from `$CARDANO_NODE_SOCKET_PATH`, intent from
+stdin, CBOR to stdout, trace to stderr:
 
 ```bash
 export CARDANO_NODE_SOCKET_PATH=/path/to/cardano-node.socket
-amaru-treasury-tx swap --intent intent.json > swap.cbor
+amaru-treasury-tx swap < intent.json > swap.cbor.hex
 ```
+
+Every value-affecting step emits one `swap:` line through the
+typed
+[`SwapEvent`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/Swap/Trace.hs)
+tracer. `--log PATH` redirects them to a file (default = stderr).
 
 ## What the CLI does
 

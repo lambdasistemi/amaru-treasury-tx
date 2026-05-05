@@ -3,115 +3,157 @@
 **Plan**: [plan.md](./plan.md) · **Spec**: [spec.md](./spec.md)
 **Date**: 2026-05-05
 
-This file is the operator-facing walkthrough that ships when the
-feature lands. It mirrors the steps in
-`pragma-org/amaru-treasury/journal/2026/bin/swap.sh` for the input
-side, then hands off to the existing `swap` subcommand for the
-build.
+This is the operator-facing walkthrough. It mirrors the input
+side of `pragma-org/amaru-treasury/journal/2026/bin/swap.sh`,
+then hands off to the existing `swap` subcommand to produce the
+unsigned Conway transaction CBOR — all in one pipe.
 
 ## 1. Prerequisites
 
 - A running cardano-node socket reachable by the local-node
   `Provider` (preprod or mainnet).
-- `amaru-treasury-tx` built from the `002-swap-wizard` branch
-  (e.g. `nix build .#default`).
-- Your wallet bech32 address (the wallet must hold a pure-ADA UTxO
-  to use as fuel + collateral).
+- Your wallet bech32 address (the wallet must hold a pure-ADA
+  UTxO to use as fuel + collateral).
 - A local `journal/2026/metadata.json`-shaped file. The wizard
-  treats it as an untrusted hint and verifies the consumed registry
-  anchors against the local node before building an intent.
+  treats it as an untrusted hint and verifies the consumed
+  registry anchors against the local node before building an
+  intent. Fetch the upstream pin once:
 
-## 2. Run the wizard
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/pragma-org/amaru-treasury/main/journal/2026/metadata.json \
+      -o metadata-mainnet.json
+  ```
+
+You don't need a local checkout; the binary is published from
+the `002-swap-wizard` branch flake. Set `EXE` once and reuse it:
 
 ```bash
-amaru-treasury-tx \
-    --node-socket /path/to/node.socket \
-    --network-magic 764824073 \
+EXE='nix run github:lambdasistemi/amaru-treasury-tx/002-swap-wizard#amaru-treasury-tx --'
+```
+
+## 2. The famous swap, end to end
+
+The full pipeline — wizard → intent.json on stdout → swap →
+hex CBOR on `--out` — is one command. The exact mainnet
+parameters that produce a 33-chunk USDM swap valid for 28
+hours from the current tip:
+
+```bash
+$EXE \
+    --node-socket /code/cardano-mainnet/ipc/node.socket \
+    --network mainnet \
     swap-wizard \
-    --wallet-addr addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu \
-    --metadata test/fixtures/registry-walk/metadata.json \
-    --scope core_development \
-    --usdm 100000 \
-    --chunk-usdm 3062.5 \
-    --min-rate 0.245 \
-    --validity-hours 6 \
-    --description 'Swapping ADA for $100k at a rate of $0.245 per ADA' \
-    --justification 'Required to pay Antithesis as vendor' \
-    --destination-label "Network Compliance's treasury" \
-    --signer f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e \
-    --signer 8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1 \
-    --out intent.json
+        --wallet-addr addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu \
+        --metadata metadata-mainnet.json \
+        --scope network_compliance \
+        --usdm 100000 \
+        --split 33 \
+        --min-rate 0.245 \
+        --validity-hours 28 \
+        --description "Swapping ADA for \$100k at a rate of \$0.245 per ADA" \
+        --justification "Required to pay Antithesis as vendor" \
+        --destination-label "Network Compliance's treasury" \
+        --signer 7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb \
+        --signer 8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1 \
+        --log wizard.log \
+  | $EXE \
+        --node-socket /code/cardano-mainnet/ipc/node.socket \
+        --network mainnet \
+        swap \
+            --log swap.log \
+            --out swap.cbor.hex
 ```
 
-The above recreates the existing mainnet swap golden in
-[`test/fixtures/swap/intent.json`](../../test/fixtures/swap/intent.json).
-Substitute `--split N` if you'd rather say "split the order into
-N equal chunks" instead of pinning the per-chunk USDM size.
+What lands where:
 
-The wizard derives the ADA spend internally as
-@usdm / min-rate@: 100_000 / 0.245 ≈ 408 163.265306 ADA.
+| Stream | Contents |
+|---|---|
+| `wizard.log` (or stderr if `--log` omitted) | Wizard's `swap-wizard:`-prefixed trace lines, one per value-affecting step |
+| pipe between the two commands | The `intent.json` payload (JSON), wizard stdout → swap stdin |
+| `swap.log` (or stderr) | Build's `swap:`-prefixed trace lines: source, connect, build, re-eval, validation |
+| `swap.cbor.hex` | The unsigned Conway transaction as hex |
 
-The wizard:
+Every flag has a sensible default for the non-pipe case:
 
-1. Reads the local metadata file from `--metadata`.
-2. Connects to the node and verifies the metadata's registry anchors.
-3. Resolves wallet + treasury UTxOs and the current chain tip.
-4. Builds `intent.json`.
-5. Writes the result to `--out PATH` (or stdout if absent).
+- Drop `--out` from the wizard to write `intent.json` to stdout
+  (this is what the pipe relies on).
+- Drop `--intent` from `swap` to read the intent from stdin
+  (also what the pipe relies on).
+- Drop `--log` from either to send the trace to stderr.
 
-Every step that changes the value committed to `intent.json`
-emits a single `swap-wizard:` line via the typed
-['WizardEvent'](../../lib/Amaru/Treasury/Tx/SwapWizard/Trace.hs)
-tracer. By default these lines go to stderr; pass
-`--log PATH` to redirect them to a file. The wizard never
-asks the operator a question — every decision is made from
-flags.
+## 3. Reading the trace
 
-## 3. Build the swap transaction
+Every line that affects the produced tx is one event. With
+`--log wizard.log` the wizard writes:
 
-The wizard's only output is the JSON file. Hand it to the existing
-subcommand:
-
-```bash
-amaru-treasury-tx swap \
-    --intent intent.json \
-    --out swap.tx.cbor
+```
+swap-wizard: network mainnet (magic 764824073)
+swap-wizard: metadata = metadata-mainnet.json
+swap-wizard: VERIFIED scope=network_compliance treasury=addr1xyezq8w… treasuryScriptHash=32201dc1… registryPolicyId=38c627d4… permissionsRewardAccount=a64d1b9e…
+swap-wizard: owners core=7095faf3… ops=f3ab64b0… network_compliance=8bd03209… middleware=97e0f6d6…
+swap-wizard: wallet utxos: 3
+swap-wizard: treasury utxos: 1 (total 1450000000000 lovelace)
+swap-wizard: tip slot 186446659
+swap-wizard: NetworkConstants swapOrder=addr1x8ax5k9m… usdmPolicy=c48cbb3d… usdmToken=0014df105553444d sundaeFee=1280000
+swap-wizard: wallet utxo selected 42e4c279…#0
+swap-wizard: treasury utxos selected 64f27254…#0 leftover=1041836734694
+swap-wizard: validity tip=186446659 upperBound=186547459 (+100800 slots)
+swap-wizard: chunks total=408163265306 chunkSize=12368583797 full=33 remainder=5
+swap-wizard: intent.json -> stdout
 ```
 
-Sign and submit out-of-band per the existing operator runbook.
+…and the build writes:
 
-## 4. Verifying the wizard
-
-Two checks the operator can run without touching chain state:
-
-**JSON round-trip**
-
-```bash
-amaru-treasury-tx swap-wizard ... \
-    | amaru-treasury-tx swap --out /tmp/swap.tx.cbor
+```
+swap: intent <- stdin
+swap: connecting to /code/cardano-mainnet/ipc/node.socket
+swap: required utxos: 6
+swap: built 15240 bytes  fee=1025037  total_collateral=1537556
+swap: re-evaluated 2 redeemers, 0 failed
+swap: cbor -> swap.cbor.hex
+swap: VALIDATION OK
 ```
 
-The wizard with no `--out` writes `intent.json` to stdout; `swap`
-with no `--intent` reads from stdin. If `swap` accepts the JSON
-without errors, the wizard's translation matches the existing
-build path.
+Operators read this trace as the audit gate before signing.
+`VERIFIED scope=… permissionsRewardAccount=…` and the
+`NetworkConstants` row are the chain- and build-time roots
+binding the produced transaction to the upstream pin.
 
-**Golden parity (developer)**
+## 4. Sign + submit
+
+The pipeline emits hex CBOR; sign it with the configured scope
+owner's key plus one witness owner key (the two `--signer`
+hashes you passed) and submit per your existing operator
+runbook.
+
+## 5. Doing it without the pipe
+
+If you prefer two separate steps, use the same flags but write
+to a file in between:
 
 ```bash
-just unit  # runs SwapWizardSpec golden + roundtrip tests
-just golden  # runs the existing swap golden harness
+$EXE swap-wizard ... --out intent.json
+$EXE swap --intent intent.json --out swap.cbor.hex
+```
+
+## 6. When something goes wrong
+
+| Exit | Action |
+|------|--------|
+| 1 (swap) | The build aborted before producing CBOR. The trace's `ABORT` line names the cause: bad intent JSON, translation error, validation failure on a re-evaluated redeemer. |
+| 3 (swap-wizard) | Metadata verification or resolver error. Check `--metadata`, local node sync, wallet fuel UTxO, treasury UTxOs. The trace's `ABORT` line names the offending step. |
+| 4 (swap-wizard) | Translation error. Re-check `--min-rate`, `--chunk-usdm`/`--split`, `--validity-hours` in [1, 48]. |
+
+Both subcommands are fail-closed — neither writes a partial
+output. If the trace ends without `cbor -> …` (or
+`intent.json -> …` from the wizard), nothing was written.
+
+## 7. Verifying the wizard (developer)
+
+```bash
+just unit     # SwapWizardSpec golden + roundtrip
+just golden   # existing swap golden harness
 ```
 
 A wizard regression breaks `SwapWizardSpec`; a translation
 regression breaks the swap golden.
-
-## 5. When something goes wrong
-
-| Exit | Action |
-|------|--------|
-| 3 | Metadata verification or resolver error. Check `--metadata`, local node sync, wallet fuel UTxO, treasury UTxOs. The trace log names the offending step. |
-| 4 | Translation error. Re-check `--min-rate`, `--chunk-usdm`/`--split`, `--validity-hours` in [1, 48]. |
-
-The wizard never writes a partial JSON. Either stdout/`--out`
-receives the full file or nothing at all.

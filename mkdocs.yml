@@ -50,6 +50,7 @@ plugins:
 nav:
   - Home: index.md
   - Architecture: architecture.md
+  - Trust model: trust-model.md
   - Quickstart: quickstart.md
   - Swap recipe: swap.md
   - ChainContext: chain-context.md

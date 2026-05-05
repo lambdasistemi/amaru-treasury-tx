@@ -204,6 +204,48 @@ JSON with the same answers.
   exits with a non-zero status and a message naming the missing piece
   — never writes a partial JSON.
 
+## Trust model
+
+See the canonical [`Trust model`](../../docs/trust-model.md)
+page (rendered at
+`https://lambdasistemi.github.io/amaru-treasury-tx/trust-model/`)
+for the full system-level account: the bake-time and run-time
+dependency graphs, the verifier's two trust roots, and the
+field-by-field map of where each `intent.json` value comes from.
+
+The wizard adds two layers on top of the verifier's:
+
+1. **Build-time `NetworkConstants`** (per-network `swapOrderAddress`,
+   `usdmPolicy`, `usdmToken`, `sundaeProtocolFeeLovelace`,
+   `extraPerChunkLovelace`, `poolId`) — reviewed in the PR that
+   advances the table; NOT verified against chain.
+2. **Operator-supplied answers** (`--wallet-addr`, `--scope`,
+   `--usdm`, `--chunk-usdm`/`--split`, `--min-rate`,
+   `--validity-hours`, rationale text, optional `--signer`
+   overrides) — structurally validated, but the wizard cannot
+   judge whether `--scope network_compliance` matches the
+   operator's intent.
+
+The wizard is **fail-closed** — verifier failure, missing network
+constant, empty wallet/treasury UTxO set, or out-of-range answer
+aborts with a typed message and writes no JSON. A confirmation
+gate (`--yes` to skip) follows the verbose resolution summary.
+
+### Why `permissionsRewardAccount` is the permissions script hash
+
+The Sundae treasury delegates authority to the permissions
+script via the **withdraw-zero pattern**: a transaction must
+include a 0-lovelace withdrawal from a reward account whose
+stake credential IS the permissions script hash, which gives
+the validator a chance to run, read the on-chain Scopes UTxO
+as a reference input, and enforce per-action approval rules.
+So `permissionsRewardAccount` MUST be the per-scope permissions
+script hash — NOT the stake credential of the treasury address.
+The two coincide only where upstream uses
+`addr1x<treasury_hash><treasury_hash>`; relying on the
+coincidence would silently substitute the wrong hash on
+testnets that diverge.
+
 ## Assumptions
 
 - The existing `Provider IO` already exposes (or trivially can expose)

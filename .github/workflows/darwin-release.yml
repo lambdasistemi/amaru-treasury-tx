@@ -62,6 +62,14 @@ jobs:
           shasum -a 256 /tmp/amaru-treasury-tx-${VERSION}-aarch64-darwin.tar.gz
           echo "$VERSION" > /tmp/version.txt
 
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: darwin-tarball
+          path: /tmp/amaru-treasury-tx-*-aarch64-darwin.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Create / update release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

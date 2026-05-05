@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -38,7 +39,9 @@ jobs:
   linux-bundles:
     name: Build Linux bundles (AppImage, DEB, RPM)
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    # Always build on workflow_dispatch; on push, only build when
+    # release-please cut a tag.
+    if: ${{ github.event_name == 'workflow_dispatch' || needs.release-please.outputs.release_created }}
     runs-on: nixos
     permissions:
       contents: write
@@ -70,17 +73,35 @@ jobs:
           .#default
           -o amaru-treasury-tx.rpm
 
-      - name: Upload release artifacts
+      - name: Stage artifacts
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name || format('manual-{0}', github.run_id) }}
+        run: |
+          mkdir -p artifacts
+          cp amaru-treasury-tx.deb/*.deb \
+            "artifacts/amaru-treasury-tx-${TAG}.deb"
+          cp amaru-treasury-tx.rpm/*.rpm \
+            "artifacts/amaru-treasury-tx-${TAG}.rpm"
+          cp -L amaru-treasury-tx.AppImage \
+            "artifacts/amaru-treasury-tx-${TAG}.AppImage"
+          ls -lh artifacts/
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-bundles
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach to GitHub release
+        if: ${{ needs.release-please.outputs.release_created }}
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
-          cp amaru-treasury-tx.deb/*.deb amaru-treasury-tx-${TAG}.deb
-          cp amaru-treasury-tx.rpm/*.rpm amaru-treasury-tx-${TAG}.rpm
-          cp -L amaru-treasury-tx.AppImage amaru-treasury-tx-${TAG}.AppImage
-
           gh release upload ${TAG} \
-            amaru-treasury-tx-${TAG}.deb \
-            amaru-treasury-tx-${TAG}.rpm \
-            amaru-treasury-tx-${TAG}.AppImage \
+            artifacts/amaru-treasury-tx-${TAG}.deb \
+            artifacts/amaru-treasury-tx-${TAG}.rpm \
+            artifacts/amaru-treasury-tx-${TAG}.AppImage \
             --clobber

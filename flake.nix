@@ -48,6 +48,18 @@
           };
           indexState = "2026-02-17T10:15:41Z";
           indexTool = { index-state = indexState; };
+          cabalLines =
+            pkgs.lib.splitString "\n"
+            (builtins.readFile ./amaru-treasury-tx.cabal);
+          packageVersionLine = pkgs.lib.findFirst
+            (line: builtins.match "version:[[:space:]]*.*" line != null)
+            (builtins.throw "missing version field in amaru-treasury-tx.cabal")
+            cabalLines;
+          packageVersion = builtins.elemAt
+            (builtins.match
+              "version:[[:space:]]*([0-9]+(\\.[0-9]+)*)"
+              packageVersionLine)
+            0;
           fix-libs = { lib, pkgs, ... }: {
             packages.cardano-crypto-praos.components.library.pkgconfig =
               lib.mkForce [ [ pkgs.libsodium-vrf ] ];
@@ -56,8 +68,6 @@
               [ [ pkgs.libsodium-vrf pkgs.secp256k1 pkgs.libblst ] ];
             packages.cardano-lmdb.components.library.pkgconfig =
               lib.mkForce [ [ pkgs.lmdb ] ];
-            packages.blockio-uring.components.library.pkgconfig =
-              lib.mkForce [ [ pkgs.liburing ] ];
             packages.cardano-ledger-binary.components.library.doHaddock =
               lib.mkForce false;
             packages.plutus-core.components.library.doHaddock =
@@ -66,6 +76,10 @@
               lib.mkForce false;
             packages.plutus-tx.components.library.doHaddock =
               lib.mkForce false;
+          };
+          fix-libs-linux = { lib, pkgs, ... }: {
+            packages.blockio-uring.components.library.pkgconfig =
+              lib.mkForce [ [ pkgs.liburing ] ];
           };
           project = pkgs.haskell-nix.cabalProject' {
             name = "amaru-treasury-tx";
@@ -82,13 +96,16 @@
                 pkgs.curl
                 pkgs.cacert
                 pkgs.lmdb
+              ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
                 pkgs.liburing
               ];
               shellHook = ''
                 export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
               '';
             };
-            modules = [ fix-libs ];
+            modules = [ fix-libs ]
+              ++ pkgs.lib.optionals pkgs.stdenv.isLinux
+                [ fix-libs-linux ];
             inputMap = {
               "https://chap.intersectmbo.org/" = CHaP;
             };
@@ -99,18 +116,27 @@
             src = ./.;
           };
           checkApps = import ./nix/apps.nix { inherit pkgs checks; };
+          mkExe = name:
+            pkgs.symlinkJoin {
+              name = "${name}-${packageVersion}";
+              version = packageVersion;
+              paths = [ components.exes.${name} ];
+              meta.mainProgram = name;
+            };
+          amaru-treasury-tx = mkExe "amaru-treasury-tx";
+          swap-probe = mkExe "swap-probe";
+          capture-swap-context = mkExe "capture-swap-context";
         in {
           packages = {
-            default = components.exes.amaru-treasury-tx;
-            amaru-treasury-tx = components.exes.amaru-treasury-tx;
+            default = amaru-treasury-tx;
+            inherit amaru-treasury-tx swap-probe capture-swap-context;
           };
           inherit checks;
           apps = checkApps // {
             default = {
               type = "app";
-              program = "${
-                  components.exes.amaru-treasury-tx
-                }/bin/amaru-treasury-tx";
+              program =
+                "${amaru-treasury-tx}/bin/amaru-treasury-tx";
             };
           };
           devShells.default = project.shell;

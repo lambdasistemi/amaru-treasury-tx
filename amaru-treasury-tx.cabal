@@ -55,6 +55,7 @@ library
     Amaru.Treasury.AuxData
     Amaru.Treasury.Backend
     Amaru.Treasury.Backend.N2C
+    Amaru.Treasury.ChainContext
     Amaru.Treasury.Constants
     Amaru.Treasury.LedgerParse
     Amaru.Treasury.Metadata
@@ -64,6 +65,8 @@ library
     Amaru.Treasury.Summary
     Amaru.Treasury.Tx.Disburse
     Amaru.Treasury.Tx.Swap
+    Amaru.Treasury.Tx.SwapBuild
+    Amaru.Treasury.Tx.SwapIntentJSON
     Amaru.Treasury.Tx.Withdraw
     Amaru.Treasury.UtxoSelect
     Amaru.Treasury.Validity
@@ -76,12 +79,17 @@ library
     , base16-bytestring
     , bytestring
     , cardano-crypto-class
+    , cardano-ledger-alonzo
+    , cardano-ledger-api
+    , cardano-ledger-binary
     , cardano-ledger-conway
     , cardano-ledger-core
     , cardano-ledger-mary
     , cardano-ledger-shelley
     , cardano-node-clients
+    , cardano-slotting
     , containers
+    , microlens
     , ouroboros-network:api
     , plutus-core
     , plutus-tx
@@ -95,7 +103,13 @@ executable amaru-treasury-tx
   default-language: GHC2021
   build-depends:
     , amaru-treasury-tx
-    , base               <5
+    , base                   <5
+    , base16-bytestring
+    , bytestring
+    , cardano-ledger-core
+    , containers
+    , optparse-applicative
+    , ouroboros-network:api
 
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
 
@@ -110,15 +124,9 @@ executable swap-probe
     , base16-bytestring
     , bytestring
     , cardano-crypto-class
-    , cardano-ledger-api
-    , cardano-ledger-binary
-    , cardano-ledger-conway
     , cardano-ledger-core
-    , cardano-ledger-mary
-    , cardano-node-clients
     , cardano-slotting
     , containers
-    , microlens
     , ouroboros-network:api
 
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N

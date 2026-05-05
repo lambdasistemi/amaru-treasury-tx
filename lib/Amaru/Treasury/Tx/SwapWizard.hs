@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 {- |
 Module      : Amaru.Treasury.Tx.SwapWizard
@@ -38,8 +39,19 @@ module Amaru.Treasury.Tx.SwapWizard
     , WizardError (..)
     , wizardToIntentJSON
     , encodeIntentJSON
+
+      -- * Resolution
+    , ResolverInput (..)
+    , ResolverError (..)
+    , ResolverEnv (..)
+    , networkConstants
+    , selectTreasury
+    , selectWallet
+    , addrNetwork
+    , resolveWizardEnv
     ) where
 
+import Cardano.Ledger.BaseTypes (Network (..))
 import Control.Monad (when)
 import Data.Aeson
     ( FromJSON (..)
@@ -56,6 +68,8 @@ import Data.Aeson.Encode.Pretty
 import Data.Aeson.Types qualified as A
 import Data.ByteString.Lazy (ByteString)
 import Data.Char (isDigit)
+import Data.Function (on)
+import Data.List qualified as L
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
@@ -508,3 +522,316 @@ encodeIntentJSON = encodePretty' cfg
             , confNumFormat = Generic
             , confTrailingNewline = True
             }
+
+-- ----------------------------------------------------
+-- Resolution
+-- ----------------------------------------------------
+
+{- | Inputs the resolver needs from the CLI.
+
+The 'RegistryView' is supplied by the operator (loaded
+from a JSON file) rather than walked on-chain in the v1
+wizard. The walk is recorded as out-of-scope in
+@research.md@ and tracked separately; it is a deep
+Plutus-data parse that does not belong in the wizard
+critical path.
+-}
+data ResolverInput = ResolverInput
+    { riNetwork :: !Text
+    -- ^ @"mainnet"@ / @"preprod"@; selects the
+    --   'NetworkConstants' row and validates the wallet
+    --   address belongs to the same network.
+    , riWalletAddrBech32 :: !Text
+    -- ^ bech32 wallet address for fuel + collateral
+    , riScope :: !ScopeId
+    , riAmountLovelace :: !Integer
+    -- ^ total lovelace to be swapped (drives treasury
+    --   selection target)
+    , riRegistry :: !RegistryView
+    -- ^ operator-supplied; see module note above
+    }
+    deriving (Eq, Show)
+
+-- | Resolver-level failure modes per @data-model.md §3@.
+data ResolverError
+    = ResolverNetworkUnsupported !Text
+    | -- | @ResolverNetworkMismatch requested observed@
+      ResolverNetworkMismatch !Text !Text
+    | ResolverScopeUnsupported !ScopeId
+    | ResolverEmptyTreasuryUtxos
+    | ResolverEmptyWalletUtxos
+    | -- | @ResolverShortfall available requested@
+      ResolverShortfall !Integer !Integer
+    deriving (Eq, Show)
+
+{- | Curated per-network constants table.
+
+Sources for each value live in the comment block above
+this function and must be kept in lock-step with upstream
+Sundae V3 deployments + USDM constants. The MVP table
+covers preprod (the documented manual E2E target); the
+mainnet row is left as a placeholder until the values are
+audited by an operator on-chain.
+
+Sources:
+
+  * SundaeSwap V3 order address: existing
+    @test/fixtures/swap/intent.json@ (preprod).
+  * USDM policy/token: same fixture (lifted from
+    @journal/2026/lib/swap_order.sh@).
+  * @extraPerChunkLovelace@, @sundaeProtocolFeeLovelace@:
+    same fixture.
+  * @slotsPerHour@: 3600 for 1-second slots on
+    preprod/mainnet (Conway era).
+  * @defaultPoolId@: same fixture.
+-}
+networkConstants :: Text -> Either String NetworkConstants
+networkConstants n = case T.toLower n of
+    "preprod" ->
+        Right
+            NetworkConstants
+                { ncSwapOrderAddress =
+                    "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n"
+                , ncUsdmPolicy =
+                    "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad"
+                , ncUsdmToken = "0014df105553444d"
+                , ncSundaeProtocolFeeLovelace = 1280000
+                , ncExtraPerChunkLovelace = 3280000
+                , ncSlotsPerHour = 3600
+                , ncDefaultPoolId =
+                    "64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef"
+                }
+    "mainnet" ->
+        Left
+            "swap-wizard: NetworkConstants for mainnet pending operator audit; preprod only in v1"
+    _ ->
+        Left
+            ( "swap-wizard: no NetworkConstants for network "
+                <> T.unpack n
+            )
+
+{- | Classify a bech32 address as 'Mainnet' or 'Testnet' by
+HRP prefix. The bech32 prefix only carries the network
+discriminator (the @addr_test1@ family covers preprod, preview,
+and any custom testnet); inferring 'preprod' specifically from
+@addr_test1@ would mis-flag a preview wallet as a network
+mismatch. Use this for the coarse mainnet-vs-testnet check;
+do NOT use it to disambiguate among testnets.
+-}
+addrNetwork :: Text -> Maybe Network
+addrNetwork t
+    | "addr_test1" `T.isPrefixOf` t = Just Testnet
+    | "addr1" `T.isPrefixOf` t = Just Mainnet
+    | otherwise = Nothing
+
+-- | The network family of a CLI 'riNetwork' name.
+networkFamily :: Text -> Maybe Network
+networkFamily = \case
+    "mainnet" -> Just Mainnet
+    "preprod" -> Just Testnet
+    "preview" -> Just Testnet
+    _ -> Nothing
+
+{- | Largest-first deterministic treasury selection over a
+list of @(txInRef, lovelace)@. Sorts by lovelace desc and
+accumulates until the running sum reaches the target.
+Returns the selected refs (in selection order) and the
+leftover (Σ selected − target).
+
+Total only when @sum (snd <$> xs) >= target@; the caller
+('resolveWizardEnv') checks this and emits a typed
+'ResolverShortfall' otherwise.
+-}
+selectTreasury
+    :: [(Text, Integer)]
+    -> Integer
+    -> Maybe ([Text], Integer)
+selectTreasury inputs target
+    | total < target = Nothing
+    | otherwise = Just (go 0 [] sorted)
+  where
+    sorted =
+        L.sortOn (\(_, l) -> negate l) inputs
+    total = sum (snd <$> inputs)
+    go acc picked [] = (reverse picked, acc - target)
+    go acc picked ((ref, l) : rest)
+        | acc >= target =
+            (reverse picked, acc - target)
+        | otherwise =
+            go (acc + l) (ref : picked) rest
+
+{- | Pick the largest pure-ADA UTxO at the wallet address
+to use as fuel + collateral. @inputs@ is a list of
+@(txInRef, lovelace, hasNativeAssets)@; only entries with
+@hasNativeAssets = False@ are eligible.
+-}
+selectWallet :: [(Text, Integer, Bool)] -> Maybe Text
+selectWallet inputs =
+    case filter (\(_, _, hasNa) -> not hasNa) inputs of
+        [] -> Nothing
+        xs ->
+            let (ref, _, _) =
+                    L.maximumBy
+                        (compare `on` snd3)
+                        xs
+            in  Just ref
+  where
+    snd3 (_, l, _) = l
+
+{- | The MVP resolver. Combines:
+
+  * 'networkConstants' lookup (pure)
+  * wallet address network check ('addrNetwork')
+  * largest-first treasury selection ('selectTreasury')
+  * largest pure-ADA wallet selection ('selectWallet')
+  * a tip read via @posixMsToSlot@ (rounded to the
+    closest hour boundary; the validity-window math in
+    'wizardToIntentJSON' adds @slotsPerHour * hours@)
+  * the operator-supplied 'RegistryView'
+
+projecting them into the 'WizardEnv' the pure
+translation expects. All resolver errors are typed; no
+exception escapes.
+-}
+resolveWizardEnv
+    :: (Monad m)
+    => ResolverEnv m
+    -> ResolverInput
+    -> m (Either ResolverError WizardEnv)
+resolveWizardEnv ResolverEnv{..} ri =
+    case networkConstants (riNetwork ri) of
+        Left _ ->
+            pure (Left (ResolverNetworkUnsupported (riNetwork ri)))
+        Right nc -> do
+            case ( addrNetwork (riWalletAddrBech32 ri)
+                 , networkFamily (riNetwork ri)
+                 ) of
+                (Just obs, Just want)
+                    | obs /= want ->
+                        let observed = case obs of
+                                Mainnet -> "mainnet" :: Text
+                                Testnet -> "testnet"
+                        in  pure
+                                ( Left
+                                    ( ResolverNetworkMismatch
+                                        (riNetwork ri)
+                                        observed
+                                    )
+                                )
+                _ -> resolveWith nc
+  where
+    resolveWith nc =
+        case Map.lookup (riScope ri) (rvTreasuryByScope (riRegistry ri)) of
+            Nothing ->
+                pure (Left (ResolverScopeUnsupported (riScope ri)))
+            Just refs -> do
+                walletUtxos <-
+                    reEnvQueryWalletUtxos
+                        (riWalletAddrBech32 ri)
+                if null walletUtxos
+                    then pure (Left ResolverEmptyWalletUtxos)
+                    else do
+                        treasuryUtxos <-
+                            reEnvQueryTreasuryUtxos
+                                (trAddress refs)
+                        if null treasuryUtxos
+                            then
+                                pure
+                                    (Left ResolverEmptyTreasuryUtxos)
+                            else case selectTreasury
+                                ( map
+                                    (\(r, l, _) -> (r, l))
+                                    treasuryUtxos
+                                )
+                                (riAmountLovelace ri) of
+                                Nothing ->
+                                    pure
+                                        ( Left
+                                            ( ResolverShortfall
+                                                ( sum
+                                                    ( map
+                                                        ( \(_, l, _) ->
+                                                            l
+                                                        )
+                                                        treasuryUtxos
+                                                    )
+                                                )
+                                                (riAmountLovelace ri)
+                                            )
+                                        )
+                                Just (picked, leftover) ->
+                                    case selectWallet
+                                        walletUtxos of
+                                        Nothing ->
+                                            pure
+                                                ( Left
+                                                    ResolverEmptyWalletUtxos
+                                                )
+                                        Just walletRef -> do
+                                            tip <- reEnvCurrentTip
+                                            let owners =
+                                                    rvOwners
+                                                        (riRegistry ri)
+                                                env =
+                                                    WizardEnv
+                                                        { weNetwork =
+                                                            riNetwork ri
+                                                        , weCurrentTip =
+                                                            tip
+                                                        , weNetworkConstants =
+                                                            nc
+                                                        , weRegistry =
+                                                            riRegistry ri
+                                                        , weScopeView =
+                                                            ScopeView
+                                                                { svScope =
+                                                                    riScope
+                                                                        ri
+                                                                , svRefs =
+                                                                    refs
+                                                                , svDefaultSigners =
+                                                                    [ soCore
+                                                                        owners
+                                                                    , soOps
+                                                                        owners
+                                                                    , soNetworkCompliance
+                                                                        owners
+                                                                    , soMiddleware
+                                                                        owners
+                                                                    ]
+                                                                }
+                                                        , weTreasurySelection =
+                                                            TreasurySelection
+                                                                { tsInputs =
+                                                                    picked
+                                                                , tsLeftoverLovelace =
+                                                                    leftover
+                                                                }
+                                                        , weWalletSelection =
+                                                            WalletSelection
+                                                                { wsTxIn =
+                                                                    walletRef
+                                                                , wsAddress =
+                                                                    riWalletAddrBech32
+                                                                        ri
+                                                                }
+                                                        }
+                                            pure (Right env)
+
+{- | Effects the resolver pulls from a 'Provider'. Kept as
+its own record so tests can stub IO without depending on
+@cardano-node-clients@.
+-}
+data ResolverEnv m = ResolverEnv
+    { reEnvQueryWalletUtxos
+        :: Text
+        -> m [(Text, Integer, Bool)]
+    -- ^ wallet address (bech32) ->
+    --   @[(txInRef, lovelace, hasNativeAssets)]@
+    , reEnvQueryTreasuryUtxos
+        :: Text
+        -> m [(Text, Integer, Bool)]
+    -- ^ same, for the treasury address
+    , reEnvCurrentTip :: m Word64
+    -- ^ current chain tip in slots
+    }

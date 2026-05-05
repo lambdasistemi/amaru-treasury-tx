@@ -32,6 +32,9 @@ module Amaru.Treasury.Tx.SwapIntentJSON
       -- * Translation
     , translateIntent
     , TranslatedIntent (..)
+
+      -- * Re-usable parsers
+    , parseAddr
     ) where
 
 import Codec.Binary.Bech32 qualified as Bech32

@@ -1,4 +1,5 @@
 {-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 
 {- |
@@ -13,15 +14,19 @@ program, re-evaluates every redeemer against the final
 tx, and emits an unsigned Conway transaction CBOR (hex)
 on stdout (or a path).
 
-Currently exposes one subcommand:
+Subcommands:
 
 * @swap --intent path\/to\/intent.json [--out path\/swap.cbor]@ —
   builds the SundaeSwap order tx for a treasury scope.
   See [@docs\/swap.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/docs/swap.md).
+* @swap-wizard --network <preprod|mainnet> --wallet-addr ... --registry path\/to\/registry.json --scope ... --amount-ada N --chunk-ada N --rate-num N --rate-den N --validity-hours N --description ... --justification ... --destination-label ... [--signers HEX,...] --out path\/intent.json [--yes] [--dry-run] [--verbose] [--force]@
+  produces a swap @intent.json@ from a typed questionnaire.
+  See [@specs\/002-swap-wizard\/quickstart.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/002-swap-wizard/quickstart.md).
 -}
 module Main (main) where
 
 import Control.Exception (throwIO)
+import Control.Monad (unless, when)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
@@ -29,8 +34,10 @@ import Data.Maybe (fromMaybe)
 import Options.Applicative
     ( Parser
     , ParserInfo
+    , ReadM
     , auto
     , command
+    , eitherReader
     , execParser
     , fullDesc
     , help
@@ -44,21 +51,51 @@ import Options.Applicative
     , progDesc
     , short
     , strOption
+    , switch
     , value
     , (<**>)
     )
+import System.Directory (doesFileExist)
 import System.Environment (lookupEnv)
-import System.Exit (exitFailure)
+import System.Exit (ExitCode (..), exitFailure, exitWith)
 import System.IO (stderr)
 import System.IO qualified as IO
 
+import Cardano.Crypto.Hash.Class (hashToBytes)
+import Cardano.Ledger.BaseTypes (txIxToInt)
 import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Hashes
+    ( extractHash
+    )
+import Cardano.Ledger.Mary.Value
+    ( MaryValue (..)
+    , MultiAsset (..)
+    )
+import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
+import Cardano.Slotting.Slot (SlotNo (..))
+import Data.Aeson (eitherDecodeFileStrict)
+import Data.Char (toLower)
+import Data.Map.Strict qualified as Map
+import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
+import Data.Text.IO qualified as TIO
+import Data.Time.Clock.POSIX (getPOSIXTime)
+import Data.Word (Word64, Word8)
+import Lens.Micro ((^.))
 import Ouroboros.Network.Magic (NetworkMagic (..))
 
 import Data.Set qualified as Set
 
+import Cardano.Ledger.Api.Tx.Out (valueTxOutL)
+
+import Amaru.Treasury.Backend (Provider (..))
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.ChainContext (liveContext)
+import Amaru.Treasury.Scope
+    ( ScopeId
+    , scopeFromText
+    )
 import Amaru.Treasury.Tx.Swap (SwapIntent (..))
 import Amaru.Treasury.Tx.SwapBuild
     ( ScriptResult (..)
@@ -69,7 +106,21 @@ import Amaru.Treasury.Tx.SwapBuild
 import Amaru.Treasury.Tx.SwapIntentJSON
     ( TranslatedIntent (..)
     , decodeSwapIntentFile
+    , parseAddr
     , translateIntent
+    )
+import Amaru.Treasury.Tx.SwapWizard
+    ( RationaleAnswers (..)
+    , RegistryView (..)
+    , ResolverEnv (..)
+    , ResolverInput (..)
+    , SwapWizardQ (..)
+    , WalletSelection (..)
+    , WizardEnv (..)
+    , WizardError
+    , encodeIntentJSON
+    , resolveWizardEnv
+    , wizardToIntentJSON
     )
 
 data GlobalOpts = GlobalOpts
@@ -77,11 +128,39 @@ data GlobalOpts = GlobalOpts
     , goNetworkMagic :: !NetworkMagic
     }
 
-newtype Cmd = CmdSwap SwapOpts
+data Cmd
+    = CmdSwap SwapOpts
+    | CmdSwapWizard WizardOpts
 
 data SwapOpts = SwapOpts
     { soIntentPath :: !FilePath
     , soOutPath :: !(Maybe FilePath)
+    }
+
+{- | Flags for the @swap-wizard@ subcommand.
+Mirrors @specs/002-swap-wizard/contracts/swap-wizard-cli.md §1@.
+-}
+data WizardOpts = WizardOpts
+    { wOptsNetwork :: !Text
+    , wOptsWalletAddr :: !Text
+    , wOptsRegistryPath :: !FilePath
+    , wOptsOut :: !FilePath
+    , wOptsScope :: !ScopeId
+    , wOptsAmountAda :: !Integer
+    , wOptsChunkAda :: !Integer
+    , wOptsRateNum :: !Integer
+    , wOptsRateDen :: !Integer
+    , wOptsValidityHours :: !Word8
+    , wOptsDescription :: !Text
+    , wOptsJustification :: !Text
+    , wOptsDestinationLabel :: !Text
+    , wOptsEvent :: !(Maybe Text)
+    , wOptsLabel :: !(Maybe Text)
+    , wOptsSigners :: !(Maybe [Text])
+    , wOptsYes :: !Bool
+    , wOptsDryRun :: !Bool
+    , wOptsVerbose :: !Bool
+    , wOptsForce :: !Bool
     }
 
 globalOptsP :: Parser GlobalOpts
@@ -134,7 +213,140 @@ cmdP =
                     "Build a SundaeSwap treasury swap (ADA→USDM)"
                 )
             )
+            <> command
+                "swap-wizard"
+                ( info
+                    (CmdSwapWizard <$> wizardOptsP)
+                    ( progDesc
+                        "Produce a swap intent.json from a typed questionnaire"
+                    )
+                )
         )
+
+scopeReader :: ReadM ScopeId
+scopeReader =
+    eitherReader $
+        scopeFromText . T.pack . map toLower
+
+wizardOptsP :: Parser WizardOpts
+wizardOptsP =
+    WizardOpts
+        <$> strOption
+            ( long "network"
+                <> metavar "NAME"
+                <> help "preprod | mainnet"
+            )
+        <*> strOption
+            ( long "wallet-addr"
+                <> metavar "BECH32"
+                <> help "Wallet address (fuel + collateral)"
+            )
+        <*> strOption
+            ( long "registry"
+                <> metavar "PATH"
+                <> help "Path to RegistryView JSON file"
+            )
+        <*> strOption
+            ( long "out"
+                <> short 'o'
+                <> metavar "PATH"
+                <> help "Where to write intent.json"
+            )
+        <*> option
+            scopeReader
+            ( long "scope"
+                <> metavar "NAME"
+                <> help
+                    "core_development|ops_and_use_cases|network_compliance|middleware"
+            )
+        <*> option
+            auto
+            ( long "amount-ada"
+                <> metavar "LOVELACE"
+                <> help "Total lovelace to swap"
+            )
+        <*> option
+            auto
+            ( long "chunk-ada"
+                <> metavar "LOVELACE"
+                <> help "Per-chunk lovelace"
+            )
+        <*> option
+            auto
+            ( long "rate-num"
+                <> metavar "INT"
+                <> help "Min acceptable USDM/ADA, numerator"
+            )
+        <*> option
+            auto
+            ( long "rate-den"
+                <> metavar "INT"
+                <> help "Min acceptable USDM/ADA, denominator"
+            )
+        <*> option
+            auto
+            ( long "validity-hours"
+                <> metavar "HOURS"
+                <> help "Validity window from tip; 1..48"
+            )
+        <*> strOption
+            ( long "description"
+                <> metavar "TEXT"
+                <> help "Rationale: description"
+            )
+        <*> strOption
+            ( long "justification"
+                <> metavar "TEXT"
+                <> help "Rationale: justification"
+            )
+        <*> strOption
+            ( long "destination-label"
+                <> metavar "TEXT"
+                <> help "Rationale: destination label"
+            )
+        <*> optional
+            ( strOption
+                ( long "event"
+                    <> metavar "TEXT"
+                    <> help "Rationale event override (defaults disburse)"
+                )
+            )
+        <*> optional
+            ( strOption
+                ( long "label"
+                    <> metavar "TEXT"
+                    <> help "Rationale label override (defaults Swap ADA<->USDM)"
+                )
+            )
+        <*> optional
+            ( option
+                (eitherReader splitSigners)
+                ( long "signers"
+                    <> metavar "HEX,HEX,..."
+                    <> help "Override default signer set"
+                )
+            )
+        <*> switch
+            ( long "yes"
+                <> help "Skip confirmation"
+            )
+        <*> switch
+            ( long "dry-run"
+                <> help "Print JSON to stdout, skip file write"
+            )
+        <*> switch
+            ( long "verbose"
+                <> help "Print resolved env summary on stderr"
+            )
+        <*> switch
+            ( long "force"
+                <> help "Overwrite --out if it exists"
+            )
+
+splitSigners :: String -> Either String [Text]
+splitSigners s
+    | null s = Left "empty --signers"
+    | otherwise = Right (T.splitOn "," (T.pack s))
 
 opts :: ParserInfo (GlobalOpts, Cmd)
 opts =
@@ -154,6 +366,8 @@ main = do
     case c of
         CmdSwap so ->
             runSwap g{goSocketPath = Just socket} so
+        CmdSwapWizard wo ->
+            runWizard g{goSocketPath = Just socket} wo
 
 resolveSocket :: Maybe FilePath -> IO FilePath
 resolveSocket (Just p) = pure p
@@ -269,3 +483,170 @@ runSwap g SwapOpts{..} = do
                                     stderr
                                     "amaru-treasury-tx swap: VALIDATION FAILED"
                                 exitFailure
+
+-- ----------------------------------------------------
+-- swap-wizard subcommand
+-- ----------------------------------------------------
+
+runWizard :: GlobalOpts -> WizardOpts -> IO ()
+runWizard g wo@WizardOpts{..} = do
+    let socket = fromMaybe "(unset)" (goSocketPath g)
+    -- 1. Load registry view from --registry path.
+    rv <- loadRegistry wOptsRegistryPath
+    -- 2. Build SwapWizardQ from flags.
+    let answers =
+            SwapWizardQ
+                { wqScope = wOptsScope
+                , wqAmountLovelace = wOptsAmountAda
+                , wqChunkSizeLovelace = wOptsChunkAda
+                , wqRateNumerator = wOptsRateNum
+                , wqRateDenominator = wOptsRateDen
+                , wqValidityHours = wOptsValidityHours
+                , wqRationale =
+                    RationaleAnswers
+                        { raDescription = wOptsDescription
+                        , raJustification = wOptsJustification
+                        , raDestinationLabel =
+                            wOptsDestinationLabel
+                        , raEvent = wOptsEvent
+                        , raLabel = wOptsLabel
+                        }
+                , wqSignersOverride = wOptsSigners
+                }
+        ri =
+            ResolverInput
+                { riNetwork = wOptsNetwork
+                , riWalletAddrBech32 = wOptsWalletAddr
+                , riScope = wOptsScope
+                , riAmountLovelace = wOptsAmountAda
+                , riRegistry = rv
+                }
+    -- 3. Refuse to overwrite without --force.
+    unless wOptsDryRun $
+        whenM (doesFileExist wOptsOut) $
+            unless wOptsForce $ do
+                wizardErr ("output exists: " <> wOptsOut)
+                exitWith (ExitFailure 5)
+    -- 4. Connect to node, run resolver.
+    IO.hPutStrLn stderr $
+        "swap-wizard: connecting to " <> socket
+    withLocalNodeBackend (goNetworkMagic g) socket $
+        \backend -> do
+            let renv = providerToResolverEnv backend
+            er <- resolveWizardEnv renv ri
+            case er of
+                Left e -> do
+                    wizardErr (show e)
+                    exitWith (ExitFailure 3)
+                Right env -> do
+                    when wOptsVerbose (printEnvSummary env)
+                    case wizardToIntentJSON env answers of
+                        Left we -> do
+                            wizardErr (show (we :: WizardError))
+                            exitWith (ExitFailure 4)
+                        Right intent -> do
+                            confirmed <- askConfirm wo
+                            unless confirmed $
+                                exitWith (ExitFailure 1)
+                            let bytes = encodeIntentJSON intent
+                            if wOptsDryRun
+                                then BSL.putStr bytes
+                                else do
+                                    BSL.writeFile wOptsOut bytes
+                                    putStrLn $
+                                        "wrote intent.json to "
+                                            <> wOptsOut
+
+loadRegistry :: FilePath -> IO RegistryView
+loadRegistry p = do
+    r <- eitherDecodeFileStrict p
+    case r of
+        Right v -> pure v
+        Left e -> do
+            wizardErr ("registry: " <> e)
+            exitWith (ExitFailure 3)
+
+wizardErr :: String -> IO ()
+wizardErr s = IO.hPutStrLn stderr ("swap-wizard: " <> s)
+
+printEnvSummary :: WizardEnv -> IO ()
+printEnvSummary e = do
+    let l = T.unpack
+    IO.hPutStrLn stderr "swap-wizard: resolved environment"
+    IO.hPutStrLn stderr $
+        "  network        = " <> l (weNetwork e)
+    IO.hPutStrLn stderr $
+        "  currentTip     = " <> show (weCurrentTip e)
+    IO.hPutStrLn stderr $
+        "  walletTxIn     = "
+            <> l (wsTxIn (weWalletSelection e))
+    IO.hPutStrLn stderr $
+        "  walletAddr     = "
+            <> l (wsAddress (weWalletSelection e))
+
+askConfirm :: WizardOpts -> IO Bool
+askConfirm WizardOpts{..}
+    | wOptsYes = pure True
+    | otherwise = do
+        IO.hPutStr
+            stderr
+            "Confirm and write intent.json? [y/N] "
+        IO.hFlush stderr
+        ln <- TIO.hGetLine IO.stdin
+        pure $ T.toLower (T.strip ln) == "y"
+
+{- | Adapter: project the lower-level 'Provider' interface
+into the 'ResolverEnv' shape the wizard consumes.
+-}
+providerToResolverEnv :: Provider IO -> ResolverEnv IO
+providerToResolverEnv p =
+    ResolverEnv
+        { reEnvQueryWalletUtxos = queryFlat p
+        , reEnvQueryTreasuryUtxos = queryFlat p
+        , reEnvCurrentTip = nowTip p
+        }
+
+queryFlat
+    :: Provider IO
+    -> Text
+    -> IO [(Text, Integer, Bool)]
+queryFlat p addrText = case parseAddr addrText of
+    -- An unparseable address is a programmer/operator bug, not
+    -- something the resolver should silently swallow into an
+    -- empty UTxO list (which would surface downstream as a
+    -- misleading 'ResolverEmptyWalletUtxos').
+    Left e ->
+        throwIO $
+            userError
+                ( "queryFlat: bech32 address: "
+                    <> T.unpack addrText
+                    <> ": "
+                    <> e
+                )
+    Right a -> do
+        utxos <- queryUTxOs p a
+        pure (map summarise utxos)
+  where
+    summarise (txin, txout) =
+        let MaryValue (Coin lov) (MultiAsset ma) =
+                txout ^. valueTxOutL
+        in  ( txInToText txin
+            , lov
+            , not (Map.null ma)
+            )
+
+txInToText :: TxIn -> Text
+txInToText (TxIn (TxId h) ix) =
+    TE.decodeUtf8Lenient (B16.encode (hashToBytes (extractHash h)))
+        <> "#"
+        <> T.pack (show (txIxToInt ix))
+
+nowTip :: Provider IO -> IO Word64
+nowTip p = do
+    nowSec <- getPOSIXTime
+    let nowMs = round (realToFrac nowSec * (1000 :: Double))
+    SlotNo s <- posixMsToSlot p nowMs
+    pure s
+
+whenM :: (Monad m) => m Bool -> m () -> m ()
+whenM cond act = cond >>= \b -> when b act

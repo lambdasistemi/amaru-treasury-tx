@@ -25,6 +25,8 @@ module Amaru.Treasury.Tx.SwapWizardSpec (spec) where
 import Data.Aeson (FromJSON, eitherDecodeFileStrict)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Either (isRight)
+import Data.Text (Text)
+import Data.Text qualified as T
 import Test.Hspec
     ( Spec
     , describe
@@ -34,6 +36,9 @@ import Test.Hspec
     , shouldSatisfy
     )
 
+import Cardano.Ledger.BaseTypes (Network (..))
+
+import Amaru.Treasury.Scope (ScopeId (..))
 import Amaru.Treasury.Tx.SwapIntentJSON
     ( RationaleInputs (..)
     , ScopeInputs (..)
@@ -44,11 +49,24 @@ import Amaru.Treasury.Tx.SwapIntentJSON
     , translateIntent
     )
 import Amaru.Treasury.Tx.SwapWizard
-    ( SwapWizardQ (..)
+    ( ResolverEnv (..)
+    , ResolverError (..)
+    , ResolverInput (..)
+    , SwapWizardQ (..)
+    , WalletSelection (..)
     , WizardEnv (..)
     , WizardError (..)
+    , addrNetwork
     , encodeIntentJSON
+    , networkConstants
+    , resolveWizardEnv
+    , selectTreasury
+    , selectWallet
     , wizardToIntentJSON
+    )
+import Test.QuickCheck
+    ( Positive (..)
+    , property
     )
 
 spec :: Spec
@@ -201,6 +219,171 @@ spec = describe "SwapWizard" $ do
             leftIs
                 (WizardSignerNotHex28 "zz")
                 answers{wqSignersOverride = Just ["zz"]}
+
+    describe "networkConstants" $ do
+        it "returns a row for preprod" $
+            case networkConstants "preprod" of
+                Right _ -> pure ()
+                Left e -> expectationFailure' e
+        it "rejects unknown networks" $
+            case networkConstants "narnia" of
+                Left _ -> pure ()
+                Right _ ->
+                    expectationFailure'
+                        "unexpected Right for narnia"
+
+    describe "addrNetwork" $ do
+        it "classifies any addr_test1 address as Testnet" $
+            addrNetwork
+                "addr_test1xyezq8wpaqnssdjvd3p220uf7e6n"
+                `shouldBe` Just Testnet
+        it "classifies addr1 as Mainnet" $
+            addrNetwork
+                "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3y"
+                `shouldBe` Just Mainnet
+        it "rejects bare bech32" $
+            addrNetwork "stake1xyz" `shouldBe` Nothing
+
+    describe "selectTreasury" $ do
+        it "is largest-first and totals to leftover" $
+            property $ \(ps :: [Positive Integer]) ->
+                let ls = [getPositive p | p <- ps]
+                    inputs =
+                        zip
+                            (map (\i -> "u" <> tShow i) [(0 :: Int) ..])
+                            ls
+                    target =
+                        if null ls
+                            then 0
+                            else sum ls `div` 2
+                in  case selectTreasury inputs target of
+                        Nothing ->
+                            sum (snd <$> inputs) < target
+                        Just (picked, leftover) ->
+                            let pickedSum =
+                                    sum
+                                        [ l
+                                        | (r, l) <- inputs
+                                        , r `elem` picked
+                                        ]
+                            in  pickedSum >= target
+                                    && leftover
+                                        == pickedSum - target
+
+    describe "selectWallet" $ do
+        it "picks the largest pure-ADA UTxO" $
+            selectWallet
+                [ ("a", 100, False)
+                , ("b", 200, False)
+                , ("c", 500, True)
+                ]
+                `shouldBe` Just "b"
+        it "ignores entries with native assets" $
+            selectWallet
+                [ ("a", 100, True)
+                , ("b", 200, True)
+                ]
+                `shouldBe` Nothing
+
+    describe "resolveWizardEnv (stub Provider)" $ do
+        it "produces a WizardEnv whose translation matches the golden" $ do
+            let stub =
+                    ResolverEnv
+                        { reEnvQueryWalletUtxos = \_ ->
+                            pure
+                                [
+                                    ( "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0"
+                                    , 1_000_000_000
+                                    , False
+                                    )
+                                ]
+                        , reEnvQueryTreasuryUtxos = \_ ->
+                            pure
+                                [
+                                    ( "64f27254f3c0311fb2e672cdb87de200089a596aa90dc09f8be4248540267cf0#0"
+                                    , 1_450_000_000_000
+                                    , False
+                                    )
+                                ]
+                        , reEnvCurrentTip = pure 186342942
+                        }
+                ri =
+                    ResolverInput
+                        { riNetwork = "preprod"
+                        , riWalletAddrBech32 =
+                            "addr_test1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+                        , riScope = CoreDevelopment
+                        , riAmountLovelace = 408163265306
+                        , riRegistry = weRegistry env
+                        }
+            r <- resolveWizardEnv stub ri
+            case r of
+                Left e -> expectationFailure' (show e)
+                Right env' -> do
+                    -- the resolver-derived env should
+                    -- carry the same scope view, treasury
+                    -- selection, and wallet selection that
+                    -- the fixture env has, so feeding it
+                    -- through wizardToIntentJSON yields the
+                    -- same byte-for-byte golden output.
+                    let envOverPreprod =
+                            env'
+                                { weNetwork = "preprod"
+                                , weWalletSelection =
+                                    (weWalletSelection env')
+                                        { wsAddress =
+                                            -- match fixture
+                                            wsAddress
+                                                ( weWalletSelection
+                                                    env
+                                                )
+                                        }
+                                }
+                    case wizardToIntentJSON envOverPreprod answers of
+                        Left e ->
+                            expectationFailure'
+                                (show e)
+                        Right intent ->
+                            encodeIntentJSON intent
+                                `shouldBe` encodeIntentJSON
+                                    ( case wizardToIntentJSON
+                                        env
+                                        answers of
+                                        Right x -> x
+                                        Left _ ->
+                                            error
+                                                "fixture broken"
+                                    )
+
+        it "rejects network mismatch" $ do
+            let stub =
+                    ResolverEnv
+                        { reEnvQueryWalletUtxos =
+                            \_ -> pure []
+                        , reEnvQueryTreasuryUtxos =
+                            \_ -> pure []
+                        , reEnvCurrentTip = pure 0
+                        }
+                ri =
+                    ResolverInput
+                        { riNetwork = "preprod"
+                        , -- mainnet wallet on preprod request
+                          riWalletAddrBech32 =
+                            "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+                        , riScope = CoreDevelopment
+                        , riAmountLovelace = 1
+                        , riRegistry = weRegistry env
+                        }
+            r <- resolveWizardEnv stub ri
+            r
+                `shouldBe` Left
+                    ( ResolverNetworkMismatch
+                        "preprod"
+                        "mainnet"
+                    )
+
+tShow :: (Show a) => a -> Text
+tShow = T.pack . show
 
 loadFixture :: forall a. (Show a, FromJSON a) => FilePath -> IO a
 loadFixture path = do

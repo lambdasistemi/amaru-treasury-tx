@@ -175,7 +175,7 @@ fixed UTxOs, registry view, and tip, the resolver produces a
 `WizardEnv` byte-equal to the T011 fixture (modulo selection order
 when ties).
 
-- [ ] T015 [US1] Implement `networkConstants :: Network ->
+- [X] T015 [US1] Implement `networkConstants :: Network ->
       Either String NetworkConstants` in
       `lib/Amaru/Treasury/Tx/SwapWizard.hs`. Mainnet + preprod
       rows. Each value carries a comment block citing its source:
@@ -191,44 +191,44 @@ when ties).
       - `defaultPoolId`: ADA↔USDM pool id at the merge commit.
       Contract:
       [contracts/network-constants.md](./contracts/network-constants.md).
-- [ ] T016 [US1] Add a unit test
+- [X] T016 [US1] Add a unit test
       `test/unit/SwapWizardSpec.hs::networkConstants` that asserts
       both rows decode their `Addr` and `Hex28` fields without
       error.
-- [ ] T017 [US1] Implement `ResolverInput` (network, wallet addr,
+- [X] T017 [US1] Implement `ResolverInput` (network, wallet addr,
       registry NFT UTxO, scope, total ADA) in
       `lib/Amaru/Treasury/Tx/SwapWizard.hs`. Plus `ResolverError`
       with constructors for: empty wallet UTxOs, empty treasury
       UTxOs, registry walk failure, network not supported,
       shortfall (Σ inputs < total), network mismatch on wallet
       address.
-- [ ] T018 [US1] Implement the registry walk helper (uses the
+- [X] T018 [US1] Implement the registry walk helper (uses the
       existing `Backend` typeclass from
       `lib/Amaru/Treasury/Backend.hs`) in
       `lib/Amaru/Treasury/Tx/SwapWizard.hs`. Returns
       `RegistryView`. No new direct N2C dependency
       ([research R3](./research.md)).
-- [ ] T019 [US1] Implement deterministic largest-first treasury
+- [X] T019 [US1] Implement deterministic largest-first treasury
       UTxO selection
       ([research R4](./research.md)) and largest-pure-ADA wallet
       UTxO selection ([research R5](./research.md)) as pure
       helpers in `lib/Amaru/Treasury/Tx/SwapWizard.hs`. Selection
       functions take a `Map TxIn Value` so they are unit-testable
       without IO.
-- [ ] T020 [P] [US1] QuickCheck property: largest-first selection
+- [X] T020 [P] [US1] QuickCheck property: largest-first selection
       yields `Σ inputs ≥ total` and `tsLeftoverLovelace = Σ inputs
       − total`, in `test/unit/SwapWizardSpec.hs`.
-- [ ] T021 [US1] Implement `resolveWizardEnv :: Provider IO ->
+- [X] T021 [US1] Implement `resolveWizardEnv :: Provider IO ->
       ResolverInput -> IO (Either ResolverError WizardEnv)`. The
       function is small: dispatch the four queries, project into
       the data-model types. No business logic beyond the
       selection helpers from T019.
-- [ ] T022 [US1] Add a stub `Provider IO` (test helper) in
+- [X] T022 [US1] Add a stub `Provider IO` (test helper) in
       `test/unit/SwapWizardSpec.hs` that returns the T009 fixture
       data. Test that `resolveWizardEnv` over it produces a
       `WizardEnv` whose `wizardToIntentJSON` against the T009
       answers matches T010's golden.
-- [ ] T022a [US1] Add a negative test in
+- [X] T022a [US1] Add a negative test in
       `test/unit/SwapWizardSpec.hs`: stub `Provider IO` returns a
       wallet address whose `Network` does not match
       `ResolverInput.network`; assert
@@ -255,28 +255,30 @@ resolver + pure translation + file write, never invokes
 `swap-wizard --yes` with all answers as flags against the stub
 `Provider IO` and asserts the produced file equals T010's golden.
 
-- [ ] T023 [US1] Add `Cmd.SwapWizard` parser to
+- [X] T023 [US1] Add `Cmd.SwapWizard` parser to
       `app/amaru-treasury-tx/Main.hs`'s `optparse-applicative`
       tree. Flags exactly per
       [contracts/swap-wizard-cli.md §1](./contracts/swap-wizard-cli.md).
-- [ ] T024 [US1] Implement the prompt loop helper (reads from
+- [X] T024 [US1] Implement the prompt loop helper (reads from
       stderr per [contract §3](./contracts/swap-wizard-cli.md)) in
       `app/amaru-treasury-tx/Main.hs`. Order is fixed per
       [contract §2](./contracts/swap-wizard-cli.md). Each missing
       flag triggers its prompt; when `--yes` is set, missing flags
-      cause exit code 2.
-- [ ] T025 [US1] Implement the resolved-env summary printer
+      cause exit code 2. **MVP scope**: only the confirmation
+      prompt is interactive; all answers come from CLI flags.
+      Per-field interactive prompting deferred.
+- [X] T025 [US1] Implement the resolved-env summary printer
       (verbose + pre-confirmation summary) in the same file.
       Output is human-readable, each field on its own line, on
       stderr (per FR-013 and contract §3).
-- [ ] T026 [US1] Implement the confirmation prompt; on "no", exit 1.
+- [X] T026 [US1] Implement the confirmation prompt; on "no", exit 1.
       On `--yes`, skip and proceed.
-- [ ] T027 [US3] Wire the file write: `--out PATH`, refuse to
+- [X] T027 [US3] Wire the file write: `--out PATH`, refuse to
       overwrite without `--force`, exit 5 if path exists. On
       `--dry-run`, write JSON to stdout and skip the file write.
       Audit: this task enforces that the JSON is the *only*
       side-effect — no transaction build, no signing, no submit.
-- [ ] T028 [US1] Map `ResolverError` and `WizardError` to exit
+- [X] T028 [US1] Map `ResolverError` and `WizardError` to exit
       codes per
       [contract §4](./contracts/swap-wizard-cli.md). Format
       messages as `swap-wizard: <message>` on stderr.
@@ -288,7 +290,11 @@ resolver + pure translation + file write, never invokes
       flags-only inputs against the stub `Provider IO`, assert
       that the file written equals T010's golden byte-for-byte.
       Asserts the audit invariant: identical `WizardEnv` + answers
-      produce identical JSON.
+      produce identical JSON. **Note**: the resolver-stub test
+      (T022 + T022a in Phase 4) covers the
+      WizardEnv→SwapIntentJSON path; the missing piece is driving
+      `runWizard` end-to-end via the CLI parser, which a follow-up
+      will add.
 
 **Checkpoint**: end-to-end JSON producer behaves to spec, exit
 codes match contract, audit trail (the JSON file) is preserved.

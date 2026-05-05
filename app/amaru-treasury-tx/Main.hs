@@ -19,7 +19,7 @@ Subcommands:
 * @swap --intent path\/to\/intent.json [--out path\/swap.cbor]@ —
   builds the SundaeSwap order tx for a treasury scope.
   See [@docs\/swap.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/docs/swap.md).
-* @swap-wizard --network <preprod|mainnet> --wallet-addr ... --registry path\/to\/registry.json --scope ... --amount-ada N --chunk-ada N --rate-num N --rate-den N --validity-hours N --description ... --justification ... --destination-label ... [--signers HEX,...] --out path\/intent.json [--yes] [--dry-run] [--verbose] [--force]@
+* @swap-wizard --network <preprod|mainnet> --wallet-addr ... --registry path\/to\/registry.json --scope ... --ada N.NN --chunks N --min-rate N.NN --validity-hours N --description ... --justification ... --destination-label ... [--signer HEX]... --out path\/intent.json [--yes] [--dry-run] [--verbose] [--force]@
   produces a swap @intent.json@ from a typed questionnaire.
   See [@specs\/002-swap-wizard\/quickstart.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/002-swap-wizard/quickstart.md).
 -}
@@ -45,6 +45,7 @@ import Options.Applicative
     , hsubparser
     , info
     , long
+    , many
     , metavar
     , option
     , optional
@@ -146,17 +147,20 @@ data WizardOpts = WizardOpts
     , wOptsRegistryPath :: !FilePath
     , wOptsOut :: !FilePath
     , wOptsScope :: !ScopeId
-    , wOptsAmountAda :: !Integer
-    , wOptsChunkAda :: !Integer
-    , wOptsRateNum :: !Integer
-    , wOptsRateDen :: !Integer
+    , wOptsAda :: !Double
+    -- ^ total ADA to swap (whole ADA, decimals OK)
+    , wOptsChunks :: !Int
+    -- ^ number of chunks; chunk size is @amount \`div\` chunks@
+    , wOptsMinRate :: !Double
+    -- ^ minimum acceptable USDM per ADA, decimal
     , wOptsValidityHours :: !Word8
     , wOptsDescription :: !Text
     , wOptsJustification :: !Text
     , wOptsDestinationLabel :: !Text
     , wOptsEvent :: !(Maybe Text)
     , wOptsLabel :: !(Maybe Text)
-    , wOptsSigners :: !(Maybe [Text])
+    , wOptsSigners :: ![Text]
+    -- ^ accumulated @--signer@ flags; empty = use scope default
     , wOptsYes :: !Bool
     , wOptsDryRun :: !Bool
     , wOptsVerbose :: !Bool
@@ -261,27 +265,21 @@ wizardOptsP =
             )
         <*> option
             auto
-            ( long "amount-ada"
-                <> metavar "LOVELACE"
-                <> help "Total lovelace to swap"
+            ( long "ada"
+                <> metavar "ADA"
+                <> help "Total ADA to swap (decimals OK, e.g. 408163.265306)"
             )
         <*> option
             auto
-            ( long "chunk-ada"
-                <> metavar "LOVELACE"
-                <> help "Per-chunk lovelace"
-            )
-        <*> option
-            auto
-            ( long "rate-num"
+            ( long "chunks"
                 <> metavar "INT"
-                <> help "Min acceptable USDM/ADA, numerator"
+                <> help "Number of chunks (chunk size = amount / chunks)"
             )
         <*> option
             auto
-            ( long "rate-den"
-                <> metavar "INT"
-                <> help "Min acceptable USDM/ADA, denominator"
+            ( long "min-rate"
+                <> metavar "USDM_PER_ADA"
+                <> help "Min acceptable rate, e.g. 0.245"
             )
         <*> option
             auto
@@ -318,12 +316,11 @@ wizardOptsP =
                     <> help "Rationale label override (defaults Swap ADA<->USDM)"
                 )
             )
-        <*> optional
-            ( option
-                (eitherReader splitSigners)
-                ( long "signers"
-                    <> metavar "HEX,HEX,..."
-                    <> help "Override default signer set"
+        <*> many
+            ( strOption
+                ( long "signer"
+                    <> metavar "HEX"
+                    <> help "Repeat for each override signer (28-byte hex)"
                 )
             )
         <*> switch
@@ -343,10 +340,17 @@ wizardOptsP =
                 <> help "Overwrite --out if it exists"
             )
 
-splitSigners :: String -> Either String [Text]
-splitSigners s
-    | null s = Left "empty --signers"
-    | otherwise = Right (T.splitOn "," (T.pack s))
+{- | Convert decimal ADA to lovelace (1 ADA = 1_000_000 lovelace).
+Accepts up to 6 decimal places; anything finer is rounded.
+-}
+adaToLovelace :: Double -> Integer
+adaToLovelace x = round (x * 1_000_000)
+
+{- | Convert decimal USDM-per-ADA rate to (numerator, denominator).
+Fixed denominator 1_000_000 matches USDM's 6-decimal precision.
+-}
+rateToFraction :: Double -> (Integer, Integer)
+rateToFraction r = (round (r * 1_000_000), 1_000_000)
 
 opts :: ParserInfo (GlobalOpts, Cmd)
 opts =
@@ -493,14 +497,24 @@ runWizard g wo@WizardOpts{..} = do
     let socket = fromMaybe "(unset)" (goSocketPath g)
     -- 1. Load registry view from --registry path.
     rv <- loadRegistry wOptsRegistryPath
-    -- 2. Build SwapWizardQ from flags.
-    let answers =
+    -- 2. Convert human-friendly answers to wire types.
+    let amountLov = adaToLovelace wOptsAda
+        chunkSize =
+            if wOptsChunks <= 0
+                then amountLov
+                else amountLov `div` toInteger wOptsChunks
+        (rateNum, rateDen) = rateToFraction wOptsMinRate
+        signersOverride =
+            if null wOptsSigners
+                then Nothing
+                else Just wOptsSigners
+        answers =
             SwapWizardQ
                 { wqScope = wOptsScope
-                , wqAmountLovelace = wOptsAmountAda
-                , wqChunkSizeLovelace = wOptsChunkAda
-                , wqRateNumerator = wOptsRateNum
-                , wqRateDenominator = wOptsRateDen
+                , wqAmountLovelace = amountLov
+                , wqChunkSizeLovelace = chunkSize
+                , wqRateNumerator = rateNum
+                , wqRateDenominator = rateDen
                 , wqValidityHours = wOptsValidityHours
                 , wqRationale =
                     RationaleAnswers
@@ -511,14 +525,14 @@ runWizard g wo@WizardOpts{..} = do
                         , raEvent = wOptsEvent
                         , raLabel = wOptsLabel
                         }
-                , wqSignersOverride = wOptsSigners
+                , wqSignersOverride = signersOverride
                 }
         ri =
             ResolverInput
                 { riNetwork = wOptsNetwork
                 , riWalletAddrBech32 = wOptsWalletAddr
                 , riScope = wOptsScope
-                , riAmountLovelace = wOptsAmountAda
+                , riAmountLovelace = amountLov
                 , riRegistry = rv
                 }
     -- 3. Refuse to overwrite without --force.

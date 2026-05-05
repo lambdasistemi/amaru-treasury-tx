@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to build, for example v0.1.1.0"
+        description: "Existing release tag, or branch/ref when publish is no"
         required: true
         type: string
       publish:
@@ -27,13 +27,14 @@ jobs:
     name: Build aarch64-darwin release bundle
     runs-on: macos-14
     env:
+      BUILD_REF: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
       TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
       PUBLISH: ${{ github.event_name == 'push' || inputs.publish == 'yes' }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          ref: ${{ env.BUILD_REF }}
 
       - uses: cachix/install-nix-action@v30
         with:
@@ -52,6 +53,7 @@ jobs:
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Validate release contract
+        if: ${{ env.PUBLISH == 'true' }}
         run: scripts/release/check-version-consistency "$TAG"
 
       - name: Build executables
@@ -101,9 +103,14 @@ jobs:
         run: |
           set -euo pipefail
           version="$(scripts/release/get-cabal-version)"
-          tarball="/tmp/amaru-treasury-tx-${version}-aarch64-darwin.tar.gz"
+          if [[ "$PUBLISH" == "true" ]]; then
+            tarball="/tmp/amaru-treasury-tx-${version}-aarch64-darwin.tar.gz"
+          else
+            sha="$(git rev-parse --short HEAD)"
+            tarball="/tmp/amaru-treasury-tx-${version}-${sha}-aarch64-darwin.tar.gz"
+          fi
           tar czf "$tarball" -C /tmp/bundle .
-          shasum -a 256 "$tarball"
+          shasum -a 256 "$tarball" | tee /tmp/tarball.sha256
           echo "$tarball" > /tmp/tarball-path
 
       - name: Upload workflow artifact
@@ -113,6 +120,17 @@ jobs:
           path: /tmp/amaru-treasury-tx-*-aarch64-darwin.tar.gz
           if-no-files-found: error
           retention-days: 30
+
+      - name: Summarize build
+        run: |
+          set -euo pipefail
+          {
+            echo "Built $(cat /tmp/tarball-path)"
+            echo
+            echo '```'
+            cat /tmp/tarball.sha256
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create release and upload artifact
         if: ${{ env.PUBLISH == 'true' }}

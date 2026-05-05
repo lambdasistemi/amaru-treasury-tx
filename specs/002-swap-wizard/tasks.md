@@ -284,9 +284,8 @@ resolver + pure translation + file write, never invokes
       messages as `swap-wizard: <message>` on stderr.
 - [X] T029 [US1] Update `README.md` and `quickstart.md` with the
       `swap-wizard` invocation. Link from the README to
-      [quickstart.md](./quickstart.md). Sample registry JSON
-      checked in at
-      [`test/fixtures/swap-wizard/registry.example.json`](../../test/fixtures/swap-wizard/registry.example.json).
+      [quickstart.md](./quickstart.md). The invocation uses a
+      local metadata file and verifies it before resolution.
 - [ ] T030 [US3] Integration test in
       `test/unit/SwapWizardSpec.hs`: drive the subcommand with
       flags-only inputs against the stub `Provider IO`, assert

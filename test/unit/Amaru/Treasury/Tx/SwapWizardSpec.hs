@@ -24,7 +24,9 @@ module Amaru.Treasury.Tx.SwapWizardSpec (spec) where
 
 import Data.Aeson (FromJSON, eitherDecodeFileStrict)
 import Data.ByteString.Lazy qualified as BSL
+import Data.Char (isDigit)
 import Data.Either (isRight)
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Test.Hspec
@@ -38,6 +40,16 @@ import Test.Hspec
 
 import Cardano.Ledger.BaseTypes (Network (..))
 
+import Amaru.Treasury.LedgerParse
+    ( addrFromText
+    , keyHashFromHex
+    , scriptHashFromHex
+    , txInFromText
+    )
+import Amaru.Treasury.Registry.Verify
+    ( VerifiedRegistry (..)
+    , VerifiedScope (..)
+    )
 import Amaru.Treasury.Scope (ScopeId (..))
 import Amaru.Treasury.Tx.SwapIntentJSON
     ( RationaleInputs (..)
@@ -49,16 +61,20 @@ import Amaru.Treasury.Tx.SwapIntentJSON
     , translateIntent
     )
 import Amaru.Treasury.Tx.SwapWizard
-    ( ResolverEnv (..)
+    ( RegistryView (..)
+    , ResolverEnv (..)
     , ResolverError (..)
     , ResolverInput (..)
+    , ScopeOwners (..)
     , SwapWizardQ (..)
+    , TreasuryRefs (..)
     , WalletSelection (..)
     , WizardEnv (..)
     , WizardError (..)
     , addrNetwork
     , encodeIntentJSON
     , networkConstants
+    , registryViewFromVerified
     , resolveWizardEnv
     , selectTreasury
     , selectWallet
@@ -178,6 +194,37 @@ spec = describe "SwapWizard" $ do
                     "test/fixtures/swap-wizard/expected.intent.json"
             existing <- BSL.readFile goldenPath
             bytes `shouldBe` existing
+
+    describe "registryViewFromVerified" $ do
+        it "projects verified local metadata into the wizard registry view" $ do
+            view <-
+                expectRight $
+                    registryViewFromVerified
+                        CoreDevelopment
+                        verifiedRegistryFixture
+            refs <-
+                expectJust "missing core_development refs" $
+                    Map.lookup CoreDevelopment (rvTreasuryByScope view)
+            let owners = rvOwners view
+            rvScopesDeployedAt view
+                `shouldBe` "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0"
+            rvTreasuryDeployedAt view
+                `shouldBe` "87ee53271fb41021efa13c2dbe2998c18ead07d32a6ab6dda184853ed7e39aae#0"
+            rvPermissionsDeployedAt view
+                `shouldBe` "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#0"
+            rvRegistryDeployedAt view
+                `shouldBe` "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#0"
+            rvRegistryPolicyId view
+                `shouldBe` "1e1ee91b8e2bddc9d583d92fd1ba5ea47b8a3e62c1eacb0ec799b99b"
+            soCore owners
+                `shouldBe` "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
+            soOps owners
+                `shouldBe` "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+            trAddress refs
+                `shouldBe` "addr1x90mk0jjjhppr36ethwj8kewpgyrxyc7q6qucl4gqru96dzlhvl999wzz8r4jhway0djuzsgxvf3up5pe3l2sq8ct56qtjz6ah"
+            trScriptHash refs
+                `shouldBe` "5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34"
+            trPermissionsRewardAccount refs `shouldSatisfy` isHex28
 
     describe "validation" $ do
         let leftIs e q =
@@ -379,13 +426,13 @@ spec = describe "SwapWizard" $ do
                 `shouldBe` Left
                     ( ResolverNetworkMismatch
                         "mainnet"
-                        "preprod"
+                        "testnet"
                     )
 
 tShow :: (Show a) => a -> Text
 tShow = T.pack . show
 
-loadFixture :: forall a. (Show a, FromJSON a) => FilePath -> IO a
+loadFixture :: forall a. (FromJSON a) => FilePath -> IO a
 loadFixture path = do
     r <- eitherDecodeFileStrict path
     case r of
@@ -395,5 +442,108 @@ loadFixture path = do
                 ( "loadFixture: " <> path <> ": " <> e
                 )
 
-expectationFailure' :: String -> IO ()
+verifiedRegistryFixture :: VerifiedRegistry
+verifiedRegistryFixture =
+    VerifiedRegistry
+        { vrScopesNftUtxo =
+            parseFixture
+                "scope owners ref"
+                txInFromText
+                "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#00"
+        , vrScopesNftPolicy =
+            parseFixture
+                "scopes policy"
+                scriptHashFromHex
+                "5a7350fef97581498697d679aa1cbc4fb72f51991bde8ad535614365"
+        , vrOwners =
+            Map.fromList
+                [
+                    ( CoreDevelopment
+                    , owner "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
+                    )
+                ,
+                    ( OpsAndUseCases
+                    , owner "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+                    )
+                ,
+                    ( NetworkCompliance
+                    , owner "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
+                    )
+                ,
+                    ( Middleware
+                    , owner "97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2"
+                    )
+                ]
+        , vrTreasuriesByScope =
+            Map.singleton CoreDevelopment verifiedCoreDevelopment
+        }
+  where
+    owner =
+        parseFixture "owner" keyHashFromHex
+
+verifiedCoreDevelopment :: VerifiedScope
+verifiedCoreDevelopment =
+    VerifiedScope
+        { vsAddress =
+            parseFixture
+                "treasury address"
+                addrFromText
+                "addr1x90mk0jjjhppr36ethwj8kewpgyrxyc7q6qucl4gqru96dzlhvl999wzz8r4jhway0djuzsgxvf3up5pe3l2sq8ct56qtjz6ah"
+        , vsTreasuryScriptHash =
+            scriptHash
+                "5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34"
+        , vsRegistryScriptHash =
+            scriptHash
+                "1e1ee91b8e2bddc9d583d92fd1ba5ea47b8a3e62c1eacb0ec799b99b"
+        , vsPermissionsScriptHash =
+            scriptHash
+                "03ee9cf951e89fb82c47edbff562ee90be17de85b2c24b451c7e8e39"
+        , vsRegistryNftUtxo =
+            txIn
+                "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#00"
+        , vsTreasuryDeployedAt =
+            txIn
+                "87ee53271fb41021efa13c2dbe2998c18ead07d32a6ab6dda184853ed7e39aae#00"
+        , vsPermissionsDeployedAt =
+            txIn
+                "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#00"
+        , vsRegistryDeployedAt =
+            txIn
+                "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#00"
+        }
+  where
+    scriptHash =
+        parseFixture "script hash" scriptHashFromHex
+    txIn =
+        parseFixture "txin" txInFromText
+
+parseFixture
+    :: (Show e)
+    => String
+    -> (Text -> Either e a)
+    -> Text
+    -> a
+parseFixture label parser raw =
+    case parser raw of
+        Right a -> a
+        Left e -> error (label <> ": " <> show e)
+
+isHex28 :: Text -> Bool
+isHex28 t =
+    T.length t == 56 && T.all isHex t
+  where
+    isHex c =
+        isDigit c
+            || (c >= 'a' && c <= 'f')
+            || (c >= 'A' && c <= 'F')
+
+expectRight :: (Show e) => Either e a -> IO a
+expectRight =
+    either (expectationFailure' . show) pure
+
+expectJust :: String -> Maybe a -> IO a
+expectJust label =
+    maybe (expectationFailure' label) pure
+
+expectationFailure' :: String -> IO a
 expectationFailure' = errorWithoutStackTrace

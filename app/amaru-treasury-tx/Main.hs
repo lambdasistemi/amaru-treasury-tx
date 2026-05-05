@@ -19,14 +19,14 @@ Subcommands:
 * @swap --intent path\/to\/intent.json [--out path\/swap.cbor]@ —
   builds the SundaeSwap order tx for a treasury scope.
   See [@docs\/swap.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/docs/swap.md).
-* @swap-wizard --network <preprod|mainnet> --wallet-addr ... --registry path\/to\/registry.json --scope ... --ada N.NN --chunks N --min-rate N.NN --validity-hours N --description ... --justification ... --destination-label ... [--signer HEX]... --out path\/intent.json [--yes] [--dry-run] [--verbose] [--force]@
+* @swap-wizard --network <preprod|mainnet> --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --usdm N.NN --split N --min-rate N.NN --validity-hours N --description ... --justification ... --destination-label ... [--signer HEX]... --out path\/intent.json [--yes] [--dry-run] [--verbose] [--force]@
   produces a swap @intent.json@ from a typed questionnaire.
   See [@specs\/002-swap-wizard\/quickstart.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/002-swap-wizard/quickstart.md).
 -}
 module Main (main) where
 
 import Control.Applicative ((<|>))
-import Control.Exception (IOException, throwIO, try)
+import Control.Exception (throwIO)
 import Control.Monad (unless, when)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
@@ -54,7 +54,6 @@ import Options.Applicative
     , short
     , strOption
     , switch
-    , value
     , (<**>)
     )
 import System.Directory (doesFileExist)
@@ -63,24 +62,16 @@ import System.Exit (ExitCode (..), exitFailure, exitWith)
 import System.IO (stderr)
 import System.IO qualified as IO
 
-import Cardano.Crypto.Hash.Class (hashToBytes)
-import Cardano.Ledger.BaseTypes (txIxToInt)
 import Cardano.Ledger.Coin (Coin (..))
-import Cardano.Ledger.Hashes
-    ( extractHash
-    )
 import Cardano.Ledger.Mary.Value
     ( MaryValue (..)
     , MultiAsset (..)
     )
-import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Slotting.Slot (SlotNo (..))
-import Data.Aeson (eitherDecodeFileStrict)
 import Data.Char (toLower)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text.Encoding qualified as TE
 import Data.Text.IO qualified as TIO
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import Data.Word (Word64, Word8)
@@ -94,6 +85,7 @@ import Cardano.Ledger.Api.Tx.Out (valueTxOutL)
 import Amaru.Treasury.Backend (Provider (..))
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.ChainContext (liveContext)
+import Amaru.Treasury.Registry.Verify (verifyRegistry)
 import Amaru.Treasury.Scope
     ( ScopeId
     , scopeFromText
@@ -113,7 +105,6 @@ import Amaru.Treasury.Tx.SwapIntentJSON
     )
 import Amaru.Treasury.Tx.SwapWizard
     ( RationaleAnswers (..)
-    , RegistryView (..)
     , ResolverEnv (..)
     , ResolverInput (..)
     , SwapWizardQ (..)
@@ -121,7 +112,9 @@ import Amaru.Treasury.Tx.SwapWizard
     , WizardEnv (..)
     , WizardError
     , encodeIntentJSON
+    , registryViewFromVerified
     , resolveWizardEnv
+    , txInToText
     , wizardToIntentJSON
     )
 
@@ -159,7 +152,7 @@ Mirrors @specs/002-swap-wizard/contracts/swap-wizard-cli.md §1@.
 -}
 data WizardOpts = WizardOpts
     { wOptsWalletAddr :: !Text
-    , wOptsRegistryPath :: !FilePath
+    , wOptsMetadataPath :: !FilePath
     , wOptsOut :: !FilePath
     , wOptsScope :: !ScopeId
     , wOptsUsdm :: !Double
@@ -315,9 +308,9 @@ wizardOptsP =
                 <> help "Wallet address (fuel + collateral)"
             )
         <*> strOption
-            ( long "registry"
+            ( long "metadata"
                 <> metavar "PATH"
-                <> help "Path to RegistryView JSON file"
+                <> help "Path to local journal/2026 metadata.json"
             )
         <*> strOption
             ( long "out"
@@ -609,9 +602,7 @@ runWizard g wo@WizardOpts{..} = do
         Left e -> do
             wizardErr e
             exitWith (ExitFailure 3)
-    -- 1. Load registry view from --registry path.
-    rv <- loadRegistry wOptsRegistryPath
-    -- 2. Convert human-friendly answers to wire types.
+    -- 1. Convert human-friendly answers to wire types.
     --    The user buys USDM at rate 'min-rate' (USDM/ADA);
     --    ADA spend = usdm / rate.
     let amountLov = usdmToLovelace wOptsUsdm wOptsMinRate
@@ -643,25 +634,40 @@ runWizard g wo@WizardOpts{..} = do
                         }
                 , wqSignersOverride = signersOverride
                 }
-        ri =
-            ResolverInput
-                { riNetwork = network
-                , riWalletAddrBech32 = wOptsWalletAddr
-                , riScope = wOptsScope
-                , riAmountLovelace = amountLov
-                , riRegistry = rv
-                }
-    -- 3. Refuse to overwrite without --force.
+    -- 2. Refuse to overwrite without --force.
     unless wOptsDryRun $
         whenM (doesFileExist wOptsOut) $
             unless wOptsForce $ do
                 wizardErr ("output exists: " <> wOptsOut)
                 exitWith (ExitFailure 5)
-    -- 4. Connect to node, run resolver.
+    -- 3. Connect to node, verify the local metadata, run resolver.
     IO.hPutStrLn stderr $
         "swap-wizard: connecting to " <> socket
     withLocalNodeBackend (goNetworkMagic g) socket $
         \backend -> do
+            verified <-
+                verifyRegistry
+                    backend
+                    wOptsMetadataPath
+                    (Set.singleton wOptsScope)
+            rv <- case verified of
+                Left e -> do
+                    wizardErr ("metadata: " <> show e)
+                    exitWith (ExitFailure 3)
+                Right registry ->
+                    case registryViewFromVerified wOptsScope registry of
+                        Left e -> do
+                            wizardErr ("metadata: " <> show e)
+                            exitWith (ExitFailure 3)
+                        Right view -> pure view
+            let ri =
+                    ResolverInput
+                        { riNetwork = network
+                        , riWalletAddrBech32 = wOptsWalletAddr
+                        , riScope = wOptsScope
+                        , riAmountLovelace = amountLov
+                        , riRegistry = rv
+                        }
             let renv = providerToResolverEnv backend
             er <- resolveWizardEnv renv ri
             case er of
@@ -686,20 +692,6 @@ runWizard g wo@WizardOpts{..} = do
                                     putStrLn $
                                         "wrote intent.json to "
                                             <> wOptsOut
-
-loadRegistry :: FilePath -> IO RegistryView
-loadRegistry p = do
-    r <-
-        try (eitherDecodeFileStrict p)
-            :: IO (Either IOException (Either String RegistryView))
-    case r of
-        Left ioe -> do
-            wizardErr ("registry: " <> show ioe)
-            exitWith (ExitFailure 3)
-        Right (Left e) -> do
-            wizardErr ("registry: " <> e)
-            exitWith (ExitFailure 3)
-        Right (Right v) -> pure v
 
 wizardErr :: String -> IO ()
 wizardErr s = IO.hPutStrLn stderr ("swap-wizard: " <> s)
@@ -769,12 +761,6 @@ queryFlat p addrText = case parseAddr addrText of
             , lov
             , not (Map.null ma)
             )
-
-txInToText :: TxIn -> Text
-txInToText (TxIn (TxId h) ix) =
-    TE.decodeUtf8Lenient (B16.encode (hashToBytes (extractHash h)))
-        <> "#"
-        <> T.pack (show (txIxToInt ix))
 
 nowTip :: Provider IO -> IO Word64
 nowTip p = do

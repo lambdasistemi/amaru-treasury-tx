@@ -1,10 +1,8 @@
 # Quickstart
 
-This document walks through the typical flow once the
-CLI is implemented (post-`/speckit.implement`). Until
-then it serves as the target UX for the implementation.
+Build a swap transaction end-to-end with the CLI.
 
-## 1. Get the binary
+## 1. Build the binary
 
 ```bash
 git clone git@github.com:lambdasistemi/amaru-treasury-tx.git
@@ -13,94 +11,109 @@ nix develop
 just build
 ```
 
-Or, when published, fetch a static binary release from
-[GitHub releases][releases].
-
-## 2. Get a metadata file
-
-Use the canonical
-[`journal/2026/metadata.json`][metadata] as-is:
+## 2. Point at a mainnet node
 
 ```bash
-curl -fsSL \
-  https://raw.githubusercontent.com/pragma-org/amaru-treasury/main/journal/2026/metadata.json \
-  > metadata.json
+export CARDANO_NODE_SOCKET_PATH=/path/to/cardano-node.socket
 ```
 
-The CLI never modifies this file; it is read-only input.
+(Or pass `--node-socket PATH` to the CLI.)
 
-## 3. Make sure a node is reachable
+## 3. Author an `intent.json`
 
-The default backend is the local cardano-node. On a
-machine with mainnet synced, point the CLI at the
-node's N2C socket.
+A swap intent collects everything the build needs that isn't
+inferable from the chain itself: the wallet UTxO + address, the
+scope's deployed-at references, the chunk size + amount + rate,
+the rationale copy.
+
+The minimal shape (see `docs/swap.md` for full schema):
+
+```json
+{
+  "wallet": {
+    "txIn": "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0",
+    "address": "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+  },
+  "scope": {
+    "treasuryAddress": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
+    "treasuryUtxos": ["64f27254f3c0311fb2e672cdb87de200089a596aa90dc09f8be4248540267cf0#0"],
+    "treasuryLeftoverLovelace": 1041836734694,
+    "treasuryScriptHash": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+    "permissionsRewardAccount": "a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094",
+    "scopesDeployedAt": "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0",
+    "permissionsDeployedAt": "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+    "treasuryDeployedAt": "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+    "registryDeployedAt": "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2",
+    "registryPolicyId": "38c627d45835744a2d6c727124f2b5852e5564aeab3f608e0e84ea6d"
+  },
+  "swap": {
+    "swapOrderAddress": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+    "chunkSizeLovelace": 12500000000,
+    "amountLovelace": 408163265306,
+    "extraPerChunkLovelace": 3280000,
+    "rateNumerator": 245,
+    "rateDenominator": 1000,
+    "sundaeProtocolFeeLovelace": 1280000,
+    "poolId": "64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef",
+    "coreOwner": "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb",
+    "opsOwner": "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+    "networkComplianceOwner": "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+    "middlewareOwner": "97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2",
+    "usdmPolicy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+    "usdmToken": "0014df105553444d"
+  },
+  "signers": [
+    "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+    "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
+  ],
+  "validityUpperBoundSlot": 186364542,
+  "rationale": {
+    "description": "Swapping ADA for $100k at a rate of $0.245 per ADA",
+    "destinationLabel": "Network Compliance's treasury",
+    "justification": "Required to pay Antithesis as vendor"
+  }
+}
+```
+
+The values above pin a real mainnet swap. Substitute your own.
+
+## 4. Build the tx
 
 ```bash
-export CARDANO_NODE_SOCKET_PATH=/path/to/node.socket
+amaru-treasury-tx swap --intent intent.json --out swap.cbor
 ```
 
-## 4. Build a disburse transaction
+You should see something like:
+
+```
+amaru-treasury-tx swap: reading intent.json
+amaru-treasury-tx swap: connecting to /path/to/socket
+amaru-treasury-tx swap: 14954 bytes  fee=1009695  total_collateral=1514543
+amaru-treasury-tx swap: re-evaluated 2 redeemers, 0 failed
+amaru-treasury-tx swap: VALIDATION OK
+```
+
+`swap.cbor` is the unsigned hex CBOR. The CLI exits non-zero if any
+redeemer failed re-evaluation against the live node.
+
+## 5. Sign + submit (out of scope for this CLI)
+
+Pipe `swap.cbor` into your signer (hardware wallet,
+[`cardano-wallet-sign`][cws], MPC service) then
+`cardano-cli transaction submit` (or any other broadcaster).
+
+## 6. Reproduce a known on-chain swap
+
+The `swap-probe` executable hard-codes a real mainnet swap and
+reproduces its CBOR to the byte (modulo the documented fee residue).
+Use it to validate the stack after upstream bumps:
 
 ```bash
-amaru-treasury-tx \
-  --metadata metadata.json \
-  disburse \
-  $WALLET_ADDR \
-  50000000 ada \
-  $VENDOR_ADDR \
-  core_development \
-  $WITNESS_KEYHASH \
-  > disburse.cbor
+export CARDANO_NODE_SOCKET_PATH=/code/cardano-mainnet/ipc/node.socket
+nix run .#swap-probe > haskell-build.hex
+diff haskell-build.hex /code/swap-experiment/user-final.hex
 ```
 
-You now have:
+See [`docs/parity.md`](parity.md) for the byte-diff explanation.
 
-- `disburse.cbor`: the unsigned Conway tx CBOR (hex).
-- `disburse.summary.json`: txid, fee, ExUnits per
-  script, redeemer indexes — see the
-  [summary schema][summary].
-
-## 5. Sign and submit (out of scope for this CLI)
-
-Pipe `disburse.cbor` into your preferred signer
-(hardware wallet, [`cardano-wallet-sign`][cws], MPC
-service). Then `cardano-cli transaction submit` (or any
-other submission path) to broadcast.
-
-## 6. Reorganize and withdraw
-
-```bash
-# Merge fragmented core_development UTxOs to a 100 ADA output
-amaru-treasury-tx --metadata metadata.json reorganize \
-  $WALLET_ADDR 100000000 ada core_development > reorganize.cbor
-
-# Pull treasury rewards into the network_compliance contract
-amaru-treasury-tx --metadata metadata.json withdraw \
-  $WALLET_ADDR network_compliance > withdraw.cbor
-```
-
-## 7. Validity bound
-
-By default the CLI sets `invalid_hereafter =
-currentSlot + 3600` (one hour). Override with
-`--ttl-seconds 7200` if your signing ceremony is slow.
-
-## 8. Treasury-UTxO blacklist
-
-If a particular treasury UTxO must be skipped during
-selection (for example, because it is reserved for a
-different operation), supply it via
-`--blacklist-file blacklist.txt` (newline-separated
-`txid#ix`) or repeat `--exclude txid#ix`.
-
-## 9. Re-running for golden tests
-
-The `test/fixtures/` tree carries one input bundle per
-supported action. A failing golden means the bash
-recipe and this CLI have diverged; the divergence must
-be analysed and one of them updated.
-
-[releases]: https://github.com/lambdasistemi/amaru-treasury-tx/releases
-[metadata]: https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/metadata.json
-[summary]: https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/001-treasury-tx-cli/contracts/summary-schema.json
 [cws]: https://github.com/lambdasistemi/cardano-wallet-sign

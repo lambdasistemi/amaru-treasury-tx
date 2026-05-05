@@ -77,6 +77,7 @@ library
     Amaru.Treasury.Summary
     Amaru.Treasury.Tx.Disburse
     Amaru.Treasury.Tx.Swap
+    Amaru.Treasury.Tx.Swap.Trace
     Amaru.Treasury.Tx.SwapBuild
     Amaru.Treasury.Tx.SwapIntentJSON
     Amaru.Treasury.Tx.SwapWizard

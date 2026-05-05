@@ -16,8 +16,10 @@ on stdout (or a path).
 
 Subcommands:
 
-* @swap --intent path\/to\/intent.json [--out path\/swap.cbor]@ —
-  builds the SundaeSwap order tx for a treasury scope.
+* @swap [--intent path\/to\/intent.json] [--out path\/swap.cbor] [--log path\/swap.log]@ —
+  builds the SundaeSwap order tx for a treasury scope. With no
+  @--intent@, reads the intent.json from stdin so
+  @swap-wizard ... | swap@ pipes cleanly.
   See [@docs\/swap.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/docs/swap.md).
 * @swap-wizard --network <preprod|mainnet> --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --usdm N.NN --split N --min-rate N.NN --validity-hours N --description ... --justification ... --destination-label ... [--signer HEX]... [--out path\/intent.json] [--log path\/wizard.log]@
   produces a swap @intent.json@ from a typed questionnaire.
@@ -88,6 +90,10 @@ import Amaru.Treasury.Scope
     , scopeFromText
     )
 import Amaru.Treasury.Tx.Swap (SwapIntent (..))
+import Amaru.Treasury.Tx.Swap.Trace
+    ( SwapEvent (..)
+    , swapEventTracer
+    )
 import Amaru.Treasury.Tx.SwapBuild
     ( ScriptResult (..)
     , SwapBuildInputs (..)
@@ -147,6 +153,9 @@ data SwapOpts = SwapOpts
     -- ^ 'Nothing' = read intent.json from stdin (so
     --   @swap-wizard ... | swap@ pipes cleanly).
     , soOutPath :: !(Maybe FilePath)
+    -- ^ where to write the hex CBOR. 'Nothing' = stdout.
+    , soLog :: !(Maybe FilePath)
+    -- ^ where to send 'SwapEvent' lines. 'Nothing' = stderr.
     }
 
 {- | Two ways to express how a swap is sliced:
@@ -274,6 +283,14 @@ swapOptsP =
                     <> short 'o'
                     <> metavar "PATH"
                     <> help "Write hex CBOR here (defaults to stdout)"
+                )
+            )
+        <*> optional
+            ( strOption
+                ( long "log"
+                    <> metavar "PATH"
+                    <> help
+                        "Where to write step-by-step trace lines (defaults to stderr)"
                 )
             )
 
@@ -499,108 +516,100 @@ resolveSocket Nothing = do
 runSwap :: GlobalOpts -> SwapOpts -> IO ()
 runSwap g SwapOpts{..} = do
     let socket = fromMaybe "(unset)" (goSocketPath g)
-    IO.hPutStrLn stderr $
-        "amaru-treasury-tx swap: reading "
-            <> fromMaybe "stdin" soIntentPath
-    parsed <- case soIntentPath of
-        Just p -> decodeSwapIntentFile p
-        Nothing -> decodeSwapIntent <$> BSL.hGetContents IO.stdin
-    case parsed of
-        Left e ->
-            throwIO . userError $
-                "intent JSON: " <> e
-        Right sij -> case translateIntent sij of
+    withLogHandle soLog $ \logH -> do
+        let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
+            tr = swapEventTracer textTracer
+        traceWith tr (SeIntentSource soIntentPath)
+        parsed <- case soIntentPath of
+            Just p -> decodeSwapIntentFile p
+            Nothing ->
+                decodeSwapIntent <$> BSL.hGetContents IO.stdin
+        sij <- case parsed of
+            Left e -> abortSwap tr ("intent JSON: " <> T.pack e)
+            Right v -> pure v
+        TranslatedIntent{..} <- case translateIntent sij of
             Left e ->
-                throwIO . userError $
-                    "intent translation: " <> e
-            Right TranslatedIntent{..} -> do
-                IO.hPutStrLn stderr $
-                    "amaru-treasury-tx swap: connecting to "
-                        <> socket
-                withLocalNodeBackend
-                    (goNetworkMagic g)
-                    socket
-                    $ \backend -> do
-                        let intent = tiSwapIntent
-                            allRequired =
-                                Set.fromList $
-                                    tiWalletTxIn
-                                        : siTreasuryUtxos intent
-                                        ++ [ siScopesDeployedAt
-                                                intent
-                                           , siPermissionsDeployedAt
-                                                intent
-                                           , siTreasuryDeployedAt
-                                                intent
-                                           , siRegistryDeployedAt
-                                                intent
-                                           ]
-                        ctx <- liveContext backend allRequired
-                        let inputs =
-                                SwapBuildInputs
-                                    { sbiIntent = intent
-                                    , sbiRationale =
-                                        tiRationale
-                                    , sbiWalletTxIn =
-                                        tiWalletTxIn
-                                    , sbiWalletAddr =
-                                        tiWalletAddr
-                                    }
-                        SwapBuildResult{..} <-
-                            runSwapBuild ctx inputs
-                        let cborStrict =
-                                BSL.toStrict sbrCborBytes
-                            hexed = B16.encode cborStrict
-                            Coin feeLov = sbrFeeLovelace
-                            Coin tcLov =
-                                sbrTotalCollateralLovelace
-                            failures =
-                                [ (purpose, e)
-                                | ScriptResult
-                                    purpose
-                                    (Left e) <-
-                                    sbrScriptResults
-                                ]
-                        IO.hPutStrLn stderr $
-                            "amaru-treasury-tx swap: "
-                                <> show
-                                    (BS.length cborStrict)
-                                <> " bytes  fee="
-                                <> show feeLov
-                                <> "  total_collateral="
-                                <> show tcLov
-                        IO.hPutStrLn stderr $
-                            "amaru-treasury-tx swap: "
-                                <> "re-evaluated "
-                                <> show
-                                    (length sbrScriptResults)
-                                <> " redeemers, "
-                                <> show (length failures)
-                                <> " failed"
-                        mapM_
-                            ( \(p, e) ->
-                                IO.hPutStrLn stderr $
-                                    "  FAIL: "
-                                        <> show p
-                                        <> " — "
-                                        <> e
+                abortSwap
+                    tr
+                    ("intent translation: " <> T.pack e)
+            Right v -> pure v
+        traceWith tr (SeConnect socket)
+        withLocalNodeBackend (goNetworkMagic g) socket $
+            \backend -> do
+                let intent = tiSwapIntent
+                    allRequired =
+                        Set.fromList $
+                            tiWalletTxIn
+                                : siTreasuryUtxos intent
+                                ++ [ siScopesDeployedAt intent
+                                   , siPermissionsDeployedAt intent
+                                   , siTreasuryDeployedAt intent
+                                   , siRegistryDeployedAt intent
+                                   ]
+                traceWith
+                    tr
+                    (SeRequiredUtxos (Set.size allRequired))
+                ctx <- liveContext backend allRequired
+                let inputs =
+                        SwapBuildInputs
+                            { sbiIntent = intent
+                            , sbiRationale = tiRationale
+                            , sbiWalletTxIn = tiWalletTxIn
+                            , sbiWalletAddr = tiWalletAddr
+                            }
+                SwapBuildResult{..} <- runSwapBuild ctx inputs
+                let cborStrict = BSL.toStrict sbrCborBytes
+                    hexed = B16.encode cborStrict
+                    Coin feeLov = sbrFeeLovelace
+                    Coin tcLov = sbrTotalCollateralLovelace
+                    failures =
+                        [ (purpose, e)
+                        | ScriptResult purpose (Left e) <-
+                            sbrScriptResults
+                        ]
+                traceWith
+                    tr
+                    ( SeBuilt
+                        (BS.length cborStrict)
+                        feeLov
+                        tcLov
+                    )
+                traceWith
+                    tr
+                    ( SeReevaluated
+                        (length sbrScriptResults)
+                        (length failures)
+                    )
+                mapM_
+                    ( \(p, e) ->
+                        traceWith
+                            tr
+                            ( SeScriptFail
+                                (T.pack (show p))
+                                (T.pack e)
                             )
-                            failures
-                        case soOutPath of
-                            Just p -> BS.writeFile p hexed
-                            Nothing -> do
-                                BS.putStr hexed
-                                putStr "\n"
-                        if null failures
-                            then
-                                IO.hPutStrLn
-                                    stderr
-                                    "amaru-treasury-tx swap: VALIDATION OK"
-                            else do
-                                IO.hPutStrLn
-                                    stderr
-                                    "amaru-treasury-tx swap: VALIDATION FAILED"
-                                exitFailure
+                    )
+                    failures
+                case soOutPath of
+                    Just p -> BS.writeFile p hexed
+                    Nothing -> do
+                        BS.putStr hexed
+                        putStr "\n"
+                traceWith tr (SeWroteCbor soOutPath)
+                if null failures
+                    then traceWith tr SeValidationOk
+                    else do
+                        traceWith tr SeValidationFailed
+                        exitFailure
+
+{- | Trace and abort with exit code 1 (mirrors the previous
+'throwIO . userError' path but routes the message through the
+typed tracer instead of escaping as an IOException).
+-}
+abortSwap :: Tracer IO SwapEvent -> Text -> IO a
+abortSwap tr msg = do
+    traceWith tr (SeAborted msg)
+    exitWith (ExitFailure 1)
 
 -- ----------------------------------------------------
 -- swap-wizard subcommand

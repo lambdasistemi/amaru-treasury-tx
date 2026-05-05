@@ -1,166 +1,181 @@
-# Phase 0 Research: Upstream metadata fetch + chain sanity-check
+# Phase 0 Research: On-chain anchor verification
 
 **Plan**: [plan.md](./plan.md) · **Spec**: [spec.md](./spec.md)
 **Date**: 2026-05-05
 
-## R1. What's actually on chain (the source-of-truth audit)
+## R1. Where the trust actually lives
 
-**Decision**: Trust `pragma-org/amaru-treasury/journal/2026/metadata.json`
-at a pinned commit, then sanity-check against chain. Do NOT
-attempt to derive `*DeployedAt` UTxOs or owner key hashes from
-on-chain data.
+**Decision**: Trust is **on chain plus build-time constants**.
+Trust is NOT in `metadata.json`. The metadata is a hint —
+useful, but verified field-by-field.
 
-**Rationale**: Inspection of upstream
-[`lib/registry.ak`](https://github.com/pragma-org/amaru-treasury/blob/main/lib/registry.ak)
-shows the registry-NFT inline datum is just
-`ScriptHashRegistry { treasury, vendor }`. The
-`*DeployedAt` UTxOs and the four scope-owner key hashes are
-*not* on chain — they live in `journal/2026/metadata.json` in
-the same repo. The bash recipes (`swap.sh`, `disburse.sh`)
-load that file with `jq`. There is no on-chain link from a
-script's hash to the UTxO it's deployed at; that mapping is
-upstream's editorial decision recorded in metadata.
+**Rationale** (the long version that produced this scope after
+two rejected framings):
 
-**Alternatives considered**:
-- Query the chain for UTxOs at the four treasury addresses and
-  pick "the one that has the script as a reference script".
-  Rejected: ambiguous when more than one such UTxO exists, and
-  doesn't recover scope-owner key hashes.
-- Walk the registry NFT inline datum to recover all fields.
-  Rejected because the datum doesn't carry those fields.
+- **Rejected v1**: walk the registry NFT inline datum on chain
+  to recover everything. Doesn't work — the
+  `ScriptHashRegistry` datum carries only `treasury` + `vendor`
+  script credentials. The `*DeployedAt` UTxOs and scope-owner
+  keys are not on chain.
+  ([`treasury-contracts/lib/types.ak`](https://github.com/SundaeSwap-finance/treasury-contracts/blob/8a3183c929be57886214624b45ee0c43a0c19277/lib/types.ak))
+- **Rejected v2**: pin upstream's `metadata.json` at a SHA,
+  fetch over HTTPS, sanity-check that `deployed_at` is unspent.
+  Strictly weaker than per-field verification because the
+  metadata's *content* is still trusted. A tampered metadata
+  with valid (but wrong-for-the-script) deployed_at refs would
+  pass the unspent check.
+- **Accepted**: per-field anchor verification. Each field in
+  metadata is either (a) anchored on chain (Scopes NFT datum,
+  registry NFT datum), (b) derivable from build-time constants
+  + chain anchors (registry policy id, permissions script
+  hash, treasury address), or (c) an operator-supplied hint
+  for which we still verify the *referenced UTxO matches the
+  derived/anchored hash* (`*_deployed_at`).
 
-## R2. HTTP source
+The upstream audit
+([txpipe-shop, 2025-08-05](https://github.com/pragma-org/amaru-treasury/blob/main/audit-report-2025-08-05-txpipe-shop.pdf))
+applies to the on-chain contracts; we bind to the same
+audited blobs.
 
-**Decision**: Pull `metadata.json` from
-`https://raw.githubusercontent.com/pragma-org/amaru-treasury/<sha>/journal/2026/metadata.json`.
+## R2. The two seed UTxOs are the trust roots
 
-**Rationale**:
-- Stable URL pattern documented by GitHub for raw blob access.
-- `<sha>` lets us pin to an exact commit reviewed at release
-  time.
-- HTTPS only; no auth required for public repos.
+**Decision**: Bake `scopes_seed_output_reference` and
+`registry_seed_output_reference` (from upstream
+[`aiken.toml`](https://github.com/pragma-org/amaru-treasury/blob/main/aiken.toml))
+as build-time constants in the binary. Wrong values → wrong
+NFT policy ids → verification rejects everything.
 
-**Alternatives considered**:
-- The GitHub REST API (`/repos/.../contents/...`). Rejected: API
-  rate limits without auth, and the response is base64-wrapped.
-- A mirror under `lambdasistemi`. Rejected: an extra surface to
-  audit.
-
-## R3. HTTP client
-
-**Decision**: `http-client` + `http-client-tls`.
-
-**Rationale**:
-- Already common in the cardano-haskell stack, low-friction.
-- Minimal deps; no streaming required (response is small JSON).
-- The fetcher sits behind a `MetadataFetcher m` record so the
-  unit tests stub it without HTTPS.
+**Rationale**: These two TxIns parameterise `scopes(seed)` and
+`treasury_registry(seed, scope)`, which determine the policy
+ids of the Scopes NFT and per-scope registry NFTs. Without
+them we cannot know "which NFT is real". They are upstream's
+sole bootstrap input; pinning them is equivalent to pinning
+the deployed contract instance.
 
 **Alternatives considered**:
-- `req`. Rejected: one more transitive dep.
-- `wreq`. Rejected: too heavy for one GET.
+- Take them as CLI flags. Rejected: the user could mis-paste
+  and send the wizard searching for an attacker-controlled
+  NFT. They belong in code review, not at runtime.
+- Read them from `metadata.json`. Rejected: the metadata is
+  untrusted by FR-001.
 
-## R4. Pinning mechanism
+## R3. The Plutus blobs are the second trust root
 
-**Decision**: A `defaultUpstreamCommit :: Text` constant in
-`Amaru.Treasury.Metadata.Upstream`, holding a 40-char hex SHA.
-Override at runtime via `--metadata-commit <sha>`.
+**Decision**: Embed the compiled Plutus validator blobs from
+upstream's `plutus.json` for `scopes`, `treasury_registry`,
+`permissions`, and the SundaeSwap treasury validator. Pin them
+to the same commit as the seeds. Update via PR.
 
-**Rationale**:
-- The constant is in source code → updating requires a PR →
-  diff-reviewable.
-- Override exists for operators who need a newer upstream commit
-  before the next release of this binary; they take
-  responsibility for that commit's content.
-
-**Alternatives considered**:
-- A separate JSON or TOML config file shipped alongside the
-  binary. Rejected: same audit-trail problem the original
-  `--registry` flag had.
-- `flake.lock`-style pinning of the upstream repo as a Nix
-  input. Rejected for v1 because the binary needs to be runnable
-  outside Nix.
-
-## R5. Sanity-check shape
-
-**Decision**: For every TxIn the metadata names — the top-level
-`scope_owners` and each scope's `treasury_script.deployed_at`,
-`permissions_script.deployed_at`, `registry_script.deployed_at`
-— call `Provider.queryUTxOByTxIn` with the singleton set; if
-the returned map is empty, the UTxO is consumed and the wizard
-aborts.
-
-**Rationale**:
-- Single existing Provider call. No new typeclass methods.
-- Catches the most common staleness mode (script re-deploy
-  consumes the old reference UTxO).
+**Rationale**: We need to compute parameter-applied script
+hashes locally. The validators are upstream's compiled code;
+we don't reimplement them. Different blob → different hash →
+verification mismatch.
 
 **Alternatives considered**:
-- Also re-query the script address and confirm a UTxO exists
-  with the metadata's claimed script hash as its reference
-  script. Rejected for v1: more queries, and the spent-UTxO
-  check already catches the practical failure.
-- Hash-pin the metadata body: compare a SHA-256 of the fetched
-  body against a constant in source. Rejected for now: the pin
-  is the commit SHA, which is itself a content hash of the
-  whole repo at that revision; double-pinning adds churn
-  without changing the trust model.
+- Trust an "is this validator at this script address?" check
+  on chain instead of recomputing the hash. Rejected: that's
+  basically a tautology; we'd still trust whatever metadata
+  said the address was.
+- Lazy-compute (don't embed; download from upstream at
+  runtime). Rejected: same trust model as the metadata —
+  unacceptable for a script root.
 
-## R6. What about scopes the operator does not request?
+## R4. Anchor topology — what's verifiable how
 
-**Decision**: Verify only the TxIns referenced by the *requested*
-scope plus the global `scope_owners`. Skip the other scopes'
-deployed-at refs.
+| Metadata field | Verification |
+|---|---|
+| `treasuries[scope].owner` | On-chain Scopes NFT datum at `scope_owners` |
+| `treasuries[scope].treasury_script.hash` | On-chain `ScriptHashRegistry.treasury` at the per-scope registry NFT |
+| `treasuries[scope].registry_script.hash` | Recomputed: `policyId(treasury_registry(registry_seed, scope))` |
+| `treasuries[scope].permissions_script.hash` | Recomputed: `scriptHash(permissions(scopes_nft_policy, scope))` |
+| `treasuries[scope].address` | Bech32 of verified `treasury_script.hash` for the network |
+| `treasuries[scope].*.deployed_at` | UTxO at TxIn must be unspent AND its reference script hash must equal the verified script hash for that field |
+| `scope_owners` (TxIn) | UTxO at TxIn must be unspent AND must hold the Scopes NFT (policy = `policyId(scopes(scopes_seed))`, asset = `"amaru 2026 scopes"`) |
 
-**Rationale**:
-- The wizard's output only references those refs.
-- Verifying everything makes the wizard refuse to run when an
-  unrelated scope's UTxOs have moved, which is noise.
+Per-scope registry NFT discovery: derive
+`treasury_registry(seed, scope)` script hash → derive bech32
+script address → `queryUTxOs <addr>` → filter for the unique
+UTxO holding the `(derived_policy_id, "REGISTRY")` token.
+
+## R5. The metadata source is interchangeable
+
+**Decision**: Read metadata from one of three interchangeable
+sources, picked by flag:
+
+- Default: upstream raw URL at `main`
+  (`https://raw.githubusercontent.com/pragma-org/amaru-treasury/main/journal/2026/metadata.json`).
+- `--metadata-url <url>`: any URL.
+- `--metadata-file <path>`: a local file.
+
+**Rationale**: After per-field verification, the source's
+trustworthiness is irrelevant to safety. The default is the
+ergonomic choice. The flags exist because operators may have
+pre-fetched / mirrored / hand-edited copies for legitimate
+reasons (CI sandboxes, air-gapped environments, etc.) — none
+of which weaken safety.
 
 **Alternatives considered**:
-- Verify all scopes always. Rejected per above.
-- Verify nothing (just project the metadata). Rejected — that's
-  the original footgun.
+- Drop the URL default; require an explicit source. Rejected:
+  bad ergonomics for the common case.
+- Allow only the official upstream URL. Rejected: artificially
+  restrictive for no safety benefit.
 
-## R7. Fixture-driven testing
+## R6. LSQ round-trip count
 
-**Decision**: Check in `test/fixtures/metadata-upstream/metadata.json`
-copied verbatim from a known-good upstream commit. The unit test
-stubs the `MetadataFetcher` to return this body and the
-`Provider IO` to report all listed TxIns as unspent.
+**Decision**: Two LSQ round-trips per wizard run:
 
-A second `it` block stubs the Provider to report one TxIn as
-spent and asserts the typed `ChainVerificationError`.
+1. `queryUTxOsAt :: Set Addr` over the scopes-validator address
+   plus each requested scope's registry-validator address →
+   all NFT UTxOs in one shot.
+2. `queryUTxOByTxIn :: Set TxIn` over all `*_deployed_at`
+   refs (and the metadata's `scope_owners` TxIn if not already
+   covered by #1) → all reference UTxOs in one shot.
 
-**Rationale**:
-- No HTTPS in tests.
-- The fixture's commit SHA is recorded in the README so it's
-  auditable.
+**Rationale**: LSQ's `GetUTxOByAddress` and `GetUTxOByTxIn`
+both accept sets natively. The current `Provider IO` exposes
+the TxIn batched form already; we need a batched address form
+(`queryUTxOsAt`) added to `Provider`.
 
-**Alternatives considered**:
-- Hit `raw.githubusercontent.com` from CI. Rejected: external
-  dependency in CI tests is a flake source.
+**Single-Acquired multi-query** is a stronger guarantee
+(atomic across both queries) but requires a Provider redesign;
+filed upstream as
+[lambdasistemi/cardano-node-clients#126](https://github.com/lambdasistemi/cardano-node-clients/issues/126).
+For v1 the per-round-trip atomicity LSQ gives is sufficient:
+chain advance during the ~ms gap is rare, and re-running the
+wizard after a torn read is a benign retry.
 
-## R8. Where the resolver dispatches
+## R7. Permissions script parameterisation
 
-**Decision**: `Amaru.Treasury.Metadata.Upstream` exports
+**Decision**: `permissions(scopes_nft_policy, scope)`. Both
+arguments are deterministic from build-time constants once we
+have the Scopes NFT policy. So the permissions script hash is
+fully recomputable; no on-chain anchor is needed beyond the
+Scopes NFT datum (which gives us the policy via the seed +
+blob bake-in).
 
-```haskell
-fetchAndVerifyMetadata
-    :: MetadataFetcher IO
-    -> Provider IO
-    -> Text                  -- commit SHA
-    -> ScopeId               -- which scope to verify
-    -> IO (Either MetadataError UpstreamMetadata)
-```
+**Rationale**: Reading
+[`validators/permissions.ak`](https://github.com/pragma-org/amaru-treasury/blob/main/validators/permissions.ak):
+the validator takes `(scopes_nft: PolicyId, scope: Scope)`. No
+runtime state. Once the Scopes NFT policy is known (which we
+re-derive locally from the seed + blob), the permissions hash
+falls out of one parameter application + hash.
 
-The wizard rebase (PR #28) replaces its `loadRegistry` call with
-this. `MetadataError` is the union of `MetadataFetchError`,
-`MetadataParseError`, and `ChainVerificationError`.
+## R8. Test strategy
 
-**Rationale**: One import for the consumer, all error paths
-typed, no IOExceptions leak past this seam.
+**Decision**:
 
-**Alternatives considered**: Splitting into separate fetch /
-verify / project calls in the consumer. Rejected for v1; the
-single call is enough surface.
+- Pure: parameter-application + hash test against checked-in
+  expected values for at least one scope.
+- Pure: metadata-projection test against a fixture
+  metadata.json + a fixture set of "anchor results" (script
+  hashes, owner keys) — assert the verified projection.
+- Stub-Provider integration: feed the verifier a stubbed
+  Provider that returns the on-chain anchors that *match* the
+  fixture; assert OK.
+- Stub-Provider mutation tests: for each verifiable field,
+  flip one byte in the metadata or in the chain stub; assert
+  the matching `AnchorMismatch` constructor.
+
+**Rationale**: Constitution V (test-first with golden
+fixtures); SC-002. The mutation table is the safety property
+made executable.

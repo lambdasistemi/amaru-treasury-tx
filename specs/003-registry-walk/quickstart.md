@@ -1,39 +1,36 @@
-# Quickstart: Upstream metadata fetch
+# Quickstart: registry walk with on-chain anchor verification
 
 **Plan**: [plan.md](./plan.md) · **Spec**: [spec.md](./spec.md)
 **Date**: 2026-05-05
 
-This file documents how the new module is consumed once it
-lands on `main`. The wizard rebase (PR #28 on top of
-this branch) is what actually exercises it end-to-end.
-
 ## 1. Library usage (post-merge)
 
 ```haskell
-import Amaru.Treasury.Metadata.Upstream
-    ( defaultUpstreamCommit
-    , fetchAndVerifyMetadata
-    , httpFetcher
-    , MetadataError
-    , UpstreamMetadata
+import Amaru.Treasury.Registry.Verify
+    ( verifyRegistry
+    , VerifiedRegistry
+    , RegistryWalkError
+    , MetadataSource (MetadataSourceDefaultUrl)
     )
+import Amaru.Treasury.Registry.Metadata (httpFetcher)
 import Amaru.Treasury.Backend (Provider)
 import Amaru.Treasury.Scope (ScopeId (..))
 import Network.HTTP.Client.TLS (newTlsManager)
+import qualified Data.Set as Set
 
-example :: Provider IO -> IO (Either MetadataError UpstreamMetadata)
+example :: Provider IO -> IO (Either RegistryWalkError VerifiedRegistry)
 example backend = do
     mgr <- newTlsManager
-    let fetcher = httpFetcher mgr
-    fetchAndVerifyMetadata
-        fetcher
+    verifyRegistry
         backend
-        defaultUpstreamCommit
-        CoreDevelopment
+        (httpFetcher mgr)
+        MetadataSourceDefaultUrl
+        (Set.singleton CoreDevelopment)
 ```
 
-The returned `UpstreamMetadata` is verified against the chain at
-the moment of the call.
+Returns `Right VerifiedRegistry` only if every metadata claim
+checked against an on-chain anchor or matched a build-time
+recomputation.
 
 ## 2. CLI usage (lands on PR #28's rebase)
 
@@ -42,7 +39,7 @@ amaru-treasury-tx \
     --node-socket /code/cardano-mainnet/ipc/node.socket \
     --network mainnet \
     swap-wizard \
-    [--metadata-commit <40-hex-sha>] \   # optional; defaults
+    [--metadata-url <url> | --metadata-file <path>] \
     --wallet-addr addr1q... \
     --scope core_development \
     --usdm 100000 --chunk-usdm 3062.5 --min-rate 0.245 \
@@ -51,39 +48,38 @@ amaru-treasury-tx \
     --out intent.json --verbose --yes
 ```
 
-Notes:
-- There is no `--registry PATH` flag. The wizard fetches
-  `metadata.json` itself.
-- Without `--metadata-commit`, the binary uses its baked-in
-  default. Updating the default is a separate PR (see
-  [contracts/metadata-upstream.md §5](./contracts/metadata-upstream.md)).
+No `--registry PATH`. Default metadata source is upstream raw
+`main`. Both metadata flags are optional and mutually
+exclusive.
 
-## 3. Verifying the safety check
+## 3. What "verified" actually checks
 
-To exercise the spent-UTxO path locally:
+For the requested scope:
 
-```bash
-# pick a deployed_at that's still unspent on mainnet
-DEPLOYED_AT=87ee53271fb41021efa13c2dbe2998c18ead07d32a6ab6dda184853ed7e39aae#0
-# confirm it's unspent (sanity)
-cardano-cli query utxo --tx-in $DEPLOYED_AT --mainnet
-# … run the wizard against a stub Provider that masks it as spent
-# (covered by test/unit/Amaru/Treasury/Metadata/UpstreamSpec.hs)
-```
+| Field | Verification |
+|---|---|
+| `owner` | matches the entry in the on-chain Scopes NFT datum |
+| `treasury_script.hash` | matches the on-chain `ScriptHashRegistry` datum's `treasury` |
+| `registry_script.hash` | matches `policyId(treasury_registry(registry_seed, scope))` |
+| `permissions_script.hash` | matches `scriptHash(permissions(scopes_nft_policy, scope))` |
+| `address` | matches bech32 of verified `treasury_script.hash` for the network |
+| `*_deployed_at` | named UTxO is unspent AND carries the verified script hash as reference script |
+| `scope_owners` | the UTxO holds the Scopes NFT and is unspent |
 
-The unit tests are the canonical way to drive the
-`ChainVerificationSpent` path; production runs should never see
-that branch unless upstream has actually moved a deployed-at
-UTxO.
+Plus: each NFT-bearing UTxO must be the unique one at its script
+address (the trap validators forbid more than one in normal
+operation; ambiguity = abort).
 
 ## 4. When things go wrong
 
 | Exit | Wizard says | Action |
 |------|-------------|--------|
-| 3 | `metadata: <url>: HTTP 404` | check `--metadata-commit` is reachable |
-| 3 | `metadata: parse error: <msg>` | upstream schema may have shifted; bump pin or update parser |
-| 3 | `chain: <ref> for <label> is no longer unspent` | upstream has redeployed; bump `--metadata-commit` to the post-redeploy commit |
+| 3 | `metadata: <url>: HTTP 404` | check `--metadata-url` is reachable |
+| 3 | `metadata: parse error: <msg>` | upstream schema may have shifted; update parser |
+| 3 | `chain: AnchorMismatch <field> <scope>: expected <X>, got <Y>` | metadata's claim disagrees with chain or build-time derivation; investigate before trusting either |
+| 3 | `chain: AnchorSpent <field> <scope>: <txin>` | the named reference UTxO has been consumed — likely a re-deployment; bump metadata source to a post-redeploy version |
+| 3 | `chain: AnchorAmbiguous <field> <scope>: [<txin>...]` | more than one NFT-bearing UTxO at a script address — should never happen in normal operation |
 | 3 | `chain: provider error: <msg>` | check `--node-socket` |
 
-The wizard never writes a partial JSON. Either the file is
-correct or it does not exist.
+The wizard never writes a partial JSON. Either everything
+verified or nothing was written.

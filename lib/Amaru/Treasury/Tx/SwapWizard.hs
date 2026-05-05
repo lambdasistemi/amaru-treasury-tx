@@ -44,14 +44,41 @@ module Amaru.Treasury.Tx.SwapWizard
     , ResolverInput (..)
     , ResolverError (..)
     , ResolverEnv (..)
+    , registryViewFromVerified
     , networkConstants
     , selectTreasury
     , selectWallet
     , addrNetwork
     , resolveWizardEnv
+
+      -- * Re-usable helpers
+    , txInToText
     ) where
 
-import Cardano.Ledger.BaseTypes (Network (..))
+import Cardano.Crypto.Hash.Class (hashToBytes)
+import Cardano.Ledger.Address
+    ( Addr (..)
+    , getNetwork
+    , serialiseAddr
+    )
+import Cardano.Ledger.BaseTypes
+    ( Network (..)
+    , txIxToInt
+    )
+import Cardano.Ledger.Credential
+    ( Credential (..)
+    , StakeReference (..)
+    )
+import Cardano.Ledger.Hashes
+    ( KeyHash (..)
+    , extractHash
+    )
+import Cardano.Ledger.Keys (KeyRole (Witness))
+import Cardano.Ledger.TxIn
+    ( TxId (..)
+    , TxIn (..)
+    )
+import Codec.Binary.Bech32 qualified as Bech32
 import Control.Monad (when)
 import Data.Aeson
     ( FromJSON (..)
@@ -66,6 +93,7 @@ import Data.Aeson.Encode.Pretty
     , encodePretty'
     )
 import Data.Aeson.Types qualified as A
+import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy (ByteString)
 import Data.Char (isDigit)
 import Data.Function (on)
@@ -75,9 +103,23 @@ import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.Word (Word64, Word8)
 
-import Amaru.Treasury.Scope (ScopeId, scopeFromText)
+import Amaru.Treasury.Registry.Derive (scriptHashToHex)
+import Amaru.Treasury.Registry.Verify
+    ( VerifiedRegistry (..)
+    , VerifiedScope (..)
+    )
+import Amaru.Treasury.Scope
+    ( ScopeId
+        ( CoreDevelopment
+        , Middleware
+        , NetworkCompliance
+        , OpsAndUseCases
+        )
+    , scopeFromText
+    )
 import Amaru.Treasury.Tx.SwapIntentJSON
     ( RationaleInputs (..)
     , ScopeInputs (..)
@@ -529,12 +571,10 @@ encodeIntentJSON = encodePretty' cfg
 
 {- | Inputs the resolver needs from the CLI.
 
-The 'RegistryView' is supplied by the operator (loaded
-from a JSON file) rather than walked on-chain in the v1
-wizard. The walk is recorded as out-of-scope in
-@research.md@ and tracked separately; it is a deep
-Plutus-data parse that does not belong in the wizard
-critical path.
+The 'RegistryView' is projected from a verified local
+metadata file before resolution begins. The resolver keeps
+this compact view so the pure intent translation stays
+decoupled from chain-query details.
 -}
 data ResolverInput = ResolverInput
     { riNetwork :: !Text
@@ -548,7 +588,7 @@ data ResolverInput = ResolverInput
     -- ^ total lovelace to be swapped (drives treasury
     --   selection target)
     , riRegistry :: !RegistryView
-    -- ^ operator-supplied; see module note above
+    -- ^ verified projection; see 'registryViewFromVerified'
     }
     deriving (Eq, Show)
 
@@ -562,7 +602,115 @@ data ResolverError
     | ResolverEmptyWalletUtxos
     | -- | @ResolverShortfall available requested@
       ResolverShortfall !Integer !Integer
+    | ResolverVerifiedScopeMissing !ScopeId
+    | ResolverOwnerMissing !ScopeId
+    | ResolverRewardAccountNotScript !ScopeId
+    | ResolverAddressEncodingFailed !Text
     deriving (Eq, Show)
+
+{- | Project a verified registry walk into the compact view
+consumed by the swap wizard.
+
+The verifier owns all chain trust decisions. This adapter is
+only a shape conversion from ledger-native values to the
+JSON-oriented fields the existing wizard and intent schema
+already consume.
+-}
+registryViewFromVerified
+    :: ScopeId
+    -> VerifiedRegistry
+    -> Either ResolverError RegistryView
+registryViewFromVerified scope verified = do
+    selected <-
+        maybe
+            (Left (ResolverVerifiedScopeMissing scope))
+            Right
+            (Map.lookup scope (vrTreasuriesByScope verified))
+    owners <-
+        ScopeOwners
+            <$> owner CoreDevelopment
+            <*> owner OpsAndUseCases
+            <*> owner NetworkCompliance
+            <*> owner Middleware
+    treasuryByScope <-
+        traverse
+            (treasuryRefsFromVerified scope)
+            (Map.singleton scope selected)
+    pure
+        RegistryView
+            { rvScopesDeployedAt =
+                txInToText (vrScopesNftUtxo verified)
+            , rvPermissionsDeployedAt =
+                txInToText (vsPermissionsDeployedAt selected)
+            , rvTreasuryDeployedAt =
+                txInToText (vsTreasuryDeployedAt selected)
+            , rvRegistryDeployedAt =
+                txInToText (vsRegistryDeployedAt selected)
+            , rvRegistryPolicyId =
+                scriptHashToHex (vsRegistryScriptHash selected)
+            , rvOwners = owners
+            , rvTreasuryByScope = treasuryByScope
+            }
+  where
+    owner ownerScope =
+        maybe
+            (Left (ResolverOwnerMissing ownerScope))
+            (Right . keyHashToText)
+            (Map.lookup ownerScope (vrOwners verified))
+
+treasuryRefsFromVerified
+    :: ScopeId
+    -> VerifiedScope
+    -> Either ResolverError TreasuryRefs
+treasuryRefsFromVerified scope verified = do
+    permissionsRewardAccount <-
+        rewardAccountFromAddress scope (vsAddress verified)
+    address <- addressToText (vsAddress verified)
+    pure
+        TreasuryRefs
+            { trAddress = address
+            , trScriptHash =
+                scriptHashToHex (vsTreasuryScriptHash verified)
+            , trPermissionsRewardAccount = permissionsRewardAccount
+            }
+
+addressToText :: Addr -> Either ResolverError Text
+addressToText addr = do
+    hrp <-
+        case Bech32.humanReadablePartFromText (addressHrp addr) of
+            Right value -> Right value
+            Left err ->
+                Left $
+                    ResolverAddressEncodingFailed (T.pack (show err))
+    pure $
+        Bech32.encodeLenient
+            hrp
+            (Bech32.dataPartFromBytes (serialiseAddr addr))
+  where
+    addressHrp target =
+        case getNetwork target of
+            Mainnet -> "addr"
+            Testnet -> "addr_test"
+
+rewardAccountFromAddress
+    :: ScopeId
+    -> Addr
+    -> Either ResolverError Text
+rewardAccountFromAddress scope = \case
+    Addr _ _ (StakeRefBase (ScriptHashObj h)) ->
+        Right (scriptHashToHex h)
+    _ ->
+        Left (ResolverRewardAccountNotScript scope)
+
+keyHashToText :: KeyHash Witness -> Text
+keyHashToText (KeyHash h) =
+    TE.decodeUtf8Lenient (B16.encode (hashToBytes h))
+
+txInToText :: TxIn -> Text
+txInToText (TxIn (TxId h) ix) =
+    TE.decodeUtf8Lenient (B16.encode (hashToBytes (extractHash h)))
+        <> "#"
+        <> T.pack (show (txIxToInt ix))
 
 {- | Curated per-network constants table.
 
@@ -687,7 +835,7 @@ selectWallet inputs =
   * a tip read via @posixMsToSlot@ (rounded to the
     closest hour boundary; the validity-window math in
     'wizardToIntentJSON' adds @slotsPerHour * hours@)
-  * the operator-supplied 'RegistryView'
+  * the verifier-projected 'RegistryView'
 
 projecting them into the 'WizardEnv' the pure
 translation expects. All resolver errors are typed; no

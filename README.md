@@ -34,9 +34,9 @@ See the [quickstart](docs/quickstart.md) for usage.
 
 A typed questionnaire that produces an `intent.json` for the
 existing `swap` subcommand. Resolves treasury / wallet UTxOs and the
-current chain tip via a local cardano-node `Provider`; loads
-registry refs (deployed-at UTxOs, owner key hashes, scope treasury
-addresses) from a JSON file.
+current chain tip via a local cardano-node `Provider`; verifies a
+local `metadata.json` against on-chain registry anchors before using
+its deployed-at refs, owner key hashes, and treasury addresses.
 
 Recreate the existing mainnet swap golden (matches
 `test/fixtures/swap/intent.json`):
@@ -47,7 +47,7 @@ amaru-treasury-tx \
     --network-magic 764824073 \
     swap-wizard \
     --wallet-addr addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu \
-    --registry test/fixtures/swap-wizard/registry.example.json \
+    --metadata test/fixtures/registry-walk/metadata.json \
     --scope core_development \
     --usdm 100000 \
     --chunk-usdm 3062.5 \

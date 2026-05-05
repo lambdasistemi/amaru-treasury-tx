@@ -12,7 +12,7 @@ options, prompt order, exit codes, and stdout shape.
 amaru-treasury-tx [--node-socket PATH] [--network-magic N]
     swap-wizard
     --wallet-addr ADDR
-    --registry PATH
+    --metadata PATH
     --out PATH
     --scope core_development|ops_and_use_cases|network_compliance|middleware
     --usdm DECIMAL
@@ -55,8 +55,9 @@ Notes:
 - `--scope` takes the canonical name from `Amaru.Treasury.Scope`.
 - `--signer` is repeated for each override key hash; absent flags
   mean "use the scope default".
-- `--registry` is a JSON file matching the `RegistryView` schema.
-  The v1 resolver does **not** walk the registry NFT on-chain.
+- `--metadata` is a local `journal/2026/metadata.json`-shaped file.
+  The wizard verifies consumed registry anchors against the local
+  node before resolving the intent.
 - `--dry-run` writes the JSON to stdout and skips file write; useful
   for piping into review tooling.
 - `--verbose` prints the resolved `WizardEnv` summary (on stderr)

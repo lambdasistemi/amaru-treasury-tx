@@ -17,15 +17,9 @@ build.
   (e.g. `nix build .#default`).
 - Your wallet bech32 address (the wallet must hold a pure-ADA UTxO
   to use as fuel + collateral).
-- A `registry.json` file describing the registry refs, scope owner
-  key hashes, and per-scope treasury addresses. A working preprod
-  example is checked in at
-  [`test/fixtures/swap-wizard/registry.example.json`](../../test/fixtures/swap-wizard/registry.example.json) —
-  copy it and adapt to your network/scope state.
-
-> **MVP note**: the v1 resolver does *not* walk the registry NFT
-> on-chain. It loads the file you pass via `--registry`. The
-> on-chain walk is tracked as a follow-up.
+- A local `journal/2026/metadata.json`-shaped file. The wizard
+  treats it as an untrusted hint and verifies the consumed registry
+  anchors against the local node before building an intent.
 
 ## 2. Run the wizard
 
@@ -35,7 +29,7 @@ amaru-treasury-tx \
     --network-magic 764824073 \
     swap-wizard \
     --wallet-addr addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu \
-    --registry test/fixtures/swap-wizard/registry.example.json \
+    --metadata test/fixtures/registry-walk/metadata.json \
     --scope core_development \
     --usdm 100000 \
     --chunk-usdm 3062.5 \
@@ -60,13 +54,14 @@ The wizard derives the ADA spend internally as
 
 The wizard:
 
-1. Loads the registry view from `--registry`.
-2. Connects to the node, resolves wallet + treasury UTxOs and the
+1. Reads the local metadata file from `--metadata`.
+2. Connects to the node and verifies the metadata's registry anchors.
+3. Resolves wallet + treasury UTxOs and the
    current chain tip.
-3. With `--verbose`, prints a summary of every resolved field on
+4. With `--verbose`, prints a summary of every resolved field on
    stderr.
-4. Asks for confirmation (skipped under `--yes`).
-5. Writes `intent.json` to the path given to `--out`.
+5. Asks for confirmation (skipped under `--yes`).
+6. Writes `intent.json` to the path given to `--out`.
 
 `--dry-run` prints the JSON to stdout instead of writing the file.
 `--force` overwrites an existing `--out` path; without it, exit 5.
@@ -113,7 +108,7 @@ regression breaks the swap golden.
 | Exit | Action |
 |------|--------|
 | 1 | You answered "no" at confirmation. Re-run. |
-| 3 | Resolver error. Check `--registry-utxo` is correct, the wallet has a pure-ADA UTxO, and the treasury has UTxOs. |
+| 3 | Metadata verification or resolver error. Check `--metadata`, local node sync, wallet fuel UTxO, and treasury UTxOs. |
 | 4 | Translation error. Re-check `--rate-den` is non-zero, `--chunk-ada` ≤ `--amount-ada`, validity hours in [1, 48]. |
 | 5 | `--out` exists. Move it or pass `--force`. |
 

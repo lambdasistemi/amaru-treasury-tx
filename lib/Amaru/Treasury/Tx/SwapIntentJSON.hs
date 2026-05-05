@@ -50,7 +50,7 @@ import Data.Maybe (fromJust, fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
-import Data.Word (Word64, Word8)
+import Data.Word (Word64)
 
 import Cardano.Crypto.Hash.Class (Hash, HashAlgorithm, hashFromBytes)
 import Cardano.Ledger.Address
@@ -361,7 +361,7 @@ parseTxIn t =
             Right
                 ( TxIn
                     (TxId (unsafeMakeSafeHash (mkHash32 bs)))
-                    (mkTxIxPartial (toInteger (ix :: Word8)))
+                    (mkTxIxPartial (ix :: Integer))
                 )
         _ ->
             Left

@@ -14,6 +14,7 @@ module Amaru.Treasury.AuxDataSpec (spec) where
 
 import Cardano.Ledger.Metadata (Metadatum (..))
 import Data.ByteString qualified as BS
+import Data.Text qualified as T
 import Data.Word (Word8)
 import Test.Hspec (Spec, describe, it, shouldBe)
 
@@ -65,5 +66,5 @@ spec = describe "Amaru.Treasury.AuxData" $ do
         case metadatum of
             Map kvs ->
                 lookup (S "instance") kvs
-                    `shouldBe` Just (S (read (show policyIdHex)))
+                    `shouldBe` Just (S (T.pack policyIdHex))
             _ -> error "expected Map"

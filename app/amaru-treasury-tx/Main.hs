@@ -153,8 +153,7 @@ data ChunkSpec
 Mirrors @specs/002-swap-wizard/contracts/swap-wizard-cli.md §1@.
 -}
 data WizardOpts = WizardOpts
-    { wOptsNetwork :: !Text
-    , wOptsWalletAddr :: !Text
+    { wOptsWalletAddr :: !Text
     , wOptsRegistryPath :: !FilePath
     , wOptsOut :: !FilePath
     , wOptsScope :: !ScopeId
@@ -247,11 +246,6 @@ wizardOptsP :: Parser WizardOpts
 wizardOptsP =
     WizardOpts
         <$> strOption
-            ( long "network"
-                <> metavar "NAME"
-                <> help "preprod | mainnet"
-            )
-        <*> strOption
             ( long "wallet-addr"
                 <> metavar "BECH32"
                 <> help "Wallet address (fuel + collateral)"
@@ -373,6 +367,23 @@ Fixed denominator 1_000_000 matches USDM's 6-decimal precision.
 -}
 rateToFraction :: Double -> (Integer, Integer)
 rateToFraction r = (round (r * 1_000_000), 1_000_000)
+
+{- | Translate the on-the-wire 'NetworkMagic' to the
+canonical network name the wizard uses for
+'NetworkConstants' lookup and HRP validation. The user
+passes only @--network-magic@; the network name is
+derived (no separate @--network@ flag).
+-}
+networkMagicName :: NetworkMagic -> Either String Text
+networkMagicName (NetworkMagic m) = case m of
+    764824073 -> Right "mainnet"
+    1 -> Right "preprod"
+    2 -> Right "preview"
+    _ ->
+        Left
+            ( "swap-wizard: unrecognised --network-magic "
+                <> show m
+            )
 
 opts :: ParserInfo (GlobalOpts, Cmd)
 opts =
@@ -517,6 +528,11 @@ runSwap g SwapOpts{..} = do
 runWizard :: GlobalOpts -> WizardOpts -> IO ()
 runWizard g wo@WizardOpts{..} = do
     let socket = fromMaybe "(unset)" (goSocketPath g)
+    network <- case networkMagicName (goNetworkMagic g) of
+        Right t -> pure t
+        Left e -> do
+            wizardErr e
+            exitWith (ExitFailure 3)
     -- 1. Load registry view from --registry path.
     rv <- loadRegistry wOptsRegistryPath
     -- 2. Convert human-friendly answers to wire types.
@@ -552,7 +568,7 @@ runWizard g wo@WizardOpts{..} = do
                 }
         ri =
             ResolverInput
-                { riNetwork = wOptsNetwork
+                { riNetwork = network
                 , riWalletAddrBech32 = wOptsWalletAddr
                 , riScope = wOptsScope
                 , riAmountLovelace = amountLov

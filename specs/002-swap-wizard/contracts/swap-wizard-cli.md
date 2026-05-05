@@ -9,8 +9,8 @@ options, prompt order, exit codes, and stdout shape.
 ## 1. Subcommand and options
 
 ```text
-amaru-treasury-tx swap-wizard
-    --network preprod|mainnet
+amaru-treasury-tx [--node-socket PATH] [--network-magic N]
+    swap-wizard
     --wallet-addr ADDR
     --registry PATH
     --out PATH
@@ -34,6 +34,9 @@ amaru-treasury-tx swap-wizard
 Notes:
 
 - All non-`[bracketed]` flags are required.
+- The network is derived from `--network-magic` (mainnet
+  `764824073`, preprod `1`, preview `2`); there is no separate
+  `--network` flag.
 - v1 takes every answer from flags; per-field interactive prompts
   are deferred. Only the final confirmation is interactive (skipped
   by `--yes`).

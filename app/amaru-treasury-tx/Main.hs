@@ -98,6 +98,7 @@ import Amaru.Treasury.Tx.SwapIntentJSON
     ( SwapInputs (..)
     , SwapIntentJSON (..)
     , TranslatedIntent (..)
+    , decodeSwapIntent
     , decodeSwapIntentFile
     , parseAddr
     , translateIntent
@@ -142,7 +143,9 @@ data Cmd
     | CmdSwapWizard WizardOpts
 
 data SwapOpts = SwapOpts
-    { soIntentPath :: !FilePath
+    { soIntentPath :: !(Maybe FilePath)
+    -- ^ 'Nothing' = read intent.json from stdin (so
+    --   @swap-wizard ... | swap@ pipes cleanly).
     , soOutPath :: !(Maybe FilePath)
     }
 
@@ -256,11 +259,14 @@ networkMagicNameMaybe (NetworkMagic m) = case m of
 swapOptsP :: Parser SwapOpts
 swapOptsP =
     SwapOpts
-        <$> strOption
-            ( long "intent"
-                <> short 'i'
-                <> metavar "PATH"
-                <> help "Path to the swap-intent JSON"
+        <$> optional
+            ( strOption
+                ( long "intent"
+                    <> short 'i'
+                    <> metavar "PATH"
+                    <> help
+                        "Path to the swap-intent JSON (defaults to stdin)"
+                )
             )
         <*> optional
             ( strOption
@@ -495,8 +501,10 @@ runSwap g SwapOpts{..} = do
     let socket = fromMaybe "(unset)" (goSocketPath g)
     IO.hPutStrLn stderr $
         "amaru-treasury-tx swap: reading "
-            <> soIntentPath
-    parsed <- decodeSwapIntentFile soIntentPath
+            <> fromMaybe "stdin" soIntentPath
+    parsed <- case soIntentPath of
+        Just p -> decodeSwapIntentFile p
+        Nothing -> decodeSwapIntent <$> BSL.hGetContents IO.stdin
     case parsed of
         Left e ->
             throwIO . userError $

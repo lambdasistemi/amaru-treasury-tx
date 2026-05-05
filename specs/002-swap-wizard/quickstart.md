@@ -88,12 +88,13 @@ Two checks the operator can run without touching chain state:
 
 ```bash
 amaru-treasury-tx swap-wizard ... \
-    | amaru-treasury-tx swap --intent /dev/stdin --out /tmp/swap.tx.cbor
+    | amaru-treasury-tx swap --out /tmp/swap.tx.cbor
 ```
 
-(With no `--out`, the wizard prints `intent.json` to stdout.) If
-`swap` accepts the JSON without errors the wizard's translation
-matches the existing schema.
+The wizard with no `--out` writes `intent.json` to stdout; `swap`
+with no `--intent` reads from stdin. If `swap` accepts the JSON
+without errors, the wizard's translation matches the existing
+build path.
 
 **Golden parity (developer)**
 

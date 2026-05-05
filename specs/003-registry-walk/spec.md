@@ -152,8 +152,14 @@ embedding sources point to that same commit.
   build-time-pinned Plutus blobs + seeds, and reject metadata
   claims that disagree.
 - **FR-006**: System MUST verify each `*.deployed_at` TxIn is
-  currently unspent on chain AND that the named UTxO carries
-  the verified script hash as its reference script.
+  currently unspent on chain. For `treasury_script.deployed_at`
+  and `permissions_script.deployed_at` the named UTxO MUST
+  carry the verified script hash as its reference script. For
+  `registry_script.deployed_at` the UTxO IS the per-scope
+  registry NFT location (inline `ScriptHashRegistry` datum, no
+  reference script); System MUST verify the UTxO carries the
+  derived registry NFT and parse the datum to extract the
+  treasury script credential.
 - **FR-007**: On any verification failure, System MUST exit
   non-zero with a typed error naming the offending field, and
   write no output.
@@ -163,11 +169,18 @@ embedding sources point to that same commit.
 - **FR-009**: System MUST drop the `--registry PATH` flag
   introduced on PR #28.
 - **FR-010**: `Provider IO` MUST expose an acquired query
-  session with a batched address-set handle query:
-  `queryUTxOsAtH :: Set Addr -> m (Map Addr [...])`.
-- **FR-011**: The chain-side verification MUST issue at most
-  two LSQ-backed queries inside one acquired Provider session
-  (one batched address query + one batched TxIn query).
+  session with a batched-by-TxIn handle query:
+  `queryUTxOByTxInH :: Set TxIn -> m (Map TxIn TxOut)`.
+- **FR-011**: The chain-side verification MUST issue exactly
+  one LSQ-backed query (`queryUTxOByTxInH`) inside one acquired
+  Provider session, over `scope_owners` ∪ each requested scope's
+  three `*.deployed_at` TxIns. No script-address derivation is
+  required for the query, removing a class of bug where a wrong
+  stake-reference convention silently returns empty UTxOs.
+- **FR-012**: System MUST refuse a verification request with
+  an empty scope set rather than silently sweep the entire
+  metadata; callers explicitly opt into a full sweep by passing
+  `Set.fromList allScopeIds`.
 
 ### Key Entities
 
@@ -195,12 +208,82 @@ embedding sources point to that same commit.
 - **SC-002**: Tampering with any verifiable field in
   `metadata.json` is detected by the unit tests.
 - **SC-003**: A wizard run completes with one acquired
-  Provider session and at most two LSQ-backed queries against
+  Provider session and exactly one LSQ-backed query against
   that snapshot (FR-011).
 - **SC-004**: Advancing build-time pins requires a PR; the diff
   shows the SHA / seed / blob delta.
 - **SC-005**: PR #28 rebases on top of this and merges with no
   further safety changes.
+
+## Security model
+
+### Trust roots
+
+The verifier's safety derives from exactly two trust roots, both
+local to this repository:
+
+1. **Build-time pinned constants**: the two seed
+   `OutputReference`s (`scopesSeedTxIdHex`, `registrySeedTxIdHex`)
+   and the four compiled Plutus blobs (`scopes`,
+   `treasury_registry`, `permissions`, `treasury`) embedded
+   from `assets/plutus/*.cbor`. These are reviewed in the PR
+   that advances the upstream pin.
+2. **The on-chain ledger** observed through a local `cardano-node`
+   socket. The verifier never trusts a remote indexer, an HTTP
+   endpoint, or the operator's filesystem outside of the metadata
+   hint.
+
+`metadata.json` is **not** a trust root. Its content is parsed,
+every field is cross-checked against an anchor (chain or
+build-time derivation), and an unverifiable field aborts the
+run.
+
+### What the verifier protects against
+
+- **Stale references**: a `*.deployed_at` TxIn that points at a
+  spent UTxO fails the chain check.
+- **Tampered hashes**: any of `treasury_script.hash`,
+  `registry_script.hash`, `permissions_script.hash`, `address`,
+  `owner` disagreeing with the on-chain anchor (NFT datum) or
+  the build-time derivation aborts.
+- **Substituted UTxOs**: a `*.deployed_at` TxIn that points at a
+  UTxO not carrying the expected NFT (registry case) or not
+  carrying the expected reference script (treasury / permissions
+  case) aborts.
+- **Wrong-scope swap**: per-scope verification is keyed on
+  `ScopeId`; a metadata file describing the wrong scope produces
+  a typed error rather than silently substituting a different
+  treasury.
+
+### What the verifier explicitly does NOT protect against
+
+- **Compromised build-time pin**: if the upstream commit
+  referenced in `assets/plutus/README.md` and
+  `Amaru.Treasury.Registry.Constants` carries a malicious blob,
+  the verifier will accept it. Mitigation: the pin advances by
+  PR; the diff is small and reviewable.
+- **Compromised local `cardano-node`**: a node serving forged
+  ledger state to LSQ would let the verifier accept tampered
+  metadata. Mitigation: run a node you control; verify it is
+  in sync.
+- **Race vs. mempool**: a `*.deployed_at` UTxO being consumed
+  in flight after our LSQ acquire and before the operator
+  signs+submits the produced intent. The next run will fail;
+  partial output is never written. Acceptable.
+- **Off-chain wizard inputs** (wallet TxIn, swap parameters,
+  rationale text) — those are operator-supplied and not part
+  of the registry walk's safety scope. PR #28 owns their
+  validation.
+
+### Failure mode
+
+The verifier is **fail-closed**: on any anchor mismatch, spent
+UTxO, ambiguous match, parse failure, or chain query error it
+returns a typed `RegistryWalkError` and the caller writes no
+output. There is no "best-effort" path. Operators see a typed
+diagnostic naming the offending field (e.g.
+`AnchorMismatch "treasury_script.deployed_at.metadata"
+(Just CoreDevelopment) <expected> <got>`).
 
 ## Assumptions
 

@@ -314,8 +314,19 @@ verifyWithAnchors metadata anchors requested = do
     verifyReferenceScript field scope expected deployment = do
         actual <-
             lookupReferenceScript field scope (sdDeployedAt deployment)
-        assertText field (Just scope) (sdHash deployment) actual
-        assertText field (Just scope) (scriptHashToHex expected) actual
+        -- Two independent comparisons: metadata's claimed hash vs
+        -- chain, and our build-time derivation vs chain. Distinct
+        -- labels so a failure pinpoints which side disagreed.
+        assertText
+            (field <> ".metadata")
+            (Just scope)
+            (sdHash deployment)
+            actual
+        assertText
+            (field <> ".derived")
+            (Just scope)
+            (scriptHashToHex expected)
+            actual
         parseTxInRef field (Just scope) (sdDeployedAt deployment)
 
     ownerEntry (scope, Just ownerHex) =
@@ -325,20 +336,20 @@ verifyWithAnchors metadata anchors requested = do
     ownerEntry (_scope, Nothing) =
         Left (ChainQueryError "verified owner map cannot contain null owner")
 
-    lookupReferenceScript field scope ref =
-        case Map.lookup ref (raReferenceScripts anchors) of
-            Just scriptHash -> Right scriptHash
-            Nothing -> do
-                target <- parseTxInRef field (Just scope) ref
-                case matchingReferenceScripts target of
-                    [] -> Left (AnchorSpent field (Just scope) ref)
-                    [(_refText, scriptHash)] -> Right scriptHash
-                    many ->
-                        Left $
-                            AnchorAmbiguous
-                                field
-                                (Just scope)
-                                (fst <$> many)
+    -- The metadata's @deployed_at@ string is normalised through
+    -- 'TxIn' parsing to absorb leading-zero @#00@ vs @#0@ casing
+    -- mismatches between metadata and on-chain rendering.
+    lookupReferenceScript field scope ref = do
+        target <- parseTxInRef field (Just scope) ref
+        case matchingReferenceScripts target of
+            [] -> Left (AnchorSpent field (Just scope) ref)
+            [(_refText, scriptHash)] -> Right scriptHash
+            many ->
+                Left $
+                    AnchorAmbiguous
+                        field
+                        (Just scope)
+                        (fst <$> many)
 
     matchingReferenceScripts target =
         mapMaybe
@@ -351,12 +362,24 @@ verifyWithAnchors metadata anchors requested = do
             )
             (Map.toList (raReferenceScripts anchors))
 
--- | Verify a local metadata snapshot against on-chain anchors.
+{- | Verify a local metadata snapshot against on-chain anchors.
+The set of requested scopes must be non-empty: callers passing an
+empty set are almost always a bug, not a request to verify the
+entire metadata. Use 'Set.fromList allScopeIds' explicitly to
+opt into a full sweep.
+-}
 verifyRegistry
     :: Provider IO
     -> FilePath
     -> Set ScopeId
     -> IO (Either RegistryWalkError VerifiedRegistry)
+verifyRegistry _ _ scopes
+    | Set.null scopes =
+        pure $
+            Left
+                ( ChainQueryError
+                    "verifyRegistry: empty scope set; pass an explicit Set ScopeId"
+                )
 verifyRegistry provider metadataPath scopes = do
     metadata <- readUpstreamMetadataFile metadataPath
     case metadata of
@@ -556,6 +579,15 @@ renderNetwork = \case
     Mainnet -> "mainnet"
     Testnet -> "testnet"
 
+{- | Build the per-scope treasury address from its script hash.
+Upstream's deployment recipe (@journal/2026/treasury.sh@) gives
+each treasury an address whose payment AND staking credentials
+are both the treasury script itself — i.e.
+@addr1x<treasury_hash><treasury_hash>@. Using any other stake
+reference would produce a different bech32 string and the
+@address@ field check in 'verifyWithAnchors' would refuse the
+metadata.
+-}
 scriptAddress :: Network -> ScriptHash -> Addr
 scriptAddress network scriptHash =
     Addr
@@ -584,6 +616,14 @@ extractScopeOwners policy scopesTxIn fetched =
                     =<< inlineDatum "scope_owners" Nothing txOut
         _ -> Right Map.empty
 
+{- | The on-chain Scopes NFT datum is the @Scopes@ constructor with
+exactly four 'Signature' fields (one per budget scope). 'Contingency'
+is metadata-only — it has a @null@ owner, no on-chain owner slot —
+so we deliberately do NOT include it here. If upstream ever rotates
+the seed and adds a fifth field, this match will surface as
+@ChainQueryError@; bump it together with the seed pin in
+@Amaru.Treasury.Registry.Constants@.
+-}
 parseOwnersDatum
     :: Data
     -> Either RegistryWalkError (Map ScopeId (Maybe Text))

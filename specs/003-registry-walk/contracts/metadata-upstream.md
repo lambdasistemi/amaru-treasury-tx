@@ -88,14 +88,36 @@ queryUTxOByTxInH
 
 Each `Addr` in the set produces one entry in the result map
 (empty list if no UTxOs at that address). Backed by LSQ
-`GetUTxOByAddress` accepting a `Set Addr` natively.
+`GetUTxOByAddress` accepting a `Set Addr` natively. The
+verifier does not use this entry point — see below.
 
-The verifier consumes one acquired session per run:
+The verifier consumes one acquired session per run, with
+**exactly one query**:
 
-- Query 1: `queryUTxOsAtH` over the scopes-validator
-  address + each requested scope's registry-validator address.
-- Query 2: `queryUTxOByTxInH` over `scope_owners` +
-  every requested-scope's `*.deployed_at` TxIn.
+- `queryUTxOByTxInH` over `scope_owners` ∪ each requested
+  scope's three `*.deployed_at` TxIns (treasury, permissions,
+  registry).
+
+`queryUTxOsAtH` was used in an earlier draft of the verifier to
+discover NFT-bearing UTxOs at a derived script address. Mainnet
+smoke testing surfaced two reasons that approach was unsafe:
+
+1. The derived script address depends on a stake-reference
+   convention (e.g. `StakeRefBase ScriptHashObj` vs
+   `StakeRefNull`) that we cannot infer from the policy alone.
+   A wrong convention makes `queryUTxOsAtH` silently return
+   `[]`, which in turn produces a misleading
+   `AnchorSpent`.
+2. The metadata already names every UTxO we need:
+   `scope_owners` is the Scopes NFT TxIn; each scope's
+   `registry_script.deployed_at` is the per-scope registry NFT
+   TxIn (not a reference-script UTxO — the on-chain UTxO has
+   an inline `ScriptHashRegistry` datum and no reference
+   script).
+
+Querying by TxIn removes the stake-reference dependency, halves
+the number of LSQ round-trips, and matches the upstream bash
+recipes (`swap.sh` etc.) which `jq` the same TxIns directly.
 
 Implemented upstream by
 [lambdasistemi/cardano-node-clients#128](https://github.com/lambdasistemi/cardano-node-clients/pull/128),

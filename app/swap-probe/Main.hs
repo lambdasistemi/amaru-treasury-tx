@@ -26,7 +26,6 @@ hard-coded values fold into the real CLI driver in
 -}
 module Main (main) where
 
-import Control.Exception (throwIO)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
@@ -380,6 +379,3 @@ main = do
                     stderr
                     "swap-probe: VALIDATION FAILED"
                 exitFailure
-        case failures of
-            [] -> pure ()
-            _ -> throwIO (userError "swap-probe: script failure")

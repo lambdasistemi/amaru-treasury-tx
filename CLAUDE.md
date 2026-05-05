@@ -1,6 +1,6 @@
 # amaru-treasury-tx Development Guidelines
 
-Auto-generated from feature plans. Last updated: 2026-05-04
+Auto-generated from feature plans. Last updated: 2026-05-05
 
 ## Active Technologies
 
@@ -67,6 +67,7 @@ nix run .#lint
 - See the `/haskell` and `/nix` skills for project-wide details.
 
 ## Recent Changes
+- 003-registry-walk: Added Haskell, GHC 9.6+ (matches the rest of the
 
 - 2026-05-04 — feature 001 (treasury transaction CLI): spec, plan,
   research, data model, contracts, quickstart.

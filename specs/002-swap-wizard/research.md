@@ -76,6 +76,15 @@ modules; reuse what exists.
 - Reading the registry NFT directly via Blockfrost — rejected; would
   introduce a second backend path.
 
+**MVP scope deviation**: the v1 resolver does *not* walk the
+registry NFT on-chain. Reading the inline datum of the registry
+UTxO and chasing its references requires deep Plutus-data parsing
+that does not belong in the wizard critical path. Instead the CLI
+takes the `RegistryView` as a JSON file (e.g. `--registry
+registry.json`); the operator produces it once per network and
+re-uses it. The on-chain walk is recorded as out-of-scope and is
+follow-up work tracked separately.
+
 ## R4. Treasury UTxO selection policy
 
 **Decision**: Largest-first deterministic selection. Sort the address's

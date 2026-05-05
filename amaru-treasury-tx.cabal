@@ -119,14 +119,25 @@ executable amaru-treasury-tx
   main-is:          Main.hs
   default-language: GHC2021
   build-depends:
+    , aeson
     , amaru-treasury-tx
     , base                   <5
     , base16-bytestring
+    , bech32
     , bytestring
+    , cardano-crypto-class
+    , cardano-ledger-api
     , cardano-ledger-core
+    , cardano-ledger-mary
+    , cardano-node-clients
+    , cardano-slotting
     , containers
+    , directory
+    , microlens
     , optparse-applicative
     , ouroboros-network:api
+    , text
+    , time
 
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
 

@@ -120,10 +120,15 @@ JSON with the same answers.
   `amaru-treasury-tx`.
 - **FR-002**: System MUST collect, at minimum, these answers from the
   user: scope (Core / Ops / NetworkCompliance / Middleware), total
-  ADA to swap, chunk size (or slippage tolerance that yields one),
-  minimum acceptable rate (or slippage percentage off pool mid-price),
-  validity window in hours, rationale description, rationale
-  justification, optional signer override.
+  ADA to swap, chunk size (lovelace), minimum acceptable rate as
+  numerator and denominator, validity window in hours, rationale
+  description, rationale justification, optional signer override.
+  Slippage-tolerance and slippage-percent shortcuts are deferred
+  per the Assumptions section. The CLI prompt schema in
+  [contracts/swap-wizard-cli.md §2](./contracts/swap-wizard-cli.md)
+  expands the rationale and signer answers into individually-prompted
+  sub-fields with sensible defaults; that expansion is the
+  *presentation* of FR-002, not an extension of it.
 - **FR-003**: System MUST resolve the following fields without asking
   the user, using the registry NFT walk and a curated
   network-constants table: `treasuryAddress`, `treasuryScriptHash`,
@@ -140,7 +145,9 @@ JSON with the same answers.
 - **FR-005**: System MUST select the wallet UTxO from the configured
   signing key as the largest pure-ADA UTxO at the wallet address.
 - **FR-006**: System MUST default `signers` to the scope's owner set
-  and accept an explicit override answer.
+  — the scope's primary owner key plus the witness scope owner keys
+  per `journal/2026/lib/swap_order.sh` — and accept an explicit
+  override answer that replaces (not extends) the default.
 - **FR-007**: System MUST compute `validityUpperBoundSlot` by adding
   the answered hours (translated to slots) to the current chain tip.
 - **FR-008**: System MUST write the result as a JSON file at a
@@ -157,8 +164,10 @@ JSON with the same answers.
   empty UTxO set, unknown network constants, registry walk
   inconsistencies.
 - **FR-013**: The wizard MUST log every resolved derivable field to
-  stdout (or a verbose flag) so the operator can verify what was
-  filled in before answering "confirm".
+  stderr (controlled by a `--verbose` flag) so the operator can
+  verify what was filled in before answering "confirm". Stdout is
+  reserved for the success line and the `--dry-run` JSON payload
+  per [contracts/swap-wizard-cli.md §3](./contracts/swap-wizard-cli.md).
 - **FR-014**: The wizard MUST require explicit confirmation before
   writing the JSON file (unless invoked with a `--yes` flag for
   scripted use).

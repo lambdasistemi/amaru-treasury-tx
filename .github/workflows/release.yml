@@ -81,6 +81,50 @@ jobs:
             "artifacts/amaru-treasury-tx-${version}-x86_64-linux.rpm"
           ls -lh artifacts/
 
+      - name: Smoke-test AppImage
+        run: |
+          set -euo pipefail
+          version="$(scripts/release/get-cabal-version)"
+          rm -rf /tmp/appimage-smoke
+          mkdir -p /tmp/appimage-smoke
+          chmod +x "artifacts/amaru-treasury-tx-${version}-x86_64-linux.AppImage"
+          ( cd /tmp/appimage-smoke && \
+            "$GITHUB_WORKSPACE/artifacts/amaru-treasury-tx-${version}-x86_64-linux.AppImage" \
+              --appimage-extract )
+          bin="$(find /tmp/appimage-smoke -name amaru-treasury-tx \
+            -type f -executable | head -1)"
+          test -x "$bin"
+          "$bin" --help
+
+      - name: Smoke-test DEB
+        run: |
+          set -euo pipefail
+          version="$(scripts/release/get-cabal-version)"
+          rm -rf /tmp/deb-smoke
+          mkdir -p /tmp/deb-smoke
+          nix --quiet shell nixpkgs#dpkg -c \
+            dpkg-deb -x \
+              "artifacts/amaru-treasury-tx-${version}-x86_64-linux.deb" \
+              /tmp/deb-smoke
+          bin="$(find /tmp/deb-smoke -name amaru-treasury-tx \
+            -type f -executable | head -1)"
+          test -x "$bin"
+          "$bin" --help
+
+      - name: Smoke-test RPM
+        run: |
+          set -euo pipefail
+          version="$(scripts/release/get-cabal-version)"
+          rm -rf /tmp/rpm-smoke
+          mkdir -p /tmp/rpm-smoke
+          rpm_path="$PWD/artifacts/amaru-treasury-tx-${version}-x86_64-linux.rpm"
+          nix --quiet shell nixpkgs#rpm nixpkgs#cpio -c bash -c \
+            "cd /tmp/rpm-smoke && rpm2cpio \"$rpm_path\" | cpio -idm >/dev/null"
+          bin="$(find /tmp/rpm-smoke -name amaru-treasury-tx \
+            -type f -executable | head -1)"
+          test -x "$bin"
+          "$bin" --help
+
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v7
         with:

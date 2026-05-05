@@ -52,6 +52,7 @@ library
   default-language: GHC2021
   exposed-modules:
     Amaru.Treasury
+    Amaru.Treasury.AuxData
     Amaru.Treasury.Backend
     Amaru.Treasury.Backend.N2C
     Amaru.Treasury.Constants
@@ -71,13 +72,14 @@ library
     , aeson
     , aeson-pretty
     , async
-    , base                   <5
+    , base                    <5
     , base16-bytestring
     , bytestring
     , cardano-crypto-class
     , cardano-ledger-conway
     , cardano-ledger-core
     , cardano-ledger-mary
+    , cardano-ledger-shelley
     , cardano-node-clients
     , containers
     , ouroboros-network:api
@@ -104,6 +106,7 @@ test-suite unit-tests
   main-is:            Spec.hs
   default-language:   GHC2021
   other-modules:
+    Amaru.Treasury.AuxDataSpec
     Amaru.Treasury.LedgerParseSpec
     Amaru.Treasury.MetadataSpec
     Amaru.Treasury.PParamsSpec

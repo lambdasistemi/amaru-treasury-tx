@@ -1,4 +1,4 @@
-{ pkgs, src, components }:
+{ pkgs, src, components, lintPkgs ? pkgs }:
 let
   build = pkgs.writeShellApplication {
     name = "build";
@@ -27,7 +27,7 @@ let
 
   lint = pkgs.writeShellApplication {
     name = "lint";
-    runtimeInputs = with pkgs.haskellPackages; [
+    runtimeInputs = with lintPkgs.haskellPackages; [
       cabal-fmt
       fourmolu
       hlint

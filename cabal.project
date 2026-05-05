@@ -22,8 +22,8 @@ repository cardano-haskell-packages
 source-repository-package
   type: git
   location: https://github.com/lambdasistemi/cardano-node-clients
-  tag: cc66c342c0028a3f2971b43076ea8d3fe0d738a6
-  --sha256: 0q7iilmh1aivsp543cj8m4zxfpx7dv3bip67s9i785q8sxrk1i1p
+  tag: c170cfe64fa2a2507e46636630a0317ce147954c
+  --sha256: 08xkrn6kdpk453znx7wqh44cmcpwvq3m9gy0m32ms78m4qdgqzzf
 
 -- Mirrored from cardano-node-clients/cabal.project (SRPs are not transitive
 -- in cabal; see https://cabal.readthedocs.io/en/3.10/cabal-project.html).

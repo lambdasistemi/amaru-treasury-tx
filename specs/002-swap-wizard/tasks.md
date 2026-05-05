@@ -40,18 +40,18 @@ Tasks reference the contract rather than duplicating fields.
 **Purpose**: cabal/justfile/flake plumbing for the new module +
 fixtures.
 
-- [ ] T001 Add `lib/Amaru/Treasury/Tx/SwapWizard.hs` and the new
+- [X] T001 Add `lib/Amaru/Treasury/Tx/SwapWizard.hs` and the new
       `Amaru.Treasury.Tx.SwapWizard` exposed module in
       `amaru-treasury-tx.cabal` (library stanza). Add `aeson-pretty`
       to `build-depends` if not already present. Confirm
       `cabal check` still passes.
-- [ ] T002 [P] Add `test/unit/SwapWizardSpec.hs` to the
+- [X] T002 [P] Add `test/unit/SwapWizardSpec.hs` to the
       `unit-tests` test-suite stanza in
       `amaru-treasury-tx.cabal`. Make sure `hspec-discover` picks
       it up.
-- [ ] T003 [P] Add `test/fixtures/swap-wizard/` to
+- [X] T003 [P] Add `test/fixtures/swap-wizard/` to
       `extra-source-files` in `amaru-treasury-tx.cabal`.
-- [ ] T004 [P] Confirm `just ci` recipe still chains
+- [X] T004 [P] Confirm `just ci` recipe still chains
       `build → unit → golden → format-check`; no recipe edit
       expected.
 
@@ -65,21 +65,21 @@ discover the new spec; `just ci` is green on the empty module.
 **Purpose**: Types and pure scaffolding that every user story
 consumes. Defined by [data-model.md](./data-model.md) §1–§3.
 
-- [ ] T005 Implement the `Hex`, `Hex28` newtypes (validated
+- [X] T005 Implement the `Hex`, `Hex28` newtypes (validated
       28-byte-hex parser) in `lib/Amaru/Treasury/Tx/SwapWizard.hs`,
       plus their `FromJSON` / `ToJSON` instances. Shape per
       [data-model.md §1](./data-model.md).
-- [ ] T006 Implement `SwapWizardQ`, `RationaleAnswers`, and
+- [X] T006 Implement `SwapWizardQ`, `RationaleAnswers`, and
       `WizardError` in `lib/Amaru/Treasury/Tx/SwapWizard.hs`. Field
       list and Haddock per [data-model.md §1
       and §3](./data-model.md). Strict, leading commas, fourmolu
       70-col.
-- [ ] T007 Implement `WizardEnv`, `NetworkConstants`,
+- [X] T007 Implement `WizardEnv`, `NetworkConstants`,
       `RegistryView`, `ScopeOwners`, `TreasuryRefs`, `ScopeView`,
       `TreasurySelection`, `WalletSelection` in
       `lib/Amaru/Treasury/Tx/SwapWizard.hs`. Field list per
       [data-model.md §2](./data-model.md).
-- [ ] T008 [P] Add a stable `ToJSON SwapIntentJSON` (and the
+- [X] T008 [P] Add a stable `ToJSON SwapIntentJSON` (and the
       nested record types) in
       `lib/Amaru/Treasury/Tx/SwapIntentJSON.hs` that mirrors the
       existing `FromJSON` field names. Pin key order to the record
@@ -113,7 +113,7 @@ run the translation, compare to a checked-in
 are authored *before* the implementation, and the spec must run RED
 once before the implementation is written.
 
-- [ ] T009 [P] [US2] Author fixtures
+- [X] T009 [P] [US2] Author fixtures
       `test/fixtures/swap-wizard/env.json` and
       `test/fixtures/swap-wizard/answers.json` for one realistic
       preprod-shaped scenario (Core scope, 50_000 ADA total,
@@ -121,10 +121,10 @@ once before the implementation is written.
       single-signer override). Encode shapes per
       [data-model.md §1, §2](./data-model.md) via the `FromJSON`
       instances landed in T005–T007.
-- [ ] T010 [P] [US2] Author golden file
+- [X] T010 [P] [US2] Author golden file
       `test/fixtures/swap-wizard/expected.intent.json` by hand,
       formatted with the stable encoder from T008.
-- [ ] T011 [US2] Implement `test/unit/SwapWizardSpec.hs` with
+- [X] T011 [US2] Implement `test/unit/SwapWizardSpec.hs` with
       these `it` blocks; all must compile and run RED:
       - `"matches golden expected.intent.json"` — loads T009
         fixtures, runs `wizardToIntentJSON`, encodes with T008's
@@ -134,23 +134,23 @@ once before the implementation is written.
         `translateIntent`, expects `Right`.
       - `"rejects WizardError cases"` — table-driven negative
         examples covering each `WizardError` constructor.
-- [ ] T012 [US2] Confirm RED: run `cabal test unit-tests -O0
+- [X] T012 [US2] Confirm RED: run `cabal test unit-tests -O0
       --test-options=--match=SwapWizard` and observe the spec
       failing (no `wizardToIntentJSON` yet).
-- [ ] T013 [US2] Implement the field-by-field translation
+- [X] T013 [US2] Implement the field-by-field translation
       `wizardToIntentJSON` in
       `lib/Amaru/Treasury/Tx/SwapWizard.hs`. Mapping per the
       contract table in [data-model.md §4](./data-model.md). Each
       branch covered by a Haddock paragraph that names the source
       field.
-- [ ] T014 [US2] Implement local validation that produces
+- [X] T014 [US2] Implement local validation that produces
       `WizardError`: chunk size positive, chunk size ≤ amount,
       validity hours in [1, 48], rate denominator non-zero, signer
       override hex-28 well-formed. Failure shapes per
       [data-model.md §3](./data-model.md).
-- [ ] T014a [US2] Confirm GREEN: rerun the same `cabal test`
+- [X] T014a [US2] Confirm GREEN: rerun the same `cabal test`
       command from T012; all three `it` blocks pass.
-- [ ] T014b [US2] Run `just ci`; the new spec must remain green
+- [X] T014b [US2] Run `just ci`; the new spec must remain green
       end-to-end.
 
 **Checkpoint (MVP)**: `wizardToIntentJSON` is correct, golden-tested,

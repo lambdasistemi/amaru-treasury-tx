@@ -5,15 +5,22 @@ Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
 Threads a 'SwapIntent' + rationale 'Metadatum' through a
-'Provider' (typically 'Amaru.Treasury.Backend.N2C'),
+'Provider' (typically 'Amaru.Treasury.Backend.N2C') and
 runs the full
 [`Cardano.Node.Client.TxBuild.build`](https://github.com/lambdasistemi/cardano-node-clients)
-loop with the live script evaluator, post-patches the
-two CIP-40 collateral fields that
-@cardano-node-clients@'s @build@ does not yet model
-(see [#124](https://github.com/lambdasistemi/cardano-node-clients/issues/124)),
-and re-evaluates the final tx so callers can be sure
-every redeemer succeeds with the committed ExUnits.
+loop with the live script evaluator. Since
+[lambdasistemi/cardano-node-clients#124](https://github.com/lambdasistemi/cardano-node-clients/issues/124)
+@build@ emits Conway @total_collateral@ (CBOR key 17)
+and @collateral_return@ (key 16) inside the fee
+fixpoint, defaulting the return target to the same
+change address passed to @build@. The wallet UTxO
+doubles as fuel and collateral, so the default is
+correct here and no @setCollateralReturn@ override is
+needed.
+
+The final tx is re-evaluated against the script
+evaluator so callers get a per-redeemer outcome
+('sbrScriptResults') alongside the CBOR.
 -}
 module Amaru.Treasury.Tx.SwapBuild
     ( -- * Inputs
@@ -31,27 +38,20 @@ import Control.Exception (throwIO)
 import Control.Monad (unless)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Map.Strict qualified as Map
-import Data.Word (Word64)
 
 import Cardano.Ledger.Address (Addr)
 import Cardano.Ledger.Alonzo.Scripts (AsIx)
 import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.Api.Tx.Body
-    ( collateralReturnTxBodyL
-    , feeTxBodyL
+    ( feeTxBodyL
     , totalCollateralTxBodyL
     )
-import Cardano.Ledger.Api.Tx.Out (mkBasicTxOut, valueTxOutL)
 import Cardano.Ledger.BaseTypes (StrictMaybe (..))
 import Cardano.Ledger.Binary (serialize)
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
 import Cardano.Ledger.Core (bodyTxL)
-import Cardano.Ledger.Mary.Value
-    ( MaryValue (..)
-    , MultiAsset (..)
-    )
 import Cardano.Ledger.Metadata (Metadatum)
 import Cardano.Ledger.Plutus (ExUnits)
 import Cardano.Ledger.TxIn (TxIn)
@@ -62,7 +62,7 @@ import Cardano.Node.Client.TxBuild
     , build
     , setMetadata
     )
-import Lens.Micro ((&), (.~), (^.))
+import Lens.Micro ((^.))
 
 import Amaru.Treasury.AuxData (label1694)
 import Amaru.Treasury.ChainContext (ChainContext (..))
@@ -80,9 +80,8 @@ data SwapBuildInputs = SwapBuildInputs
     , sbiWalletTxIn :: !TxIn
     -- ^ the wallet UTxO used as fuel + collateral
     , sbiWalletAddr :: !Addr
-    -- ^ change address (and collateral_return target)
-    , sbiCollateralPercent :: !Word64
-    -- ^ Conway default = 150
+    -- ^ change address — also receives @collateral_return@
+    --     by default (see module header)
     }
 
 -- | Per-script result from 'evaluateTx'.
@@ -105,10 +104,12 @@ data SwapBuildResult = SwapBuildResult
     , sbrFeeLovelace :: !Coin
     -- ^ fee assigned by 'build'
     , sbrTotalCollateralLovelace :: !Coin
-    -- ^ post-patched @total_collateral@
+    -- ^ @total_collateral@ as recorded in the final
+    --     body. 'Coin' 0 if the body has no
+    --     @total_collateral@ field (a non-script tx).
     , sbrScriptResults :: ![ScriptResult]
     -- ^ outcome of re-evaluating every redeemer on the
-    --     fully-balanced + collateral-patched tx
+    --     fully-balanced tx
     }
 
 -- ----------------------------------------------------
@@ -191,42 +192,19 @@ runSwapBuild ctx sbi = do
                 "runSwapBuild: build failed: "
                     <> show (e :: BuildError ())
         Right tx -> do
-            let walletValue = case lookup walletInput inputUtxos of
-                    Just txout ->
-                        let MaryValue c _ =
-                                txout ^. valueTxOutL
-                        in  c
-                    Nothing ->
-                        error
-                            "runSwapBuild: missing wallet"
-                Coin feeLov = tx ^. bodyTxL . feeTxBodyL
-                Coin walletLov = walletValue
-                pct = sbiCollateralPercent sbi
-                totalColl =
-                    Coin
-                        ( ( feeLov
-                                * fromIntegral pct
-                                + 99
-                          )
-                            `div` 100
-                        )
-                Coin totalCollLov = totalColl
-                returnColl =
-                    mkBasicTxOut
-                        walletAddr
-                        ( MaryValue
-                            (Coin (walletLov - totalCollLov))
-                            (MultiAsset Map.empty)
-                        )
-                txPatched =
-                    tx
-                        & bodyTxL
-                            . totalCollateralTxBodyL
-                            .~ SJust totalColl
-                        & bodyTxL
-                            . collateralReturnTxBodyL
-                            .~ SJust returnColl
-            scriptMap <- ccEvaluateTx ctx txPatched
+            let body = tx ^. bodyTxL
+                feeLov = body ^. feeTxBodyL
+                totalColl = case body
+                    ^. totalCollateralTxBodyL of
+                    SJust c -> c
+                    SNothing -> Coin 0
+            -- Re-evaluate on the final tx so callers
+            -- see the per-redeemer outcome alongside
+            -- the CBOR. The closure passed to 'build'
+            -- above drove the balancing fixpoint; this
+            -- second call captures script results once
+            -- the body is settled.
+            scriptMap <- ccEvaluateTx ctx tx
             let scriptResults =
                     [ ScriptResult
                         purpose
@@ -241,11 +219,11 @@ runSwapBuild ctx sbi = do
                 cbor =
                     serialize
                         (eraProtVerLow @ConwayEra)
-                        (txPatched :: ConwayTx)
+                        (tx :: ConwayTx)
             pure
                 SwapBuildResult
                     { sbrCborBytes = cbor
-                    , sbrFeeLovelace = Coin feeLov
+                    , sbrFeeLovelace = feeLov
                     , sbrTotalCollateralLovelace =
                         totalColl
                     , sbrScriptResults = scriptResults

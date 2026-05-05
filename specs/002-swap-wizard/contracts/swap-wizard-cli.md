@@ -23,6 +23,7 @@ amaru-treasury-tx swap-wizard
     [--yes]
     [--dry-run]
     [--verbose]
+    [--force]
 ```
 
 Notes:
@@ -38,8 +39,10 @@ Notes:
   string is rejected.
 - `--dry-run` writes the JSON to stdout and skips file write; useful
   for piping into review tooling.
-- `--verbose` prints the resolved `WizardEnv` summary before the
-  confirmation prompt.
+- `--verbose` prints the resolved `WizardEnv` summary (on stderr)
+  before the confirmation prompt.
+- `--force` overwrites an existing `--out` path; without it, exit 5
+  if the path exists.
 
 ## 2. Prompt order (interactive mode)
 

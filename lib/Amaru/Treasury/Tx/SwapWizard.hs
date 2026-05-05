@@ -604,7 +604,6 @@ data ResolverError
       ResolverShortfall !Integer !Integer
     | ResolverVerifiedScopeMissing !ScopeId
     | ResolverOwnerMissing !ScopeId
-    | ResolverRewardAccountNotScript !ScopeId
     | ResolverAddressEncodingFailed !Text
     deriving (Eq, Show)
 
@@ -662,16 +661,22 @@ treasuryRefsFromVerified
     :: ScopeId
     -> VerifiedScope
     -> Either ResolverError TreasuryRefs
-treasuryRefsFromVerified scope verified = do
-    permissionsRewardAccount <-
-        rewardAccountFromAddress scope (vsAddress verified)
+treasuryRefsFromVerified _scope verified = do
     address <- addressToText (vsAddress verified)
     pure
         TreasuryRefs
             { trAddress = address
             , trScriptHash =
                 scriptHashToHex (vsTreasuryScriptHash verified)
-            , trPermissionsRewardAccount = permissionsRewardAccount
+            , -- Withdraw-zero pattern: the permissions script is
+              -- invoked by registering its hash as a stake credential
+              -- and submitting a 0-lovelace withdrawal. The reward
+              -- account IS the permissions script hash, NOT the
+              -- stake credential of the treasury address (which is
+              -- the treasury hash by upstream's symmetric
+              -- addr1x<treasury><treasury> convention).
+              trPermissionsRewardAccount =
+                scriptHashToHex (vsPermissionsScriptHash verified)
             }
 
 addressToText :: Addr -> Either ResolverError Text
@@ -691,16 +696,6 @@ addressToText addr = do
         case getNetwork target of
             Mainnet -> "addr"
             Testnet -> "addr_test"
-
-rewardAccountFromAddress
-    :: ScopeId
-    -> Addr
-    -> Either ResolverError Text
-rewardAccountFromAddress scope = \case
-    Addr _ _ (StakeRefBase (ScriptHashObj h)) ->
-        Right (scriptHashToHex h)
-    _ ->
-        Left (ResolverRewardAccountNotScript scope)
 
 keyHashToText :: KeyHash Witness -> Text
 keyHashToText (KeyHash h) =

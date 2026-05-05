@@ -230,8 +230,8 @@ git fetch origin \
 git switch -C "$release_branch" "origin/$base_branch"
 
 awk -v version="$next_version" '
-  !done && $1 == "version:" {
-    printf "%-16s%s\n", "version:", version
+  !done && match($0, /^([[:space:]]*version:[[:space:]]*)/) {
+    printf "%s%s\n", substr($0, RSTART, RLENGTH), version
     done = 1
     next
   }

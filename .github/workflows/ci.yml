@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
@@ -27,6 +28,8 @@ jobs:
           .#checks.x86_64-linux.unit
           .#checks.x86_64-linux.golden
           .#checks.x86_64-linux.lint
+      - name: Release version contract
+        run: scripts/release/check-version-consistency
 
   unit:
     needs: build-gate

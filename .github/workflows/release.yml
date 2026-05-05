@@ -2,106 +2,103 @@ name: Release
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch: {}
+    tags: [ "v*" ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish, for example v0.1.1.0"
+        required: true
+        type: string
 
 permissions:
   contents: write
-  pull-requests: write
+
+concurrency:
+  group: release-${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+  cancel-in-progress: false
 
 jobs:
-  release-please:
-    runs-on: ubuntu-latest
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-    steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
-
-  publish:
-    needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
-    runs-on: nixos
-    steps:
-      - uses: actions/checkout@v6
-      - uses: cachix/cachix-action@v17
-        with:
-          name: paolino
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
-      - name: Build
-        run: nix build --quiet .#default
-      - name: Test
-        run: nix run --quiet .#unit
-      - name: Released
-        run: echo "Released ${{ needs.release-please.outputs.tag_name }}"
-
   linux-bundles:
-    name: Build Linux bundles (AppImage, DEB, RPM)
-    needs: release-please
-    # Always build on workflow_dispatch; on push, only build when
-    # release-please cut a tag.
-    if: ${{ github.event_name == 'workflow_dispatch' || needs.release-please.outputs.release_created }}
+    name: Build Linux release bundles
     runs-on: nixos
-    permissions:
-      contents: write
+    env:
+      TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+
       - uses: cachix/cachix-action@v17
         with:
           name: paolino
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Validate release contract
+        run: scripts/release/check-version-consistency "$TAG"
+
+      - name: Build and test release inputs
+        run: >-
+          nix build --quiet
+          .#checks.x86_64-linux.build
+          .#checks.x86_64-linux.unit
+          .#checks.x86_64-linux.golden
+          .#checks.x86_64-linux.lint
 
       - name: Build AppImage
         run: >-
           nix --quiet bundle
           --bundler github:ralismark/nix-appimage
-          .#default
+          .#packages.x86_64-linux.default
           -o amaru-treasury-tx.AppImage
 
       - name: Build DEB
         run: >-
           nix --quiet bundle
           --bundler github:NixOS/bundlers#toDEB
-          .#default
+          .#packages.x86_64-linux.default
           -o amaru-treasury-tx.deb
 
       - name: Build RPM
         run: >-
           nix --quiet bundle
           --bundler github:NixOS/bundlers#toRPM
-          .#default
+          .#packages.x86_64-linux.default
           -o amaru-treasury-tx.rpm
 
       - name: Stage artifacts
-        env:
-          TAG: ${{ needs.release-please.outputs.tag_name || format('manual-{0}', github.run_id) }}
         run: |
+          set -euo pipefail
+          version="$(scripts/release/get-cabal-version)"
           mkdir -p artifacts
-          cp amaru-treasury-tx.deb/*.deb \
-            "artifacts/amaru-treasury-tx-${TAG}.deb"
-          cp amaru-treasury-tx.rpm/*.rpm \
-            "artifacts/amaru-treasury-tx-${TAG}.rpm"
           cp -L amaru-treasury-tx.AppImage \
-            "artifacts/amaru-treasury-tx-${TAG}.AppImage"
+            "artifacts/amaru-treasury-tx-${version}-x86_64-linux.AppImage"
+          cp -L amaru-treasury-tx.AppImage \
+            "artifacts/amaru-treasury-tx.AppImage"
+          cp amaru-treasury-tx.deb/*.deb \
+            "artifacts/amaru-treasury-tx-${version}-x86_64-linux.deb"
+          cp amaru-treasury-tx.rpm/*.rpm \
+            "artifacts/amaru-treasury-tx-${version}-x86_64-linux.rpm"
           ls -lh artifacts/
 
-      - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload workflow artifacts
+        uses: actions/upload-artifact@v7
         with:
-          name: linux-bundles
+          name: linux-release-bundles
           path: artifacts/*
           if-no-files-found: error
           retention-days: 30
 
-      - name: Attach to GitHub release
-        if: ${{ needs.release-please.outputs.release_created }}
+      - name: Create release and upload artifacts
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
-          gh release upload ${TAG} \
-            artifacts/amaru-treasury-tx-${TAG}.deb \
-            artifacts/amaru-treasury-tx-${TAG}.rpm \
-            artifacts/amaru-treasury-tx-${TAG}.AppImage \
-            --clobber
+          set -euo pipefail
+          notes="$(mktemp)"
+          scripts/release/extract-notes "$TAG" > "$notes"
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" \
+              --title "amaru-treasury-tx $TAG" \
+              --notes-file "$notes" \
+            || gh release view "$TAG" >/dev/null
+          gh release upload "$TAG" artifacts/* --clobber

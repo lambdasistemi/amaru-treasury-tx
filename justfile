@@ -32,6 +32,10 @@ hlint:
       -not -path '*/dist-newstyle/*' \
       -exec hlint {} +
 
+# Check the release version contract
+release-check:
+    scripts/release/check-version-consistency
+
 # Build all components
 build:
     cabal build all -O0
@@ -69,3 +73,4 @@ ci:
     just golden
     just format-check
     just hlint
+    just release-check

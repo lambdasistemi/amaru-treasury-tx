@@ -1,21 +1,39 @@
 name: Darwin Release
 
 on:
-  workflow_dispatch: {}
+  push:
+    tags: [ "v*" ]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build, for example v0.1.1.0"
+        required: true
+        type: string
+      publish:
+        description: "Upload to the GitHub release and update Homebrew"
+        type: choice
+        options: [ "no", "yes" ]
+        default: "no"
 
 permissions:
   contents: write
 
 concurrency:
-  group: darwin-release
-  cancel-in-progress: true
+  group: darwin-release-${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+  cancel-in-progress: false
 
 jobs:
   build-and-release:
-    name: Build amaru-treasury-tx for aarch64-darwin
+    name: Build aarch64-darwin release bundle
     runs-on: macos-14
+    env:
+      TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+      PUBLISH: ${{ github.event_name == 'push' || inputs.publish == 'yes' }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
 
       - uses: cachix/install-nix-action@v30
         with:
@@ -23,78 +41,99 @@ jobs:
             extra-substituters = https://cache.iog.io https://paolino.cachix.org
             extra-trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= paolino.cachix.org-1:ecmgO3CXdgSWA2cHlm4srknd/cLFMLmK3i3NrzeDFaE=
 
-      - name: Build
-        run: nix build -L --print-out-paths .#default > /tmp/nix-out
+      - name: Validate release contract
+        run: scripts/release/check-version-consistency "$TAG"
 
-      - name: Bundle three executables with their dylibs
+      - name: Build executables
+        run: >-
+          nix build -L --print-out-paths
+          .#amaru-treasury-tx
+          .#swap-probe
+          .#capture-swap-context
+          > /tmp/nix-outs
+
+      - name: Bundle executables with their dylibs
         run: |
-          mkdir -p /tmp/bundle/bin /tmp/bundle/lib
+          set -euo pipefail
+          mkdir -p /tmp/bundle/bin /tmp/bundle/libexec/lib
 
           for exe in amaru-treasury-tx swap-probe capture-swap-context; do
-            src="$(cat /tmp/nix-out)/bin/$exe"
+            src="$(
+              while read -r out; do
+                if [ -x "$out/bin/$exe" ]; then
+                  echo "$out/bin/$exe"
+                  break
+                fi
+              done < /tmp/nix-outs
+            )"
             if [ ! -x "$src" ]; then
-              echo "missing executable: $src"
+              echo "missing executable: $exe"
               exit 1
             fi
             cp "$src" "/tmp/bundle/bin/$exe"
 
-            # Rewrite every non-system dylib reference in this exe.
             otool -L "/tmp/bundle/bin/$exe" \
               | grep -v /usr/lib | grep -v /System | grep -v ":" \
-              | awk '{print $1}' | while read lib; do
-                libname=$(basename "$lib")
-                if [ ! -f "/tmp/bundle/lib/$libname" ]; then
-                  cp "$lib" "/tmp/bundle/lib/$libname"
+              | awk '{print $1}' | while read -r lib; do
+                libname="$(basename "$lib")"
+                if [ ! -f "/tmp/bundle/libexec/lib/$libname" ]; then
+                  cp "$lib" "/tmp/bundle/libexec/lib/$libname"
                 fi
                 install_name_tool -change "$lib" \
                   "@executable_path/../libexec/lib/$libname" \
                   "/tmp/bundle/bin/$exe"
               done
 
-            echo "==> Verify $exe:"
             otool -L "/tmp/bundle/bin/$exe"
           done
 
       - name: Create tarball
         run: |
-          VERSION=$(jq -r '."."' .release-please-manifest.json 2>/dev/null || echo "0.1.0")
-          tar czf /tmp/amaru-treasury-tx-${VERSION}-aarch64-darwin.tar.gz -C /tmp/bundle .
-          shasum -a 256 /tmp/amaru-treasury-tx-${VERSION}-aarch64-darwin.tar.gz
-          echo "$VERSION" > /tmp/version.txt
+          set -euo pipefail
+          version="$(scripts/release/get-cabal-version)"
+          tarball="/tmp/amaru-treasury-tx-${version}-aarch64-darwin.tar.gz"
+          tar czf "$tarball" -C /tmp/bundle .
+          shasum -a 256 "$tarball"
+          echo "$tarball" > /tmp/tarball-path
 
       - name: Upload workflow artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: darwin-tarball
+          name: darwin-release-bundle
           path: /tmp/amaru-treasury-tx-*-aarch64-darwin.tar.gz
           if-no-files-found: error
           retention-days: 30
 
-      - name: Create / update release
+      - name: Create release and upload artifact
+        if: ${{ env.PUBLISH == 'true' }}
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION=$(cat /tmp/version.txt)
-          TAG="v${VERSION}"
-          TARBALL="/tmp/amaru-treasury-tx-${VERSION}-aarch64-darwin.tar.gz"
-          gh release upload "$TAG" "$TARBALL" --clobber || \
-            gh release create "$TAG" \
+          set -euo pipefail
+          notes="$(mktemp)"
+          scripts/release/extract-notes "$TAG" > "$notes"
+          tarball="$(cat /tmp/tarball-path)"
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" \
               --title "amaru-treasury-tx $TAG" \
-              --notes "aarch64-darwin release" \
-              "$TARBALL"
+              --notes-file "$notes" \
+            || gh release view "$TAG" >/dev/null
+          gh release upload "$TAG" "$tarball" --clobber
 
       - name: Update homebrew tap
+        if: ${{ env.PUBLISH == 'true' }}
         env:
           TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
         run: |
-          VERSION=$(cat /tmp/version.txt)
-          TAG="v${VERSION}"
-          TARBALL="/tmp/amaru-treasury-tx-${VERSION}-aarch64-darwin.tar.gz"
-          SHA=$(shasum -a 256 "$TARBALL" | cut -d' ' -f1)
-          URL="https://github.com/lambdasistemi/amaru-treasury-tx/releases/download/${TAG}/amaru-treasury-tx-${VERSION}-aarch64-darwin.tar.gz"
+          set -euo pipefail
+          version="$(scripts/release/get-cabal-version)"
+          tag="v${version}"
+          tarball="$(cat /tmp/tarball-path)"
+          sha="$(shasum -a 256 "$tarball" | cut -d' ' -f1)"
+          url="https://github.com/lambdasistemi/amaru-treasury-tx/releases/download/${tag}/amaru-treasury-tx-${version}-aarch64-darwin.tar.gz"
 
-          printf 'class AmaruTreasuryTx < Formula\n  desc "Build unsigned Amaru treasury transactions (disburse, swap, withdraw)"\n  homepage "https://github.com/lambdasistemi/amaru-treasury-tx"\n  url "%s"\n  sha256 "%s"\n  version "%s"\n\n  def install\n    bin.install "bin/amaru-treasury-tx", "bin/swap-probe", "bin/capture-swap-context"\n    (libexec/"lib").install Dir["lib/*"]\n  end\nend\n' \
-            "$URL" "$SHA" "$VERSION" \
+          printf 'class AmaruTreasuryTx < Formula\n  desc "Build unsigned Amaru treasury transactions (disburse, swap, withdraw)"\n  homepage "https://github.com/lambdasistemi/amaru-treasury-tx"\n  url "%s"\n  sha256 "%s"\n  version "%s"\n\n  def install\n    bin.install "bin/amaru-treasury-tx", "bin/swap-probe", "bin/capture-swap-context"\n    (libexec/"lib").install Dir["libexec/lib/*"]\n  end\nend\n' \
+            "$url" "$sha" "$version" \
             > /tmp/amaru-treasury-tx.rb
 
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/lambdasistemi/homebrew-tap.git" /tmp/tap
@@ -104,14 +143,16 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           git add Formula/amaru-treasury-tx.rb
-          git diff --cached --quiet || \
-            git commit -m "update amaru-treasury-tx to ${TAG}"
+          git diff --cached --quiet \
+            || git commit -m "update amaru-treasury-tx to ${tag}"
           git push
 
       - name: Test brew install
+        if: ${{ env.PUBLISH == 'true' }}
         run: |
+          set -euo pipefail
           brew tap lambdasistemi/tap
           brew install amaru-treasury-tx
-          amaru-treasury-tx --help || true
+          amaru-treasury-tx --help
           which amaru-treasury-tx
           otool -L "$(which amaru-treasury-tx)"

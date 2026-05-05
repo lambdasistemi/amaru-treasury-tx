@@ -1,26 +1,27 @@
-# Contract: `metadata.json` schema mirror + URL
+# Contract: metadata source + chain anchors + Provider extension
 
 **Plan**: [../plan.md](../plan.md) · **Spec**: [../spec.md](../spec.md)
 **Date**: 2026-05-05
 
-This file pins the JSON schema the wizard's parser accepts and
-the URL it fetches from. Anything outside this contract is a
-breaking change.
+This file pins the contracts the verifier relies on. Anything
+outside this is a breaking change.
 
-## 1. URL
+## 1. Metadata source
 
-```
-https://raw.githubusercontent.com/pragma-org/amaru-treasury/<sha>/journal/2026/metadata.json
-```
+The verifier reads `metadata.json` from one of three
+interchangeable sources, picked by CLI flag:
 
-- `<sha>` is a 40-char hex SHA-1 commit hash. No branches, no
-  tags.
-- Default `<sha>` is the `defaultUpstreamCommit` constant in
-  `Amaru.Treasury.Metadata.Upstream`. Override via
-  `--metadata-commit`.
-- The wizard does NOT follow redirects beyond GitHub's standard
-  raw-blob redirect.
-- Required: HTTPS, no auth.
+- **Default**:
+  `https://raw.githubusercontent.com/pragma-org/amaru-treasury/main/journal/2026/metadata.json`.
+  Used when no flag is given.
+- **`--metadata-url <url>`**: an arbitrary URL. No restriction.
+- **`--metadata-file <path>`**: a local filesystem path.
+
+`--metadata-url` and `--metadata-file` are mutually exclusive.
+Passing both produces `MetadataSourceConflict` at parse time.
+
+The metadata's *content* is treated as untrusted regardless of
+source.
 
 ## 2. JSON schema
 
@@ -31,77 +32,83 @@ https://raw.githubusercontent.com/pragma-org/amaru-treasury/<sha>/journal/2026/m
     "<scope-name>": {
       "owner": "<28-byte hex>" | null,
       "address": "<bech32>",
-      "treasury_script": {
-        "hash": "<28-byte hex>",
-        "deployed_at": "<txid hex>#<ix>"
-      },
-      "permissions_script": {
-        "hash": "<28-byte hex>",
-        "deployed_at": "<txid hex>#<ix>"
-      },
-      "registry_script": {
-        "hash": "<28-byte hex>",
-        "deployed_at": "<txid hex>#<ix>"
-      }
+      "treasury_script": { "hash": "<28-byte hex>", "deployed_at": "<txid hex>#<ix>" },
+      "permissions_script": { "hash": "<28-byte hex>", "deployed_at": "<txid hex>#<ix>" },
+      "registry_script": { "hash": "<28-byte hex>", "deployed_at": "<txid hex>#<ix>" }
     }
   }
 }
 ```
 
-Required scope keys: `core_development`, `ops_and_use_cases`,
-`network_compliance`, `middleware`, `contingency`.
+Scope keys: `core_development`, `ops_and_use_cases`,
+`network_compliance`, `middleware`, `contingency`. Extra fields
+(e.g. `budget`) are ignored. `owner` is `null` only for
+`contingency`.
 
-Notes:
-- `owner` is `null` only for `contingency`; the parser accepts
-  this and projects to `Nothing`.
-- Extra unknown fields (e.g. `budget`) are ignored.
+## 3. On-chain anchors
 
-## 3. Fetcher contract
+| Anchor | Where | What it commits to |
+|---|---|---|
+| Scopes NFT inline datum | UTxO at script address `scopes(scopes_seed)` carrying token `(policy = scopesNftPolicy, name = "amaru 2026 scopes")` | Four scope-owner key hashes (`MultisigScript.Signature` constructors) |
+| Per-scope registry NFT inline datum | UTxO at script address `treasury_registry(registry_seed, scope)` carrying token `(policy = perScopeRegistryPolicy, name = "REGISTRY")` | `ScriptHashRegistry { treasury, vendor }` — `treasury` is the per-scope treasury validator hash |
+
+`scopesNftPolicy = scriptHash(applyParams(scopesValidatorBlob,
+[scopes_seed]))`.
+
+`perScopeRegistryPolicy[scope] =
+scriptHash(applyParams(treasuryRegistryValidatorBlob,
+[registry_seed, scope]))`.
+
+`permissionsScriptHash[scope] =
+scriptHash(applyParams(permissionsValidatorBlob,
+[scopesNftPolicy, scope]))`.
+
+The per-scope treasury validator hash is recoverable in
+principle by parameter-applying the SundaeSwap
+treasury-contracts validator with a `TreasuryConfiguration`,
+but the cleaner path is to read it from the per-scope registry
+NFT's inline datum (anchored).
+
+## 4. Provider IO requirement
+
+`Provider IO` must expose:
 
 ```haskell
-runFetcher :: Text -> m (Either MetadataError ByteString)
+queryUTxOsAt
+    :: Provider IO
+    -> Set Addr
+    -> IO (Map Addr [(TxIn, TxOut ConwayEra)])
 ```
 
-- Input: full URL.
-- Output:
-  - `Right body` for HTTP 200 with a non-empty body.
-  - `Left (MetadataFetchHttp status url)` for non-200.
-  - `Left (MetadataFetchTimeout url)` if the request timed out
-    at the configured limit (10 s default).
-  - `Left (MetadataFetchTransport msg)` for DNS/TLS/socket
-    failures.
+Each `Addr` in the set produces one entry in the result map
+(empty list if no UTxOs at that address). Backed by LSQ
+`GetUTxOByAddress` accepting a `Set Addr` natively.
 
-## 4. Verifier contract
+The verifier consumes this twice in total per run alongside
+the existing `queryUTxOByTxIn`:
 
-For each TxIn in the verify-set
-([data-model.md §4](../data-model.md)):
+- Round-trip 1: `queryUTxOsAt` over the scopes-validator
+  address + each requested scope's registry-validator address.
+- Round-trip 2: `queryUTxOByTxIn` over `scope_owners` +
+  every requested-scope's `*.deployed_at` TxIn.
 
-```haskell
-queryUTxOByTxIn (Set.singleton ref) :: IO (Map TxIn (TxOut ConwayEra))
-```
+Cross-call atomicity (single Acquired session for both) is
+tracked at
+[lambdasistemi/cardano-node-clients#126](https://github.com/lambdasistemi/cardano-node-clients/issues/126).
 
-If the returned map is empty, the ref is consumed: emit
-`ChainVerificationSpent ref label`.
+## 5. Build-time pin
 
-Errors from the Provider itself (network drop, exception) bubble
-as `ChainVerificationProviderError`.
-
-## 5. Pin update procedure
-
-To advance `defaultUpstreamCommit`:
-
-1. Open a PR that updates ONLY the constant and (optionally) the
-   checked-in fixture.
-2. Reviewer cross-checks the new SHA against
-   `pragma-org/amaru-treasury/journal/2026/metadata.json` at
-   that commit.
-3. Confirm `just ci` is green with the new fixture.
-4. Merge.
+Constants and Plutus blobs in
+`Amaru.Treasury.Registry.Constants` are pinned to a specific
+upstream commit of `pragma-org/amaru-treasury`. The pin lives
+in `flake.nix` (Nix builds) and a comment block above the
+constants (non-Nix). Advancing the pin is one PR.
 
 ## 6. Out of scope
 
-- Schema migration (e.g. upstream renames a field). When that
-  happens we reject parsing and require a code change.
-- Local-file metadata input. There is no
-  `--metadata-path` flag.
-- Air-gapped operation. Out of scope for v1.
+- Discovering `*_deployed_at` from chain alone (would require
+  an indexer or whole-UTxO-set walk).
+- Air-gapped operation. `--metadata-file` accommodates pre-
+  fetched files but the chain check still runs against
+  `Provider IO`.
+- Cross-call LSQ atomicity (see §4).

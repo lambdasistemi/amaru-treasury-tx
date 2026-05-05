@@ -23,6 +23,10 @@ module Amaru.Treasury.Backend
 
       -- * Re-exports from cardano-node-clients
     , Provider (..)
+    , QueryHandle
+    , queryUTxOsAtH
+    , queryUTxOByTxInH
+    , singleShotWithAcquired
     , EvaluateTxResult
     , SlotNo (..)
     ) where
@@ -30,7 +34,11 @@ module Amaru.Treasury.Backend
 import Cardano.Node.Client.Provider
     ( EvaluateTxResult
     , Provider (..)
+    , QueryHandle
     , SlotNo (..)
+    , queryUTxOByTxInH
+    , queryUTxOsAtH
+    , singleShotWithAcquired
     )
 
 -- | The CLI's effect-y boundary: a 'Provider' running in 'IO'.

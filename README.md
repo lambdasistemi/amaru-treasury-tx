@@ -38,26 +38,33 @@ current chain tip via a local cardano-node `Provider`; loads
 registry refs (deployed-at UTxOs, owner key hashes, scope treasury
 addresses) from a JSON file.
 
+Recreate the existing mainnet swap golden (matches
+`test/fixtures/swap/intent.json`):
+
 ```bash
-amaru-treasury-tx swap-wizard \
-    --node-socket /path/to/node.socket \
-    --network-magic 1 \
-    --network preprod \
-    --wallet-addr addr_test1q... \
+amaru-treasury-tx \
+    --node-socket /code/cardano-mainnet/ipc/node.socket \
+    --network-magic 764824073 \
+    swap-wizard \
+    --network mainnet \
+    --wallet-addr addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu \
     --registry test/fixtures/swap-wizard/registry.example.json \
     --scope core_development \
     --ada 408163.265306 \
-    --chunks 32 \
+    --chunk-ada 12500 \
     --min-rate 0.245 \
     --validity-hours 6 \
-    --description 'Swapping ADA for USDM' \
-    --justification 'Required to pay vendor X' \
-    --destination-label 'Network Compliance treasury' \
+    --description 'Swapping ADA for $100k at a rate of $0.245 per ADA' \
+    --justification 'Required to pay Antithesis as vendor' \
+    --destination-label "Network Compliance's treasury" \
     --signer f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e \
     --signer 8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1 \
     --out intent.json \
     --verbose --yes
 ```
+
+`--chunks N` is the alternative to `--chunk-ada` if you want the
+wizard to compute the per-chunk size from a chunk count.
 
 The wizard never builds a transaction. Hand the produced
 `intent.json` to `amaru-treasury-tx swap` exactly as today.

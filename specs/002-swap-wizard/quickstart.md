@@ -30,25 +30,31 @@ build.
 ## 2. Run the wizard
 
 ```bash
-amaru-treasury-tx swap-wizard \
+amaru-treasury-tx \
     --node-socket /path/to/node.socket \
-    --network-magic 1 \
-    --network preprod \
-    --wallet-addr addr_test1q... \
+    --network-magic 764824073 \
+    swap-wizard \
+    --network mainnet \
+    --wallet-addr addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu \
     --registry test/fixtures/swap-wizard/registry.example.json \
     --scope core_development \
     --ada 408163.265306 \
-    --chunks 32 \
+    --chunk-ada 12500 \
     --min-rate 0.245 \
     --validity-hours 6 \
-    --description 'Swapping ADA for USDM' \
-    --justification 'Required to pay vendor X' \
-    --destination-label 'Network Compliance treasury' \
+    --description 'Swapping ADA for $100k at a rate of $0.245 per ADA' \
+    --justification 'Required to pay Antithesis as vendor' \
+    --destination-label "Network Compliance's treasury" \
     --signer f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e \
     --signer 8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1 \
     --out intent.json \
     --verbose --yes
 ```
+
+The above recreates the existing mainnet swap golden in
+[`test/fixtures/swap/intent.json`](../../test/fixtures/swap/intent.json).
+Substitute `--chunks N` if you'd rather the wizard compute the
+per-chunk size from a chunk count.
 
 The wizard:
 

@@ -587,7 +587,7 @@ Sources:
 -}
 networkConstants :: Text -> Either String NetworkConstants
 networkConstants n = case T.toLower n of
-    "preprod" ->
+    "mainnet" ->
         Right
             NetworkConstants
                 { ncSwapOrderAddress =
@@ -601,9 +601,9 @@ networkConstants n = case T.toLower n of
                 , ncDefaultPoolId =
                     "64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef"
                 }
-    "mainnet" ->
+    "preprod" ->
         Left
-            "swap-wizard: NetworkConstants for mainnet pending operator audit; preprod only in v1"
+            "swap-wizard: NetworkConstants for preprod pending operator audit; mainnet only in v1"
     _ ->
         Left
             ( "swap-wizard: no NetworkConstants for network "

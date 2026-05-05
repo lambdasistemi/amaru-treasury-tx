@@ -33,7 +33,15 @@ theme:
 
 markdown_extensions:
   - admonition
-  - pymdownx.superfences
+  - pymdownx.superfences:
+      # Hand the ``` ``mermaid `` fence to mkdocs-mermaid2 instead
+      # of letting Material's superfences swallow it as a plain
+      # code block. Without this custom fence, diagrams render as
+      # raw text on the published site.
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:mermaid2.fence_mermaid_custom
   - pymdownx.details
   - pymdownx.highlight
   - pymdownx.inlinehilite

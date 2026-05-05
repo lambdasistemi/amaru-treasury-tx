@@ -51,3 +51,6 @@ nav:
   - Home: index.md
   - Architecture: architecture.md
   - Quickstart: quickstart.md
+  - Swap recipe: swap.md
+  - ChainContext: chain-context.md
+  - Parity report: parity.md

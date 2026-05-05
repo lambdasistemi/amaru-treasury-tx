@@ -2,7 +2,31 @@
 
 Build a swap transaction end-to-end with the CLI.
 
-## 1. Build the binary
+## 1. Install
+
+### macOS (Apple Silicon)
+
+```bash
+brew tap lambdasistemi/tap
+brew install amaru-treasury-tx
+```
+
+### Linux (x86_64)
+
+Grab the AppImage from the
+[releases page](https://github.com/lambdasistemi/amaru-treasury-tx/releases/latest):
+
+```bash
+curl -L \
+  https://github.com/lambdasistemi/amaru-treasury-tx/releases/latest/download/amaru-treasury-tx.AppImage \
+  -o amaru-treasury-tx
+chmod +x ./amaru-treasury-tx
+./amaru-treasury-tx --help
+```
+
+Or use the `.deb` / `.rpm` packages from the same release.
+
+### From source (any platform)
 
 ```bash
 git clone git@github.com:lambdasistemi/amaru-treasury-tx.git

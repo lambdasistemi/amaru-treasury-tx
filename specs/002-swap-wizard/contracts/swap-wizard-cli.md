@@ -15,8 +15,8 @@ amaru-treasury-tx [--node-socket PATH] [--network-magic N]
     --registry PATH
     --out PATH
     --scope core_development|ops_and_use_cases|network_compliance|middleware
-    --ada DECIMAL
-    --chunks INT
+    --usdm DECIMAL
+    (--split INT | --chunk-usdm DECIMAL)
     --min-rate DECIMAL
     --validity-hours INT
     --description TEXT
@@ -40,12 +40,15 @@ Notes:
 - v1 takes every answer from flags; per-field interactive prompts
   are deferred. Only the final confirmation is interactive (skipped
   by `--yes`).
-- `--ada` accepts a decimal value (e.g. `408163.265306`). Internally
-  multiplied by 1_000_000 and rounded to lovelace.
-- `--chunks` is a positive integer. Internal `chunkSizeLovelace =
-  amountLovelace / chunks` (integer division). If the division is
-  not exact, the underlying `mkChunks` produces one extra small
-  remainder chunk.
+- `--usdm` is the target USDM amount (decimals OK). The wizard
+  derives the total ADA spend as `usdm / min-rate` (rounded to
+  lovelace).
+- The chunking flag is one of:
+  - `--split N`: split the order into N equal chunks
+    (`chunkSizeLovelace = amountLovelace / N`; one small remainder
+    chunk if not exact);
+  - `--chunk-usdm X`: each chunk targets X USDM
+    (`chunkSizeLovelace = round (X / min-rate * 1_000_000)`).
 - `--min-rate` accepts a decimal USDM-per-ADA value (e.g. `0.245`).
   Internally rendered as numerator/denominator with denominator
   fixed at 1_000_000 (USDM precision).

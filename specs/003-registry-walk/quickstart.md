@@ -53,16 +53,24 @@ For the requested scope:
 | Field | Verification |
 |---|---|
 | `owner` | matches the entry in the on-chain Scopes NFT datum |
-| `treasury_script.hash` | matches the on-chain `ScriptHashRegistry` datum's `treasury` |
+| `treasury_script.hash` | matches the on-chain per-scope `ScriptHashRegistry` datum's `treasury` AND matches `derivedTreasuryScriptHash(scope)` |
 | `registry_script.hash` | matches `policyId(treasury_registry(registry_seed, scope))` |
 | `permissions_script.hash` | matches `scriptHash(permissions(scopes_nft_policy, scope))` |
-| `address` | matches bech32 of verified `treasury_script.hash` for the network |
-| `*_deployed_at` | named UTxO is unspent AND carries the verified script hash as reference script |
-| `scope_owners` | the UTxO holds the Scopes NFT and is unspent |
+| `address` | matches bech32 of verified `treasury_script.hash` for the network (payment=stake=treasury hash) |
+| `treasury_script.deployed_at` | UTxO unspent AND carries verified treasury script as reference script |
+| `permissions_script.deployed_at` | UTxO unspent AND carries verified permissions script as reference script |
+| `registry_script.deployed_at` | UTxO unspent AND carries the per-scope registry NFT (this UTxO IS the registry NFT location, with inline `ScriptHashRegistry` datum — there is no reference script here) |
+| `scope_owners` | UTxO unspent AND holds the derived Scopes NFT, with parseable owners datum |
 
-Plus: each NFT-bearing UTxO must be the unique one at its script
-address (the trap validators forbid more than one in normal
-operation; ambiguity = abort).
+Plus: each NFT-bearing UTxO must be the unique one matching its
+TxIn (the trap validators forbid more than one NFT in circulation
+in normal operation; ambiguity = abort).
+
+The chain side is one acquired LSQ session, one
+`queryUTxOByTxInH` query over `scope_owners` ∪ each requested
+scope's three `*.deployed_at` TxIns. No script-address derivation
+is involved in the query — that removes a class of bug where a
+wrong stake-reference convention silently returns empty UTxOs.
 
 ## 4. When things go wrong
 

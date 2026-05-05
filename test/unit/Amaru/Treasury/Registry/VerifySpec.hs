@@ -205,7 +205,7 @@ spec =
                     (sdDeployedAt . teTreasuryScript)
                     badHash
                     <$> loadAnchors
-            expectMismatch "treasury_script.deployed_at" $
+            expectMismatch "treasury_script.deployed_at.metadata" $
                 verify metadata anchors
 
         it "rejects a spent permissions_script.deployed_at" $ do
@@ -225,7 +225,7 @@ spec =
                         (sdDeployedAt . tePermissionsScript)
                         badHash
                         <$> loadAnchors
-                expectMismatch "permissions_script.deployed_at" $
+                expectMismatch "permissions_script.deployed_at.metadata" $
                     verify metadata anchors
 
         it "rejects a spent registry NFT" $ do

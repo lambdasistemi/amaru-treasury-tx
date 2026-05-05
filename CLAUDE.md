@@ -68,6 +68,7 @@ nix run .#lint
 
 ## Recent Changes
 - 003-registry-walk: Added Haskell, GHC 9.6+ (matches the rest of the
+- 002-swap-wizard: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`)
 
 - 2026-05-04 — feature 001 (treasury transaction CLI): spec, plan,
   research, data model, contracts, quickstart.

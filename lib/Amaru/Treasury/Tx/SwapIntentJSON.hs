@@ -37,10 +37,13 @@ module Amaru.Treasury.Tx.SwapIntentJSON
 import Codec.Binary.Bech32 qualified as Bech32
 import Data.Aeson
     ( FromJSON (..)
+    , ToJSON (..)
     , eitherDecodeFileStrict
+    , object
     , withObject
     , (.:)
     , (.:?)
+    , (.=)
     )
 import Data.Aeson qualified as A
 import Data.ByteString (ByteString)
@@ -201,6 +204,72 @@ instance FromJSON SwapIntentJSON where
             <*> o .: "signers"
             <*> o .: "validityUpperBoundSlot"
             <*> o .: "rationale"
+
+instance ToJSON Wallet where
+    toJSON Wallet{..} =
+        object
+            [ "txIn" .= wTxIn
+            , "address" .= wAddress
+            ]
+
+instance ToJSON ScopeInputs where
+    toJSON ScopeInputs{..} =
+        object
+            [ "treasuryAddress" .= siTreasuryAddress_
+            , "treasuryUtxos" .= siTreasuryUtxos_
+            , "treasuryLeftoverLovelace"
+                .= siTreasuryLeftoverLovelace_
+            , "treasuryScriptHash" .= siTreasuryScriptHash_
+            , "permissionsRewardAccount"
+                .= siPermissionsRewardAccount_
+            , "scopesDeployedAt" .= siScopesDeployedAt_
+            , "permissionsDeployedAt" .= siPermissionsDeployedAt_
+            , "treasuryDeployedAt" .= siTreasuryDeployedAt_
+            , "registryDeployedAt" .= siRegistryDeployedAt_
+            , "registryPolicyId" .= siRegistryPolicyId_
+            ]
+
+instance ToJSON SwapInputs where
+    toJSON SwapInputs{..} =
+        object
+            [ "swapOrderAddress" .= swSwapOrderAddress
+            , "chunkSizeLovelace" .= swChunkSizeLovelace
+            , "amountLovelace" .= swAmountLovelace
+            , "extraPerChunkLovelace" .= swExtraPerChunkLovelace
+            , "rateNumerator" .= swRateNumerator
+            , "rateDenominator" .= swRateDenominator
+            , "poolId" .= swPoolId
+            , "coreOwner" .= swCoreOwner
+            , "opsOwner" .= swOpsOwner
+            , "networkComplianceOwner" .= swNetworkComplianceOwner
+            , "middlewareOwner" .= swMiddlewareOwner
+            , "sundaeProtocolFeeLovelace"
+                .= swSundaeProtocolFeeLovelace
+            , "usdmPolicy" .= swUsdmPolicy
+            , "usdmToken" .= swUsdmToken
+            ]
+
+instance ToJSON RationaleInputs where
+    toJSON RationaleInputs{..} =
+        object
+            [ "event" .= riEvent
+            , "label" .= riLabel
+            , "description" .= riDescription
+            , "destinationLabel" .= riDestinationLabel
+            , "justification" .= riJustification
+            ]
+
+instance ToJSON SwapIntentJSON where
+    toJSON SwapIntentJSON{..} =
+        object
+            [ "wallet" .= sijWallet
+            , "scope" .= sijScope
+            , "swap" .= sijSwap
+            , "signers" .= sijSigners
+            , "validityUpperBoundSlot"
+                .= sijValidityUpperBoundSlot
+            , "rationale" .= sijRationale
+            ]
 
 decodeSwapIntent :: BSL.ByteString -> Either String SwapIntentJSON
 decodeSwapIntent = A.eitherDecode

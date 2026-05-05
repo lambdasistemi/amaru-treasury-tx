@@ -221,13 +221,17 @@ test-suite golden-tests
   default-language:   GHC2021
   other-modules:
     PlaceholderSpec
+    RegistryWalkGoldenSpec
     SwapGoldenSpec
 
   build-depends:
+    , aeson
+    , aeson-pretty
     , amaru-treasury-tx
     , base               <5
     , base16-bytestring
     , bytestring
+    , containers
     , hspec
 
   build-tool-depends: hspec-discover:hspec-discover

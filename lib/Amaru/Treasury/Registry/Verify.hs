@@ -23,8 +23,11 @@ module Amaru.Treasury.Registry.Verify
 import Control.Monad (unless)
 import Data.Aeson
     ( FromJSON (..)
+    , ToJSON (..)
+    , object
     , withObject
     , (.:)
+    , (.=)
     )
 import Data.Aeson.Types (Parser)
 import Data.ByteString (ByteString)
@@ -62,7 +65,7 @@ import Cardano.Ledger.Credential
     ( Credential (..)
     , StakeReference (..)
     )
-import Cardano.Ledger.Hashes (KeyHash, ScriptHash, extractHash)
+import Cardano.Ledger.Hashes (KeyHash (..), ScriptHash, extractHash)
 import Cardano.Ledger.Keys (KeyRole (Witness))
 import Cardano.Ledger.Mary.Value
     ( AssetName (..)
@@ -740,11 +743,7 @@ referenceScriptEntry (txIn, txOut) =
 renderAddress :: Addr -> Either RegistryWalkError Text
 renderAddress addr = do
     hrp <-
-        case Bech32.humanReadablePartFromText
-            ( case getNetwork addr of
-                Mainnet -> "addr"
-                Testnet -> "addr_test"
-            ) of
+        case Bech32.humanReadablePartFromText (addrPrefix addr) of
             Right value -> Right value
             Left err ->
                 Left $
@@ -754,6 +753,27 @@ renderAddress addr = do
         Bech32.encodeLenient
             hrp
             (Bech32.dataPartFromBytes (serialiseAddr addr))
+
+-- | Same as 'renderAddress' but with a static prefix that cannot fail.
+renderAddressUnchecked :: Addr -> Text
+renderAddressUnchecked addr =
+    Bech32.encodeLenient
+        ( either (error "renderAddressUnchecked: prefix") id $
+            Bech32.humanReadablePartFromText (addrPrefix addr)
+        )
+        (Bech32.dataPartFromBytes (serialiseAddr addr))
+
+addrPrefix :: Addr -> Text
+addrPrefix addr = case getNetwork addr of
+    Mainnet -> "addr"
+    Testnet -> "addr_test"
+
+renderTxIn :: TxIn -> Text
+renderTxIn = unTxInRef . renderTxInRef
+
+renderKeyHashWitness :: KeyHash Witness -> Text
+renderKeyHashWitness (KeyHash h) =
+    TE.decodeUtf8 (B16.encode (hashToBytes h))
 
 renderTxInRef :: TxIn -> TxInRef
 renderTxInRef (TxIn (TxId txIdHash) txIx) =
@@ -875,3 +895,39 @@ parseScopeKey (key, value) =
     case scopeFromText key of
         Right scope -> pure (scope, value)
         Left err -> fail err
+
+instance ToJSON VerifiedRegistry where
+    toJSON vr =
+        object
+            [ "scopesNftPolicy"
+                .= scriptHashToHex (vrScopesNftPolicy vr)
+            , "scopesDeployedAt"
+                .= renderTxIn (vrScopesNftUtxo vr)
+            , "owners"
+                .= Map.mapKeys
+                    scopeText
+                    (Map.map renderKeyHashWitness (vrOwners vr))
+            , "scopes"
+                .= Map.mapKeys scopeText (vrTreasuriesByScope vr)
+            ]
+
+instance ToJSON VerifiedScope where
+    toJSON vs =
+        object
+            [ "treasuryAddress"
+                .= renderAddressUnchecked (vsAddress vs)
+            , "treasuryScriptHash"
+                .= scriptHashToHex (vsTreasuryScriptHash vs)
+            , "registryPolicyId"
+                .= scriptHashToHex (vsRegistryScriptHash vs)
+            , "permissionsRewardAccount"
+                .= scriptHashToHex (vsPermissionsScriptHash vs)
+            , "registryNftUtxo"
+                .= renderTxIn (vsRegistryNftUtxo vs)
+            , "treasuryDeployedAt"
+                .= renderTxIn (vsTreasuryDeployedAt vs)
+            , "permissionsDeployedAt"
+                .= renderTxIn (vsPermissionsDeployedAt vs)
+            , "registryDeployedAt"
+                .= renderTxIn (vsRegistryDeployedAt vs)
+            ]

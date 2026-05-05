@@ -15,6 +15,7 @@ DSL][txbuild].
 - [Swap recipe](swap.md)
 - [ChainContext](chain-context.md)
 - [Parity report](parity.md)
+- [Release automation](release.md)
 - [Spec / plan / tasks](https://github.com/lambdasistemi/amaru-treasury-tx/tree/main/specs/001-treasury-tx-cli)
 - [Source](https://github.com/lambdasistemi/amaru-treasury-tx)
 

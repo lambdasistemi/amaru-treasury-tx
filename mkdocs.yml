@@ -54,3 +54,4 @@ nav:
   - Swap recipe: swap.md
   - ChainContext: chain-context.md
   - Parity report: parity.md
+  - Release automation: release.md

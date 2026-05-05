@@ -64,7 +64,7 @@ import System.FilePath ((</>))
 import Cardano.Ledger.Alonzo.Scripts (AsIx (..))
 import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.Api.Tx.Out (TxOut)
-import Cardano.Ledger.BaseTypes (mkTxIxPartial)
+import Cardano.Ledger.BaseTypes (mkTxIxPartial, txIxToInt)
 import Cardano.Ledger.Binary
     ( DecoderError
     , decodeFull'
@@ -73,14 +73,14 @@ import Cardano.Ledger.Binary
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose (..))
 import Cardano.Ledger.Core (PParams)
-import Cardano.Ledger.Hashes (unsafeMakeSafeHash)
+import Cardano.Ledger.Hashes (extractHash, unsafeMakeSafeHash)
 import Cardano.Ledger.Plutus (ExUnits (..))
 import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 
 import Amaru.Treasury.ChainContext (ChainContext, frozenContext)
 import Amaru.Treasury.PParams (readPParamsFile)
 
-import Cardano.Crypto.Hash.Class (hashFromBytes)
+import Cardano.Crypto.Hash.Class (hashFromBytes, hashToBytes)
 import Data.ByteString (ByteString)
 import Data.Maybe (fromMaybe)
 
@@ -403,11 +403,8 @@ purposeKey = \case
 
 renderTxIn :: TxIn -> Text
 renderTxIn (TxIn (TxId sh) ix) =
-    -- 'Cardano.Ledger.Hashes' uses 'unsafeMakeSafeHash'
-    -- under the hood; we render via the Show instance
-    -- of the underlying hash, then stripping the
-    -- "<safehash:...>" prefix is fragile — so go via
-    -- ToJSON.
-    case toJSON (TxIn (TxId sh) ix) of
-        A.String s -> s
-        _ -> error "renderTxIn: ToJSON shape changed"
+    let hashHex =
+            TE.decodeUtf8 $
+                B16.encode (hashToBytes (extractHash sh))
+        ixT = T.pack (show (txIxToInt ix))
+    in  hashHex <> "#" <> ixT

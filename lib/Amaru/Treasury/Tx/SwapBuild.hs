@@ -53,6 +53,7 @@ import Cardano.Ledger.Mary.Value
     , MultiAsset (..)
     )
 import Cardano.Ledger.Metadata (Metadatum)
+import Cardano.Ledger.Plutus (ExUnits)
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Node.Client.Ledger (ConwayTx)
 import Cardano.Node.Client.TxBuild
@@ -91,8 +92,9 @@ data ScriptResult = ScriptResult
                 AsIx
                 ConwayEra
             )
-    , srOutcome :: !(Either String ())
-    -- ^ @Right ()@ on success; @Left e@ on script failure
+    , srOutcome :: !(Either String ExUnits)
+    -- ^ @Right ex@ on success carrying the evaluator's
+    --     ExUnits; @Left e@ on script failure.
     }
     deriving (Show)
 
@@ -230,7 +232,7 @@ runSwapBuild ctx sbi = do
                         purpose
                         ( either
                             (Left . show)
-                            (const (Right ()))
+                            Right
                             outcome
                         )
                     | (purpose, outcome) <-

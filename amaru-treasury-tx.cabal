@@ -78,6 +78,7 @@ library
     , async
     , base                    <5
     , base16-bytestring
+    , bech32
     , bytestring
     , cardano-crypto-class
     , cardano-ledger-alonzo
@@ -101,6 +102,23 @@ library
 executable amaru-treasury-tx
   import:           warnings
   hs-source-dirs:   app/amaru-treasury-tx
+  main-is:          Main.hs
+  default-language: GHC2021
+  build-depends:
+    , amaru-treasury-tx
+    , base                   <5
+    , base16-bytestring
+    , bytestring
+    , cardano-ledger-core
+    , containers
+    , optparse-applicative
+    , ouroboros-network:api
+
+  ghc-options:      -threaded -rtsopts -with-rtsopts=-N
+
+executable capture-swap-context
+  import:           warnings
+  hs-source-dirs:   app/capture-swap-context
   main-is:          Main.hs
   default-language: GHC2021
   build-depends:
@@ -183,9 +201,15 @@ test-suite golden-tests
   hs-source-dirs:     test/golden
   main-is:            Spec.hs
   default-language:   GHC2021
+  other-modules:
+    PlaceholderSpec
+    SwapGoldenSpec
+
   build-depends:
     , amaru-treasury-tx
     , base               <5
+    , base16-bytestring
+    , bytestring
     , hspec
 
   build-tool-depends: hspec-discover:hspec-discover

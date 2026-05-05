@@ -34,6 +34,7 @@ module Amaru.Treasury.Tx.SwapIntentJSON
     , TranslatedIntent (..)
     ) where
 
+import Codec.Binary.Bech32 qualified as Bech32
 import Data.Aeson
     ( FromJSON (..)
     , eitherDecodeFileStrict
@@ -347,8 +348,15 @@ mkChunks chunkSize totalAmount (rNum, rDen) dp =
 -- ----------------------------------------------------
 
 parseAddr :: Text -> Either String Addr
-parseAddr t =
-    case decodeAddrEither (TE.encodeUtf8 t) of
+parseAddr t = do
+    raw <-
+        case Bech32.decodeLenient t of
+            Right (_hrp, dp) ->
+                case Bech32.dataPartToBytes dp of
+                    Just bs -> Right bs
+                    Nothing -> Left "bech32 data-part decode"
+            Left e -> Left ("bech32: " <> show e)
+    case decodeAddrEither raw of
         Right a -> Right a
         Left e -> Left ("address: " <> show e)
 

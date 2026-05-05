@@ -37,8 +37,8 @@ amaru-treasury-tx \
     --wallet-addr addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu \
     --registry test/fixtures/swap-wizard/registry.example.json \
     --scope core_development \
-    --ada 408163.265306 \
-    --chunk-ada 12500 \
+    --usdm 100000 \
+    --chunk-usdm 3062.5 \
     --min-rate 0.245 \
     --validity-hours 6 \
     --description 'Swapping ADA for $100k at a rate of $0.245 per ADA' \
@@ -52,8 +52,11 @@ amaru-treasury-tx \
 
 The above recreates the existing mainnet swap golden in
 [`test/fixtures/swap/intent.json`](../../test/fixtures/swap/intent.json).
-Substitute `--chunks N` if you'd rather the wizard compute the
-per-chunk size from a chunk count.
+Substitute `--split N` if you'd rather say "split the order into
+N equal chunks" instead of pinning the per-chunk USDM size.
+
+The wizard derives the ADA spend internally as
+@usdm / min-rate@: 100_000 / 0.245 ≈ 408 163.265306 ADA.
 
 The wizard:
 

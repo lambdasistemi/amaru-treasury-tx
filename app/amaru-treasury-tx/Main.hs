@@ -140,14 +140,15 @@ data SwapOpts = SwapOpts
     }
 
 {- | Two ways to express how a swap is sliced:
-  * @ChunkCount n@: split into @n@ approximately equal chunks
-    (chunk size = @amount `div` n@; one extra small remainder
+  * @SplitCount n@: split into @n@ approximately equal chunks
+    (per-chunk size = @amount \`div\` n@; one extra small remainder
     chunk if not exact).
-  * @ChunkAda d@: a fixed per-chunk ADA size.
+  * @ChunkUsdm d@: a fixed per-chunk USDM target; the chunk's
+    ADA size is derived from the @--min-rate@.
 -}
 data ChunkSpec
-    = ChunkCount !Int
-    | ChunkAda !Double
+    = SplitCount !Int
+    | ChunkUsdm !Double
 
 {- | Flags for the @swap-wizard@ subcommand.
 Mirrors @specs/002-swap-wizard/contracts/swap-wizard-cli.md §1@.
@@ -157,8 +158,10 @@ data WizardOpts = WizardOpts
     , wOptsRegistryPath :: !FilePath
     , wOptsOut :: !FilePath
     , wOptsScope :: !ScopeId
-    , wOptsAda :: !Double
-    -- ^ total ADA to swap (whole ADA, decimals OK)
+    , wOptsUsdm :: !Double
+    -- ^ target USDM amount (whole USDM, decimals OK).
+    --   The wizard derives the ADA spend from
+    --   @usdm \/ min-rate@.
     , wOptsChunkSpec :: !ChunkSpec
     -- ^ how to split the amount into chunks
     , wOptsMinRate :: !Double
@@ -242,6 +245,17 @@ scopeReader =
     eitherReader $
         scopeFromText . T.pack . map toLower
 
+{- | Reject a non-positive @--split@ at parse time. The wizard
+divides the total amount by this number; @0@ would be a silent
+no-op (one chunk of the full amount), @< 0@ would flip the sign.
+-}
+positiveSplit :: ReadM Int
+positiveSplit = eitherReader $ \s -> case reads s of
+    [(n, "")]
+        | n >= 1 -> Right n
+        | otherwise -> Left "--split must be a positive integer (>= 1)"
+    _ -> Left ("--split: not an integer: " <> s)
+
 wizardOptsP :: Parser WizardOpts
 wizardOptsP =
     WizardOpts
@@ -270,25 +284,26 @@ wizardOptsP =
             )
         <*> option
             auto
-            ( long "ada"
-                <> metavar "ADA"
-                <> help "Total ADA to swap (decimals OK, e.g. 408163.265306)"
+            ( long "usdm"
+                <> metavar "USDM"
+                <> help
+                    "Target USDM amount (decimals OK; e.g. 100000). The ADA spend is derived as usdm / min-rate."
             )
-        <*> ( ChunkCount
+        <*> ( SplitCount
                 <$> option
-                    auto
-                    ( long "chunks"
+                    positiveSplit
+                    ( long "split"
                         <> metavar "INT"
                         <> help
-                            "Number of chunks (chunk size = amount / chunks)"
+                            "Split the order into N equal chunks (N >= 1)"
                     )
-                <|> ChunkAda
+                <|> ChunkUsdm
                     <$> option
                         auto
-                        ( long "chunk-ada"
-                            <> metavar "ADA"
+                        ( long "chunk-usdm"
+                            <> metavar "USDM"
                             <> help
-                                "Per-chunk ADA size (decimals OK; alternative to --chunks)"
+                                "Per-chunk USDM size (alternative to --split; decimals OK)"
                         )
             )
         <*> option
@@ -356,17 +371,28 @@ wizardOptsP =
                 <> help "Overwrite --out if it exists"
             )
 
-{- | Convert decimal ADA to lovelace (1 ADA = 1_000_000 lovelace).
-Accepts up to 6 decimal places; anything finer is rounded.
+{- | Convert a USDM amount + USDM\/ADA rate to lovelace:
+@lovelace = round (usdm * 1_000_000 \/ rate)@.
+
+The CLI parses both inputs as 'Double' (Read), but we promote
+them to 'Rational' before any arithmetic so the multiplication
+and division do not compound the Double round-trip error.
+The result is correct to within ~1 ulp of the operator-supplied
+@--usdm@ \/ @--min-rate@, with no further drift introduced by
+intermediate floating-point ops.
 -}
-adaToLovelace :: Double -> Integer
-adaToLovelace x = round (x * 1_000_000)
+usdmToLovelace :: Double -> Double -> Integer
+usdmToLovelace usdm rate =
+    round (toRational usdm * 1_000_000 / toRational rate)
 
 {- | Convert decimal USDM-per-ADA rate to (numerator, denominator).
 Fixed denominator 1_000_000 matches USDM's 6-decimal precision.
+The conversion is done in 'Rational' to avoid Double drift during
+the @r * 1_000_000@ scaling.
 -}
 rateToFraction :: Double -> (Integer, Integer)
-rateToFraction r = (round (r * 1_000_000), 1_000_000)
+rateToFraction r =
+    (round (toRational r * 1_000_000), 1_000_000)
 
 {- | Translate the on-the-wire 'NetworkMagic' to the
 canonical network name the wizard uses for
@@ -536,12 +562,13 @@ runWizard g wo@WizardOpts{..} = do
     -- 1. Load registry view from --registry path.
     rv <- loadRegistry wOptsRegistryPath
     -- 2. Convert human-friendly answers to wire types.
-    let amountLov = adaToLovelace wOptsAda
+    --    The user buys USDM at rate 'min-rate' (USDM/ADA);
+    --    ADA spend = usdm / rate.
+    let amountLov = usdmToLovelace wOptsUsdm wOptsMinRate
         chunkSize = case wOptsChunkSpec of
-            ChunkCount n
-                | n <= 0 -> amountLov
-                | otherwise -> amountLov `div` toInteger n
-            ChunkAda x -> adaToLovelace x
+            -- 'positiveSplit' rejects N < 1 at parse time.
+            SplitCount n -> amountLov `div` toInteger n
+            ChunkUsdm x -> usdmToLovelace x wOptsMinRate
         (rateNum, rateDen) = rateToFraction wOptsMinRate
         signersOverride =
             if null wOptsSigners

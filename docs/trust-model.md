@@ -219,8 +219,9 @@ testnets that diverge.
 
 - **A wrong `--scope` answer**: the wizard verifies the named
   scope but cannot detect that the operator typed the wrong
-  scope name. Mitigation: `--verbose` prints the resolved scope
-  summary; confirmation prompt before write.
+  scope name. Mitigation: every value-affecting step emits a
+  `WizardEvent` line on stderr (or `--log PATH`) so the
+  operator can read the trace before signing.
 - **A `--min-rate` that disagrees with intent**: the rate
   becomes a Sundae limit-price, not a sanity check on the
   swap's economic correctness. The wizard echoes the resolved
@@ -240,13 +241,16 @@ network constant, empty wallet/treasury UTxO set, or out-of-range
 answer aborts with a non-zero exit and a typed message. Partial
 `intent.json` is never written.
 
-### Confirmation gate
+### Trace as audit trail
 
-Before writing `intent.json` the wizard prints the resolved
-summary (verbose mode) and asks for an interactive `y` unless
-`--yes` is supplied. The `--yes` flag is intended for scripted
-runs whose script has its own audit trail; operators should read
-the verbose summary before confirming.
+The wizard runs non-interactively (no confirmation prompt). Every
+value-affecting step — verifier acceptance, on-chain owner
+parsing, NetworkConstants lookup, UTxO selection, validity slot,
+chunk shape, output destination — emits a single structured
+`WizardEvent` line through `Tracer IO WizardEvent`. By default
+these lines go to stderr; `--log PATH` redirects them to a file.
+Operators are expected to read the trace before signing the
+produced `intent.json`; that is the audit gate.
 
 ## What this means in practice
 
@@ -265,5 +269,5 @@ order:
    responsibility.
 
 Layer 1 is binary: either the verifier accepted or it refused.
-Layer 2 is what the audit trail (rationale fields, the
-`--verbose` summary) is for.
+Layer 2 is what the audit trail (rationale fields + the trace
+log) is for.

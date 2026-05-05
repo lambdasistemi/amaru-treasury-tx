@@ -40,8 +40,7 @@ amaru-treasury-tx \
     --destination-label "Network Compliance's treasury" \
     --signer f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e \
     --signer 8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1 \
-    --out intent.json \
-    --verbose --yes
+    --out intent.json
 ```
 
 The above recreates the existing mainnet swap golden in
@@ -56,15 +55,17 @@ The wizard:
 
 1. Reads the local metadata file from `--metadata`.
 2. Connects to the node and verifies the metadata's registry anchors.
-3. Resolves wallet + treasury UTxOs and the
-   current chain tip.
-4. With `--verbose`, prints a summary of every resolved field on
-   stderr.
-5. Asks for confirmation (skipped under `--yes`).
-6. Writes `intent.json` to the path given to `--out`.
+3. Resolves wallet + treasury UTxOs and the current chain tip.
+4. Builds `intent.json`.
+5. Writes the result to `--out PATH` (or stdout if absent).
 
-`--dry-run` prints the JSON to stdout instead of writing the file.
-`--force` overwrites an existing `--out` path; without it, exit 5.
+Every step that changes the value committed to `intent.json`
+emits a single `swap-wizard:` line via the typed
+['WizardEvent'](../../lib/Amaru/Treasury/Tx/SwapWizard/Trace.hs)
+tracer. By default these lines go to stderr; pass
+`--log PATH` to redirect them to a file. The wizard never
+asks the operator a question — every decision is made from
+flags.
 
 ## 3. Build the swap transaction
 
@@ -86,11 +87,12 @@ Two checks the operator can run without touching chain state:
 **JSON round-trip**
 
 ```bash
-amaru-treasury-tx swap-wizard ... --dry-run \
+amaru-treasury-tx swap-wizard ... \
     | amaru-treasury-tx swap --intent /dev/stdin --out /tmp/swap.tx.cbor
 ```
 
-If `swap` accepts the JSON without errors the wizard's translation
+(With no `--out`, the wizard prints `intent.json` to stdout.) If
+`swap` accepts the JSON without errors the wizard's translation
 matches the existing schema.
 
 **Golden parity (developer)**
@@ -107,10 +109,8 @@ regression breaks the swap golden.
 
 | Exit | Action |
 |------|--------|
-| 1 | You answered "no" at confirmation. Re-run. |
-| 3 | Metadata verification or resolver error. Check `--metadata`, local node sync, wallet fuel UTxO, and treasury UTxOs. |
-| 4 | Translation error. Re-check `--rate-den` is non-zero, `--chunk-ada` ≤ `--amount-ada`, validity hours in [1, 48]. |
-| 5 | `--out` exists. Move it or pass `--force`. |
+| 3 | Metadata verification or resolver error. Check `--metadata`, local node sync, wallet fuel UTxO, treasury UTxOs. The trace log names the offending step. |
+| 4 | Translation error. Re-check `--min-rate`, `--chunk-usdm`/`--split`, `--validity-hours` in [1, 48]. |
 
-The wizard never writes a partial JSON. Either the file is complete
-or it does not exist.
+The wizard never writes a partial JSON. Either stdout/`--out`
+receives the full file or nothing at all.

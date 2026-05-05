@@ -163,14 +163,17 @@ JSON with the same answers.
   back) when any resolved field cannot be obtained — missing scope,
   empty UTxO set, unknown network constants, registry walk
   inconsistencies.
-- **FR-013**: The wizard MUST log every resolved derivable field to
-  stderr (controlled by a `--verbose` flag) so the operator can
-  verify what was filled in before answering "confirm". Stdout is
-  reserved for the success line and the `--dry-run` JSON payload
-  per [contracts/swap-wizard-cli.md §3](./contracts/swap-wizard-cli.md).
-- **FR-014**: The wizard MUST require explicit confirmation before
-  writing the JSON file (unless invoked with a `--yes` flag for
-  scripted use).
+- **FR-013**: The wizard MUST emit one structured trace event
+  per value-affecting step through a
+  `Tracer IO WizardEvent` (see
+  `Amaru.Treasury.Tx.SwapWizard.Trace.WizardEvent`). The
+  rendered events go to stderr by default; `--log PATH`
+  redirects them to a file. Stdout carries the
+  `intent.json` payload when `--out` is absent; otherwise
+  stdout is empty.
+- **FR-014**: The wizard MUST run non-interactively. There
+  is no confirmation prompt — every input is a flag. If
+  `--out` exists it is overwritten without asking.
 
 ### Key Entities
 
@@ -228,8 +231,9 @@ The wizard adds two layers on top of the verifier's:
 
 The wizard is **fail-closed** — verifier failure, missing network
 constant, empty wallet/treasury UTxO set, or out-of-range answer
-aborts with a typed message and writes no JSON. A confirmation
-gate (`--yes` to skip) follows the verbose resolution summary.
+aborts with a typed `WeAborted` trace event and exit 3, writing
+no JSON. The wizard runs non-interactively (no confirmation
+prompt); the audit trail is the structured trace log.
 
 ### Why `permissionsRewardAccount` is the permissions script hash
 

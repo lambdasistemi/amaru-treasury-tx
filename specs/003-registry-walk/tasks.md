@@ -229,7 +229,7 @@ against one acquired ledger snapshot.
 
 ## Phase 7: Polish and cross-cutting concerns
 
-- [ ] T025 Run `just ci` (build + unit + golden +
+- [X] T025 Run `just ci` (build + unit + golden +
       format-check + hlint) plus `cabal check`; resolve any
       new warnings.
 - [ ] T026 Update PR #31 description with the final command

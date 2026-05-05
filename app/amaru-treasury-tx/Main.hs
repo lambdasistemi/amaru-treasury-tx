@@ -26,7 +26,7 @@ Subcommands:
 module Main (main) where
 
 import Control.Applicative ((<|>))
-import Control.Exception (throwIO)
+import Control.Exception (IOException, throwIO, try)
 import Control.Monad (unless, when)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
@@ -689,12 +689,17 @@ runWizard g wo@WizardOpts{..} = do
 
 loadRegistry :: FilePath -> IO RegistryView
 loadRegistry p = do
-    r <- eitherDecodeFileStrict p
+    r <-
+        try (eitherDecodeFileStrict p)
+            :: IO (Either IOException (Either String RegistryView))
     case r of
-        Right v -> pure v
-        Left e -> do
+        Left ioe -> do
+            wizardErr ("registry: " <> show ioe)
+            exitWith (ExitFailure 3)
+        Right (Left e) -> do
             wizardErr ("registry: " <> e)
             exitWith (ExitFailure 3)
+        Right (Right v) -> pure v
 
 wizardErr :: String -> IO ()
 wizardErr s = IO.hPutStrLn stderr ("swap-wizard: " <> s)

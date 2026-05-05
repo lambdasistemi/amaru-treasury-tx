@@ -56,6 +56,7 @@ library
     Amaru.Treasury.Backend
     Amaru.Treasury.Backend.N2C
     Amaru.Treasury.ChainContext
+    Amaru.Treasury.ChainContext.Fixture
     Amaru.Treasury.Constants
     Amaru.Treasury.LedgerParse
     Amaru.Treasury.Metadata
@@ -89,6 +90,7 @@ library
     , cardano-node-clients
     , cardano-slotting
     , containers
+    , filepath
     , microlens
     , ouroboros-network:api
     , plutus-core

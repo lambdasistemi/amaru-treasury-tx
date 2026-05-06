@@ -4,6 +4,18 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.0.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.1.1.0...v0.2.0.0) (2026-05-06)
+
+### Breaking Changes
+
+* infer swap-wizard scope owner signer ([78366ff](https://github.com/lambdasistemi/amaru-treasury-tx/commit/78366ff8f0f1cf13d79a611f1f7d98effc4dc319))
+
+### Bug Fixes
+
+* **release:** provide gh on linux publisher (#37) ([cbb910c](https://github.com/lambdasistemi/amaru-treasury-tx/commit/cbb910cc9216b2b95f4144a1afae871d4c9a2c93))
+* **release:** reuse only open release PRs ([6abefed](https://github.com/lambdasistemi/amaru-treasury-tx/commit/6abefed741b2451103507a5856fdff371a3daa27))
+* **docs:** use mermaid2.fence_mermaid (not _custom) so diagrams render ([ff05d93](https://github.com/lambdasistemi/amaru-treasury-tx/commit/ff05d932740f8a53039691a6d8bee29919240ad9))
+
 ## [0.1.1.0](https://github.com/lambdasistemi/amaru-treasury-tx/releases/tag/v0.1.1.0) (2026-05-05)
 
 ### Features

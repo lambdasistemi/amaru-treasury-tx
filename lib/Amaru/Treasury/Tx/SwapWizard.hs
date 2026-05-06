@@ -124,6 +124,11 @@ import Amaru.Treasury.Tx.SwapIntentJSON
     , SwapIntentJSON (..)
     , Wallet (..)
     )
+import Amaru.Treasury.Wizard.Common
+    ( isHex28
+    , normaliseSignerToken
+    , signerScopeFromText
+    )
 
 -- ----------------------------------------------------
 -- Answers
@@ -512,37 +517,8 @@ scopeOwnerText ScopeOwners{..} = \case
     Middleware -> Just soMiddleware
     Contingency -> Nothing
 
-signerScopeFromText :: Text -> Maybe ScopeId
-signerScopeFromText t =
-    case normaliseSignerToken t of
-        "core" -> Just CoreDevelopment
-        "core_development" -> Just CoreDevelopment
-        "coredevelopment" -> Just CoreDevelopment
-        "ops" -> Just OpsAndUseCases
-        "ops_and_use_cases" -> Just OpsAndUseCases
-        "opsandusecases" -> Just OpsAndUseCases
-        "network" -> Just NetworkCompliance
-        "network_compliance" -> Just NetworkCompliance
-        "networkcompliance" -> Just NetworkCompliance
-        "middleware" -> Just Middleware
-        "contingency" -> Just Contingency
-        _ -> Nothing
-
-normaliseSignerToken :: Text -> Text
-normaliseSignerToken =
-    T.map dashToUnderscore . T.toLower
-  where
-    dashToUnderscore '-' = '_'
-    dashToUnderscore c = c
-
-isHex28 :: Text -> Bool
-isHex28 t =
-    T.length t == 56 && T.all isHexChar t
-  where
-    isHexChar c =
-        isDigit c
-            || (c >= 'a' && c <= 'f')
-            || (c >= 'A' && c <= 'F')
+-- 'isHex28', 'normaliseSignerToken', and 'signerScopeFromText'
+-- moved to 'Amaru.Treasury.Wizard.Common' in T009. Imported above.
 
 mkWallet :: WalletSelection -> Wallet
 mkWallet ws =

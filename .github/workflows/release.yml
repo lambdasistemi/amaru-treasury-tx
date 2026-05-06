@@ -1,20 +1,43 @@
-name: Release
+name: Linux Release
 
 on:
   push:
     tags: [ "v*" ]
+  pull_request:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/release.yml"
+      - "flake.nix"
+      - "flake.lock"
+      - "nix/**"
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Existing tag to publish, for example v0.1.1.0"
+      mode:
+        description: "Release mode"
         required: true
+        default: release
+        type: choice
+        options:
+          - release
+          - dev-linux
+      tag:
+        description: "Existing release tag, for example v0.1.1.0"
+        required: false
         type: string
+      publish:
+        description: "Upload release assets when mode=release"
+        required: true
+        default: "no"
+        type: choice
+        options:
+          - "no"
+          - "yes"
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+  group: linux-release-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name || inputs.tag || inputs.mode }}
   cancel-in-progress: false
 
 jobs:
@@ -22,130 +45,88 @@ jobs:
     name: Build Linux release bundles
     runs-on: nixos
     env:
+      DEV_TAG: dev-linux
+      MODE: ${{ github.event_name == 'pull_request' && 'dev-linux' || inputs.mode || 'release' }}
+      PUBLISH: ${{ github.event_name == 'push' && 'yes' || inputs.publish || 'no' }}
       TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          ref: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag || github.ref }}
 
       - uses: cachix/cachix-action@v17
         with:
           name: paolino
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
-      - name: Validate release contract
-        run: scripts/release/check-version-consistency "$TAG"
-
-      - name: Build and test release inputs
-        run: >-
-          nix build --quiet
-          .#checks.x86_64-linux.build
-          .#checks.x86_64-linux.unit
-          .#checks.x86_64-linux.golden
-          .#checks.x86_64-linux.lint
-
-      - name: Build AppImage
-        run: >-
-          nix --quiet bundle
-          --bundler github:ralismark/nix-appimage
-          .#packages.x86_64-linux.default
-          -o amaru-treasury-tx.AppImage
-
-      - name: Build DEB
-        run: >-
-          nix --quiet bundle
-          --bundler github:NixOS/bundlers#toDEB
-          .#packages.x86_64-linux.default
-          -o amaru-treasury-tx.deb
-
-      - name: Build RPM
-        run: >-
-          nix --quiet bundle
-          --bundler github:NixOS/bundlers#toRPM
-          .#packages.x86_64-linux.default
-          -o amaru-treasury-tx.rpm
-
-      - name: Stage artifacts
+      - name: Validate release mode
         run: |
           set -euo pipefail
-          version="$(scripts/release/get-cabal-version)"
+          case "$MODE" in
+            release)
+              if [ -z "${TAG:-}" ]; then
+                echo "release mode requires a v* tag from a tag push or the tag input" >&2
+                exit 1
+              fi
+              scripts/release/check-version-consistency "$TAG"
+              ;;
+            dev-linux)
+              ;;
+            *)
+              echo "unsupported release mode: $MODE" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Build and smoke-test Linux artifacts
+        id: linux-artifacts
+        run: |
+          set -euo pipefail
+
+          case "$MODE" in
+            release)
+              artifact_version="$(scripts/release/get-cabal-version)"
+              package_output="linux-release-artifacts"
+              artifact_name="linux-release-bundles"
+              ;;
+            dev-linux)
+              artifact_version="$(scripts/release/get-cabal-version)-$(git rev-parse --short=7 HEAD)"
+              package_output="linux-dev-release-artifacts"
+              artifact_name="linux-dev-release-bundles"
+              ;;
+            *)
+              echo "unsupported release mode: $MODE" >&2
+              exit 1
+              ;;
+          esac
+
+          nix build --quiet ".#$package_output"
+          artifact_dir="$(readlink -f result)"
+          nix run --quiet .#linux-artifact-smoke -- \
+            --artifacts-dir "$artifact_dir" \
+            --artifact-version "$artifact_version"
+
+          rm -rf artifacts
           mkdir -p artifacts
-          cp -L amaru-treasury-tx.AppImage \
-            "artifacts/amaru-treasury-tx-${version}-x86_64-linux.AppImage"
-          cp -L amaru-treasury-tx.AppImage \
-            "artifacts/amaru-treasury-tx.AppImage"
-          cp amaru-treasury-tx.deb/*.deb \
-            "artifacts/amaru-treasury-tx-${version}-x86_64-linux.deb"
-          cp amaru-treasury-tx.rpm/*.rpm \
-            "artifacts/amaru-treasury-tx-${version}-x86_64-linux.rpm"
+          cp -L "$artifact_dir"/* artifacts/
           ls -lh artifacts/
 
-      - name: Smoke-test AppImage
-        run: |
-          set -euo pipefail
-          version="$(scripts/release/get-cabal-version)"
-          rm -rf /tmp/appimage-smoke
-          mkdir -p /tmp/appimage-smoke
-          chmod +x "artifacts/amaru-treasury-tx-${version}-x86_64-linux.AppImage"
-          ( cd /tmp/appimage-smoke && \
-            "$GITHUB_WORKSPACE/artifacts/amaru-treasury-tx-${version}-x86_64-linux.AppImage" \
-              --appimage-extract )
-          bin="$(find /tmp/appimage-smoke -name amaru-treasury-tx \
-            -type f -executable | head -1)"
-          test -x "$bin"
-          "$bin" --help
-          help_text="$("$bin" swap-wizard --help)"
-          printf '%s\n' "$help_text"
-          grep -F -- '--extra-signer,--signer SCOPE|HEX' \
-            <<<"$help_text" >/dev/null
-
-      - name: Smoke-test DEB
-        run: |
-          set -euo pipefail
-          version="$(scripts/release/get-cabal-version)"
-          rm -rf /tmp/deb-smoke
-          mkdir -p /tmp/deb-smoke
-          nix --quiet shell nixpkgs#dpkg -c \
-            dpkg-deb -x \
-              "artifacts/amaru-treasury-tx-${version}-x86_64-linux.deb" \
-              /tmp/deb-smoke
-          bin="$(find /tmp/deb-smoke -name amaru-treasury-tx \
-            -type f -executable | head -1)"
-          test -x "$bin"
-          "$bin" --help
-          help_text="$("$bin" swap-wizard --help)"
-          printf '%s\n' "$help_text"
-          grep -F -- '--extra-signer,--signer SCOPE|HEX' \
-            <<<"$help_text" >/dev/null
-
-      - name: Smoke-test RPM
-        run: |
-          set -euo pipefail
-          version="$(scripts/release/get-cabal-version)"
-          rm -rf /tmp/rpm-smoke
-          mkdir -p /tmp/rpm-smoke
-          rpm_path="$PWD/artifacts/amaru-treasury-tx-${version}-x86_64-linux.rpm"
-          nix --quiet shell nixpkgs#rpm nixpkgs#cpio -c bash -c \
-            "cd /tmp/rpm-smoke && rpm2cpio \"$rpm_path\" | cpio -idm >/dev/null"
-          bin="$(find /tmp/rpm-smoke -name amaru-treasury-tx \
-            -type f -executable | head -1)"
-          test -x "$bin"
-          "$bin" --help
-          help_text="$("$bin" swap-wizard --help)"
-          printf '%s\n' "$help_text"
-          grep -F -- '--extra-signer,--signer SCOPE|HEX' \
-            <<<"$help_text" >/dev/null
+          {
+            echo "artifact_name=$artifact_name"
+            echo "artifact_version=$artifact_version"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: linux-release-bundles
+          name: ${{ steps.linux-artifacts.outputs.artifact_name }}
           path: artifacts/*
           if-no-files-found: error
           retention-days: 30
 
       - name: Create release and upload artifacts
+        if: env.MODE == 'release' && env.PUBLISH == 'yes'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -159,3 +140,49 @@ jobs:
               --notes-file "$notes" \
             || "${gh[@]}" release view "$TAG" >/dev/null
           "${gh[@]}" release upload "$TAG" artifacts/* --clobber
+
+      - name: Publish dev Linux release assets
+        if: env.MODE == 'dev-linux' && github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          notes="$(mktemp)"
+          {
+            echo "Development Linux bundles for $GITHUB_SHA"
+            echo
+            echo "Built from $GITHUB_REF."
+          } > "$notes"
+
+          git tag -f "$DEV_TAG" HEAD
+          git push --force origin "refs/tags/$DEV_TAG"
+
+          gh=(nix --quiet shell nixpkgs#gh -c gh)
+          "${gh[@]}" release view "$DEV_TAG" >/dev/null 2>&1 \
+            || "${gh[@]}" release create "$DEV_TAG" \
+              --title "amaru-treasury-tx dev Linux bundles" \
+              --notes-file "$notes" \
+              --prerelease
+          "${gh[@]}" release edit "$DEV_TAG" \
+            --title "amaru-treasury-tx dev Linux bundles" \
+            --notes-file "$notes" \
+            --prerelease
+          "${gh[@]}" release upload "$DEV_TAG" artifacts/* --clobber
+
+      - name: Smoke-test dev Linux release assets
+        if: env.MODE == 'dev-linux' && github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          artifact_version="${{ steps.linux-artifacts.outputs.artifact_version }}"
+          download_dir="$(mktemp -d)"
+          gh=(nix --quiet shell nixpkgs#gh -c gh)
+          "${gh[@]}" release download "$DEV_TAG" \
+            --dir "$download_dir" \
+            --pattern "amaru-treasury-tx-$artifact_version-x86_64-linux.*" \
+            --clobber
+          ls -lh "$download_dir"
+          nix run --quiet .#linux-artifact-smoke -- \
+            --artifacts-dir "$download_dir" \
+            --artifact-version "$artifact_version"

@@ -21,6 +21,10 @@
     lintNixpkgs.url =
       "github:NixOS/nixpkgs/647e5c14cbd5067f44ac86b74f014962df460840";
     flake-parts.url = "github:hercules-ci/flake-parts";
+    bundlers = {
+      url = "github:NixOS/bundlers";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     iohkNix = {
       url =
         "github:input-output-hk/iohk-nix/f444d972c301ddd9f23eac4325ffcc8b5766eee9";
@@ -129,17 +133,71 @@
           amaru-treasury-tx = mkExe "amaru-treasury-tx";
           swap-probe = mkExe "swap-probe";
           capture-swap-context = mkExe "capture-swap-context";
+          sourceRevision = self.shortRev or (self.dirtyShortRev or "dirty");
+          devArtifactVersion = "${packageVersion}-${sourceRevision}";
+          darwinReleasePackages = pkgs.lib.optionalAttrs
+            pkgs.stdenv.isDarwin
+            {
+              darwin-release-artifacts =
+                import ./nix/darwin-release.nix {
+                  inherit pkgs packageVersion;
+                  executables = {
+                    inherit amaru-treasury-tx swap-probe capture-swap-context;
+                  };
+                };
+              darwin-dev-homebrew-artifacts =
+                import ./nix/darwin-release.nix {
+                  inherit pkgs packageVersion;
+                  artifactVersion = devArtifactVersion;
+                  releaseTag = "dev-homebrew";
+                  formulaName = "amaru-treasury-tx-dev";
+                  formulaClass = "AmaruTreasuryTxDev";
+                  formulaVersion = devArtifactVersion;
+                  formulaExtraLines =
+                    "\n  conflicts_with \"amaru-treasury-tx\", because: \"both install the same command-line tools\"";
+                  executables = {
+                    inherit amaru-treasury-tx swap-probe capture-swap-context;
+                  };
+              };
+            };
+          linuxReleasePackages = pkgs.lib.optionalAttrs
+            pkgs.stdenv.isLinux
+            {
+              linux-release-artifacts =
+                import ./nix/linux-release.nix {
+                  inherit pkgs system packageVersion;
+                  package = amaru-treasury-tx;
+                  bundlers = inputs.bundlers;
+                };
+              linux-dev-release-artifacts =
+                import ./nix/linux-release.nix {
+                  inherit pkgs system packageVersion;
+                  artifactVersion = devArtifactVersion;
+                  package = amaru-treasury-tx;
+                  bundlers = inputs.bundlers;
+                };
+              linux-artifact-smoke =
+                import ./nix/linux-artifact-smoke.nix {
+                  inherit pkgs system;
+                };
+            };
         in {
           packages = {
             default = amaru-treasury-tx;
             inherit amaru-treasury-tx swap-probe capture-swap-context;
-          };
+          } // darwinReleasePackages // linuxReleasePackages;
           inherit checks;
           apps = checkApps // {
             default = {
               type = "app";
               program =
                 "${amaru-treasury-tx}/bin/amaru-treasury-tx";
+            };
+          } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+            linux-artifact-smoke = {
+              type = "app";
+              program =
+                "${linuxReleasePackages.linux-artifact-smoke}/bin/linux-artifact-smoke";
             };
           };
           devShells.default = project.shell;

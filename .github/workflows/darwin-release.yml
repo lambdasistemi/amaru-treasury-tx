@@ -3,37 +3,75 @@ name: Darwin Release
 on:
   push:
     tags: [ "v*" ]
+  pull_request:
+    branches: [ main ]
+    paths:
+      - ".github/workflows/darwin-release.yml"
+      - "flake.nix"
+      - "nix/**"
   workflow_dispatch:
     inputs:
+      mode:
+        description: "Release mode"
+        type: choice
+        options: [ "release", "dev-homebrew" ]
+        default: "release"
       tag:
-        description: "Existing tag to build, for example v0.1.1.0"
-        required: true
+        description: "Existing tag to build for release mode, for example v0.1.1.0"
+        required: false
         type: string
       publish:
-        description: "Upload to the GitHub release and update Homebrew"
+        description: "Release mode only: upload to the GitHub release and update Homebrew"
         type: choice
         options: [ "no", "yes" ]
         default: "no"
+      update_tap:
+        description: "Dev Homebrew mode only: update lambdasistemi/homebrew-tap"
+        type: choice
+        options: [ "yes", "no" ]
+        default: "yes"
 
 permissions:
   contents: write
 
 concurrency:
-  group: darwin-release-${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+  group: >-
+    darwin-release-${{
+      github.ref_type == 'tag' && github.ref_name
+      || inputs.tag
+      || github.ref
+    }}-${{ inputs.mode || github.event_name }}
   cancel-in-progress: false
 
 jobs:
   build-and-release:
-    name: Build aarch64-darwin release bundle
+    name: Build aarch64-darwin artifacts
     runs-on: macos-14
     env:
       TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
-      PUBLISH: ${{ github.event_name == 'push' || inputs.publish == 'yes' }}
+      MODE: >-
+        ${{
+          github.event_name == 'pull_request' && 'dev-homebrew'
+          || inputs.mode
+          || 'release'
+        }}
+      PUBLISH: >-
+        ${{
+          github.event_name == 'push'
+          || (inputs.mode != 'dev-homebrew' && inputs.publish == 'yes')
+        }}
+      UPDATE_TAP: ${{ inputs.update_tap || 'yes' }}
+      DEV_TAG: dev-homebrew
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
+          ref: >-
+            ${{
+              github.ref_type == 'tag' && github.ref_name
+              || inputs.tag
+              || github.ref
+            }}
 
       - uses: cachix/install-nix-action@v30
         with:
@@ -51,92 +89,141 @@ jobs:
           name: paolino
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
-      - name: Validate release contract
-        run: scripts/release/check-version-consistency "$TAG"
-
-      - name: Build executables
-        run: >-
-          nix build -L --print-out-paths
-          .#amaru-treasury-tx
-          .#swap-probe
-          .#capture-swap-context
-          > /tmp/nix-outs
-
-      - name: Bundle executables with their dylibs
+      - name: Validate mode
         run: |
           set -euo pipefail
-          mkdir -p /tmp/bundle/bin /tmp/bundle/libexec/lib
-
-          for exe in amaru-treasury-tx swap-probe capture-swap-context; do
-            src="$(
-              while read -r out; do
-                if [ -x "$out/bin/$exe" ]; then
-                  echo "$out/bin/$exe"
-                  break
-                fi
-              done < /tmp/nix-outs
-            )"
-            if [ ! -x "$src" ]; then
-              echo "missing executable: $exe"
+          case "$MODE" in
+            release)
+              if [ -z "$TAG" ]; then
+                echo "release mode requires a tag input or a tag push" >&2
+                exit 1
+              fi
+              scripts/release/check-version-consistency "$TAG"
+              ;;
+            dev-homebrew)
+              ;;
+            *)
+              echo "unsupported Darwin release mode: $MODE" >&2
               exit 1
-            fi
-            cp "$src" "/tmp/bundle/bin/$exe"
+              ;;
+          esac
 
-            otool -L "/tmp/bundle/bin/$exe" \
-              | grep -v /usr/lib | grep -v /System | grep -v ":" \
-              | awk '{print $1}' | while read -r lib; do
-                libname="$(basename "$lib")"
-                if [ ! -f "/tmp/bundle/libexec/lib/$libname" ]; then
-                  cp "$lib" "/tmp/bundle/libexec/lib/$libname"
-                fi
-                install_name_tool -change "$lib" \
-                  "@executable_path/../libexec/lib/$libname" \
-                  "/tmp/bundle/bin/$exe"
-              done
-
-            otool -L "/tmp/bundle/bin/$exe"
-          done
-
-      - name: Create tarball
+      - name: Build Darwin artifacts
+        id: darwin-artifacts
         run: |
           set -euo pipefail
-          version="$(scripts/release/get-cabal-version)"
-          tarball="/tmp/amaru-treasury-tx-${version}-aarch64-darwin.tar.gz"
-          tar czf "$tarball" -C /tmp/bundle .
-          shasum -a 256 "$tarball"
-          echo "$tarball" > /tmp/tarball-path
+          case "$MODE" in
+            release)
+              package="darwin-release-artifacts"
+              out_link="/tmp/darwin-release-artifacts"
+              formula_name="amaru-treasury-tx.rb"
+              artifact_name="darwin-release-bundle"
+              ;;
+            dev-homebrew)
+              package="darwin-dev-homebrew-artifacts"
+              out_link="/tmp/darwin-dev-homebrew-artifacts"
+              formula_name="amaru-treasury-tx-dev.rb"
+              artifact_name="darwin-dev-homebrew-artifacts"
+              ;;
+          esac
+
+          artifacts="$(
+            nix build -L --print-out-paths \
+              --out-link "$out_link" \
+              ".#$package"
+          )"
+          tarball="$(
+            find "$artifacts" -maxdepth 1 -type f \
+              -name 'amaru-treasury-tx-*-aarch64-darwin.tar.gz'
+          )"
+          formula="$artifacts/$formula_name"
+
+          if [ -z "$tarball" ]; then
+            echo "missing Darwin tarball in $artifacts" >&2
+            exit 1
+          fi
+          if [ ! -f "$formula" ]; then
+            echo "missing Homebrew formula: $formula" >&2
+            exit 1
+          fi
+
+          cat "$artifacts/SHA256SUMS"
+          {
+            printf 'path=%s\n' "$artifacts"
+            printf 'tarball=%s\n' "$tarball"
+            printf 'formula=%s\n' "$formula"
+            printf 'asset=%s\n' "$(basename "$tarball")"
+            printf 'artifact_name=%s\n' "$artifact_name"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Smoke-test Darwin tarball
         run: |
           set -euo pipefail
-          tarball="$(cat /tmp/tarball-path)"
+          tarball="${{ steps.darwin-artifacts.outputs.tarball }}"
           tmpdir="$(mktemp -d)"
           tar xzf "$tarball" -C "$tmpdir"
-          bin="$tmpdir/bin/amaru-treasury-tx"
-          test -x "$bin"
-          "$bin" --help
-          help_text="$("$bin" swap-wizard --help)"
+          for command in amaru-treasury-tx swap-probe capture-swap-context; do
+            test -x "$tmpdir/bin/$command"
+          done
+          "$tmpdir/bin/amaru-treasury-tx" --help
+          "$tmpdir/bin/capture-swap-context" --help
+          help_text="$("$tmpdir/bin/amaru-treasury-tx" swap-wizard --help)"
           printf '%s\n' "$help_text"
           grep -F -- '--extra-signer,--signer SCOPE|HEX' \
             <<<"$help_text" >/dev/null
 
+      - name: Test generated formula through local tap
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          set -euo pipefail
+          formula="${{ steps.darwin-artifacts.outputs.formula }}"
+          tarball="${{ steps.darwin-artifacts.outputs.tarball }}"
+          formula_name="$(basename "$formula")"
+          formula_id="${formula_name%.rb}"
+          formula_ref="lambdasistemi/tap/${formula_id}"
+          tap_dir="$(mktemp -d)"
+
+          mkdir -p "$tap_dir/Formula"
+          awk -v local_url="  url \"file://${tarball}\"" '
+            /^[[:space:]]*url "/ { print local_url; next }
+            { print }
+          ' "$formula" > "$tap_dir/Formula/$formula_name"
+
+          git -C "$tap_dir" init
+          git -C "$tap_dir" config user.name "github-actions"
+          git -C "$tap_dir" config user.email "actions@github.com"
+          git -C "$tap_dir" add "Formula/$formula_name"
+          git -C "$tap_dir" commit -m "test generated formula"
+
+          brew uninstall --force amaru-treasury-tx amaru-treasury-tx-dev || true
+          brew untap lambdasistemi/tap || true
+          brew tap lambdasistemi/tap "$tap_dir"
+          brew install "$formula_ref"
+          brew test "$formula_ref"
+          amaru-treasury-tx --help
+          test -x "$(command -v swap-probe)"
+          capture-swap-context --help
+          otool -L "$(which amaru-treasury-tx)"
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: darwin-release-bundle
-          path: /tmp/amaru-treasury-tx-*-aarch64-darwin.tar.gz
+          name: ${{ steps.darwin-artifacts.outputs.artifact_name }}
+          path: |
+            ${{ steps.darwin-artifacts.outputs.tarball }}
+            ${{ steps.darwin-artifacts.outputs.formula }}
           if-no-files-found: error
           retention-days: 30
 
       - name: Create release and upload artifact
-        if: ${{ env.PUBLISH == 'true' }}
+        if: ${{ env.MODE == 'release' && env.PUBLISH == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           notes="$(mktemp)"
           scripts/release/extract-notes "$TAG" > "$notes"
-          tarball="$(cat /tmp/tarball-path)"
+          tarball="${{ steps.darwin-artifacts.outputs.tarball }}"
           gh release view "$TAG" >/dev/null 2>&1 \
             || gh release create "$TAG" \
               --title "amaru-treasury-tx $TAG" \
@@ -145,24 +232,17 @@ jobs:
           gh release upload "$TAG" "$tarball" --clobber
 
       - name: Update homebrew tap
-        if: ${{ env.PUBLISH == 'true' }}
+        if: ${{ env.MODE == 'release' && env.PUBLISH == 'true' }}
         env:
           TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
         run: |
           set -euo pipefail
           version="$(scripts/release/get-cabal-version)"
           tag="v${version}"
-          tarball="$(cat /tmp/tarball-path)"
-          sha="$(shasum -a 256 "$tarball" | cut -d' ' -f1)"
-          url="https://github.com/lambdasistemi/amaru-treasury-tx/releases/download/${tag}/amaru-treasury-tx-${version}-aarch64-darwin.tar.gz"
-
-          printf 'class AmaruTreasuryTx < Formula\n  desc "Build unsigned Amaru treasury transactions (disburse, swap, withdraw)"\n  homepage "https://github.com/lambdasistemi/amaru-treasury-tx"\n  url "%s"\n  sha256 "%s"\n  version "%s"\n\n  def install\n    bin.install "bin/amaru-treasury-tx", "bin/swap-probe", "bin/capture-swap-context"\n    (libexec/"lib").install Dir["libexec/lib/*"]\n  end\nend\n' \
-            "$url" "$sha" "$version" \
-            > /tmp/amaru-treasury-tx.rb
 
           git clone "https://x-access-token:${TAP_TOKEN}@github.com/lambdasistemi/homebrew-tap.git" /tmp/tap
           mkdir -p /tmp/tap/Formula
-          cp /tmp/amaru-treasury-tx.rb /tmp/tap/Formula/amaru-treasury-tx.rb
+          cp "${{ steps.darwin-artifacts.outputs.formula }}" /tmp/tap/Formula/amaru-treasury-tx.rb
           cd /tmp/tap
           git config user.name "github-actions"
           git config user.email "actions@github.com"
@@ -172,11 +252,92 @@ jobs:
           git push
 
       - name: Test brew install
-        if: ${{ env.PUBLISH == 'true' }}
+        if: ${{ env.MODE == 'release' && env.PUBLISH == 'true' }}
         run: |
           set -euo pipefail
-          brew tap lambdasistemi/tap
-          brew install amaru-treasury-tx
+          brew uninstall --force amaru-treasury-tx amaru-treasury-tx-dev || true
+          brew untap lambdasistemi/tap || true
+          brew tap lambdasistemi/tap https://github.com/lambdasistemi/homebrew-tap
+          brew install lambdasistemi/tap/amaru-treasury-tx
+          brew test lambdasistemi/tap/amaru-treasury-tx
           amaru-treasury-tx --help
+          test -x "$(command -v swap-probe)"
+          capture-swap-context --help
           which amaru-treasury-tx
+          otool -L "$(which amaru-treasury-tx)"
+
+      - name: Publish dev GitHub release asset
+        if: ${{ env.MODE == 'dev-homebrew' && github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          notes="$(mktemp)"
+          {
+            printf "Development Homebrew build for \`%s\`.\n\n" "$GITHUB_SHA"
+            printf "Formula: \`amaru-treasury-tx-dev\`\n"
+            printf "Asset: \`%s\`\n" "${{ steps.darwin-artifacts.outputs.asset }}"
+          } > "$notes"
+
+          git tag -f "$DEV_TAG" "$GITHUB_SHA"
+          git push --force origin "refs/tags/$DEV_TAG"
+
+          gh release view "$DEV_TAG" >/dev/null 2>&1 \
+            || gh release create "$DEV_TAG" \
+              --title "amaru-treasury-tx dev Homebrew" \
+              --notes-file "$notes" \
+              --prerelease
+          gh release edit "$DEV_TAG" \
+            --title "amaru-treasury-tx dev Homebrew" \
+            --notes-file "$notes" \
+            --prerelease
+          gh release upload \
+            "$DEV_TAG" \
+            "${{ steps.darwin-artifacts.outputs.tarball }}" \
+            --clobber
+
+      - name: Update dev homebrew tap
+        if: >-
+          ${{
+            env.MODE == 'dev-homebrew'
+            && github.event_name == 'workflow_dispatch'
+            && env.UPDATE_TAP == 'yes'
+          }}
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          set -euo pipefail
+          git clone \
+            "https://x-access-token:${TAP_TOKEN}@github.com/lambdasistemi/homebrew-tap.git" \
+            /tmp/tap
+          mkdir -p /tmp/tap/Formula
+          cp \
+            "${{ steps.darwin-artifacts.outputs.formula }}" \
+            /tmp/tap/Formula/amaru-treasury-tx-dev.rb
+
+          cd /tmp/tap
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add Formula/amaru-treasury-tx-dev.rb
+          git diff --cached --quiet \
+            || git commit -m "update amaru-treasury-tx dev to ${GITHUB_SHA::12}"
+          git push
+
+      - name: Test dev brew install
+        if: >-
+          ${{
+            env.MODE == 'dev-homebrew'
+            && github.event_name == 'workflow_dispatch'
+            && env.UPDATE_TAP == 'yes'
+          }}
+        run: |
+          set -euo pipefail
+          brew uninstall --force amaru-treasury-tx amaru-treasury-tx-dev || true
+          brew untap lambdasistemi/tap || true
+          brew tap lambdasistemi/tap https://github.com/lambdasistemi/homebrew-tap
+          brew install lambdasistemi/tap/amaru-treasury-tx-dev
+          brew test lambdasistemi/tap/amaru-treasury-tx-dev
+          amaru-treasury-tx --help
+          test -x "$(command -v swap-probe)"
+          capture-swap-context --help
           otool -L "$(which amaru-treasury-tx)"

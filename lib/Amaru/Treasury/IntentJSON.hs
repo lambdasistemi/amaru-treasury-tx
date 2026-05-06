@@ -26,6 +26,7 @@ module Amaru.Treasury.IntentJSON
     ( -- * Action discriminator
       Action (..)
     , SAction (..)
+    , actionToText
 
       -- * Type families projecting per-action types
     , Payload
@@ -45,19 +46,40 @@ module Amaru.Treasury.IntentJSON
       -- * Top-level intent
     , TreasuryIntent (..)
     , SomeTreasuryIntent (..)
+
+      -- * Schema
+    , allowedSchemas
+
+      -- * Encoding / decoding
+    , decodeTreasuryIntent
+    , decodeTreasuryIntentFile
+    , encodeSomeTreasuryIntent
     ) where
 
+import Control.Monad (unless)
 import Data.Aeson
     ( FromJSON (..)
     , ToJSON (..)
+    , Value
+    , eitherDecode
+    , eitherDecodeFileStrict
     , object
     , withObject
+    , withText
     , (.:)
     , (.=)
     )
+import Data.Aeson.Encode.Pretty
+    ( Config (..)
+    , Indent (..)
+    , NumberFormat (..)
+    , encodePretty'
+    )
+import Data.ByteString.Lazy (ByteString)
 import Data.Kind (Type)
 import Data.Map.Strict (Map)
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Word (Word64)
 
 import Amaru.Treasury.Tx.Disburse (DisburseIntent)
@@ -416,3 +438,214 @@ data SomeTreasuryIntent where
         :: !(SAction a)
         -> !(TreasuryIntent a)
         -> SomeTreasuryIntent
+
+instance Show SomeTreasuryIntent where
+    showsPrec p (SomeTreasuryIntent sa ti) =
+        showParen (p > 10) $
+            showString "SomeTreasuryIntent "
+                . case sa of
+                    SSwap -> showsPrec 11 ti
+                    SDisburse -> showsPrec 11 ti
+                    SWithdraw -> showsPrec 11 ti
+                    SReorganize -> showsPrec 11 ti
+
+instance Eq SomeTreasuryIntent where
+    SomeTreasuryIntent sa ti == SomeTreasuryIntent sb tj =
+        case (sa, sb) of
+            (SSwap, SSwap) -> ti == tj
+            (SDisburse, SDisburse) -> ti == tj
+            (SWithdraw, SWithdraw) -> ti == tj
+            (SReorganize, SReorganize) -> ti == tj
+            _ -> False
+
+-- ----------------------------------------------------
+-- Schema versioning
+-- ----------------------------------------------------
+
+{- | The set of schema versions this binary accepts. v0
+allow-list is @[1]@. Bumping the schema appends to this
+list; old binaries refuse new intents, new binaries
+accept old intents only if their schema is in the list.
+-}
+allowedSchemas :: [Int]
+allowedSchemas = [1]
+
+-- ----------------------------------------------------
+-- Action <-> Text bijection
+-- ----------------------------------------------------
+
+{- | Render an 'Action' as its lower-case JSON
+discriminator string.
+-}
+actionToText :: Action -> Text
+actionToText = \case
+    Swap -> "swap"
+    Disburse -> "disburse"
+    Withdraw -> "withdraw"
+    Reorganize -> "reorganize"
+
+instance FromJSON Action where
+    parseJSON = withText "Action" $ \t -> case T.toLower t of
+        "swap" -> pure Swap
+        "disburse" -> pure Disburse
+        "withdraw" -> pure Withdraw
+        "reorganize" -> pure Reorganize
+        other ->
+            fail $
+                "unknown action: "
+                    <> T.unpack other
+                    <> " (expected one of "
+                    <> "swap | disburse | withdraw | reorganize)"
+
+instance ToJSON Action where
+    toJSON = toJSON . actionToText
+
+-- ----------------------------------------------------
+-- TreasuryIntent JSON
+-- ----------------------------------------------------
+
+{- | Parse to the existential. Validates schema +
+action ↔ payload pairing in one pass.
+-}
+instance FromJSON SomeTreasuryIntent where
+    parseJSON = withObject "TreasuryIntent" $ \o -> do
+        schema <- o .: "schema"
+        unless
+            (schema `elem` allowedSchemas)
+            ( fail $
+                "unknown intent schema version: "
+                    <> show schema
+                    <> " (allowed: "
+                    <> show allowedSchemas
+                    <> ")"
+            )
+        action <- o .: "action"
+        network <- o .: "network"
+        wallet <- o .: "wallet"
+        scope <- o .: "scope"
+        signers <- o .: "signers"
+        ub <- o .: "validityUpperBoundSlot"
+        rationale <- o .: "rationale"
+        case action of
+            Swap -> do
+                payload <- o .: "swap"
+                pure $
+                    SomeTreasuryIntent SSwap $
+                        TreasuryIntent
+                            SSwap
+                            schema
+                            network
+                            wallet
+                            scope
+                            signers
+                            ub
+                            rationale
+                            payload
+            Disburse -> do
+                payload <- o .: "disburse"
+                pure $
+                    SomeTreasuryIntent SDisburse $
+                        TreasuryIntent
+                            SDisburse
+                            schema
+                            network
+                            wallet
+                            scope
+                            signers
+                            ub
+                            rationale
+                            payload
+            Withdraw -> do
+                payload <- o .: "withdraw"
+                pure $
+                    SomeTreasuryIntent SWithdraw $
+                        TreasuryIntent
+                            SWithdraw
+                            schema
+                            network
+                            wallet
+                            scope
+                            signers
+                            ub
+                            rationale
+                            payload
+            Reorganize -> do
+                payload <- o .: "reorganize"
+                pure $
+                    SomeTreasuryIntent SReorganize $
+                        TreasuryIntent
+                            SReorganize
+                            schema
+                            network
+                            wallet
+                            scope
+                            signers
+                            ub
+                            rationale
+                            payload
+
+{- | Emit the unified intent as JSON. Action discriminator
+and the matching action-keyed payload object.
+-}
+instance ToJSON SomeTreasuryIntent where
+    toJSON (SomeTreasuryIntent sa ti) =
+        toJSONIntent sa ti
+
+{- | Build the JSON 'Value' for a typed intent. Pure;
+pattern matches the singleton to write the matching
+action-keyed payload key.
+-}
+toJSONIntent :: SAction a -> TreasuryIntent a -> Value
+toJSONIntent sa ti =
+    let actionName = case sa of
+            SSwap -> "swap" :: Text
+            SDisburse -> "disburse"
+            SWithdraw -> "withdraw"
+            SReorganize -> "reorganize"
+        payloadEntry = case sa of
+            SSwap -> "swap" .= tiPayload ti
+            SDisburse -> "disburse" .= tiPayload ti
+            SWithdraw -> "withdraw" .= tiPayload ti
+            SReorganize -> "reorganize" .= tiPayload ti
+    in  object
+            [ "schema" .= tiSchema ti
+            , "action" .= actionName
+            , "network" .= tiNetwork ti
+            , "wallet" .= tiWallet ti
+            , "scope" .= tiScope ti
+            , "signers" .= tiSigners ti
+            , "validityUpperBoundSlot"
+                .= tiValidityUpperBoundSlot ti
+            , "rationale" .= tiRationale ti
+            , payloadEntry
+            ]
+
+-- ----------------------------------------------------
+-- Decoding / encoding
+-- ----------------------------------------------------
+
+-- | Parse a 'SomeTreasuryIntent' from a UTF-8 byte string.
+decodeTreasuryIntent
+    :: ByteString -> Either String SomeTreasuryIntent
+decodeTreasuryIntent = eitherDecode
+
+-- | 'decodeTreasuryIntent' over a file path.
+decodeTreasuryIntentFile
+    :: FilePath -> IO (Either String SomeTreasuryIntent)
+decodeTreasuryIntentFile = eitherDecodeFileStrict
+
+{- | Stable pretty-printed encoder for
+'SomeTreasuryIntent'. Fixed config: 4-space indent,
+alphabetical key ordering, no unicode escapes for ASCII
+text, decimals for numbers, trailing newline.
+-}
+encodeSomeTreasuryIntent :: SomeTreasuryIntent -> ByteString
+encodeSomeTreasuryIntent = encodePretty' cfg
+  where
+    cfg =
+        Config
+            { confIndent = Spaces 4
+            , confCompare = compare
+            , confNumFormat = Generic
+            , confTrailingNewline = True
+            }

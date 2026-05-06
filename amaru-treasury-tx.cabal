@@ -66,6 +66,8 @@ library
     Amaru.Treasury.ChainContext
     Amaru.Treasury.ChainContext.Fixture
     Amaru.Treasury.Constants
+    Amaru.Treasury.IntentJSON
+    Amaru.Treasury.IntentJSON.Common
     Amaru.Treasury.LedgerParse
     Amaru.Treasury.Metadata
     Amaru.Treasury.PParams
@@ -76,7 +78,10 @@ library
     Amaru.Treasury.Registry.Verify
     Amaru.Treasury.Scope
     Amaru.Treasury.Summary
+    Amaru.Treasury.TreasuryBuild
+    Amaru.Treasury.TreasuryBuild.Trace
     Amaru.Treasury.Tx.Disburse
+    Amaru.Treasury.Tx.Reorganize
     Amaru.Treasury.Tx.Swap
     Amaru.Treasury.Tx.Swap.Trace
     Amaru.Treasury.Tx.SwapBuild
@@ -86,6 +91,7 @@ library
     Amaru.Treasury.Tx.Withdraw
     Amaru.Treasury.UtxoSelect
     Amaru.Treasury.Validity
+    Amaru.Treasury.Wizard.Common
 
   build-depends:
     , aeson
@@ -189,6 +195,7 @@ test-suite unit-tests
   default-language:   GHC2021
   other-modules:
     Amaru.Treasury.AuxDataSpec
+    Amaru.Treasury.IntentJSONSpec
     Amaru.Treasury.LedgerParseSpec
     Amaru.Treasury.MetadataSpec
     Amaru.Treasury.PParamsSpec
@@ -199,6 +206,7 @@ test-suite unit-tests
     Amaru.Treasury.Registry.VerifySpec
     Amaru.Treasury.ScopeSpec
     Amaru.Treasury.SummarySpec
+    Amaru.Treasury.TreasuryBuildSpec
     Amaru.Treasury.Tx.DisburseSpec
     Amaru.Treasury.Tx.SwapSpec
     Amaru.Treasury.Tx.SwapWizardSpec

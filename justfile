@@ -79,3 +79,9 @@ ci:
     just hlint
     just smoke
     just release-check
+
+# Cabal check (Hackage-readiness gate, per /haskell skill)
+cabal-check:
+    cabal check --ignore=missing-upper-bounds \
+        --ignore=no-modules-exposed \
+        --ignore=option-o2

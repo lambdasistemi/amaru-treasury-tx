@@ -1,8 +1,10 @@
 # amaru-treasury-tx Development Guidelines
 
-Auto-generated from feature plans. Last updated: 2026-05-05
+Auto-generated from feature plans. Last updated: 2026-05-06
 
 ## Active Technologies
+- Haskell, GHC 9.6+ (matches `cardano-node-clients`). (005-unified-tx-build)
+- filesystem only — `intent.json` (wizard output), (005-unified-tx-build)
 
 - Haskell, GHC 9.6+ (matches `cardano-node-clients`)
 - Cabal + Nix flake (haskell.nix, IOG cache)
@@ -67,10 +69,10 @@ nix run .#lint
 - See the `/haskell` and `/nix` skills for project-wide details.
 
 ## Recent Changes
+- 005-unified-tx-build: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`).
 - 003-registry-walk: Added Haskell, GHC 9.6+ (matches the rest of the
 - 002-swap-wizard: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`)
 
-- 2026-05-04 — feature 001 (treasury transaction CLI): spec, plan,
   research, data model, contracts, quickstart.
 
 <!-- MANUAL ADDITIONS START -->

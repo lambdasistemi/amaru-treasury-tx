@@ -25,6 +25,7 @@
       url = "github:NixOS/bundlers";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    dev-assets.url = "github:paolino/dev-assets";
     iohkNix = {
       url =
         "github:input-output-hk/iohk-nix/f444d972c301ddd9f23eac4325ffcc8b5766eee9";
@@ -135,29 +136,48 @@
           capture-swap-context = mkExe "capture-swap-context";
           sourceRevision = self.shortRev or (self.dirtyShortRev or "dirty");
           devArtifactVersion = "${packageVersion}-${sourceRevision}";
+          mkDarwinHomebrewBundle =
+            inputs.dev-assets.lib.mkDarwinHomebrewBundle { inherit pkgs; };
+          darwinExecutables = {
+            inherit amaru-treasury-tx swap-probe capture-swap-context;
+          };
+          darwinExecutableNames = [
+            "amaru-treasury-tx"
+            "swap-probe"
+            "capture-swap-context"
+          ];
+          darwinFormulaTest = ''
+            assert_predicate bin/"swap-probe", :executable?
+            system "#{bin}/amaru-treasury-tx", "--help"
+            system "#{bin}/capture-swap-context", "--help"
+            system "#{bin}/amaru-treasury-tx", "swap-wizard", "--help"
+          '';
+          mkAmaruDarwinHomebrewBundle = args:
+            mkDarwinHomebrewBundle ({
+              pname = "amaru-treasury-tx";
+              version = packageVersion;
+              owner = "lambdasistemi";
+              desc =
+                "Build unsigned Amaru treasury transactions (disburse, swap, withdraw)";
+              homepage = "https://github.com/lambdasistemi/amaru-treasury-tx";
+              formulaClass = "AmaruTreasuryTx";
+              executables = darwinExecutables;
+              executableNames = darwinExecutableNames;
+              formulaTest = darwinFormulaTest;
+              smokeCommands = [ "amaru-treasury-tx --help >/dev/null" ];
+            } // args);
           darwinReleasePackages = pkgs.lib.optionalAttrs
             pkgs.stdenv.isDarwin
             {
-              darwin-release-artifacts =
-                import ./nix/darwin-release.nix {
-                  inherit pkgs packageVersion;
-                  executables = {
-                    inherit amaru-treasury-tx swap-probe capture-swap-context;
-                  };
-                };
-              darwin-dev-homebrew-artifacts =
-                import ./nix/darwin-release.nix {
-                  inherit pkgs packageVersion;
-                  artifactVersion = devArtifactVersion;
-                  releaseTag = "dev-homebrew";
-                  formulaName = "amaru-treasury-tx-dev";
-                  formulaClass = "AmaruTreasuryTxDev";
-                  formulaVersion = devArtifactVersion;
-                  formulaExtraLines =
-                    "\n  conflicts_with \"amaru-treasury-tx\", because: \"both install the same command-line tools\"";
-                  executables = {
-                    inherit amaru-treasury-tx swap-probe capture-swap-context;
-                  };
+              darwin-release-artifacts = mkAmaruDarwinHomebrewBundle { };
+              darwin-dev-homebrew-artifacts = mkAmaruDarwinHomebrewBundle {
+                artifactVersion = devArtifactVersion;
+                releaseTag = "dev-homebrew";
+                formulaName = "amaru-treasury-tx-dev";
+                formulaClass = "AmaruTreasuryTxDev";
+                formulaVersion = devArtifactVersion;
+                formulaExtraLines =
+                  "\n  conflicts_with \"amaru-treasury-tx\", because: \"both install the same command-line tools\"";
               };
             };
           linuxReleasePackages = pkgs.lib.optionalAttrs

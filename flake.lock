@@ -123,6 +123,21 @@
         "type": "github"
       }
     },
+    "dev-assets": {
+      "locked": {
+        "lastModified": 1778076309,
+        "narHash": "sha256-pqUvCJPZCO/2eaWVk7432gkSHLNgnQZhHGfWmovbYzQ=",
+        "owner": "paolino",
+        "repo": "dev-assets",
+        "rev": "62d0bd0525bddff37356b96e7840208cf7999bf4",
+        "type": "github"
+      },
+      "original": {
+        "owner": "paolino",
+        "repo": "dev-assets",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -851,6 +866,7 @@
       "inputs": {
         "CHaP": "CHaP",
         "bundlers": "bundlers",
+        "dev-assets": "dev-assets",
         "flake-parts": "flake-parts",
         "hackageNix": "hackageNix",
         "haskellNix": "haskellNix",

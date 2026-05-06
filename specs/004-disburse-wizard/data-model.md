@@ -256,20 +256,38 @@ translateDisburseIntent
 
 The pure builder's
 [`DisburseIntent`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/Disburse.hs)
-record is extended in this feature with two additional cases:
+type is split per unit. The shared chain-state lives in
+`DisburseIntentFields`; each unit carries its own payload record:
 
 ```haskell
 data DisburseIntent
-    = DisburseAdaIntent !DisburseIntentFields !Coin
-    | DisburseUsdmIntent !DisburseIntentFields !Integer
-    -- ^ Integer = USDM smallest-unit amount; the field record holds
-    --   the shared seven references + two leftover quantities.
+    = DisburseAdaIntent
+        !DisburseIntentFields
+        !DisburseAdaPayload
+    -- USDM constructor lands in T038:
+    -- | DisburseUsdmIntent
+    --     !DisburseIntentFields
+    --     !DisburseUsdmPayload
+    deriving stock (Show, Eq)
+
+data DisburseAdaPayload = DisburseAdaPayload
+    { dapAmountLovelace :: !Coin
+    , dapLeftoverLovelace :: !Coin
+    }
+    deriving stock (Show, Eq)
 ```
 
-The exact split between `DisburseIntentFields` and the per-unit case
-is fixed in the implementation PR; the contract here is that
-`disburseAdaProgram` consumes the `Ada` constructor and a new
-`disburseUsdmProgram` consumes the `Usdm` constructor.
+Per-unit pure builders take the field record and the payload
+separately so a future build dispatcher can pattern-match on the
+`DisburseIntent` ADT and call the matching builder:
+
+```haskell
+disburseAdaProgram
+    :: DisburseIntentFields -> DisburseAdaPayload -> TxBuild q e ()
+-- T038:
+-- disburseUsdmProgram
+--     :: DisburseIntentFields -> DisburseUsdmPayload -> TxBuild q e ()
+```
 
 ## 6. DisburseBuildInputs / DisburseBuildResult
 

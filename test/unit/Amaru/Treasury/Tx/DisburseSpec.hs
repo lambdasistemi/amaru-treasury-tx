@@ -62,7 +62,8 @@ import Test.Hspec
 import Cardano.Node.Client.TxBuild (draft)
 
 import Amaru.Treasury.Tx.Disburse
-    ( DisburseIntent (..)
+    ( DisburseAdaPayload (..)
+    , DisburseIntentFields (..)
     , disburseAdaProgram
     )
 
@@ -104,30 +105,38 @@ permissionsRewardAcct n =
         Mainnet
         (AccountId (ScriptHashObj (ScriptHash (mkHash28 n))))
 
-intent :: DisburseIntent
-intent =
-    DisburseIntent
-        { diWalletUtxo = mkTxIn 0
-        , diBeneficiaryAddress = keyAddr 99
-        , diAmountLovelace = Coin 50_000_000
-        , diLeftoverLovelace = Coin 1_400_000_000_000
-        , diTreasuryUtxos = [mkTxIn 1]
-        , diTreasuryAddress = scriptAddr 10
-        , diPermissionsRewardAccount = permissionsRewardAcct 11
-        , diScopesDeployedAt = mkTxIn 2
-        , diPermissionsDeployedAt = mkTxIn 3
-        , diTreasuryDeployedAt = mkTxIn 4
-        , diRegistryDeployedAt = mkTxIn 5
-        , diSigners =
+fields :: DisburseIntentFields
+fields =
+    DisburseIntentFields
+        { difWalletUtxo = mkTxIn 0
+        , difBeneficiaryAddress = keyAddr 99
+        , difTreasuryUtxos = [mkTxIn 1]
+        , difTreasuryAddress = scriptAddr 10
+        , difPermissionsRewardAccount = permissionsRewardAcct 11
+        , difScopesDeployedAt = mkTxIn 2
+        , difPermissionsDeployedAt = mkTxIn 3
+        , difTreasuryDeployedAt = mkTxIn 4
+        , difRegistryDeployedAt = mkTxIn 5
+        , difSigners =
             [ KeyHash (mkHash28 20)
             , KeyHash (mkHash28 21)
             ]
-        , diUpperBound = SlotNo 1_000
+        , difUpperBound = SlotNo 1_000
+        }
+
+payload :: DisburseAdaPayload
+payload =
+    DisburseAdaPayload
+        { dapAmountLovelace = Coin 50_000_000
+        , dapLeftoverLovelace = Coin 1_400_000_000_000
         }
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Tx.Disburse" $ do
-    let tx = draft emptyPParams (disburseAdaProgram intent)
+    let tx =
+            draft
+                emptyPParams
+                (disburseAdaProgram fields payload)
         body = tx ^. bodyTxL
     it "spends wallet UTxO + the treasury UTxO" $
         body

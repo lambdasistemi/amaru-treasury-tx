@@ -65,6 +65,23 @@ data ActionPayload
 - **Sibling records (status quo)** — rejected; structurally
   duplicates shared blocks, scatters parser helpers, and lets
   `disburse-wizard | swap` go undetected until the build dies.
+- **GADT** indexed by the action (`TreasuryIntent :: Action ->
+  Type`, with constructors `IntentSwap :: SharedBlocks ->
+  SwapInputs -> TreasuryIntent 'Swap`, etc.) — *considered, not
+  chosen*. A GADT would let the type system enforce the
+  action ↔ payload pairing at compile time, which is strictly
+  stronger than the runtime parser invariant in §6 of
+  [data-model.md](./data-model.md). The reasons we picked the
+  plain sum over the GADT: (a) the JSON layer is the validation
+  boundary anyway — once the value crosses the parser, runtime
+  consistency is guaranteed; (b) every consumer that pattern-
+  matches still has to handle every action variant, so there's
+  no compile-time win at the call site; (c) the FromJSON
+  derivation is materially simpler over a sum than over a GADT
+  (`aeson` doesn't auto-derive parsers for indexed types).
+  We can promote to a GADT later without breaking the JSON
+  contract if a downstream consumer ever benefits from the
+  stronger typing.
 - **Phantom-typed shared record** parameterised by action
   (`TreasuryIntent (a :: Action)`) — rejected; the JSON layer is
   un-phantom-typed by the time the parser fires, so the type

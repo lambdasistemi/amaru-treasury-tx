@@ -39,11 +39,13 @@ Phases 4 and 5.
   `lib/Amaru/Treasury/Tx/DisburseWizard/Trace.hs`
 - Subcommand wiring: `app/amaru-treasury-tx/Main.hs`
 - Unit specs: `test/unit/Amaru/Treasury/Tx/Disburse{,Build,Wizard}Spec.hs`
-- Golden specs: `test/golden/Amaru/Treasury/Tx/{AdaDisburse,UsdmDisburse}GoldenSpec.hs`
-  (the `Golden` suffix disambiguates from the unit `DisburseSpec` —
-  cabal would technically resolve same-named modules across
-  `hs-source-dirs`, but the convention in this repo follows
-  [`SwapGoldenSpec.hs`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/test/golden/SwapGoldenSpec.hs))
+- Golden specs: `test/golden/{AdaDisburse,UsdmDisburse}GoldenSpec.hs`
+  (flat layout matching the existing
+  [`SwapGoldenSpec.hs`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/test/golden/SwapGoldenSpec.hs)
+  convention; the `Golden` suffix disambiguates from the unit
+  `DisburseSpec` under `test/unit/`).
+- Shared golden helper:
+  [`test/golden/DisburseFixture.hs`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/004-disburse-wizard/test/golden/DisburseFixture.hs)
 - Wizard fixtures: `test/fixtures/disburse-wizard/`
 - Build fixtures: `test/fixtures/disburse/{ada,usdm}/`
 
@@ -70,16 +72,21 @@ Phases 4 and 5.
       `Amaru.Treasury.Tx.DisburseBuildSpec`,
       `Amaru.Treasury.Tx.DisburseWizardSpec`) to the `unit-tests`
       stanza's `other-modules` in `amaru-treasury-tx.cabal`, and the
-      golden specs (`Amaru.Treasury.Tx.AdaDisburseGoldenSpec` and
-      `Amaru.Treasury.Tx.UsdmDisburseGoldenSpec` under
-      `test/golden/Amaru/Treasury/Tx/`) to the `golden-tests` stanza.
-      The `Golden` suffix on the golden modules deliberately
-      disambiguates from the unit `DisburseSpec`. Run `nix develop -c
+      golden specs (`AdaDisburseGoldenSpec`,
+      `UsdmDisburseGoldenSpec`, `DisburseFixture` under
+      `test/golden/`) to the `golden-tests` stanza. Flat layout
+      matches the existing `SwapGoldenSpec.hs` convention; the
+      `Golden` suffix disambiguates from the unit `DisburseSpec`. Run `nix develop -c
       just build` and confirm both test suites compile (empty modules
       OK at this stage).
-- [ ] T003 [P] Add the wizard and build fixture directories
-      (`test/fixtures/disburse-wizard/`, `test/fixtures/disburse/`)
-      to `extra-source-files` in `amaru-treasury-tx.cabal`.
+- [ ] T003 [P] Create empty fixture directories
+      `test/fixtures/disburse-wizard/` and
+      `test/fixtures/disburse/{ada,usdm}/`. Do **not** add a
+      `**/*.json` glob to `extra-source-files` yet — `cabal check`
+      treats an empty glob as a `[no-glob-match]` warning and the
+      package must stay Hackage-clean. The glob entries are added
+      in T014 (first wizard fixture) and T029/T040 (first build
+      fixture) as those tasks author actual files.
 - [ ] T004 [P] Confirm `just ci` recipe still chains `build → unit
       → golden → format-check → hlint → cabal-check`; no recipe edit
       expected.
@@ -299,19 +306,15 @@ after running the build subcommand.
       treasury inputs + wallet UTxO), and `pparams.json`
       (already-checked-in fixture under
       [`test/fixtures/pparams.json`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/test/fixtures/pparams.json) — symlink).
-- [ ] T030 [US1] Author
-      `test/golden/Amaru/Treasury/Tx/AdaDisburseGoldenSpec.hs` with
-      one `it` block: `"ada-disburse golden body matches"`.
-      Loads T029 fixtures, calls a small fixture-recorder helper
-      `runDisburseBuildFromFixtures` that builds a `ChainContext`
-      from the `utxos.json` + `pparams.json` fixtures (no
-      `Provider IO`, no node socket) and invokes `runDisburseBuild`
-      directly. Strips ExUnits, compares the body bytes to
-      `test/fixtures/disburse/ada/body.cbor`.
-      Note: this is the same fixture-mode shape the swap golden
-      uses; the helper itself lives in
-      `test/golden/Amaru/Treasury/Tx/Fixture.hs` so both the ADA and
-      USDM goldens share it.
+- [ ] T030 [US1] Author `test/golden/AdaDisburseGoldenSpec.hs` with
+      one `it` block: `"ada-disburse golden body matches"`. Loads
+      T029 fixtures, calls a small fixture-recorder helper
+      `runDisburseBuildFromFixtures` (in `test/golden/DisburseFixture.hs`)
+      that builds a `ChainContext` from the `utxos.json` +
+      `pparams.json` fixtures (no `Provider IO`, no node socket) and
+      invokes `runDisburseBuild` directly. Strips ExUnits, compares
+      the body bytes to `test/fixtures/disburse/ada/body.cbor`. Both
+      ADA and USDM goldens share the helper.
 - [ ] T031 [US1] Confirm RED: run `nix develop -c just golden
       --test-options=--match=ada-disburse` and observe the spec
       failing (no `body.cbor` yet, or no `runDisburseBuild`).
@@ -399,8 +402,7 @@ golden.
       `test/fixtures/disburse/usdm/`: `intent.json`, `utxos.json`
       (synthesized USDM-bearing treasury UTxO), `pparams.json`
       (symlink).
-- [ ] T041 [US2] Author
-      `test/golden/Amaru/Treasury/Tx/UsdmDisburseGoldenSpec.hs` with
+- [ ] T041 [US2] Author `test/golden/UsdmDisburseGoldenSpec.hs` with
       one `it` block: `"usdm-disburse golden body matches"`. Loads
       T040 fixtures via the shared `runDisburseBuildFromFixtures`
       helper from T030 (no CLI, no node socket), strips ExUnits,

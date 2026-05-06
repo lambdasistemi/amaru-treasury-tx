@@ -199,11 +199,15 @@ test/unit/Amaru/Treasury/Tx/
 │                                # inputs/result records
 └── DisburseWizardSpec.hs        # NEW: parser + translator tests
 
-test/golden/Amaru/Treasury/Tx/
+test/golden/
 ├── AdaDisburseGoldenSpec.hs     # NEW: body CBOR vs golden (ADA case);
-│                                # name disambiguates from the unit
-│                                # DisburseSpec under test/unit/.
-└── UsdmDisburseGoldenSpec.hs    # NEW: body CBOR vs golden (USDM)
+│                                # flat layout matches existing
+│                                # SwapGoldenSpec convention.
+├── UsdmDisburseGoldenSpec.hs    # NEW: body CBOR vs golden (USDM)
+└── DisburseFixture.hs           # NEW: shared helper
+                                 # `runDisburseBuildFromFixtures` used
+                                 # by both goldens (and by the
+                                 # one-shot fixture recorder).
 
 test/fixtures/disburse-wizard/
 ├── env.ada.json                 # fixture DisburseEnv (ADA case)

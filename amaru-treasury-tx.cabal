@@ -84,6 +84,11 @@ library
     Amaru.Treasury.TreasuryBuild
     Amaru.Treasury.TreasuryBuild.Trace
     Amaru.Treasury.Tx.Disburse
+    Amaru.Treasury.Tx.Disburse.Trace
+    Amaru.Treasury.Tx.DisburseBuild
+    Amaru.Treasury.Tx.DisburseIntentJSON
+    Amaru.Treasury.Tx.DisburseWizard
+    Amaru.Treasury.Tx.DisburseWizard.Trace
     Amaru.Treasury.Tx.Reorganize
     Amaru.Treasury.Tx.Swap
     Amaru.Treasury.Tx.SwapWizard
@@ -218,7 +223,9 @@ test-suite unit-tests
     Amaru.Treasury.ScopeSpec
     Amaru.Treasury.SummarySpec
     Amaru.Treasury.TreasuryBuildSpec
+    Amaru.Treasury.Tx.DisburseBuildSpec
     Amaru.Treasury.Tx.DisburseSpec
+    Amaru.Treasury.Tx.DisburseWizardSpec
     Amaru.Treasury.Tx.SwapSpec
     Amaru.Treasury.Tx.SwapWizardSpec
     Amaru.Treasury.Tx.WithdrawSpec
@@ -260,9 +267,12 @@ test-suite golden-tests
   main-is:            Spec.hs
   default-language:   GHC2021
   other-modules:
+    AdaDisburseGoldenSpec
+    DisburseFixture
     PlaceholderSpec
     RegistryWalkGoldenSpec
     SwapGoldenSpec
+    UsdmDisburseGoldenSpec
 
   build-depends:
     , aeson

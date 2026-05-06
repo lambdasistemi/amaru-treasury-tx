@@ -1,0 +1,16 @@
+{
+    "exUnits": [
+        {
+            "ix": 1,
+            "memory": 600000,
+            "purpose": "spending",
+            "steps": 240000000
+        },
+        {
+            "ix": 0,
+            "memory": 200000,
+            "purpose": "rewarding",
+            "steps": 65000000
+        }
+    ]
+}

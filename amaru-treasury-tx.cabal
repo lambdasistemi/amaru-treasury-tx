@@ -25,6 +25,8 @@ extra-source-files:
   docs/assets/intent-schema.json
   scripts/smoke/swap-wizard-signers
   scripts/smoke/tx-build-pipe
+  test/fixtures/disburse/**/*.cbor
+  test/fixtures/disburse/**/*.json
   test/fixtures/disburse-wizard/**/*.json
   test/fixtures/swap-wizard/**/*.json
 
@@ -285,6 +287,7 @@ test-suite golden-tests
     , base16-bytestring
     , bytestring
     , containers
+    , directory
     , hspec
 
   build-tool-depends: hspec-discover:hspec-discover

@@ -88,8 +88,11 @@ data TreasurySelection = TreasurySelection
     --   (precomputed by the resolver; pure translation does
     --   not redo the arithmetic).
     , tsLeftoverUsdm :: !Integer
-    -- ^ Σ USDM on inputs − beneficiary USDM
-    --   (zero for the ADA case).
+    -- ^ Σ USDM on inputs − beneficiary USDM.
+    --   For `--unit ada` the beneficiary takes 0 USDM, so this
+    --   equals the total USDM on the selected treasury inputs
+    --   (often zero in practice, but non-zero whenever a
+    --   selected treasury UTxO happens to carry USDM).
     , tsLeftoverOtherAssets :: !MultiAsset
     -- ^ All non-ADA / non-USDM assets present on inputs;
     --   forwarded verbatim onto the leftover output.
@@ -142,10 +145,29 @@ data DisburseError
     | DisburseInsufficientTreasuryAda
     | DisburseInsufficientTreasuryUsdm
     | DisburseUsdmRequestedOnAdaOnlyScope
-    | DisburseBeneficiaryNetworkMismatch
-    -- ^ Caught by the resolver, but kept in this enum so the
-    --   wizard's surfaced error is consistent across layers.
 ```
+
+`ResolverError` is a sibling type owned by the IO resolver — it
+covers failures the pure translation cannot detect because the raw
+inputs (bech32 strings, on-chain UTxOs, registry anchors) never reach
+`disburseToIntentJSON`:
+
+```haskell
+data ResolverError
+    = ResolverEmptyWalletUtxos
+    | ResolverEmptyTreasuryUtxos
+    | ResolverRegistryWalkFailed Text
+    | ResolverNetworkNotSupported Text
+    | ResolverShortfall { rsRequired :: Integer, rsAvailable :: Integer }
+    | ResolverWalletNetworkMismatch
+    | ResolverBeneficiaryNetworkMismatch
+    | ResolverBeneficiaryAddressUnparseable Text
+```
+
+The two error families are kept disjoint by design: `DisburseError`
+enumerates only what the pure translation can witness from a typed
+`(DisburseEnv, DisburseAnswers)` pair, while `ResolverError` covers
+chain-state and bech32-parse failures.
 
 ## 4. DisburseIntentJSON — the JSON contract
 

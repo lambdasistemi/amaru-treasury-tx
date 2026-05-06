@@ -39,7 +39,11 @@ Phases 4 and 5.
   `lib/Amaru/Treasury/Tx/DisburseWizard/Trace.hs`
 - Subcommand wiring: `app/amaru-treasury-tx/Main.hs`
 - Unit specs: `test/unit/Amaru/Treasury/Tx/Disburse{,Build,Wizard}Spec.hs`
-- Golden specs: `test/golden/Amaru/Treasury/Tx/{Disburse,UsdmDisburse}Spec.hs`
+- Golden specs: `test/golden/Amaru/Treasury/Tx/{AdaDisburse,UsdmDisburse}GoldenSpec.hs`
+  (the `Golden` suffix disambiguates from the unit `DisburseSpec` —
+  cabal would technically resolve same-named modules across
+  `hs-source-dirs`, but the convention in this repo follows
+  [`SwapGoldenSpec.hs`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/test/golden/SwapGoldenSpec.hs))
 - Wizard fixtures: `test/fixtures/disburse-wizard/`
 - Build fixtures: `test/fixtures/disburse/{ada,usdm}/`
 
@@ -57,18 +61,22 @@ Phases 4 and 5.
       `Amaru.Treasury.Tx.DisburseWizard.Trace`) to the library
       `exposed-modules` list in `amaru-treasury-tx.cabal`. Verify
       `aeson-pretty` is already in `build-depends` (added in 002); add
-      it if missing. Run `nix develop -c just cabal-check` and confirm
-      pass.
-- [ ] T002 [P] Add the new test specs
+      it if missing. Confirm `just format-check` and `just hlint`
+      recipes exist in the `justfile`; add them if missing (they
+      are referenced by `just ci`). Run `nix develop -c just
+      cabal-check` and confirm pass.
+- [ ] T002 [P] Add the new unit specs
       (`Amaru.Treasury.Tx.DisburseSpec`,
       `Amaru.Treasury.Tx.DisburseBuildSpec`,
       `Amaru.Treasury.Tx.DisburseWizardSpec`) to the `unit-tests`
       stanza's `other-modules` in `amaru-treasury-tx.cabal`, and the
-      golden specs (`Amaru.Treasury.Tx.DisburseSpec` and
-      `Amaru.Treasury.Tx.UsdmDisburseSpec` under
+      golden specs (`Amaru.Treasury.Tx.AdaDisburseGoldenSpec` and
+      `Amaru.Treasury.Tx.UsdmDisburseGoldenSpec` under
       `test/golden/Amaru/Treasury/Tx/`) to the `golden-tests` stanza.
-      Run `nix develop -c just build` and confirm both test suites
-      compile (empty modules OK at this stage).
+      The `Golden` suffix on the golden modules deliberately
+      disambiguates from the unit `DisburseSpec`. Run `nix develop -c
+      just build` and confirm both test suites compile (empty modules
+      OK at this stage).
 - [ ] T003 [P] Add the wizard and build fixture directories
       (`test/fixtures/disburse-wizard/`, `test/fixtures/disburse/`)
       to `extra-source-files` in `amaru-treasury-tx.cabal`.
@@ -274,8 +282,14 @@ after running the build subcommand.
       [`runSwapBuild`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapBuild.hs):
       load pparams, build via `disburseAdaProgram`, balance,
       re-evaluate per-redeemer ExUnits, return `DisburseBuildResult`.
-      The `ChainContext` and `ScriptResult` types are imported
-      unchanged from existing modules
+      On any redeemer re-evaluation failure, emit `ScriptResult …
+      (Left err)` for that index but continue producing a complete
+      `DisburseBuildResult` (CBOR + fee + collateral). The runner in
+      `Main.hs` (T048) is responsible for translating any `Left` into
+      a non-zero exit code per FR-011 — `runDisburseBuild` itself
+      does not throw on script failure. The `ChainContext` and
+      `ScriptResult` types are imported unchanged from existing
+      modules
       ([research R11](./research.md#r11-reusing-runswapbuilds-chaincontext)).
 - [ ] T029 [P] [US1] Author ADA body-CBOR fixture set under
       `test/fixtures/disburse/ada/`: `intent.json` (the same one
@@ -285,32 +299,49 @@ after running the build subcommand.
       treasury inputs + wallet UTxO), and `pparams.json`
       (already-checked-in fixture under
       [`test/fixtures/pparams.json`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/test/fixtures/pparams.json) — symlink).
-- [ ] T030 [US1] Author `test/golden/Amaru/Treasury/Tx/DisburseSpec.hs`
-      with one `it` block: `"ada-disburse golden body matches"`.
-      Loads T029 fixtures, runs `runDisburseBuild`, strips ExUnits,
-      compares to `test/fixtures/disburse/ada/body.cbor`.
+- [ ] T030 [US1] Author
+      `test/golden/Amaru/Treasury/Tx/AdaDisburseGoldenSpec.hs` with
+      one `it` block: `"ada-disburse golden body matches"`.
+      Loads T029 fixtures, calls a small fixture-recorder helper
+      `runDisburseBuildFromFixtures` that builds a `ChainContext`
+      from the `utxos.json` + `pparams.json` fixtures (no
+      `Provider IO`, no node socket) and invokes `runDisburseBuild`
+      directly. Strips ExUnits, compares the body bytes to
+      `test/fixtures/disburse/ada/body.cbor`.
+      Note: this is the same fixture-mode shape the swap golden
+      uses; the helper itself lives in
+      `test/golden/Amaru/Treasury/Tx/Fixture.hs` so both the ADA and
+      USDM goldens share it.
 - [ ] T031 [US1] Confirm RED: run `nix develop -c just golden
       --test-options=--match=ada-disburse` and observe the spec
       failing (no `body.cbor` yet, or no `runDisburseBuild`).
-- [ ] T032 [US1] Generate `test/fixtures/disburse/ada/body.cbor` once
-      against the local mainnet node:
-      `nix develop -c cabal run amaru-treasury-tx -O0 -- --network
-      mainnet --node-socket /code/cardano-mainnet/ipc/node.socket
-      disburse --intent test/fixtures/disburse/ada/intent.json --out
-      /tmp/disburse.cbor.hex`. Strip ExUnits (use the existing
-      `stripExUnits` helper), commit `body.cbor`. Document the exact
-      command in a comment at the top of the spec file so the next
-      regeneration is mechanical.
+- [ ] T032 [US1] Generate `test/fixtures/disburse/ada/body.cbor`
+      once via the same `runDisburseBuildFromFixtures` helper used
+      by T030 (a one-shot Hspec entry point added under
+      `test/golden/Amaru/Treasury/Tx/Fixture.hs` that writes the
+      stripped-ExUnits body to the fixture path). The CLI binary is
+      **not** required at this point — Phase 6 (`disburse`
+      subcommand) lands later. Commit `body.cbor`. Document the
+      exact command (a single `cabal run golden-tests --
+      --recorder ada`) in a comment at the top of T030's spec file
+      so the next regeneration is mechanical. This step is local
+      only (workstation with the local mainnet UTxO snapshot used to
+      author `utxos.json`); CI replays the recorded body.cbor and
+      never re-records.
 - [ ] T033 [US1] Confirm GREEN: rerun T031's command; the golden
       passes byte-for-byte.
 - [ ] T034 [P] [US1] Negative test in
       `test/unit/Amaru/Treasury/Tx/DisburseWizardSpec.hs`: stub
       `Provider IO` returns a beneficiary address whose `Network`
-      does not match `ResolverInput.network`; assert
-      `Left ResolverBeneficiaryNetworkMismatch`. Covers the
+      does not match `ResolverInput.network`; assert the resolver
+      returns `Left ResolverBeneficiaryNetworkMismatch` (constructor
+      from the `ResolverError` block in
+      [data-model.md §3](./data-model.md), distinct from the
+      pure-translation `DisburseError`). Covers the
       beneficiary-mismatch edge case from `spec.md`.
 - [ ] T035 [P] [US1] Negative test: insufficient treasury ADA →
-      `Left ResolverInsufficientTreasuryAda`.
+      `Left (ResolverShortfall …)` (the typed shortfall constructor
+      from `ResolverError`).
 - [ ] T036 [US1] Run `just ci`; the new specs must remain green
       end-to-end.
 
@@ -341,18 +372,25 @@ golden.
       `DisburseWizardSpec.hs`: `Σ usdm on inputs ≥ amount`,
       `tsLeftoverUsdm = Σ usdm − amount`, leftover lovelace and other
       assets preserved.
+- [ ] T037a [US2] Add `disburseUsdmRedeemer :: Integer ->
+      RawPlutusData` to
+      [`Amaru.Treasury.Redeemer`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Redeemer.hs)
+      mirroring the existing `disburseAdaRedeemer`. The Plutus-data
+      shape encodes the USDM `Value` (a single asset entry under the
+      USDM policy + token) per the Sundae treasury redeemer
+      [`DisburseValue`](https://github.com/SundaeSwap-finance/treasury-contracts/blob/main/validators/treasury.ak)
+      constructor. Add a `RedeemerSpec` golden hex assertion under
+      `test/unit/Amaru/Treasury/RedeemerSpec.hs` recorded once via
+      [`make_redeemer_disburse.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/lib/make_redeemer_disburse.sh)
+      against a USDM amount.
 - [ ] T038 [US2] Implement `disburseUsdmProgram :: DisburseIntentFields
       -> Integer -> TxBuild q e ()` in
-      `lib/Amaru/Treasury/Tx/Disburse.hs`. Body shape: same eight
-      operations as `disburseAdaProgram`, but the beneficiary output
-      carries `MaryValue (getMinCoinTxOut pparams) (singletonAsset
+      `lib/Amaru/Treasury/Tx/Disburse.hs`, consuming the redeemer
+      added in T037a. Body shape: same eight operations as
+      `disburseAdaProgram`, but the beneficiary output carries
+      `MaryValue (getMinCoinTxOut pparams) (singletonAsset
       usdmPolicy usdmAsset amount)` and the leftover output carries
       every other asset present on inputs (including spent ADA).
-      Redeemer is `DisburseValue amount` (USDM is a value, not a
-      lovelace number — the redeemer shape carries the typed Plutus
-      value; check
-      [`Amaru.Treasury.Redeemer.disburseUsdmRedeemer`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Redeemer.hs)
-      exists; if not, add it in this task).
 - [ ] T039 [US2] Extend `runDisburseBuild` in
       `lib/Amaru/Treasury/Tx/DisburseBuild.hs` to dispatch to
       `disburseUsdmProgram` when `dbiIntent` is
@@ -362,15 +400,17 @@ golden.
       (synthesized USDM-bearing treasury UTxO), `pparams.json`
       (symlink).
 - [ ] T041 [US2] Author
-      `test/golden/Amaru/Treasury/Tx/UsdmDisburseSpec.hs` with one
-      `it` block: `"usdm-disburse golden body matches"`. Loads T040
-      fixtures, runs `runDisburseBuild`, strips ExUnits, compares to
-      `test/fixtures/disburse/usdm/body.cbor`.
+      `test/golden/Amaru/Treasury/Tx/UsdmDisburseGoldenSpec.hs` with
+      one `it` block: `"usdm-disburse golden body matches"`. Loads
+      T040 fixtures via the shared `runDisburseBuildFromFixtures`
+      helper from T030 (no CLI, no node socket), strips ExUnits,
+      compares to `test/fixtures/disburse/usdm/body.cbor`.
 - [ ] T042 [US2] Confirm RED: run `nix develop -c just golden
       --test-options=--match=usdm-disburse`.
 - [ ] T043 [US2] Generate `test/fixtures/disburse/usdm/body.cbor`
-      against the local mainnet node (same procedure as T032).
-      Document the exact command.
+      via the same fixture-recorder helper as T032 (no CLI
+      dependency). Local-only step; CI replays. Document the exact
+      command.
 - [ ] T044 [US2] Confirm GREEN: rerun T042's command; the golden
       passes byte-for-byte. Run `just ci` end-to-end.
 
@@ -421,7 +461,9 @@ exactly one line of hex characters.
       a fixture metadata.json against a stub-stdin `disburse` build
       (no node required) — asserts the wizard's stdout decodes as
       `DisburseIntentJSON` and that `disburse < intent.json` exits
-      `0` with hex on stdout. Mirror
+      `0` with hex on stdout. Records wall-clock duration via
+      `time -f '%e'` and fails the script if it exceeds 10 seconds
+      (covers SC-002). Mirror
       [`scripts/smoke/swap-wizard-signers`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/scripts/smoke/swap-wizard-signers).
 - [ ] T051 [US4] Add the smoke script to the `just smoke` recipe and
       to the CI workflow under
@@ -492,14 +534,14 @@ two goldens and validate against the schema.
       [quickstart.md §9](./quickstart.md): produce `intent.json` with
       the wizard against `--network preprod`, hand-sign offline,
       submit, observe. Record the run in the PR description.
-- [ ] T063 Once 004 lands and is tagged, file follow-up issues for
-      005 (withdraw-wizard) and 006 (reorganize-wizard) to start —
-      they were filed as
+- [ ] T063 On 004 merge, unblock the follow-up features:
       [#45](https://github.com/lambdasistemi/amaru-treasury-tx/issues/45)
-      and
-      [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46),
-      blocked-by [#44](https://github.com/lambdasistemi/amaru-treasury-tx/issues/44);
-      this task is the unblock signal (close + remove blockedBy edges).
+      (withdraw-wizard) and
+      [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46)
+      (reorganize-wizard) were filed at the start of the path with
+      `blockedBy = #44`. This task removes the `blockedBy` edges via
+      `gh api graphql … removeBlockedBy …` and posts a comment on
+      both issues announcing that work can start.
 
 **Checkpoint**: ready for review and merge once #44's PR is green.
 
@@ -512,7 +554,7 @@ Setup (T001-T004)
     └── Foundational (T005-T013)
             └── Phase 3 [US3] pure translation (T014-T024) ── MVP gate
                     └── Phase 4 [US1] ADA resolver + golden (T025-T036)
-                            └── Phase 5 [US2] USDM golden (T037-T044)
+                            └── Phase 5 [US2] USDM golden (T037-T037a-T038-T044)
                                     └── Phase 6 [US4] pipe (T045-T053)
                                             └── Phase 7 [US5] summary (T054-T056)
                                                     └── Phase 8 polish (T057-T063)

@@ -200,8 +200,10 @@ test/unit/Amaru/Treasury/Tx/
 └── DisburseWizardSpec.hs        # NEW: parser + translator tests
 
 test/golden/Amaru/Treasury/Tx/
-├── DisburseSpec.hs              # NEW: body CBOR vs golden (ADA case)
-└── UsdmDisburseSpec.hs          # NEW: body CBOR vs golden (USDM)
+├── AdaDisburseGoldenSpec.hs     # NEW: body CBOR vs golden (ADA case);
+│                                # name disambiguates from the unit
+│                                # DisburseSpec under test/unit/.
+└── UsdmDisburseGoldenSpec.hs    # NEW: body CBOR vs golden (USDM)
 
 test/fixtures/disburse-wizard/
 ├── env.ada.json                 # fixture DisburseEnv (ADA case)

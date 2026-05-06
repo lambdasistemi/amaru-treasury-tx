@@ -33,6 +33,12 @@ module Amaru.Treasury.IntentJSON
     , WalletJSON (..)
     , ScopeJSON (..)
     , RationaleJSON (..)
+
+      -- * Per-action input records
+    , SwapInputs (..)
+    , DisburseInputs (..)
+    , WithdrawInputs (..)
+    , ReorganizeInputs (..)
     ) where
 
 import Data.Aeson
@@ -82,21 +88,14 @@ deriving stock instance Eq (SAction a)
 -- ----------------------------------------------------
 
 {- | Per-action input payload — the JSON block under the
-discriminator-keyed object. The matching record types
-land in T006:
-
-@
-    Payload \'Swap        = SwapInputs
-    Payload \'Disburse    = DisburseInputs
-    Payload \'Withdraw    = WithdrawInputs
-    Payload \'Reorganize  = ReorganizeInputs
-@
-
-Stubbed as @()@ here; T006 fills in each row by
-re-defining the family with the per-action records once
-they exist.
+discriminator-keyed object. Each row names one of the
+per-action input records defined below.
 -}
-type family Payload (a :: Action) :: Type
+type family Payload (a :: Action) :: Type where
+    Payload 'Swap = SwapInputs
+    Payload 'Disburse = DisburseInputs
+    Payload 'Withdraw = WithdrawInputs
+    Payload 'Reorganize = ReorganizeInputs
 
 {- | Per-action translated form — the typed lift consumed
 by the build path. Names the existing per-action typed
@@ -235,3 +234,130 @@ instance ToJSON RationaleJSON where
             , "justification" .= rjJustification
             , "destinationLabel" .= rjDestinationLabel
             ]
+
+-- ----------------------------------------------------
+-- Per-action input records
+-- ----------------------------------------------------
+
+{- | Swap-action payload. Identical fields to today's
+'Amaru.Treasury.Tx.SwapIntentJSON.SwapInputs'.
+-}
+data SwapInputs = SwapInputs
+    { siSwapOrderAddress :: !Text
+    , siChunkSizeLovelace :: !Integer
+    , siAmountLovelace :: !Integer
+    , siExtraPerChunkLovelace :: !Integer
+    , siRateNumerator :: !Integer
+    , siRateDenominator :: !Integer
+    , siPoolId :: !Text
+    , siCoreOwner :: !Text
+    , siOpsOwner :: !Text
+    , siNetworkComplianceOwner :: !Text
+    , siMiddlewareOwner :: !Text
+    , siSundaeProtocolFeeLovelace :: !Integer
+    , siUsdmPolicy :: !Text
+    , siUsdmToken :: !Text
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON SwapInputs where
+    parseJSON = withObject "SwapInputs" $ \o ->
+        SwapInputs
+            <$> o .: "swapOrderAddress"
+            <*> o .: "chunkSizeLovelace"
+            <*> o .: "amountLovelace"
+            <*> o .: "extraPerChunkLovelace"
+            <*> o .: "rateNumerator"
+            <*> o .: "rateDenominator"
+            <*> o .: "poolId"
+            <*> o .: "coreOwner"
+            <*> o .: "opsOwner"
+            <*> o .: "networkComplianceOwner"
+            <*> o .: "middlewareOwner"
+            <*> o .: "sundaeProtocolFeeLovelace"
+            <*> o .: "usdmPolicy"
+            <*> o .: "usdmToken"
+
+instance ToJSON SwapInputs where
+    toJSON SwapInputs{..} =
+        object
+            [ "swapOrderAddress" .= siSwapOrderAddress
+            , "chunkSizeLovelace" .= siChunkSizeLovelace
+            , "amountLovelace" .= siAmountLovelace
+            , "extraPerChunkLovelace"
+                .= siExtraPerChunkLovelace
+            , "rateNumerator" .= siRateNumerator
+            , "rateDenominator" .= siRateDenominator
+            , "poolId" .= siPoolId
+            , "coreOwner" .= siCoreOwner
+            , "opsOwner" .= siOpsOwner
+            , "networkComplianceOwner"
+                .= siNetworkComplianceOwner
+            , "middlewareOwner" .= siMiddlewareOwner
+            , "sundaeProtocolFeeLovelace"
+                .= siSundaeProtocolFeeLovelace
+            , "usdmPolicy" .= siUsdmPolicy
+            , "usdmToken" .= siUsdmToken
+            ]
+
+{- | Disburse-action payload. Mirrors feature 004's
+'Amaru.Treasury.Tx.DisburseIntentJSON.DisburseInputsJSON'
+on the same JSON keys.
+-}
+data DisburseInputs = DisburseInputs
+    { diUnit :: !Text
+    -- ^ @"ada"@ or @"usdm"@
+    , diAmount :: !Integer
+    , diBeneficiaryAddress :: !Text
+    , diUsdmPolicy :: !Text
+    , diUsdmToken :: !Text
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON DisburseInputs where
+    parseJSON = withObject "DisburseInputs" $ \o ->
+        DisburseInputs
+            <$> o .: "unit"
+            <*> o .: "amount"
+            <*> o .: "beneficiaryAddress"
+            <*> o .: "usdmPolicy"
+            <*> o .: "usdmToken"
+
+instance ToJSON DisburseInputs where
+    toJSON DisburseInputs{..} =
+        object
+            [ "unit" .= diUnit
+            , "amount" .= diAmount
+            , "beneficiaryAddress" .= diBeneficiaryAddress
+            , "usdmPolicy" .= diUsdmPolicy
+            , "usdmToken" .= diUsdmToken
+            ]
+
+{- | Withdraw-action payload (placeholder until
+[#45](https://github.com/lambdasistemi/amaru-treasury-tx/issues/45)
+ships). Empty record so the parser can still produce a
+typed value; real shape lands when withdraw ships.
+-}
+data WithdrawInputs = WithdrawInputs
+    deriving stock (Eq, Show)
+
+instance FromJSON WithdrawInputs where
+    parseJSON = withObject "WithdrawInputs" $ \_ ->
+        pure WithdrawInputs
+
+instance ToJSON WithdrawInputs where
+    toJSON WithdrawInputs = object []
+
+{- | Reorganize-action payload (placeholder until
+[#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46)
+ships).
+-}
+data ReorganizeInputs = ReorganizeInputs
+    deriving stock (Eq, Show)
+
+instance FromJSON ReorganizeInputs where
+    parseJSON = withObject "ReorganizeInputs" $ \_ ->
+        pure ReorganizeInputs
+
+instance ToJSON ReorganizeInputs where
+    toJSON ReorganizeInputs = object []

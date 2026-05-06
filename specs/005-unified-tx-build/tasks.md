@@ -55,7 +55,7 @@ no-behaviour-change gate.
 **Purpose**: cabal/justfile plumbing for the new modules. No
 production code yet.
 
-- [ ] T001 Add the new library modules
+- [x] T001 Add the new library modules
       (`Amaru.Treasury.IntentJSON`,
       `Amaru.Treasury.IntentJSON.Common`,
       `Amaru.Treasury.Wizard.Common`,
@@ -65,7 +65,7 @@ production code yet.
       `Tx/SwapIntentJSON`, `Tx/SwapBuild`, `Tx/Swap/Trace` for
       removal in T011 / T021. Run `nix develop -c just
       cabal-check` and confirm pass.
-- [ ] T002 [P] Add the new unit specs
+- [x] T002 [P] Add the new unit specs
       (`Amaru.Treasury.IntentJSONSpec`,
       `Amaru.Treasury.TreasuryBuildSpec`) to the `unit-tests`
       stanza's `other-modules`. The existing
@@ -73,7 +73,7 @@ production code yet.
       `unit-tests`; the existing `SwapGoldenSpec` (under
       `golden-tests`) keeps its name but its body is rewritten in
       T024.
-- [ ] T003 [P] Confirm `just ci` recipe still chains
+- [x] T003 [P] Confirm `just ci` recipe still chains
       `build → unit → golden → format-check → hlint → smoke
        → release-check`; no recipe edit expected.
 
@@ -87,14 +87,14 @@ stubs; both test suites discover them.
 **Purpose**: GADT + type-family scaffolding, shared blocks, and
 the parser/encoder helpers shared across actions.
 
-- [ ] T004 Implement `Action`, `SAction` (singleton GADT),
+- [x] T004 Implement `Action`, `SAction` (singleton GADT),
       `Payload` and `Translated` type families in
       `lib/Amaru/Treasury/IntentJSON.hs`. Field list per
       [data-model.md §1, §2](./data-model.md). Strict, leading
       commas, fourmolu 70-col, explicit export list. Add the
       required language pragmas (`DataKinds`, `GADTs`,
       `TypeFamilies`, `KindSignatures`).
-- [ ] T005 [P] Implement the shared structural blocks
+- [x] T005 [P] Implement the shared structural blocks
       (`WalletJSON`, `ScopeJSON`, `RationaleJSON`) in
       `lib/Amaru/Treasury/IntentJSON.hs` with `FromJSON` +
       `ToJSON`. Field list per
@@ -111,7 +111,7 @@ the parser/encoder helpers shared across actions.
       unit field) until [#45](https://github.com/lambdasistemi/amaru-treasury-tx/issues/45)
       and [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46)
       ship.
-- [ ] T006a Add a placeholder
+- [x] T006a Add a placeholder
       `lib/Amaru/Treasury/Tx/Reorganize.hs` exporting
       `data ReorganizeIntent = ReorganizeIntent` (a record with a
       single unit field) so the `Translated` family in §2 of

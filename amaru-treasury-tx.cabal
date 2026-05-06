@@ -22,6 +22,7 @@ extra-source-files:
   assets/plutus/scopes.cbor
   assets/plutus/treasury.cbor
   assets/plutus/treasury_registry.cbor
+  scripts/smoke/swap-wizard-signers
   test/fixtures/swap-wizard/**/*.json
 
 flag werror

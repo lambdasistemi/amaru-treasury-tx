@@ -3,7 +3,7 @@
 **Feature Branch**: `002-swap-wizard`
 **Created**: 2026-05-05
 **Status**: Draft
-**Input**: User description: "swap-wizard subcommand that produces intent.json from a small typed questionnaire (see issue #27). The CLI prompts the user for ~7 real-intent answers (scope, total ADA, chunk size or slippage, min rate or slippage %, validity window in hours, rationale description+justification, optional signer override) and resolves all derivable fields (treasuryAddress, *DeployedAt, owner key hashes, swapOrderAddress, USDM policy/token, sundae fee, treasuryUtxos selection, leftover lovelace, wallet UTxO) via the existing Provider IO and a curated network-constants table. Output is a JSON file that round-trips through decodeSwapIntent + translateIntent. The build path stays JSON-only — the wizard is purely a JSON producer, never calls runSwapBuild directly."
+**Input**: User description: "swap-wizard subcommand that produces intent.json from a small typed questionnaire (see issue #27). The CLI prompts the user for ~7 real-intent answers (scope, total ADA, chunk size or slippage, min rate or slippage %, validity window in hours, rationale description+justification, optional extra signer witnesses) and resolves all derivable fields (treasuryAddress, *DeployedAt, owner key hashes, swapOrderAddress, USDM policy/token, sundae fee, treasuryUtxos selection, leftover lovelace, wallet UTxO) via the existing Provider IO and a curated network-constants table. Output is a JSON file that round-trips through decodeSwapIntent + translateIntent. The build path stays JSON-only — the wizard is purely a JSON producer, never calls runSwapBuild directly."
 
 Tracking issue: [#27](https://github.com/lambdasistemi/amaru-treasury-tx/issues/27)
 
@@ -122,7 +122,7 @@ JSON with the same answers.
   user: scope (Core / Ops / NetworkCompliance / Middleware), total
   ADA to swap, chunk size (lovelace), minimum acceptable rate as
   numerator and denominator, validity window in hours, rationale
-  description, rationale justification, optional signer override.
+  description, rationale justification, optional extra signers.
   Slippage-tolerance and slippage-percent shortcuts are deferred
   per the Assumptions section. The CLI prompt schema in
   [contracts/swap-wizard-cli.md §2](./contracts/swap-wizard-cli.md)
@@ -144,10 +144,11 @@ JSON with the same answers.
   policy (e.g. largest-first until sum ≥ total).
 - **FR-005**: System MUST select the wallet UTxO from the configured
   signing key as the largest pure-ADA UTxO at the wallet address.
-- **FR-006**: System MUST default `signers` to the scope's owner set
-  — the scope's primary owner key plus the witness scope owner keys
-  per `journal/2026/lib/swap_order.sh` — and accept an explicit
-  override answer that replaces (not extends) the default.
+- **FR-006**: System MUST default `signers` to the selected scope's
+  owner key inferred from `--scope`, and MUST accept extra signer
+  answers that extend (not replace) that default. Extra signers MAY be
+  given as scope names/aliases, resolved to their owner key hashes, or
+  as raw 28-byte key hashes.
 - **FR-007**: System MUST compute `validityUpperBoundSlot` by adding
   the answered hours (translated to slots) to the current chain tip.
 - **FR-008**: System MUST write the result as a JSON file at a
@@ -224,8 +225,8 @@ The wizard adds two layers on top of the verifier's:
    advances the table; NOT verified against chain.
 2. **Operator-supplied answers** (`--wallet-addr`, `--scope`,
    `--usdm`, `--chunk-usdm`/`--split`, `--min-rate`,
-   `--validity-hours`, rationale text, optional `--signer`
-   overrides) — structurally validated, but the wizard cannot
+   `--validity-hours`, rationale text, optional `--extra-signer`
+   witnesses) — structurally validated, but the wizard cannot
    judge whether `--scope network_compliance` matches the
    operator's intent.
 

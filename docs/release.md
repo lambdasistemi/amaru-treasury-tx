@@ -23,6 +23,11 @@ The planner maps commit intent onto PVP-shaped Cabal versions:
 | `feat:` | third component, for example `0.1.1.0` to `0.1.2.0` |
 | `!` or `BREAKING CHANGE:` | second component, for example `0.1.1.0` to `0.2.0.0` |
 
+For user-facing CLI changes that invalidate old operator scripts, use
+a breaking Conventional Commit such as `feat!:` and include a
+`BREAKING CHANGE:` footer. The release planner treats either marker as
+a breaking release signal.
+
 The planner must push branches and tags through `RELEASE_BOT_SSH_KEY`.
 Using the default `GITHUB_TOKEN` for git writes would create branch and
 tag events that do not trigger the normal CI and publication workflows.
@@ -65,6 +70,16 @@ Merging the release PR does not publish directly. The next planner run
 creates `v<package-version>`, and the tag push starts the Linux and
 Darwin release workflows.
 
+Before merging a release-bound PR, run:
+
+```bash
+nix develop --quiet -c just ci
+```
+
+That includes `just smoke`, which exercises the swap-wizard signer
+regression and checks that the built CLI advertises
+`--extra-signer,--signer SCOPE|HEX`.
+
 The release workflows run `scripts/release/check-version-consistency`
 before building. A tag is publishable only when:
 
@@ -73,4 +88,6 @@ before building. A tag is publishable only when:
 - release-please state files are absent.
 
 Linux publishes AppImage, DEB, and RPM assets. Darwin publishes an
-aarch64-darwin tarball and updates the Homebrew tap.
+aarch64-darwin tarball and updates the Homebrew tap. Each release
+bundle is smoke-tested by extracting the artifact and checking the
+`swap-wizard --help` signer surface before upload.

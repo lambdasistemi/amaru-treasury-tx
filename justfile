@@ -36,6 +36,10 @@ hlint:
 release-check:
     scripts/release/check-version-consistency
 
+# Smoke-test the shipped swap-wizard signer UX
+smoke:
+    scripts/smoke/swap-wizard-signers
+
 # Build all components
 build:
     cabal build all -O0
@@ -73,4 +77,5 @@ ci:
     just golden
     just format-check
     just hlint
+    just smoke
     just release-check

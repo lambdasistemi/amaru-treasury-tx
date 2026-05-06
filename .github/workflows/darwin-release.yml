@@ -106,6 +106,20 @@ jobs:
           shasum -a 256 "$tarball"
           echo "$tarball" > /tmp/tarball-path
 
+      - name: Smoke-test Darwin tarball
+        run: |
+          set -euo pipefail
+          tarball="$(cat /tmp/tarball-path)"
+          tmpdir="$(mktemp -d)"
+          tar xzf "$tarball" -C "$tmpdir"
+          bin="$tmpdir/bin/amaru-treasury-tx"
+          test -x "$bin"
+          "$bin" --help
+          help_text="$("$bin" swap-wizard --help)"
+          printf '%s\n' "$help_text"
+          grep -F -- '--extra-signer,--signer SCOPE|HEX' \
+            <<<"$help_text" >/dev/null
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v7
         with:

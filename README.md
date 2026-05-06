@@ -57,6 +57,12 @@ nix develop
 just ci      # build + unit + golden + format + hlint + cabal-check
 ```
 
+Smoke the release-facing signer path locally with:
+
+```bash
+nix develop --quiet -c just smoke
+```
+
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE).

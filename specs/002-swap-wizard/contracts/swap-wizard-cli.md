@@ -24,7 +24,7 @@ amaru-treasury-tx [--node-socket PATH] [--network-magic N]
     --destination-label TEXT
     [--event TEXT]
     [--label TEXT]
-    [--signer HEX28]      (repeat for each)
+    [--extra-signer SCOPE|HEX28]      (repeat for each)
     [--yes]
     [--dry-run]
     [--verbose]
@@ -53,8 +53,10 @@ Notes:
   Internally rendered as numerator/denominator with denominator
   fixed at 1_000_000 (USDM precision).
 - `--scope` takes the canonical name from `Amaru.Treasury.Scope`.
-- `--signer` is repeated for each override key hash; absent flags
-  mean "use the scope default".
+- The selected `--scope` implies its owner key as the first required
+  signer. `--extra-signer` is repeated for each witness beyond that
+  owner and accepts either a scope name/alias or a raw 28-byte key
+  hash. `--signer` is kept as a compatibility alias.
 - `--metadata` is a local `journal/2026/metadata.json`-shaped file.
   The wizard verifies consumed registry anchors against the local
   node before resolving the intent.
@@ -79,8 +81,8 @@ Notes:
 8. Rationale destination label (single line).
 9. Optional rationale event override (default `disburse`).
 10. Optional rationale label override (default `Swap ADA<->USDM`).
-11. Optional signer override (comma-separated 28-byte hex; empty =
-    use scope default).
+11. Optional extra signers (comma-separated scope names or 28-byte
+    key hashes; empty = selected scope owner only).
 12. Resolved-fields summary printed; confirmation prompt
     `Confirm and write intent.json? [y/N]`.
 

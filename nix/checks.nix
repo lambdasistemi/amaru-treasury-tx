@@ -43,7 +43,27 @@ let
         -exec hlint {} +
     '';
   };
+
+  smoke = pkgs.writeShellApplication {
+    name = "smoke";
+    runtimeInputs = [
+      components.exes.amaru-treasury-tx
+      components.tests.unit-tests
+    ];
+    text = ''
+      unit-tests \
+        --match "infers the scope owner and appends extra signer scopes"
+
+      help_text="$(amaru-treasury-tx swap-wizard --help)"
+      printf '%s\n' "$help_text"
+
+      grep -F -- '[--extra-signer|--signer SCOPE|HEX]' \
+        <<<"$help_text" >/dev/null
+      grep -F -- '--extra-signer,--signer SCOPE|HEX' \
+        <<<"$help_text" >/dev/null
+    '';
+  };
 in
 {
-  inherit build golden lint unit;
+  inherit build golden lint smoke unit;
 }

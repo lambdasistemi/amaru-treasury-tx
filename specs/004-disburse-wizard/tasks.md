@@ -103,12 +103,12 @@ green.
 story consumes. Defined by [data-model.md](./data-model.md) §1–§6
 and [contracts/disburse-intent-json.md](./contracts/disburse-intent-json.md).
 
-- [ ] T005 Implement `DisburseAnswers`, `RationaleAnswers`, and
+- [x] T005 Implement `DisburseAnswers`, `RationaleAnswers`, and
       `DisburseError` in `lib/Amaru/Treasury/Tx/DisburseWizard.hs`.
       Field list and Haddock per [data-model.md §1
       and §3](./data-model.md). Strict, leading commas, fourmolu
       70-col, explicit export list.
-- [ ] T006 [P] Implement `DisburseEnv`, `TreasurySelection` (with
+- [x] T006 [P] Implement `DisburseEnv`, `TreasurySelection` (with
       `tsInputValues`, `tsLeftoverLovelace`, `tsLeftoverUsdm`,
       `tsLeftoverOtherAssets`), and `WalletSelection` in
       `lib/Amaru/Treasury/Tx/DisburseWizard.hs`. Re-export
@@ -116,7 +116,7 @@ and [contracts/disburse-intent-json.md](./contracts/disburse-intent-json.md).
       `TreasuryRefs`, `ScopeView` from `Amaru.Treasury.Tx.SwapWizard`
       via the new module so downstream callers do not need to import
       from the swap module directly.
-- [ ] T007 [P] Implement `DisburseIntentJSON`, `WalletJSON`,
+- [x] T007 [P] Implement `DisburseIntentJSON`, `WalletJSON`,
       `ScopeJSON`, `DisburseJSON`, `SignersJSON`, and `RationaleJSON`
       in `lib/Amaru/Treasury/Tx/DisburseIntentJSON.hs`. Field list per
       [data-model.md §4](./data-model.md). `FromJSON` + `ToJSON` with
@@ -125,7 +125,7 @@ and [contracts/disburse-intent-json.md](./contracts/disburse-intent-json.md).
       Add `encodeDisburseIntent :: DisburseIntentJSON ->
       ByteString.Lazy` using the same `aeson-pretty`-based stable
       encoder as `SwapIntentJSON.encodeIntentJSON`.
-- [ ] T008 Extend `Amaru.Treasury.Tx.Disburse` with the
+- [x] T008 Extend `Amaru.Treasury.Tx.Disburse` with the
       `DisburseIntent` ADT split per
       [data-model.md §5](./data-model.md): `DisburseAdaIntent
       DisburseIntentFields Coin` and `DisburseUsdmIntent
@@ -133,32 +133,32 @@ and [contracts/disburse-intent-json.md](./contracts/disburse-intent-json.md).
       `disburseAdaProgram` to consume `DisburseAdaIntent`. Keep this
       a *type-only* refactor — no behaviour change; the existing
       `Disburse.hs` body shape stays bit-identical.
-- [ ] T009 [P] Implement `decodeDisburseIntent :: ByteString.Lazy ->
+- [x] T009 [P] Implement `decodeDisburseIntent :: ByteString.Lazy ->
       Either String DisburseIntentJSON` and `translateDisburseIntent
       :: DisburseIntentJSON -> Either String TranslatedDisburseIntent`
       in `lib/Amaru/Treasury/Tx/DisburseIntentJSON.hs`. Mapping table
       per [data-model.md §7.2](./data-model.md). The `usdm` branch
       reads `disburse.amount` as USDM smallest-units; the `ada`
       branch reads it as lovelace.
-- [ ] T010 Implement the `Trace` type
+- [x] T010 Implement the `Trace` type
       `Amaru.Treasury.Tx.DisburseWizard.Trace.WizardEvent` (constructor
       list per
       [contracts/disburse-wizard-cli.md §5](./contracts/disburse-wizard-cli.md))
       with the `eventTracer :: Tracer IO Text -> Tracer IO WizardEvent`
       wrapper, mirroring `Tx.SwapWizard.Trace.eventTracer`.
-- [ ] T011 [P] Implement
+- [x] T011 [P] Implement
       `Amaru.Treasury.Tx.Disburse.Trace.DisburseEvent` (constructor
       list per
       [contracts/disburse-cli.md §5](./contracts/disburse-cli.md))
       with the `disburseEventTracer` wrapper, mirroring
       `Tx.Swap.Trace.swapEventTracer`.
-- [ ] T012 [P] Add a JSON round-trip QuickCheck property in
+- [x] T012 [P] Add a JSON round-trip QuickCheck property in
       `test/unit/Amaru/Treasury/Tx/DisburseSpec.hs`: for any small
       generator over `DisburseIntentJSON`, the output of
       `decodeDisburseIntent . encodeDisburseIntent` must equal the
       input (modulo deterministic key ordering). Property uses a tiny
       generator constrained to the `usdm` and `ada` branches.
-- [ ] T013 Confirm GREEN on Phase 2: `nix develop -c just unit`
+- [x] T013 Confirm GREEN on Phase 2: `nix develop -c just unit`
       passes the round-trip property; `just cabal-check` clean.
 
 **Checkpoint**: types compile; JSON round-trip property holds; both

@@ -64,7 +64,7 @@ Notes:
 data DisburseEnv = DisburseEnv
     { deNetwork :: !Text
     -- ^ "mainnet" | "preprod" | "preview"
-    , deCurrentTip :: !SlotNo
+    , deCurrentTip :: !Word64
     , deNetworkConstants :: !NetworkConstants
     -- ^ Reused from Amaru.Treasury.Tx.SwapWizard for the USDM
     --   policy/token rows; swap-only rows are simply unread on
@@ -72,50 +72,54 @@ data DisburseEnv = DisburseEnv
     , deRegistry :: !RegistryView
     , deScopeView :: !ScopeView
     -- ^ Projection of `deRegistry` for the chosen scope.
-    , deTreasurySelection :: !TreasurySelection
+    , deTreasurySelection :: !DisburseTreasurySelection
     , deWalletSelection :: !WalletSelection
-    , deBeneficiaryAddr :: !Addr
-    -- ^ The parsed-and-validated beneficiary address.
+    , deBeneficiaryAddrBech32 :: !Text
+    -- ^ The bech32 string carried verbatim through to the
+    --   JSON intent. Parsed and network-checked by the resolver
+    --   before this record is built; the pure translation does
+    --   not re-parse it.
     }
 
-data TreasurySelection = TreasurySelection
-    { tsInputs :: ![TxIn]
-    , tsInputValues :: ![MaryValue]
-    -- ^ Per-input value, parallel to tsInputs. Used to compute
-    --   the leftover output's full asset map.
-    , tsLeftoverLovelace :: !Integer
+data DisburseTreasurySelection = DisburseTreasurySelection
+    { dtsInputs :: ![Text]
+    -- ^ "txid#ix"
+    , dtsLeftoverLovelace :: !Integer
     -- ^ Σ lovelace on inputs − beneficiary lovelace
     --   (precomputed by the resolver; pure translation does
     --   not redo the arithmetic).
-    , tsLeftoverUsdm :: !Integer
+    , dtsLeftoverUsdm :: !Integer
     -- ^ Σ USDM on inputs − beneficiary USDM.
     --   For `--unit ada` the beneficiary takes 0 USDM, so this
     --   equals the total USDM on the selected treasury inputs
     --   (often zero in practice, but non-zero whenever a
     --   selected treasury UTxO happens to carry USDM).
-    , tsLeftoverOtherAssets :: !MultiAsset
+    , dtsLeftoverOtherAssets :: !(Map Text (Map Text Integer))
     -- ^ All non-ADA / non-USDM assets present on inputs;
-    --   forwarded verbatim onto the leftover output.
-    }
-
-data WalletSelection = WalletSelection
-    { wsTxIn :: !TxIn
-    , wsAddress :: !Addr
+    --   forwarded verbatim onto the leftover output. Outer
+    --   key: policy hex; inner key: asset-name hex.
     }
 ```
+
+`WalletSelection` is re-exported unchanged from
+[`Amaru.Treasury.Tx.SwapWizard`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapWizard.hs)
+(`wsTxIn :: Text`, `wsAddress :: Text`).
 
 Notes:
 
 - `NetworkConstants`, `RegistryView`, `ScopeOwners`, `TreasuryRefs`,
-  `ScopeView` are imported from
-  [`Amaru.Treasury.Tx.SwapWizard`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapWizard.hs);
-  see research [§R7](./research.md#r7-networkconstants-reuse).
-- `tsInputValues` is *new* relative to feature 002. The swap path only
-  spends ADA, so the leftover is a single lovelace number; disburse
-  must preserve every asset present on the inputs and so the resolver
-  carries the full per-input value.
-- `deBeneficiaryAddr` is the parsed `Addr`; the resolver rejects any
-  bech32 whose network does not match `deNetwork`.
+  `ScopeView`, `WalletSelection` are imported and re-exported from
+  the swap wizard; see research [§R7](./research.md#r7-networkconstants-reuse).
+- The disburse-side `DisburseTreasurySelection` is a sibling of the
+  swap-side `TreasurySelection`: disburse must preserve every asset
+  present on the selected inputs (USDM and any other native assets)
+  on the leftover output, so the leftover triple is materialised in
+  the env. The resolver computes per-input values internally; only
+  the precomputed leftover totals enter `DisburseEnv`.
+- The bech32 strings (txin / addr / policy / asset name) are kept as
+  `Text` until the build path lifts them to ledger types via
+  `translateDisburseIntent`. This matches the existing swap-wizard
+  pattern.
 
 ## 3. The pure translation
 

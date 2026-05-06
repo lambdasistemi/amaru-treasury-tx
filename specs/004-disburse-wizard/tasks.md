@@ -187,33 +187,33 @@ each result through `decodeDisburseIntent + translateDisburseIntent`.
 authored *before* the translation, and the spec must run RED once
 before the implementation is written.
 
-- [ ] T014 [P] [US3] Author fixture
+- [x] T014 [P] [US3] Author fixture
       `test/fixtures/disburse-wizard/env.ada.json` for an
       ADA-disburse scenario (`core_development` scope, single treasury
       UTxO holding 1500 ADA, wallet UTxO holding 50 ADA, mainnet
       registry refs). Encoded shape matches the `FromJSON` for
       `DisburseEnv` landed in T006.
-- [ ] T015 [P] [US3] Author fixture
+- [x] T015 [P] [US3] Author fixture
       `test/fixtures/disburse-wizard/answers.ada.json`
       (50 ADA disburse, 6 h validity, single extra-signer
       `ops_and_use_cases`).
-- [ ] T016 [P] [US3] Author fixture
+- [x] T016 [P] [US3] Author fixture
       `test/fixtures/disburse-wizard/env.usdm.json` for a
       USDM-disburse scenario (`network_compliance` scope, single
       treasury UTxO holding 100 ADA + 500 USDM, wallet UTxO holding
       50 ADA, mainnet registry refs).
-- [ ] T017 [P] [US3] Author fixture
+- [x] T017 [P] [US3] Author fixture
       `test/fixtures/disburse-wizard/answers.usdm.json` (100 USDM
       disburse, 6 h validity, single extra-signer `core_development`).
-- [ ] T018 [P] [US3] Author golden file
+- [x] T018 [P] [US3] Author golden file
       `test/fixtures/disburse-wizard/expected.intent.ada.json` by
       hand, formatted with the stable encoder from T007. Field values
       derived from the contract table in
       [data-model.md §7.1](./data-model.md).
-- [ ] T019 [P] [US3] Author golden file
+- [x] T019 [P] [US3] Author golden file
       `test/fixtures/disburse-wizard/expected.intent.usdm.json` the
       same way.
-- [ ] T020 [US3] Implement
+- [x] T020 [US3] Implement
       `test/unit/Amaru/Treasury/Tx/DisburseSpec.hs` with these `it`
       blocks; all must compile and run RED:
       - `"matches golden expected.intent.ada.json"`
@@ -222,23 +222,23 @@ before the implementation is written.
         (per fixture)
       - `"rejects DisburseError cases"` — table-driven negative
         examples covering each `DisburseError` constructor.
-- [ ] T021 [US3] Confirm RED: run `nix develop -c just unit
+- [x] T021 [US3] Confirm RED: run `nix develop -c just unit
       --test-options=--match=Disburse` and observe the spec failing
       (no `disburseToIntentJSON` yet).
-- [ ] T022 [US3] Implement the field-by-field translation
+- [x] T022 [US3] Implement the field-by-field translation
       `disburseToIntentJSON` in
       `lib/Amaru/Treasury/Tx/DisburseWizard.hs`. Mapping per the
       contract table in [data-model.md §7.1](./data-model.md). Each
       branch (`ada`, `usdm`) covered by a Haddock paragraph naming
       its source field. **Pure** — no IO, no `Reader`, no chain
       queries.
-- [ ] T023 [US3] Implement local validation that produces
+- [x] T023 [US3] Implement local validation that produces
       `DisburseError`: amount positive; validity-hours in [1, 48];
       extra-signer tokens are known scopes or hex-28 keyhashes; for
       `--unit usdm`, the `DisburseEnv`'s `tsLeftoverUsdm + amount`
       must equal `Σ USDM on inputs`. Failure shapes per
       [data-model.md §3](./data-model.md).
-- [ ] T024 [US3] Confirm GREEN: rerun the same `cabal test` command
+- [x] T024 [US3] Confirm GREEN: rerun the same `cabal test` command
       from T021; all four `it` blocks pass. Run `just ci`; the spec
       must remain green end-to-end.
 

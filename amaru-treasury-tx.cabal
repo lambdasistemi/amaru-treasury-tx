@@ -250,6 +250,7 @@ test-suite unit-tests
     , cardano-node-clients
     , cardano-slotting
     , containers
+    , directory
     , hspec
     , hspec-discover
     , jsonschema

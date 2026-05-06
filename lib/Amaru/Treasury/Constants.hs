@@ -26,7 +26,12 @@ module Amaru.Treasury.Constants
     , minUtxoDepositLovelace
     ) where
 
-import Data.Aeson (FromJSON (..), ToJSON (..), Value (String), withText)
+import Data.Aeson
+    ( FromJSON (..)
+    , ToJSON (..)
+    , Value (String)
+    , withText
+    )
 import Data.Text (Text)
 import Data.Text qualified as T
 
@@ -38,8 +43,9 @@ data Unit
       USDM
     deriving (Eq, Show)
 
--- | JSON: @"ada"@ / @"usdm"@ (case-insensitive on parse;
--- always lower-cased on emit).
+{- | JSON: @"ada"@ / @"usdm"@ (case-insensitive on parse;
+always lower-cased on emit).
+-}
 instance FromJSON Unit where
     parseJSON = withText "Unit" $ \t -> case T.toLower t of
         "ada" -> pure ADA

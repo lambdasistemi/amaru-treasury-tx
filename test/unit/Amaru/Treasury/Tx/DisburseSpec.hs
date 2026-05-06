@@ -103,6 +103,8 @@ import Data.Aeson.Encode.Pretty
     , encodePretty'
     )
 import Data.ByteString.Lazy qualified as BSL
+import System.Directory (doesFileExist)
+import System.Environment (lookupEnv)
 
 import Data.Map.Strict (Map)
 import Data.Text (Text)
@@ -212,8 +214,8 @@ spec = do
             "decodeDisburseIntent . encodeDisburseIntent = Right"
             roundTripProp
 
-    describe "Amaru.Treasury.Tx.DisburseWizard.disburseToIntentJSON"
-        $ do
+    describe "Amaru.Treasury.Tx.DisburseWizard.disburseToIntentJSON" $
+        do
             it "matches golden expected.intent.ada.json" $
                 goldenCase "ada"
             it "matches golden expected.intent.usdm.json" $
@@ -248,8 +250,20 @@ goldenCase unit = do
                 )
         Right got -> do
             let actualBytes = stableEncode got
-            expectedBytes <- BSL.readFile goldenPath
-            actualBytes `shouldBe` expectedBytes
+            exists <- doesFileExist goldenPath
+            update <- lookupEnv "UPDATE_GOLDENS"
+            if not exists || update == Just "1"
+                then do
+                    BSL.writeFile goldenPath actualBytes
+                    error
+                        ( "Golden written to "
+                            <> goldenPath
+                            <> "; review and re-run without"
+                            <> " UPDATE_GOLDENS=1 to lock in"
+                        )
+                else do
+                    expectedBytes <- BSL.readFile goldenPath
+                    actualBytes `shouldBe` expectedBytes
 
 eitherDecodeStrict :: (Aeson.FromJSON a) => FilePath -> IO a
 eitherDecodeStrict p = do
@@ -259,9 +273,10 @@ eitherDecodeStrict p = do
         Left e ->
             error ("decode " <> p <> ": " <> e)
 
--- | Stable encoder; same shape as
--- 'Amaru.Treasury.Tx.DisburseIntentJSON.encodeDisburseIntent'
--- so the golden file is byte-comparable.
+{- | Stable encoder; same shape as
+'Amaru.Treasury.Tx.DisburseIntentJSON.encodeDisburseIntent'
+so the golden file is byte-comparable.
+-}
 stableEncode :: DisburseIntentJSON -> BSL.ByteString
 stableEncode = encodePretty' cfg
   where

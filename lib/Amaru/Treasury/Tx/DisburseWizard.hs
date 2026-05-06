@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+
 {- |
 Module      : Amaru.Treasury.Tx.DisburseWizard
 Description : Typed-Q&A wizard for the disburse subcommand
@@ -44,16 +46,33 @@ module Amaru.Treasury.Tx.DisburseWizard
     , disburseToIntentJSON
     ) where
 
+import Control.Monad (when)
 import Data.Aeson (FromJSON (..), withObject, (.:), (.:?))
+import Data.Char (isDigit)
+import Data.List qualified as L
 import Data.Map.Strict (Map)
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Word (Word64, Word8)
 
 import Amaru.Treasury.Constants (Unit (..))
-import Amaru.Treasury.Scope (ScopeId)
+import Amaru.Treasury.Scope
+    ( ScopeId
+        ( Contingency
+        , CoreDevelopment
+        , Middleware
+        , NetworkCompliance
+        , OpsAndUseCases
+        )
+    , scopeText
+    )
 import Amaru.Treasury.Tx.DisburseIntentJSON
-    ( DisburseIntentJSON
+    ( DisburseInputsJSON (..)
+    , DisburseIntentJSON (..)
+    , DisburseRationaleJSON (..)
+    , DisburseScopeJSON (..)
+    , DisburseWalletJSON (..)
     )
 import Amaru.Treasury.Tx.SwapWizard
     ( NetworkConstants (..)
@@ -220,19 +239,213 @@ instance FromJSON DisburseEnv where
             <*> o .: "beneficiaryAddrBech32"
 
 -- ----------------------------------------------------
--- Pure translation (RED stub)
+-- Pure translation
 -- ----------------------------------------------------
 
-{- | Pure translation from a 'DisburseEnv' and a
+{- | Pure, total translation from a 'DisburseEnv' and a
 'DisburseAnswers' to a 'DisburseIntentJSON'.
 
-Phase-3 RED stub: always returns
-'DisburseAmountNotPositive'. The real implementation
-lands in T022 once the golden test for both ADA and USDM
-fixtures is observed failing.
+The mapping is the contract documented in
+@specs\/004-disburse-wizard\/data-model.md §7.1@. Local
+validation produces a 'DisburseError'; resolver-level
+failures (empty UTxOs, address parse, network mismatch)
+are caught by the resolver and live in a sibling
+@ResolverError@ type.
 -}
 disburseToIntentJSON
     :: DisburseEnv
     -> DisburseAnswers
     -> Either DisburseError DisburseIntentJSON
-disburseToIntentJSON _ _ = Left DisburseAmountNotPositive
+disburseToIntentJSON env ans = do
+    validate env ans
+    signers <- resolveSigners env ans
+    pure
+        DisburseIntentJSON
+            { dijNetwork = deNetwork env
+            , dijWallet =
+                mkWallet (deWalletSelection env)
+            , dijScope = mkScope env ans
+            , dijDisburse = mkDisburse env ans
+            , dijSigners = signers
+            , dijValidityUpperBoundSlot =
+                deCurrentTip env
+                    + ncSlotsPerHour
+                        (deNetworkConstants env)
+                        * fromIntegral (daValidityHours ans)
+            , dijRationale = mkRationale ans
+            }
+
+-- ----------------------------------------------------
+-- Validation
+-- ----------------------------------------------------
+
+validate
+    :: DisburseEnv -> DisburseAnswers -> Either DisburseError ()
+validate env ans = do
+    when
+        (daAmount ans <= 0)
+        (Left DisburseAmountNotPositive)
+    let h = daValidityHours ans
+    when
+        (h == 0 || h > 48)
+        (Left (DisburseValidityHoursOutOfRange h))
+    let sel = deTreasurySelection env
+    case daUnit ans of
+        ADA ->
+            when
+                (dtsLeftoverLovelace sel < 0)
+                (Left DisburseInsufficientTreasuryAda)
+        USDM -> do
+            when
+                (dtsLeftoverUsdm sel < 0)
+                (Left DisburseInsufficientTreasuryUsdm)
+
+-- ----------------------------------------------------
+-- Signer resolution (mirrors SwapWizard)
+-- ----------------------------------------------------
+
+{- | Required signers always start with the selected scope
+owner. Extra tokens add witnesses; each token is either a
+known scope name/alias or a raw 28-byte hex keyhash.
+Duplicates are removed after resolution while preserving
+the first occurrence.
+-}
+resolveSigners
+    :: DisburseEnv
+    -> DisburseAnswers
+    -> Either DisburseError [Text]
+resolveSigners env ans = do
+    let owners = rvOwners (deRegistry env)
+    selectedOwner <- ownerForScope owners (daScope ans)
+    extraOwners <-
+        traverse
+            (resolveExtraSigner owners)
+            (daExtraSigners ans)
+    pure (L.nub (selectedOwner : extraOwners))
+
+resolveExtraSigner
+    :: ScopeOwners -> Text -> Either DisburseError Text
+resolveExtraSigner owners t
+    | isHex28 t = Right t
+    | otherwise = case signerScopeFromText t of
+        Just scope -> ownerForScope owners scope
+        Nothing ->
+            Left (DisburseSignerNotScopeOrHex28 t)
+
+ownerForScope
+    :: ScopeOwners -> ScopeId -> Either DisburseError Text
+ownerForScope ScopeOwners{..} = \case
+    CoreDevelopment -> Right soCore
+    OpsAndUseCases -> Right soOps
+    NetworkCompliance -> Right soNetworkCompliance
+    Middleware -> Right soMiddleware
+    Contingency ->
+        -- Contingency has no on-chain owner key; the scope
+        -- exists but cannot sign disbursements directly.
+        Left
+            ( DisburseSignerNotScopeOrHex28
+                "contingency"
+            )
+
+signerScopeFromText :: Text -> Maybe ScopeId
+signerScopeFromText t = case normaliseSignerToken t of
+    "core" -> Just CoreDevelopment
+    "core_development" -> Just CoreDevelopment
+    "coredevelopment" -> Just CoreDevelopment
+    "ops" -> Just OpsAndUseCases
+    "ops_and_use_cases" -> Just OpsAndUseCases
+    "opsandusecases" -> Just OpsAndUseCases
+    "network" -> Just NetworkCompliance
+    "network_compliance" -> Just NetworkCompliance
+    "networkcompliance" -> Just NetworkCompliance
+    "middleware" -> Just Middleware
+    "contingency" -> Just Contingency
+    _ -> Nothing
+
+normaliseSignerToken :: Text -> Text
+normaliseSignerToken =
+    T.map dashToUnderscore . T.toLower
+  where
+    dashToUnderscore '-' = '_'
+    dashToUnderscore c = c
+
+isHex28 :: Text -> Bool
+isHex28 t = T.length t == 56 && T.all isHexChar t
+  where
+    isHexChar c =
+        isDigit c
+            || (c >= 'a' && c <= 'f')
+            || (c >= 'A' && c <= 'F')
+
+-- ----------------------------------------------------
+-- Field projection (data-model §7.1)
+-- ----------------------------------------------------
+
+mkWallet :: WalletSelection -> DisburseWalletJSON
+mkWallet ws =
+    DisburseWalletJSON
+        { dwjTxIn = wsTxIn ws
+        , dwjAddress = wsAddress ws
+        }
+
+mkScope :: DisburseEnv -> DisburseAnswers -> DisburseScopeJSON
+mkScope env ans =
+    let r = deRegistry env
+        s = svRefs (deScopeView env)
+        sel = deTreasurySelection env
+    in  DisburseScopeJSON
+            { dsjId = scopeText (daScope ans)
+            , dsjTreasuryAddress = trAddress s
+            , dsjTreasuryUtxos = dtsInputs sel
+            , dsjTreasuryLeftoverLovelace =
+                dtsLeftoverLovelace sel
+            , dsjTreasuryLeftoverUsdm =
+                dtsLeftoverUsdm sel
+            , dsjTreasuryLeftoverOtherAssets =
+                dtsLeftoverOtherAssets sel
+            , dsjTreasuryScriptHash = trScriptHash s
+            , dsjPermissionsRewardAccount =
+                trPermissionsRewardAccount s
+            , dsjScopesDeployedAt = rvScopesDeployedAt r
+            , dsjPermissionsDeployedAt =
+                rvPermissionsDeployedAt r
+            , dsjTreasuryDeployedAt =
+                rvTreasuryDeployedAt r
+            , dsjRegistryDeployedAt =
+                rvRegistryDeployedAt r
+            , dsjRegistryPolicyId = rvRegistryPolicyId r
+            }
+
+mkDisburse
+    :: DisburseEnv -> DisburseAnswers -> DisburseInputsJSON
+mkDisburse env ans =
+    let nc = deNetworkConstants env
+    in  DisburseInputsJSON
+            { dijUnit = unitText (daUnit ans)
+            , dijAmount = daAmount ans
+            , dijBeneficiaryAddress =
+                deBeneficiaryAddrBech32 env
+            , dijUsdmPolicy = ncUsdmPolicy nc
+            , dijUsdmToken = ncUsdmToken nc
+            }
+
+mkRationale :: DisburseAnswers -> DisburseRationaleJSON
+mkRationale ans =
+    let r = daRationale ans
+        labelDefault = case daUnit ans of
+            ADA -> "Disburse ADA"
+            USDM -> "Disburse USDM"
+    in  DisburseRationaleJSON
+            { drjEvent =
+                fromMaybe "disburse" (raEvent r)
+            , drjLabel =
+                fromMaybe labelDefault (raLabel r)
+            , drjDescription = raDescription r
+            , drjJustification = raJustification r
+            , drjDestinationLabel = raDestinationLabel r
+            }
+
+unitText :: Unit -> Text
+unitText = \case
+    ADA -> "ada"
+    USDM -> "usdm"

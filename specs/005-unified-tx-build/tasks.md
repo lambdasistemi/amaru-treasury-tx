@@ -124,11 +124,11 @@ the parser/encoder helpers shared across actions.
       this task only adds the type so the type family can name
       it. Add `Amaru.Treasury.Tx.Reorganize` to the library
       `exposed-modules` list in `amaru-treasury-tx.cabal`.
-- [ ] T007 Implement the `TreasuryIntent (a :: Action)` GADT and
+- [x] T007 Implement the `TreasuryIntent (a :: Action)` GADT and
       the `SomeTreasuryIntent` existential in
       `lib/Amaru/Treasury/IntentJSON.hs`. Field list per
       [data-model.md §2](./data-model.md).
-- [ ] T008 [P] Implement `Amaru.Treasury.IntentJSON.Common`:
+- [x] T008 [P] Implement `Amaru.Treasury.IntentJSON.Common`:
       shared parser helpers (`parseAddr`, `parseTxIn`,
       `parseRewardAccount`, `parseGuardKeyHash`,
       `decodeHexBytes`, `mkHash28`, `mkHash32`). Bodies move
@@ -137,14 +137,14 @@ the parser/encoder helpers shared across actions.
       and the (in-flight) feature 004
       [`Tx.DisburseIntentJSON`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/004-disburse-wizard/lib/Amaru/Treasury/Tx/DisburseIntentJSON.hs).
       The existing copies in those modules are deleted in T011.
-- [ ] T009 [P] Implement `Amaru.Treasury.Wizard.Common`: shared
+- [x] T009 [P] Implement `Amaru.Treasury.Wizard.Common`: shared
       signer-resolver (`signerScopeFromText`,
       `normaliseSignerToken`, `isHex28`, `ownerForScope`) and
       the `NetworkConstants` table. Bodies move verbatim from
       [`Tx.SwapWizard`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapWizard.hs).
       The existing copies in `Tx.SwapWizard` are deleted in
       T012.
-- [ ] T010 [P] Implement
+- [x] T010 [P] Implement
       `Amaru.Treasury.TreasuryBuild.Trace.BuildEvent` (typed
       trace events for the unified build path). Constructor list
       per
@@ -153,7 +153,7 @@ the parser/encoder helpers shared across actions.
       `TbeIntentParsed`, `TbeNetworkOk`, `TbeNetworkMismatch`.
       The existing `Tx.Swap.Trace` module is deleted in T028
       alongside the other now-unused per-action modules.
-- [ ] T011 Delete *only* the helper functions (parser /
+- [x] T011 Delete *only* the helper functions (parser /
       hex-decode) from `Tx.SwapIntentJSON` (every `parse*` helper
       now lives in `IntentJSON.Common`). The module + its
       `SwapIntentJSON` record + `translateIntent` body stay
@@ -161,11 +161,11 @@ the parser/encoder helpers shared across actions.
       unified `runSwap`. Full file deletion lands in T028.
       Update the module's import list and verify it still
       compiles standalone.
-- [ ] T012 Delete the now-empty signer-resolver helpers from
+- [x] T012 Delete the now-empty signer-resolver helpers from
       `Tx.SwapWizard` (every helper now lives in
       `Wizard.Common`). Update the module's import list and
       verify it still compiles standalone.
-- [ ] T013 [P] Confirm GREEN on Phase 2: `nix develop -c just
+- [x] T013 [P] Confirm GREEN on Phase 2: `nix develop -c just
       build` compiles all new modules; `just cabal-check` clean.
 
 **Checkpoint**: types and shared helpers compile; no behaviour

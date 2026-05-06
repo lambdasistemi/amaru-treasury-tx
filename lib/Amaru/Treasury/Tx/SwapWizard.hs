@@ -65,10 +65,6 @@ import Cardano.Ledger.BaseTypes
     ( Network (..)
     , txIxToInt
     )
-import Cardano.Ledger.Credential
-    ( Credential (..)
-    , StakeReference (..)
-    )
 import Cardano.Ledger.Hashes
     ( KeyHash (..)
     , extractHash
@@ -100,7 +96,7 @@ import Data.Function (on)
 import Data.List qualified as L
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, maybeToList)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -113,7 +109,8 @@ import Amaru.Treasury.Registry.Verify
     )
 import Amaru.Treasury.Scope
     ( ScopeId
-        ( CoreDevelopment
+        ( Contingency
+        , CoreDevelopment
         , Middleware
         , NetworkCompliance
         , OpsAndUseCases
@@ -162,10 +159,12 @@ data SwapWizardQ = SwapWizardQ
     , wqValidityHours :: !Word8
     -- ^ Range [1, 48]; enforced by 'wizardToIntentJSON'.
     , wqRationale :: !RationaleAnswers
-    , wqSignersOverride :: !(Maybe [Text])
-    -- ^ 28-byte hex strings; @Nothing@ uses the scope's
-    --   default owner set (the four-scope-owner list per
-    --   @swap_order.sh@).
+    , wqExtraSigners :: ![Text]
+    -- ^ Extra signer tokens. Each token is either a
+    --   scope name/alias, resolved to that scope owner's
+    --   key hash from the registry walk, or a raw
+    --   28-byte key hash hex string. The selected scope
+    --   owner is always inferred separately.
     }
     deriving (Eq, Show)
 
@@ -241,8 +240,10 @@ data ScopeView = ScopeView
     { svScope :: !ScopeId
     , svRefs :: !TreasuryRefs
     , svDefaultSigners :: ![Text]
-    -- ^ 28-byte hex; defaults to all four scope owners
-    --   per @swap_order.sh@
+    -- ^ 28-byte hex; defaults to the selected scope
+    --   owner. Kept in the environment for traceability;
+    --   'resolveSigners' derives the same owner from the
+    --   registry view and appends any extra signers.
     }
     deriving (Eq, Show)
 
@@ -298,6 +299,10 @@ instance FromJSON SwapWizardQ where
         scope <- case scopeFromText scopeText' of
             Right s -> pure s
             Left e -> fail e
+        extraSigners <- fromMaybe [] <$> o .:? "extraSigners"
+        -- Legacy fixture/input key; after the signer model change,
+        -- these tokens are treated as extras, not replacements.
+        legacySigners <- fromMaybe [] <$> o .:? "signersOverride"
         SwapWizardQ scope
             <$> o .: "amountLovelace"
             <*> o .: "chunkSizeLovelace"
@@ -305,7 +310,7 @@ instance FromJSON SwapWizardQ where
             <*> o .: "rateDenominator"
             <*> o .: "validityHours"
             <*> o .: "rationale"
-            <*> o .:? "signersOverride"
+            <*> pure (extraSigners <> legacySigners)
 
 instance FromJSON NetworkConstants where
     parseJSON = withObject "NetworkConstants" $ \o ->
@@ -402,7 +407,7 @@ data WizardError
     | WizardAmountNotPositive
     | WizardValidityHoursOutOfRange !Word8
     | WizardRateDenominatorZero
-    | WizardSignerNotHex28 !Text
+    | WizardSignerNotScopeOrHex28 !Text
     | -- | wizard accepts only Core/Ops/NetworkCompliance/
       --   Middleware; @Contingency@ is rejected
       WizardScopeUnsupported !ScopeId
@@ -456,29 +461,84 @@ validate q = do
     when
         (wqRateDenominator q == 0)
         (Left WizardRateDenominatorZero)
+    when
+        (wqScope q == Contingency)
+        (Left (WizardScopeUnsupported Contingency))
     let h = wqValidityHours q
     when
         (h == 0 || h > 48)
         (Left (WizardValidityHoursOutOfRange h))
 
-{- | Default signer set is the four scope-owner key
-hashes; an explicit override replaces it. Each
-override entry is validated as 28-byte hex.
+{- | Required signers always start with the selected scope
+owner. User-supplied signer tokens add witnesses; each
+extra token may be a known scope name/alias or a raw
+28-byte key hash. Duplicate tokens are removed after
+resolution while preserving the first occurrence.
 -}
 resolveSigners
     :: WizardEnv -> SwapWizardQ -> Either WizardError [Text]
-resolveSigners we q =
-    case wqSignersOverride q of
-        Nothing ->
-            Right (svDefaultSigners (weScopeView we))
-        Just xs -> traverse checkHex28 xs
+resolveSigners we q = do
+    selectedOwner <-
+        ownerForScope
+            (rvOwners (weRegistry we))
+            (wqScope q)
+    extraOwners <-
+        traverse
+            (resolveExtraSigner (rvOwners (weRegistry we)))
+            (wqExtraSigners q)
+    pure (L.nub (selectedOwner : extraOwners))
+
+resolveExtraSigner
+    :: ScopeOwners -> Text -> Either WizardError Text
+resolveExtraSigner owners t
+    | isHex28 t = Right t
+    | otherwise =
+        case signerScopeFromText t of
+            Just scope -> ownerForScope owners scope
+            Nothing -> Left (WizardSignerNotScopeOrHex28 t)
+
+ownerForScope :: ScopeOwners -> ScopeId -> Either WizardError Text
+ownerForScope owners scope =
+    maybe
+        (Left (WizardScopeUnsupported scope))
+        Right
+        (scopeOwnerText owners scope)
+
+scopeOwnerText :: ScopeOwners -> ScopeId -> Maybe Text
+scopeOwnerText ScopeOwners{..} = \case
+    CoreDevelopment -> Just soCore
+    OpsAndUseCases -> Just soOps
+    NetworkCompliance -> Just soNetworkCompliance
+    Middleware -> Just soMiddleware
+    Contingency -> Nothing
+
+signerScopeFromText :: Text -> Maybe ScopeId
+signerScopeFromText t =
+    case normaliseSignerToken t of
+        "core" -> Just CoreDevelopment
+        "core_development" -> Just CoreDevelopment
+        "coredevelopment" -> Just CoreDevelopment
+        "ops" -> Just OpsAndUseCases
+        "ops_and_use_cases" -> Just OpsAndUseCases
+        "opsandusecases" -> Just OpsAndUseCases
+        "network" -> Just NetworkCompliance
+        "network_compliance" -> Just NetworkCompliance
+        "networkcompliance" -> Just NetworkCompliance
+        "middleware" -> Just Middleware
+        "contingency" -> Just Contingency
+        _ -> Nothing
+
+normaliseSignerToken :: Text -> Text
+normaliseSignerToken =
+    T.map dashToUnderscore . T.toLower
   where
-    checkHex28 t
-        | T.length t == 56
-        , T.all isHexChar t =
-            Right t
-        | otherwise =
-            Left (WizardSignerNotHex28 t)
+    dashToUnderscore '-' = '_'
+    dashToUnderscore c = c
+
+isHex28 :: Text -> Bool
+isHex28 t =
+    T.length t == 56 && T.all isHexChar t
+  where
     isHexChar c =
         isDigit c
             || (c >= 'a' && c <= 'f')
@@ -933,15 +993,11 @@ resolveWizardEnv ResolverEnv{..} ri =
                                                                 , svRefs =
                                                                     refs
                                                                 , svDefaultSigners =
-                                                                    [ soCore
-                                                                        owners
-                                                                    , soOps
-                                                                        owners
-                                                                    , soNetworkCompliance
-                                                                        owners
-                                                                    , soMiddleware
-                                                                        owners
-                                                                    ]
+                                                                    maybeToList
+                                                                        ( scopeOwnerText
+                                                                            owners
+                                                                            (riScope ri)
+                                                                        )
                                                                 }
                                                         , weTreasurySelection =
                                                             TreasurySelection

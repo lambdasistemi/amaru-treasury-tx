@@ -170,8 +170,8 @@ In addition to layer 1, the wizard depends on:
    the table. **NOT verified against chain.**
 2. **Operator-supplied answers**: `--wallet-addr`, `--scope`,
    `--usdm`, `--chunk-usdm`/`--split`, `--min-rate`,
-   `--validity-hours`, rationale text, optional `--signer`
-   overrides. Structurally validated but the wizard cannot
+   `--validity-hours`, rationale text, optional `--extra-signer`
+   witnesses. Structurally validated but the wizard cannot
    judge intent.
 3. **The local `cardano-node` socket** for tip + UTxO queries
    (same as layer 1).
@@ -193,7 +193,7 @@ In addition to layer 1, the wizard depends on:
 | `walletTxIn`, `walletAddress` | operator's `--wallet-addr` + largest pure-ADA UTxO selection | layer 2 operator |
 | `chunkSizeLovelace`, `amountLovelace`, `rateNumerator`, `rateDenominator` | derived from `--usdm`, `--chunk-usdm`/`--split`, `--min-rate` | layer 2 operator |
 | `validityUpperBoundSlot` | tip + `--validity-hours` | layer 2 operator + node |
-| `signers` | default = scope's owner key plus the witness scope owner keys, OR operator override | layer 1 default; layer 2 if overridden |
+| `signers` | selected scope owner inferred from `--scope`, plus optional extra witnesses from `--extra-signer`/`--signer` | layer 1 default and scope-name extras; layer 2 raw key-hash extras |
 | `rationale.*` | operator-supplied free text | layer 2 operator |
 
 ### Why `permissionsRewardAccount` is the permissions script hash
@@ -230,10 +230,11 @@ testnets that diverge.
   collateral; if the operator signs with a key not matching
   the address, the tx fails at submission, not at wizard time.
 - **A compromised `NetworkConstants` table** — see layer 2 (1).
-- **Operator-supplied signer overrides**: `--signer` replaces
-  (not extends) the default scope-owner set. A wrong signer
-  list produces a tx that needs a wrong signature; submission
-  fails. Treat overrides as an expert-mode flag.
+- **Operator-supplied raw signer key hashes**: scope-name extra
+  signers are resolved from the verified owner set, but a raw
+  `--extra-signer` key hash is accepted as operator input. A wrong
+  raw key hash produces a tx that needs a wrong signature; submission
+  fails. Prefer scope-name extra signers for normal operation.
 - **A compromised cardano-node** — see layer 1.
 
 The wizard is **fail-closed**: any verifier failure, missing

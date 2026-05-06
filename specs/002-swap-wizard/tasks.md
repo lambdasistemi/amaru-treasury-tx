@@ -118,7 +118,7 @@ once before the implementation is written.
       `test/fixtures/swap-wizard/answers.json` for one realistic
       preprod-shaped scenario (Core scope, 50_000 ADA total,
       10_000 ADA chunk, rate 425000/1000000, 6 h validity,
-      single-signer override). Encode shapes per
+      one extra signer witness). Encode shapes per
       [data-model.md §1, §2](./data-model.md) via the `FromJSON`
       instances landed in T005–T007.
 - [X] T010 [P] [US2] Author golden file
@@ -145,8 +145,9 @@ once before the implementation is written.
       field.
 - [X] T014 [US2] Implement local validation that produces
       `WizardError`: chunk size positive, chunk size ≤ amount,
-      validity hours in [1, 48], rate denominator non-zero, signer
-      override hex-28 well-formed. Failure shapes per
+      validity hours in [1, 48], rate denominator non-zero, extra
+      signer tokens are known scopes or hex-28 key hashes. Failure
+      shapes per
       [data-model.md §3](./data-model.md).
 - [X] T014a [US2] Confirm GREEN: rerun the same `cabal test`
       command from T012; all three `it` blocks pass.
@@ -306,9 +307,9 @@ SC-001 + SC-003 satisfied for the stub backend.
 ## Phase 6: Polish and cross-cutting concerns
 
 - [ ] T031 Run `just ci` (which runs build + unit + golden +
-      format-check + hlint) plus `cabal check`; resolve any new
-      warnings to keep the package Hackage-ready per Constitution
-      VI.
+      format-check + hlint + smoke + release-check) plus
+      `cabal check`; resolve any new warnings to keep the package
+      Hackage-ready per Constitution VI.
 - [ ] T032 Update PR #28 description with the final command-line
       reference and link to
       [quickstart.md](./quickstart.md).

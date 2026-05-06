@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cabal test unit-tests -O0 \
+  --test-show-details=direct \
+  --test-option=--match \
+  --test-option="infers the scope owner and appends extra signer scopes"
+
+help_text="$(
+  cabal run exe:amaru-treasury-tx -O0 -- swap-wizard --help
+)"
+
+printf '%s\n' "$help_text"
+
+grep -F -- '[--extra-signer|--signer SCOPE|HEX]' \
+  <<<"$help_text" >/dev/null
+grep -F -- '--extra-signer,--signer SCOPE|HEX' \
+  <<<"$help_text" >/dev/null

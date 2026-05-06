@@ -21,7 +21,7 @@ Subcommands:
   @--intent@, reads the intent.json from stdin so
   @swap-wizard ... | swap@ pipes cleanly.
   See [@docs\/swap.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/docs/swap.md).
-* @swap-wizard --network <preprod|mainnet> --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --usdm N.NN --split N --min-rate N.NN --validity-hours N --description ... --justification ... --destination-label ... [--signer HEX]... [--out path\/intent.json] [--log path\/wizard.log]@
+* @swap-wizard --network <preprod|mainnet> --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --usdm N.NN --split N --min-rate N.NN --validity-hours N --description ... --justification ... --destination-label ... [--extra-signer SCOPE|HEX]... [--out path\/intent.json] [--log path\/wizard.log]@
   produces a swap @intent.json@ from a typed questionnaire.
   See [@specs\/002-swap-wizard\/quickstart.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/002-swap-wizard/quickstart.md).
 -}
@@ -195,7 +195,8 @@ data WizardOpts = WizardOpts
     , wOptsEvent :: !(Maybe Text)
     , wOptsLabel :: !(Maybe Text)
     , wOptsSigners :: ![Text]
-    -- ^ accumulated @--signer@ flags; empty = use scope default
+    -- ^ accumulated extra-signer flags; empty = selected
+    --   scope owner only.
     }
 
 globalOptsP :: Parser GlobalOpts
@@ -435,9 +436,11 @@ wizardOptsP =
             )
         <*> many
             ( strOption
-                ( long "signer"
-                    <> metavar "HEX"
-                    <> help "Repeat for each override signer (28-byte hex)"
+                ( long "extra-signer"
+                    <> long "signer"
+                    <> metavar "SCOPE|HEX"
+                    <> help
+                        "Repeat for each extra signer (scope name/alias or 28-byte hex)"
                 )
             )
 
@@ -637,10 +640,6 @@ runWizard g WizardOpts{..} = do
                 SplitCount n -> amountLov `div` toInteger n
                 ChunkUsdm x -> usdmToLovelace x wOptsMinRate
             (rateNum, rateDen) = rateToFraction wOptsMinRate
-            signersOverride =
-                if null wOptsSigners
-                    then Nothing
-                    else Just wOptsSigners
             answers =
                 SwapWizardQ
                     { wqScope = wOptsScope
@@ -658,7 +657,7 @@ runWizard g WizardOpts{..} = do
                             , raEvent = wOptsEvent
                             , raLabel = wOptsLabel
                             }
-                    , wqSignersOverride = signersOverride
+                    , wqExtraSigners = wOptsSigners
                     }
 
         withLocalNodeBackend (goNetworkMagic g) socket $

@@ -53,8 +53,7 @@ $EXE \
         --description "Swapping ADA for \$100k at a rate of \$0.245 per ADA" \
         --justification "Required to pay Antithesis as vendor" \
         --destination-label "Network Compliance's treasury" \
-        --signer 7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb \
-        --signer 8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1 \
+        --extra-signer core_development \
         --log wizard.log \
   | $EXE \
         --node-socket /code/cardano-mainnet/ipc/node.socket \
@@ -122,9 +121,9 @@ binding the produced transaction to the upstream pin.
 ## 4. Sign + submit
 
 The pipeline emits hex CBOR; sign it with the configured scope
-owner's key plus one witness owner key (the two `--signer`
-hashes you passed) and submit per your existing operator
-runbook.
+owner's key plus the witness owner keys named with
+`--extra-signer` (or the `--signer` compatibility alias) and
+submit per your existing operator runbook.
 
 ## 5. Doing it without the pipe
 
@@ -153,7 +152,9 @@ output. If the trace ends without `cbor -> …` (or
 ```bash
 just unit     # SwapWizardSpec golden + roundtrip
 just golden   # existing swap golden harness
+just smoke    # focused signer UX smoke + CLI help surface
 ```
 
 A wizard regression breaks `SwapWizardSpec`; a translation
-regression breaks the swap golden.
+regression breaks the swap golden. A signer UX regression breaks the
+smoke check before a release artifact is published.

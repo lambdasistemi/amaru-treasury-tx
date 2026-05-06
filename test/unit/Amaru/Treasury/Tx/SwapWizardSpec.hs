@@ -146,10 +146,49 @@ spec = describe "SwapWizard" $ do
                 `shouldBe` "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad"
             swUsdmToken sw `shouldBe` "0014df105553444d"
 
-        it "honours the signer override" $ do
+        it "infers the scope owner and appends extra signer scopes" $ do
             let Right intent = wizardToIntentJSON env answers
             sijSigners intent
-                `shouldBe` [ "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+                `shouldBe` [ "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
+                           , "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
+                           ]
+
+        it "defaults signers to the selected scope owner" $ do
+            let Right intent =
+                    wizardToIntentJSON
+                        env
+                        answers{wqExtraSigners = []}
+            sijSigners intent
+                `shouldBe` [ "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
+                           ]
+
+        it "accepts raw key hashes for extra signers" $ do
+            let Right intent =
+                    wizardToIntentJSON
+                        env
+                        answers
+                            { wqExtraSigners =
+                                [ "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+                                ]
+                            }
+            sijSigners intent
+                `shouldBe` [ "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
+                           , "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+                           ]
+
+        it "deduplicates an explicitly repeated scope owner" $ do
+            let Right intent =
+                    wizardToIntentJSON
+                        env
+                        answers
+                            { wqExtraSigners =
+                                [ "core_development"
+                                , "network_compliance"
+                                , "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
+                                ]
+                            }
+            sijSigners intent
+                `shouldBe` [ "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
                            , "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
                            ]
 
@@ -262,10 +301,10 @@ spec = describe "SwapWizard" $ do
             leftIs
                 WizardRateDenominatorZero
                 answers{wqRateDenominator = 0}
-        it "rejects malformed signer hex" $ do
+        it "rejects unknown extra signer tokens" $ do
             leftIs
-                (WizardSignerNotHex28 "zz")
-                answers{wqSignersOverride = Just ["zz"]}
+                (WizardSignerNotScopeOrHex28 "zz")
+                answers{wqExtraSigners = ["zz"]}
 
     describe "networkConstants" $ do
         it "returns a row for mainnet" $

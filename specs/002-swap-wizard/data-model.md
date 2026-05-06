@@ -29,9 +29,10 @@ data SwapWizardQ = SwapWizardQ
     , wqValidityHours :: !Word8
     -- ^ validity window from now, hours (range 1..48)
     , wqRationale :: !RationaleAnswers
-    , wqSignersOverride :: !(Maybe [Hex28])
-    -- ^ Nothing = use the scope's default owners; Just = explicit
-    --   list of 28-byte hex key hashes
+    , wqExtraSigners :: ![Text]
+    -- ^ Extra signer tokens. Each token is a scope name/alias
+    --   resolved through the registry owners, or a raw 28-byte
+    --   hex key hash. The selected scope owner is inferred.
     }
 
 data RationaleAnswers = RationaleAnswers
@@ -47,8 +48,9 @@ data RationaleAnswers = RationaleAnswers
 
 Notes:
 - `Hex28` is a thin newtype around `Text` validated as
-  28-byte-hex. Defined in this module; not exported beyond the
-  wizard.
+  28-byte-hex. Defined in this module where raw key hashes cross the
+  boundary; scope-name extra signer tokens are resolved before
+  `SwapIntentJSON`.
 - `ScopeId` is reused from `Amaru.Treasury.Scope`.
 - `RationaleAnswers` mirrors the existing
   `Amaru.Treasury.Tx.SwapIntentJSON.RationaleInputs`.
@@ -105,6 +107,8 @@ data ScopeView = ScopeView
     { svScope :: !ScopeId
     , svRefs :: !TreasuryRefs
     , svDefaultSigners :: ![Hex28]
+    -- ^ selected scope owner only; extra witness signers are answers,
+    --   not resolver defaults
     }
 
 data TreasurySelection = TreasurySelection
@@ -145,8 +149,9 @@ Rules:
 - **No IO**: no chain queries, no protocol-parameter fetches, no
   current-time reads. Everything must be in `WizardEnv`.
 - **Errors are domain errors**: `WizardError` enumerates the failure
-  modes the translation can detect locally (e.g. signer hex not 28
-  bytes, validity hours out of range). Resolver-level failures
+  modes the translation can detect locally (e.g. extra signer token is
+  neither a scope nor a 28-byte key hash, validity hours out of
+  range). Resolver-level failures
   (empty UTxO set, unknown network) are caught earlier and never
   reach this function.
 
@@ -155,7 +160,7 @@ data WizardError
     = WizardChunkSizeNotPositive
     | WizardChunkSizeExceedsAmount
     | WizardValidityHoursOutOfRange Word8
-    | WizardSignerNotHex28 Text
+    | WizardSignerNotScopeOrHex28 Text
     | WizardRateDenominatorZero
 ```
 
@@ -183,7 +188,7 @@ unchanged. Field-by-field mapping:
 | `swap.{core,ops,networkCompliance,middleware}Owner` | `weRegistry.rvOwners` |
 | `swap.sundaeProtocolFeeLovelace` | `weNetworkConstants.ncSundaeProtocolFeeLovelace` |
 | `swap.usdmPolicy`, `swap.usdmToken` | `weNetworkConstants` |
-| `signers` | `wqSignersOverride` ?: `weScopeView.svDefaultSigners` |
+| `signers` | selected scope owner inferred from `wqScope` + resolved `wqExtraSigners`, de-duplicated in order |
 | `validityUpperBoundSlot` | `weCurrentTip + ncSlotsPerHour * wqValidityHours` |
 | `rationale.*` | `wqRationale` (with defaults applied) |
 

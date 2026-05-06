@@ -81,8 +81,7 @@ amaru-treasury-tx \
         --description "Swapping ADA for \$100k at a rate of \$0.245 per ADA" \
         --justification "Required to pay Antithesis as vendor" \
         --destination-label "Network Compliance's treasury" \
-        --signer 7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb \
-        --signer 8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1 \
+        --extra-signer core_development \
         --log wizard.log \
   | amaru-treasury-tx \
         --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
@@ -103,7 +102,7 @@ What the flags mean:
 | `--min-rate`   | Sundae limit price (USDM per ADA). |
 | `--validity-hours` | Validity window from current tip; 1..48. |
 | `--description` / `--justification` / `--destination-label` | Free-form rationale fields, pinned into the on-chain audit trail. |
-| `--signer HEX` | Repeated for each scope-owner key hash that will sign. |
+| `--extra-signer SCOPE\|HEX` | Repeated for each witness owner beyond the selected scope owner. Scope names and 28-byte key hashes are accepted; `--signer` remains as an alias. |
 | `--log PATH`   | Redirect the typed step trace to a file (default = stderr). |
 | `--out PATH`   | Wizard side: write `intent.json` here (default = stdout, which is what the pipe reads). Swap side: write hex CBOR here (default = stdout). |
 
@@ -198,7 +197,19 @@ diff haskell-build.hex /code/swap-experiment/user-final.hex
 
 See [`docs/parity.md`](parity.md) for the byte-diff explanation.
 
-## 11. Trust model
+## 11. Smoke the signer UX (developer)
+
+Before cutting a release or handing a branch to operators, run:
+
+```bash
+nix develop --quiet -c just smoke
+```
+
+The smoke check runs the focused signer regression and checks that the
+compiled `swap-wizard --help` exposes
+`--extra-signer,--signer SCOPE|HEX`.
+
+## 12. Trust model
 
 The full account of what the wizard verifies vs. what it asks
 the operator to assert lives in

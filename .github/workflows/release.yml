@@ -95,6 +95,10 @@ jobs:
             -type f -executable | head -1)"
           test -x "$bin"
           "$bin" --help
+          help_text="$("$bin" swap-wizard --help)"
+          printf '%s\n' "$help_text"
+          grep -F -- '--extra-signer,--signer SCOPE|HEX' \
+            <<<"$help_text" >/dev/null
 
       - name: Smoke-test DEB
         run: |
@@ -110,6 +114,10 @@ jobs:
             -type f -executable | head -1)"
           test -x "$bin"
           "$bin" --help
+          help_text="$("$bin" swap-wizard --help)"
+          printf '%s\n' "$help_text"
+          grep -F -- '--extra-signer,--signer SCOPE|HEX' \
+            <<<"$help_text" >/dev/null
 
       - name: Smoke-test RPM
         run: |
@@ -124,6 +132,10 @@ jobs:
             -type f -executable | head -1)"
           test -x "$bin"
           "$bin" --help
+          help_text="$("$bin" swap-wizard --help)"
+          printf '%s\n' "$help_text"
+          grep -F -- '--extra-signer,--signer SCOPE|HEX' \
+            <<<"$help_text" >/dev/null
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v7

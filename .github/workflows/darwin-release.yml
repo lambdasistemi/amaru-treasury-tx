@@ -181,23 +181,33 @@ jobs:
           formula_name="$(basename "$formula")"
           formula_id="${formula_name%.rb}"
           formula_ref="lambdasistemi/tap/${formula_id}"
-          tap_dir="$(mktemp -d)"
 
-          mkdir -p "$tap_dir/Formula"
+          brew_uninstall_if_installed() {
+            local formula="$1"
+            if brew list --formula "$formula" >/dev/null 2>&1; then
+              brew uninstall --force "$formula"
+            fi
+          }
+
+          brew_untap_if_tapped() {
+            local tap="$1"
+            if brew tap | grep -qx "$tap"; then
+              brew untap "$tap"
+            fi
+          }
+
+          brew_uninstall_if_installed amaru-treasury-tx
+          brew_uninstall_if_installed amaru-treasury-tx-dev
+          brew_untap_if_tapped lambdasistemi/tap
+          brew tap lambdasistemi/tap https://github.com/lambdasistemi/homebrew-tap
+          tap_dir="$(brew --repo lambdasistemi/tap)"
+
+          export HOMEBREW_NO_AUTO_UPDATE=1
           awk -v local_url="  url \"file://${tarball}\"" '
             /^[[:space:]]*url "/ { print local_url; next }
             { print }
           ' "$formula" > "$tap_dir/Formula/$formula_name"
 
-          git -C "$tap_dir" init
-          git -C "$tap_dir" config user.name "github-actions"
-          git -C "$tap_dir" config user.email "actions@github.com"
-          git -C "$tap_dir" add "Formula/$formula_name"
-          git -C "$tap_dir" commit -m "test generated formula"
-
-          brew uninstall --force amaru-treasury-tx amaru-treasury-tx-dev || true
-          brew untap lambdasistemi/tap || true
-          brew tap lambdasistemi/tap "$tap_dir"
           brew install "$formula_ref"
           brew test "$formula_ref"
           amaru-treasury-tx --help
@@ -255,8 +265,23 @@ jobs:
         if: ${{ env.MODE == 'release' && env.PUBLISH == 'true' }}
         run: |
           set -euo pipefail
-          brew uninstall --force amaru-treasury-tx amaru-treasury-tx-dev || true
-          brew untap lambdasistemi/tap || true
+          brew_uninstall_if_installed() {
+            local formula="$1"
+            if brew list --formula "$formula" >/dev/null 2>&1; then
+              brew uninstall --force "$formula"
+            fi
+          }
+
+          brew_untap_if_tapped() {
+            local tap="$1"
+            if brew tap | grep -qx "$tap"; then
+              brew untap "$tap"
+            fi
+          }
+
+          brew_uninstall_if_installed amaru-treasury-tx
+          brew_uninstall_if_installed amaru-treasury-tx-dev
+          brew_untap_if_tapped lambdasistemi/tap
           brew tap lambdasistemi/tap https://github.com/lambdasistemi/homebrew-tap
           brew install lambdasistemi/tap/amaru-treasury-tx
           brew test lambdasistemi/tap/amaru-treasury-tx
@@ -332,8 +357,23 @@ jobs:
           }}
         run: |
           set -euo pipefail
-          brew uninstall --force amaru-treasury-tx amaru-treasury-tx-dev || true
-          brew untap lambdasistemi/tap || true
+          brew_uninstall_if_installed() {
+            local formula="$1"
+            if brew list --formula "$formula" >/dev/null 2>&1; then
+              brew uninstall --force "$formula"
+            fi
+          }
+
+          brew_untap_if_tapped() {
+            local tap="$1"
+            if brew tap | grep -qx "$tap"; then
+              brew untap "$tap"
+            fi
+          }
+
+          brew_uninstall_if_installed amaru-treasury-tx
+          brew_uninstall_if_installed amaru-treasury-tx-dev
+          brew_untap_if_tapped lambdasistemi/tap
           brew tap lambdasistemi/tap https://github.com/lambdasistemi/homebrew-tap
           brew install lambdasistemi/tap/amaru-treasury-tx-dev
           brew test lambdasistemi/tap/amaru-treasury-tx-dev

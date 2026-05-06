@@ -55,7 +55,7 @@ Phases 4 and 5.
 
 **Purpose**: cabal/justfile/flake plumbing for the new modules + fixtures.
 
-- [ ] T001 Add the five new modules
+- [x] T001 Add the five new modules
       (`Amaru.Treasury.Tx.DisburseIntentJSON`,
       `Amaru.Treasury.Tx.DisburseBuild`,
       `Amaru.Treasury.Tx.DisburseWizard`,
@@ -67,7 +67,7 @@ Phases 4 and 5.
       recipes exist in the `justfile`; add them if missing (they
       are referenced by `just ci`). Run `nix develop -c just
       cabal-check` and confirm pass.
-- [ ] T002 [P] Add the new unit specs
+- [x] T002 [P] Add the new unit specs
       (`Amaru.Treasury.Tx.DisburseSpec`,
       `Amaru.Treasury.Tx.DisburseBuildSpec`,
       `Amaru.Treasury.Tx.DisburseWizardSpec`) to the `unit-tests`
@@ -79,7 +79,7 @@ Phases 4 and 5.
       `Golden` suffix disambiguates from the unit `DisburseSpec`. Run `nix develop -c
       just build` and confirm both test suites compile (empty modules
       OK at this stage).
-- [ ] T003 [P] Create empty fixture directories
+- [x] T003 [P] Create empty fixture directories
       `test/fixtures/disburse-wizard/` and
       `test/fixtures/disburse/{ada,usdm}/`. Do **not** add a
       `**/*.json` glob to `extra-source-files` yet — `cabal check`
@@ -87,9 +87,9 @@ Phases 4 and 5.
       package must stay Hackage-clean. The glob entries are added
       in T014 (first wizard fixture) and T029/T040 (first build
       fixture) as those tasks author actual files.
-- [ ] T004 [P] Confirm `just ci` recipe still chains `build → unit
-      → golden → format-check → hlint → cabal-check`; no recipe edit
-      expected.
+- [x] T004 [P] Confirm `just ci` recipe still chains `build → unit
+      → golden → format-check → hlint → smoke → release-check`;
+      `just cabal-check` recipe added (was missing). All green.
 
 **Checkpoint**: package compiles with the new (empty) module
 skeletons; both test suites discover the new specs; `just ci` is

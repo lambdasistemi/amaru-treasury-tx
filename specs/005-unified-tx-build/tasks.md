@@ -193,24 +193,24 @@ ordering).
 **Test-first ordering** (Constitution V): the property lands red
 before the FromJSON instance is wired.
 
-- [ ] T014 [P] [US3] Implement the FromJSON instance for
+- [x] T014 [P] [US3] Implement the FromJSON instance for
       `SomeTreasuryIntent` in
       `lib/Amaru/Treasury/IntentJSON.hs`. Body shape per
       [data-model.md §6](./data-model.md) — schema allow-list
       check, action discriminator parse, dispatch on action to
       build the `SomeTreasuryIntent` wrapper. Each action branch
       reads its payload from the action-keyed JSON sub-object.
-- [ ] T015 [P] [US3] Implement `toJSONIntent :: SAction a ->
+- [x] T015 [P] [US3] Implement `toJSONIntent :: SAction a ->
       TreasuryIntent a -> Aeson.Value` and
       `encodeSomeTreasuryIntent :: SomeTreasuryIntent ->
       ByteString.Lazy` (stable encoder using `aeson-pretty` with
       4-space indent + alphabetical key ordering, mirroring
       [`SwapIntentJSON.encodeIntentJSON`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapWizard.hs)).
-- [ ] T016 [P] [US3] Implement `decodeTreasuryIntent ::
+- [x] T016 [P] [US3] Implement `decodeTreasuryIntent ::
       ByteString.Lazy -> Either String SomeTreasuryIntent` and
       `decodeTreasuryIntentFile :: FilePath -> IO (Either String
       SomeTreasuryIntent)` in `lib/Amaru/Treasury/IntentJSON.hs`.
-- [ ] T017 [US3] Author
+- [x] T017 [US3] Author
       `test/unit/Amaru/Treasury/IntentJSONSpec.hs` with the
       round-trip property: for each of the four action variants
       generate a small `SomeTreasuryIntent`, encode, decode,
@@ -223,19 +223,19 @@ before the FromJSON instance is wired.
       ones when [#45](https://github.com/lambdasistemi/amaru-treasury-tx/issues/45)
       and [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46)
       ship.
-- [ ] T018 [US3] Confirm RED before T014–T016 land: run `nix
+- [x] T018 [US3] Confirm RED before T014–T016 land: run `nix
       develop -c just unit --test-options=--match=IntentJSON`.
       (If RED isn't observed because the parsers didn't exist
       and the test won't compile, pause T014–T016 to write
       stubs returning `Left "RED"`, run, observe RED, then
       remove the stubs.)
-- [ ] T019 [US3] Negative tests in the same spec:
+- [x] T019 [US3] Negative tests in the same spec:
       - `action: "frob"` → typed parse error.
       - `schema: 99` → "unknown intent schema" error.
       - `action: "swap"` with a `disburse` block but no `swap`
         block → "key not found: swap" error.
       - missing `network` field → typed parse error.
-- [ ] T020 [US3] Confirm GREEN: rerun T018's command. Property +
+- [x] T020 [US3] Confirm GREEN: rerun T018's command. Property +
       negative tests pass.
 
 **Checkpoint (MVP)**: the unified intent shape parses and

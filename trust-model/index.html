@@ -1,0 +1,926 @@
+
+<!DOCTYPE html>
+
+<html class="no-js" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<meta content="Build unsigned Amaru treasury transactions (disburse, reorganize, withdraw)" name="description"/>
+<link href="https://lambdasistemi.github.io/amaru-treasury-tx/trust-model/" rel="canonical"/>
+<link href="../architecture/" rel="prev"/>
+<link href="../swap/" rel="next"/>
+<link href="../assets/images/favicon.png" rel="icon"/>
+<meta content="mkdocs-1.6.1, mkdocs-material-9.7.0" name="generator"/>
+<title>Trust model - amaru-treasury-tx</title>
+<link href="../assets/stylesheets/main.618322db.min.css" rel="stylesheet"/>
+<link href="../assets/stylesheets/palette.ab4e12ef.min.css" rel="stylesheet"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&amp;display=fallback" rel="stylesheet"/>
+<style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+<script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+</head>
+<body data-md-color-accent="amber" data-md-color-primary="indigo" data-md-color-scheme="slate" dir="ltr">
+<input autocomplete="off" class="md-toggle" data-md-toggle="drawer" id="__drawer" type="checkbox"/>
+<input autocomplete="off" class="md-toggle" data-md-toggle="search" id="__search" type="checkbox"/>
+<label class="md-overlay" for="__drawer"></label>
+<div data-md-component="skip">
+<a class="md-skip" href="#trust-model">
+          Skip to content
+        </a>
+</div>
+<div data-md-component="announce">
+</div>
+<header class="md-header md-header--shadow" data-md-component="header">
+<nav aria-label="Header" class="md-header__inner md-grid">
+<a aria-label="amaru-treasury-tx" class="md-header__button md-logo" data-md-component="logo" href=".." title="amaru-treasury-tx">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"></path></svg>
+</a>
+<label class="md-header__button md-icon" for="__drawer">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"></path></svg>
+</label>
+<div class="md-header__title" data-md-component="header-title">
+<div class="md-header__ellipsis">
+<div class="md-header__topic">
+<span class="md-ellipsis">
+            amaru-treasury-tx
+          </span>
+</div>
+<div class="md-header__topic" data-md-component="header-topic">
+<span class="md-ellipsis">
+            
+              Trust model
+            
+          </span>
+</div>
+</div>
+</div>
+<form class="md-header__option" data-md-component="palette">
+<input aria-label="Switch to light mode" class="md-option" data-md-color-accent="amber" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-primary="indigo" data-md-color-scheme="slate" id="__palette_0" name="__palette" type="radio"/>
+<label class="md-header__button md-icon" for="__palette_1" hidden="" title="Switch to light mode">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"></path></svg>
+</label>
+<input aria-label="Switch to dark mode" class="md-option" data-md-color-accent="amber" data-md-color-media="(prefers-color-scheme: light)" data-md-color-primary="indigo" data-md-color-scheme="default" id="__palette_1" name="__palette" type="radio"/>
+<label class="md-header__button md-icon" for="__palette_0" hidden="" title="Switch to dark mode">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"></path></svg>
+</label>
+</form>
+<script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+<label class="md-header__button md-icon" for="__search">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"></path></svg>
+</label>
+<div class="md-search" data-md-component="search" role="dialog">
+<label class="md-search__overlay" for="__search"></label>
+<div class="md-search__inner" role="search">
+<form class="md-search__form" name="search">
+<input aria-label="Search" autocapitalize="off" autocomplete="off" autocorrect="off" class="md-search__input" data-md-component="search-query" name="query" placeholder="Search" required="" spellcheck="false" type="text"/>
+<label class="md-search__icon md-icon" for="__search">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"></path></svg>
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"></path></svg>
+</label>
+<nav aria-label="Search" class="md-search__options">
+<button aria-label="Clear" class="md-search__icon md-icon" tabindex="-1" title="Clear" type="reset">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg>
+</button>
+</nav>
+</form>
+<div class="md-search__output">
+<div class="md-search__scrollwrap" data-md-scrollfix="" tabindex="0">
+<div class="md-search-result" data-md-component="search-result">
+<div class="md-search-result__meta">
+            Initializing search
+          </div>
+<ol class="md-search-result__list" role="presentation"></ol>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="md-header__source">
+<a class="md-source" data-md-component="source" href="https://github.com/lambdasistemi/amaru-treasury-tx" title="Go to repository">
+<div class="md-source__icon md-icon">
+<svg viewbox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"></path></svg>
+</div>
+<div class="md-source__repository">
+    lambdasistemi/amaru-treasury-tx
+  </div>
+</a>
+</div>
+</nav>
+</header>
+<div class="md-container" data-md-component="container">
+<main class="md-main" data-md-component="main">
+<div class="md-main__inner md-grid">
+<div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation">
+<div class="md-sidebar__scrollwrap">
+<div class="md-sidebar__inner">
+<nav aria-label="Navigation" class="md-nav md-nav--primary" data-md-level="0">
+<label class="md-nav__title" for="__drawer">
+<a aria-label="amaru-treasury-tx" class="md-nav__button md-logo" data-md-component="logo" href=".." title="amaru-treasury-tx">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"></path></svg>
+</a>
+    amaru-treasury-tx
+  </label>
+<div class="md-nav__source">
+<a class="md-source" data-md-component="source" href="https://github.com/lambdasistemi/amaru-treasury-tx" title="Go to repository">
+<div class="md-source__icon md-icon">
+<svg viewbox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"></path></svg>
+</div>
+<div class="md-source__repository">
+    lambdasistemi/amaru-treasury-tx
+  </div>
+</a>
+</div>
+<ul class="md-nav__list" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="..">
+<span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../quickstart/">
+<span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../architecture/">
+<span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item md-nav__item--active">
+<input class="md-nav__toggle md-toggle" id="__toc" type="checkbox"/>
+<label class="md-nav__link md-nav__link--active" for="__toc">
+<span class="md-ellipsis">
+    
+  
+    Trust model
+  
+
+    
+  </span>
+<span class="md-nav__icon md-icon"></span>
+</label>
+<a class="md-nav__link md-nav__link--active" href="./">
+<span class="md-ellipsis">
+    
+  
+    Trust model
+  
+
+    
+  </span>
+</a>
+<nav aria-label="Table of contents" class="md-nav md-nav--secondary">
+<label class="md-nav__title" for="__toc">
+<span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+<ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#system-overview">
+<span class="md-ellipsis">
+      
+        System overview
+      
+    </span>
+</a>
+<nav aria-label="System overview" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#bake-time-parameter-graph">
+<span class="md-ellipsis">
+      
+        Bake-time parameter graph
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#run-time-utxo-graph">
+<span class="md-ellipsis">
+      
+        Run-time UTxO graph
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#why-each-arrow-exists">
+<span class="md-ellipsis">
+      
+        Why each arrow exists
+      
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#verifier-trust-roots-layer-1">
+<span class="md-ellipsis">
+      
+        Verifier trust roots (layer 1)
+      
+    </span>
+</a>
+<nav aria-label="Verifier trust roots (layer 1)" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#what-the-verifier-protects-against">
+<span class="md-ellipsis">
+      
+        What the verifier protects against
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#what-the-verifier-does-not-protect-against">
+<span class="md-ellipsis">
+      
+        What the verifier does NOT protect against
+      
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#wizard-trust-roots-layer-2">
+<span class="md-ellipsis">
+      
+        Wizard trust roots (layer 2)
+      
+    </span>
+</a>
+<nav aria-label="Wizard trust roots (layer 2)" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#how-intentjson-fields-map-to-the-trust-graph">
+<span class="md-ellipsis">
+      
+        How intent.json fields map to the trust graph
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#why-permissionsrewardaccount-is-the-permissions-script-hash">
+<span class="md-ellipsis">
+      
+        Why permissionsRewardAccount is the permissions script hash
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#what-the-wizard-does-not-protect-against">
+<span class="md-ellipsis">
+      
+        What the wizard does NOT protect against
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#trace-as-audit-trail">
+<span class="md-ellipsis">
+      
+        Trace as audit trail
+      
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#what-this-means-in-practice">
+<span class="md-ellipsis">
+      
+        What this means in practice
+      
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../swap/">
+<span class="md-ellipsis">
+    
+  
+    Swap recipe
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../chain-context/">
+<span class="md-ellipsis">
+    
+  
+    ChainContext
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../freeze-workflow/">
+<span class="md-ellipsis">
+    
+  
+    Freeze workflow
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../parity/">
+<span class="md-ellipsis">
+    
+  
+    Parity report
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../release/">
+<span class="md-ellipsis">
+    
+  
+    Release automation
+  
+
+    
+  </span>
+</a>
+</li>
+</ul>
+</nav>
+</div>
+</div>
+</div>
+<div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc">
+<div class="md-sidebar__scrollwrap">
+<div class="md-sidebar__inner">
+<nav aria-label="Table of contents" class="md-nav md-nav--secondary">
+<label class="md-nav__title" for="__toc">
+<span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+<ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#system-overview">
+<span class="md-ellipsis">
+      
+        System overview
+      
+    </span>
+</a>
+<nav aria-label="System overview" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#bake-time-parameter-graph">
+<span class="md-ellipsis">
+      
+        Bake-time parameter graph
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#run-time-utxo-graph">
+<span class="md-ellipsis">
+      
+        Run-time UTxO graph
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#why-each-arrow-exists">
+<span class="md-ellipsis">
+      
+        Why each arrow exists
+      
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#verifier-trust-roots-layer-1">
+<span class="md-ellipsis">
+      
+        Verifier trust roots (layer 1)
+      
+    </span>
+</a>
+<nav aria-label="Verifier trust roots (layer 1)" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#what-the-verifier-protects-against">
+<span class="md-ellipsis">
+      
+        What the verifier protects against
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#what-the-verifier-does-not-protect-against">
+<span class="md-ellipsis">
+      
+        What the verifier does NOT protect against
+      
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#wizard-trust-roots-layer-2">
+<span class="md-ellipsis">
+      
+        Wizard trust roots (layer 2)
+      
+    </span>
+</a>
+<nav aria-label="Wizard trust roots (layer 2)" class="md-nav">
+<ul class="md-nav__list">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#how-intentjson-fields-map-to-the-trust-graph">
+<span class="md-ellipsis">
+      
+        How intent.json fields map to the trust graph
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#why-permissionsrewardaccount-is-the-permissions-script-hash">
+<span class="md-ellipsis">
+      
+        Why permissionsRewardAccount is the permissions script hash
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#what-the-wizard-does-not-protect-against">
+<span class="md-ellipsis">
+      
+        What the wizard does NOT protect against
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#trace-as-audit-trail">
+<span class="md-ellipsis">
+      
+        Trace as audit trail
+      
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#what-this-means-in-practice">
+<span class="md-ellipsis">
+      
+        What this means in practice
+      
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</div>
+</div>
+</div>
+<div class="md-content" data-md-component="content">
+<article class="md-content__inner md-typeset">
+<a class="md-content__button md-icon" href="https://github.com/lambdasistemi/amaru-treasury-tx/edit/main/docs/trust-model.md" rel="edit" title="Edit this page">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"></path></svg>
+</a>
+<h1 id="trust-model">Trust model<a class="headerlink" href="#trust-model" title="Permanent link">¶</a></h1>
+<p>This page is the canonical reference for what <code>amaru-treasury-tx</code>
+trusts when it produces an unsigned transaction. It synthesises the
+upstream Amaru treasury system into a dependency graph and names the
+trust roots and threat surfaces this CLI cannot eliminate.</p>
+<p>The CLI's safety story has two layers:</p>
+<ol>
+<li><strong>The on-chain registry walk verifier</strong> (under
+   <code>Amaru.Treasury.Registry.Verify</code>) reduces an untrusted
+   <code>metadata.json</code> hint to a <code>VerifiedRegistry</code> projection,
+   refusing every claim that disagrees with chain or build-time
+   derivation.</li>
+<li><strong>The swap wizard</strong> (under <code>Amaru.Treasury.Tx.SwapWizard</code>)
+   composes verified registry data with operator-supplied wizard
+   answers and a curated <code>NetworkConstants</code> table to produce
+   <code>intent.json</code>.</li>
+</ol>
+<p>The verifier's trust roots are described below; the wizard adds two
+more layers that are explicitly NOT verified by this codebase.</p>
+<h2 id="system-overview">System overview<a class="headerlink" href="#system-overview" title="Permanent link">¶</a></h2>
+<p>The upstream treasury (
+<a href="https://github.com/pragma-org/amaru-treasury"><code>pragma-org/amaru-treasury</code></a>)
+has <strong>three NFT-pinned UTxO families</strong> — Scopes, Registry, Treasury —
+plus a permissions script that holds no UTxO and is invoked through
+the withdraw-zero pattern.</p>
+<blockquote>
+<p>The treasury holds the money but knows nothing about owners; it
+asks permissions; permissions asks the scopes UTxO; the registry
+tells everyone where the treasury and vendor scripts live — all
+three lookups are by NFT policy id, so addresses can rotate
+without re-parameterising scripts.</p>
+</blockquote>
+<h3 id="bake-time-parameter-graph">Bake-time parameter graph<a class="headerlink" href="#bake-time-parameter-graph" title="Permanent link">¶</a></h3>
+<div class="mermaid">flowchart TD
+    seedS[seed UTxO for scopes]
+    seedR[seed UTxO for registry]
+    Scope{{Scope tag}}
+
+    S["scopes validator<br/>policy = SCOPES_NFT"]
+    P["permissions(scopes_nft, scope)"]
+    R["treasury_registry(seed, scope)<br/>policy = REG_NFT[scope]"]
+    T["Sundae treasury(cfg)<br/>cfg.registry_token = REG_NFT[scope]<br/>cfg.permissions.* = hash(P)"]
+
+    seedS --&gt; S
+    seedR --&gt; R
+    Scope --&gt; P
+    Scope --&gt; R
+    S -- SCOPES_NFT --&gt; P
+    P -- "permissions script hash" --&gt; T
+    R -- "REG_NFT[scope]" --&gt; T
+</div>
+<p>Each script's hash is fixed at deploy time by:</p>
+<ul>
+<li>the <strong>seed UTxO</strong> that anchors the NFT policy (one-shot — once
+  the seed is spent, the policy id can never be re-minted);</li>
+<li>the <strong>scope tag</strong> parameter for per-scope variants
+  (permissions, registry, treasury);</li>
+<li>the <strong>scopes NFT policy</strong> which permissions reads as a reference
+  input to discover owner credentials.</li>
+</ul>
+<h3 id="run-time-utxo-graph">Run-time UTxO graph<a class="headerlink" href="#run-time-utxo-graph" title="Permanent link">¶</a></h3>
+<div class="mermaid">flowchart TD
+    SU["<b>Scopes UTxO</b> (NFT-pinned)<br/>Datum: Scopes {<br/>  core_development,<br/>  ops_and_use_cases,<br/>  network_compliance,<br/>  middleware : MultisigScript<br/>}"]
+    RU["<b>Registry UTxO</b> per scope (NFT-pinned)<br/>Datum: ScriptHashRegistry {<br/>  treasury : Script h_t,<br/>  vendor   : Script h_v<br/>}<br/>Immutable: old == new"]
+    TU["<b>Treasury UTxO</b> per scope (Sundae)<br/>Datum: TreasuryConfiguration {<br/>  registry_token,<br/>  permissions { reorganize, sweep, fund=AnyOf[], disburse },<br/>  expiration,<br/>  payout_upperbound = 0<br/>}<br/>Holds: withdrawn ADA"]
+    P["permissions script (no UTxO)<br/>withdraw-zero gate<br/>Reorganize → owner<br/>Sweep / Disburse → owner + 1 other<br/>Fund → False"]
+    VU["Vendor UTxO(s)<br/>per disbursement"]
+    GA[(PRAGMA General Assembly multisig)]
+
+    TU -- "withdraw 0 (delegates auth)" --&gt; P
+    P  -- "reference input" --&gt; SU
+    TU -- "reference input" --&gt; RU
+    TU -- "disburse / sweep" --&gt; VU
+    VU -- "reference input on cancel" --&gt; RU
+    GA -- "spend (mutate)" --&gt; SU
+    GA -- "spend (immutable)" --&gt; RU
+</div>
+<h3 id="why-each-arrow-exists">Why each arrow exists<a class="headerlink" href="#why-each-arrow-exists" title="Permanent link">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Arrow</th>
+<th>Direction</th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Treasury → Permissions</td>
+<td>runtime, withdraw-zero</td>
+<td>Sundae's treasury delegates <em>who can sweep / disburse / reorganize</em> to the permissions script. <code>TreasuryConfiguration.permissions.*</code> literally stores the permissions script hash.</td>
+</tr>
+<tr>
+<td>Permissions → Scopes</td>
+<td>runtime, <strong>reference input</strong></td>
+<td><code>expect_scopes(self.reference_inputs, scopes_nft)</code> — owner credentials are <em>dynamic</em>, so permissions reads them from the Scopes UTxO each time. Decouples ownership rotation from script hashes.</td>
+</tr>
+<tr>
+<td>Treasury → Registry</td>
+<td>runtime, <strong>reference input</strong></td>
+<td>Sundae's vendor logic needs the treasury &amp; vendor script hashes (e.g. for cancel-to-treasury). It locates them via the <code>registry_token</code> policy baked into <code>TreasuryConfiguration</code>.</td>
+</tr>
+<tr>
+<td>Scopes UTxO ← admin</td>
+<td>spend</td>
+<td>Mutable but only by PRAGMA General Assembly multisig (<code>must_be_approved_by_general_assembly</code>). New datum must still match the <code>Scopes</code> shape.</td>
+</tr>
+<tr>
+<td>Registry UTxO ← admin</td>
+<td>spend</td>
+<td>Spendable only by GA, and <code>with_state</code> forces <code>old_datum == new_datum</code> — effectively immutable until the NFT is burned.</td>
+</tr>
+<tr>
+<td>Both NFT mints ← seed UTxO</td>
+<td>one-shot</td>
+<td>The two trap validators are parameterised by a seed <code>OutputReference</code> so the policy id is unique and minting can only happen once.</td>
+</tr>
+<tr>
+<td>Vendor → Registry</td>
+<td>runtime, reference input</td>
+<td>Vendor outputs use the registry to find the treasury hash to return to on cancel.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="verifier-trust-roots-layer-1">Verifier trust roots (layer 1)<a class="headerlink" href="#verifier-trust-roots-layer-1" title="Permanent link">¶</a></h2>
+<p>Two and only two:</p>
+<ol>
+<li><strong>Build-time pinned constants</strong> in
+   <code>Amaru.Treasury.Registry.Constants</code>:</li>
+<li>the two seed <code>OutputReference</code>s
+     (<code>scopesSeedTxIdHex</code>, <code>registrySeedTxIdHex</code>),</li>
+<li>the four compiled Plutus blobs (<code>scopes</code>,
+     <code>treasury_registry</code>, <code>permissions</code>, <code>treasury</code>) embedded
+     from <code>assets/plutus/*.cbor</code>.
+   These are reviewed in the PR that advances the upstream pin.
+   The seeds are load-bearing: they make every NFT policy
+   one-shot, so a forged Scopes or Registry NFT under our
+   policy id is impossible.</li>
+<li><strong>The on-chain ledger</strong> observed through a local
+   <code>cardano-node</code> socket. The verifier never trusts a remote
+   indexer, an HTTP endpoint, or the operator's filesystem
+   outside of the metadata hint.</li>
+</ol>
+<p><code>metadata.json</code> is <strong>not</strong> a trust root. Every consumed field is
+cross-checked against an anchor (chain or build-time derivation),
+and an unverifiable field aborts the run.</p>
+<h3 id="what-the-verifier-protects-against">What the verifier protects against<a class="headerlink" href="#what-the-verifier-protects-against" title="Permanent link">¶</a></h3>
+<ul>
+<li><strong>Stale references</strong>: a <code>*.deployed_at</code> TxIn that points at a
+  spent UTxO fails the chain check.</li>
+<li><strong>Tampered hashes</strong>: any of <code>treasury_script.hash</code>,
+  <code>registry_script.hash</code>, <code>permissions_script.hash</code>, <code>address</code>,
+  <code>owner</code> disagreeing with the on-chain anchor (NFT datum) or
+  the build-time derivation aborts.</li>
+<li><strong>Substituted UTxOs</strong>: a <code>*.deployed_at</code> TxIn that points at
+  a UTxO not carrying the expected NFT (registry case) or not
+  carrying the expected reference script (treasury / permissions
+  case) aborts.</li>
+<li><strong>Wrong-scope swap</strong>: per-scope verification is keyed on
+  <code>ScopeId</code>; a metadata file describing the wrong scope
+  produces a typed error.</li>
+<li><strong>Mutable-owner attack</strong>: the Scopes datum is the only mutable
+  field across the system; the verifier reads it through the
+  on-chain Scopes NFT (one-shot policy + GA-multisig-gated
+  spend) at the moment of the run, so a stale local copy of
+  owners cannot survive.</li>
+</ul>
+<h3 id="what-the-verifier-does-not-protect-against">What the verifier does NOT protect against<a class="headerlink" href="#what-the-verifier-does-not-protect-against" title="Permanent link">¶</a></h3>
+<ul>
+<li><strong>Compromised build-time pin</strong>: a malicious blob committed
+  under <code>assets/plutus/</code> would be accepted. Mitigation: the pin
+  advances by PR; the diff is small and reviewable.</li>
+<li><strong>Compromised local <code>cardano-node</code></strong>: a node serving forged
+  ledger state to LSQ. Mitigation: run a node you control,
+  verify it is in sync.</li>
+<li><strong>Race vs. mempool</strong>: a <code>*.deployed_at</code> UTxO consumed in
+  flight after our LSQ acquire and before submission. The next
+  run will fail; partial output is never written. Acceptable.</li>
+<li><strong>Off-chain wizard inputs</strong> — see layer 2 below.</li>
+</ul>
+<p>The verifier is <strong>fail-closed</strong>: any anchor mismatch, spent UTxO,
+ambiguous match, parse failure, or chain query error returns a
+typed <code>RegistryWalkError</code> and the caller writes no output.</p>
+<h2 id="wizard-trust-roots-layer-2">Wizard trust roots (layer 2)<a class="headerlink" href="#wizard-trust-roots-layer-2" title="Permanent link">¶</a></h2>
+<p>In addition to layer 1, the wizard depends on:</p>
+<ol>
+<li><strong>Build-time <code>NetworkConstants</code></strong> — <code>swapOrderAddress</code>,
+   <code>usdmPolicy</code>, <code>usdmToken</code>, <code>sundaeProtocolFeeLovelace</code>,
+   <code>extraPerChunkLovelace</code>, <code>poolId</code>. Hard-coded per network
+   (mainnet/preprod/preview), reviewed in the PR that advances
+   the table. <strong>NOT verified against chain.</strong></li>
+<li><strong>Operator-supplied answers</strong>: <code>--wallet-addr</code>, <code>--scope</code>,
+   <code>--usdm</code>, <code>--chunk-usdm</code>/<code>--split</code>, <code>--min-rate</code>,
+   <code>--validity-hours</code>, rationale text, optional <code>--extra-signer</code>
+   witnesses. Structurally validated but the wizard cannot
+   judge intent.</li>
+<li><strong>The local <code>cardano-node</code> socket</strong> for tip + UTxO queries
+   (same as layer 1).</li>
+</ol>
+<h3 id="how-intentjson-fields-map-to-the-trust-graph">How <code>intent.json</code> fields map to the trust graph<a class="headerlink" href="#how-intentjson-fields-map-to-the-trust-graph" title="Permanent link">¶</a></h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Source</th>
+<th>Trust</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scopesDeployedAt</code></td>
+<td>verifier (<code>scope_owners</code> TxIn)</td>
+<td>layer 1</td>
+</tr>
+<tr>
+<td><code>permissionsDeployedAt</code></td>
+<td>verifier (<code>permissions_script.deployed_at</code>, ref-script UTxO)</td>
+<td>layer 1</td>
+</tr>
+<tr>
+<td><code>treasuryDeployedAt</code></td>
+<td>verifier (<code>treasury_script.deployed_at</code>, ref-script UTxO)</td>
+<td>layer 1</td>
+</tr>
+<tr>
+<td><code>registryDeployedAt</code></td>
+<td>verifier (<code>registry_script.deployed_at</code>, the registry NFT UTxO with inline <code>ScriptHashRegistry</code> datum)</td>
+<td>layer 1</td>
+</tr>
+<tr>
+<td><code>registryPolicyId</code></td>
+<td>derived from build-time seed</td>
+<td>layer 1</td>
+</tr>
+<tr>
+<td><code>treasuryAddress</code></td>
+<td>derived from verified treasury script hash + upstream <code>addr1x&lt;treasury_hash&gt;&lt;treasury_hash&gt;</code> convention</td>
+<td>layer 1</td>
+</tr>
+<tr>
+<td><code>treasuryScriptHash</code></td>
+<td>verifier (matches metadata, registry NFT datum, AND build-time derivation)</td>
+<td>layer 1</td>
+</tr>
+<tr>
+<td><code>permissionsRewardAccount</code></td>
+<td>per-scope <strong>permissions script hash</strong> (the withdraw-zero target — see below)</td>
+<td>layer 1</td>
+</tr>
+<tr>
+<td><code>coreOwner</code> / <code>opsOwner</code> / <code>networkComplianceOwner</code> / <code>middlewareOwner</code></td>
+<td>verifier (parsed from on-chain Scopes NFT datum)</td>
+<td>layer 1</td>
+</tr>
+<tr>
+<td><code>swapOrderAddress</code>, <code>usdmPolicy</code>, <code>usdmToken</code>, <code>sundaeProtocolFeeLovelace</code>, <code>extraPerChunkLovelace</code>, <code>poolId</code></td>
+<td><code>NetworkConstants</code> table</td>
+<td>layer 2 build-time</td>
+</tr>
+<tr>
+<td><code>walletTxIn</code>, <code>walletAddress</code></td>
+<td>operator's <code>--wallet-addr</code> + largest pure-ADA UTxO selection</td>
+<td>layer 2 operator</td>
+</tr>
+<tr>
+<td><code>chunkSizeLovelace</code>, <code>amountLovelace</code>, <code>rateNumerator</code>, <code>rateDenominator</code></td>
+<td>derived from <code>--usdm</code>, <code>--chunk-usdm</code>/<code>--split</code>, <code>--min-rate</code></td>
+<td>layer 2 operator</td>
+</tr>
+<tr>
+<td><code>validityUpperBoundSlot</code></td>
+<td>tip + <code>--validity-hours</code></td>
+<td>layer 2 operator + node</td>
+</tr>
+<tr>
+<td><code>signers</code></td>
+<td>selected scope owner inferred from <code>--scope</code>, plus optional extra witnesses from <code>--extra-signer</code>/<code>--signer</code></td>
+<td>layer 1 default and scope-name extras; layer 2 raw key-hash extras</td>
+</tr>
+<tr>
+<td><code>rationale.*</code></td>
+<td>operator-supplied free text</td>
+<td>layer 2 operator</td>
+</tr>
+</tbody>
+</table>
+<h3 id="why-permissionsrewardaccount-is-the-permissions-script-hash">Why <code>permissionsRewardAccount</code> is the permissions script hash<a class="headerlink" href="#why-permissionsrewardaccount-is-the-permissions-script-hash" title="Permanent link">¶</a></h3>
+<p>The Sundae treasury delegates authority to the permissions script
+via the withdraw-zero pattern: a transaction that wants to
+disburse / sweep / reorganize must include a 0-lovelace
+withdrawal from a reward account whose stake credential IS the
+permissions script. That gives the permissions validator a
+chance to run, where it reads the on-chain Scopes UTxO as a
+reference input and enforces the per-action approval rules
+(owner alone for reorganize; owner + one witness for
+sweep / disburse).</p>
+<p>So <code>permissionsRewardAccount</code> MUST be the per-scope permissions
+script hash — NOT the stake credential of the treasury address.
+The two coincide only on networks where upstream's deployment
+sets <code>addr1x&lt;treasury_hash&gt;&lt;treasury_hash&gt;</code>; relying on the
+coincidence would silently substitute the treasury hash on
+testnets that diverge.</p>
+<h3 id="what-the-wizard-does-not-protect-against">What the wizard does NOT protect against<a class="headerlink" href="#what-the-wizard-does-not-protect-against" title="Permanent link">¶</a></h3>
+<ul>
+<li><strong>A wrong <code>--scope</code> answer</strong>: the wizard verifies the named
+  scope but cannot detect that the operator typed the wrong
+  scope name. Mitigation: every value-affecting step emits a
+  <code>WizardEvent</code> line on stderr (or <code>--log PATH</code>) so the
+  operator can read the trace before signing.</li>
+<li><strong>A <code>--min-rate</code> that disagrees with intent</strong>: the rate
+  becomes a Sundae limit-price, not a sanity check on the
+  swap's economic correctness. The wizard echoes the resolved
+  numerator/denominator on stderr.</li>
+<li><strong>A wrong <code>--wallet-addr</code></strong>: the wallet TxIn supplies fuel +
+  collateral; if the operator signs with a key not matching
+  the address, the tx fails at submission, not at wizard time.</li>
+<li><strong>A compromised <code>NetworkConstants</code> table</strong> — see layer 2 (1).</li>
+<li><strong>Operator-supplied raw signer key hashes</strong>: scope-name extra
+  signers are resolved from the verified owner set, but a raw
+  <code>--extra-signer</code> key hash is accepted as operator input. A wrong
+  raw key hash produces a tx that needs a wrong signature; submission
+  fails. Prefer scope-name extra signers for normal operation.</li>
+<li><strong>A compromised cardano-node</strong> — see layer 1.</li>
+</ul>
+<p>The wizard is <strong>fail-closed</strong>: any verifier failure, missing
+network constant, empty wallet/treasury UTxO set, or out-of-range
+answer aborts with a non-zero exit and a typed message. Partial
+<code>intent.json</code> is never written.</p>
+<h3 id="trace-as-audit-trail">Trace as audit trail<a class="headerlink" href="#trace-as-audit-trail" title="Permanent link">¶</a></h3>
+<p>The wizard runs non-interactively (no confirmation prompt). Every
+value-affecting step — verifier acceptance, on-chain owner
+parsing, NetworkConstants lookup, UTxO selection, validity slot,
+chunk shape, output destination — emits a single structured
+<code>WizardEvent</code> line through <code>Tracer IO WizardEvent</code>. By default
+these lines go to stderr; <code>--log PATH</code> redirects them to a file.
+Operators are expected to read the trace before signing the
+produced <code>intent.json</code>; that is the audit gate.</p>
+<h2 id="what-this-means-in-practice">What this means in practice<a class="headerlink" href="#what-this-means-in-practice" title="Permanent link">¶</a></h2>
+<p>A reviewer of a wizard-produced <code>intent.json</code> should ask, in
+order:</p>
+<ol>
+<li><strong>Layer 1</strong> — does the build-time pin match what was reviewed
+   in the most recent <code>assets/plutus/</code> PR? Was the verifier run
+   against a node the operator controls? Both can be answered
+   from the PR history and the operator's machine state.</li>
+<li><strong>Layer 2 build-time</strong> — is the <code>NetworkConstants</code> row for
+   this network up to date? Same PR-review answer.</li>
+<li><strong>Layer 2 operator</strong> — do <code>--scope</code>, <code>--wallet-addr</code>,
+   <code>--usdm</code>, <code>--min-rate</code>, and rationale match the human intent
+   for this swap? This is irreducibly the operator's
+   responsibility.</li>
+</ol>
+<p>Layer 1 is binary: either the verifier accepted or it refused.
+Layer 2 is what the audit trail (rationale fields + the trace
+log) is for.</p>
+</article>
+</div>
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+</div>
+</main>
+<footer class="md-footer">
+<div class="md-footer-meta md-typeset">
+<div class="md-footer-meta__inner md-grid">
+<div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" rel="noopener" target="_blank">
+      Material for MkDocs
+    </a>
+</div>
+</div>
+</div>
+</footer>
+</div>
+<div class="md-dialog" data-md-component="dialog">
+<div class="md-dialog__inner md-typeset"></div>
+</div>
+<script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "content.code.copy", "content.action.edit"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+<script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
+<script type="module">import mermaid from "https://unpkg.com/mermaid@10.4.0/dist/mermaid.esm.min.mjs";
+mermaid.initialize({});</script></body>
+</html>

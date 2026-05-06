@@ -1,0 +1,1256 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Build unsigned Amaru treasury transactions (disburse, reorganize, withdraw)">
+      
+      
+      
+        <link rel="canonical" href="https://lambdasistemi.github.io/amaru-treasury-tx/quickstart/">
+      
+      
+        <link rel="prev" href="..">
+      
+      
+        <link rel="next" href="../architecture/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.0">
+    
+    
+      
+        <title>Quickstart - amaru-treasury-tx</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.618322db.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="amber">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#quickstart" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="amaru-treasury-tx" class="md-header__button md-logo" aria-label="amaru-treasury-tx" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            amaru-treasury-tx
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Quickstart
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="amber"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="amber"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/lambdasistemi/amaru-treasury-tx" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    lambdasistemi/amaru-treasury-tx
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="amaru-treasury-tx" class="md-nav__button md-logo" aria-label="amaru-treasury-tx" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    amaru-treasury-tx
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/lambdasistemi/amaru-treasury-tx" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    lambdasistemi/amaru-treasury-tx
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-install" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Install
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Install">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#macos-apple-silicon" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        macOS (Apple Silicon)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#linux-x86_64" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Linux (x86_64)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#from-source-any-platform" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From source (any platform)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run-from-the-published-flake-no-install" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run from the published flake (no install)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-point-at-a-mainnet-node" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Point at a mainnet node
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-fetch-the-upstream-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Fetch the upstream metadata
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-the-famous-swap-end-to-end" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. The famous swap, end to end
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-what-lands-where" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. What lands where
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-reading-the-trace-as-the-audit-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Reading the trace as the audit gate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-sign-submit-out-of-scope-for-this-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Sign + submit (out of scope for this CLI)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-two-step-form-without-the-pipe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Two-step form (without the pipe)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-when-something-goes-wrong" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. When something goes wrong
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-reproduce-a-known-on-chain-swap-developer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Reproduce a known on-chain swap (developer)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-smoke-the-signer-ux-developer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. Smoke the signer UX (developer)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#12-trust-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12. Trust model
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../trust-model/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Trust model
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../swap/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Swap recipe
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../chain-context/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ChainContext
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../freeze-workflow/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Freeze workflow
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../parity/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Parity report
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../release/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release automation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#1-install" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Install
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Install">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#macos-apple-silicon" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        macOS (Apple Silicon)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#linux-x86_64" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Linux (x86_64)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#from-source-any-platform" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From source (any platform)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#run-from-the-published-flake-no-install" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run from the published flake (no install)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-point-at-a-mainnet-node" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Point at a mainnet node
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-fetch-the-upstream-metadata" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Fetch the upstream metadata
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-the-famous-swap-end-to-end" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. The famous swap, end to end
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-what-lands-where" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. What lands where
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-reading-the-trace-as-the-audit-gate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Reading the trace as the audit gate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#7-sign-submit-out-of-scope-for-this-cli" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        7. Sign + submit (out of scope for this CLI)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#8-two-step-form-without-the-pipe" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        8. Two-step form (without the pipe)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#9-when-something-goes-wrong" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        9. When something goes wrong
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#10-reproduce-a-known-on-chain-swap-developer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        10. Reproduce a known on-chain swap (developer)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#11-smoke-the-signer-ux-developer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        11. Smoke the signer UX (developer)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#12-trust-model" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        12. Trust model
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/lambdasistemi/amaru-treasury-tx/edit/main/docs/quickstart.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="quickstart">Quickstart<a class="headerlink" href="#quickstart" title="Permanent link">&para;</a></h1>
+<p>Build a swap transaction end-to-end in one pipe — the <strong>swap
+wizard</strong> answers every chain-anchored field for you, the
+<strong>swap</strong> subcommand turns its <code>intent.json</code> into unsigned
+Conway CBOR.</p>
+<h2 id="1-install">1. Install<a class="headerlink" href="#1-install" title="Permanent link">&para;</a></h2>
+<h3 id="macos-apple-silicon">macOS (Apple Silicon)<a class="headerlink" href="#macos-apple-silicon" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>brew<span class="w"> </span>tap<span class="w"> </span>lambdasistemi/tap
+brew<span class="w"> </span>install<span class="w"> </span>amaru-treasury-tx
+</code></pre></div>
+<h3 id="linux-x86_64">Linux (x86_64)<a class="headerlink" href="#linux-x86_64" title="Permanent link">&para;</a></h3>
+<p>Grab the AppImage from the
+<a href="https://github.com/lambdasistemi/amaru-treasury-tx/releases/latest">releases page</a>:</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-L<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>https://github.com/lambdasistemi/amaru-treasury-tx/releases/latest/download/amaru-treasury-tx.AppImage<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>-o<span class="w"> </span>amaru-treasury-tx
+chmod<span class="w"> </span>+x<span class="w"> </span>./amaru-treasury-tx
+./amaru-treasury-tx<span class="w"> </span>--help
+</code></pre></div>
+<p>Or use the <code>.deb</code> / <code>.rpm</code> packages from the same release.</p>
+<h3 id="from-source-any-platform">From source (any platform)<a class="headerlink" href="#from-source-any-platform" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>git@github.com:lambdasistemi/amaru-treasury-tx.git
+<span class="nb">cd</span><span class="w"> </span>amaru-treasury-tx
+nix<span class="w"> </span>develop
+just<span class="w"> </span>build
+</code></pre></div>
+<h3 id="run-from-the-published-flake-no-install">Run from the published flake (no install)<a class="headerlink" href="#run-from-the-published-flake-no-install" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="nv">EXE</span><span class="o">=</span><span class="s1">&#39;nix run github:lambdasistemi/amaru-treasury-tx#amaru-treasury-tx --&#39;</span>
+</code></pre></div>
+<p>(Use this <code>EXE</code> everywhere <code>amaru-treasury-tx</code> appears below.)</p>
+<h2 id="2-point-at-a-mainnet-node">2. Point at a mainnet node<a class="headerlink" href="#2-point-at-a-mainnet-node" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">CARDANO_NODE_SOCKET_PATH</span><span class="o">=</span>/path/to/cardano-node.socket
+</code></pre></div>
+<p>(Or pass <code>--node-socket PATH</code> to the CLI.)</p>
+<h2 id="3-fetch-the-upstream-metadata">3. Fetch the upstream metadata<a class="headerlink" href="#3-fetch-the-upstream-metadata" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-fsSL<span class="w"> </span>https://raw.githubusercontent.com/pragma-org/amaru-treasury/main/journal/2026/metadata.json<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>-o<span class="w"> </span>metadata-mainnet.json
+</code></pre></div>
+<p>The wizard treats this file as an untrusted hint and verifies
+every consumed field against the on-chain registry NFT and
+build-time pinned Plutus blobs before producing an intent.</p>
+<h2 id="4-the-famous-swap-end-to-end">4. The famous swap, end to end<a class="headerlink" href="#4-the-famous-swap-end-to-end" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>amaru-treasury-tx<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--node-socket<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$CARDANO_NODE_SOCKET_PATH</span><span class="s2">&quot;</span><span class="w"> </span>--network<span class="w"> </span>mainnet<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>swap-wizard<span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>--wallet-addr<span class="w"> </span>addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu<span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>--metadata<span class="w"> </span>metadata-mainnet.json<span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>--scope<span class="w"> </span>network_compliance<span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>--usdm<span class="w"> </span><span class="m">100000</span><span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>--split<span class="w"> </span><span class="m">33</span><span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>--min-rate<span class="w"> </span><span class="m">0</span>.245<span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>--validity-hours<span class="w"> </span><span class="m">28</span><span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>--description<span class="w"> </span><span class="s2">&quot;Swapping ADA for \$100k at a rate of \$0.245 per ADA&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>--justification<span class="w"> </span><span class="s2">&quot;Required to pay Antithesis as vendor&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>--destination-label<span class="w"> </span><span class="s2">&quot;Network Compliance&#39;s treasury&quot;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>--extra-signer<span class="w"> </span>core_development<span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>--log<span class="w"> </span>wizard.log<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="p">|</span><span class="w"> </span>amaru-treasury-tx<span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>--node-socket<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$CARDANO_NODE_SOCKET_PATH</span><span class="s2">&quot;</span><span class="w"> </span>--network<span class="w"> </span>mainnet<span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>swap<span class="w"> </span><span class="se">\</span>
+<span class="w">            </span>--log<span class="w"> </span>swap.log<span class="w"> </span><span class="se">\</span>
+<span class="w">            </span>--out<span class="w"> </span>swap.cbor.hex
+</code></pre></div>
+<p>What the flags mean:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>What it controls</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--wallet-addr</code></td>
+<td>Wallet bech32 address. Wizard picks its largest pure-ADA UTxO as fuel + collateral.</td>
+</tr>
+<tr>
+<td><code>--metadata</code></td>
+<td>Local <code>metadata.json</code> (untrusted hint; verified against chain).</td>
+</tr>
+<tr>
+<td><code>--scope</code></td>
+<td>One of <code>core_development</code>, <code>ops_and_use_cases</code>, <code>network_compliance</code>, <code>middleware</code>.</td>
+</tr>
+<tr>
+<td><code>--usdm</code></td>
+<td>Total USDM the swap should buy. ADA spend is derived as <code>usdm / min-rate</code>.</td>
+</tr>
+<tr>
+<td><code>--split N</code></td>
+<td>Slice the order into N equal chunks. Use <code>--chunk-usdm X</code> instead to pin per-chunk size.</td>
+</tr>
+<tr>
+<td><code>--min-rate</code></td>
+<td>Sundae limit price (USDM per ADA).</td>
+</tr>
+<tr>
+<td><code>--validity-hours</code></td>
+<td>Validity window from current tip; 1..48.</td>
+</tr>
+<tr>
+<td><code>--description</code> / <code>--justification</code> / <code>--destination-label</code></td>
+<td>Free-form rationale fields, pinned into the on-chain audit trail.</td>
+</tr>
+<tr>
+<td><code>--extra-signer SCOPE\|HEX</code></td>
+<td>Repeated for each witness owner beyond the selected scope owner. Scope names and 28-byte key hashes are accepted; <code>--signer</code> remains as an alias.</td>
+</tr>
+<tr>
+<td><code>--log PATH</code></td>
+<td>Redirect the typed step trace to a file (default = stderr).</td>
+</tr>
+<tr>
+<td><code>--out PATH</code></td>
+<td>Wizard side: write <code>intent.json</code> here (default = stdout, which is what the pipe reads). Swap side: write hex CBOR here (default = stdout).</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-what-lands-where">5. What lands where<a class="headerlink" href="#5-what-lands-where" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Stream</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wizard.log</code></td>
+<td><code>swap-wizard:</code> step trace, one event per value-affecting step (verifier acceptance, on-chain owners, UTxO selection, validity slot, chunk shape, …).</td>
+</tr>
+<tr>
+<td>pipe</td>
+<td><code>intent.json</code> payload — wizard stdout → swap stdin.</td>
+</tr>
+<tr>
+<td><code>swap.log</code></td>
+<td><code>swap:</code> step trace (intent source, connect, build summary, redeemer re-eval, validation result).</td>
+</tr>
+<tr>
+<td><code>swap.cbor.hex</code></td>
+<td>The unsigned Conway transaction as hex.</td>
+</tr>
+</tbody>
+</table>
+<p>Drop <code>--log</code> from either subcommand to send the trace to stderr.
+Drop <code>--out</code> from the wizard to write <code>intent.json</code> to stdout
+(this is what the pipe relies on). Drop <code>--intent</code> from <code>swap</code>
+to read the intent from stdin (also what the pipe relies on).</p>
+<h2 id="6-reading-the-trace-as-the-audit-gate">6. Reading the trace as the audit gate<a class="headerlink" href="#6-reading-the-trace-as-the-audit-gate" title="Permanent link">&para;</a></h2>
+<p>The wizard never asks for confirmation. The trace IS the audit
+trail. A successful run looks like this:</p>
+<div class="highlight"><pre><span></span><code>swap-wizard: network mainnet (magic 764824073)
+swap-wizard: metadata = metadata-mainnet.json
+swap-wizard: VERIFIED scope=network_compliance treasury=addr1xyezq8w… treasuryScriptHash=32201dc1… registryPolicyId=38c627d4… permissionsRewardAccount=a64d1b9e…
+swap-wizard: owners core=7095faf3… ops=f3ab64b0… network_compliance=8bd03209… middleware=97e0f6d6…
+swap-wizard: wallet utxos: 3
+swap-wizard: treasury utxos: 1 (total 1450000000000 lovelace)
+swap-wizard: tip slot 186446659
+swap-wizard: NetworkConstants swapOrder=addr1x8ax5k9m… usdmPolicy=c48cbb3d… usdmToken=0014df105553444d sundaeFee=1280000
+swap-wizard: wallet utxo selected 42e4c279…#0
+swap-wizard: treasury utxos selected 64f27254…#0 leftover=1041836734694
+swap-wizard: validity tip=186446659 upperBound=186547459 (+100800 slots)
+swap-wizard: chunks total=408163265306 chunkSize=12368583797 full=33 remainder=5
+swap-wizard: intent.json -&gt; stdout
+
+swap: intent &lt;- stdin
+swap: connecting to /path/to/cardano-node.socket
+swap: required utxos: 6
+swap: built 15240 bytes  fee=1025037  total_collateral=1537556
+swap: re-evaluated 2 redeemers, 0 failed
+swap: cbor -&gt; swap.cbor.hex
+swap: VALIDATION OK
+</code></pre></div>
+<p>The <code>VERIFIED scope=…</code> line and the <code>NetworkConstants</code> row are
+the chain- and build-time roots binding the produced
+transaction to the upstream pin. Read them before signing.</p>
+<h2 id="7-sign-submit-out-of-scope-for-this-cli">7. Sign + submit (out of scope for this CLI)<a class="headerlink" href="#7-sign-submit-out-of-scope-for-this-cli" title="Permanent link">&para;</a></h2>
+<p>Pipe <code>swap.cbor.hex</code> into your signer (hardware wallet,
+<a href="https://github.com/lambdasistemi/cardano-wallet-sign"><code>cardano-wallet-sign</code></a>, MPC service) then
+<code>cardano-cli transaction submit</code> (or any other broadcaster).
+Submit within minutes — the wizard's <code>validityUpperBoundSlot</code>
+ticks down with the tip.</p>
+<h2 id="8-two-step-form-without-the-pipe">8. Two-step form (without the pipe)<a class="headerlink" href="#8-two-step-form-without-the-pipe" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code>amaru-treasury-tx<span class="w"> </span>swap-wizard<span class="w"> </span>...<span class="w"> </span>--out<span class="w"> </span>intent.json
+amaru-treasury-tx<span class="w"> </span>swap<span class="w"> </span>--intent<span class="w"> </span>intent.json<span class="w"> </span>--out<span class="w"> </span>swap.cbor.hex
+</code></pre></div>
+<p>Same behaviour, useful when you want to inspect or hand-edit
+<code>intent.json</code> between the two stages.</p>
+<h2 id="9-when-something-goes-wrong">9. When something goes wrong<a class="headerlink" href="#9-when-something-goes-wrong" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Exit</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 (swap)</td>
+<td>The build aborted before producing CBOR. The trace's <code>swap: ABORT …</code> line names the cause: bad intent JSON, translation error, or a re-evaluated redeemer failure.</td>
+</tr>
+<tr>
+<td>3 (swap-wizard)</td>
+<td>Metadata verification or resolver error. The trace's <code>swap-wizard: ABORT …</code> line names the offending step (registry mismatch, empty wallet UTxO set, network mismatch, …).</td>
+</tr>
+<tr>
+<td>4 (swap-wizard)</td>
+<td>Translation error. Re-check <code>--min-rate</code>, <code>--chunk-usdm</code>/<code>--split</code>, and <code>--validity-hours ∈ [1, 48]</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Both subcommands are fail-closed — neither writes a partial
+output. If the trace ends without <code>cbor -&gt; …</code> (or
+<code>intent.json -&gt; …</code> from the wizard), nothing was written.</p>
+<h2 id="10-reproduce-a-known-on-chain-swap-developer">10. Reproduce a known on-chain swap (developer)<a class="headerlink" href="#10-reproduce-a-known-on-chain-swap-developer" title="Permanent link">&para;</a></h2>
+<p>The <code>swap-probe</code> executable hard-codes a real mainnet swap and
+reproduces its CBOR to the byte (modulo the documented fee
+residue). Use it to validate the stack after upstream bumps:</p>
+<div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">CARDANO_NODE_SOCKET_PATH</span><span class="o">=</span>/code/cardano-mainnet/ipc/node.socket
+nix<span class="w"> </span>run<span class="w"> </span>.#swap-probe<span class="w"> </span>&gt;<span class="w"> </span>haskell-build.hex
+diff<span class="w"> </span>haskell-build.hex<span class="w"> </span>/code/swap-experiment/user-final.hex
+</code></pre></div>
+<p>See <a href="../parity/"><code>docs/parity.md</code></a> for the byte-diff explanation.</p>
+<h2 id="11-smoke-the-signer-ux-developer">11. Smoke the signer UX (developer)<a class="headerlink" href="#11-smoke-the-signer-ux-developer" title="Permanent link">&para;</a></h2>
+<p>Before cutting a release or handing a branch to operators, run:</p>
+<div class="highlight"><pre><span></span><code>nix<span class="w"> </span>develop<span class="w"> </span>--quiet<span class="w"> </span>-c<span class="w"> </span>just<span class="w"> </span>smoke
+</code></pre></div>
+<p>The smoke check runs the focused signer regression and checks that the
+compiled <code>swap-wizard --help</code> exposes
+<code>--extra-signer,--signer SCOPE|HEX</code>.</p>
+<h2 id="12-trust-model">12. Trust model<a class="headerlink" href="#12-trust-model" title="Permanent link">&para;</a></h2>
+<p>The full account of what the wizard verifies vs. what it asks
+the operator to assert lives in
+<a href="../trust-model/">Trust model</a>: bake-time and run-time
+dependency graphs, the verifier's two trust roots, the
+field-by-field map of where each <code>intent.json</code> value comes
+from. Read it once before signing your first mainnet
+transaction.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "content.code.copy", "content.action.edit"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
+      
+    
+  </body>
+</html>

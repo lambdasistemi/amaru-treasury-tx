@@ -1,0 +1,588 @@
+
+<!DOCTYPE html>
+
+<html class="no-js" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width,initial-scale=1" name="viewport"/>
+<meta content="Build unsigned Amaru treasury transactions (disburse, reorganize, withdraw)" name="description"/>
+<link href="https://lambdasistemi.github.io/amaru-treasury-tx/architecture/" rel="canonical"/>
+<link href="../quickstart/" rel="prev"/>
+<link href="../trust-model/" rel="next"/>
+<link href="../assets/images/favicon.png" rel="icon"/>
+<meta content="mkdocs-1.6.1, mkdocs-material-9.7.0" name="generator"/>
+<title>Architecture - amaru-treasury-tx</title>
+<link href="../assets/stylesheets/main.618322db.min.css" rel="stylesheet"/>
+<link href="../assets/stylesheets/palette.ab4e12ef.min.css" rel="stylesheet"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&amp;display=fallback" rel="stylesheet"/>
+<style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+<script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+</head>
+<body data-md-color-accent="amber" data-md-color-primary="indigo" data-md-color-scheme="slate" dir="ltr">
+<input autocomplete="off" class="md-toggle" data-md-toggle="drawer" id="__drawer" type="checkbox"/>
+<input autocomplete="off" class="md-toggle" data-md-toggle="search" id="__search" type="checkbox"/>
+<label class="md-overlay" for="__drawer"></label>
+<div data-md-component="skip">
+<a class="md-skip" href="#architecture">
+          Skip to content
+        </a>
+</div>
+<div data-md-component="announce">
+</div>
+<header class="md-header md-header--shadow" data-md-component="header">
+<nav aria-label="Header" class="md-header__inner md-grid">
+<a aria-label="amaru-treasury-tx" class="md-header__button md-logo" data-md-component="logo" href=".." title="amaru-treasury-tx">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"></path></svg>
+</a>
+<label class="md-header__button md-icon" for="__drawer">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"></path></svg>
+</label>
+<div class="md-header__title" data-md-component="header-title">
+<div class="md-header__ellipsis">
+<div class="md-header__topic">
+<span class="md-ellipsis">
+            amaru-treasury-tx
+          </span>
+</div>
+<div class="md-header__topic" data-md-component="header-topic">
+<span class="md-ellipsis">
+            
+              Architecture
+            
+          </span>
+</div>
+</div>
+</div>
+<form class="md-header__option" data-md-component="palette">
+<input aria-label="Switch to light mode" class="md-option" data-md-color-accent="amber" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-primary="indigo" data-md-color-scheme="slate" id="__palette_0" name="__palette" type="radio"/>
+<label class="md-header__button md-icon" for="__palette_1" hidden="" title="Switch to light mode">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"></path></svg>
+</label>
+<input aria-label="Switch to dark mode" class="md-option" data-md-color-accent="amber" data-md-color-media="(prefers-color-scheme: light)" data-md-color-primary="indigo" data-md-color-scheme="default" id="__palette_1" name="__palette" type="radio"/>
+<label class="md-header__button md-icon" for="__palette_0" hidden="" title="Switch to dark mode">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"></path></svg>
+</label>
+</form>
+<script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+<label class="md-header__button md-icon" for="__search">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"></path></svg>
+</label>
+<div class="md-search" data-md-component="search" role="dialog">
+<label class="md-search__overlay" for="__search"></label>
+<div class="md-search__inner" role="search">
+<form class="md-search__form" name="search">
+<input aria-label="Search" autocapitalize="off" autocomplete="off" autocorrect="off" class="md-search__input" data-md-component="search-query" name="query" placeholder="Search" required="" spellcheck="false" type="text"/>
+<label class="md-search__icon md-icon" for="__search">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"></path></svg>
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"></path></svg>
+</label>
+<nav aria-label="Search" class="md-search__options">
+<button aria-label="Clear" class="md-search__icon md-icon" tabindex="-1" title="Clear" type="reset">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg>
+</button>
+</nav>
+</form>
+<div class="md-search__output">
+<div class="md-search__scrollwrap" data-md-scrollfix="" tabindex="0">
+<div class="md-search-result" data-md-component="search-result">
+<div class="md-search-result__meta">
+            Initializing search
+          </div>
+<ol class="md-search-result__list" role="presentation"></ol>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="md-header__source">
+<a class="md-source" data-md-component="source" href="https://github.com/lambdasistemi/amaru-treasury-tx" title="Go to repository">
+<div class="md-source__icon md-icon">
+<svg viewbox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"></path></svg>
+</div>
+<div class="md-source__repository">
+    lambdasistemi/amaru-treasury-tx
+  </div>
+</a>
+</div>
+</nav>
+</header>
+<div class="md-container" data-md-component="container">
+<main class="md-main" data-md-component="main">
+<div class="md-main__inner md-grid">
+<div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation">
+<div class="md-sidebar__scrollwrap">
+<div class="md-sidebar__inner">
+<nav aria-label="Navigation" class="md-nav md-nav--primary" data-md-level="0">
+<label class="md-nav__title" for="__drawer">
+<a aria-label="amaru-treasury-tx" class="md-nav__button md-logo" data-md-component="logo" href=".." title="amaru-treasury-tx">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"></path></svg>
+</a>
+    amaru-treasury-tx
+  </label>
+<div class="md-nav__source">
+<a class="md-source" data-md-component="source" href="https://github.com/lambdasistemi/amaru-treasury-tx" title="Go to repository">
+<div class="md-source__icon md-icon">
+<svg viewbox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"></path></svg>
+</div>
+<div class="md-source__repository">
+    lambdasistemi/amaru-treasury-tx
+  </div>
+</a>
+</div>
+<ul class="md-nav__list" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="..">
+<span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../quickstart/">
+<span class="md-ellipsis">
+    
+  
+    Quickstart
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item md-nav__item--active">
+<input class="md-nav__toggle md-toggle" id="__toc" type="checkbox"/>
+<label class="md-nav__link md-nav__link--active" for="__toc">
+<span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+<span class="md-nav__icon md-icon"></span>
+</label>
+<a class="md-nav__link md-nav__link--active" href="./">
+<span class="md-ellipsis">
+    
+  
+    Architecture
+  
+
+    
+  </span>
+</a>
+<nav aria-label="Table of contents" class="md-nav md-nav--secondary">
+<label class="md-nav__title" for="__toc">
+<span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+<ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#layered-design">
+<span class="md-ellipsis">
+      
+        Layered design
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#module-layout">
+<span class="md-ellipsis">
+      
+        Module layout
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#subcommand-module-map">
+<span class="md-ellipsis">
+      
+        Subcommand → module map
+      
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../trust-model/">
+<span class="md-ellipsis">
+    
+  
+    Trust model
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../swap/">
+<span class="md-ellipsis">
+    
+  
+    Swap recipe
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../chain-context/">
+<span class="md-ellipsis">
+    
+  
+    ChainContext
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../freeze-workflow/">
+<span class="md-ellipsis">
+    
+  
+    Freeze workflow
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../parity/">
+<span class="md-ellipsis">
+    
+  
+    Parity report
+  
+
+    
+  </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="../release/">
+<span class="md-ellipsis">
+    
+  
+    Release automation
+  
+
+    
+  </span>
+</a>
+</li>
+</ul>
+</nav>
+</div>
+</div>
+</div>
+<div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc">
+<div class="md-sidebar__scrollwrap">
+<div class="md-sidebar__inner">
+<nav aria-label="Table of contents" class="md-nav md-nav--secondary">
+<label class="md-nav__title" for="__toc">
+<span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+<ul class="md-nav__list" data-md-component="toc" data-md-scrollfix="">
+<li class="md-nav__item">
+<a class="md-nav__link" href="#layered-design">
+<span class="md-ellipsis">
+      
+        Layered design
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#module-layout">
+<span class="md-ellipsis">
+      
+        Module layout
+      
+    </span>
+</a>
+</li>
+<li class="md-nav__item">
+<a class="md-nav__link" href="#subcommand-module-map">
+<span class="md-ellipsis">
+      
+        Subcommand → module map
+      
+    </span>
+</a>
+</li>
+</ul>
+</nav>
+</div>
+</div>
+</div>
+<div class="md-content" data-md-component="content">
+<article class="md-content__inner md-typeset">
+<a class="md-content__button md-icon" href="https://github.com/lambdasistemi/amaru-treasury-tx/edit/main/docs/architecture.md" rel="edit" title="Edit this page">
+<svg viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"></path></svg>
+</a>
+<h1 id="architecture">Architecture<a class="headerlink" href="#architecture" title="Permanent link">¶</a></h1>
+<p><code>amaru-treasury-tx</code> is a thin executable on top of the
+<a href="https://github.com/lambdasistemi/cardano-node-clients"><code>cardano-node-clients</code></a> <code>TxBuild</code> DSL. The behavioural
+source of truth is the bash recipe set in
+<a href="https://github.com/pragma-org/amaru-treasury/tree/main/journal/2026"><code>pragma-org/amaru-treasury/journal/2026/</code></a>.</p>
+<h2 id="layered-design">Layered design<a class="headerlink" href="#layered-design" title="Permanent link">¶</a></h2>
+<div class="mermaid">flowchart TD
+    CLI[app/amaru-treasury-tx/Main.hs<br/><i>impure</i>]
+    Wizard[Tx.SwapWizard<br/><i>pure</i>]
+    SwapBuild[Tx.SwapBuild<br/><i>pure</i>]
+    Disburse[Tx.Disburse<br/><i>pure TxBuild q e ()</i>]
+    Withdraw[Tx.Withdraw<br/><i>pure</i>]
+    Verify[Registry.Verify<br/><i>pure + Provider IO</i>]
+    Trace1[Tx.SwapWizard.Trace<br/><i>pure</i>]
+    Trace2[Tx.Swap.Trace<br/><i>pure</i>]
+    Intent[Tx.SwapIntentJSON<br/><i>encode / decode / translate</i>]
+    Swap[Tx.Swap<br/><i>SwapIntent + program</i>]
+    Redeemer[Redeemer]
+    AuxData[AuxData]
+    N2C[Backend.N2C<br/><i>impure</i>]
+    Provider[Cardano.Node.Client.Provider<br/><i>record of functions</i>]
+
+    CLI --&gt; Wizard
+    CLI --&gt; SwapBuild
+    CLI --&gt; Disburse
+    CLI --&gt; Withdraw
+    CLI --&gt; Trace1
+    CLI --&gt; Trace2
+    Wizard --&gt; Verify
+    Wizard --&gt; Intent
+    SwapBuild --&gt; Swap
+    SwapBuild --&gt; Intent
+    Swap --&gt; Redeemer
+    Swap --&gt; AuxData
+    Disburse --&gt; Redeemer
+    Disburse --&gt; AuxData
+    Withdraw --&gt; Redeemer
+    Withdraw --&gt; AuxData
+    CLI --&gt; N2C
+    Verify --&gt; Provider
+    N2C --&gt; Provider
+</div>
+<h2 id="module-layout">Module layout<a class="headerlink" href="#module-layout" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Module</th>
+<th style="text-align: left;">Role</th>
+<th style="text-align: center;">Pure?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Scope</code></td>
+<td style="text-align: left;">Scope identifiers + parsers</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Constants</code></td>
+<td style="text-align: left;">USDM policy/asset constants</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Metadata</code></td>
+<td style="text-align: left;">Parse <code>journal/2026/metadata.json</code></td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.LedgerParse</code></td>
+<td style="text-align: left;">Address / hash / TxIn parsers</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Redeemer</code></td>
+<td style="text-align: left;"><code>ToData</code> for Sundae and permissions redeemers</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.UtxoSelect</code></td>
+<td style="text-align: left;">UTxO selection with blacklist</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.AuxData</code></td>
+<td style="text-align: left;">Treasury-instance metadata builder</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Validity</code></td>
+<td style="text-align: left;">Upper validity bound from wall-clock</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.PParams</code></td>
+<td style="text-align: left;">pparams snapshot loader</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Summary</code></td>
+<td style="text-align: left;">Tx summary JSON encoder</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.ChainContext</code></td>
+<td style="text-align: left;">Frozen <code>ChainContext</code> envelope</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.ChainContext.Fixture</code></td>
+<td style="text-align: left;">Frozen-context test fixture loader</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Registry.Constants</code></td>
+<td style="text-align: left;">Build-time-pinned seeds + Plutus blob digests</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Registry.Derive</code></td>
+<td style="text-align: left;">Re-derive script hashes from the pinned blobs</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Registry.Metadata</code></td>
+<td style="text-align: left;">Parse upstream <code>metadata.json</code></td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Registry.Verify</code></td>
+<td style="text-align: left;">Walk the registry NFT, verify metadata against chain anchors</td>
+<td style="text-align: center;"><strong>no</strong> (Provider IO)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Tx.Disburse</code></td>
+<td style="text-align: left;"><code>TxBuild q e ()</code> for <code>disburse</code></td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Tx.Withdraw</code></td>
+<td style="text-align: left;"><code>TxBuild q e ()</code> for <code>withdraw</code></td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Tx.Swap</code></td>
+<td style="text-align: left;"><code>SwapIntent</code> + <code>swapProgram :: TxBuild q e ()</code></td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Tx.SwapBuild</code></td>
+<td style="text-align: left;"><code>runSwapBuild</code> against a <code>ChainContext</code></td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Tx.SwapIntentJSON</code></td>
+<td style="text-align: left;"><code>intent.json</code> schema, decode + translate</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Tx.SwapWizard</code></td>
+<td style="text-align: left;">Pure questionnaire-to-<code>SwapIntentJSON</code> translation + resolver</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Tx.SwapWizard.Trace</code></td>
+<td style="text-align: left;">Typed <code>WizardEvent</code> ADT + renderer</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Tx.Swap.Trace</code></td>
+<td style="text-align: left;">Typed <code>SwapEvent</code> ADT + renderer</td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Backend</code></td>
+<td style="text-align: left;">Alias around <code>Cardano.Node.Client.Provider</code></td>
+<td style="text-align: center;">yes</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>Amaru.Treasury.Backend.N2C</code></td>
+<td style="text-align: left;">N2C <code>Provider</code> constructor</td>
+<td style="text-align: center;"><strong>no</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>app/amaru-treasury-tx/Main.hs</code></td>
+<td style="text-align: left;">Optparse parser, <code>Tracer</code> setup, backend wiring, output</td>
+<td style="text-align: center;"><strong>no</strong></td>
+</tr>
+</tbody>
+</table>
+<h2 id="subcommand-module-map">Subcommand → module map<a class="headerlink" href="#subcommand-module-map" title="Permanent link">¶</a></h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Subcommand</th>
+<th style="text-align: left;">Drives</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>swap-wizard</code></td>
+<td style="text-align: left;"><code>Registry.Verify</code> → <code>Tx.SwapWizard</code> → <code>Tx.SwapIntentJSON</code> (encode)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>swap</code></td>
+<td style="text-align: left;"><code>Tx.SwapIntentJSON</code> (decode) → <code>Tx.SwapBuild</code> → <code>Tx.Swap</code></td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>disburse</code></td>
+<td style="text-align: left;"><code>Tx.Disburse</code></td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>withdraw</code></td>
+<td style="text-align: left;"><code>Tx.Withdraw</code></td>
+</tr>
+</tbody>
+</table>
+<p>Both <code>swap-wizard</code> and <code>swap</code> route every value-affecting step
+through a typed <code>Tracer</code> — <code>WizardEvent</code> and <code>SwapEvent</code>
+respectively. See the <a href="../trust-model/">Trust model</a> page for the
+full account of what flows through each event and what the operator
+must assert vs. what the verifier rejects.</p>
+</article>
+</div>
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+</div>
+</main>
+<footer class="md-footer">
+<div class="md-footer-meta md-typeset">
+<div class="md-footer-meta__inner md-grid">
+<div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" rel="noopener" target="_blank">
+      Material for MkDocs
+    </a>
+</div>
+</div>
+</div>
+</footer>
+</div>
+<div class="md-dialog" data-md-component="dialog">
+<div class="md-dialog__inner md-typeset"></div>
+</div>
+<script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "content.code.copy", "content.action.edit"], "search": "../assets/javascripts/workers/search.7a47a382.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+<script src="../assets/javascripts/bundle.e71a0d61.min.js"></script>
+<script type="module">import mermaid from "https://unpkg.com/mermaid@10.4.0/dist/mermaid.esm.min.mjs";
+mermaid.initialize({});</script></body>
+</html>

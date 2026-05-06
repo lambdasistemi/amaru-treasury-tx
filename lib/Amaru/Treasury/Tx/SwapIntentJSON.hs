@@ -37,7 +37,6 @@ module Amaru.Treasury.Tx.SwapIntentJSON
     , parseAddr
     ) where
 
-import Codec.Binary.Bech32 qualified as Bech32
 import Data.Aeson
     ( FromJSON (..)
     , ToJSON (..)
@@ -49,39 +48,26 @@ import Data.Aeson
     , (.=)
     )
 import Data.Aeson qualified as A
-import Data.ByteString (ByteString)
-import Data.ByteString qualified as BS
-import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
-import Data.Maybe (fromJust, fromMaybe)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
-import Data.Text qualified as T
-import Data.Text.Encoding qualified as TE
 import Data.Word (Word64)
 
-import Cardano.Crypto.Hash.Class (Hash, HashAlgorithm, hashFromBytes)
-import Cardano.Ledger.Address
-    ( AccountAddress (..)
-    , AccountId (..)
-    , Addr (..)
-    , decodeAddrEither
-    )
-import Cardano.Ledger.BaseTypes (Network (..), mkTxIxPartial)
+import Cardano.Ledger.Address (AccountAddress, Addr)
 import Cardano.Ledger.Coin (Coin (..))
-import Cardano.Ledger.Credential
-    ( Credential (..)
-    )
-import Cardano.Ledger.Hashes
-    ( KeyHash (..)
-    , ScriptHash (..)
-    , unsafeMakeSafeHash
-    )
-import Cardano.Ledger.Keys (KeyRole (..))
 import Cardano.Ledger.Metadata (Metadatum)
-import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
+import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Slotting.Slot (SlotNo (..))
 
 import Amaru.Treasury.AuxData (RationaleBody (..), rationaleMetadatum)
+import Amaru.Treasury.IntentJSON.Common
+    ( decodeHexBytes
+    , decodeHexBytesAny
+    , parseAddr
+    , parseGuardKeyHash
+    , parseRewardAccount
+    , parseTxIn
+    )
 import Amaru.Treasury.Tx.Swap
     ( SwapIntent (..)
     , SwapOrderDatumParams (..)
@@ -415,91 +401,8 @@ mkChunks chunkSize totalAmount (rNum, rDen) dp =
         fulls = replicate (fromInteger full) fullChunk
     in  if rem' > 0 then fulls ++ [remChunk] else fulls
 
--- ----------------------------------------------------
--- Helpers
--- ----------------------------------------------------
-
-parseAddr :: Text -> Either String Addr
-parseAddr t = do
-    raw <-
-        case Bech32.decodeLenient t of
-            Right (_hrp, dp) ->
-                case Bech32.dataPartToBytes dp of
-                    Just bs -> Right bs
-                    Nothing -> Left "bech32 data-part decode"
-            Left e -> Left ("bech32: " <> show e)
-    case decodeAddrEither raw of
-        Right a -> Right a
-        Left e -> Left ("address: " <> show e)
-
-parseTxIn :: Text -> Either String TxIn
-parseTxIn t =
-    case T.splitOn "#" t of
-        [hHex, ixT] -> do
-            ix <- readEither "txix" (T.unpack ixT)
-            bs <- decodeHexBytes 32 hHex
-            Right
-                ( TxIn
-                    (TxId (unsafeMakeSafeHash (mkHash32 bs)))
-                    (mkTxIxPartial (ix :: Integer))
-                )
-        _ ->
-            Left
-                ( "txIn must be \"<hex>#<ix>\", got "
-                    <> T.unpack t
-                )
-
-{- | Parse a reward-account credential as the 28-byte
-hex of the stake-script hash. (Bech32 stake addresses
-are not accepted at the JSON layer; the user already
-supplies one hash, not a full address.)
--}
-parseRewardAccount :: Text -> Either String AccountAddress
-parseRewardAccount t = do
-    bs <- decodeHexBytes 28 t
-    Right
-        ( AccountAddress
-            Mainnet
-            ( AccountId
-                ( ScriptHashObj
-                    (ScriptHash (mkHash28 bs))
-                )
-            )
-        )
-
-parseGuardKeyHash :: Text -> Either String (KeyHash Guard)
-parseGuardKeyHash t = do
-    bs <- decodeHexBytes 28 t
-    Right (KeyHash (mkHash28 bs))
-
-decodeHexBytes :: Int -> Text -> Either String ByteString
-decodeHexBytes expected t =
-    case B16.decode (TE.encodeUtf8 t) of
-        Right bs
-            | BS.length bs == expected -> Right bs
-            | otherwise ->
-                Left
-                    ( "expected "
-                        <> show expected
-                        <> " bytes, got "
-                        <> show (BS.length bs)
-                    )
-        Left e -> Left ("hex decode: " <> e)
-
-decodeHexBytesAny :: Text -> Either String ByteString
-decodeHexBytesAny t =
-    case B16.decode (TE.encodeUtf8 t) of
-        Right bs -> Right bs
-        Left e -> Left ("hex decode: " <> e)
-
-mkHash28 :: (HashAlgorithm h) => ByteString -> Hash h a
-mkHash28 = fromJust . hashFromBytes
-
-mkHash32 :: (HashAlgorithm h) => ByteString -> Hash h a
-mkHash32 = fromJust . hashFromBytes
-
-readEither :: (Read a) => String -> String -> Either String a
-readEither what s =
-    case reads s of
-        [(v, "")] -> Right v
-        _ -> Left ("could not parse " <> what <> ": " <> s)
+-- Parser helpers (parseAddr, parseTxIn, parseRewardAccount,
+-- parseGuardKeyHash, decodeHexBytes, decodeHexBytesAny, mkHash28,
+-- mkHash32, readEither) moved to
+-- Amaru.Treasury.IntentJSON.Common in T008. The full module
+-- itself is collapsed into Amaru.Treasury.IntentJSON in T028.

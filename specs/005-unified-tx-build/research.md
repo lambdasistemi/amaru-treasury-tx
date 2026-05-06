@@ -8,89 +8,161 @@ This file resolves the Technical Context unknowns flagged by
 not be discovered later by reading the implementation. Each section
 follows the *Decision / Rationale / Alternatives considered* format.
 
-## R1. Tagged union vs sibling records
+## R1. GADT indexed by action + type-family payload projection
 
-**Decision**: One top-level
-`Amaru.Treasury.IntentJSON.TreasuryIntent` record carrying:
-
-- shared blocks at the top level (`schema`, `action`, `network`,
-  `wallet`, `scope`, `signers`, `validityUpperBoundSlot`,
-  `rationale`),
-- exactly one action-specific payload nested under a key named by
-  `action` (`swap` | `disburse` | `withdraw` | `reorganize`).
-
-In Haskell:
+**Decision**: One indexed `TreasuryIntent (a :: Action)` GADT with
+a type-family projecting per-action types, plus a singleton
+`SAction a` and an existential wrapper `SomeTreasuryIntent` at the
+parser boundary. Concretely:
 
 ```haskell
-data TreasuryIntent = TreasuryIntent
-    { tiSchema :: !Int            -- 1
-    , tiAction :: !Action
+-- Promoted action enum.
+data Action = Swap | Disburse | Withdraw | Reorganize
+
+-- Singleton — runtime witness of the action carried at the
+-- type level. Pattern-matching on this brings the type-level
+-- index into scope and selects the right type-family rows.
+data SAction (a :: Action) where
+    SSwap :: SAction 'Swap
+    SDisburse :: SAction 'Disburse
+    SWithdraw :: SAction 'Withdraw
+    SReorganize :: SAction 'Reorganize
+
+-- Per-action input payload — the JSON block under the
+-- discriminator-keyed object.
+type family Payload (a :: Action) :: Type where
+    Payload 'Swap = SwapInputs
+    Payload 'Disburse = DisburseInputs
+    Payload 'Withdraw = WithdrawInputs
+    Payload 'Reorganize = ReorganizeInputs
+
+-- Per-action translated form — the typed lift consumed by
+-- the build path. Disburse splits per unit (ADA / USDM) here
+-- because the ledger-level intent differs.
+type family Translated (a :: Action) :: Type where
+    Translated 'Swap = SwapIntent
+    Translated 'Disburse = DisburseIntent
+    Translated 'Withdraw = WithdrawIntent
+    Translated 'Reorganize = ReorganizeIntent
+
+-- The intent itself — shared blocks plus the per-action
+-- payload, indexed by 'a'.
+data TreasuryIntent (a :: Action) = TreasuryIntent
+    { tiSAction :: !(SAction a)
+    , tiSchema :: !Int
     , tiNetwork :: !Text
     , tiWallet :: !WalletJSON
     , tiScope :: !ScopeJSON
     , tiSigners :: ![Text]
     , tiValidityUpperBoundSlot :: !Word64
     , tiRationale :: !RationaleJSON
-    , tiPayload :: !ActionPayload
+    , tiPayload :: !(Payload a)
     }
 
-data Action = Swap | Disburse | Withdraw | Reorganize
-
-data ActionPayload
-    = SwapPayload SwapInputs
-    | DisbursePayload DisburseInputs
-    | WithdrawPayload WithdrawInputs
-    | ReorganizePayload ReorganizeInputs
+-- Existential wrapper — the parser's return shape. Hides
+-- the action index so the parser has one return type
+-- regardless of which discriminator it found.
+data SomeTreasuryIntent where
+    SomeTreasuryIntent
+        :: !(SAction a)
+        -> !(TreasuryIntent a)
+        -> SomeTreasuryIntent
 ```
+
+The parser returns `SomeTreasuryIntent`; consumers unwrap it once
+at the entry point, then work inside a typed branch where `a` is
+known statically and `Payload a` / `Translated a` resolve to
+concrete types.
 
 **Rationale**:
 
-- The `Action` and `ActionPayload` are kept as separate fields
-  (rather than a single sum-with-shared-fields) so the FromJSON
-  instance can validate the discriminator independently of the
-  payload, which gives a better error message for the
-  "action says X, payload is Y" mismatch (FR-007).
-- Withdraw and reorganize payload types are placeholders until
-  features 005 and 006 ship; their FromJSON parsers fail with a
-  clear "feature not yet shipped" message.
-- Earlier (research §R13 of feature 004) I argued for *sibling*
-  records on the grounds that a union forces every consumer to
-  pattern-match. That call was wrong: the only consumer is the
-  build path, and it has to dispatch on action *anyway*. Sibling
-  records just hide the dispatch behind subcommand names while
-  duplicating the shared blocks.
+- **Code-sharing wins downstream.** Helpers parameterised by the
+  action index (`translateIntent :: TreasuryIntent a -> Either
+  String (Translated a)`, `runBuild :: ChainContext ->
+  Translated a -> IO TreasuryBuildResult`) are written *once*
+  with `forall a` — the type families pick the right per-action
+  types at each call site. Adding a fifth action is a new row in
+  each type family + a new `SAction` constructor + the per-
+  action body; helpers that don't dispatch on action don't need
+  touching.
+- **Compile-time enforcement of action ↔ payload pairing.** A
+  helper that takes `TreasuryIntent 'Swap` cannot accidentally
+  receive a disburse payload — the GADT erases that bug class
+  entirely.
+- **Parser cost is one existential**, not one parser per action.
+  `aeson` parses to `Aeson.Value`, the discriminator is read
+  dynamically, and a single case selects the GADT branch.
+  `instance FromJSON SomeTreasuryIntent` is one declaration.
+- The earlier objections in [feature 004 research §R13](https://github.com/lambdasistemi/amaru-treasury-tx/blob/004-disburse-wizard/specs/004-disburse-wizard/research.md#r13-intent-json-shape--diff-vs-swapintentjson)
+  about siblings vs unions don't apply here — the GADT is
+  strictly stronger than either, with the only cost being the
+  `SomeTreasuryIntent` boundary at the parser, which is one
+  pattern match in `Main.hs`.
 
 **Alternatives considered**:
 
-- **Sibling records (status quo)** — rejected; structurally
-  duplicates shared blocks, scatters parser helpers, and lets
-  `disburse-wizard | swap` go undetected until the build dies.
-- **GADT** indexed by the action (`TreasuryIntent :: Action ->
-  Type`, with constructors `IntentSwap :: SharedBlocks ->
-  SwapInputs -> TreasuryIntent 'Swap`, etc.) — *considered, not
-  chosen*. A GADT would let the type system enforce the
-  action ↔ payload pairing at compile time, which is strictly
-  stronger than the runtime parser invariant in §6 of
-  [data-model.md](./data-model.md). The reasons we picked the
-  plain sum over the GADT: (a) the JSON layer is the validation
-  boundary anyway — once the value crosses the parser, runtime
-  consistency is guaranteed; (b) every consumer that pattern-
-  matches still has to handle every action variant, so there's
-  no compile-time win at the call site; (c) the FromJSON
-  derivation is materially simpler over a sum than over a GADT
-  (`aeson` doesn't auto-derive parsers for indexed types).
-  We can promote to a GADT later without breaking the JSON
-  contract if a downstream consumer ever benefits from the
-  stronger typing.
+- **Plain sum** (`data ActionPayload = SwapPayload … | DisbursePayload …`)
+  — rejected after consideration. Forces every downstream helper
+  that touches the payload to pattern-match all four variants,
+  even when the helper's logic is uniform across actions. Loses
+  the compile-time action ↔ payload guarantee. The earlier draft
+  of this research picked the plain sum on the grounds that
+  "every consumer pattern-matches all four variants regardless"
+  — that is wrong as soon as you have a parameterised helper
+  that lets the type family pick the per-action type.
+- **Sibling records (status quo before this PR)** — rejected;
+  structurally duplicates shared blocks, scatters parser helpers,
+  and lets `disburse-wizard | swap` go undetected until the build
+  dies.
 - **Phantom-typed shared record** parameterised by action
-  (`TreasuryIntent (a :: Action)`) — rejected; the JSON layer is
-  un-phantom-typed by the time the parser fires, so the type
-  parameter has to be erased anyway, which defeats its purpose.
+  (`TreasuryIntent (a :: Action)` with no per-action payload
+  field — payloads in a separate untyped value) — rejected; the
+  type parameter would be vestigial since the consumer still
+  needs to recover the per-action payload from somewhere.
 - **Each variant as an entirely separate top-level record** with
   a discriminator key — rejected; the FromJSON parser would
   need to peek at the discriminator before deciding which record
-  to parse, which is more code and a worse error message than
-  the chosen design.
+  to parse, which is more code than the GADT existential and
+  loses the type-family code-sharing.
+
+### Implementation note: `Some` and singleton patterns are common
+
+`Some`-style existentials and `S<X>` singleton GADTs are an
+established pattern in the Haskell ecosystem (`some`, `singletons`
+libraries; `cardano-ledger`'s `ShelleyBasedEra` uses the same
+shape). We don't pull in a new dependency — the four-line
+`SAction` GADT + `SomeTreasuryIntent` existential is enough for
+our scope.
+
+### What the per-action build body looks like
+
+```haskell
+-- Generic, action-polymorphic entry point.
+runBuild
+    :: ChainContext
+    -> Translated a
+    -> IO TreasuryBuildResult
+
+-- Dispatcher at the parser boundary — the only place a runtime
+-- case on the singleton appears.
+runFromIntent
+    :: ChainContext
+    -> SomeTreasuryIntent
+    -> IO TreasuryBuildResult
+runFromIntent ctx (SomeTreasuryIntent sa intent) = do
+    translated <- case translateIntent sa intent of
+        Right t -> pure t
+        Left e  -> throwIO (userError e)
+    case sa of
+        SSwap -> runBuild ctx (translated :: Translated 'Swap)
+        SDisburse -> runBuild ctx (translated :: Translated 'Disburse)
+        SWithdraw -> runBuild ctx translated
+        SReorganize -> runBuild ctx translated
+```
+
+The case on `sa` is necessary to bring the type-family equation
+into scope per branch; once inside a branch, `Translated 'Swap`
+is a concrete type and `runBuild` is fully type-safe.
 
 ## R2. Schema versioning
 

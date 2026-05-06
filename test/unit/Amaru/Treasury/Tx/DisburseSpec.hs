@@ -89,6 +89,20 @@ import Amaru.Treasury.Tx.DisburseIntentJSON
     , decodeDisburseIntent
     , encodeDisburseIntent
     )
+import Amaru.Treasury.Tx.DisburseWizard
+    ( DisburseAnswers
+    , DisburseEnv
+    , disburseToIntentJSON
+    )
+
+import Data.Aeson qualified as Aeson
+import Data.Aeson.Encode.Pretty
+    ( Config (..)
+    , Indent (..)
+    , NumberFormat (..)
+    , encodePretty'
+    )
+import Data.ByteString.Lazy qualified as BSL
 
 import Data.Map.Strict (Map)
 import Data.Text (Text)
@@ -197,6 +211,67 @@ spec = do
         it
             "decodeDisburseIntent . encodeDisburseIntent = Right"
             roundTripProp
+
+    describe "Amaru.Treasury.Tx.DisburseWizard.disburseToIntentJSON"
+        $ do
+            it "matches golden expected.intent.ada.json" $
+                goldenCase "ada"
+            it "matches golden expected.intent.usdm.json" $
+                goldenCase "usdm"
+
+-- ----------------------------------------------------
+-- T020: Pure-translation goldens (ADA + USDM)
+-- ----------------------------------------------------
+
+{- | Load fixture (env, answers) for the named unit, run
+'disburseToIntentJSON', and assert the encoded JSON
+matches the checked-in golden byte-for-byte (modulo
+alphabetical key ordering, applied by both the encoder
+and the golden file).
+-}
+goldenCase :: FilePath -> IO ()
+goldenCase unit = do
+    let dir = "test/fixtures/disburse-wizard"
+        envPath = dir <> "/env." <> unit <> ".json"
+        ansPath = dir <> "/answers." <> unit <> ".json"
+        goldenPath =
+            dir <> "/expected.intent." <> unit <> ".json"
+    env <-
+        eitherDecodeStrict envPath :: IO DisburseEnv
+    answers <-
+        eitherDecodeStrict ansPath :: IO DisburseAnswers
+    let result = disburseToIntentJSON env answers
+    case result of
+        Left err ->
+            error
+                ( "disburseToIntentJSON failed: " <> show err
+                )
+        Right got -> do
+            let actualBytes = stableEncode got
+            expectedBytes <- BSL.readFile goldenPath
+            actualBytes `shouldBe` expectedBytes
+
+eitherDecodeStrict :: (Aeson.FromJSON a) => FilePath -> IO a
+eitherDecodeStrict p = do
+    bs <- BSL.readFile p
+    case Aeson.eitherDecode bs of
+        Right v -> pure v
+        Left e ->
+            error ("decode " <> p <> ": " <> e)
+
+-- | Stable encoder; same shape as
+-- 'Amaru.Treasury.Tx.DisburseIntentJSON.encodeDisburseIntent'
+-- so the golden file is byte-comparable.
+stableEncode :: DisburseIntentJSON -> BSL.ByteString
+stableEncode = encodePretty' cfg
+  where
+    cfg =
+        Config
+            { confIndent = Spaces 4
+            , confCompare = compare
+            , confNumFormat = Generic
+            , confTrailingNewline = True
+            }
 
 -- ----------------------------------------------------
 -- T012: JSON round-trip property

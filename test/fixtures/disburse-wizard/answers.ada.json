@@ -1,0 +1,13 @@
+{
+    "scope": "core_development",
+    "unit": "ada",
+    "amount": 50000000,
+    "beneficiaryAddrBech32": "addr1qy8ac7qqy0vtulyl7wntmsxc6wex80gvcyjy33qffrhm7sh927ysx5sftuw0dlft05dz3c7revpf7jx0xnlcjz3g69mq4afdhv",
+    "validityHours": 6,
+    "rationale": {
+        "description": "Q2 vendor invoice — translation services",
+        "justification": "Per CIP-1694 budget allocation",
+        "destinationLabel": "ACME Translations Ltd."
+    },
+    "extraSigners": ["ops_and_use_cases"]
+}

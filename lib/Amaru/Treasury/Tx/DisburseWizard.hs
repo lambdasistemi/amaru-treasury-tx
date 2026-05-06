@@ -39,14 +39,22 @@ module Amaru.Treasury.Tx.DisburseWizard
 
       -- * Local-translation errors
     , DisburseError (..)
+
+      -- * Pure translation
+    , disburseToIntentJSON
     ) where
 
+import Data.Aeson (FromJSON (..), withObject, (.:), (.:?))
 import Data.Map.Strict (Map)
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Word (Word64, Word8)
 
 import Amaru.Treasury.Constants (Unit (..))
 import Amaru.Treasury.Scope (ScopeId)
+import Amaru.Treasury.Tx.DisburseIntentJSON
+    ( DisburseIntentJSON
+    )
 import Amaru.Treasury.Tx.SwapWizard
     ( NetworkConstants (..)
     , RationaleAnswers (..)
@@ -174,3 +182,57 @@ data DisburseError
       -- no USDM holdings on chain.
       DisburseUsdmRequestedOnAdaOnlyScope
     deriving stock (Eq, Show)
+
+-- ----------------------------------------------------
+-- FromJSON (for fixtures)
+-- ----------------------------------------------------
+
+instance FromJSON DisburseAnswers where
+    parseJSON = withObject "DisburseAnswers" $ \o -> do
+        scope <- o .: "scope"
+        DisburseAnswers scope
+            <$> o .: "unit"
+            <*> o .: "amount"
+            <*> o .: "beneficiaryAddrBech32"
+            <*> o .: "validityHours"
+            <*> o .: "rationale"
+            <*> (fromMaybe [] <$> o .:? "extraSigners")
+
+instance FromJSON DisburseTreasurySelection where
+    parseJSON =
+        withObject "DisburseTreasurySelection" $ \o ->
+            DisburseTreasurySelection
+                <$> o .: "inputs"
+                <*> o .: "leftoverLovelace"
+                <*> o .: "leftoverUsdm"
+                <*> (fromMaybe mempty <$> o .:? "leftoverOtherAssets")
+
+instance FromJSON DisburseEnv where
+    parseJSON = withObject "DisburseEnv" $ \o ->
+        DisburseEnv
+            <$> o .: "network"
+            <*> o .: "currentTip"
+            <*> o .: "networkConstants"
+            <*> o .: "registry"
+            <*> o .: "scopeView"
+            <*> o .: "treasurySelection"
+            <*> o .: "walletSelection"
+            <*> o .: "beneficiaryAddrBech32"
+
+-- ----------------------------------------------------
+-- Pure translation (RED stub)
+-- ----------------------------------------------------
+
+{- | Pure translation from a 'DisburseEnv' and a
+'DisburseAnswers' to a 'DisburseIntentJSON'.
+
+Phase-3 RED stub: always returns
+'DisburseAmountNotPositive'. The real implementation
+lands in T022 once the golden test for both ADA and USDM
+fixtures is observed failing.
+-}
+disburseToIntentJSON
+    :: DisburseEnv
+    -> DisburseAnswers
+    -> Either DisburseError DisburseIntentJSON
+disburseToIntentJSON _ _ = Left DisburseAmountNotPositive

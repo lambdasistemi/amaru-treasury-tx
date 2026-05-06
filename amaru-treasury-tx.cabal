@@ -25,6 +25,7 @@ extra-source-files:
   docs/assets/intent-schema.json
   scripts/smoke/swap-wizard-signers
   scripts/smoke/tx-build-pipe
+  test/fixtures/disburse-wizard/**/*.json
   test/fixtures/swap-wizard/**/*.json
 
 flag werror
@@ -234,6 +235,7 @@ test-suite unit-tests
 
   build-depends:
     , aeson
+    , aeson-pretty
     , amaru-treasury-tx
     , base                    <5
     , base16-bytestring

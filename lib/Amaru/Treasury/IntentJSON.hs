@@ -1,8 +1,10 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 
 {- |
 Module      : Amaru.Treasury.IntentJSON
@@ -39,6 +41,10 @@ module Amaru.Treasury.IntentJSON
     , DisburseInputs (..)
     , WithdrawInputs (..)
     , ReorganizeInputs (..)
+
+      -- * Top-level intent
+    , TreasuryIntent (..)
+    , SomeTreasuryIntent (..)
     ) where
 
 import Data.Aeson
@@ -52,6 +58,7 @@ import Data.Aeson
 import Data.Kind (Type)
 import Data.Map.Strict (Map)
 import Data.Text (Text)
+import Data.Word (Word64)
 
 import Amaru.Treasury.Tx.Disburse (DisburseIntent)
 import Amaru.Treasury.Tx.Reorganize (ReorganizeIntent)
@@ -361,3 +368,51 @@ instance FromJSON ReorganizeInputs where
 
 instance ToJSON ReorganizeInputs where
     toJSON ReorganizeInputs = object []
+
+-- ----------------------------------------------------
+-- Top-level intent (GADT indexed by Action)
+-- ----------------------------------------------------
+
+{- | The parsed unified intent. @a@ is the type-level
+action; @tiSAction@ is its runtime witness; @tiPayload@
+projects to the matching per-action input record via the
+'Payload' family.
+
+The action ↔ payload pairing is enforced at compile
+time: a value of type @TreasuryIntent \'Swap@ cannot
+carry a disburse payload — the type family rules out
+that bug class entirely.
+
+FromJSON / ToJSON instances and the encoder / decoder /
+'translateIntent' land in T014–T016.
+-}
+data TreasuryIntent (a :: Action) = TreasuryIntent
+    { tiSAction :: !(SAction a)
+    , tiSchema :: !Int
+    -- ^ schema version. v0 allow-list = [1].
+    , tiNetwork :: !Text
+    -- ^ "mainnet" | "preprod" | "preview"
+    , tiWallet :: !WalletJSON
+    , tiScope :: !ScopeJSON
+    , tiSigners :: ![Text]
+    -- ^ 28-byte hex keyhashes; scope owner first.
+    , tiValidityUpperBoundSlot :: !Word64
+    , tiRationale :: !RationaleJSON
+    , tiPayload :: !(Payload a)
+    }
+
+deriving stock instance (Show (Payload a)) => Show (TreasuryIntent a)
+
+deriving stock instance (Eq (Payload a)) => Eq (TreasuryIntent a)
+
+{- | Existential wrapper at the parser boundary. The
+parser returns 'SomeTreasuryIntent' so it has one return
+type regardless of which discriminator it read;
+consumers unwrap and pattern-match on the 'SAction' once
+at entry.
+-}
+data SomeTreasuryIntent where
+    SomeTreasuryIntent
+        :: !(SAction a)
+        -> !(TreasuryIntent a)
+        -> SomeTreasuryIntent

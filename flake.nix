@@ -129,11 +129,38 @@
           amaru-treasury-tx = mkExe "amaru-treasury-tx";
           swap-probe = mkExe "swap-probe";
           capture-swap-context = mkExe "capture-swap-context";
+          sourceRevision = self.shortRev or (self.dirtyShortRev or "dirty");
+          devArtifactVersion = "${packageVersion}-${sourceRevision}";
+          darwinReleasePackages = pkgs.lib.optionalAttrs
+            pkgs.stdenv.isDarwin
+            {
+              darwin-release-artifacts =
+                import ./nix/darwin-release.nix {
+                  inherit pkgs packageVersion;
+                  executables = {
+                    inherit amaru-treasury-tx swap-probe capture-swap-context;
+                  };
+                };
+              darwin-dev-homebrew-artifacts =
+                import ./nix/darwin-release.nix {
+                  inherit pkgs packageVersion;
+                  artifactVersion = devArtifactVersion;
+                  releaseTag = "dev-homebrew";
+                  formulaName = "amaru-treasury-tx-dev";
+                  formulaClass = "AmaruTreasuryTxDev";
+                  formulaVersion = devArtifactVersion;
+                  formulaExtraLines =
+                    "\n  conflicts_with \"amaru-treasury-tx\", because: \"both install the same command-line tools\"";
+                  executables = {
+                    inherit amaru-treasury-tx swap-probe capture-swap-context;
+                  };
+                };
+            };
         in {
           packages = {
             default = amaru-treasury-tx;
             inherit amaru-treasury-tx swap-probe capture-swap-context;
-          };
+          } // darwinReleasePackages;
           inherit checks;
           apps = checkApps // {
             default = {

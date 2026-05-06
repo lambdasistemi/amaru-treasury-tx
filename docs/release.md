@@ -89,5 +89,50 @@ before building. A tag is publishable only when:
 
 Linux publishes AppImage, DEB, and RPM assets. Darwin publishes an
 aarch64-darwin tarball and updates the Homebrew tap. Each release
-bundle is smoke-tested by extracting the artifact and checking the
-`swap-wizard --help` signer surface before upload.
+bundle is smoke-tested before upload; Linux extracts the artifact and
+checks the `swap-wizard --help` signer surface, while Darwin installs
+the tap-qualified formula and runs its Homebrew test.
+
+Darwin builds the `.#darwin-release-artifacts` flake package, which
+produces:
+
+- `amaru-treasury-tx-<version>-aarch64-darwin.tar.gz`;
+- `SHA256SUMS`;
+- `amaru-treasury-tx.rb`, the Homebrew formula with the tarball SHA.
+
+The Darwin Release workflow uploads the tarball and copies the generated
+formula into the Homebrew tap. The smoke test installs
+`lambdasistemi/tap/amaru-treasury-tx`, runs `brew test`, and checks the
+offline help surfaces plus executable presence for the shipped tools.
+Binary bundling and dylib load-path patching live in
+`nix/darwin-release.nix`.
+
+## Darwin dev Homebrew formula
+
+The existing Darwin Release workflow also has a manual dev mode:
+
+```bash
+gh workflow run darwin-release.yml \
+  --ref main \
+  -f mode=dev-homebrew \
+  -f update_tap=yes
+```
+
+Dev mode builds the `.#darwin-dev-homebrew-artifacts` flake package on
+`macos-14`, uploads the tarball to the `dev-homebrew` prerelease, and
+updates `Formula/amaru-treasury-tx-dev.rb` in
+`lambdasistemi/homebrew-tap`.
+
+The dev formula uses the Cabal version plus source revision and conflicts
+with the release formula because both install the same command-line
+tools. After updating the tap, the workflow installs
+`amaru-treasury-tx-dev` through Homebrew and smoke-tests all shipped
+tools through the tap-qualified formula
+`lambdasistemi/tap/amaru-treasury-tx-dev`, including `brew test`. The
+test avoids node-socket-dependent commands, so `swap-probe` is checked
+for executable presence rather than invoked. On pull requests that touch
+the Darwin workflow or Nix packaging, the same workflow runs in
+build-only dev mode and does not mutate releases or the Homebrew tap;
+it still verifies the generated formula by installing it through a
+temporary local `lambdasistemi/tap` tap whose URL points at the freshly
+built tarball.

@@ -111,6 +111,19 @@ the parser/encoder helpers shared across actions.
       unit field) until [#45](https://github.com/lambdasistemi/amaru-treasury-tx/issues/45)
       and [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46)
       ship.
+- [ ] T006a Add a placeholder
+      `lib/Amaru/Treasury/Tx/Reorganize.hs` exporting
+      `data ReorganizeIntent = ReorganizeIntent` (a record with a
+      single unit field) so the `Translated` family in §2 of
+      [data-model.md](./data-model.md) resolves on this branch.
+      Mirrors the existing
+      [`Tx/Withdraw.hs`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/Withdraw.hs)
+      which already exposes a typed `WithdrawIntent`. Real
+      `ReorganizeIntent` shape lands with
+      [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46);
+      this task only adds the type so the type family can name
+      it. Add `Amaru.Treasury.Tx.Reorganize` to the library
+      `exposed-modules` list in `amaru-treasury-tx.cabal`.
 - [ ] T007 Implement the `TreasuryIntent (a :: Action)` GADT and
       the `SomeTreasuryIntent` existential in
       `lib/Amaru/Treasury/IntentJSON.hs`. Field list per
@@ -138,11 +151,16 @@ the parser/encoder helpers shared across actions.
       [contracts/tx-build-cli.md §5](./contracts/tx-build-cli.md).
       Mirrors `Tx.Swap.Trace.SwapEvent` shape but adds
       `TbeIntentParsed`, `TbeNetworkOk`, `TbeNetworkMismatch`.
-      The existing `Tx.Swap.Trace` module is deleted in T021.
-- [ ] T011 Delete the now-empty per-action JSON helpers from
-      `Tx.SwapIntentJSON` (every `parse*` helper now lives in
-      `IntentJSON.Common`). Update the module's import list and
-      verify it still compiles standalone.
+      The existing `Tx.Swap.Trace` module is deleted in T028
+      alongside the other now-unused per-action modules.
+- [ ] T011 Delete *only* the helper functions (parser /
+      hex-decode) from `Tx.SwapIntentJSON` (every `parse*` helper
+      now lives in `IntentJSON.Common`). The module + its
+      `SwapIntentJSON` record + `translateIntent` body stay
+      temporarily — T021 borrows that body verbatim into the
+      unified `runSwap`. Full file deletion lands in T028.
+      Update the module's import list and verify it still
+      compiles standalone.
 - [ ] T012 Delete the now-empty signer-resolver helpers from
       `Tx.SwapWizard` (every helper now lives in
       `Wizard.Common`). Update the module's import list and
@@ -197,6 +215,14 @@ before the FromJSON instance is wired.
       round-trip property: for each of the four action variants
       generate a small `SomeTreasuryIntent`, encode, decode,
       assert equality. ≥100 shapes per variant. SC-002.
+      **Note**: the withdraw and reorganize generators produce
+      trivial-shape values (since `WithdrawInputs` and
+      `ReorganizeInputs` are placeholder unit-records per T006).
+      The property still holds for those, but the test is
+      uninformative — replace these generators with real-shape
+      ones when [#45](https://github.com/lambdasistemi/amaru-treasury-tx/issues/45)
+      and [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46)
+      ship.
 - [ ] T018 [US3] Confirm RED before T014–T016 land: run `nix
       develop -c just unit --test-options=--match=IntentJSON`.
       (If RED isn't observed because the parsers didn't exist
@@ -240,10 +266,13 @@ the sole build entry point.
       `runReorganize`). `runSwap`'s body is the existing
       [`Tx.SwapBuild.runSwapBuild`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapBuild.hs)
       verbatim, retyped to take `TranslatedShared` + `Translated
-      'Swap`. `runDisburse` is a `Left "feature 004 PR #47 land"`
-      stub — the disburse-side rebase commit fills it in.
-      `runWithdraw` and `runReorganize` are `error "feature not
-      yet shipped"` stubs.
+      'Swap`. `runDisburse` is a stub:
+      `throwIO . userError $ "runDisburse: feature 004 PR #47 lands first"`
+      — the disburse-side rebase commit
+      ([#55](https://github.com/lambdasistemi/amaru-treasury-tx/issues/55))
+      fills it in. `runWithdraw` and `runReorganize` are
+      analogous stubs that `throwIO . userError $ "feature not
+      yet shipped"`.
 - [ ] T022 [US1] Implement `translateIntent :: SAction a ->
       TreasuryIntent a -> Either String (TranslatedShared,
       Translated a)` in `lib/Amaru/Treasury/IntentJSON.hs`. The
@@ -251,9 +280,10 @@ the sole build entry point.
       action's translator dispatches on `SAction a` and produces
       the matching `Translated a`. The swap branch's body is
       [`Tx.SwapIntentJSON.translateIntent`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapIntentJSON.hs)
-      verbatim. The disburse branch is a stub returning
-      `Left "feature 004 PR #47 land"`. Withdraw and reorganize
-      are stubs returning the typed "not shipped" error.
+      verbatim. The disburse branch returns
+      `Left "translateIntent: feature 004 PR #47 lands first"`.
+      Withdraw and reorganize return analogous typed "not yet
+      shipped" `Left` errors.
 - [ ] T023 [US1] Rewrite `app/amaru-treasury-tx/Main.hs`:
       remove the `swap` subcommand parser; remove the `--network`
       / `--network-magic` flags from the build side; add the
@@ -413,23 +443,16 @@ of SC-004) satisfied.
       pipe through `tx-build` against the preprod socket,
       confirm the tx is buildable. Optionally hand-sign and
       submit.
-- [ ] T045 Once 005 lands and is tagged:
-      - Rebase
-        [#47](https://github.com/lambdasistemi/amaru-treasury-tx/pull/47)
-        (feature 004) on top of this PR's merge commit.
-      - Update feature 004's spec / plan / contracts /
-        quickstart / data-model to reflect the unified shape
-        (drop the per-action `disburse` subcommand contract;
-        adopt `tx-build`; rebase the disburse intent JSON on
-        top of `TreasuryIntent`).
-      - Remove the `runDisburse` "feature 004 PR #47 land"
-        stub in `Amaru.Treasury.TreasuryBuild` and wire the
-        actual disburse build path.
-      - Re-record the ada-disburse golden against the new
-        intent shape; assert byte-identity.
-      - Unblock [#45](https://github.com/lambdasistemi/amaru-treasury-tx/issues/45)
-        and [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46)
-        (remove the `blockedBy = #51` edges).
+- [ ] T045 On merge of this PR: link the post-merge follow-up
+      issue
+      [#55](https://github.com/lambdasistemi/amaru-treasury-tx/issues/55)
+      ("Post-merge: rebase #47 + finalise feature 004 under
+      unified shape") in the merge commit message. #55 owns the
+      substantial work that follows — rebase #47, fill the
+      `runDisburse` stub, re-record the ada-disburse golden,
+      drop `blockedBy = #51` from #45/#46. Splitting that body
+      out keeps this PR's task list focused; #55 runs on the
+      004 branch under its own review cycle.
 
 **Checkpoint**: ready for review and merge once #52 is green.
 

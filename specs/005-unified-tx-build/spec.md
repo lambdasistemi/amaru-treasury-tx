@@ -198,7 +198,17 @@ swap`. After this feature lands, no occurrences remain.
 - **FR-005**: `tx-build` MUST NOT accept a `--network` or
   `--network-magic` flag; `--node-socket` is the only operator-
   supplied connection input.
-- **FR-006**: Each wizard MUST emit `network` into its intent JSON.
+- **FR-006a**: The swap wizard MUST emit `network` into its
+  intent JSON. (Verified on this PR via the swap quickstart and
+  the swap golden re-record.)
+- **FR-006b**: Each future wizard (disburse, withdraw, reorganize)
+  MUST emit `network` into its intent JSON when it ships. The
+  contract is inherited transitively via the unified
+  `TreasuryIntent` shape; no wizard can produce a valid intent
+  without a `network` field. Verified on the per-feature follow-up
+  PRs ([#47](https://github.com/lambdasistemi/amaru-treasury-tx/pull/47),
+  [#45](https://github.com/lambdasistemi/amaru-treasury-tx/issues/45),
+  [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46)).
 - **FR-007**: The build path MUST validate that the intent's `action`
   field matches the action-specific block present (e.g. `action:
   "disburse"` requires a `disburse` block) and reject mismatches with
@@ -219,10 +229,15 @@ swap`. After this feature lands, no occurrences remain.
 - **FR-012**: Signer-resolver helpers (`signerScopeFromText`,
   `normaliseSignerToken`, `isHex28`, `ownerForScope`) MUST live in
   exactly one shared module.
-- **FR-013**: The existing swap golden + the in-flight ada-disburse
-  golden MUST be re-recorded against the new intent shape. The CBOR
-  bodies MUST NOT change as a result of this feature; only the JSON
-  inputs change.
+- **FR-013a**: The existing swap golden MUST be re-recorded
+  against the new intent shape on this PR. The CBOR body MUST NOT
+  change; only the JSON input changes.
+- **FR-013b**: The in-flight ada-disburse golden (on the 004
+  branch) MUST be re-recorded against the new intent shape on the
+  post-merge follow-up
+  ([#55](https://github.com/lambdasistemi/amaru-treasury-tx/issues/55)).
+  The CBOR body MUST NOT change. This deliverable lands on the 004
+  rebase commit, not on this PR.
 - **FR-014**: The published quickstart, README, and any other
   operator-visible documentation MUST be updated in lockstep with
   the code change. No operator-visible doc may instruct the
@@ -230,10 +245,12 @@ swap`. After this feature lands, no occurrences remain.
   lands.
 - **FR-015**: Feature 004's spec, plan, contracts, data-model,
   research, and tasks artifacts MUST be updated to reflect the
-  unified shape. The branch under PR
+  unified shape on the post-merge follow-up
+  ([#55](https://github.com/lambdasistemi/amaru-treasury-tx/issues/55)).
+  PR
   [#47](https://github.com/lambdasistemi/amaru-treasury-tx/pull/47)
-  MUST rebase on top of this feature once it lands and adapt
-  accordingly.
+  rebases on top of this feature once it lands. The doc updates
+  land on the 004 rebase commit, not on this PR.
 
 ### Key Entities
 
@@ -262,9 +279,15 @@ swap`. After this feature lands, no occurrences remain.
   `decodeTreasuryIntent . encodeTreasuryIntent` byte-for-byte
   (modulo deterministic key ordering) for at least 100 random
   shapes.
-- **SC-003**: 100% of pipelines `<action>-wizard ... | tx-build`
-  produce a valid unsigned hex CBOR on stdout for any of the four
-  actions whose feature has shipped at the time of measurement.
+- **SC-003**: After this feature lands, the `swap-wizard ... |
+  tx-build` pipeline produces a valid unsigned hex CBOR on
+  stdout. Future wizards inherit this guarantee transitively as
+  they ship — disburse on
+  [#47](https://github.com/lambdasistemi/amaru-treasury-tx/pull/47)'s
+  rebase commit, withdraw on
+  [#45](https://github.com/lambdasistemi/amaru-treasury-tx/issues/45),
+  reorganize on
+  [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46).
 - **SC-004**: The swap golden and ada-disburse golden re-record
   identically (CBOR bodies match the previous bytes) against the
   new intent shape. Any byte-level diff is a regression and blocks
@@ -280,6 +303,14 @@ swap`. After this feature lands, no occurrences remain.
 - The CBOR bodies of the existing swap golden and the in-flight
   ada-disburse golden are correct as recorded — the unification
   changes only the JSON we feed in, not the resulting transaction.
+- **Constitution V (NON-NEGOTIABLE) RED-first ordering applies to
+  *new* goldens.** This PR's golden re-records (T024 swap; T045
+  ada-disburse on the 004 rebase) are byte-identity gates: the
+  assertion is `actual == previous expected.cbor`, not `RED →
+  GREEN`. Constitution V's spirit (every supported action ships
+  with at least one golden test that re-builds and byte-compares)
+  is preserved; the test-first ladder applies to *new* tests, not
+  to re-records of existing ones.
 - Operators following the published quickstart for feature 002 are
   willing to update their pipelines to `| tx-build`. We do not need
   to ship a backwards-compatible `swap` alias.

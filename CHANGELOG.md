@@ -4,6 +4,14 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.1.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.0.0...v0.2.1.0) (2026-05-07)
+
+### Features
+
+* **004:** phase 1 — module + test stubs for disburse-wizard ([a89bc21](https://github.com/lambdasistemi/amaru-treasury-tx/commit/a89bc210afa5c550de7e2a806f0386a85d0f076b))
+* **004:** route ADA disburse through unified tx-build ([dc8ad18](https://github.com/lambdasistemi/amaru-treasury-tx/commit/dc8ad18a3111920be5314b4b168d67171063a5cb))
+* **004:** add disburse treasury selection helpers ([a231507](https://github.com/lambdasistemi/amaru-treasury-tx/commit/a231507a6f183e6298f80a749756181f463d17cd))
+
 ## [0.2.0.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.1.1.0...v0.2.0.0) (2026-05-06)
 
 ### Breaking Changes

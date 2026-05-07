@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Offline-safe zero-rewards smoke guard. T031 wires this into
+# `just smoke` after the runner no-op behavior lands; until then
+# it protects the fixture/no-intent invariant and CLI surface.
+
+cabal build exe:amaru-treasury-tx -O0 >/dev/null
+
+exe="$(
+  cabal list-bin exe:amaru-treasury-tx -O0
+)"
+
+help_text="$("$exe" withdraw-wizard --help)"
+
+for needle in \
+  '--wallet-addr BECH32' \
+  '--metadata PATH' \
+  '--scope NAME' \
+  '--validity-hours HOURS' \
+  'Produce a withdraw intent.json'
+do
+  if ! grep -F -- "$needle" >/dev/null <<<"$help_text"; then
+    printf 'withdraw-wizard-zero-rewards: missing help text: %s\n' \
+      "$needle" >&2
+    exit 1
+  fi
+done
+
+fixture_dir="test/fixtures/withdraw/zero-rewards"
+if [[ -e "$fixture_dir/intent.json" ]]; then
+  printf 'withdraw-wizard-zero-rewards: unexpected %s/intent.json\n' \
+    "$fixture_dir" >&2
+  exit 1
+fi
+
+cabal test unit-tests -O0 \
+  --test-show-details=direct \
+  --test-option=--match \
+  --test-option="does not emit an intent for the zero-rewards fixture"
+
+printf 'withdraw-wizard-zero-rewards: OK (fixture has no intent.json)\n'

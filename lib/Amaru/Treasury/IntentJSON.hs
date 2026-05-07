@@ -54,6 +54,10 @@ module Amaru.Treasury.IntentJSON
     , decodeTreasuryIntent
     , decodeTreasuryIntentFile
     , encodeSomeTreasuryIntent
+
+      -- * Translation
+    , TranslatedShared (..)
+    , translateIntent
     ) where
 
 import Control.Monad (unless)
@@ -82,9 +86,32 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word64)
 
+import Cardano.Ledger.Address (Addr)
+import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Metadata (Metadatum)
+import Cardano.Ledger.TxIn (TxIn)
+import Cardano.Slotting.Slot (SlotNo (..))
+
+import Amaru.Treasury.AuxData
+    ( RationaleBody (..)
+    , rationaleMetadatum
+    )
+import Amaru.Treasury.IntentJSON.Common
+    ( decodeHexBytes
+    , decodeHexBytesAny
+    , parseAddr
+    , parseGuardKeyHash
+    , parseRewardAccount
+    , parseTxIn
+    )
 import Amaru.Treasury.Tx.Disburse (DisburseIntent)
 import Amaru.Treasury.Tx.Reorganize (ReorganizeIntent)
-import Amaru.Treasury.Tx.Swap (SwapIntent)
+import Amaru.Treasury.Tx.Swap
+    ( SwapIntent (..)
+    , SwapOrderDatumParams (..)
+    , SwapOrderOut (..)
+    , swapOrderDatum
+    )
 import Amaru.Treasury.Tx.Withdraw (WithdrawIntent)
 
 -- ----------------------------------------------------
@@ -272,20 +299,20 @@ instance ToJSON RationaleJSON where
 'Amaru.Treasury.Tx.SwapIntentJSON.SwapInputs'.
 -}
 data SwapInputs = SwapInputs
-    { siSwapOrderAddress :: !Text
-    , siChunkSizeLovelace :: !Integer
-    , siAmountLovelace :: !Integer
-    , siExtraPerChunkLovelace :: !Integer
-    , siRateNumerator :: !Integer
-    , siRateDenominator :: !Integer
-    , siPoolId :: !Text
-    , siCoreOwner :: !Text
-    , siOpsOwner :: !Text
-    , siNetworkComplianceOwner :: !Text
-    , siMiddlewareOwner :: !Text
-    , siSundaeProtocolFeeLovelace :: !Integer
-    , siUsdmPolicy :: !Text
-    , siUsdmToken :: !Text
+    { swiSwapOrderAddress :: !Text
+    , swiChunkSizeLovelace :: !Integer
+    , swiAmountLovelace :: !Integer
+    , swiExtraPerChunkLovelace :: !Integer
+    , swiRateNumerator :: !Integer
+    , swiRateDenominator :: !Integer
+    , swiPoolId :: !Text
+    , swiCoreOwner :: !Text
+    , swiOpsOwner :: !Text
+    , swiNetworkComplianceOwner :: !Text
+    , swiMiddlewareOwner :: !Text
+    , swiSundaeProtocolFeeLovelace :: !Integer
+    , swiUsdmPolicy :: !Text
+    , swiUsdmToken :: !Text
     }
     deriving stock (Eq, Show)
 
@@ -310,23 +337,23 @@ instance FromJSON SwapInputs where
 instance ToJSON SwapInputs where
     toJSON SwapInputs{..} =
         object
-            [ "swapOrderAddress" .= siSwapOrderAddress
-            , "chunkSizeLovelace" .= siChunkSizeLovelace
-            , "amountLovelace" .= siAmountLovelace
+            [ "swapOrderAddress" .= swiSwapOrderAddress
+            , "chunkSizeLovelace" .= swiChunkSizeLovelace
+            , "amountLovelace" .= swiAmountLovelace
             , "extraPerChunkLovelace"
-                .= siExtraPerChunkLovelace
-            , "rateNumerator" .= siRateNumerator
-            , "rateDenominator" .= siRateDenominator
-            , "poolId" .= siPoolId
-            , "coreOwner" .= siCoreOwner
-            , "opsOwner" .= siOpsOwner
+                .= swiExtraPerChunkLovelace
+            , "rateNumerator" .= swiRateNumerator
+            , "rateDenominator" .= swiRateDenominator
+            , "poolId" .= swiPoolId
+            , "coreOwner" .= swiCoreOwner
+            , "opsOwner" .= swiOpsOwner
             , "networkComplianceOwner"
-                .= siNetworkComplianceOwner
-            , "middlewareOwner" .= siMiddlewareOwner
+                .= swiNetworkComplianceOwner
+            , "middlewareOwner" .= swiMiddlewareOwner
             , "sundaeProtocolFeeLovelace"
-                .= siSundaeProtocolFeeLovelace
-            , "usdmPolicy" .= siUsdmPolicy
-            , "usdmToken" .= siUsdmToken
+                .= swiSundaeProtocolFeeLovelace
+            , "usdmPolicy" .= swiUsdmPolicy
+            , "usdmToken" .= swiUsdmToken
             ]
 
 {- | Disburse-action payload. Mirrors feature 004's
@@ -649,3 +676,169 @@ encodeSomeTreasuryIntent = encodePretty' cfg
             , confNumFormat = Generic
             , confTrailingNewline = True
             }
+
+-- ----------------------------------------------------
+-- Translation
+-- ----------------------------------------------------
+
+{- | Shared translated boundary fields — the part of the
+intent that doesn't depend on the action variant. The
+typed lift consumed by 'TreasuryBuild.runBuild' is
+@(TranslatedShared, Translated a)@.
+-}
+data TranslatedShared = TranslatedShared
+    { tsNetwork :: !Text
+    , tsWalletTxIn :: !TxIn
+    , tsWalletAddr :: !Addr
+    , tsRationale :: !Metadatum
+    }
+
+{- | Action-polymorphic translator. Dispatches on the
+singleton; each branch produces the matching
+@Translated a@ via the type family.
+-}
+translateIntent
+    :: SAction a
+    -> TreasuryIntent a
+    -> Either String (TranslatedShared, Translated a)
+translateIntent sa ti = case sa of
+    SSwap -> translateSwap ti
+    SDisburse ->
+        Left
+            "translateIntent: feature 004 PR #47 lands first"
+    SWithdraw ->
+        Left
+            "translateIntent: 'withdraw' not yet shipped (#45)"
+    SReorganize ->
+        Left
+            "translateIntent: 'reorganize' not yet shipped (#46)"
+
+{- | Swap-action translator. Body lifts the existing
+'Tx.SwapIntentJSON.translateIntent' verbatim, retyped
+to read directly from the unified 'TreasuryIntent'.
+-}
+translateSwap
+    :: TreasuryIntent 'Swap
+    -> Either String (TranslatedShared, SwapIntent)
+translateSwap ti = do
+    let wallet = tiWallet ti
+        scope = tiScope ti
+        sw = tiPayload ti
+        rat = tiRationale ti
+    walletAddr <- parseAddr (wjAddress wallet)
+    walletTxIn <- parseTxIn (wjTxIn wallet)
+    treasuryAddr <- parseAddr (sjTreasuryAddress scope)
+    swapOrderAddr <- parseAddr (swiSwapOrderAddress sw)
+    treasuryUtxos <-
+        traverse parseTxIn (sjTreasuryUtxos scope)
+    permissionsAcct <-
+        parseRewardAccount (sjPermissionsRewardAccount scope)
+    scopesRef <- parseTxIn (sjScopesDeployedAt scope)
+    permissionsRef <-
+        parseTxIn (sjPermissionsDeployedAt scope)
+    treasuryRef <- parseTxIn (sjTreasuryDeployedAt scope)
+    registryRef <- parseTxIn (sjRegistryDeployedAt scope)
+    registryPolicy <-
+        decodeHexBytes 28 (sjRegistryPolicyId scope)
+    signers <- traverse parseGuardKeyHash (tiSigners ti)
+    poolId <- decodeHexBytes 28 (swiPoolId sw)
+    coreOwner <- decodeHexBytes 28 (swiCoreOwner sw)
+    opsOwner <- decodeHexBytes 28 (swiOpsOwner sw)
+    netcOwner <-
+        decodeHexBytes 28 (swiNetworkComplianceOwner sw)
+    midOwner <-
+        decodeHexBytes 28 (swiMiddlewareOwner sw)
+    treasurySh <-
+        decodeHexBytes 28 (sjTreasuryScriptHash scope)
+    usdmPol <- decodeHexBytesAny (swiUsdmPolicy sw)
+    usdmTok <- decodeHexBytesAny (swiUsdmToken sw)
+    let dp =
+            SwapOrderDatumParams
+                { sodPoolId = poolId
+                , sodCoreOwner = coreOwner
+                , sodOpsOwner = opsOwner
+                , sodNetworkComplianceOwner = netcOwner
+                , sodMiddlewareOwner = midOwner
+                , sodSundaeProtocolFeeLovelace =
+                    swiSundaeProtocolFeeLovelace sw
+                , sodTreasuryScriptHash = treasurySh
+                , sodUsdmPolicy = usdmPol
+                , sodUsdmToken = usdmTok
+                }
+        chunks =
+            mkChunks
+                (swiChunkSizeLovelace sw)
+                (swiAmountLovelace sw)
+                ( swiRateNumerator sw
+                , swiRateDenominator sw
+                )
+                dp
+        intent =
+            SwapIntent
+                { siWalletUtxo = walletTxIn
+                , siSwapOrderAddress = swapOrderAddr
+                , siSwapOrders = chunks
+                , siSwapOrderExtraLovelace =
+                    Coin (swiExtraPerChunkLovelace sw)
+                , siTreasuryUtxos = treasuryUtxos
+                , siTreasuryAddress = treasuryAddr
+                , siTreasuryLeftoverLovelace =
+                    Coin (sjTreasuryLeftoverLovelace scope)
+                , siTreasuryLeftoverAsset = Nothing
+                , siRedeemerAmountLovelace =
+                    Coin (swiAmountLovelace sw)
+                , siPermissionsRewardAccount =
+                    permissionsAcct
+                , siScopesDeployedAt = scopesRef
+                , siPermissionsDeployedAt = permissionsRef
+                , siTreasuryDeployedAt = treasuryRef
+                , siRegistryDeployedAt = registryRef
+                , siSigners = signers
+                , siUpperBound =
+                    SlotNo (tiValidityUpperBoundSlot ti)
+                }
+        body =
+            RationaleBody
+                { rbEvent = rjEvent rat
+                , rbLabel = rjLabel rat
+                , rbDescription = [rjDescription rat]
+                , rbDestinationLabel = rjDestinationLabel rat
+                , rbJustification = [rjJustification rat]
+                }
+        shared =
+            TranslatedShared
+                { tsNetwork = tiNetwork ti
+                , tsWalletTxIn = walletTxIn
+                , tsWalletAddr = walletAddr
+                , tsRationale =
+                    rationaleMetadatum body registryPolicy
+                }
+    pure (shared, intent)
+
+{- | Per-chunk swap-order builder. Lifted verbatim from
+'Tx.SwapIntentJSON.mkChunks'; that copy is deleted in
+T028 alongside the rest of the per-action JSON module.
+-}
+mkChunks
+    :: Integer
+    -- ^ chunkSize
+    -> Integer
+    -- ^ totalAmount
+    -> (Integer, Integer)
+    -- ^ (rateNum, rateDen)
+    -> SwapOrderDatumParams
+    -> [SwapOrderOut]
+mkChunks chunkSize totalAmount (rNum, rDen) dp =
+    let full = totalAmount `div` chunkSize
+        rem' = totalAmount `mod` chunkSize
+        usdm n = (n * rNum + rDen - 1) `div` rDen
+        fullChunk =
+            SwapOrderOut
+                (Coin chunkSize)
+                (swapOrderDatum dp chunkSize (usdm chunkSize))
+        remChunk =
+            SwapOrderOut
+                (Coin rem')
+                (swapOrderDatum dp rem' (usdm rem'))
+        fulls = replicate (fromInteger full) fullChunk
+    in  if rem' > 0 then fulls ++ [remChunk] else fulls

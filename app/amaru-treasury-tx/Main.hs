@@ -66,6 +66,7 @@ import Cardano.Ledger.Mary.Value
     ( MaryValue (..)
     , MultiAsset (..)
     )
+import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Slotting.Slot (SlotNo (..))
 import Data.Char (toLower)
 import Data.Map.Strict qualified as Map
@@ -84,10 +85,31 @@ import Cardano.Ledger.Api.Tx.Out (valueTxOutL)
 import Amaru.Treasury.Backend (Provider (..))
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.ChainContext (liveContext)
+import Amaru.Treasury.IntentJSON
+    ( SAction (..)
+    , ScopeJSON (..)
+    , SomeTreasuryIntent (..)
+    , TreasuryIntent (..)
+    , WalletJSON (..)
+    , decodeTreasuryIntent
+    , decodeTreasuryIntentFile
+    )
+import Amaru.Treasury.IntentJSON.Common
+    ( parseTxIn
+    )
 import Amaru.Treasury.Registry.Verify (verifyRegistry)
 import Amaru.Treasury.Scope
     ( ScopeId
     , scopeFromText
+    )
+import Amaru.Treasury.TreasuryBuild
+    ( ScriptResult (..)
+    , TreasuryBuildResult (..)
+    , runFromIntent
+    )
+import Amaru.Treasury.TreasuryBuild.Trace
+    ( BuildEvent (..)
+    , buildEventTracer
     )
 import Amaru.Treasury.Tx.Swap (SwapIntent (..))
 import Amaru.Treasury.Tx.Swap.Trace
@@ -95,8 +117,7 @@ import Amaru.Treasury.Tx.Swap.Trace
     , swapEventTracer
     )
 import Amaru.Treasury.Tx.SwapBuild
-    ( ScriptResult (..)
-    , SwapBuildInputs (..)
+    ( SwapBuildInputs (..)
     , SwapBuildResult (..)
     , runSwapBuild
     )
@@ -147,6 +168,7 @@ data GlobalOpts = GlobalOpts
 data Cmd
     = CmdSwap SwapOpts
     | CmdSwapWizard WizardOpts
+    | CmdTxBuild TxBuildOpts
 
 data SwapOpts = SwapOpts
     { soIntentPath :: !(Maybe FilePath)
@@ -156,6 +178,20 @@ data SwapOpts = SwapOpts
     -- ^ where to write the hex CBOR. 'Nothing' = stdout.
     , soLog :: !(Maybe FilePath)
     -- ^ where to send 'SwapEvent' lines. 'Nothing' = stderr.
+    }
+
+{- | Flags for the unified @tx-build@ subcommand. The
+network is read from the intent's @network@ field, not
+from any CLI flag — the intent is the single source of
+truth (research §R3 of feature 005).
+-}
+data TxBuildOpts = TxBuildOpts
+    { tboIntentPath :: !(Maybe FilePath)
+    -- ^ 'Nothing' = read intent.json from stdin
+    , tboOutPath :: !(Maybe FilePath)
+    -- ^ 'Nothing' = stdout
+    , tboLog :: !(Maybe FilePath)
+    -- ^ 'Nothing' = stderr
     }
 
 {- | Two ways to express how a swap is sliced:
@@ -295,6 +331,35 @@ swapOptsP =
                 )
             )
 
+txBuildOptsP :: Parser TxBuildOpts
+txBuildOptsP =
+    TxBuildOpts
+        <$> optional
+            ( strOption
+                ( long "intent"
+                    <> short 'i'
+                    <> metavar "PATH"
+                    <> help
+                        "Path to the unified intent.json (defaults to stdin)"
+                )
+            )
+        <*> optional
+            ( strOption
+                ( long "out"
+                    <> short 'o'
+                    <> metavar "PATH"
+                    <> help "Write hex CBOR here (defaults to stdout)"
+                )
+            )
+        <*> optional
+            ( strOption
+                ( long "log"
+                    <> metavar "PATH"
+                    <> help
+                        "Where to write step-by-step trace lines (defaults to stderr)"
+                )
+            )
+
 cmdP :: Parser Cmd
 cmdP =
     hsubparser
@@ -303,9 +368,17 @@ cmdP =
             ( info
                 (CmdSwap <$> swapOptsP)
                 ( progDesc
-                    "Build a SundaeSwap treasury swap (ADA→USDM)"
+                    "Build a SundaeSwap treasury swap (ADA→USDM) [DEPRECATED — use tx-build]"
                 )
             )
+            <> command
+                "tx-build"
+                ( info
+                    (CmdTxBuild <$> txBuildOptsP)
+                    ( progDesc
+                        "Build any treasury transaction from a unified intent.json"
+                    )
+                )
             <> command
                 "swap-wizard"
                 ( info
@@ -504,6 +577,8 @@ main = do
             runSwap g{goSocketPath = Just socket} so
         CmdSwapWizard wo ->
             runWizard g{goSocketPath = Just socket} wo
+        CmdTxBuild to ->
+            runTxBuild socket to
 
 resolveSocket :: Maybe FilePath -> IO FilePath
 resolveSocket (Just p) = pure p
@@ -864,3 +939,141 @@ nowTip p = do
     let nowMs = round (realToFrac nowSec * (1000 :: Double))
     SlotNo s <- posixMsToSlot p nowMs
     pure s
+
+-- ----------------------------------------------------
+-- tx-build subcommand (unified intent dispatcher)
+-- ----------------------------------------------------
+
+{- | The unified @tx-build@ runner. Reads a
+'SomeTreasuryIntent' from stdin or @--intent@, derives
+the N2C handshake magic from the intent's @network@
+field (single source of truth — no @--network@ flag
+accepted on this subcommand), connects, queries the
+required UTxOs, and dispatches via 'runFromIntent'.
+
+The required-UTxO set comes from the intent's shared
+blocks (wallet TxIn + scope's treasury inputs + four
+deployed-at refs); these fields are the same across all
+four action variants, so the computation works
+unchanged for any 'SomeTreasuryIntent'.
+-}
+runTxBuild :: FilePath -> TxBuildOpts -> IO ()
+runTxBuild socket TxBuildOpts{..} = do
+    withLogHandle tboLog $ \logH -> do
+        let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
+            tr = buildEventTracer textTracer
+        traceWith tr (TbeIntentSource tboIntentPath)
+        parsed <- case tboIntentPath of
+            Just p -> decodeTreasuryIntentFile p
+            Nothing ->
+                decodeTreasuryIntent <$> BSL.hGetContents IO.stdin
+        some <- case parsed of
+            Left e -> abortBuild tr ("intent JSON: " <> T.pack e)
+            Right v -> pure v
+        (actionName, netName) <-
+            pure $ case some of
+                SomeTreasuryIntent _sa intent ->
+                    -- "SSwap" → "Swap"; user-readable.
+                    ( T.pack
+                        (drop 1 (show (tiSAction intent)))
+                    , tiNetwork intent
+                    )
+        traceWith tr (TbeIntentParsed actionName netName)
+        magic <- case netName of
+            "mainnet" -> pure (NetworkMagic 764_824_073)
+            "preprod" -> pure (NetworkMagic 1)
+            "preview" -> pure (NetworkMagic 2)
+            other ->
+                abortBuild
+                    tr
+                    ( "unknown network in intent: " <> other
+                    )
+        traceWith tr (TbeConnect socket)
+        required <- case requiredUtxos some of
+            Left e ->
+                abortBuild tr ("required UTxOs: " <> T.pack e)
+            Right s -> pure s
+        traceWith
+            tr
+            (TbeRequiredUtxos (Set.size required))
+        withLocalNodeBackend magic socket $ \backend -> do
+            ctx <- liveContext backend required
+            tbr <- runFromIntent ctx some
+            let cborStrict = BSL.toStrict (tbrCborBytes tbr)
+                hexed = B16.encode cborStrict
+                Coin feeLov = tbrFeeLovelace tbr
+                Coin tcLov = tbrTotalCollateralLovelace tbr
+                failures =
+                    [ (purpose, e)
+                    | ScriptResult purpose (Left e) <-
+                        tbrScriptResults tbr
+                    ]
+            traceWith
+                tr
+                ( TbeBuilt
+                    (BS.length cborStrict)
+                    feeLov
+                    tcLov
+                )
+            traceWith
+                tr
+                ( TbeReevaluated
+                    (length (tbrScriptResults tbr))
+                    (length failures)
+                )
+            mapM_
+                ( \(p, e) ->
+                    traceWith
+                        tr
+                        ( TbeScriptFail
+                            (T.pack (show p))
+                            (T.pack e)
+                        )
+                )
+                failures
+            case tboOutPath of
+                Just p -> BS.writeFile p hexed
+                Nothing -> do
+                    BS.putStr hexed
+                    putStr "\n"
+            traceWith tr (TbeWroteCbor tboOutPath)
+            if null failures
+                then traceWith tr TbeValidationOk
+                else do
+                    traceWith tr TbeValidationFailed
+                    exitFailure
+
+-- | Trace and abort with exit code 3 (parse / setup error).
+abortBuild :: Tracer IO BuildEvent -> Text -> IO a
+abortBuild tr msg = do
+    traceWith tr (TbeAborted msg)
+    exitWith (ExitFailure 3)
+
+{- | Compute the set of UTxOs the build needs to query.
+The shared blocks (wallet, scope.treasuryUtxos, four
+deployed-at refs) are the same shape across all four
+action variants, so this works for any
+'SomeTreasuryIntent'.
+-}
+requiredUtxos
+    :: SomeTreasuryIntent -> Either String (Set.Set TxIn)
+requiredUtxos (SomeTreasuryIntent _sa intent) = do
+    let wallet = tiWallet intent
+        scope = tiScope intent
+    walletTxIn <- parseTxIn (wjTxIn wallet)
+    treasuryUtxos <-
+        traverse parseTxIn (sjTreasuryUtxos scope)
+    scopesRef <- parseTxIn (sjScopesDeployedAt scope)
+    permissionsRef <-
+        parseTxIn (sjPermissionsDeployedAt scope)
+    treasuryRef <- parseTxIn (sjTreasuryDeployedAt scope)
+    registryRef <- parseTxIn (sjRegistryDeployedAt scope)
+    Right $
+        Set.fromList $
+            walletTxIn
+                : treasuryUtxos
+                ++ [ scopesRef
+                   , permissionsRef
+                   , treasuryRef
+                   , registryRef
+                   ]

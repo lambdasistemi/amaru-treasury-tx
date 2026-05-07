@@ -102,6 +102,7 @@ import Amaru.Treasury.IntentJSON.Common
     , parseAddr
     , parseGuardKeyHash
     , parseRewardAccount
+    , parseRewardAccountForNetwork
     , parseTxIn
     )
 import Amaru.Treasury.Tx.Disburse
@@ -116,7 +117,7 @@ import Amaru.Treasury.Tx.Swap
     , SwapOrderOut (..)
     , swapOrderDatum
     )
-import Amaru.Treasury.Tx.Withdraw (WithdrawIntent)
+import Amaru.Treasury.Tx.Withdraw (WithdrawIntent (..))
 
 -- ----------------------------------------------------
 -- Action enum + singleton
@@ -394,20 +395,31 @@ instance ToJSON DisburseInputs where
             , "usdmToken" .= diUsdmToken
             ]
 
-{- | Withdraw-action payload (placeholder until
-[#45](https://github.com/lambdasistemi/amaru-treasury-tx/issues/45)
-ships). Empty record so the parser can still produce a
-typed value; real shape lands when withdraw ships.
+{- | Withdraw-action payload. Carries the treasury stake
+script hash plus the positive reward balance the wizard
+resolved before emitting the intent.
 -}
 data WithdrawInputs = WithdrawInputs
+    { wdiTreasuryRewardAccount :: !Text
+    -- ^ 28-byte hex stake-script hash
+    , wdiRewardsLovelace :: !Integer
+    -- ^ strictly positive reward balance
+    }
     deriving stock (Eq, Show)
 
 instance FromJSON WithdrawInputs where
-    parseJSON = withObject "WithdrawInputs" $ \_ ->
-        pure WithdrawInputs
+    parseJSON = withObject "WithdrawInputs" $ \o ->
+        WithdrawInputs
+            <$> o .: "treasuryRewardAccount"
+            <*> o .: "rewardsLovelace"
 
 instance ToJSON WithdrawInputs where
-    toJSON WithdrawInputs = object []
+    toJSON WithdrawInputs{..} =
+        object
+            [ "treasuryRewardAccount"
+                .= wdiTreasuryRewardAccount
+            , "rewardsLovelace" .= wdiRewardsLovelace
+            ]
 
 {- | Reorganize-action payload (placeholder until
 [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46)
@@ -736,9 +748,7 @@ translateIntent
 translateIntent sa ti = case sa of
     SSwap -> translateSwap ti
     SDisburse -> translateDisburse ti
-    SWithdraw ->
-        Left
-            "translateIntent: 'withdraw' not yet shipped (#45)"
+    SWithdraw -> translateWithdraw ti
     SReorganize ->
         Left
             "translateIntent: 'reorganize' not yet shipped (#46)"
@@ -910,6 +920,63 @@ translateDisburse ti = do
         other ->
             Left ("unknown disburse unit: " <> T.unpack other)
     let body =
+            RationaleBody
+                { rbEvent = rjEvent rat
+                , rbLabel = rjLabel rat
+                , rbDescription = [rjDescription rat]
+                , rbDestinationLabel = rjDestinationLabel rat
+                , rbJustification = [rjJustification rat]
+                }
+        shared =
+            TranslatedShared
+                { tsNetwork = tiNetwork ti
+                , tsWalletTxIn = walletTxIn
+                , tsWalletAddr = walletAddr
+                , tsRationale =
+                    rationaleMetadatum body registryPolicy
+                }
+    pure (shared, intent)
+
+{- | Withdraw-action translator. Reads the unified
+'TreasuryIntent' withdraw payload and produces the typed
+'WithdrawIntent' consumed by the build dispatcher.
+-}
+translateWithdraw
+    :: TreasuryIntent 'Withdraw
+    -> Either String (TranslatedShared, WithdrawIntent)
+translateWithdraw ti = do
+    let wallet = tiWallet ti
+        scope = tiScope ti
+        wd = tiPayload ti
+        rat = tiRationale ti
+    unless
+        (wdiRewardsLovelace wd > 0)
+        (Left "withdraw rewardsLovelace must be positive")
+    walletAddr <- parseAddr (wjAddress wallet)
+    walletTxIn <- parseTxIn (wjTxIn wallet)
+    treasuryAddr <- parseAddr (sjTreasuryAddress scope)
+    treasuryRewardAccount <-
+        parseRewardAccountForNetwork
+            (tiNetwork ti)
+            (wdiTreasuryRewardAccount wd)
+    treasuryRef <- parseTxIn (sjTreasuryDeployedAt scope)
+    registryRef <- parseTxIn (sjRegistryDeployedAt scope)
+    registryPolicy <-
+        decodeHexBytes 28 (sjRegistryPolicyId scope)
+    let intent =
+            WithdrawIntent
+                { wiWalletUtxo = walletTxIn
+                , wiTreasuryRewardAccount =
+                    treasuryRewardAccount
+                , wiTreasuryAddress = treasuryAddr
+                , wiTreasuryDeployedAt = treasuryRef
+                , wiRegistryDeployedAt = registryRef
+                , wiRewardsAmount =
+                    Coin (wdiRewardsLovelace wd)
+                , wiUpperBound =
+                    SlotNo (tiValidityUpperBoundSlot ti)
+                }
+        body =
             RationaleBody
                 { rbEvent = rjEvent rat
                 , rbLabel = rjLabel rat

@@ -259,8 +259,19 @@
         },
         "withdraw": {
             "additionalProperties": false,
-            "properties": {},
-            "required": [],
+            "properties": {
+                "rewardsLovelace": {
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "treasuryRewardAccount": {
+                    "$ref": "#/$defs/hex28"
+                }
+            },
+            "required": [
+                "treasuryRewardAccount",
+                "rewardsLovelace"
+            ],
             "type": "object"
         }
     },

@@ -28,10 +28,18 @@ import Amaru.Treasury.IntentJSON
     , decodeTreasuryIntentFile
     , encodeSomeTreasuryIntent
     )
+import Amaru.Treasury.Tx.SwapWizard
+    ( ScopeView (..)
+    , TreasuryRefs (..)
+    , WalletSelection (..)
+    )
 import Amaru.Treasury.Tx.WithdrawWizard
-    ( WithdrawAnswers
+    ( WithdrawAnswers (..)
     , WithdrawEnv (..)
     , WithdrawError (..)
+    , WithdrawResolverEnv (..)
+    , WithdrawResolverInput (..)
+    , resolveWithdrawEnv
     , withdrawToTreasuryIntent
     )
 import Amaru.Treasury.Tx.WithdrawWizard.Trace ()
@@ -51,6 +59,9 @@ spec =
                 (env{weRewardsLovelace = 0})
                 answers
                 `shouldBe` Left WithdrawRewardsNotPositive
+        it
+            "resolves reward account and amount from registry/provider state"
+            resolverCase
 
 goldenCase :: IO ()
 goldenCase = do
@@ -89,6 +100,54 @@ goldenCase = do
                 _ ->
                     expectationFailure
                         "expected SWithdraw intent"
+
+resolverCase :: IO ()
+resolverCase = do
+    let dir = "test/fixtures/withdraw/synthetic"
+    fixtureEnv <-
+        eitherDecodeStrict (dir <> "/env.json") :: IO WithdrawEnv
+    answers <-
+        eitherDecodeStrict (dir <> "/answers.json") :: IO WithdrawAnswers
+    let wallet = weWalletSelection fixtureEnv
+        expectedAccount = weTreasuryRewardAccount fixtureEnv
+        expectedRewards = weRewardsLovelace fixtureEnv
+        stub =
+            WithdrawResolverEnv
+                { wreQueryWalletUtxos = \addr -> do
+                    addr `shouldBe` wsAddress wallet
+                    pure [(wsTxIn wallet, 10_000_000, False)]
+                , wreQueryRewardsLovelace = \account -> do
+                    account `shouldBe` expectedAccount
+                    pure expectedRewards
+                , wreCurrentTip = pure (weCurrentTip fixtureEnv)
+                }
+        input =
+            WithdrawResolverInput
+                { wriNetwork = weNetwork fixtureEnv
+                , wriWalletAddrBech32 = wsAddress wallet
+                , wriScope = waScope answers
+                , wriRegistry = weRegistry fixtureEnv
+                }
+    resolved <- resolveWithdrawEnv stub input
+    env <- expectRight resolved
+    weTreasuryRewardAccount env `shouldBe` expectedAccount
+    weRewardsLovelace env `shouldBe` expectedRewards
+    trScriptHash (svRefs (weScopeView env)) `shouldBe` expectedAccount
+    case withdrawToTreasuryIntent env answers of
+        Left err ->
+            expectationFailure
+                ("withdrawToTreasuryIntent failed: " <> show err)
+        Right intent ->
+            stableEncode intent
+                `shouldBe` stableEncode
+                    ( case withdrawToTreasuryIntent fixtureEnv answers of
+                        Right x -> x
+                        Left err ->
+                            error
+                                ( "fixture translation failed: "
+                                    <> show err
+                                )
+                    )
 
 eitherDecodeStrict :: (Aeson.FromJSON a) => FilePath -> IO a
 eitherDecodeStrict p = do

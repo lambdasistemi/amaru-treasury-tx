@@ -17,11 +17,18 @@ module Amaru.Treasury.Tx.WithdrawWizard
 
       -- * Resolved environment
     , WithdrawEnv (..)
-    , NetworkConstants (..)
+    , WithdrawNetworkConstants (..)
     , RegistryView (..)
     , ScopeView (..)
     , TreasuryRefs (..)
     , WalletSelection (..)
+
+      -- * Resolution
+    , WithdrawResolverInput (..)
+    , WithdrawResolverEnv (..)
+    , WithdrawResolverError (..)
+    , registryViewFromVerified
+    , resolveWithdrawEnv
 
       -- * Pure translation
     , WithdrawError (..)
@@ -48,12 +55,13 @@ import Amaru.Treasury.IntentJSON
     )
 import Amaru.Treasury.Scope (ScopeId, scopeText)
 import Amaru.Treasury.Tx.SwapWizard
-    ( NetworkConstants (..)
-    , RegistryView (..)
+    ( RegistryView (..)
     , ScopeView (..)
     , TreasuryRefs (..)
     , WalletSelection (..)
     , addrNetwork
+    , registryViewFromVerified
+    , selectWallet
     )
 
 -- ----------------------------------------------------
@@ -86,6 +94,21 @@ instance FromJSON WithdrawAnswers where
             <*> o .:? "event"
             <*> o .:? "label"
 
+{- | Withdraw only needs slot conversion from the network
+constants table. Keep the type separate from swap's
+Sundae/USDM constants so withdraw fixtures cannot carry
+irrelevant placeholder state.
+-}
+newtype WithdrawNetworkConstants = WithdrawNetworkConstants
+    { wncSlotsPerHour :: Word64
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON WithdrawNetworkConstants where
+    parseJSON = withObject "WithdrawNetworkConstants" $ \o ->
+        WithdrawNetworkConstants
+            <$> o .: "slotsPerHour"
+
 -- ----------------------------------------------------
 -- Resolved environment
 -- ----------------------------------------------------
@@ -99,8 +122,8 @@ data WithdrawEnv = WithdrawEnv
     -- ^ @"mainnet"@ / @"preprod"@ / @"preview"@
     , weCurrentTip :: !Word64
     -- ^ chain tip slot at the time of resolution
-    , weNetworkConstants :: !NetworkConstants
-    -- ^ shared slot conversion constants
+    , weNetworkConstants :: !WithdrawNetworkConstants
+    -- ^ slot conversion constants
     , weRegistry :: !RegistryView
     , weScopeView :: !ScopeView
     , weWalletSelection :: !WalletSelection
@@ -154,7 +177,7 @@ withdrawToTreasuryIntent env ans = do
             , tiSigners = []
             , tiValidityUpperBoundSlot =
                 weCurrentTip env
-                    + ncSlotsPerHour
+                    + wncSlotsPerHour
                         (weNetworkConstants env)
                         * fromIntegral (waValidityHours ans)
             , tiRationale = mkRationale ans
@@ -257,3 +280,131 @@ networkText :: Network -> Text
 networkText = \case
     Mainnet -> "mainnet"
     Testnet -> "testnet"
+
+-- ----------------------------------------------------
+-- Resolution
+-- ----------------------------------------------------
+
+{- | Inputs the resolver needs from the CLI. The reward
+account and reward amount are intentionally absent: the
+resolver derives them from verified registry/provider
+state.
+-}
+data WithdrawResolverInput = WithdrawResolverInput
+    { wriNetwork :: !Text
+    , wriWalletAddrBech32 :: !Text
+    , wriScope :: !ScopeId
+    , wriRegistry :: !RegistryView
+    }
+    deriving stock (Eq, Show)
+
+{- | Effects the withdraw resolver pulls from the backend.
+The record keeps tests deterministic without depending on a
+live node.
+-}
+data WithdrawResolverEnv m = WithdrawResolverEnv
+    { wreQueryWalletUtxos
+        :: !(Text -> m [(Text, Integer, Bool)])
+    -- ^ @(txInRef, lovelace, hasNativeAssets)@ for the wallet.
+    , wreQueryRewardsLovelace :: !(Text -> m Integer)
+    -- ^ Rewards for a 28-byte treasury reward account hash.
+    , wreCurrentTip :: !(m Word64)
+    }
+
+data WithdrawResolverError
+    = WithdrawResolverNetworkUnsupported !Text
+    | WithdrawResolverNetworkMismatch !Text !Text
+    | WithdrawResolverScopeUnsupported !ScopeId
+    | WithdrawResolverEmptyWalletUtxos
+    deriving stock (Eq, Show)
+
+{- | Resolve chain-derived withdraw inputs. The selected
+treasury reward account is the selected scope's treasury
+script hash, and the reward amount comes from the provider
+hook for that account.
+-}
+resolveWithdrawEnv
+    :: (Monad m)
+    => WithdrawResolverEnv m
+    -> WithdrawResolverInput
+    -> m (Either WithdrawResolverError WithdrawEnv)
+resolveWithdrawEnv renv input =
+    case ( networkFamily (wriNetwork input)
+         , addrNetwork (wriWalletAddrBech32 input)
+         ) of
+        (Nothing, _) ->
+            pure
+                ( Left
+                    ( WithdrawResolverNetworkUnsupported
+                        (wriNetwork input)
+                    )
+                )
+        (Just want, Just observed)
+            | observed /= want ->
+                pure
+                    ( Left
+                        ( WithdrawResolverNetworkMismatch
+                            (wriNetwork input)
+                            (networkText observed)
+                        )
+                    )
+        _ ->
+            resolveWithScope renv input
+
+resolveWithScope
+    :: (Monad m)
+    => WithdrawResolverEnv m
+    -> WithdrawResolverInput
+    -> m (Either WithdrawResolverError WithdrawEnv)
+resolveWithScope renv input =
+    case Map.lookup
+        (wriScope input)
+        (rvTreasuryByScope (wriRegistry input)) of
+        Nothing ->
+            pure
+                ( Left
+                    ( WithdrawResolverScopeUnsupported
+                        (wriScope input)
+                    )
+                )
+        Just refs -> do
+            walletUtxos <-
+                wreQueryWalletUtxos renv (wriWalletAddrBech32 input)
+            case selectWallet walletUtxos of
+                Nothing ->
+                    pure (Left WithdrawResolverEmptyWalletUtxos)
+                Just walletRef -> do
+                    let rewardAccount = trScriptHash refs
+                    rewards <-
+                        wreQueryRewardsLovelace renv rewardAccount
+                    tip <- wreCurrentTip renv
+                    pure $
+                        Right
+                            WithdrawEnv
+                                { weNetwork = wriNetwork input
+                                , weCurrentTip = tip
+                                , weNetworkConstants =
+                                    withdrawNetworkConstants
+                                , weRegistry = wriRegistry input
+                                , weScopeView =
+                                    ScopeView
+                                        { svScope = wriScope input
+                                        , svRefs = refs
+                                        , svDefaultSigners = []
+                                        }
+                                , weWalletSelection =
+                                    WalletSelection
+                                        { wsTxIn = walletRef
+                                        , wsAddress =
+                                            wriWalletAddrBech32 input
+                                        }
+                                , weTreasuryRewardAccount =
+                                    rewardAccount
+                                , weRewardsLovelace = rewards
+                                }
+
+withdrawNetworkConstants :: WithdrawNetworkConstants
+withdrawNetworkConstants =
+    WithdrawNetworkConstants
+        { wncSlotsPerHour = 3600
+        }

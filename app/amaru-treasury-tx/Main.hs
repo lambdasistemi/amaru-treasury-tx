@@ -848,8 +848,8 @@ runWithdrawWizard g WithdrawOpts{..} = do
                             ("resolve: " <> T.pack (show e))
                     Right e -> pure e
                 traceWithdrawEnv tr env
-                intent <-
-                    case Withdraw.withdrawToTreasuryIntent env answers of
+                result <-
+                    case Withdraw.withdrawToTreasuryResult env answers of
                         Left we ->
                             abortWithdraw
                                 tr
@@ -861,18 +861,22 @@ runWithdrawWizard g WithdrawOpts{..} = do
                                             )
                                         )
                                 )
-                        Right i -> pure i
-                traceWith tr $
-                    WithdrawTrace.WweValidityComputed
-                        (Withdraw.weCurrentTip env)
-                        (tiValidityUpperBoundSlot intent)
-                traceWith tr (WithdrawTrace.WweIntentReady wdOptsOut)
-                let bytes =
-                        encodeSomeTreasuryIntent
-                            (SomeTreasuryIntent SWithdraw intent)
-                case wdOptsOut of
-                    Nothing -> BSL.putStr bytes
-                    Just fp -> BSL.writeFile fp bytes
+                        Right r -> pure r
+                case result of
+                    Withdraw.WithdrawNoRewards account ->
+                        traceWith tr (WithdrawTrace.WweNoRewards account)
+                    Withdraw.WithdrawIntentReady intent -> do
+                        traceWith tr $
+                            WithdrawTrace.WweValidityComputed
+                                (Withdraw.weCurrentTip env)
+                                (tiValidityUpperBoundSlot intent)
+                        traceWith tr (WithdrawTrace.WweIntentReady wdOptsOut)
+                        let bytes =
+                                encodeSomeTreasuryIntent
+                                    (SomeTreasuryIntent SWithdraw intent)
+                        case wdOptsOut of
+                            Nothing -> BSL.putStr bytes
+                            Just fp -> BSL.writeFile fp bytes
 
 {- | Open the log handle indicated by '--log' (or stderr if absent),
 run the action, and close the handle on exit.

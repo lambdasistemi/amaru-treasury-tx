@@ -24,6 +24,8 @@ Subcommands:
 * @swap-wizard --network <preprod|mainnet> --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --usdm N.NN --split N --min-rate N.NN --validity-hours N --description ... --justification ... --destination-label ... [--extra-signer SCOPE|HEX]... [--out path\/intent.json] [--log path\/wizard.log]@
   produces a swap @intent.json@ from a typed questionnaire.
   See [@specs\/002-swap-wizard\/quickstart.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/002-swap-wizard/quickstart.md).
+* @withdraw-wizard --network <preprod|mainnet> --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --validity-hours N [--description ...] [--justification ...] [--destination-label ...] [--out path\/intent.json] [--log path\/wizard.log]@
+  produces a withdraw @intent.json@ from resolved registry and reward state.
 -}
 module Main (main) where
 
@@ -141,6 +143,8 @@ import Amaru.Treasury.Tx.SwapWizard.Trace
     ( WizardEvent (..)
     , eventTracer
     )
+import Amaru.Treasury.Tx.WithdrawWizard qualified as Withdraw
+import Amaru.Treasury.Tx.WithdrawWizard.Trace qualified as WithdrawTrace
 import Control.Tracer (Tracer (..), traceWith)
 
 data GlobalOpts = GlobalOpts
@@ -154,6 +158,7 @@ data GlobalOpts = GlobalOpts
 
 data Cmd
     = CmdSwapWizard WizardOpts
+    | CmdWithdrawWizard WithdrawOpts
     | CmdTxBuild TxBuildOpts
 
 {- | Flags for the unified @tx-build@ subcommand. The
@@ -209,6 +214,25 @@ data WizardOpts = WizardOpts
     , wOptsSigners :: ![Text]
     -- ^ accumulated extra-signer flags; empty = selected
     --   scope owner only.
+    }
+
+{- | Flags for the @withdraw-wizard@ subcommand.
+Mirrors @specs/006-withdraw-wizard/contracts/withdraw-wizard-cli.md@.
+-}
+data WithdrawOpts = WithdrawOpts
+    { wdOptsWalletAddr :: !Text
+    , wdOptsMetadataPath :: !FilePath
+    , wdOptsOut :: !(Maybe FilePath)
+    -- ^ where to write @intent.json@. 'Nothing' = stdout.
+    , wdOptsLog :: !(Maybe FilePath)
+    -- ^ where to send 'WithdrawWizardEvent' lines. 'Nothing' = stderr.
+    , wdOptsScope :: !ScopeId
+    , wdOptsValidityHours :: !Word8
+    , wdOptsDescription :: !(Maybe Text)
+    , wdOptsJustification :: !(Maybe Text)
+    , wdOptsDestinationLabel :: !(Maybe Text)
+    , wdOptsEvent :: !(Maybe Text)
+    , wdOptsLabel :: !(Maybe Text)
     }
 
 globalOptsP :: Parser GlobalOpts
@@ -324,6 +348,14 @@ cmdP =
                     (CmdSwapWizard <$> wizardOptsP)
                     ( progDesc
                         "Produce a swap intent.json from a typed questionnaire"
+                    )
+                )
+            <> command
+                "withdraw-wizard"
+                ( info
+                    (CmdWithdrawWizard <$> withdrawOptsP)
+                    ( progDesc
+                        "Produce a withdraw intent.json from registry and reward state"
                     )
                 )
         )
@@ -456,6 +488,89 @@ wizardOptsP =
                 )
             )
 
+withdrawOptsP :: Parser WithdrawOpts
+withdrawOptsP =
+    WithdrawOpts
+        <$> strOption
+            ( long "wallet-addr"
+                <> metavar "BECH32"
+                <> help "Wallet address (fuel + collateral)"
+            )
+        <*> strOption
+            ( long "metadata"
+                <> metavar "PATH"
+                <> help "Path to local journal/2026 metadata.json"
+            )
+        <*> optional
+            ( strOption
+                ( long "out"
+                    <> short 'o'
+                    <> metavar "PATH"
+                    <> help
+                        "Where to write intent.json (defaults to stdout)"
+                )
+            )
+        <*> optional
+            ( strOption
+                ( long "log"
+                    <> metavar "PATH"
+                    <> help
+                        "Where to write step-by-step trace lines (defaults to stderr)"
+                )
+            )
+        <*> option
+            scopeReader
+            ( long "scope"
+                <> metavar "NAME"
+                <> help
+                    "core_development|ops_and_use_cases|network_compliance|middleware"
+            )
+        <*> option
+            auto
+            ( long "validity-hours"
+                <> metavar "HOURS"
+                <> help "Validity window from tip; 1..48"
+            )
+        <*> optional
+            ( strOption
+                ( long "description"
+                    <> metavar "TEXT"
+                    <> help
+                        "Rationale description override"
+                )
+            )
+        <*> optional
+            ( strOption
+                ( long "justification"
+                    <> metavar "TEXT"
+                    <> help
+                        "Rationale justification override"
+                )
+            )
+        <*> optional
+            ( strOption
+                ( long "destination-label"
+                    <> metavar "TEXT"
+                    <> help
+                        "Rationale destination label override"
+                )
+            )
+        <*> optional
+            ( strOption
+                ( long "event"
+                    <> metavar "TEXT"
+                    <> help "Rationale event override (defaults withdraw)"
+                )
+            )
+        <*> optional
+            ( strOption
+                ( long "label"
+                    <> metavar "TEXT"
+                    <> help
+                        "Rationale label override (defaults Withdraw treasury rewards)"
+                )
+            )
+
 {- | Convert a USDM amount + USDM\/ADA rate to lovelace:
 @lovelace = round (usdm * 1_000_000 \/ rate)@.
 
@@ -514,6 +629,8 @@ main = do
     case c of
         CmdSwapWizard wo ->
             runWizard g{goSocketPath = Just socket} wo
+        CmdWithdrawWizard wo ->
+            runWithdrawWizard g{goSocketPath = Just socket} wo
         CmdTxBuild to ->
             runTxBuild socket to
 
@@ -645,6 +762,112 @@ runWizard g WizardOpts{..} = do
                     Nothing -> BSL.putStr bytes
                     Just fp -> BSL.writeFile fp bytes
 
+-- ----------------------------------------------------
+-- withdraw-wizard subcommand
+-- ----------------------------------------------------
+
+runWithdrawWizard :: GlobalOpts -> WithdrawOpts -> IO ()
+runWithdrawWizard g WithdrawOpts{..} = do
+    let socket = fromMaybe "(unset)" (goSocketPath g)
+    withLogHandle wdOptsLog $ \logH -> do
+        let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
+            tr = WithdrawTrace.withdrawWizardEventTracer textTracer
+        networkName <- case resolveNetworkName g of
+            Right t -> pure t
+            Left e -> abortWithdraw tr (T.pack e)
+        let NetworkMagic magic = goNetworkMagic g
+        traceWith
+            tr
+            ( WithdrawTrace.WweNetwork
+                networkName
+                (fromIntegral magic)
+            )
+        traceWith tr (WithdrawTrace.WweMetadata wdOptsMetadataPath)
+
+        let answers =
+                Withdraw.WithdrawAnswers
+                    { Withdraw.waScope = wdOptsScope
+                    , Withdraw.waValidityHours =
+                        wdOptsValidityHours
+                    , Withdraw.waDescription =
+                        wdOptsDescription
+                    , Withdraw.waJustification =
+                        wdOptsJustification
+                    , Withdraw.waDestinationLabel =
+                        wdOptsDestinationLabel
+                    , Withdraw.waEvent = wdOptsEvent
+                    , Withdraw.waLabel = wdOptsLabel
+                    }
+
+        withLocalNodeBackend (goNetworkMagic g) socket $
+            \backend -> do
+                verified <-
+                    verifyRegistry
+                        backend
+                        wdOptsMetadataPath
+                        (Set.singleton wdOptsScope)
+                rv <- case verified of
+                    Left e ->
+                        abortWithdraw
+                            tr
+                            ("verify: " <> T.pack (show e))
+                    Right registry ->
+                        case Withdraw.registryViewFromVerified
+                            wdOptsScope
+                            registry of
+                            Left e ->
+                                abortWithdraw
+                                    tr
+                                    ("project: " <> T.pack (show e))
+                            Right view -> pure view
+                traceWithdrawRegistryView tr wdOptsScope rv
+                let ri =
+                        Withdraw.WithdrawResolverInput
+                            { Withdraw.wriNetwork = networkName
+                            , Withdraw.wriWalletAddrBech32 =
+                                wdOptsWalletAddr
+                            , Withdraw.wriScope = wdOptsScope
+                            , Withdraw.wriRegistry = rv
+                            }
+                    renv =
+                        traceWithdrawResolverEnv tr $
+                            providerToWithdrawResolverEnv
+                                tr
+                                backend
+                er <- Withdraw.resolveWithdrawEnv renv ri
+                env <- case er of
+                    Left e ->
+                        abortWithdraw
+                            tr
+                            ("resolve: " <> T.pack (show e))
+                    Right e -> pure e
+                traceWithdrawEnv tr env
+                intent <-
+                    case Withdraw.withdrawToTreasuryIntent env answers of
+                        Left we ->
+                            abortWithdraw
+                                tr
+                                ( "translate: "
+                                    <> T.pack
+                                        ( show
+                                            ( we
+                                                :: Withdraw.WithdrawError
+                                            )
+                                        )
+                                )
+                        Right i -> pure i
+                traceWith tr $
+                    WithdrawTrace.WweValidityComputed
+                        (Withdraw.weCurrentTip env)
+                        (tiValidityUpperBoundSlot intent)
+                traceWith tr (WithdrawTrace.WweIntentReady wdOptsOut)
+                let bytes =
+                        encodeSomeTreasuryIntent
+                            (SomeTreasuryIntent SWithdraw intent)
+                case wdOptsOut of
+                    Nothing -> BSL.putStr bytes
+                    Just fp -> BSL.writeFile fp bytes
+
 {- | Open the log handle indicated by '--log' (or stderr if absent),
 run the action, and close the handle on exit.
 -}
@@ -659,6 +882,13 @@ withLogHandle (Just p) k =
 abortTr :: Tracer IO WizardEvent -> Text -> IO a
 abortTr tr msg = do
     traceWith tr (WeAborted msg)
+    exitWith (ExitFailure 3)
+
+-- | Trace and abort with exit code 3 for withdraw-wizard setup errors.
+abortWithdraw
+    :: Tracer IO WithdrawTrace.WithdrawWizardEvent -> Text -> IO a
+abortWithdraw tr msg = do
+    traceWith tr (WithdrawTrace.WweAborted msg)
     exitWith (ExitFailure 3)
 
 -- | Wrap a 'ResolverEnv' with tracing for each IO method.
@@ -687,6 +917,32 @@ traceResolverEnv tr renv =
             pure t
         }
 
+-- | Wrap a withdraw resolver env with tracing for each IO method.
+traceWithdrawResolverEnv
+    :: Tracer IO WithdrawTrace.WithdrawWizardEvent
+    -> Withdraw.WithdrawResolverEnv IO
+    -> Withdraw.WithdrawResolverEnv IO
+traceWithdrawResolverEnv tr renv =
+    Withdraw.WithdrawResolverEnv
+        { Withdraw.wreQueryWalletUtxos = \addr -> do
+            us <- Withdraw.wreQueryWalletUtxos renv addr
+            traceWith
+                tr
+                (WithdrawTrace.WweWalletUtxosQueried (length us))
+            pure us
+        , Withdraw.wreQueryRewardsLovelace = \account -> do
+            rewards <-
+                Withdraw.wreQueryRewardsLovelace renv account
+            traceWith
+                tr
+                (WithdrawTrace.WweRewardsQueried account rewards)
+            pure rewards
+        , Withdraw.wreCurrentTip = do
+            t <- Withdraw.wreCurrentTip renv
+            traceWith tr (WithdrawTrace.WweTipRead t)
+            pure t
+        }
+
 -- | Trace verifier outcome and on-chain owners for the requested scope.
 traceRegistryView
     :: Tracer IO WizardEvent
@@ -709,6 +965,26 @@ traceRegistryView tr scope rv = do
             (soOps os)
             (soNetworkCompliance os)
             (soMiddleware os)
+
+-- | Trace verifier outcome for the requested withdraw scope.
+traceWithdrawRegistryView
+    :: Tracer IO WithdrawTrace.WithdrawWizardEvent
+    -> ScopeId
+    -> Withdraw.RegistryView
+    -> IO ()
+traceWithdrawRegistryView tr scope rv =
+    case Map.lookup scope (Withdraw.rvTreasuryByScope rv) of
+        Just refs ->
+            traceWith tr $
+                WithdrawTrace.WweRegistryVerified
+                    scope
+                    (Withdraw.trAddress refs)
+                    (Withdraw.trScriptHash refs)
+                    (Withdraw.rvRegistryPolicyId rv)
+        Nothing ->
+            abortWithdraw
+                tr
+                "internal: missing scope in RegistryView (post-verify); please file a bug"
 
 -- | Project a per-scope 'ScopeView' out of a 'RegistryView' for tracing.
 mkScopeView :: ScopeId -> RegistryView -> ScopeView
@@ -744,6 +1020,26 @@ traceEnv tr env = do
             (tsInputs tsel)
             (tsLeftoverLovelace tsel)
 
+{- | Trace post-resolve withdraw env data: selected wallet UTxO,
+reward account, and reward balance.
+-}
+traceWithdrawEnv
+    :: Tracer IO WithdrawTrace.WithdrawWizardEvent
+    -> Withdraw.WithdrawEnv
+    -> IO ()
+traceWithdrawEnv tr env = do
+    let wsel = Withdraw.weWalletSelection env
+        rewardAccount = Withdraw.weTreasuryRewardAccount env
+    traceWith tr $
+        WithdrawTrace.WweWalletUtxoSelected
+            (Withdraw.wsTxIn wsel)
+    traceWith tr $
+        WithdrawTrace.WweRewardAccountResolved rewardAccount
+    traceWith tr $
+        WithdrawTrace.WweRewardsQueried
+            rewardAccount
+            (Withdraw.weRewardsLovelace env)
+
 {- | Adapter: project the lower-level 'Provider' interface
 into the 'ResolverEnv' shape the wizard consumes.
 -}
@@ -753,6 +1049,32 @@ providerToResolverEnv p =
         { reEnvQueryWalletUtxos = queryFlat p
         , reEnvQueryTreasuryUtxos = queryFlat p
         , reEnvCurrentTip = nowTip p
+        }
+
+{- | Adapter for the withdraw resolver.
+
+The current upstream 'Provider' does not expose stake-reward queries.
+Keep the CLI failure explicit until that provider method lands, instead
+of silently deriving a reward amount from CLI input or registry metadata.
+Tracked in #58.
+-}
+providerToWithdrawResolverEnv
+    :: Tracer IO WithdrawTrace.WithdrawWizardEvent
+    -> Provider IO
+    -> Withdraw.WithdrawResolverEnv IO
+providerToWithdrawResolverEnv tr p =
+    Withdraw.WithdrawResolverEnv
+        { Withdraw.wreQueryWalletUtxos = queryFlat p
+        , Withdraw.wreQueryRewardsLovelace = \account -> do
+            traceWith tr $
+                WithdrawTrace.WweRewardAccountResolved account
+            abortWithdraw
+                tr
+                ( "resolve: live stake-reward query is not available "
+                    <> "in cardano-node-clients Provider yet; "
+                    <> "tracked in #58"
+                )
+        , Withdraw.wreCurrentTip = nowTip p
         }
 
 queryFlat

@@ -2,7 +2,29 @@
 
 **Feature Branch**: `002-swap-wizard`
 **Created**: 2026-05-05
-**Status**: Draft
+**Status**: Superseded (intent shape) — see [feature 005](../005-unified-tx-build/spec.md)
+
+> **Superseded by feature 005** ([PR #52](https://github.com/lambdasistemi/amaru-treasury-tx/pull/52)).
+>
+> Feature 002 introduced the wizard surface and the
+> per-action `SwapIntentJSON`. Feature 005 unifies that
+> shape across all four actions ('swap', 'disburse',
+> 'withdraw', 'reorganize') under a single
+> `TreasuryIntent` GADT and replaces the per-action
+> build subcommand with the unified `tx-build`. The
+> wizard's CLI surface and signer resolution are
+> unchanged; the produced JSON now carries top-level
+> `schema`, `action`, and `network` fields (the
+> single-source-of-truth network), and `scope` carries
+> a canonical `id` plus disburse-friendly leftover
+> placeholders (`treasuryLeftoverUsdm`,
+> `treasuryLeftoverOtherAssets`).
+>
+> The acceptance scenarios below remain valid; treat the
+> phrase "`amaru-treasury-tx swap`" as
+> "`amaru-treasury-tx tx-build`" wherever it appears,
+> and `decodeSwapIntent` as `decodeTreasuryIntent`.
+
 **Input**: User description: "swap-wizard subcommand that produces intent.json from a small typed questionnaire (see issue #27). The CLI prompts the user for ~7 real-intent answers (scope, total ADA, chunk size or slippage, min rate or slippage %, validity window in hours, rationale description+justification, optional extra signer witnesses) and resolves all derivable fields (treasuryAddress, *DeployedAt, owner key hashes, swapOrderAddress, USDM policy/token, sundae fee, treasuryUtxos selection, leftover lovelace, wallet UTxO) via the existing Provider IO and a curated network-constants table. Output is a JSON file that round-trips through decodeSwapIntent + translateIntent. The build path stays JSON-only — the wizard is purely a JSON producer, never calls runSwapBuild directly."
 
 Tracking issue: [#27](https://github.com/lambdasistemi/amaru-treasury-tx/issues/27)

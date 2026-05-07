@@ -5,8 +5,9 @@ treasury contracts. Two subcommands today:
 
 - `swap-wizard` — typed questionnaire that produces an
   `intent.json`, verified end-to-end against a local cardano-node.
-- `swap` — turns an `intent.json` into the unsigned Conway CBOR
-  the user signs and submits.
+- `tx-build` — turns any unified `intent.json` (swap today;
+  disburse / withdraw / reorganize as they ship) into the
+  unsigned Conway CBOR the user signs and submits.
 
 Haskell port of the bash recipes in
 [`pragma-org/amaru-treasury/journal/2026/`](https://github.com/pragma-org/amaru-treasury/tree/main/journal/2026),
@@ -19,7 +20,7 @@ built on the
 The full operator and developer documentation lives at
 **<https://lambdasistemi.github.io/amaru-treasury-tx/>**:
 
-- [**Quickstart**](https://lambdasistemi.github.io/amaru-treasury-tx/quickstart/) — the `swap-wizard | swap` pipeline end to end.
+- [**Quickstart**](https://lambdasistemi.github.io/amaru-treasury-tx/quickstart/) — the `swap-wizard | tx-build` pipeline end to end.
 - [Architecture](https://lambdasistemi.github.io/amaru-treasury-tx/architecture/) — module layout and data flow.
 - [Trust model](https://lambdasistemi.github.io/amaru-treasury-tx/trust-model/) — what the wizard verifies, what the operator must assert.
 - [Swap recipe](https://lambdasistemi.github.io/amaru-treasury-tx/swap/) — building a swap from an existing `intent.json`.

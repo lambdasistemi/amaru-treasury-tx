@@ -4,6 +4,12 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.1.1](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.1.0...v0.2.1.1) (2026-05-07)
+
+### Bug Fixes
+
+* probe tx-build N2C magic with LSQ ([5019465](https://github.com/lambdasistemi/amaru-treasury-tx/commit/5019465f8fa92f2985a2b4c1e92497734fe7055f))
+
 ## [0.2.1.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.0.0...v0.2.1.0) (2026-05-07)
 
 ### Features

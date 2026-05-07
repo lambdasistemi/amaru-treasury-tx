@@ -16,11 +16,11 @@ on stdout (or a path).
 
 Subcommands:
 
-* @swap [--intent path\/to\/intent.json] [--out path\/swap.cbor] [--log path\/swap.log]@ —
-  builds the SundaeSwap order tx for a treasury scope. With no
-  @--intent@, reads the intent.json from stdin so
-  @swap-wizard ... | swap@ pipes cleanly.
-  See [@docs\/swap.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/docs/swap.md).
+* @tx-build [--intent path\/to\/intent.json] [--out path\/tx.cbor] [--log path\/build.log]@ —
+  builds any supported treasury tx from a unified
+  'SomeTreasuryIntent'. With no @--intent@, reads the intent JSON from
+  stdin so wizard-produced intents can pipe cleanly into the unified
+  builder.
 * @swap-wizard --network <preprod|mainnet> --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --usdm N.NN --split N --min-rate N.NN --validity-hours N --description ... --justification ... --destination-label ... [--extra-signer SCOPE|HEX]... [--out path\/intent.json] [--log path\/wizard.log]@
   produces a swap @intent.json@ from a typed questionnaire.
   See [@specs\/002-swap-wizard\/quickstart.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/002-swap-wizard/quickstart.md).

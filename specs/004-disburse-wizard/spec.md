@@ -3,12 +3,25 @@
 **Feature Branch**: `004-disburse-wizard`
 **Created**: 2026-05-06
 **Status**: Draft
-**Input**: User description: "disburse-wizard subcommand pair (`disburse-wizard` + `disburse`) that mirrors feature 002 (swap-wizard) for the disburse action. Wizard takes typed Q&A — scope, beneficiary address, unit (ada|usdm), amount, validity-hours, rationale (description, justification, destination-label) — and resolves all derivable fields via the existing Provider IO and the verified registry. Build subcommand consumes intent.json and emits unsigned Conway hex CBOR. Replaces the positional CLI from spec 001 for the disburse case."
+**Input**: User description: "`disburse-wizard` plus the unified
+`tx-build` dispatcher for the disburse action. Wizard takes typed Q&A
+— scope, beneficiary address, unit (ada|usdm), amount, validity-hours,
+rationale (description, justification, destination-label) — and
+resolves all derivable fields via the existing Provider IO and the
+verified registry. `tx-build` consumes unified intent.json and emits
+unsigned Conway hex CBOR. Replaces the positional CLI from spec 001
+for the disburse case."
 
 Tracking issue: [#44](https://github.com/lambdasistemi/amaru-treasury-tx/issues/44).
 
 Mirrors the architecture established in [feature 002 (swap-wizard)](../002-swap-wizard/spec.md). Replaces the
 positional-CLI design described in [spec 001 §`disburse`](../001-treasury-tx-cli/contracts/cli.md#disburse).
+
+Post-#52 update: [#52](https://github.com/lambdasistemi/amaru-treasury-tx/pull/52)
+merged first and introduced `TreasuryIntent` plus `tx-build`. Feature
+004 now emits `TreasuryIntent 'Disburse` (`schema = 1`,
+`action = "disburse"`) and pipes into `tx-build`, not a per-action
+`disburse` builder subcommand.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -20,7 +33,7 @@ that includes the scope's treasury address, deployed-script
 references, registry reference, owner key hashes, the validity-bound
 slot, and the leftover-vs-beneficiary lovelace split. With the wizard,
 they answer a short typed questionnaire and receive a complete
-`intent.json` ready for `amaru-treasury-tx disburse`.
+`intent.json` ready for `amaru-treasury-tx tx-build`.
 
 **Why this priority**: This is the marquee flow for the upstream
 [`disburse.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/bin/disburse.sh)
@@ -31,9 +44,10 @@ and the feature's primary user value.
 --wallet-addr <addr> --metadata <path> --scope core_development
 --beneficiary-addr <addr> --unit ada --amount 50000000 --validity-hours 6
 --description ... --justification ... --destination-label ... --out intent.json`
-against a connected node. The produced JSON must round-trip through
-the new `decodeDisburseIntent` followed by `translateDisburseIntent`
-without errors and yield a typed disburse intent whose fields match
+against a connected node. The produced JSON must validate against
+`docs/assets/intent-schema.json`, round-trip through
+`decodeTreasuryIntent` followed by `translateIntent SDisburse`
+without errors, and yield a typed disburse intent whose fields match
 the answers and the resolved registry/network state.
 
 **Acceptance Scenarios**:
@@ -76,7 +90,8 @@ treasury scope holding USDM. The produced `intent.json` must:
    `--unit usdm --amount Q`, **Then** the resulting intent's
    beneficiary output carries `Q` USDM plus the min-ADA allowance, the
    leftover output carries the remaining USDM plus all other assets
-   spent, and `runDisburseBuild` produces a balanced unsigned tx.
+   spent, and `runFromIntent` / `runDisburse` produces a balanced
+   unsigned tx.
 2. **Given** insufficient USDM in the selected scope, **When** the
    wizard runs, **Then** it exits non-zero with a single human-readable
    message on stderr (no JSON written).
@@ -87,7 +102,8 @@ treasury scope holding USDM. The produced `intent.json` must:
 
 The translation from the typed answer record (scope, unit, amount,
 validity, rationale, signers) and a `DisburseEnv` (carrying everything
-resolved from chain/registry/network constants) to `DisburseIntentJSON`
+resolved from chain/registry/network constants) to
+`TreasuryIntent 'Disburse`
 must be a pure function so it can be golden-tested without IO.
 
 **Why this priority**: Without a pure translation step the wizard
@@ -99,7 +115,7 @@ choice in feature 002.
 selected wallet UTxO, selected treasury UTxOs + leftover, current tip,
 network constants) and a fixture answer record. Call the pure
 translation. Compare the result against a checked-in golden
-`DisburseIntentJSON` (or its rendered JSON).
+`TreasuryIntent 'Disburse` (or its rendered JSON).
 
 **Acceptance Scenarios**:
 
@@ -113,13 +129,13 @@ translation. Compare the result against a checked-in golden
 
 ---
 
-### User Story 4 - Pipe `disburse-wizard | disburse` end-to-end (Priority: P2)
+### User Story 4 - Pipe `disburse-wizard | tx-build` end-to-end (Priority: P2)
 
 The two subcommands must compose as a Unix pipe: the wizard writes
 `intent.json` to stdout (or `--out`), the builder reads it on stdin
 (or `--intent`), and the builder emits unsigned hex CBOR on stdout (or
 `--out`). Operators must be able to run the full pipeline as one
-command line: `disburse-wizard ... | disburse > tx.cbor.hex`.
+command line: `disburse-wizard ... | tx-build > tx.cbor.hex`.
 
 **Why this priority**: This is the operator-facing UX guarantee. If
 either side breaks the pipe contract (wizard writing trace lines to
@@ -133,7 +149,7 @@ hex characters (no prefix, no whitespace, no JSON, no trace text).
 **Acceptance Scenarios**:
 
 1. **Given** a connected node and a valid wizard answer set,
-   **When** the operator runs `disburse-wizard ... | disburse`,
+   **When** the operator runs `disburse-wizard ... | tx-build`,
    **Then** stdout is the unsigned hex CBOR (exactly one line).
 2. **Given** the same pipe with `--log` flags directed to a file on
    each side, **When** the pipe runs, **Then** stderr is empty on
@@ -143,7 +159,7 @@ hex characters (no prefix, no whitespace, no JSON, no trace text).
 
 ### User Story 5 - Summary sidecar for inspection before signing (Priority: P3)
 
-Every successful `disburse` invocation writes a JSON summary alongside
+Every successful disburse build writes a JSON summary alongside
 the CBOR (default path: `disburse.summary.json` in CWD; overridable
 via `--summary-out`) describing inputs, outputs, fee, total
 collateral, and a per-redeemer breakdown including ExUnits.
@@ -214,20 +230,21 @@ summary JSON against the existing
   flags identifying co-approving scope owners (by scope name or 28-byte
   hex keyhash). The selected scope's owner is always required and must
   not need to be passed explicitly.
-- **FR-007**: `disburse-wizard` output JSON MUST round-trip through
-  `decodeDisburseIntent` + `translateDisburseIntent` without loss.
+- **FR-007**: `disburse-wizard` output JSON MUST validate against
+  `docs/assets/intent-schema.json` and round-trip through
+  `decodeTreasuryIntent` + `translateIntent SDisburse` without loss.
 - **FR-008**: The translation step (typed answers + env →
-  `DisburseIntentJSON`) MUST be a pure function with no IO and no
+  `TreasuryIntent 'Disburse`) MUST be a pure function with no IO and no
   hidden randomness.
-- **FR-009**: `disburse` MUST read the intent JSON either from
+- **FR-009**: `tx-build` MUST read the intent JSON either from
   `--intent <path>` or from stdin when the flag is omitted.
-- **FR-010**: `disburse` MUST emit unsigned Conway transaction hex CBOR
+- **FR-010**: `tx-build` MUST emit unsigned Conway transaction hex CBOR
   on stdout (or to `--out`) as a single line with no prefix, suffix, or
   surrounding whitespace.
-- **FR-011**: `disburse` MUST re-evaluate every redeemer against the
+- **FR-011**: `tx-build` MUST re-evaluate every redeemer against the
   built tx and exit non-zero on any script failure, with the failure
   recorded in the summary.
-- **FR-012**: `disburse` MUST emit a JSON summary sidecar conforming to
+- **FR-012**: `tx-build` MUST emit a JSON summary sidecar conforming to
   the existing
   [`summary-schema.json`](../001-treasury-tx-cli/contracts/summary-schema.json)
   (default path `disburse.summary.json`, overridable via `--summary-out`).
@@ -237,7 +254,7 @@ summary JSON against the existing
 - **FR-014**: Both subcommands MUST exit with code `0` on success and
   a non-zero code on any error, with a single-line human-readable
   message on stderr.
-- **FR-015**: The pipe `disburse-wizard ... | disburse` MUST work
+- **FR-015**: The pipe `disburse-wizard ... | tx-build` MUST work
   with no intermediate files: the wizard's stdout is exactly the
   intent JSON when `--out` is omitted; the builder's stdin is read
   when `--intent` is omitted.
@@ -250,9 +267,10 @@ summary JSON against the existing
 - **DisburseEnv**: typed record of chain-resolved values (registry
   view for the selected scope, selected wallet UTxO, selected treasury
   UTxOs + leftover totals, current tip slot, network constants).
-- **DisburseIntentJSON**: the on-disk JSON contract — what the wizard
-  writes and the builder reads. Mirrors the shape and stability
-  guarantees of `SwapIntentJSON`.
+- **TreasuryIntent 'Disburse**: the on-disk JSON contract — what the
+  wizard writes and `tx-build` reads. Shares the unified top-level
+  `schema`, `action`, `network`, `wallet`, `scope`, `signers`,
+  `validityUpperBoundSlot`, and `rationale` shape with other actions.
 - **DisburseIntent (typed)**: the translated form consumed by the
   pure builder; carries already-resolved ledger values.
 - **DisburseSummary**: the JSON sidecar written by the build path,
@@ -266,16 +284,17 @@ summary JSON against the existing
   any of the five scopes using only `metadata.json`, a wallet bech32
   address, a beneficiary bech32 address, and the seven typed answer
   values — without writing JSON by hand.
-- **SC-002**: The full pipe `disburse-wizard ... | disburse` against
+- **SC-002**: The full pipe `disburse-wizard ... | tx-build` against
   the local mainnet node completes in under 10 seconds end-to-end on
   the operator's workstation.
 - **SC-003**: 100% of disburse `intent.json` documents produced by
-  the wizard against a valid registry round-trip through
-  `decodeDisburseIntent` + `translateDisburseIntent` without error.
+  the wizard against a valid registry validate against
+  `docs/assets/intent-schema.json` and round-trip through
+  `decodeTreasuryIntent` + `translateIntent SDisburse` without error.
 - **SC-004**: The pure translation step is covered by golden tests for
   both `--unit ada` and `--unit usdm`, and these tests run in under 1
   second locally.
-- **SC-005**: The `disburse` subcommand re-evaluates every redeemer
+- **SC-005**: The `tx-build` disburse branch re-evaluates every redeemer
   against the final tx and surfaces any script failure in the summary
   sidecar in 100% of failure cases.
 
@@ -289,17 +308,14 @@ summary JSON against the existing
   [`disburseAdaProgram`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/Disburse.hs)
   is correct as written and stays the source of truth for the ADA case.
   A new `disburseUsdmProgram` is added in this feature for the USDM case.
-- The existing `runSwapBuild` IO pipeline
-  ([`SwapBuild.hs`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapBuild.hs))
-  factors cleanly into a reusable build-path that this feature
-  generalises (or copies, if abstraction proves leaky) into
-  `runDisburseBuild`.
+- The existing `runFromIntent` / `runSwap` IO pipeline factors
+  cleanly into a disburse branch named `runDisburse`.
 - The summary JSON schema in spec 001 already covers the disburse case
   unchanged; this feature does not alter the schema.
-- Operators run `disburse` against the local mainnet
+- Operators run `tx-build` against the local mainnet
   cardano-node socket (`/code/cardano-mainnet/ipc/node.socket`) for
   goldens and against preprod for live smoke tests; no other networks
   are required for v0 of this feature.
 - The legacy positional `disburse` design from spec 001 is fully
-  replaced by this feature. No migration path or backwards-compatible
-  alias is shipped.
+  replaced by `disburse-wizard | tx-build`. No migration path or
+  backwards-compatible alias is shipped.

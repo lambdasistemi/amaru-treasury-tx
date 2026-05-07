@@ -5,8 +5,9 @@
 
 This is the operator-facing walkthrough. It mirrors the input side of
 [`pragma-org/amaru-treasury/journal/2026/bin/disburse.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/bin/disburse.sh),
-then hands off to the new `disburse` subcommand to produce the
-unsigned Conway transaction CBOR — all in one pipe.
+then hands off to the unified `tx-build` subcommand to produce the
+unsigned Conway transaction CBOR from the action-keyed
+`TreasuryIntent` JSON — all in one pipe.
 
 ## 1. Prerequisites
 
@@ -57,8 +58,7 @@ $EXE \
         --log wizard.log \
   | $EXE \
         --node-socket /code/cardano-mainnet/ipc/node.socket \
-        --network mainnet \
-        disburse \
+        tx-build \
             --log build.log \
             --out disburse.cbor.hex
 ```
@@ -69,15 +69,15 @@ What lands where:
 |---|---|
 | `wizard.log` (or stderr if `--log` omitted) | Wizard's `disburse-wizard:`-prefixed trace events, one per value-affecting step |
 | pipe between the two commands | The `intent.json` payload (JSON), wizard stdout → builder stdin |
-| `build.log` (or stderr) | Builder's `disburse:`-prefixed trace events: source, connect, build, re-eval, validation |
+| `build.log` (or stderr) | Builder's `tx-build:`-prefixed trace events: source, parsed action/network, connect, build, re-eval, validation |
 | `disburse.cbor.hex` | The unsigned Conway transaction as hex |
-| `disburse.summary.json` | Summary sidecar with txid, fee, ExUnits per redeemer |
+| `disburse.summary.json` | Summary sidecar with txid, fee, ExUnits per redeemer once Phase 7 lands |
 
 Every flag has a sensible default for the non-pipe case:
 
 - Drop `--out` from the wizard to write `intent.json` to stdout (this
   is what the pipe relies on).
-- Drop `--intent` from `disburse` to read the intent from stdin (also
+- Drop `--intent` from `tx-build` to read the intent from stdin (also
   what the pipe relies on).
 - Drop `--log` from either to send the trace to stderr.
 
@@ -104,7 +104,8 @@ $EXE \
         --destination-label "Antithesis Inc." \
         --log wizard.log \
   | $EXE \
-        disburse \
+        --node-socket /code/cardano-mainnet/ipc/node.socket \
+        tx-build \
             --log build.log \
             --out disburse.cbor.hex
 ```
@@ -140,14 +141,15 @@ disburse-wizard: intent.json -> stdout
 …and the builder writes:
 
 ```
-disburse: intent <- stdin
-disburse: connecting to /code/cardano-mainnet/ipc/node.socket
-disburse: required utxos: 7
-disburse: built 4920 bytes  fee=215037  total_collateral=322556
-disburse: re-evaluated 2 redeemers, 0 failed
-disburse: cbor -> disburse.cbor.hex
-disburse: summary -> disburse.summary.json
-disburse: VALIDATION OK
+tx-build: intent <- stdin
+tx-build: parsed action=Disburse network=mainnet
+tx-build: connecting to /code/cardano-mainnet/ipc/node.socket
+tx-build: handshake ok (magic 764824073 matches intent network=mainnet)
+tx-build: required utxos: 7
+tx-build: built 4920 bytes  fee=215037  total_collateral=322556
+tx-build: re-evaluated 2 redeemers, 0 failed
+tx-build: cbor -> disburse.cbor.hex
+tx-build: VALIDATION OK
 ```
 
 Operators read this trace as the audit gate before signing.
@@ -165,7 +167,7 @@ The pipeline emits hex CBOR; sign it with:
   `--signer` compatibility alias).
 - Your wallet key for the fuel input.
 
-Submit per your existing operator runbook. `disburse` does not sign
+Submit per your existing operator runbook. `tx-build` does not sign
 or submit (Constitution IV).
 
 ## 6. Doing it without the pipe
@@ -175,17 +177,17 @@ file in between:
 
 ```bash
 $EXE disburse-wizard ... --out intent.json
-$EXE disburse --intent intent.json --out disburse.cbor.hex
+$EXE --node-socket /code/cardano-mainnet/ipc/node.socket \
+    tx-build --intent intent.json --out disburse.cbor.hex
 ```
 
 ## 7. When something goes wrong
 
 | Exit | Action |
 |------|--------|
-| 1 (disburse) | One or more redeemers failed re-evaluation. The summary captures the per-script failure detail; CBOR is still emitted for inspection. |
-| 3 (disburse) | Intent JSON parse failure. Check the JSON shape against [`disburse-intent-json.md`](./contracts/disburse-intent-json.md). |
-| 4 (disburse) | Translation error. Typed message identifies the field. |
-| 5 (disburse) | Build / balance failure. Often insufficient ADA after fee estimation; pick a different wallet UTxO or treasury inputs. |
+| 1 (tx-build) | One or more redeemers failed re-evaluation. The trace captures the per-script failure detail; CBOR is still emitted for inspection. |
+| 3 (tx-build) | Intent JSON parse, required-UTxO, or build setup failure. Check the JSON shape against [`disburse-intent-json.md`](./contracts/disburse-intent-json.md). |
+| 6 (tx-build) | `intent.network` does not match the local-node socket's network magic. |
 | 3 (disburse-wizard) | Resolver error. Check `--metadata`, local node sync, wallet fuel UTxO, treasury UTxOs, beneficiary address network. |
 | 4 (disburse-wizard) | Translation error (`DisburseError`). Re-check `--unit`, `--amount`, `--validity-hours` in [1, 48]. |
 
@@ -196,14 +198,16 @@ wizard), nothing was written.
 ## 8. Verifying the wizard (developer)
 
 ```bash
-just unit     # DisburseSpec / DisburseWizardSpec / DisburseBuildSpec
-just golden   # ada + usdm body-CBOR goldens
+just unit     # DisburseSpec / schema conformance / resolver specs
+just golden --test-options=--match=ada-disburse
+              # ADA body-CBOR golden via unified tx-build path
 just smoke    # focused signer + pipe smoke
 ```
 
 A wizard regression breaks `DisburseWizardSpec`; a translation
-regression breaks the body-CBOR goldens. A signer UX regression
-breaks the smoke check before a release artifact is published.
+regression breaks the unified schema tests or the body-CBOR golden.
+A signer UX regression breaks the smoke check before a release
+artifact is published.
 
 ## 9. Validating on preprod (recorded smoke)
 

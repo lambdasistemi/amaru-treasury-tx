@@ -8,22 +8,32 @@ This file resolves the Technical Context unknowns flagged by
 not be discovered later by reading the implementation. Each section
 follows the *Decision / Rationale / Alternatives considered* format.
 
+**Post-#52 update**: PR
+[#52](https://github.com/lambdasistemi/amaru-treasury-tx/pull/52)
+landed the unified `TreasuryIntent` contract and `tx-build`
+dispatcher before feature 004 completed. Feature 004 now emits
+`TreasuryIntent 'Disburse` with top-level `schema` and `action`, and
+the per-action `DisburseIntentJSON` / `DisburseBuild` modules are
+legacy compatibility during the branch transition rather than the
+operator-facing contract.
+
 ## R1. Module boundary — five new modules, one extension
 
 **Decision**:
 
 - **Extend** `Amaru.Treasury.Tx.Disburse` to add `disburseUsdmProgram`
   alongside the existing `disburseAdaProgram`.
-- **New** `Amaru.Treasury.Tx.DisburseIntentJSON` — `DisburseIntentJSON`
-  ADT, `decodeDisburseIntent`, `translateDisburseIntent` (pure
-  parse + lift to typed `DisburseIntent`).
-- **New** `Amaru.Treasury.Tx.DisburseBuild` — `runDisburseBuild ::
-  ChainContext -> DisburseBuildInputs -> IO DisburseBuildResult`
-  (mirrors
-  [`runSwapBuild`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapBuild.hs)).
+- **Legacy compatibility** `Amaru.Treasury.Tx.DisburseIntentJSON` —
+  the branch originally introduced this sibling record; after #52,
+  new wizard output and body-CBOR goldens use
+  `Amaru.Treasury.IntentJSON.TreasuryIntent 'Disburse`.
+- **Legacy compatibility** `Amaru.Treasury.Tx.DisburseBuild` —
+  the unified dispatcher now owns the real build entry point as
+  `Amaru.Treasury.TreasuryBuild.runDisburse`.
 - **New** `Amaru.Treasury.Tx.DisburseWizard` — `DisburseAnswers` ADT,
-  `DisburseEnv`, `disburseToIntentJSON :: DisburseEnv ->
-  DisburseAnswers -> Either DisburseError DisburseIntentJSON` (pure),
+  `DisburseEnv`, `disburseToTreasuryIntent :: DisburseEnv ->
+  DisburseAnswers -> Either DisburseError (TreasuryIntent 'Disburse)`
+  (pure),
   plus `resolveDisburseEnv :: ResolverEnv IO -> ResolverInput -> IO
   (Either DisburseError DisburseEnv)`.
 - **New** `Amaru.Treasury.Tx.Disburse.Trace` and
@@ -37,8 +47,8 @@ follows the *Decision / Rationale / Alternatives considered* format.
 
 - One module per "layer" matches the swap-wizard split. Each layer
   has a distinct testable contract: pure translation
-  (`disburseToIntentJSON`), serde round-trip (`decodeDisburseIntent`),
-  IO build (`runDisburseBuild`).
+  (`disburseToTreasuryIntent`), unified schema conformance
+  (`decodeTreasuryIntent` + JSON Schema), IO build (`runDisburse`).
 - Keeping the existing `Tx/Disburse.hs` as the home of pure
   `TxBuild q e ()` programs reuses the proven pattern from feature 002.
 - Trace modules live next to their owners so `Trace` types can be
@@ -56,16 +66,17 @@ follows the *Decision / Rationale / Alternatives considered* format.
 
 **Decision**:
 
-- `DisburseAnswers`, `DisburseEnv`, `DisburseIntentJSON`, and
+- `DisburseAnswers`, `DisburseEnv`, `TreasuryIntent 'Disburse`, and
   `DisburseIntent` are pure data.
-- `disburseToIntentJSON` is total and pure
-  (`Either DisburseError DisburseIntentJSON`).
-- `decodeDisburseIntent` and `translateDisburseIntent` are pure
+- `disburseToTreasuryIntent` is total and pure
+  (`Either DisburseError (TreasuryIntent 'Disburse)`).
+- `decodeTreasuryIntent` and `translateIntent SDisburse` are pure
   (`Either String _`).
 - `disburseAdaProgram` and `disburseUsdmProgram` are pure
   `TxBuild q e ()`.
 - IO is confined to `resolveDisburseEnv` (`Provider IO` calls,
-  registry verify), `runDisburseBuild` (UTxO query, ExUnits eval,
+  registry verify), `runDisburse` / `runFromIntent` (UTxO query,
+  ExUnits eval,
   balance), and `app/Main.hs` (file I/O, tracer plumbing).
 
 **Rationale**: Constitution II (pure builders, impure shell) and FR-008
@@ -76,7 +87,7 @@ follows the *Decision / Rationale / Alternatives considered* format.
 - **`IO`-flavoured translation reading from a Reader env** — rejected
   for the same reason as feature 002 R2: defeats golden testing
   without a stub backend.
-- **Inlining `runSwapBuild`'s body into `runDisburseBuild`** — picked
+- **Inlining `runSwapBuild`'s body into `runDisburse`** — picked
   the copy over an abstraction, since the build pipelines diverge in
   the redeemer set, the validator references, the output shape, and
   the required-signers list. Premature abstraction would force every
@@ -216,10 +227,10 @@ inconsistency between `swap-wizard` and `disburse-wizard`.
 
 ## R9. Stable JSON encoder for goldens
 
-**Decision**: Reuse the `aeson-pretty`-based stable encoder pattern
-established by `SwapIntentJSON.encodeIntentJSON` (fixed key order, two-space
-indent, terminal newline). `DisburseIntentJSON` will ship its own
-`encodeDisburseIntent` with the same shape.
+**Decision**: Reuse the unified `encodeSomeTreasuryIntent` stable
+encoder introduced by #52 (four-space indent, alphabetical key order,
+terminal newline). The checked-in disburse wizard goldens and the
+ADA body-CBOR fixture intent both use this shape.
 
 **Rationale**: Goldens fail loudly on encoder churn. Pinning the key
 order to the `FromJSON` schema documents the contract.
@@ -237,13 +248,12 @@ order to the `FromJSON` schema documents the contract.
   single `DisburseSpec.hs` that loads fixture
   `(DisburseEnv, DisburseAnswers)` pairs from
   `test/fixtures/disburse-wizard/` for both ADA and USDM, runs
-  `disburseToIntentJSON`, and compares to checked-in
+  `disburseToTreasuryIntent`, encodes via `encodeSomeTreasuryIntent`,
+  and compares to checked-in
   `expected.intent.{ada,usdm}.json`.
-- **Round-trip property** (per unit): for any
-  `(DisburseEnv, DisburseAnswers)` produced by a small generator, the
-  output must satisfy
-  `decodeDisburseIntent (encode (toJSON …)) = Right …` and then
-  `translateDisburseIntent` must succeed.
+- **Schema conformance**: checked-in disburse fixture JSON and JSON
+  emitted by `disburseToTreasuryIntent` must validate against
+  `docs/assets/intent-schema.json`.
 - **Body-CBOR golden — ADA** (lands red before `disburseAdaProgram`
   changes): `DisburseSpec.hs` under `test/golden/Amaru/Treasury/Tx/`,
   fixture set under `test/fixtures/disburse/ada/`, recorded once
@@ -267,11 +277,11 @@ NON-NEGOTIABLE) and SC-003/SC-004.
 - **Synthesize the body-CBOR fixtures from a stub backend** —
   rejected; loses coverage of the ledger-API balancing path.
 
-## R11. Reusing `runSwapBuild`'s ChainContext
+## R11. Reusing `runFromIntent`'s ChainContext
 
-**Decision**: `runDisburseBuild` accepts a
+**Decision**: the unified `runDisburse` branch accepts a
 [`ChainContext`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/ChainContext.hs)
-the same way `runSwapBuild` does. The required-utxo set passed to
+the same way `runSwap` does. The required-utxo set passed to
 `liveContext` is `walletUtxo : treasuryUtxos ++ [scopesDeployedAt,
 permissionsDeployedAt, treasuryDeployedAt, registryDeployedAt]`.
 
@@ -305,34 +315,33 @@ scope owner from their signer list and producing un-submittable txs.
 - **Take all signers explicitly** — rejected; matches the bug we
   already fixed for swap.
 
-## R13. Intent JSON shape — diff vs SwapIntentJSON
+## R13. Intent JSON shape — unified TreasuryIntent
 
-**Decision**: `DisburseIntentJSON` is a sibling of `SwapIntentJSON`,
-not a generalisation. Differences:
+**Decision**: The earlier sibling-record decision is superseded by
+[#51](https://github.com/lambdasistemi/amaru-treasury-tx/issues/51)
+and [#52](https://github.com/lambdasistemi/amaru-treasury-tx/pull/52).
+Feature 004 emits the unified shape:
 
-| Field | Swap | Disburse |
-|---|---|---|
-| `unit` | always implicit ADA→USDM | new field: `"ada" \| "usdm"` |
-| `amountLov` / `amountUsdm` | `swap.amountLovelace` + `swap.chunkSizeLovelace` | one of: `disburse.amountLovelace` (ada) or `disburse.amountUsdm` (usdm) |
-| `beneficiary` | n/a (swap target is Sundae order address) | new field: `disburse.beneficiaryAddress` |
-| `chunks` | yes (swap is multi-output) | no (disburse is single beneficiary + leftover) |
-| `swapOrderAddress` / `sundae*` | yes | n/a |
-| treasury inputs / leftover | yes | yes (same shape) |
-| `*DeployedAt` × 4 | yes | yes (same shape) |
-| `permissionsRewardAccount` | yes | yes (same shape) |
-| `requiredSigners` | yes | yes (same shape) |
-| `validityUpperBoundSlot` | yes | yes (same shape) |
-| `rationale` block | yes | yes (same fields) |
+- top-level `schema = 1`
+- top-level `action = "disburse"`
+- shared `network`, `wallet`, `scope`, `signers`,
+  `validityUpperBoundSlot`, and `rationale`
+- action-keyed `disburse` payload with `unit`, `amount`,
+  `beneficiaryAddress`, `usdmPolicy`, and `usdmToken`
 
-**Rationale**: A union-shape "TreasuryIntentJSON" with a `kind` discriminator
-would force every consumer to pattern-match the kind before reading any
-field. Two parallel records with shared field names keep both sides
-flat and let `aeson` derive the parsers.
+**Rationale**: The unified dispatcher removes the per-action builder
+subcommands (`swap`, `disburse`, …) and lets every wizard pipe into the
+same `tx-build` entry point. The JSON Schema can reject
+action/payload mismatches centrally, while the typed
+`TreasuryIntent a` GADT keeps action-specific payloads separated in
+Haskell.
 
 **Alternatives considered**:
 
-- **Single tagged-union JSON schema** — rejected; verbose for
-  consumers and brittle to future actions.
-- **Reuse `SwapIntentJSON` with optional fields** — rejected; spreads
-  the disburse contract across fields whose names lie about their
-  purpose.
+- **Keep the original sibling `DisburseIntentJSON` as the public
+  contract** — rejected after #52; it would fork the operator UX away
+  from `swap-wizard | tx-build` and leave withdraw/reorganize to solve
+  the same dispatch problem again.
+- **Add a per-action `disburse` subcommand on top of `tx-build`** —
+  rejected; it would duplicate parsing, network-probe, required-UTxO,
+  and tracing logic that #52 deliberately centralized.

@@ -4,10 +4,10 @@ Description : Offline byte-parity golden for the ADA disburse CBOR
 License     : Apache-2.0
 
 Loads the frozen disburse fixture under
-@test/fixtures/disburse/ada/@, builds a tx via
-'runDisburseBuild' against the resulting frozen
-'ChainContext', and byte-diffs the CBOR against
-@body.cbor@.
+@test/fixtures/disburse/ada/@, decodes the unified
+@intent.json@, builds a tx via 'runFromIntent' against
+the resulting frozen 'ChainContext', and byte-diffs the
+CBOR against @body.cbor@.
 
 Mirrors 'SwapGoldenSpec'. Refuses to fall back to a live
 build; surfaces any byte diff as a regression. To
@@ -27,15 +27,12 @@ import Amaru.Treasury.ChainContext.Fixture
     ( readSwapFixture
     , toFrozenContext
     )
-import Amaru.Treasury.Tx.DisburseBuild
-    ( DisburseBuildInputs (..)
-    , DisburseBuildResult (..)
-    , runDisburseBuild
+import Amaru.Treasury.IntentJSON
+    ( decodeTreasuryIntentFile
     )
-import Amaru.Treasury.Tx.DisburseIntentJSON
-    ( TranslatedDisburseIntent (..)
-    , decodeDisburseIntentFile
-    , translateDisburseIntent
+import Amaru.Treasury.TreasuryBuild
+    ( TreasuryBuildResult (..)
+    , runFromIntent
     )
 
 fixtureDir :: FilePath
@@ -45,30 +42,18 @@ spec :: Spec
 spec =
     describe "ada-disburse golden (frozen ChainContext)" $
         it "rebuilds body.cbor byte-for-byte" $ do
-            sij <-
-                decodeDisburseIntentFile
+            intent <-
+                decodeTreasuryIntentFile
                     (fixtureDir <> "/intent.json")
-            ti <- case sij of
+            some <- case intent of
                 Left e -> error ("intent JSON: " <> e)
-                Right v -> case translateDisburseIntent v of
-                    Left e ->
-                        error
-                            ("intent translation: " <> e)
-                    Right ok -> pure ok
+                Right ok -> pure ok
             fixture <- readSwapFixture fixtureDir
             let ctx = toFrozenContext fixture
-            dbr <-
-                runDisburseBuild
-                    ctx
-                    DisburseBuildInputs
-                        { dbiIntent =
-                            tdDisburseIntent ti
-                        , dbiRationale = tdRationale ti
-                        , dbiWalletAddr = tdWalletAddr ti
-                        }
+            tbr <- runFromIntent ctx some
             let actualHex =
                     B16.encode
-                        (BSL.toStrict (dbrCborBytes dbr))
+                        (BSL.toStrict (tbrCborBytes tbr))
                 goldenPath = fixtureDir <> "/body.cbor"
             update <- lookupEnv "UPDATE_GOLDENS"
             exists <- doesFileExist goldenPath

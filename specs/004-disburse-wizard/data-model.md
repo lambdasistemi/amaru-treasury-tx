@@ -9,6 +9,12 @@ implementation PR; what's here is the contract between the CLI parser,
 the resolver, the pure translation, the JSON schema, and the build
 pipeline.
 
+**Post-#52 update**: the public JSON contract is now the unified
+`TreasuryIntent` shape from feature 005. Feature 004's pure wizard
+translation produces `TreasuryIntent 'Disburse`; `tx-build` decodes
+`SomeTreasuryIntent` and dispatches through
+`Amaru.Treasury.TreasuryBuild.runFromIntent`.
+
 ## 1. DisburseAnswers — the typed answers
 
 ```haskell
@@ -118,22 +124,24 @@ Notes:
   the precomputed leftover totals enter `DisburseEnv`.
 - The bech32 strings (txin / addr / policy / asset name) are kept as
   `Text` until the build path lifts them to ledger types via
-  `translateDisburseIntent`. This matches the existing swap-wizard
+  `translateIntent SDisburse`. This matches the existing swap-wizard
   pattern.
 
 ## 3. The pure translation
 
 ```haskell
-disburseToIntentJSON
+disburseToTreasuryIntent
     :: DisburseEnv
     -> DisburseAnswers
-    -> Either DisburseError DisburseIntentJSON
+    -> Either DisburseError (TreasuryIntent 'Disburse)
 ```
 
 Rules:
 
-- **Total**: every successful path produces a `DisburseIntentJSON`
-  that passes `decodeDisburseIntent + translateDisburseIntent`.
+- **Total**: every successful path produces a
+  `TreasuryIntent 'Disburse` that passes
+  `decodeTreasuryIntent + translateIntent SDisburse` and validates
+  against `docs/assets/intent-schema.json`.
 - **No IO**: no chain queries, no protocol-parameter fetches, no
   current-time reads. Everything must be in `DisburseEnv`.
 - **Errors are domain errors**: `DisburseError` enumerates the failure
@@ -154,7 +162,7 @@ data DisburseError
 `ResolverError` is a sibling type owned by the IO resolver — it
 covers failures the pure translation cannot detect because the raw
 inputs (bech32 strings, on-chain UTxOs, registry anchors) never reach
-`disburseToIntentJSON`:
+`disburseToTreasuryIntent`:
 
 ```haskell
 data ResolverError
@@ -173,23 +181,27 @@ enumerates only what the pure translation can witness from a typed
 `(DisburseEnv, DisburseAnswers)` pair, while `ResolverError` covers
 chain-state and bech32-parse failures.
 
-## 4. DisburseIntentJSON — the JSON contract
+## 4. TreasuryIntent 'Disburse — the JSON contract
 
 The full JSON schema lives in
+[`docs/assets/intent-schema.json`](../../docs/assets/intent-schema.json)
+and is described for the disburse branch in
 [`contracts/disburse-intent-json.md`](./contracts/disburse-intent-json.md).
 Here is the corresponding Haskell record:
 
 ```haskell
-module Amaru.Treasury.Tx.DisburseIntentJSON where
+module Amaru.Treasury.IntentJSON where
 
-data DisburseIntentJSON = DisburseIntentJSON
-    { dijNetwork :: !Text
-    , dijWallet :: !WalletJSON
-    , dijScope :: !ScopeJSON
-    , dijDisburse :: !DisburseJSON
-    , dijSigners :: !SignersJSON
-    , dijValidityUpperBoundSlot :: !Integer
-    , dijRationale :: !RationaleJSON
+data TreasuryIntent (a :: Action) = TreasuryIntent
+    { tiSAction :: !(SAction a)
+    , tiSchema :: !Int
+    , tiNetwork :: !Text
+    , tiWallet :: !WalletJSON
+    , tiScope :: !ScopeJSON
+    , tiSigners :: ![Text]
+    , tiValidityUpperBoundSlot :: !Word64
+    , tiRationale :: !RationaleJSON
+    , tiPayload :: !(Payload a)
     }
 
 data WalletJSON = WalletJSON
@@ -213,17 +225,12 @@ data ScopeJSON = ScopeJSON
     , sjRegistryPolicyId :: !Text
     }
 
-data DisburseJSON = DisburseJSON
-    { djUnit :: !Text                            -- "ada" | "usdm"
-    , djAmount :: !Integer                       -- lovelace OR smallest USDM unit
-    , djBeneficiaryAddress :: !Text              -- bech32
-    , djUsdmPolicy :: !Text                      -- 28-byte hex (only used for "usdm")
-    , djUsdmToken :: !Text                       -- hex (only used for "usdm")
-    }
-
-data SignersJSON = SignersJSON
-    { sigList :: ![Text]                         -- 28-byte hex keyhashes,
-                                                 -- scope owner first
+data DisburseInputs = DisburseInputs
+    { diUnit :: !Text                            -- "ada" | "usdm"
+    , diAmount :: !Integer                       -- lovelace OR smallest USDM unit
+    , diBeneficiaryAddress :: !Text              -- bech32
+    , diUsdmPolicy :: !Text                      -- 28-byte hex (only used for "usdm")
+    , diUsdmToken :: !Text                       -- hex (only used for "usdm")
     }
 
 data RationaleJSON = RationaleJSON
@@ -235,27 +242,26 @@ data RationaleJSON = RationaleJSON
     }
 ```
 
+The encoded JSON adds top-level `schema` and `action` fields, where
+`action = "disburse"` selects `Payload 'Disburse = DisburseInputs`.
 The `usdmPolicy` / `usdmToken` fields are present unconditionally in
 the JSON shape so the contract stays flat; the build path ignores them
-when `djUnit = "ada"`.
+when `diUnit = "ada"`.
 
-## 5. TranslatedDisburseIntent — the typed lift
+## 5. translateIntent SDisburse — the typed lift
 
 ```haskell
-data TranslatedDisburseIntent = TranslatedDisburseIntent
-    { tdNetwork :: !Text
-    , tdWalletTxIn :: !TxIn
-    , tdWalletAddr :: !Addr
-    , tdDisburseIntent :: !DisburseIntent
-    -- ^ Reused from the pure builder
-    --   Amaru.Treasury.Tx.Disburse, extended for USDM in this
-    --   feature.
-    , tdRationale :: !RationaleAnswers
+data TranslatedShared = TranslatedShared
+    { tsNetwork :: !Text
+    , tsWalletTxIn :: !TxIn
+    , tsWalletAddr :: !Addr
+    , tsRationale :: !Metadatum
     }
 
-translateDisburseIntent
-    :: DisburseIntentJSON
-    -> Either String TranslatedDisburseIntent
+translateIntent
+    :: SAction 'Disburse
+    -> TreasuryIntent 'Disburse
+    -> Either String (TranslatedShared, DisburseIntent)
 ```
 
 The pure builder's
@@ -293,44 +299,45 @@ disburseAdaProgram
 --     :: DisburseIntentFields -> DisburseUsdmPayload -> TxBuild q e ()
 ```
 
-## 6. DisburseBuildInputs / DisburseBuildResult
+## 6. TreasuryBuildResult / runDisburse
 
 ```haskell
-module Amaru.Treasury.Tx.DisburseBuild where
+module Amaru.Treasury.TreasuryBuild where
 
-data DisburseBuildInputs = DisburseBuildInputs
-    { dbiIntent :: !DisburseIntent
-    , dbiRationale :: !RationaleAnswers
-    , dbiWalletTxIn :: !TxIn
-    , dbiWalletAddr :: !Addr
-    }
-
-data DisburseBuildResult = DisburseBuildResult
-    { dbrCborBytes :: !ByteString.Lazy
-    , dbrFeeLovelace :: !Coin
-    , dbrTotalCollateralLovelace :: !Coin
-    , dbrScriptResults :: ![ScriptResult]
+data TreasuryBuildResult = TreasuryBuildResult
+    { tbrCborBytes :: !ByteString.Lazy
+    , tbrFeeLovelace :: !Coin
+    , tbrTotalCollateralLovelace :: !Coin
+    , tbrScriptResults :: ![ScriptResult]
     -- ^ One entry per redeemer; mirrors SwapBuild.ScriptResult.
     }
 
-runDisburseBuild
+runFromIntent
     :: ChainContext
-    -> DisburseBuildInputs
-    -> IO DisburseBuildResult
+    -> SomeTreasuryIntent
+    -> IO TreasuryBuildResult
+
+runDisburse
+    :: ChainContext
+    -> DisburseIntent
+    -> Metadatum
+    -> Addr
+    -> IO TreasuryBuildResult
 ```
 
-`ScriptResult` and `ChainContext` are imported from
-[`Amaru.Treasury.Tx.SwapBuild`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapBuild.hs)
-and
-[`Amaru.Treasury.ChainContext`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/ChainContext.hs)
-respectively; this feature does not introduce new types for them.
+`ScriptResult`, `TreasuryBuildResult`, `runFromIntent`, and
+`runDisburse` live in the unified dispatcher. The older
+`Tx.DisburseBuild` module is compatibility scaffolding while the
+branch is finalised.
 
 ## 7. Boundary tables
 
-### 7.1 DisburseAnswers + DisburseEnv → DisburseIntentJSON
+### 7.1 DisburseAnswers + DisburseEnv → TreasuryIntent 'Disburse
 
-| `DisburseIntentJSON` field | Source |
+| `TreasuryIntent 'Disburse` field | Source |
 |---|---|
+| `schema` | fixed `1` |
+| `action` | fixed `"disburse"` via `SDisburse` |
 | `network` | `deNetwork` |
 | `wallet.txIn`, `wallet.address` | `deWalletSelection` |
 | `scope.id` | `daScope` (rendered via `Scope.scopeText`) |
@@ -355,16 +362,16 @@ respectively; this feature does not introduce new types for them.
 This table is the contract; the implementation PR may not deviate
 without updating this file.
 
-### 7.2 DisburseIntentJSON → TranslatedDisburseIntent
+### 7.2 TreasuryIntent 'Disburse → TranslatedShared + DisburseIntent
 
-| `TranslatedDisburseIntent` field | Source |
+| translated field | Source |
 |---|---|
-| `tdNetwork` | `dijNetwork` |
-| `tdWalletTxIn` | `parseTxIn dijWallet.txIn` |
-| `tdWalletAddr` | `parseAddr dijWallet.address` |
-| `tdRationale` | `dijRationale` (re-folded into `RationaleAnswers`) |
-| `tdDisburseIntent` (`DisburseAdaIntent`) | when `dijDisburse.unit = "ada"` |
-| `tdDisburseIntent` (`DisburseUsdmIntent`) | when `dijDisburse.unit = "usdm"` |
+| `tsNetwork` | `tiNetwork` |
+| `tsWalletTxIn` | `parseTxIn tiWallet.txIn` |
+| `tsWalletAddr` | `parseAddr tiWallet.address` |
+| `tsRationale` | `tiRationale` + `scope.registryPolicyId`, folded into CIP-1694 metadata |
+| `DisburseAdaIntent` | when `tiPayload.unit = "ada"` |
+| `DisburseUsdmIntent` | when `tiPayload.unit = "usdm"` (Phase 5) |
 
 ## 8. State transitions
 
@@ -373,16 +380,16 @@ deterministic pass:
 
 ```
 flags → DisburseAnswers ────┐
-                            ├── disburseToIntentJSON
-Provider IO + verifyRegistry├──── → DisburseIntentJSON
+                            ├── disburseToTreasuryIntent
+Provider IO + verifyRegistry├──── → TreasuryIntent 'Disburse
 → DisburseEnv ──────────────┘                              → write file
 ```
 
 The build path is also stateless across invocations:
 
 ```
-intent.json → decodeDisburseIntent → translateDisburseIntent
-            → DisburseBuildInputs → runDisburseBuild
+intent.json → decodeTreasuryIntent → translateIntent
+            → runFromIntent / runDisburse
             → unsigned hex CBOR + summary.json
 ```
 

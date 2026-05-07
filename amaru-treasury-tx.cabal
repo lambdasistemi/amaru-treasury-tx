@@ -273,7 +273,6 @@ test-suite golden-tests
   default-language:   GHC2021
   other-modules:
     AdaDisburseGoldenSpec
-    DisburseFixture
     PlaceholderSpec
     RegistryWalkGoldenSpec
     SwapGoldenSpec

@@ -6,30 +6,33 @@
 
 ## Summary
 
-Add a paired `disburse-wizard` + `disburse` subcommand to
-`amaru-treasury-tx`, mirroring the architecture of feature 002
+Add `disburse-wizard` plus a disburse branch in the unified
+`tx-build` dispatcher, mirroring the architecture of feature 002
 ([`swap-wizard`](../002-swap-wizard/plan.md)) for the disburse action.
+PR [#52](https://github.com/lambdasistemi/amaru-treasury-tx/pull/52)
+landed first, so this plan is rebased from the original
+`disburse-wizard | disburse` pair to `disburse-wizard | tx-build`.
 
-`disburse-wizard` produces a valid `intent.json` for `disburse` from a
-small typed answer record (scope, unit, amount, beneficiary address,
-validity-hours, rationale, optional extra signers). The wizard
-resolves the derivable fields — treasury contract address, treasury
-UTxO selection, leftover lovelace + asset arithmetic, deployed-script
-references, registry reference, owner key hashes, validity upper-bound
-slot — via the existing
+`disburse-wizard` produces a valid `TreasuryIntent 'Disburse`
+`intent.json` from a small typed answer record (scope, unit, amount,
+beneficiary address, validity-hours, rationale, optional extra
+signers). The wizard resolves the derivable fields — treasury contract
+address, treasury UTxO selection, leftover lovelace + asset
+arithmetic, deployed-script references, registry reference, owner key
+hashes, validity upper-bound slot — via the existing
 [`Provider IO`](https://github.com/lambdasistemi/cardano-node-clients/blob/main/lib/Cardano/Node/Client/Provider.hs)
 and the verified registry produced by
 [`Amaru.Treasury.Registry.Verify`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Registry/Verify.hs).
-The `disburse` subcommand consumes that JSON (from stdin or
-`--intent`), runs UTxO-side selection / per-script ExUnits evaluation
-/ balance, and emits unsigned Conway hex CBOR on stdout plus a
-schema-conforming summary sidecar.
+`tx-build` consumes that JSON (from stdin or `--intent`), derives the
+network from `intent.network`, runs per-script ExUnits evaluation /
+balance, and emits unsigned Conway hex CBOR on stdout. The summary
+sidecar remains Phase 7 work.
 
 The translation from `(DisburseEnv, DisburseAnswers)` to
-`DisburseIntentJSON` is a pure function. The IO layer is the resolver
-that builds `DisburseEnv` (`Provider IO` calls + registry verify) and
-the build pipeline. The wizard never invokes the build path directly —
-its only output is the JSON document.
+`TreasuryIntent 'Disburse` is a pure function. The IO layer is the
+resolver that builds `DisburseEnv` (`Provider IO` calls + registry
+verify) and the build pipeline. The wizard never invokes the build
+path directly — its only output is the JSON document.
 
 ## Technical Context
 
@@ -44,10 +47,10 @@ its only output is the JSON document.
 - existing wizard-side modules to mirror —
   [`Tx/SwapWizard`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapWizard.hs),
   [`Tx/SwapWizard/Trace`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapWizard/Trace.hs).
-- existing build-side modules to mirror —
-  [`Tx/SwapBuild`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapBuild.hs),
-  [`Tx/SwapIntentJSON`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapIntentJSON.hs),
-  [`Tx/Swap/Trace`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/Swap/Trace.hs).
+- existing unified build-side modules —
+  [`TreasuryBuild`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/TreasuryBuild.hs),
+  [`IntentJSON`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/IntentJSON.hs),
+  [`TreasuryBuild/Trace`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/TreasuryBuild/Trace.hs).
 - `cardano-node-clients` `Provider IO` for queries (UTxOs at address,
   registry NFT walk, current tip, slot conversion, protocol
   parameters).
@@ -63,11 +66,11 @@ sidecar). No DB, no network state beyond the `Provider IO`.
 **Testing**: Hspec unit tests + golden fixtures + property tests.
 Specifically:
 
-- Pure golden on `disburseToIntentJSON` for both `--unit ada` and
+- Pure golden on `disburseToTreasuryIntent` for both `--unit ada` and
   `--unit usdm` (a fixture `DisburseEnv` × fixture `DisburseAnswers` →
   expected `intent.json`).
-- Pure round-trip on `decodeDisburseIntent` + `translateDisburseIntent`
-  against the same fixtures.
+- JSON Schema conformance on checked-in disburse fixture intents and
+  JSON emitted by `disburseToTreasuryIntent`.
 - Body-CBOR golden in `test/golden/Amaru/Treasury/Tx/DisburseSpec.hs`
   for the ADA case (rebuilt against
   [`/code/cardano-mainnet/ipc/node.socket`](mainnet socket from CLAUDE.md memory),
@@ -85,7 +88,7 @@ Specifically:
 **Project Type**: CLI tool (extension of the existing `amaru-treasury-tx`
 executable; two new subcommands, no new app-target).
 
-**Performance Goals**: full pipe `disburse-wizard ... | disburse`
+**Performance Goals**: full pipe `disburse-wizard ... | tx-build`
 against the local mainnet node MUST complete in under 10 s on the
 operator workstation (success criterion SC-002). Not a hot path;
 correctness >> speed.
@@ -94,9 +97,10 @@ correctness >> speed.
 
 - **Pure builders** (Constitution II): `disburseAdaProgram` /
   `disburseUsdmProgram` stay pure `TxBuild q e ()`; the new
-  `runDisburseBuild` lives in IO and is the only effectful seam on the
-  build side. The new `disburseToIntentJSON :: DisburseEnv ->
-  DisburseAnswers -> Either DisburseError DisburseIntentJSON` is pure.
+  `runDisburse` branch in `TreasuryBuild` lives in IO on the build
+  side. The new `disburseToTreasuryIntent :: DisburseEnv ->
+  DisburseAnswers -> Either DisburseError (TreasuryIntent 'Disburse)`
+  is pure.
 - **Faithful port** (Constitution I): the on-chain shape MUST match
   [`bin/disburse.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/bin/disburse.sh)
   +
@@ -116,16 +120,20 @@ correctness >> speed.
   header; fourmolu 70-col leading commas; explicit export lists;
   `-Werror`. `just cabal-check` must stay green.
 - **JSON-only wizard** (mirrors FR-001 / FR-008 of feature 002): the
-  wizard MUST NOT call `runDisburseBuild`. Its only output is the
-  intent JSON.
+  wizard MUST NOT call `runDisburse` / `runFromIntent`. Its only
+  output is the intent JSON.
 
 **Scale/Scope**:
 
-- 5 new library modules — `Tx/DisburseIntentJSON`, `Tx/DisburseBuild`,
-  `Tx/DisburseWizard`, `Tx/Disburse/Trace`, `Tx/DisburseWizard/Trace`.
+- New disburse wizard modules — `Tx/DisburseWizard` and
+  `Tx/DisburseWizard/Trace`; existing branch-local
+  `Tx/DisburseIntentJSON`, `Tx/DisburseBuild`, and
+  `Tx/Disburse/Trace` are legacy compatibility until deleted or folded
+  into the unified path.
 - 1 module extended — `Tx/Disburse` gains `disburseUsdmProgram`.
-- 2 new subcommands wired in `app/amaru-treasury-tx/Main.hs` —
-  `disburse`, `disburse-wizard`.
+- 1 new subcommand wired in `app/amaru-treasury-tx/Main.hs` —
+  `disburse-wizard`; the builder is the existing `tx-build`
+  subcommand.
 - ~5 new unit specs + 2 new goldens + 1 new fixture set per unit.
 - No new package, sublibrary, flake output, or runtime dep.
 
@@ -136,7 +144,7 @@ correctness >> speed.
 | Principle | Status | Notes |
 |-----------|--------|-------|
 | I. Faithful port of bash recipes | ✅ | Tx body shape mirrors [`disburse.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/bin/disburse.sh) + [`build_transaction.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/lib/build_transaction.sh) for both ADA and USDM cases. Wizard answers correspond 1:1 to the operator inputs of `disburse.sh`. |
-| II. Pure builders, impure shell | ✅ | `disburseAdaProgram` / `disburseUsdmProgram` / `disburseToIntentJSON` are pure. IO confined to `runDisburseBuild` and the wizard resolver. |
+| II. Pure builders, impure shell | ✅ | `disburseAdaProgram` / `disburseUsdmProgram` / `disburseToTreasuryIntent` are pure. IO confined to `runDisburse` / `runFromIntent` and the wizard resolver. |
 | III. Pluggable data source | ✅ | Reuses the existing `Backend` / `Provider IO` typeclass. No new direct N2C dependency. |
 | IV. Build, never sign or submit | ✅ | Builder emits unsigned hex CBOR + summary; wizard emits JSON only. |
 | V. Test-first with golden CBOR fixtures | ✅ | Two new golden fixtures (ADA + USDM) land red-failing before the modules that satisfy them. |
@@ -156,8 +164,8 @@ specs/004-disburse-wizard/
 ├── quickstart.md        # Phase 1 output
 ├── contracts/
 │   ├── disburse-wizard-cli.md         # CLI flag schema for disburse-wizard
-│   ├── disburse-cli.md                # CLI flag schema for disburse
-│   └── disburse-intent-json.md        # JSON contract: shape of intent.json
+│   ├── disburse-cli.md                # tx-build contract for disburse intents
+│   └── disburse-intent-json.md        # JSON contract: TreasuryIntent 'Disburse
 ├── checklists/
 │   └── requirements.md  # Already created by /speckit.specify
 └── tasks.md             # Phase 2 output (/speckit.tasks)
@@ -170,15 +178,13 @@ lib/Amaru/Treasury/Tx/
 ├── Disburse.hs                  # extend: add disburseUsdmProgram
 │                                # alongside the existing
 │                                # disburseAdaProgram
-├── DisburseIntentJSON.hs        # NEW: DisburseIntentJSON ADT,
-│                                # decodeDisburseIntent,
-│                                # translateDisburseIntent (pure)
-├── DisburseBuild.hs             # NEW: runDisburseBuild :: ChainContext
-│                                # -> DisburseBuildInputs ->
-│                                # IO DisburseBuildResult
+├── DisburseIntentJSON.hs        # LEGACY compatibility from the
+│                                # pre-#52 branch shape
+├── DisburseBuild.hs             # LEGACY compatibility; unified
+│                                # build is TreasuryBuild.runDisburse
 ├── DisburseWizard.hs            # NEW: DisburseAnswers ADT,
 │                                # DisburseEnv, the pure
-│                                # disburseToIntentJSON, plus the
+│                                # disburseToTreasuryIntent, plus the
 │                                # IO-bearing resolveDisburseEnv
 ├── Disburse/
 │   └── Trace.hs                 # NEW: typed DisburseEvent for
@@ -188,13 +194,15 @@ lib/Amaru/Treasury/Tx/
                                  # for the wizard path
 
 app/amaru-treasury-tx/
-└── Main.hs                      # extend: wire `disburse` and
-                                 # `disburse-wizard` subcommands
+└── Main.hs                      # extend: wire `disburse-wizard`;
+                                 # `tx-build` already consumes
+                                 # SomeTreasuryIntent
 
 test/unit/Amaru/Treasury/Tx/
 ├── DisburseSpec.hs              # extend: round-trip on
-│                                # DisburseIntentJSON, pure golden on
-│                                # disburseToIntentJSON for ADA + USDM
+│                                # TreasuryIntent 'Disburse, pure
+│                                # golden on disburseToTreasuryIntent
+│                                # for ADA + USDM
 ├── DisburseBuildSpec.hs         # NEW: pure unit tests on the build
 │                                # inputs/result records
 └── DisburseWizardSpec.hs        # NEW: parser + translator tests
@@ -204,10 +212,6 @@ test/golden/
 │                                # flat layout matches existing
 │                                # SwapGoldenSpec convention.
 ├── UsdmDisburseGoldenSpec.hs    # NEW: body CBOR vs golden (USDM)
-└── DisburseFixture.hs           # NEW: shared helper
-                                 # `runDisburseBuildFromFixtures` used
-                                 # by both goldens (and by the
-                                 # one-shot fixture recorder).
 
 test/fixtures/disburse-wizard/
 ├── env.ada.json                 # fixture DisburseEnv (ADA case)

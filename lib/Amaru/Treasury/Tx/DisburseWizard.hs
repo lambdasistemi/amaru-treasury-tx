@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE RecordWildCards #-}
 
 {- |
@@ -10,12 +11,13 @@ Sister of
 [`Amaru.Treasury.Tx.SwapWizard`](Amaru.Treasury.Tx.SwapWizard.html)
 for the disburse action: typed operator answers + a
 chain-resolved environment, fed into a pure translation
-to 'DisburseIntentJSON'.
+to 'TreasuryIntent' @'Disburse@.
 
-This phase 2 cut wires the answer + environment types
-plus the local validation enum. The pure translation
-('disburseToIntentJSON') and IO resolver
-('resolveDisburseEnv') land in phases 3 and 4.
+The public pure translation is 'disburseToTreasuryIntent', which
+emits the unified @schema@ / @action@ JSON shape consumed by
+@tx-build@. The older 'disburseToIntentJSON' entry point remains as
+branch-local compatibility while the feature is rebased on top of
+the unified dispatcher.
 
 Shared registry/network types
 ('NetworkConstants', 'RegistryView', 'ScopeOwners',
@@ -44,6 +46,7 @@ module Amaru.Treasury.Tx.DisburseWizard
 
       -- * Pure translation
     , disburseToIntentJSON
+    , disburseToTreasuryIntent
     ) where
 
 import Control.Monad (when)
@@ -57,6 +60,15 @@ import Data.Text qualified as T
 import Data.Word (Word64, Word8)
 
 import Amaru.Treasury.Constants (Unit (..))
+import Amaru.Treasury.IntentJSON
+    ( Action (..)
+    , DisburseInputs (..)
+    , RationaleJSON (..)
+    , SAction (..)
+    , ScopeJSON (..)
+    , TreasuryIntent (..)
+    , WalletJSON (..)
+    )
 import Amaru.Treasury.Scope
     ( ScopeId
         ( Contingency
@@ -275,6 +287,36 @@ disburseToIntentJSON env ans = do
             , dijRationale = mkRationale ans
             }
 
+{- | Pure translation to the unified feature-005
+'TreasuryIntent' shape. This is the JSON contract the
+wizard emits after feature 005: top-level @schema@ and
+@action@ fields plus the action-keyed @disburse@ block.
+-}
+disburseToTreasuryIntent
+    :: DisburseEnv
+    -> DisburseAnswers
+    -> Either DisburseError (TreasuryIntent 'Disburse)
+disburseToTreasuryIntent env ans = do
+    validate env ans
+    signers <- resolveSigners env ans
+    pure
+        TreasuryIntent
+            { tiSAction = SDisburse
+            , tiSchema = 1
+            , tiNetwork = deNetwork env
+            , tiWallet =
+                mkTreasuryWallet (deWalletSelection env)
+            , tiScope = mkTreasuryScope env ans
+            , tiSigners = signers
+            , tiValidityUpperBoundSlot =
+                deCurrentTip env
+                    + ncSlotsPerHour
+                        (deNetworkConstants env)
+                        * fromIntegral (daValidityHours ans)
+            , tiRationale = mkTreasuryRationale ans
+            , tiPayload = mkTreasuryDisburse env ans
+            }
+
 -- ----------------------------------------------------
 -- Validation
 -- ----------------------------------------------------
@@ -449,3 +491,67 @@ unitText :: Unit -> Text
 unitText = \case
     ADA -> "ada"
     USDM -> "usdm"
+
+mkTreasuryWallet :: WalletSelection -> WalletJSON
+mkTreasuryWallet ws =
+    WalletJSON
+        { wjTxIn = wsTxIn ws
+        , wjAddress = wsAddress ws
+        }
+
+mkTreasuryScope :: DisburseEnv -> DisburseAnswers -> ScopeJSON
+mkTreasuryScope env ans =
+    let r = deRegistry env
+        s = svRefs (deScopeView env)
+        sel = deTreasurySelection env
+    in  ScopeJSON
+            { sjId = scopeText (daScope ans)
+            , sjTreasuryAddress = trAddress s
+            , sjTreasuryUtxos = dtsInputs sel
+            , sjTreasuryLeftoverLovelace =
+                dtsLeftoverLovelace sel
+            , sjTreasuryLeftoverUsdm =
+                dtsLeftoverUsdm sel
+            , sjTreasuryLeftoverOtherAssets =
+                dtsLeftoverOtherAssets sel
+            , sjTreasuryScriptHash = trScriptHash s
+            , sjPermissionsRewardAccount =
+                trPermissionsRewardAccount s
+            , sjScopesDeployedAt = rvScopesDeployedAt r
+            , sjPermissionsDeployedAt =
+                rvPermissionsDeployedAt r
+            , sjTreasuryDeployedAt =
+                rvTreasuryDeployedAt r
+            , sjRegistryDeployedAt =
+                rvRegistryDeployedAt r
+            , sjRegistryPolicyId = rvRegistryPolicyId r
+            }
+
+mkTreasuryDisburse
+    :: DisburseEnv -> DisburseAnswers -> DisburseInputs
+mkTreasuryDisburse env ans =
+    let nc = deNetworkConstants env
+    in  DisburseInputs
+            { diUnit = unitText (daUnit ans)
+            , diAmount = daAmount ans
+            , diBeneficiaryAddress =
+                deBeneficiaryAddrBech32 env
+            , diUsdmPolicy = ncUsdmPolicy nc
+            , diUsdmToken = ncUsdmToken nc
+            }
+
+mkTreasuryRationale :: DisburseAnswers -> RationaleJSON
+mkTreasuryRationale ans =
+    let r = daRationale ans
+        labelDefault = case daUnit ans of
+            ADA -> "Disburse ADA"
+            USDM -> "Disburse USDM"
+    in  RationaleJSON
+            { rjEvent =
+                fromMaybe "disburse" (raEvent r)
+            , rjLabel =
+                fromMaybe labelDefault (raLabel r)
+            , rjDescription = raDescription r
+            , rjJustification = raJustification r
+            , rjDestinationLabel = raDestinationLabel r
+            }

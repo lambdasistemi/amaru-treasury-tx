@@ -1,3 +1,5 @@
+{-# LANGUAGE DataKinds #-}
+
 {- |
 Module      : Amaru.Treasury.Tx.DisburseSpec
 Description : Tests for the disburse builder + JSON contract
@@ -45,7 +47,6 @@ import Cardano.Ledger.Hashes
     , ScriptHash (..)
     , unsafeMakeSafeHash
     )
-import Cardano.Ledger.Keys (KeyRole (..))
 import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Slotting.Slot (SlotNo (..))
 import Data.ByteString qualified as BS
@@ -57,6 +58,7 @@ import Lens.Micro ((^.))
 import Test.Hspec
     ( Spec
     , describe
+    , expectationFailure
     , it
     , shouldBe
     , shouldSatisfy
@@ -68,15 +70,25 @@ import Test.QuickCheck
     , chooseInteger
     , elements
     , forAll
-    , listOf
     , vectorOf
     , (===)
     )
 
 import Cardano.Node.Client.TxBuild (draft)
 
+import Amaru.Treasury.IntentJSON
+    ( Action (..)
+    , SAction (..)
+    , SomeTreasuryIntent (..)
+    , TranslatedShared (..)
+    , TreasuryIntent
+    , decodeTreasuryIntentFile
+    , encodeSomeTreasuryIntent
+    , translateIntent
+    )
 import Amaru.Treasury.Tx.Disburse
     ( DisburseAdaPayload (..)
+    , DisburseIntent (..)
     , DisburseIntentFields (..)
     , disburseAdaProgram
     )
@@ -92,16 +104,10 @@ import Amaru.Treasury.Tx.DisburseIntentJSON
 import Amaru.Treasury.Tx.DisburseWizard
     ( DisburseAnswers
     , DisburseEnv
-    , disburseToIntentJSON
+    , disburseToTreasuryIntent
     )
 
 import Data.Aeson qualified as Aeson
-import Data.Aeson.Encode.Pretty
-    ( Config (..)
-    , Indent (..)
-    , NumberFormat (..)
-    , encodePretty'
-    )
 import Data.ByteString.Lazy qualified as BSL
 import System.Directory (doesFileExist)
 import System.Environment (lookupEnv)
@@ -214,19 +220,39 @@ spec = do
             "decodeDisburseIntent . encodeDisburseIntent = Right"
             roundTripProp
 
-    describe "Amaru.Treasury.Tx.DisburseWizard.disburseToIntentJSON" $
+    describe "Amaru.Treasury.Tx.DisburseWizard.disburseToTreasuryIntent" $
         do
             it "matches golden expected.intent.ada.json" $
                 goldenCase "ada"
             it "matches golden expected.intent.usdm.json" $
                 goldenCase "usdm"
 
+    describe "Amaru.Treasury.IntentJSON.translateIntent" $
+        it "translates unified ADA disburse intent" $ do
+            some <-
+                expectRight
+                    =<< decodeTreasuryIntentFile
+                        "test/fixtures/disburse-wizard/expected.intent.ada.json"
+            case some of
+                SomeTreasuryIntent SDisburse intent -> do
+                    (shared, translated) <-
+                        expectRight $
+                            translateIntent SDisburse intent
+                    tsNetwork shared `shouldBe` "mainnet"
+                    case translated of
+                        DisburseAdaIntent _ ada ->
+                            dapAmountLovelace ada
+                                `shouldBe` Coin 50_000_000
+                _ ->
+                    expectationFailure
+                        "expected SDisburse intent"
+
 -- ----------------------------------------------------
 -- T020: Pure-translation goldens (ADA + USDM)
 -- ----------------------------------------------------
 
 {- | Load fixture (env, answers) for the named unit, run
-'disburseToIntentJSON', and assert the encoded JSON
+'disburseToTreasuryIntent', and assert the encoded JSON
 matches the checked-in golden byte-for-byte (modulo
 alphabetical key ordering, applied by both the encoder
 and the golden file).
@@ -242,11 +268,11 @@ goldenCase unit = do
         eitherDecodeStrict envPath :: IO DisburseEnv
     answers <-
         eitherDecodeStrict ansPath :: IO DisburseAnswers
-    let result = disburseToIntentJSON env answers
+    let result = disburseToTreasuryIntent env answers
     case result of
         Left err ->
             error
-                ( "disburseToIntentJSON failed: " <> show err
+                ( "disburseToTreasuryIntent failed: " <> show err
                 )
         Right got -> do
             let actualBytes = stableEncode got
@@ -273,20 +299,19 @@ eitherDecodeStrict p = do
         Left e ->
             error ("decode " <> p <> ": " <> e)
 
-{- | Stable encoder; same shape as
-'Amaru.Treasury.Tx.DisburseIntentJSON.encodeDisburseIntent'
-so the golden file is byte-comparable.
--}
-stableEncode :: DisburseIntentJSON -> BSL.ByteString
-stableEncode = encodePretty' cfg
-  where
-    cfg =
-        Config
-            { confIndent = Spaces 4
-            , confCompare = compare
-            , confNumFormat = Generic
-            , confTrailingNewline = True
-            }
+expectRight :: (Show e) => Either e a -> IO a
+expectRight =
+    either
+        ( errorWithoutStackTrace
+            . ("unexpected Left: " <>)
+            . show
+        )
+        pure
+
+-- | Stable encoder for the unified disburse intent shape.
+stableEncode :: TreasuryIntent 'Disburse -> BSL.ByteString
+stableEncode =
+    encodeSomeTreasuryIntent . SomeTreasuryIntent SDisburse
 
 -- ----------------------------------------------------
 -- T012: JSON round-trip property

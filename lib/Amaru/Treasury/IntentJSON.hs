@@ -104,7 +104,11 @@ import Amaru.Treasury.IntentJSON.Common
     , parseRewardAccount
     , parseTxIn
     )
-import Amaru.Treasury.Tx.Disburse (DisburseIntent)
+import Amaru.Treasury.Tx.Disburse
+    ( DisburseAdaPayload (..)
+    , DisburseIntent (..)
+    , DisburseIntentFields (..)
+    )
 import Amaru.Treasury.Tx.Reorganize (ReorganizeIntent)
 import Amaru.Treasury.Tx.Swap
     ( SwapIntent (..)
@@ -731,9 +735,7 @@ translateIntent
     -> Either String (TranslatedShared, Translated a)
 translateIntent sa ti = case sa of
     SSwap -> translateSwap ti
-    SDisburse ->
-        Left
-            "translateIntent: feature 004 PR #47 lands first"
+    SDisburse -> translateDisburse ti
     SWithdraw ->
         Left
             "translateIntent: 'withdraw' not yet shipped (#45)"
@@ -826,6 +828,88 @@ translateSwap ti = do
                     SlotNo (tiValidityUpperBoundSlot ti)
                 }
         body =
+            RationaleBody
+                { rbEvent = rjEvent rat
+                , rbLabel = rjLabel rat
+                , rbDescription = [rjDescription rat]
+                , rbDestinationLabel = rjDestinationLabel rat
+                , rbJustification = [rjJustification rat]
+                }
+        shared =
+            TranslatedShared
+                { tsNetwork = tiNetwork ti
+                , tsWalletTxIn = walletTxIn
+                , tsWalletAddr = walletAddr
+                , tsRationale =
+                    rationaleMetadatum body registryPolicy
+                }
+    pure (shared, intent)
+
+{- | Disburse-action translator. Reads the unified
+'TreasuryIntent' disburse payload and produces the typed
+'DisburseIntent' consumed by the build dispatcher.
+-}
+translateDisburse
+    :: TreasuryIntent 'Disburse
+    -> Either String (TranslatedShared, DisburseIntent)
+translateDisburse ti = do
+    let wallet = tiWallet ti
+        scope = tiScope ti
+        disb = tiPayload ti
+        rat = tiRationale ti
+    walletAddr <- parseAddr (wjAddress wallet)
+    walletTxIn <- parseTxIn (wjTxIn wallet)
+    treasuryAddr <- parseAddr (sjTreasuryAddress scope)
+    treasuryUtxos <-
+        traverse parseTxIn (sjTreasuryUtxos scope)
+    permissionsAcct <-
+        parseRewardAccount (sjPermissionsRewardAccount scope)
+    scopesRef <- parseTxIn (sjScopesDeployedAt scope)
+    permissionsRef <-
+        parseTxIn (sjPermissionsDeployedAt scope)
+    treasuryRef <- parseTxIn (sjTreasuryDeployedAt scope)
+    registryRef <- parseTxIn (sjRegistryDeployedAt scope)
+    registryPolicy <-
+        decodeHexBytes 28 (sjRegistryPolicyId scope)
+    beneficiaryAddr <-
+        parseAddr (diBeneficiaryAddress disb)
+    signers <- traverse parseGuardKeyHash (tiSigners ti)
+    let fields =
+            DisburseIntentFields
+                { difWalletUtxo = walletTxIn
+                , difBeneficiaryAddress = beneficiaryAddr
+                , difTreasuryUtxos = treasuryUtxos
+                , difTreasuryAddress = treasuryAddr
+                , difPermissionsRewardAccount =
+                    permissionsAcct
+                , difScopesDeployedAt = scopesRef
+                , difPermissionsDeployedAt = permissionsRef
+                , difTreasuryDeployedAt = treasuryRef
+                , difRegistryDeployedAt = registryRef
+                , difSigners = signers
+                , difUpperBound =
+                    SlotNo (tiValidityUpperBoundSlot ti)
+                }
+    intent <- case T.toLower (diUnit disb) of
+        "ada" ->
+            Right $
+                DisburseAdaIntent
+                    fields
+                    DisburseAdaPayload
+                        { dapAmountLovelace =
+                            Coin (diAmount disb)
+                        , dapLeftoverLovelace =
+                            Coin
+                                ( sjTreasuryLeftoverLovelace
+                                    scope
+                                )
+                        }
+        "usdm" ->
+            Left
+                "USDM disburse JSON parsed; pure builder lands in T038"
+        other ->
+            Left ("unknown disburse unit: " <> T.unpack other)
+    let body =
             RationaleBody
                 { rbEvent = rjEvent rat
                 , rbLabel = rjLabel rat

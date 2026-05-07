@@ -4,11 +4,10 @@ Description : Live-build orchestration for disburse transactions
 Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
-Sister of
-[`Amaru.Treasury.Tx.SwapBuild`](Amaru.Treasury.Tx.SwapBuild.html)
-for the disburse subcommand. Threads a 'DisburseIntent'
-+ rationale 'Metadatum' through a 'ChainContext' and
-runs the full
+Sister of the swap branch in
+[`Amaru.Treasury.TreasuryBuild`](Amaru.Treasury.TreasuryBuild.html).
+Threads a 'DisburseIntent' + rationale 'Metadatum'
+through a 'ChainContext' and runs the full
 [`Cardano.Node.Client.TxBuild.build`](https://github.com/lambdasistemi/cardano-node-clients)
 loop.
 
@@ -53,7 +52,6 @@ import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (bodyTxL)
 import Cardano.Ledger.Metadata (Metadatum)
-import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Node.Client.Ledger (ConwayTx)
 import Cardano.Node.Client.TxBuild
     ( BuildError
@@ -65,13 +63,13 @@ import Lens.Micro ((^.))
 
 import Amaru.Treasury.AuxData (label1694)
 import Amaru.Treasury.ChainContext (ChainContext (..))
+import Amaru.Treasury.TreasuryBuild (ScriptResult (..))
 import Amaru.Treasury.Tx.Disburse
     ( DisburseAdaPayload
     , DisburseIntent (..)
     , DisburseIntentFields (..)
     , disburseAdaProgram
     )
-import Amaru.Treasury.Tx.SwapBuild (ScriptResult (..))
 
 -- | Everything 'runDisburseBuild' needs at runtime.
 data DisburseBuildInputs = DisburseBuildInputs
@@ -84,11 +82,11 @@ data DisburseBuildInputs = DisburseBuildInputs
     , dbiWalletAddr :: !Addr
     -- ^ change address — also receives
     --     @collateral_return@ by default
-    --     (see 'SwapBuild' header)
+    --     (see 'Amaru.Treasury.TreasuryBuild' header)
     }
 
 {- | What 'runDisburseBuild' returns. Field set is identical
-to 'Amaru.Treasury.Tx.SwapBuild.SwapBuildResult'.
+to 'Amaru.Treasury.TreasuryBuild.TreasuryBuildResult'.
 -}
 data DisburseBuildResult = DisburseBuildResult
     { dbrCborBytes :: !BSL.ByteString

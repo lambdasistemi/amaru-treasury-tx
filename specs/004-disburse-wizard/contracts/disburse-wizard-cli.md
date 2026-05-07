@@ -54,7 +54,7 @@ Notes:
   file. The wizard verifies consumed registry anchors against the
   connected node before resolving the intent.
 - `--out` defaults to stdout when omitted, so the pipe shape
-  `disburse-wizard ... | disburse` works without an intermediate
+  `disburse-wizard ... | tx-build` works without an intermediate
   file.
 - `--log` defaults to stderr.
 
@@ -82,12 +82,13 @@ The wizard MUST NOT use exit code 0 for any non-success path.
 
 ## 4. JSON output contract
 
-The output is a `DisburseIntentJSON` (see
+The output is a unified `TreasuryIntent 'Disburse` (see
 [`disburse-intent-json.md`](./disburse-intent-json.md)) and MUST
-round-trip through `decodeDisburseIntent` followed by
-`translateDisburseIntent`. The wizard uses a stable encoder (fixed key
-order, two-space indent, terminal newline) so the file is reviewable
-and golden-testable.
+round-trip through `decodeTreasuryIntent` followed by
+`translateIntent SDisburse`. The wizard uses the unified stable
+encoder (top-level `schema`, top-level `action`, four-space indent,
+alphabetical key order, terminal newline) so the file is reviewable,
+schema-validatable, and golden-testable.
 
 ## 5. Trace event categories
 

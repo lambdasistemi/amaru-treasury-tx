@@ -31,12 +31,8 @@ The final tx is re-evaluated against the script
 evaluator so callers get a per-redeemer outcome
 ('tbrScriptResults') alongside the CBOR.
 
-In this phase-4 cut only the swap branch is wired; the
-others are 'throwIO' stubs. Disburse comes online when
-[#47](https://github.com/lambdasistemi/amaru-treasury-tx/pull/47)
-rebases on top of this PR's merge commit (tracked under
-[#55](https://github.com/lambdasistemi/amaru-treasury-tx/issues/55)).
-Withdraw and reorganize land with
+In this phase-4 cut the swap and disburse branches are
+wired. Withdraw and reorganize land with
 [#45](https://github.com/lambdasistemi/amaru-treasury-tx/issues/45)
 and
 [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46).
@@ -49,6 +45,7 @@ module Amaru.Treasury.TreasuryBuild
       -- * Drivers
     , runBuild
     , runFromIntent
+    , runDisburse
     , runSwap
     ) where
 
@@ -90,6 +87,12 @@ import Amaru.Treasury.IntentJSON
     , Translated
     , TranslatedShared (..)
     , translateIntent
+    )
+import Amaru.Treasury.Tx.Disburse
+    ( DisburseAdaPayload
+    , DisburseIntent (..)
+    , DisburseIntentFields (..)
+    , disburseAdaProgram
     )
 import Amaru.Treasury.Tx.Swap
     ( SwapIntent (..)
@@ -150,10 +153,11 @@ runBuild ctx shared sa translated = case sa of
             (tsWalletTxIn shared)
             (tsWalletAddr shared)
     SDisburse ->
-        throwIO . userError $
-            "runBuild: 'disburse' lands when feature 004 PR #47"
-                <> " rebases on top of this commit (tracked"
-                <> " under #55)"
+        runDisburse
+            ctx
+            translated
+            (tsRationale shared)
+            (tsWalletAddr shared)
     SWithdraw ->
         throwIO . userError $
             "runBuild: 'withdraw' not yet shipped (#45)"
@@ -175,6 +179,123 @@ runFromIntent ctx (SomeTreasuryIntent sa intent) = do
                 "runFromIntent: translate: " <> e
         Right (shared, translated) ->
             runBuild ctx shared sa translated
+
+-- ----------------------------------------------------
+-- Disburse runner
+-- ----------------------------------------------------
+
+{- | Build a disburse transaction end-to-end against a
+'ChainContext'. This is the unified dispatcher branch for
+feature 004; callers normally reach it via 'runBuild' /
+'runFromIntent'.
+-}
+runDisburse
+    :: ChainContext
+    -> DisburseIntent
+    -> Metadatum
+    -- ^ CIP-1694 rationale tree (see 'Amaru.Treasury.AuxData')
+    -> Addr
+    -- ^ change address — also receives @collateral_return@
+    --     by default (see module header)
+    -> IO TreasuryBuildResult
+runDisburse ctx intent rationale walletAddr = case intent of
+    DisburseAdaIntent fields payload ->
+        runDisburseAda ctx fields payload rationale walletAddr
+
+-- | The ADA-disburse build pipeline.
+runDisburseAda
+    :: ChainContext
+    -> DisburseIntentFields
+    -> DisburseAdaPayload
+    -> Metadatum
+    -> Addr
+    -> IO TreasuryBuildResult
+runDisburseAda ctx fields payload rationale walletAddr = do
+    let walletInput = difWalletUtxo fields
+        treasuryInputs = difTreasuryUtxos fields
+        refInputs =
+            [ difScopesDeployedAt fields
+            , difPermissionsDeployedAt fields
+            , difTreasuryDeployedAt fields
+            , difRegistryDeployedAt fields
+            ]
+        utxoMap = ccUtxos ctx
+        required = walletInput : treasuryInputs ++ refInputs
+        missing =
+            [ i
+            | i <- required
+            , not (Map.member i utxoMap)
+            ]
+    unless (null missing) $
+        throwIO . userError $
+            "runDisburse: missing UTxOs in context: "
+                <> show missing
+    let inputUtxos =
+            (walletInput, utxoMap Map.! walletInput)
+                : [ (i, utxoMap Map.! i)
+                  | i <- treasuryInputs
+                  ]
+        refUtxos =
+            [ (i, utxoMap Map.! i)
+            | i <- refInputs
+            ]
+        pp = ccPParams ctx
+    let evaluator tx = do
+            m <- ccEvaluateTx ctx tx
+            pure (fmap (either (Left . show) Right) m)
+        program = do
+            disburseAdaProgram fields payload
+            setMetadata label1694 rationale
+        noCtxIO :: InterpretIO q
+        noCtxIO =
+            InterpretIO $
+                const
+                    (error "runDisburse: unexpected ctx")
+    result <-
+        build
+            pp
+            noCtxIO
+            evaluator
+            inputUtxos
+            refUtxos
+            walletAddr
+            program
+    case result of
+        Left e ->
+            throwIO . userError $
+                "runDisburse: build failed: "
+                    <> show (e :: BuildError ())
+        Right tx -> do
+            let body = tx ^. bodyTxL
+                feeLov = body ^. feeTxBodyL
+                totalColl = case body
+                    ^. totalCollateralTxBodyL of
+                    SJust c -> c
+                    SNothing -> Coin 0
+            scriptMap <- ccEvaluateTx ctx tx
+            let scriptResults =
+                    [ ScriptResult
+                        purpose
+                        ( either
+                            (Left . show)
+                            Right
+                            outcome
+                        )
+                    | (purpose, outcome) <-
+                        Map.toAscList scriptMap
+                    ]
+                cbor =
+                    serialize
+                        (eraProtVerLow @ConwayEra)
+                        (tx :: ConwayTx)
+            pure
+                TreasuryBuildResult
+                    { tbrCborBytes = cbor
+                    , tbrFeeLovelace = feeLov
+                    , tbrTotalCollateralLovelace =
+                        totalColl
+                    , tbrScriptResults = scriptResults
+                    }
 
 -- ----------------------------------------------------
 -- Swap runner

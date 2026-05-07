@@ -10,6 +10,15 @@
 
 **Tracking issue**: [#44](https://github.com/lambdasistemi/amaru-treasury-tx/issues/44)
 
+**Post-#52 update**: [#52](https://github.com/lambdasistemi/amaru-treasury-tx/pull/52)
+merged the unified `TreasuryIntent` JSON contract and `tx-build`
+dispatcher first. Remaining 004 work therefore targets
+`disburse-wizard | tx-build`, `TreasuryIntent 'Disburse`, and
+`Amaru.Treasury.TreasuryBuild.runDisburse`. Earlier tasks that mention
+`DisburseIntentJSON`, `DisburseBuild`, or a per-action `disburse`
+subcommand are preserved as branch history but superseded for the
+public contract.
+
 **Tests**: Required by Constitution V (golden CBOR fixtures) and
 SC-003 / SC-004. Each user-story phase contains its own tests, written
 to FAIL before the implementation that satisfies them.
@@ -34,7 +43,10 @@ Phases 4 and 5.
 
 ## Path conventions
 
-- Library modules: `lib/Amaru/Treasury/Tx/{DisburseIntentJSON,DisburseBuild,DisburseWizard}.hs`
+- Library modules: `lib/Amaru/Treasury/Tx/DisburseWizard.hs` plus
+  `lib/Amaru/Treasury/TreasuryBuild.hs` for the unified disburse
+  build branch. `Tx/DisburseIntentJSON` and `Tx/DisburseBuild` are
+  branch-local compatibility modules from the pre-#52 shape.
 - Trace modules: `lib/Amaru/Treasury/Tx/Disburse/Trace.hs`,
   `lib/Amaru/Treasury/Tx/DisburseWizard/Trace.hs`
 - Subcommand wiring: `app/amaru-treasury-tx/Main.hs`
@@ -44,8 +56,8 @@ Phases 4 and 5.
   [`SwapGoldenSpec.hs`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/test/golden/SwapGoldenSpec.hs)
   convention; the `Golden` suffix disambiguates from the unit
   `DisburseSpec` under `test/unit/`).
-- Shared golden helper:
-  [`test/golden/DisburseFixture.hs`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/004-disburse-wizard/test/golden/DisburseFixture.hs)
+- Shared golden helper: removed after #52. The ADA disburse golden
+  decodes `SomeTreasuryIntent` and calls `runFromIntent` directly.
 - Wizard fixtures: `test/fixtures/disburse-wizard/`
 - Build fixtures: `test/fixtures/disburse/{ada,usdm}/`
 
@@ -73,8 +85,7 @@ Phases 4 and 5.
       `Amaru.Treasury.Tx.DisburseWizardSpec`) to the `unit-tests`
       stanza's `other-modules` in `amaru-treasury-tx.cabal`, and the
       golden specs (`AdaDisburseGoldenSpec`,
-      `UsdmDisburseGoldenSpec`, `DisburseFixture` under
-      `test/golden/`) to the `golden-tests` stanza. Flat layout
+      `UsdmDisburseGoldenSpec`) to the `golden-tests` stanza. Flat layout
       matches the existing `SwapGoldenSpec.hs` convention; the
       `Golden` suffix disambiguates from the unit `DisburseSpec`. Run `nix develop -c
       just build` and confirm both test suites compile (empty modules
@@ -174,14 +185,17 @@ helper.
 > earns the golden test that User Story 1 (ADA disburse) and User
 > Story 2 (USDM disburse) consume.
 
-**Goal**: `disburseToIntentJSON :: DisburseEnv -> DisburseAnswers ->
-Either DisburseError DisburseIntentJSON` is total, pure, and
-golden-tested for both `--unit ada` and `--unit usdm`.
+**Goal**: `disburseToTreasuryIntent :: DisburseEnv ->
+DisburseAnswers -> Either DisburseError (TreasuryIntent 'Disburse)`
+is total, pure, schema-valid, and golden-tested for both `--unit ada`
+and `--unit usdm`.
 
 **Independent test**: Load fixture `(DisburseEnv, DisburseAnswers)`
 pairs (one ADA, one USDM), run the translation, compare to checked-in
 `expected.intent.ada.json` and `expected.intent.usdm.json`. Round-trip
-each result through `decodeDisburseIntent + translateDisburseIntent`.
+each result through `decodeTreasuryIntent + translateIntent
+SDisburse` and validate the encoded JSON against
+`docs/assets/intent-schema.json`.
 
 **Test-first ordering** (Constitution V): fixtures + spec + golden are
 authored *before* the translation, and the spec must run RED once
@@ -218,15 +232,16 @@ before the implementation is written.
       blocks; all must compile and run RED:
       - `"matches golden expected.intent.ada.json"`
       - `"matches golden expected.intent.usdm.json"`
-      - `"round-trips through decodeDisburseIntent + translateDisburseIntent"`
+      - `"round-trips through decodeTreasuryIntent + translateIntent SDisburse"`
+      - `"validates against docs/assets/intent-schema.json"`
         (per fixture)
       - `"rejects DisburseError cases"` — table-driven negative
         examples covering each `DisburseError` constructor.
 - [x] T021 [US3] Confirm RED: run `nix develop -c just unit
       --test-options=--match=Disburse` and observe the spec failing
-      (no `disburseToIntentJSON` yet).
+      (no `disburseToTreasuryIntent` yet).
 - [x] T022 [US3] Implement the field-by-field translation
-      `disburseToIntentJSON` in
+      `disburseToTreasuryIntent` in
       `lib/Amaru/Treasury/Tx/DisburseWizard.hs`. Mapping per the
       contract table in [data-model.md §7.1](./data-model.md). Each
       branch (`ada`, `usdm`) covered by a Haddock paragraph naming
@@ -242,8 +257,8 @@ before the implementation is written.
       from T021; all four `it` blocks pass. Run `just ci`; the spec
       must remain green end-to-end.
 
-**Checkpoint (MVP)**: `disburseToIntentJSON` is correct,
-golden-tested for both units, round-trips. The wizard can be
+**Checkpoint (MVP)**: `disburseToTreasuryIntent` is correct,
+golden-tested for both units, round-trips, and schema-validates. The wizard can be
 exercised purely from a fixture without IO. SC-003 + SC-004
 satisfied for the fixture path. `spec.md`'s US3 acceptance scenarios
 are met.
@@ -283,22 +298,23 @@ after running the build subcommand.
       largest-first selection by lovelace yields `Σ inputs ≥ amount`
       and `tsLeftoverLovelace = Σ inputs − amount`; leftover preserves
       every other asset present on the inputs verbatim.
-- [ ] T028 [US1] Implement `runDisburseBuild :: ChainContext ->
-      DisburseBuildInputs -> IO DisburseBuildResult` in
-      `lib/Amaru/Treasury/Tx/DisburseBuild.hs`. Body shape mirrors
-      [`runSwapBuild`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapBuild.hs):
+- [x] T028 [US1] Implement the ADA disburse build branch as
+      `runDisburse :: ChainContext -> DisburseIntent -> Metadatum ->
+      Addr -> IO TreasuryBuildResult` in
+      `lib/Amaru/Treasury/TreasuryBuild.hs`. Body shape mirrors
+      the unified `runSwap` branch:
       load pparams, build via `disburseAdaProgram`, balance,
-      re-evaluate per-redeemer ExUnits, return `DisburseBuildResult`.
+      re-evaluate per-redeemer ExUnits, return `TreasuryBuildResult`.
       On any redeemer re-evaluation failure, emit `ScriptResult …
       (Left err)` for that index but continue producing a complete
       `DisburseBuildResult` (CBOR + fee + collateral). The runner in
       `Main.hs` (T048) is responsible for translating any `Left` into
-      a non-zero exit code per FR-011 — `runDisburseBuild` itself
+      a non-zero exit code per FR-011 — `runDisburse` itself
       does not throw on script failure. The `ChainContext` and
       `ScriptResult` types are imported unchanged from existing
       modules
       ([research R11](./research.md#r11-reusing-runswapbuilds-chaincontext)).
-- [ ] T029 [P] [US1] Author ADA body-CBOR fixture set under
+- [x] T029 [P] [US1] Author ADA body-CBOR fixture set under
       `test/fixtures/disburse/ada/`: `intent.json` (the same one
       `expected.intent.ada.json` produces; T018 is the wizard view,
       this is the consumer view), `utxos.json` (synthesized
@@ -306,32 +322,20 @@ after running the build subcommand.
       treasury inputs + wallet UTxO), and `pparams.json`
       (already-checked-in fixture under
       [`test/fixtures/pparams.json`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/test/fixtures/pparams.json) — symlink).
-- [ ] T030 [US1] Author `test/golden/AdaDisburseGoldenSpec.hs` with
+- [x] T030 [US1] Author `test/golden/AdaDisburseGoldenSpec.hs` with
       one `it` block: `"ada-disburse golden body matches"`. Loads
-      T029 fixtures, calls a small fixture-recorder helper
-      `runDisburseBuildFromFixtures` (in `test/golden/DisburseFixture.hs`)
-      that builds a `ChainContext` from the `utxos.json` +
-      `pparams.json` fixtures (no `Provider IO`, no node socket) and
-      invokes `runDisburseBuild` directly. Strips ExUnits, compares
-      the body bytes to `test/fixtures/disburse/ada/body.cbor`. Both
-      ADA and USDM goldens share the helper.
-- [ ] T031 [US1] Confirm RED: run `nix develop -c just golden
+      T029 fixtures, decodes `intent.json` via
+      `decodeTreasuryIntentFile`, builds a frozen `ChainContext`, and
+      invokes `runFromIntent` directly. Compares the bytes to
+      `test/fixtures/disburse/ada/body.cbor`.
+- [x] T031 [US1] Confirm RED: run `nix develop -c just golden
       --test-options=--match=ada-disburse` and observe the spec
-      failing (no `body.cbor` yet, or no `runDisburseBuild`).
-- [ ] T032 [US1] Generate `test/fixtures/disburse/ada/body.cbor`
-      once via the same `runDisburseBuildFromFixtures` helper used
-      by T030 (a one-shot Hspec entry point added under
-      `test/golden/Amaru/Treasury/Tx/Fixture.hs` that writes the
-      stripped-ExUnits body to the fixture path). The CLI binary is
-      **not** required at this point — Phase 6 (`disburse`
-      subcommand) lands later. Commit `body.cbor`. Document the
-      exact command (a single `cabal run golden-tests --
-      --recorder ada`) in a comment at the top of T030's spec file
-      so the next regeneration is mechanical. This step is local
-      only (workstation with the local mainnet UTxO snapshot used to
-      author `utxos.json`); CI replays the recorded body.cbor and
-      never re-records.
-- [ ] T033 [US1] Confirm GREEN: rerun T031's command; the golden
+      failing first on the old JSON shape and then on the disburse
+      dispatcher stub.
+- [x] T032 [US1] Preserve `test/fixtures/disburse/ada/body.cbor`
+      byte-for-byte while upgrading only `intent.json` to the unified
+      `schema` / `action` shape. No behavioral re-record was needed.
+- [x] T033 [US1] Confirm GREEN: rerun T031's command; the golden
       passes byte-for-byte.
 - [ ] T034 [P] [US1] Negative test in
       `test/unit/Amaru/Treasury/Tx/DisburseWizardSpec.hs`: stub
@@ -349,8 +353,8 @@ after running the build subcommand.
       end-to-end.
 
 **Checkpoint**: ADA disburse path is fully wired from
-`(DisburseAnswers, Provider IO) → DisburseIntentJSON →
-DisburseBuildInputs → unsigned hex CBOR`, with a body-CBOR golden
+`(DisburseAnswers, Provider IO) → TreasuryIntent 'Disburse →
+runFromIntent → unsigned hex CBOR`, with a body-CBOR golden
 recorded against the local mainnet node. SC-005 satisfied for ADA.
 
 ---
@@ -394,9 +398,9 @@ golden.
       `MaryValue (getMinCoinTxOut pparams) (singletonAsset
       usdmPolicy usdmAsset amount)` and the leftover output carries
       every other asset present on inputs (including spent ADA).
-- [ ] T039 [US2] Extend `runDisburseBuild` in
-      `lib/Amaru/Treasury/Tx/DisburseBuild.hs` to dispatch to
-      `disburseUsdmProgram` when `dbiIntent` is
+- [ ] T039 [US2] Extend `runDisburse` in
+      `lib/Amaru/Treasury/TreasuryBuild.hs` to dispatch to
+      `disburseUsdmProgram` when the translated intent is
       `DisburseUsdmIntent`.
 - [ ] T040 [P] [US2] Author USDM body-CBOR fixture set under
       `test/fixtures/disburse/usdm/`: `intent.json`, `utxos.json`
@@ -404,9 +408,9 @@ golden.
       (symlink).
 - [ ] T041 [US2] Author `test/golden/UsdmDisburseGoldenSpec.hs` with
       one `it` block: `"usdm-disburse golden body matches"`. Loads
-      T040 fixtures via the shared `runDisburseBuildFromFixtures`
-      helper from T030 (no CLI, no node socket), strips ExUnits,
-      compares to `test/fixtures/disburse/usdm/body.cbor`.
+      T040 fixtures via `decodeTreasuryIntentFile` + `runFromIntent`
+      against a frozen `ChainContext`, matching the ADA golden. Compares
+      to `test/fixtures/disburse/usdm/body.cbor`.
 - [ ] T042 [US2] Confirm RED: run `nix develop -c just golden
       --test-options=--match=usdm-disburse`.
 - [ ] T043 [US2] Generate `test/fixtures/disburse/usdm/body.cbor`
@@ -421,16 +425,18 @@ golden. Both P1 user stories are deliverable.
 
 ---
 
-## Phase 6: User Story 4 — pipe `disburse-wizard | disburse` (Priority: P2)
+## Phase 6: User Story 4 — pipe `disburse-wizard | tx-build` (Priority: P2)
 
 > **Story label**: `[US4]` matches `spec.md` US4 ("Pipe
-> disburse-wizard | disburse end-to-end").
+> disburse-wizard | tx-build end-to-end").
 
-**Goal**: Both subcommands wired in `app/amaru-treasury-tx/Main.hs`,
-with the FR-009 / FR-010 / FR-015 pipe contract enforced.
+**Goal**: `disburse-wizard` is wired in
+`app/amaru-treasury-tx/Main.hs` and composes with the existing
+`tx-build` subcommand, with the FR-009 / FR-010 / FR-015 pipe
+contract enforced.
 
 **Independent test**: integration test that exercises `disburse-wizard
-... | disburse` against the local mainnet node and verifies stdout is
+... | tx-build` against the local mainnet node and verifies stdout is
 exactly one line of hex characters.
 
 - [ ] T045 [US4] Add the `disburse-wizard` subcommand parser
@@ -439,15 +445,13 @@ exactly one line of hex characters.
       [contracts/disburse-wizard-cli.md §1](./contracts/disburse-wizard-cli.md);
       structure mirrors `runWizard` for swap. Default `--out` to
       stdout when omitted; default `--log` to stderr.
-- [ ] T046 [US4] Add the `disburse` subcommand parser (`DisburseOpts`)
-      and `runDisburse` function to `app/amaru-treasury-tx/Main.hs`.
-      Flag set per
-      [contracts/disburse-cli.md §1](./contracts/disburse-cli.md);
-      structure mirrors `runSwap`. Default `--intent` to stdin when
-      omitted; default `--out` to stdout; default `--summary-out` to
-      `disburse.summary.json` in CWD; default `--log` to stderr.
-- [ ] T047 [US4] Wire the typed tracers from T010 + T011 into both
-      runners; on success, the only stdout content is the intent JSON
+- [x] T046 [US4] Reuse the unified `tx-build` parser and runner from
+      feature 005. No per-action `disburse` subcommand is added.
+      `tx-build` defaults `--intent` to stdin, `--out` to stdout, and
+      `--log` to stderr; summary sidecar wiring remains T054.
+- [ ] T047 [US4] Wire the typed tracer for `disburse-wizard` and the
+      existing `TreasuryBuild.Trace` tracer into the full pipe. On
+      success, the only stdout content is the intent JSON
       (wizard) or the hex CBOR (build). Stderr (or `--log`) carries
       events one per line.
 - [ ] T048 [US4] Wire the exit codes per
@@ -460,9 +464,9 @@ exactly one line of hex characters.
       subcommands and their pipe shape, mirroring the swap entry.
 - [ ] T050 [P] [US4] Smoke script
       `scripts/smoke/disburse-wizard-pipe`: exercises the pipe with
-      a fixture metadata.json against a stub-stdin `disburse` build
+      a fixture metadata.json against a stub-stdin `tx-build`
       (no node required) — asserts the wizard's stdout decodes as
-      `DisburseIntentJSON` and that `disburse < intent.json` exits
+      `SomeTreasuryIntent` and that `tx-build < intent.json` exits
       `0` with hex on stdout. Records wall-clock duration via
       `time -f '%e'` and fails the script if it exceeds 10 seconds
       (covers SC-002). Mirror
@@ -473,8 +477,8 @@ exactly one line of hex characters.
       so it runs on every push.
 - [ ] T052 [US4] Negative test in
       `test/unit/Amaru/Treasury/Tx/DisburseWizardSpec.hs`: feed
-      malformed JSON to `disburse` via stdin (use a
-      `withSystemTempFile` helper and call `decodeDisburseIntent`);
+      malformed JSON to `tx-build` via stdin (use a
+      `withSystemTempFile` helper and call `decodeTreasuryIntent`);
       assert exit 3 + single-line stderr.
 - [ ] T053 [US4] Run `just ci`; everything green.
 
@@ -488,8 +492,8 @@ SC-005 covers re-eval failure path.
 > **Story label**: `[US5]` matches `spec.md` US5 ("Summary sidecar
 > for inspection before signing").
 
-**Goal**: `disburse` writes a JSON summary at `--summary-out` (default
-`disburse.summary.json`) that conforms to
+**Goal**: `tx-build` writes a JSON summary for disburse at
+`--summary-out` (default `disburse.summary.json`) that conforms to
 [`summary-schema.json`](../001-treasury-tx-cli/contracts/summary-schema.json).
 
 **Independent test**: parse the summary JSON written by each of the
@@ -503,7 +507,7 @@ two goldens and validate against the schema.
       `exUnits`, and (when `Left`) `failure`.
 - [ ] T055 [P] [US5] Add a golden summary test
       `test/golden/Amaru/Treasury/SummaryGoldenSpec.hs` that runs
-      both `disburse` fixtures and validates each emitted summary
+      both disburse fixtures and validates each emitted summary
       against
       [`specs/001-treasury-tx-cli/contracts/summary-schema.json`](../001-treasury-tx-cli/contracts/summary-schema.json)
       using a hand-rolled validator (Aeson `Value` against the schema's
@@ -563,9 +567,9 @@ Setup (T001-T004)
 ```
 
 Phase 3 (`[US3]` pure translation) is the MVP gate. Phase 4 + 5
-(`[US1]` + `[US2]`) consume `disburseToIntentJSON`. Phase 6 (`[US4]`
-CLI pipe) wires both into the subcommands; Phase 7 (`[US5]`) adds the
-summary sidecar; Phase 8 polishes for review.
+(`[US1]` + `[US2]`) consume `disburseToTreasuryIntent`. Phase 6
+(`[US4]` CLI pipe) wires the wizard into `tx-build`; Phase 7
+(`[US5]`) adds the summary sidecar; Phase 8 polishes for review.
 
 ## Parallel opportunities
 

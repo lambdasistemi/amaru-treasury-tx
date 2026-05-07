@@ -3,15 +3,19 @@
 **Plan**: [../plan.md](../plan.md) · **Spec**: [../spec.md](../spec.md)
 **Date**: 2026-05-06
 
-This file fixes the on-disk JSON contract that the wizard writes and
-the build path reads. The Haskell record is in
-[`data-model.md §4`](../data-model.md#4-disburseintentjson--the-json-contract).
-Both shapes must stay aligned.
+This file fixes the disburse branch of the unified on-disk
+`TreasuryIntent` JSON contract that the wizard writes and `tx-build`
+reads. The source-of-truth JSON Schema is
+[`docs/assets/intent-schema.json`](../../../docs/assets/intent-schema.json),
+generated from `Amaru.Treasury.IntentJSON.Schema`; this prose
+contract explains the disburse-specific fields.
 
 ## 1. Shape
 
 ```jsonc
 {
+  "schema": 1,
+  "action": "disburse",
   "network": "mainnet",
   "wallet": {
     "txIn": "42e4c279…#0",
@@ -56,19 +60,26 @@ Both shapes must stay aligned.
 
 ## 2. Field reference
 
-### 2.1 `network`
+### 2.1 `schema` and `action`
+
+`schema` is the integer contract version accepted by the binary.
+`action` is the discriminator and MUST be `"disburse"` for this
+contract. The JSON Schema rejects action/payload mismatches, e.g.
+`"action": "swap"` with a `disburse` payload block.
+
+### 2.2 `network`
 
 String, one of `"mainnet"`, `"preprod"`, `"preview"`. Used by the
 build path to choose ledger network parameters.
 
-### 2.2 `wallet`
+### 2.3 `wallet`
 
 | Field | Type | Notes |
 |---|---|---|
 | `txIn` | string `"txid#ix"` | wallet UTxO used as fuel + collateral |
 | `address` | bech32 `addr…` | wallet address |
 
-### 2.3 `scope`
+### 2.4 `scope`
 
 | Field | Type | Notes |
 |---|---|---|
@@ -86,7 +97,7 @@ build path to choose ledger network parameters.
 | `registryDeployedAt` | `"txid#ix"` | registry NFT reference |
 | `registryPolicyId` | hex 28 bytes | registry NFT policy id |
 
-### 2.4 `disburse`
+### 2.5 `disburse`
 
 | Field | Type | Notes |
 |---|---|---|
@@ -96,19 +107,19 @@ build path to choose ledger network parameters.
 | `usdmPolicy` | hex 28 bytes | always present in the JSON for stability; ignored when `unit = "ada"` |
 | `usdmToken` | hex | always present; ignored when `unit = "ada"` |
 
-### 2.5 `signers[]`
+### 2.6 `signers[]`
 
 Array of 28-byte hex keyhashes. Order is significant: the scope
 owner's keyhash is always first, followed by extra signers in the
 order they were declared on the CLI. Duplicates are removed in the
 wizard.
 
-### 2.6 `validityUpperBoundSlot`
+### 2.7 `validityUpperBoundSlot`
 
 Absolute Cardano slot. The build path uses this as
 `invalid_hereafter`.
 
-### 2.7 `rationale`
+### 2.8 `rationale`
 
 | Field | Type | Default |
 |---|---|---|
@@ -130,32 +141,31 @@ For any `DisburseAnswers` and any `DisburseEnv` that the resolver
 produces, the following must hold:
 
 ```haskell
-disburseToIntentJSON env answers
-  >>= (decodeDisburseIntent . encodeDisburseIntent)
-  >>= translateDisburseIntent
-  ≡  Right (some TranslatedDisburseIntent)
+disburseToTreasuryIntent env answers
+  & fmap (encodeSomeTreasuryIntent . SomeTreasuryIntent SDisburse)
+  >>= decodeTreasuryIntent
+  >>= \(SomeTreasuryIntent SDisburse intent) ->
+        translateIntent SDisburse intent
+  ≡  Right (TranslatedShared, DisburseIntent)
 ```
 
 Failure of this property is a P0 regression and breaks the wizard +
-build pipeline contract.
+`tx-build` pipeline contract. The unit tests also validate checked-in
+disburse fixture JSON against `docs/assets/intent-schema.json`.
 
 ## 4. Encoder shape
 
-Encoded with `aeson-pretty`:
+Encoded with `encodeSomeTreasuryIntent`:
 
-- Two-space indent.
-- Fixed key order matching the field listing in §2 (top-level
-  `network`, `wallet`, `scope`, `disburse`, `signers`,
-  `validityUpperBoundSlot`, `rationale`; nested keys in record-source
-  order).
+- Four-space indent.
+- Alphabetical key ordering, matching the unified intent encoder used
+  by swap and disburse.
 - Trailing newline.
 
-This is the same encoder strategy used for `SwapIntentJSON`.
+This is the same encoder strategy used for every
+`SomeTreasuryIntent`.
 
 ## 5. Out of scope for v0
 
-- A schema-validator (`json-schema`) representation. The contract is
-  prose plus the Haskell record + the round-trip property.
-- Versioning the schema (e.g. a top-level `"schema": 1` field). When
-  v1 changes are required, this file is amended in lockstep with the
-  Haskell record and the goldens are re-recorded.
+- USDM build dispatch. The JSON shape already accepts `"unit":
+  "usdm"`; the pure USDM builder and body-CBOR golden land in Phase 5.

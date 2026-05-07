@@ -1,4 +1,5 @@
 {
+    "action": "disburse",
     "disburse": {
         "amount": 100000000,
         "beneficiaryAddress": "addr1qy8ac7qqy0vtulyl7wntmsxc6wex80gvcyjy33qffrhm7sh927ysx5sftuw0dlft05dz3c7revpf7jx0xnlcjz3g69mq4afdhv",
@@ -14,6 +15,7 @@
         "justification": "Per network-compliance budget for vendor X",
         "label": "Disburse USDM"
     },
+    "schema": 1,
     "scope": {
         "id": "network_compliance",
         "permissionsDeployedAt": "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",

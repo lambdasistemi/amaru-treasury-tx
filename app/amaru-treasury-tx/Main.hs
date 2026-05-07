@@ -86,8 +86,10 @@ import Cardano.Ledger.Api.Tx.Out (valueTxOutL)
 
 import Amaru.Treasury.Backend (Provider (..))
 import Amaru.Treasury.Backend.N2C
-    ( findSocketMagic
+    ( StakeRewardsError (..)
+    , findSocketMagic
     , probeNetworkMagic
+    , queryStakeRewardsLovelace
     , withLocalNodeBackend
     )
 import Amaru.Treasury.ChainContext (liveContext)
@@ -104,6 +106,7 @@ import Amaru.Treasury.IntentJSON
     )
 import Amaru.Treasury.IntentJSON.Common
     ( parseAddr
+    , parseRewardAccountForNetwork
     , parseTxIn
     )
 import Amaru.Treasury.Registry.Verify (verifyRegistry)
@@ -833,6 +836,9 @@ runWithdrawWizard g WithdrawOpts{..} = do
                         traceWithdrawResolverEnv tr $
                             providerToWithdrawResolverEnv
                                 tr
+                                networkName
+                                (goNetworkMagic g)
+                                socket
                                 backend
                 er <- Withdraw.resolveWithdrawEnv renv ri
                 env <- case er of
@@ -1051,29 +1057,39 @@ providerToResolverEnv p =
         , reEnvCurrentTip = nowTip p
         }
 
-{- | Adapter for the withdraw resolver.
-
-The current upstream 'Provider' does not expose stake-reward queries.
-Keep the CLI failure explicit until that provider method lands, instead
-of silently deriving a reward amount from CLI input or registry metadata.
-Tracked in #58.
--}
+-- | Adapter for the withdraw resolver.
 providerToWithdrawResolverEnv
     :: Tracer IO WithdrawTrace.WithdrawWizardEvent
+    -> Text
+    -> NetworkMagic
+    -> FilePath
     -> Provider IO
     -> Withdraw.WithdrawResolverEnv IO
-providerToWithdrawResolverEnv tr p =
+providerToWithdrawResolverEnv tr networkName magic socket p =
     Withdraw.WithdrawResolverEnv
         { Withdraw.wreQueryWalletUtxos = queryFlat p
         , Withdraw.wreQueryRewardsLovelace = \account -> do
-            traceWith tr $
-                WithdrawTrace.WweRewardAccountResolved account
-            abortWithdraw
-                tr
-                ( "resolve: live stake-reward query is not available "
-                    <> "in cardano-node-clients Provider yet; "
-                    <> "tracked in #58"
-                )
+            rewardAccount <- case parseRewardAccountForNetwork
+                networkName
+                account of
+                Right value -> pure value
+                Left e ->
+                    abortWithdraw
+                        tr
+                        ( "resolve: reward account: "
+                            <> T.pack e
+                        )
+            result <-
+                queryStakeRewardsLovelace
+                    magic
+                    socket
+                    rewardAccount
+            case result of
+                Right rewards -> pure rewards
+                Left StakeRewardsEraMismatch ->
+                    abortWithdraw
+                        tr
+                        "resolve: stake rewards query: node is not in Conway era"
         , Withdraw.wreCurrentTip = nowTip p
         }
 

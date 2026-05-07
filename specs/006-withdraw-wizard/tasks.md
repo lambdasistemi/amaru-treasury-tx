@@ -89,8 +89,8 @@ before the implementation tasks they constrain.
 - [x] T020 [US1] Implement pure `withdrawToTreasuryIntent` in `lib/Amaru/Treasury/Tx/WithdrawWizard.hs`.
 - [x] T021 [US1] Implement `WithdrawWizardEvent` and renderer in `lib/Amaru/Treasury/Tx/WithdrawWizard/Trace.hs`.
 - [x] T022 [US1] Implement resolver helpers for wallet UTxO selection, treasury reward account construction, reward balance query, registry verification, and validity computation in `lib/Amaru/Treasury/Tx/WithdrawWizard.hs`.
-- [x] T023a [US1] Add `withdraw-wizard` CLI parser and runner skeleton in `app/amaru-treasury-tx/Main.hs`, failing explicitly while live reward query support is tracked in [#58](https://github.com/lambdasistemi/amaru-treasury-tx/issues/58).
-- [ ] T023b [US1] Wire live stake-reward query support so positive rewards emit `intent.json`.
+- [x] T023a [US1] Add `withdraw-wizard` CLI parser and runner skeleton in `app/amaru-treasury-tx/Main.hs`.
+- [x] T023b [US1] Wire live stake-reward query support so positive rewards emit `intent.json`.
 - [x] T024 [US1] Add fixture globs for `test/fixtures/withdraw/**/*.json` and `test/fixtures/withdraw/**/*.md` to `amaru-treasury-tx.cabal` once files exist.
 - [x] T025 [US1] Run `nix develop --quiet -c just unit WithdrawWizard` and confirm positive-rewards wizard tests pass.
 

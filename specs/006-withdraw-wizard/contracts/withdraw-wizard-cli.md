@@ -47,13 +47,6 @@ Global CLI flags provide `--network` / `--network-magic` and
 
 ## Output contract
 
-Current implementation note: the CLI runner surface is present, but live
-stake-reward querying is still tracked in
-[#58](https://github.com/lambdasistemi/amaru-treasury-tx/issues/58).
-Until that lands, real invocations abort with a typed trace line before
-writing an intent. The pure translation and resolver tests cover the
-positive-rewards path through a stubbed provider.
-
 Positive rewards:
 
 - stdout contains exactly one JSON document unless `--out` is supplied;

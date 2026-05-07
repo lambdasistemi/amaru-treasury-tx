@@ -112,7 +112,7 @@ library
     , aeson
     , aeson-pretty
     , async
-    , base                       <5
+    , base                         <5
     , base16-bytestring
     , bech32
     , bytestring
@@ -133,6 +133,7 @@ library
     , filepath
     , microlens
     , ouroboros-consensus
+    , ouroboros-consensus:cardano
     , ouroboros-network:api
     , plutus-core
     , plutus-ledger-api
@@ -288,6 +289,7 @@ test-suite golden-tests
     RegistryWalkGoldenSpec
     SwapGoldenSpec
     UsdmDisburseGoldenSpec
+    WithdrawGoldenSpec
 
   build-depends:
     , aeson

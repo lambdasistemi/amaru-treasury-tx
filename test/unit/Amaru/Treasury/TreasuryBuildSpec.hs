@@ -19,6 +19,7 @@ import Data.IORef
     , newIORef
     , readIORef
     )
+import Data.Map.Strict qualified as Map
 import Test.Hspec
     ( Spec
     , describe
@@ -32,10 +33,40 @@ import Amaru.Treasury.Backend.N2C
     ( findSocketMagic
     , knownNetworkMagics
     , probeResultAccepted
+    , stakeRewardLovelaceFromRewards
     )
+import Amaru.Treasury.IntentJSON.Common
+    ( parseRewardAccountForNetwork
+    )
+import Cardano.Ledger.Address
+    ( AccountAddress (..)
+    , AccountId (..)
+    )
+import Cardano.Ledger.Coin (Coin (..))
 
 spec :: Spec
 spec = describe "Amaru.Treasury.TreasuryBuild" $ do
+    describe "stakeRewardLovelaceFromRewards" $ do
+        it "returns the selected account reward balance" $ do
+            let AccountAddress _ (AccountId credential) =
+                    fixtureRewardAccount
+                rewards =
+                    Map.singleton
+                        credential
+                        (Coin 12_345_678)
+            stakeRewardLovelaceFromRewards
+                credential
+                rewards
+                `shouldBe` 12_345_678
+
+        it "treats a missing reward row as zero" $ do
+            let AccountAddress _ (AccountId credential) =
+                    fixtureRewardAccount
+            stakeRewardLovelaceFromRewards
+                credential
+                Map.empty
+                `shouldBe` 0
+
     describe "findSocketMagic" $ do
         it "returns the actual magic when the socket is on the wrong network" $ do
             -- Intent says mainnet; socket actually accepts preprod (1).
@@ -93,3 +124,19 @@ spec = describe "Amaru.Treasury.TreasuryBuild" $ do
                 `shouldBe` Just (NetworkMagic 1)
             lookup "preview" knownNetworkMagics
                 `shouldBe` Just (NetworkMagic 2)
+
+fixtureRewardAccount :: AccountAddress
+fixtureRewardAccount =
+    expectRight $
+        parseRewardAccountForNetwork
+            "mainnet"
+            "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d"
+
+expectRight :: (Show e) => Either e a -> a
+expectRight =
+    either
+        ( error
+            . ("unexpected Left: " <>)
+            . show
+        )
+        id

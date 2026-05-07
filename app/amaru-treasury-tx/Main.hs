@@ -86,8 +86,7 @@ import Amaru.Treasury.Backend (Provider (..))
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.ChainContext (liveContext)
 import Amaru.Treasury.IntentJSON
-    ( SAction (..)
-    , ScopeJSON (..)
+    ( ScopeJSON (..)
     , SomeTreasuryIntent (..)
     , TreasuryIntent (..)
     , WalletJSON (..)
@@ -95,7 +94,8 @@ import Amaru.Treasury.IntentJSON
     , decodeTreasuryIntentFile
     )
 import Amaru.Treasury.IntentJSON.Common
-    ( parseTxIn
+    ( parseAddr
+    , parseTxIn
     )
 import Amaru.Treasury.Registry.Verify (verifyRegistry)
 import Amaru.Treasury.Scope
@@ -111,24 +111,9 @@ import Amaru.Treasury.TreasuryBuild.Trace
     ( BuildEvent (..)
     , buildEventTracer
     )
-import Amaru.Treasury.Tx.Swap (SwapIntent (..))
-import Amaru.Treasury.Tx.Swap.Trace
-    ( SwapEvent (..)
-    , swapEventTracer
-    )
-import Amaru.Treasury.Tx.SwapBuild
-    ( SwapBuildInputs (..)
-    , SwapBuildResult (..)
-    , runSwapBuild
-    )
 import Amaru.Treasury.Tx.SwapIntentJSON
     ( SwapInputs (..)
     , SwapIntentJSON (..)
-    , TranslatedIntent (..)
-    , decodeSwapIntent
-    , decodeSwapIntentFile
-    , parseAddr
-    , translateIntent
     )
 import Amaru.Treasury.Tx.SwapWizard
     ( NetworkConstants (..)
@@ -166,19 +151,8 @@ data GlobalOpts = GlobalOpts
     }
 
 data Cmd
-    = CmdSwap SwapOpts
-    | CmdSwapWizard WizardOpts
+    = CmdSwapWizard WizardOpts
     | CmdTxBuild TxBuildOpts
-
-data SwapOpts = SwapOpts
-    { soIntentPath :: !(Maybe FilePath)
-    -- ^ 'Nothing' = read intent.json from stdin (so
-    --   @swap-wizard ... | swap@ pipes cleanly).
-    , soOutPath :: !(Maybe FilePath)
-    -- ^ where to write the hex CBOR. 'Nothing' = stdout.
-    , soLog :: !(Maybe FilePath)
-    -- ^ where to send 'SwapEvent' lines. 'Nothing' = stderr.
-    }
 
 {- | Flags for the unified @tx-build@ subcommand. The
 network is read from the intent's @network@ field, not
@@ -302,35 +276,6 @@ networkMagicNameMaybe (NetworkMagic m) = case m of
     2 -> Just "preview"
     _ -> Nothing
 
-swapOptsP :: Parser SwapOpts
-swapOptsP =
-    SwapOpts
-        <$> optional
-            ( strOption
-                ( long "intent"
-                    <> short 'i'
-                    <> metavar "PATH"
-                    <> help
-                        "Path to the swap-intent JSON (defaults to stdin)"
-                )
-            )
-        <*> optional
-            ( strOption
-                ( long "out"
-                    <> short 'o'
-                    <> metavar "PATH"
-                    <> help "Write hex CBOR here (defaults to stdout)"
-                )
-            )
-        <*> optional
-            ( strOption
-                ( long "log"
-                    <> metavar "PATH"
-                    <> help
-                        "Where to write step-by-step trace lines (defaults to stderr)"
-                )
-            )
-
 txBuildOptsP :: Parser TxBuildOpts
 txBuildOptsP =
     TxBuildOpts
@@ -364,21 +309,13 @@ cmdP :: Parser Cmd
 cmdP =
     hsubparser
         ( command
-            "swap"
+            "tx-build"
             ( info
-                (CmdSwap <$> swapOptsP)
+                (CmdTxBuild <$> txBuildOptsP)
                 ( progDesc
-                    "Build a SundaeSwap treasury swap (ADA→USDM) [DEPRECATED — use tx-build]"
+                    "Build any treasury transaction from a unified intent.json"
                 )
             )
-            <> command
-                "tx-build"
-                ( info
-                    (CmdTxBuild <$> txBuildOptsP)
-                    ( progDesc
-                        "Build any treasury transaction from a unified intent.json"
-                    )
-                )
             <> command
                 "swap-wizard"
                 ( info
@@ -573,8 +510,6 @@ main = do
     (g, c) <- execParser opts
     socket <- resolveSocket (goSocketPath g)
     case c of
-        CmdSwap so ->
-            runSwap g{goSocketPath = Just socket} so
         CmdSwapWizard wo ->
             runWizard g{goSocketPath = Just socket} wo
         CmdTxBuild to ->
@@ -591,103 +526,10 @@ resolveSocket Nothing = do
                 "amaru-treasury-tx: pass --node-socket "
                     <> "or set CARDANO_NODE_SOCKET_PATH"
 
-runSwap :: GlobalOpts -> SwapOpts -> IO ()
-runSwap g SwapOpts{..} = do
-    let socket = fromMaybe "(unset)" (goSocketPath g)
-    withLogHandle soLog $ \logH -> do
-        let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
-            tr = swapEventTracer textTracer
-        traceWith tr (SeIntentSource soIntentPath)
-        parsed <- case soIntentPath of
-            Just p -> decodeSwapIntentFile p
-            Nothing ->
-                decodeSwapIntent <$> BSL.hGetContents IO.stdin
-        sij <- case parsed of
-            Left e -> abortSwap tr ("intent JSON: " <> T.pack e)
-            Right v -> pure v
-        TranslatedIntent{..} <- case translateIntent sij of
-            Left e ->
-                abortSwap
-                    tr
-                    ("intent translation: " <> T.pack e)
-            Right v -> pure v
-        traceWith tr (SeConnect socket)
-        withLocalNodeBackend (goNetworkMagic g) socket $
-            \backend -> do
-                let intent = tiSwapIntent
-                    allRequired =
-                        Set.fromList $
-                            tiWalletTxIn
-                                : siTreasuryUtxos intent
-                                ++ [ siScopesDeployedAt intent
-                                   , siPermissionsDeployedAt intent
-                                   , siTreasuryDeployedAt intent
-                                   , siRegistryDeployedAt intent
-                                   ]
-                traceWith
-                    tr
-                    (SeRequiredUtxos (Set.size allRequired))
-                ctx <- liveContext backend allRequired
-                let inputs =
-                        SwapBuildInputs
-                            { sbiIntent = intent
-                            , sbiRationale = tiRationale
-                            , sbiWalletTxIn = tiWalletTxIn
-                            , sbiWalletAddr = tiWalletAddr
-                            }
-                SwapBuildResult{..} <- runSwapBuild ctx inputs
-                let cborStrict = BSL.toStrict sbrCborBytes
-                    hexed = B16.encode cborStrict
-                    Coin feeLov = sbrFeeLovelace
-                    Coin tcLov = sbrTotalCollateralLovelace
-                    failures =
-                        [ (purpose, e)
-                        | ScriptResult purpose (Left e) <-
-                            sbrScriptResults
-                        ]
-                traceWith
-                    tr
-                    ( SeBuilt
-                        (BS.length cborStrict)
-                        feeLov
-                        tcLov
-                    )
-                traceWith
-                    tr
-                    ( SeReevaluated
-                        (length sbrScriptResults)
-                        (length failures)
-                    )
-                mapM_
-                    ( \(p, e) ->
-                        traceWith
-                            tr
-                            ( SeScriptFail
-                                (T.pack (show p))
-                                (T.pack e)
-                            )
-                    )
-                    failures
-                case soOutPath of
-                    Just p -> BS.writeFile p hexed
-                    Nothing -> do
-                        BS.putStr hexed
-                        putStr "\n"
-                traceWith tr (SeWroteCbor soOutPath)
-                if null failures
-                    then traceWith tr SeValidationOk
-                    else do
-                        traceWith tr SeValidationFailed
-                        exitFailure
-
-{- | Trace and abort with exit code 1 (mirrors the previous
-'throwIO . userError' path but routes the message through the
-typed tracer instead of escaping as an IOException).
--}
-abortSwap :: Tracer IO SwapEvent -> Text -> IO a
-abortSwap tr msg = do
-    traceWith tr (SeAborted msg)
-    exitWith (ExitFailure 1)
+-- The legacy 'swap' subcommand (runSwap, abortSwap) was
+-- removed in T028 alongside the per-action build modules
+-- (Tx.SwapBuild, Tx.Swap.Trace). Use 'tx-build' (above)
+-- instead — the unified entry point for any treasury action.
 
 -- ----------------------------------------------------
 -- swap-wizard subcommand

@@ -284,7 +284,7 @@ the sole build entry point.
       `Left "translateIntent: feature 004 PR #47 lands first"`.
       Withdraw and reorganize return analogous typed "not yet
       shipped" `Left` errors.
-- [ ] T023 [US1] Rewrite `app/amaru-treasury-tx/Main.hs`:
+- [x] T023 [US1] Rewrite `app/amaru-treasury-tx/Main.hs`:
       remove the `swap` subcommand parser; remove the `--network`
       / `--network-magic` flags from the build side; add the
       `tx-build` subcommand parser per

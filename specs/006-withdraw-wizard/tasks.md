@@ -79,19 +79,19 @@ before the implementation tasks they constrain.
 
 ### Tests for User Story 1
 
-- [ ] T016 [P] [US1] Add positive-rewards wizard fixtures in `test/fixtures/withdraw/synthetic/env.json` and `test/fixtures/withdraw/synthetic/answers.json`.
-- [ ] T017 [P] [US1] Add RED pure translation golden in `test/unit/Amaru/Treasury/Tx/WithdrawWizardSpec.hs` comparing wizard output to `test/fixtures/withdraw/synthetic/intent.json`.
+- [x] T016 [P] [US1] Add positive-rewards wizard fixtures in `test/fixtures/withdraw/synthetic/env.json` and `test/fixtures/withdraw/synthetic/answers.json`.
+- [x] T017 [P] [US1] Add RED pure translation golden in `test/unit/Amaru/Treasury/Tx/WithdrawWizardSpec.hs` comparing wizard output to `test/fixtures/withdraw/synthetic/intent.json`.
 - [ ] T018 [P] [US1] Add RED resolver test in `test/unit/Amaru/Treasury/Tx/WithdrawWizardSpec.hs` proving the reward account and rewards amount are resolved from provider/registry state, not CLI input.
 
 ### Implementation for User Story 1
 
-- [ ] T019 [US1] Define `WithdrawAnswers`, `WithdrawEnv`, `WithdrawError`, and exported shared aliases in `lib/Amaru/Treasury/Tx/WithdrawWizard.hs`.
-- [ ] T020 [US1] Implement pure `withdrawToTreasuryIntent` in `lib/Amaru/Treasury/Tx/WithdrawWizard.hs`.
+- [x] T019 [US1] Define `WithdrawAnswers`, `WithdrawEnv`, `WithdrawError`, and exported shared aliases in `lib/Amaru/Treasury/Tx/WithdrawWizard.hs`.
+- [x] T020 [US1] Implement pure `withdrawToTreasuryIntent` in `lib/Amaru/Treasury/Tx/WithdrawWizard.hs`.
 - [ ] T021 [US1] Implement `WithdrawWizardEvent` and renderer in `lib/Amaru/Treasury/Tx/WithdrawWizard/Trace.hs`.
 - [ ] T022 [US1] Implement resolver helpers for wallet UTxO selection, treasury reward account construction, reward balance query, registry verification, and validity computation in `lib/Amaru/Treasury/Tx/WithdrawWizard.hs`.
 - [ ] T023 [US1] Add `withdraw-wizard` CLI parser and runner in `app/amaru-treasury-tx/Main.hs`.
-- [ ] T024 [US1] Add fixture globs for `test/fixtures/withdraw/**/*.json` and `test/fixtures/withdraw/**/*.md` to `amaru-treasury-tx.cabal` once files exist.
-- [ ] T025 [US1] Run `nix develop --quiet -c just unit WithdrawWizard` and confirm positive-rewards wizard tests pass.
+- [x] T024 [US1] Add fixture globs for `test/fixtures/withdraw/**/*.json` and `test/fixtures/withdraw/**/*.md` to `amaru-treasury-tx.cabal` once files exist.
+- [x] T025 [US1] Run `nix develop --quiet -c just unit WithdrawWizard` and confirm positive-rewards wizard tests pass.
 
 **Checkpoint**: A positive rewards fixture produces a valid withdraw intent without invoking the builder.
 

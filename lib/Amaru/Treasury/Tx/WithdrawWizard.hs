@@ -1,0 +1,259 @@
+{-# LANGUAGE DataKinds #-}
+
+{- |
+Module      : Amaru.Treasury.Tx.WithdrawWizard
+Description : Typed-Q&A wizard for the withdraw subcommand
+Copyright   : (c) Paolo Veronelli, 2026
+License     : Apache-2.0
+
+Typed operator answers plus a resolved chain environment
+for the withdraw action. The pure translation emits the
+unified 'TreasuryIntent' @'Withdraw@ shape consumed by
+@tx-build@.
+-}
+module Amaru.Treasury.Tx.WithdrawWizard
+    ( -- * Answers
+      WithdrawAnswers (..)
+
+      -- * Resolved environment
+    , WithdrawEnv (..)
+    , NetworkConstants (..)
+    , RegistryView (..)
+    , ScopeView (..)
+    , TreasuryRefs (..)
+    , WalletSelection (..)
+
+      -- * Pure translation
+    , WithdrawError (..)
+    , withdrawToTreasuryIntent
+    ) where
+
+import Cardano.Ledger.BaseTypes (Network (..))
+import Control.Monad (when)
+import Data.Aeson (FromJSON (..), withObject, (.:), (.:?))
+import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
+import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Word (Word64, Word8)
+
+import Amaru.Treasury.IntentJSON
+    ( Action (..)
+    , RationaleJSON (..)
+    , SAction (..)
+    , ScopeJSON (..)
+    , TreasuryIntent (..)
+    , WalletJSON (..)
+    , WithdrawInputs (..)
+    )
+import Amaru.Treasury.Scope (ScopeId, scopeText)
+import Amaru.Treasury.Tx.SwapWizard
+    ( NetworkConstants (..)
+    , RegistryView (..)
+    , ScopeView (..)
+    , TreasuryRefs (..)
+    , WalletSelection (..)
+    , addrNetwork
+    )
+
+-- ----------------------------------------------------
+-- Answers
+-- ----------------------------------------------------
+
+{- | Typed operator answers for the withdraw wizard.
+The reward account and reward amount are deliberately
+absent: they come from the resolver, not from CLI input.
+-}
+data WithdrawAnswers = WithdrawAnswers
+    { waScope :: !ScopeId
+    , waValidityHours :: !Word8
+    , waDescription :: !(Maybe Text)
+    , waJustification :: !(Maybe Text)
+    , waDestinationLabel :: !(Maybe Text)
+    , waEvent :: !(Maybe Text)
+    , waLabel :: !(Maybe Text)
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON WithdrawAnswers where
+    parseJSON = withObject "WithdrawAnswers" $ \o ->
+        WithdrawAnswers
+            <$> o .: "scope"
+            <*> o .: "validityHours"
+            <*> o .:? "description"
+            <*> o .:? "justification"
+            <*> o .:? "destinationLabel"
+            <*> o .:? "event"
+            <*> o .:? "label"
+
+-- ----------------------------------------------------
+-- Resolved environment
+-- ----------------------------------------------------
+
+{- | Everything the resolver hands the pure translation.
+Pure 'withdrawToTreasuryIntent' reads only this record
+plus 'WithdrawAnswers'; it never performs IO.
+-}
+data WithdrawEnv = WithdrawEnv
+    { weNetwork :: !Text
+    -- ^ @"mainnet"@ / @"preprod"@ / @"preview"@
+    , weCurrentTip :: !Word64
+    -- ^ chain tip slot at the time of resolution
+    , weNetworkConstants :: !NetworkConstants
+    -- ^ shared slot conversion constants
+    , weRegistry :: !RegistryView
+    , weScopeView :: !ScopeView
+    , weWalletSelection :: !WalletSelection
+    , weTreasuryRewardAccount :: !Text
+    -- ^ 28-byte hex stake-script hash for the selected treasury
+    , weRewardsLovelace :: !Integer
+    -- ^ positive rewards balance resolved from chain state
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON WithdrawEnv where
+    parseJSON = withObject "WithdrawEnv" $ \o ->
+        WithdrawEnv
+            <$> o .: "network"
+            <*> o .: "currentTip"
+            <*> o .: "networkConstants"
+            <*> o .: "registry"
+            <*> o .: "scopeView"
+            <*> o .: "walletSelection"
+            <*> o .: "treasuryRewardAccount"
+            <*> o .: "rewardsLovelace"
+
+-- ----------------------------------------------------
+-- Pure translation
+-- ----------------------------------------------------
+
+data WithdrawError
+    = WithdrawRewardsNotPositive
+    | WithdrawValidityHoursOutOfRange !Word8
+    | WithdrawScopeMismatch !ScopeId !ScopeId
+    | WithdrawNetworkUnsupported !Text
+    | WithdrawNetworkMismatch !Text !Text
+    deriving stock (Eq, Show)
+
+{- | Pure translation to the unified schema-v1
+'TreasuryIntent' withdraw shape.
+-}
+withdrawToTreasuryIntent
+    :: WithdrawEnv
+    -> WithdrawAnswers
+    -> Either WithdrawError (TreasuryIntent 'Withdraw)
+withdrawToTreasuryIntent env ans = do
+    validate env ans
+    pure
+        TreasuryIntent
+            { tiSAction = SWithdraw
+            , tiSchema = 1
+            , tiNetwork = weNetwork env
+            , tiWallet = mkWallet (weWalletSelection env)
+            , tiScope = mkScope env ans
+            , tiSigners = []
+            , tiValidityUpperBoundSlot =
+                weCurrentTip env
+                    + ncSlotsPerHour
+                        (weNetworkConstants env)
+                        * fromIntegral (waValidityHours ans)
+            , tiRationale = mkRationale ans
+            , tiPayload =
+                WithdrawInputs
+                    { wdiTreasuryRewardAccount =
+                        weTreasuryRewardAccount env
+                    , wdiRewardsLovelace = weRewardsLovelace env
+                    }
+            }
+
+validate
+    :: WithdrawEnv -> WithdrawAnswers -> Either WithdrawError ()
+validate env ans = do
+    when
+        (weRewardsLovelace env <= 0)
+        (Left WithdrawRewardsNotPositive)
+    let h = waValidityHours ans
+    when
+        (h == 0 || h > 48)
+        (Left (WithdrawValidityHoursOutOfRange h))
+    let resolvedScope = svScope (weScopeView env)
+    when
+        (waScope ans /= resolvedScope)
+        (Left (WithdrawScopeMismatch (waScope ans) resolvedScope))
+    case networkFamily (weNetwork env) of
+        Nothing ->
+            Left (WithdrawNetworkUnsupported (weNetwork env))
+        Just expected ->
+            case addrNetwork (trAddress (svRefs (weScopeView env))) of
+                Just observed
+                    | observed /= expected ->
+                        Left
+                            ( WithdrawNetworkMismatch
+                                (weNetwork env)
+                                (networkText observed)
+                            )
+                _ -> Right ()
+
+mkWallet :: WalletSelection -> WalletJSON
+mkWallet ws =
+    WalletJSON
+        { wjTxIn = wsTxIn ws
+        , wjAddress = wsAddress ws
+        }
+
+mkScope :: WithdrawEnv -> WithdrawAnswers -> ScopeJSON
+mkScope env ans =
+    let r = weRegistry env
+        s = svRefs (weScopeView env)
+    in  ScopeJSON
+            { sjId = scopeText (waScope ans)
+            , sjTreasuryAddress = trAddress s
+            , sjTreasuryUtxos = []
+            , sjTreasuryLeftoverLovelace = 0
+            , sjTreasuryLeftoverUsdm = 0
+            , sjTreasuryLeftoverOtherAssets = Map.empty
+            , sjTreasuryScriptHash = trScriptHash s
+            , sjPermissionsRewardAccount =
+                trPermissionsRewardAccount s
+            , sjScopesDeployedAt = rvScopesDeployedAt r
+            , sjPermissionsDeployedAt =
+                rvPermissionsDeployedAt r
+            , sjTreasuryDeployedAt = rvTreasuryDeployedAt r
+            , sjRegistryDeployedAt = rvRegistryDeployedAt r
+            , sjRegistryPolicyId = rvRegistryPolicyId r
+            }
+
+mkRationale :: WithdrawAnswers -> RationaleJSON
+mkRationale ans =
+    let scopeName = scopeText (waScope ans)
+    in  RationaleJSON
+            { rjEvent = fromMaybe "withdraw" (waEvent ans)
+            , rjLabel =
+                fromMaybe
+                    "Withdraw treasury rewards"
+                    (waLabel ans)
+            , rjDescription =
+                fromMaybe
+                    ("Withdraw accumulated rewards for " <> scopeName)
+                    (waDescription ans)
+            , rjJustification =
+                fromMaybe
+                    "Move rewards back under treasury contract control"
+                    (waJustification ans)
+            , rjDestinationLabel =
+                fromMaybe
+                    (scopeName <> " treasury")
+                    (waDestinationLabel ans)
+            }
+
+networkFamily :: Text -> Maybe Network
+networkFamily n = case T.toLower n of
+    "mainnet" -> Just Mainnet
+    "preprod" -> Just Testnet
+    "preview" -> Just Testnet
+    _ -> Nothing
+
+networkText :: Network -> Text
+networkText = \case
+    Mainnet -> "mainnet"
+    Testnet -> "testnet"

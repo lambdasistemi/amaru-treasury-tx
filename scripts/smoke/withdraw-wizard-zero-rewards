@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Offline-safe zero-rewards smoke guard. T031 wires this into
-# `just smoke` after the runner no-op behavior lands; until then
-# it protects the fixture/no-intent invariant and CLI surface.
+# Offline-safe zero-rewards smoke guard for the withdraw wizard.
+# It protects the fixture/no-intent invariant and CLI surface.
 
 cabal build exe:amaru-treasury-tx -O0 >/dev/null
 

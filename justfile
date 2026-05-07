@@ -53,6 +53,7 @@ schema-check:
 # Smoke-test the shipped CLI surface
 smoke:
     scripts/smoke/swap-wizard-signers
+    scripts/smoke/withdraw-wizard-zero-rewards
     scripts/smoke/tx-build-pipe
 
 # Build all components

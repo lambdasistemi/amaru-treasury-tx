@@ -114,7 +114,7 @@ before the implementation tasks they constrain.
 
 - [x] T029 [US2] Implement typed zero-rewards result/event in `lib/Amaru/Treasury/Tx/WithdrawWizard.hs` and `lib/Amaru/Treasury/Tx/WithdrawWizard/Trace.hs`.
 - [x] T030 [US2] Wire zero-rewards behavior in `app/amaru-treasury-tx/Main.hs` so `--out` targets are not created or modified.
-- [ ] T031 [US2] Add the zero-rewards smoke script to `just smoke` or an equivalent smoke aggregator in `justfile`.
+- [x] T031 [US2] Add the zero-rewards smoke script to `just smoke` or an equivalent smoke aggregator in `justfile`.
 - [ ] T032 [US2] Run `nix develop --quiet -c just smoke` and confirm the zero-rewards path passes.
 
 **Checkpoint**: Zero rewards never produces a stale or misleading intent artifact.

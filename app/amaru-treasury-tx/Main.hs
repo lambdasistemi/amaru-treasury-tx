@@ -83,7 +83,11 @@ import Data.Set qualified as Set
 import Cardano.Ledger.Api.Tx.Out (valueTxOutL)
 
 import Amaru.Treasury.Backend (Provider (..))
-import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
+import Amaru.Treasury.Backend.N2C
+    ( findSocketMagic
+    , probeNetworkMagic
+    , withLocalNodeBackend
+    )
 import Amaru.Treasury.ChainContext (liveContext)
 import Amaru.Treasury.IntentJSON
     ( SAction (..)
@@ -843,6 +847,33 @@ runTxBuild socket TxBuildOpts{..} = do
         traceWith
             tr
             (TbeRequiredUtxos (Set.size required))
+        -- Network handshake: probe the intent's magic against
+        -- the socket; if it refuses, identify the socket's
+        -- actual network by trying the two remaining known
+        -- magics and emit a typed mismatch event before any
+        -- balance or build work happens.
+        ok <- probeNetworkMagic magic socket
+        if ok
+            then
+                traceWith
+                    tr
+                    ( TbeNetworkOk
+                        netName
+                        (unNetworkMagic magic)
+                    )
+            else do
+                socketMagic <-
+                    findSocketMagic
+                        (`probeNetworkMagic` socket)
+                        netName
+                traceWith
+                    tr
+                    ( TbeNetworkMismatch
+                        netName
+                        (unNetworkMagic magic)
+                        socketMagic
+                    )
+                exitWith (ExitFailure 6)
         withLocalNodeBackend magic socket $ \backend -> do
             ctx <- liveContext backend required
             tbr <- runFromIntent ctx some

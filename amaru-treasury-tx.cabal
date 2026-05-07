@@ -231,6 +231,7 @@ test-suite unit-tests
     , hspec
     , hspec-discover
     , microlens
+    , ouroboros-network:api
     , plutus-core
     , QuickCheck
     , serialise

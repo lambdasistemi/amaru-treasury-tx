@@ -99,7 +99,7 @@ the parser/encoder helpers shared across actions.
       `lib/Amaru/Treasury/IntentJSON.hs` with `FromJSON` +
       `ToJSON`. Field list per
       [data-model.md §3](./data-model.md).
-- [ ] T006 [P] Implement the per-action input records
+- [X] T006 [P] Implement the per-action input records
       (`SwapInputs`, `DisburseInputs`, `WithdrawInputs`,
       `ReorganizeInputs`) in
       `lib/Amaru/Treasury/IntentJSON.hs` with `FromJSON` +
@@ -304,16 +304,16 @@ the sole build entry point.
       `swap` key. Confirm `just golden --test-options=
       --match=swap` passes (i.e. the rewired
       `SwapGoldenSpec` matches the unchanged `expected.cbor`).
-- [ ] T026 [US1] Smoke script `scripts/smoke/tx-build-pipe`:
+- [X] T026 [US1] Smoke script `scripts/smoke/tx-build-pipe`:
       exercise `swap-wizard | tx-build` against a fixture
       metadata.json, assert the wizard's stdout decodes as
       `SomeTreasuryIntent` and that `tx-build < intent.json`
       exits `0` with hex on stdout. Records wall-clock and
       fails > 10 s (covers feature 004 SC-002 carryover).
-- [ ] T027 [US1] Add the smoke script to the `just smoke`
+- [X] T027 [US1] Add the smoke script to the `just smoke`
       recipe and to the CI workflow under
       [`.github/workflows/ci.yml`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/.github/workflows/ci.yml).
-- [ ] T028 [US1] Delete the now-unused
+- [X] T028 [US1] Delete the now-unused
       `lib/Amaru/Treasury/Tx/SwapBuild.hs`,
       `lib/Amaru/Treasury/Tx/SwapIntentJSON.hs`,
       `lib/Amaru/Treasury/Tx/Swap/Trace.hs`. Remove their entries
@@ -336,7 +336,7 @@ pre-PR pipeline. SC-001 + SC-004 satisfied.
 network than the intent declares, `tx-build` exits 6 with a
 clear "intent declares X, socket reports Y" error.
 
-- [ ] T029 [US2] Read the N2C handshake's reported magic in
+- [X] T029 [US2] Read the N2C handshake's reported magic in
       `app/amaru-treasury-tx/Main.hs` after
       `withLocalNodeBackend` connects. Compare against
       `intent.network`'s magic
@@ -344,13 +344,13 @@ clear "intent declares X, socket reports Y" error.
       emit `TbeNetworkMismatch (intentNet, intentMagic)
       (socketNet, socketMagic)`, write a single-line stderr
       message, and exit 6.
-- [ ] T030 [US2] Refactor
+- [X] T030 [US2] Refactor
       [`runWizard`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/app/amaru-treasury-tx/Main.hs)
       in `app/amaru-treasury-tx/Main.hs` to write
       `tiSchema = 1`, `tiSAction = SSwap`, and `tiNetwork =
       <name>` into the unified intent. The wizard's flag set is
       unchanged (still takes `--network`).
-- [ ] T031 [P] [US2] Unit test in
+- [X] T031 [P] [US2] Unit test in
       `test/unit/Amaru/Treasury/TreasuryBuildSpec.hs`: stub
       `Provider IO` reports a network magic differing from the
       intent's; assert the runner returns `Left
@@ -373,11 +373,11 @@ balance.
 > versioning hook"). Mostly already covered by T014 + T019;
 > this phase locks the contract.
 
-- [ ] T033 [US4] Confirm the schema allow-list is exposed as
+- [X] T033 [US4] Confirm the schema allow-list is exposed as
       `allowedSchemas :: [Int]` from
       `Amaru.Treasury.IntentJSON` (per data-model §6) and
       Haddock-document it as the single source of truth.
-- [ ] T034 [US4] Add a Haddock note above the `allowedSchemas`
+- [X] T034 [US4] Add a Haddock note above the `allowedSchemas`
       definition explaining the bump protocol: a future schema
       change appends to the list; old binaries refuse new
       intents; new binaries accept old intents only if their
@@ -396,27 +396,27 @@ balance.
 `swap-wizard … | swap` says `swap-wizard … | tx-build` after
 this PR. `grep -r '| swap '` returns zero hits.
 
-- [ ] T035 [US5] Update `README.md`: replace any `| swap`
+- [X] T035 [US5] Update `README.md`: replace any `| swap`
       pipeline example with `| tx-build`.
-- [ ] T036 [US5] Update `docs/quickstart.md` (the user-facing
+- [X] T036 [US5] Update `docs/quickstart.md` (the user-facing
       docs site): replace any `| swap` example with
       `| tx-build`. Ensure the Markdown still renders cleanly
       under `mkdocs`.
-- [ ] T037 [US5] Update
+- [X] T037 [US5] Update
       [`specs/002-swap-wizard/quickstart.md`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/002-swap-wizard/quickstart.md):
       change the famous-swap pipeline to use `| tx-build`.
-- [ ] T038 [US5] Update
+- [X] T038 [US5] Update
       [`specs/002-swap-wizard/contracts/swap-wizard-cli.md`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/002-swap-wizard/contracts/swap-wizard-cli.md)
       to reflect the new intent shape (top-level `network`,
       `schema`, `action`).
-- [ ] T039 [US5] Update
+- [X] T039 [US5] Update
       [`specs/002-swap-wizard/spec.md`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/002-swap-wizard/spec.md)
       and
       [`specs/002-swap-wizard/plan.md`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/002-swap-wizard/plan.md)
       with a "Superseded by feature 005" preface and link to
       this PR. Mark feature 002 as a contributor to the
       unified shape.
-- [ ] T040 [US5] Run `grep -rE '\| swap ' README.md docs/
+- [X] T040 [US5] Run `grep -rE '\| swap ' README.md docs/
       specs/002-swap-wizard/`; assert zero matches. (Not
       including `| swap-wizard ` which is a different command.)
 
@@ -428,14 +428,14 @@ of SC-004) satisfied.
 
 ## Phase 8: Polish & cross-cutting concerns
 
-- [ ] T041 [P] Update PR description with the final
+- [X] T041 [P] Update PR description with the final
       `swap-wizard | tx-build` reference and link to
       [quickstart.md](./quickstart.md). Use `gh pr edit` after
       every push to keep the description in sync with the diff.
-- [ ] T042 [P] Run `nix develop -c just cabal-check`; resolve
+- [X] T042 [P] Run `nix develop -c just cabal-check`; resolve
       any new warnings to keep the package Hackage-ready
       (Constitution VI).
-- [ ] T043 [P] Run `nix develop -c just hlint` and
+- [X] T043 [P] Run `nix develop -c just hlint` and
       `nix develop -c just format-check`; resolve any new
       diagnostics.
 - [ ] T044 Manual preprod E2E recorded in the PR description:

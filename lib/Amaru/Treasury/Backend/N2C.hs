@@ -17,6 +17,7 @@ This is the only impure module in
 module Amaru.Treasury.Backend.N2C
     ( withLocalNodeBackend
     , probeNetworkMagic
+    , probeResultAccepted
     , findSocketMagic
     , knownNetworkMagics
     ) where
@@ -25,6 +26,7 @@ import Control.Concurrent.Async
     ( withAsync
     )
 import Control.Exception (SomeException, throwIO, try)
+import Control.Monad (void)
 import Data.Text (Text)
 import Data.Word (Word32)
 import Ouroboros.Network.Magic (NetworkMagic (..))
@@ -35,7 +37,11 @@ import Cardano.Node.Client.N2C.Connection
     , newLTxSChannel
     , runNodeClient
     )
+import Cardano.Node.Client.N2C.LocalStateQuery (queryLSQ)
 import Cardano.Node.Client.N2C.Provider (mkN2CProvider)
+import Ouroboros.Consensus.Ledger.Query
+    ( Query (GetChainPoint)
+    )
 
 import Amaru.Treasury.Backend (Backend)
 
@@ -70,17 +76,18 @@ withLocalNodeBackend magic socketPath action = do
 
 {- | Probe whether a Unix socket accepts the given
 'NetworkMagic' on the N2C handshake. Returns 'True' if
-the handshake completes (i.e. the socket's network
-matches), 'False' if 'runNodeClient' returns a Left
-within the timeout, and 'False' on any other exception
-(treated as "socket unreachable / wrong network").
+the handshake completes and LocalStateQuery can answer a
+cheap chain-point query. Returns 'False' if the query
+does not answer within the timeout or any exception is
+raised (treated as "socket unreachable / wrong
+network").
 
 The timeout is short on purpose: a local-Unix N2C
-handshake completes in tens of milliseconds; anything
-slower is a sign that the socket is unreachable or the
-magic is wrong. After the probe we abandon the channels
-and let the caller open a fresh connection if it wants
-to.
+handshake and LSQ chain-point query complete in tens of
+milliseconds; anything slower is a sign that the socket
+is unreachable, still replaying, or the magic is wrong.
+After the probe we abandon the channels and let the
+caller open a fresh connection if it wants to.
 -}
 probeNetworkMagic
     :: NetworkMagic
@@ -90,16 +97,17 @@ probeNetworkMagic magic socketPath = do
     lsq <- newLSQChannel 1
     ltxs <- newLTxSChannel 1
     r <-
-        timeout 1_500_000 $
-            try (runNodeClient magic socketPath lsq ltxs)
-    pure $ case r of
-        Nothing -> True
-        -- timeout fired => handshake completed, conn open
-        Just (Right (Right ())) -> True
-        -- runNodeClient returned cleanly (rare)
-        Just (Right (Left _)) -> False
-        -- handshake refused
-        Just (Left (_ :: SomeException)) -> False
+        timeout 1_500_000
+            $ try @SomeException
+            $ withAsync
+                (runNodeClient magic socketPath lsq ltxs)
+            $ \_ -> void (queryLSQ lsq GetChainPoint)
+    pure (probeResultAccepted r)
+
+-- | Interpret the bounded LSQ probe result.
+probeResultAccepted :: Maybe (Either e a) -> Bool
+probeResultAccepted (Just (Right _)) = True
+probeResultAccepted _ = False
 
 {- | Curated allow-list of network names ↔ magics. Mirrors
 the case in 'app/amaru-treasury-tx/Main.hs' that maps

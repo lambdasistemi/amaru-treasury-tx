@@ -4,18 +4,14 @@ Description : Tracer events for the unified tx-build pipeline
 Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
-Mirrors
-[`Amaru.Treasury.Tx.Swap.Trace.SwapEvent`](Amaru.Treasury.Tx.Swap.Trace.html)
-shape but adds three events specific to the unified
-intent: 'TbeIntentParsed' (the action + network read
+Carries the steps the unified @tx-build@ subcommand
+takes that affect the produced tx CBOR or the summary
+sidecar: 'TbeIntentParsed' (the action + network read
 from the intent), 'TbeNetworkOk' / 'TbeNetworkMismatch'
 (the N2C handshake magic vs @intent.network@), and
 'TbeWroteSummary' (the summary sidecar path).
 
-Constructor prefix @Tbe-@ for "TreasuryBuildEvent" so
-traces are distinguishable when both unified and per-
-action tracers are visible (mostly during the migration
-transition; per-action tracers retire in T028).
+Constructor prefix @Tbe-@ for "TreasuryBuildEvent".
 -}
 module Amaru.Treasury.TreasuryBuild.Trace
     ( BuildEvent (..)

@@ -15,6 +15,22 @@ per-action build pipeline. Keeps the pure builders
 'runBuild' is just the IO seam that selects which one to
 call.
 
+Threads the chosen pure program through a
+[`Cardano.Node.Client.TxBuild.build`](https://github.com/lambdasistemi/cardano-node-clients)
+loop with the live script evaluator. Since
+[lambdasistemi/cardano-node-clients#124](https://github.com/lambdasistemi/cardano-node-clients/issues/124)
+@build@ emits Conway @total_collateral@ (CBOR key 17)
+and @collateral_return@ (key 16) inside the fee
+fixpoint, defaulting the return target to the same
+change address passed to @build@. The wallet UTxO
+doubles as fuel and collateral, so the default is
+correct here and no @setCollateralReturn@ override is
+needed.
+
+The final tx is re-evaluated against the script
+evaluator so callers get a per-redeemer outcome
+('tbrScriptResults') alongside the CBOR.
+
 In this phase-4 cut only the swap branch is wired; the
 others are 'throwIO' stubs. Disburse comes online when
 [#47](https://github.com/lambdasistemi/amaru-treasury-tx/pull/47)
@@ -30,37 +46,70 @@ module Amaru.Treasury.TreasuryBuild
       TreasuryBuildResult (..)
     , ScriptResult (..)
 
-      -- * Driver
+      -- * Drivers
     , runBuild
     , runFromIntent
+    , runSwap
     ) where
 
 import Control.Exception (throwIO)
+import Control.Monad (unless)
 import Data.ByteString.Lazy qualified as BSL
+import Data.Map.Strict qualified as Map
 
-import Cardano.Ledger.Coin (Coin)
+import Cardano.Ledger.Address (Addr)
+import Cardano.Ledger.Alonzo.Scripts (AsIx)
+import Cardano.Ledger.Api.Era (eraProtVerLow)
+import Cardano.Ledger.Api.Tx.Body
+    ( feeTxBodyL
+    , totalCollateralTxBodyL
+    )
+import Cardano.Ledger.BaseTypes (StrictMaybe (..))
+import Cardano.Ledger.Binary (serialize)
+import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Conway (ConwayEra)
+import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
+import Cardano.Ledger.Core (bodyTxL)
+import Cardano.Ledger.Metadata (Metadatum)
+import Cardano.Ledger.Plutus (ExUnits)
+import Cardano.Ledger.TxIn (TxIn)
+import Cardano.Node.Client.Ledger (ConwayTx)
+import Cardano.Node.Client.TxBuild
+    ( BuildError
+    , InterpretIO (..)
+    , build
+    , setMetadata
+    )
+import Lens.Micro ((^.))
 
-import Amaru.Treasury.ChainContext (ChainContext)
+import Amaru.Treasury.AuxData (label1694)
+import Amaru.Treasury.ChainContext (ChainContext (..))
 import Amaru.Treasury.IntentJSON
-    ( Action (..)
-    , SAction (..)
+    ( SAction (..)
     , SomeTreasuryIntent (..)
     , Translated
     , TranslatedShared (..)
     , translateIntent
     )
-import Amaru.Treasury.Tx.SwapBuild
-    ( ScriptResult (..)
-    , SwapBuildInputs (..)
-    , SwapBuildResult (..)
-    , runSwapBuild
+import Amaru.Treasury.Tx.Swap
+    ( SwapIntent (..)
+    , swapProgram
     )
 
-{- | What the build pipeline returns. Field set is
-identical to today's @SwapBuildResult@ /
-@DisburseBuildResult@ — just renamed under the
-unified module.
--}
+-- | Per-script result from 'evaluateTx'.
+data ScriptResult = ScriptResult
+    { srPurpose
+        :: !( ConwayPlutusPurpose
+                AsIx
+                ConwayEra
+            )
+    , srOutcome :: !(Either String ExUnits)
+    -- ^ @Right ex@ on success carrying the evaluator's
+    --     ExUnits; @Left e@ on script failure.
+    }
+    deriving (Show)
+
+-- | What the build pipeline returns.
 data TreasuryBuildResult = TreasuryBuildResult
     { tbrCborBytes :: !BSL.ByteString
     -- ^ raw Conway tx CBOR
@@ -93,7 +142,13 @@ runBuild
     -> Translated a
     -> IO TreasuryBuildResult
 runBuild ctx shared sa translated = case sa of
-    SSwap -> runSwap ctx shared translated
+    SSwap ->
+        runSwap
+            ctx
+            translated
+            (tsRationale shared)
+            (tsWalletTxIn shared)
+            (tsWalletAddr shared)
     SDisburse ->
         throwIO . userError $
             "runBuild: 'disburse' lands when feature 004 PR #47"
@@ -125,33 +180,123 @@ runFromIntent ctx (SomeTreasuryIntent sa intent) = do
 -- Swap runner
 -- ----------------------------------------------------
 
-{- | The swap-action build runner. Delegates to the
-existing 'runSwapBuild'; this wrapper just adapts the
-record shape (TranslatedShared + Translated 'Swap →
-SwapBuildInputs).
+{- | Build a swap transaction end-to-end against a
+'ChainContext'. The context carries the only inputs the
+build is allowed to read from "reality" (pparams,
+UTxOs, script evaluator); supplying a frozen one
+('Amaru.Treasury.ChainContext.frozenContext') makes the
+build deterministic across chain drift.
 
-The @runSwapBuild@ body itself moves into this module
-in T028 once 'Amaru.Treasury.Tx.SwapBuild' is collapsed.
+This is the low-level driver; callers that already have
+a typed 'TreasuryIntent' can reach it via 'runBuild' /
+'runFromIntent'. Direct callers ('app/swap-probe',
+'app/capture-swap-context') stitch the inputs together
+manually for parity tooling.
 -}
 runSwap
     :: ChainContext
-    -> TranslatedShared
-    -> Translated 'Swap
+    -> SwapIntent
+    -> Metadatum
+    -- ^ CIP-1694 rationale tree (see 'Amaru.Treasury.AuxData')
+    -> TxIn
+    -- ^ the wallet UTxO used as fuel + collateral
+    -> Addr
+    -- ^ change address — also receives @collateral_return@
+    --     by default (see module header)
     -> IO TreasuryBuildResult
-runSwap ctx shared swapIntent = do
-    let inputs =
-            SwapBuildInputs
-                { sbiIntent = swapIntent
-                , sbiRationale = tsRationale shared
-                , sbiWalletTxIn = tsWalletTxIn shared
-                , sbiWalletAddr = tsWalletAddr shared
-                }
-    sbr <- runSwapBuild ctx inputs
-    pure
-        TreasuryBuildResult
-            { tbrCborBytes = sbrCborBytes sbr
-            , tbrFeeLovelace = sbrFeeLovelace sbr
-            , tbrTotalCollateralLovelace =
-                sbrTotalCollateralLovelace sbr
-            , tbrScriptResults = sbrScriptResults sbr
-            }
+runSwap ctx intent rationale walletInput walletAddr = do
+    let utxoMap = ccUtxos ctx
+        required =
+            walletInput
+                : siTreasuryUtxos intent
+                ++ [ siScopesDeployedAt intent
+                   , siPermissionsDeployedAt intent
+                   , siTreasuryDeployedAt intent
+                   , siRegistryDeployedAt intent
+                   ]
+        missing =
+            [ i
+            | i <- required
+            , not (Map.member i utxoMap)
+            ]
+    unless (null missing) $
+        throwIO . userError $
+            "runSwap: missing UTxOs in context: "
+                <> show missing
+    let inputUtxos =
+            (walletInput, utxoMap Map.! walletInput)
+                : [ (i, utxoMap Map.! i)
+                  | i <- siTreasuryUtxos intent
+                  ]
+        refUtxos =
+            [ (i, utxoMap Map.! i)
+            | i <-
+                [ siScopesDeployedAt intent
+                , siPermissionsDeployedAt intent
+                , siTreasuryDeployedAt intent
+                , siRegistryDeployedAt intent
+                ]
+            ]
+        pp = ccPParams ctx
+    let evaluator tx = do
+            m <- ccEvaluateTx ctx tx
+            pure (fmap (either (Left . show) Right) m)
+        program = do
+            swapProgram intent
+            setMetadata label1694 rationale
+        noCtxIO :: InterpretIO q
+        noCtxIO =
+            InterpretIO $
+                const
+                    (error "runSwap: unexpected ctx")
+    result <-
+        build
+            pp
+            noCtxIO
+            evaluator
+            inputUtxos
+            refUtxos
+            walletAddr
+            program
+    case result of
+        Left e ->
+            throwIO . userError $
+                "runSwap: build failed: "
+                    <> show (e :: BuildError ())
+        Right tx -> do
+            let body = tx ^. bodyTxL
+                feeLov = body ^. feeTxBodyL
+                totalColl = case body
+                    ^. totalCollateralTxBodyL of
+                    SJust c -> c
+                    SNothing -> Coin 0
+            -- Re-evaluate on the final tx so callers
+            -- see the per-redeemer outcome alongside
+            -- the CBOR. The closure passed to 'build'
+            -- above drove the balancing fixpoint; this
+            -- second call captures script results once
+            -- the body is settled.
+            scriptMap <- ccEvaluateTx ctx tx
+            let scriptResults =
+                    [ ScriptResult
+                        purpose
+                        ( either
+                            (Left . show)
+                            Right
+                            outcome
+                        )
+                    | (purpose, outcome) <-
+                        Map.toAscList scriptMap
+                    ]
+                cbor =
+                    serialize
+                        (eraProtVerLow @ConwayEra)
+                        (tx :: ConwayTx)
+            pure
+                TreasuryBuildResult
+                    { tbrCborBytes = cbor
+                    , tbrFeeLovelace = feeLov
+                    , tbrTotalCollateralLovelace =
+                        totalColl
+                    , tbrScriptResults = scriptResults
+                    }

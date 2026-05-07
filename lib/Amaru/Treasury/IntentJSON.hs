@@ -295,8 +295,9 @@ instance ToJSON RationaleJSON where
 -- Per-action input records
 -- ----------------------------------------------------
 
-{- | Swap-action payload. Identical fields to today's
-'Amaru.Treasury.Tx.SwapIntentJSON.SwapInputs'.
+{- | Swap-action payload — the per-chunk SundaeSwap V3
+order parameters plus the four scope owner key hashes
+that authorise the swap redeemer.
 -}
 data SwapInputs = SwapInputs
     { swiSwapOrderAddress :: !Text

@@ -28,7 +28,7 @@ build a 'ChainContext':
   pure evaluator (typically returning ExUnits captured
   during a previous live run).
 
-Consumers ('Amaru.Treasury.Tx.SwapBuild.runSwapBuild')
+Consumers ('Amaru.Treasury.TreasuryBuild.runSwap')
 take a 'ChainContext' and don't care which constructor
 made it.
 -}

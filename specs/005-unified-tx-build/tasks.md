@@ -458,6 +458,37 @@ of SC-004) satisfied.
 
 ---
 
+## Phase 9: JSON Schema contract addendum
+
+**Goal**: publish a machine-readable JSON Schema for the unified
+intent format and verify that current wizard/golden outputs conform
+to it.
+
+- [X] T046 Add `Amaru.Treasury.IntentJSON.Schema` exporting
+      `intentJsonSchema :: Value` and
+      `encodeIntentJsonSchema :: ByteString`. The schema is
+      JSON Schema 2020-12, has one `oneOf` branch per action, and
+      uses `allowedSchemas` for the top-level `schema` enum.
+- [X] T047 Add the `amaru-treasury-intent-schema` executable and
+      commit the generated `docs/assets/intent-schema.json`
+      asset.
+- [X] T048 Add unit coverage that validates
+      `test/fixtures/swap/intent.json`,
+      `test/fixtures/swap-wizard/expected.intent.json`, and fresh
+      `wizardToTreasuryIntent` output against the generated
+      schema. The same spec rejects an action / payload-block
+      mismatch.
+- [X] T049 Add `just update-schema`, `just schema-check`, a Nix
+      `checks.x86_64-linux.schema` derivation, and wire that check
+      into GitHub CI.
+- [X] T050 Update the JSON intent contract, data model, plan, and
+      operator docs to point at the schema asset and generator.
+
+**Checkpoint**: hand-written intents have a checked-in validator
+contract, and schema drift is caught locally and in CI.
+
+---
+
 ## Dependencies
 
 ```
@@ -469,6 +500,7 @@ Setup (T001-T003)
                                     └── Phase 6 [US4] schema (T033-T034)
                                             └── Phase 7 [US5] docs (T035-T040)
                                                     └── Phase 8 polish (T041-T045)
+                                                            └── Phase 9 schema addendum (T046-T050)
 ```
 
 Phase 3 (`[US3]` round-trip) is the MVP gate — it earns the
@@ -496,7 +528,8 @@ migration.
 **MVP = Phase 1 + Phase 2 + Phase 3.** Proves the unified
 `SomeTreasuryIntent` shape parses and encodes round-trip for all
 four action variants. Phase 4 lands the byte-identity gate.
-Phase 5–8 polish the operator + docs experience.
+Phase 5–9 polish the operator, docs, and machine-readable
+contract experience.
 
 ## Out of scope for this feature
 

@@ -107,6 +107,14 @@ bech32 base addresses for `wallet.address`,
 `Amaru.Treasury.IntentJSON.allowedSchemas` — the bump protocol
 documented there is the single source of truth.
 
+The machine-readable contract is committed at
+`docs/assets/intent-schema.json`. It is generated from
+`Amaru.Treasury.IntentJSON.Schema`; run `just update-schema`
+after changing the intent shape. `just schema-check` and CI
+diff the checked-in asset against the executable output and the
+unit suite validates both swap fixtures plus the swap wizard
+output against it.
+
 ## Validation
 
 Once the build returns, the CLI re-runs the live evaluator against

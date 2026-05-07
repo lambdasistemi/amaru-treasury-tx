@@ -131,6 +131,8 @@
               meta.mainProgram = name;
             };
           amaru-treasury-tx = mkExe "amaru-treasury-tx";
+          amaru-treasury-intent-schema =
+            mkExe "amaru-treasury-intent-schema";
           swap-probe = mkExe "swap-probe";
           capture-swap-context = mkExe "capture-swap-context";
           sourceRevision = self.shortRev or (self.dirtyShortRev or "dirty");
@@ -184,7 +186,12 @@
         in {
           packages = {
             default = amaru-treasury-tx;
-            inherit amaru-treasury-tx swap-probe capture-swap-context;
+            inherit
+              amaru-treasury-tx
+              amaru-treasury-intent-schema
+              swap-probe
+              capture-swap-context
+              ;
           } // darwinReleasePackages // linuxReleasePackages;
           inherit checks;
           apps = checkApps // {

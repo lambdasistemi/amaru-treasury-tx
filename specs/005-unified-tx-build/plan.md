@@ -239,9 +239,14 @@ test/golden/
 └── SwapGoldenSpec.hs             # re-points at IntentJSON;
                                   # asserts unchanged expected.cbor.
 
-docs/                             # quickstart.md updated to use
-                                  # `swap-wizard | tx-build`; old
-                                  # `| swap` references removed.
+docs/
+└── assets/intent-schema.json     # generated JSON Schema 2020-12
+                                  # contract for hand-written
+                                  # intents and drift checks.
+
+app/amaru-treasury-intent-schema/
+└── Main.hs                       # prints the generated
+                                  # TreasuryIntent JSON Schema.
 
 specs/002-swap-wizard/            # spec.md, plan.md, quickstart.md,
                                   # contracts/swap-wizard-cli.md
@@ -263,6 +268,13 @@ build path) is unified.
 This split preserves the operator-visible shape of feature 002's
 wizard CLI (same flags, same prompts) while dramatically
 simplifying the consumer side.
+
+The machine-readable JSON Schema lives beside the intent types in
+`Amaru.Treasury.IntentJSON.Schema`, not in a hand-maintained docs
+file. `docs/assets/intent-schema.json` is generated output; the
+schema executable, `just schema-check`, and
+`checks.x86_64-linux.schema` keep that asset aligned with the
+Haskell source.
 
 ## Complexity Tracking
 

@@ -36,6 +36,20 @@ hlint:
 release-check:
     scripts/release/check-version-consistency
 
+# Regenerate the TreasuryIntent JSON Schema asset
+update-schema:
+    cabal run -v0 -O0 exe:amaru-treasury-intent-schema \
+        > docs/assets/intent-schema.json
+
+# Check that the committed TreasuryIntent JSON Schema is current
+schema-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tmp="$(mktemp)"
+    trap 'rm -f "$tmp"' EXIT
+    cabal run -v0 -O0 exe:amaru-treasury-intent-schema > "$tmp"
+    diff -u docs/assets/intent-schema.json "$tmp"
+
 # Smoke-test the shipped CLI surface
 smoke:
     scripts/smoke/swap-wizard-signers
@@ -74,6 +88,7 @@ golden match="":
 # Full CI pipeline (build, tests, lint, format-check)
 ci:
     just build
+    just schema-check
     just unit
     just golden
     just format-check

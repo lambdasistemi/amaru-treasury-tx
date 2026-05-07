@@ -1,0 +1,501 @@
+{
+    "$defs": {
+        "assetMap": {
+            "additionalProperties": {
+                "additionalProperties": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "propertyNames": {
+                    "$ref": "#/$defs/assetNameHex"
+                },
+                "type": "object"
+            },
+            "propertyNames": {
+                "$ref": "#/$defs/hex28"
+            },
+            "type": "object"
+        },
+        "assetNameHex": {
+            "pattern": "^([0-9a-fA-F]{2})*$",
+            "type": "string"
+        },
+        "bech32Address": {
+            "pattern": "^addr(_test)?1[0-9a-z]+$",
+            "type": "string"
+        },
+        "disburse": {
+            "additionalProperties": false,
+            "properties": {
+                "amount": {
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "beneficiaryAddress": {
+                    "$ref": "#/$defs/bech32Address"
+                },
+                "unit": {
+                    "enum": [
+                        "ada",
+                        "usdm"
+                    ],
+                    "type": "string"
+                },
+                "usdmPolicy": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "usdmToken": {
+                    "$ref": "#/$defs/assetNameHex"
+                }
+            },
+            "required": [
+                "unit",
+                "amount",
+                "beneficiaryAddress",
+                "usdmPolicy",
+                "usdmToken"
+            ],
+            "type": "object"
+        },
+        "hex28": {
+            "pattern": "^([0-9a-fA-F]{56})$",
+            "type": "string"
+        },
+        "rationale": {
+            "additionalProperties": false,
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "destinationLabel": {
+                    "type": "string"
+                },
+                "event": {
+                    "type": "string"
+                },
+                "justification": {
+                    "type": "string"
+                },
+                "label": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "event",
+                "label",
+                "description",
+                "justification",
+                "destinationLabel"
+            ],
+            "type": "object"
+        },
+        "reorganize": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
+            "type": "object"
+        },
+        "scope": {
+            "additionalProperties": false,
+            "properties": {
+                "id": {
+                    "enum": [
+                        "core_development",
+                        "ops_and_use_cases",
+                        "network_compliance",
+                        "middleware",
+                        "contingency"
+                    ],
+                    "type": "string"
+                },
+                "permissionsDeployedAt": {
+                    "$ref": "#/$defs/txIn"
+                },
+                "permissionsRewardAccount": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "registryDeployedAt": {
+                    "$ref": "#/$defs/txIn"
+                },
+                "registryPolicyId": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "scopesDeployedAt": {
+                    "$ref": "#/$defs/txIn"
+                },
+                "treasuryAddress": {
+                    "$ref": "#/$defs/bech32Address"
+                },
+                "treasuryDeployedAt": {
+                    "$ref": "#/$defs/txIn"
+                },
+                "treasuryLeftoverLovelace": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "treasuryLeftoverOtherAssets": {
+                    "$ref": "#/$defs/assetMap"
+                },
+                "treasuryLeftoverUsdm": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "treasuryScriptHash": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "treasuryUtxos": {
+                    "items": {
+                        "$ref": "#/$defs/txIn"
+                    },
+                    "type": "array"
+                }
+            },
+            "required": [
+                "id",
+                "treasuryAddress",
+                "treasuryUtxos",
+                "treasuryLeftoverLovelace",
+                "treasuryLeftoverUsdm",
+                "treasuryLeftoverOtherAssets",
+                "treasuryScriptHash",
+                "permissionsRewardAccount",
+                "scopesDeployedAt",
+                "permissionsDeployedAt",
+                "treasuryDeployedAt",
+                "registryDeployedAt",
+                "registryPolicyId"
+            ],
+            "type": "object"
+        },
+        "swap": {
+            "additionalProperties": false,
+            "properties": {
+                "amountLovelace": {
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "chunkSizeLovelace": {
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "coreOwner": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "extraPerChunkLovelace": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "middlewareOwner": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "networkComplianceOwner": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "opsOwner": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "poolId": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "rateDenominator": {
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "rateNumerator": {
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "sundaeProtocolFeeLovelace": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "swapOrderAddress": {
+                    "$ref": "#/$defs/bech32Address"
+                },
+                "usdmPolicy": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "usdmToken": {
+                    "$ref": "#/$defs/assetNameHex"
+                }
+            },
+            "required": [
+                "swapOrderAddress",
+                "chunkSizeLovelace",
+                "amountLovelace",
+                "extraPerChunkLovelace",
+                "rateNumerator",
+                "rateDenominator",
+                "poolId",
+                "coreOwner",
+                "opsOwner",
+                "networkComplianceOwner",
+                "middlewareOwner",
+                "sundaeProtocolFeeLovelace",
+                "usdmPolicy",
+                "usdmToken"
+            ],
+            "type": "object"
+        },
+        "txIn": {
+            "pattern": "^[0-9a-fA-F]{64}#[0-9]+$",
+            "type": "string"
+        },
+        "wallet": {
+            "additionalProperties": false,
+            "properties": {
+                "address": {
+                    "$ref": "#/$defs/bech32Address"
+                },
+                "txIn": {
+                    "$ref": "#/$defs/txIn"
+                }
+            },
+            "required": [
+                "txIn",
+                "address"
+            ],
+            "type": "object"
+        },
+        "withdraw": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
+            "type": "object"
+        }
+    },
+    "$id": "https://github.com/lambdasistemi/amaru-treasury-tx/schemas/treasury-intent-v1.json",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "description": "Unified intent JSON contract emitted by treasury wizards and consumed by tx-build.",
+    "oneOf": [
+        {
+            "additionalProperties": false,
+            "properties": {
+                "action": {
+                    "const": "swap",
+                    "type": "string"
+                },
+                "network": {
+                    "enum": [
+                        "mainnet",
+                        "preprod",
+                        "preview"
+                    ],
+                    "type": "string"
+                },
+                "rationale": {
+                    "$ref": "#/$defs/rationale"
+                },
+                "schema": {
+                    "enum": [
+                        1
+                    ],
+                    "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/$defs/scope"
+                },
+                "signers": {
+                    "items": {
+                        "$ref": "#/$defs/hex28"
+                    },
+                    "type": "array"
+                },
+                "swap": {
+                    "$ref": "#/$defs/swap"
+                },
+                "validityUpperBoundSlot": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "wallet": {
+                    "$ref": "#/$defs/wallet"
+                }
+            },
+            "required": [
+                "schema",
+                "action",
+                "network",
+                "wallet",
+                "scope",
+                "signers",
+                "validityUpperBoundSlot",
+                "rationale",
+                "swap"
+            ],
+            "type": "object"
+        },
+        {
+            "additionalProperties": false,
+            "properties": {
+                "action": {
+                    "const": "disburse",
+                    "type": "string"
+                },
+                "disburse": {
+                    "$ref": "#/$defs/disburse"
+                },
+                "network": {
+                    "enum": [
+                        "mainnet",
+                        "preprod",
+                        "preview"
+                    ],
+                    "type": "string"
+                },
+                "rationale": {
+                    "$ref": "#/$defs/rationale"
+                },
+                "schema": {
+                    "enum": [
+                        1
+                    ],
+                    "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/$defs/scope"
+                },
+                "signers": {
+                    "items": {
+                        "$ref": "#/$defs/hex28"
+                    },
+                    "type": "array"
+                },
+                "validityUpperBoundSlot": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "wallet": {
+                    "$ref": "#/$defs/wallet"
+                }
+            },
+            "required": [
+                "schema",
+                "action",
+                "network",
+                "wallet",
+                "scope",
+                "signers",
+                "validityUpperBoundSlot",
+                "rationale",
+                "disburse"
+            ],
+            "type": "object"
+        },
+        {
+            "additionalProperties": false,
+            "properties": {
+                "action": {
+                    "const": "withdraw",
+                    "type": "string"
+                },
+                "network": {
+                    "enum": [
+                        "mainnet",
+                        "preprod",
+                        "preview"
+                    ],
+                    "type": "string"
+                },
+                "rationale": {
+                    "$ref": "#/$defs/rationale"
+                },
+                "schema": {
+                    "enum": [
+                        1
+                    ],
+                    "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/$defs/scope"
+                },
+                "signers": {
+                    "items": {
+                        "$ref": "#/$defs/hex28"
+                    },
+                    "type": "array"
+                },
+                "validityUpperBoundSlot": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "wallet": {
+                    "$ref": "#/$defs/wallet"
+                },
+                "withdraw": {
+                    "$ref": "#/$defs/withdraw"
+                }
+            },
+            "required": [
+                "schema",
+                "action",
+                "network",
+                "wallet",
+                "scope",
+                "signers",
+                "validityUpperBoundSlot",
+                "rationale",
+                "withdraw"
+            ],
+            "type": "object"
+        },
+        {
+            "additionalProperties": false,
+            "properties": {
+                "action": {
+                    "const": "reorganize",
+                    "type": "string"
+                },
+                "network": {
+                    "enum": [
+                        "mainnet",
+                        "preprod",
+                        "preview"
+                    ],
+                    "type": "string"
+                },
+                "rationale": {
+                    "$ref": "#/$defs/rationale"
+                },
+                "reorganize": {
+                    "$ref": "#/$defs/reorganize"
+                },
+                "schema": {
+                    "enum": [
+                        1
+                    ],
+                    "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/$defs/scope"
+                },
+                "signers": {
+                    "items": {
+                        "$ref": "#/$defs/hex28"
+                    },
+                    "type": "array"
+                },
+                "validityUpperBoundSlot": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "wallet": {
+                    "$ref": "#/$defs/wallet"
+                }
+            },
+            "required": [
+                "schema",
+                "action",
+                "network",
+                "wallet",
+                "scope",
+                "signers",
+                "validityUpperBoundSlot",
+                "rationale",
+                "reorganize"
+            ],
+            "type": "object"
+        }
+    ],
+    "title": "Amaru TreasuryIntent JSON"
+}

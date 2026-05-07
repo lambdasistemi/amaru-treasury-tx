@@ -172,8 +172,8 @@ swap`. After this feature lands, no occurrences remain.
   pre-unification swap intent format is rejected at parse time
   (operator must re-run the wizard). No silent migration.
 - **`schema` field missing**: intent has no `schema` key. Parser
-  defaults to `schema: 1` for usability — the field is required only
-  after a future bump.
+  rejects it; the field is required so archived intent files never
+  depend on an implicit binary default.
 - **Builder run with `--network` flag**: the flag is removed from the
   build subcommand; operators who pass it get an
   `optparse-applicative` parse error.
@@ -229,6 +229,10 @@ swap`. After this feature lands, no occurrences remain.
 - **FR-012**: Signer-resolver helpers (`signerScopeFromText`,
   `normaliseSignerToken`, `isHex28`, `ownerForScope`) MUST live in
   exactly one shared module.
+- **FR-012a**: The unified intent contract MUST have a committed
+  JSON Schema asset generated from Haskell. CI MUST reject drift
+  between the checked-in schema and the generator, and tests MUST
+  validate current wizard/golden intent JSON against the schema.
 - **FR-013a**: The existing swap golden MUST be re-recorded
   against the new intent shape on this PR. The CBOR body MUST NOT
   change; only the JSON input changes.

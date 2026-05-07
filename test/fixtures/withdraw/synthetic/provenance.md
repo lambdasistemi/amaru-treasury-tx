@@ -42,6 +42,19 @@ Frozen context:
   offline `ChainContext` can evaluate the withdraw script without live
   node access.
 
-This file is intentionally limited to why the oracle is synthetic and
-where the live replacement is tracked. The `withdraw.sh` withdrawal
-amount parity decision is recorded separately by T036.
+Withdraw amount parity decision:
+
+- Upstream `journal/2026/bin/withdraw.sh` queries
+  `rewardAccountBalance` into `treasury_lovelace`.
+- The same script builds an output with
+  `--tx-out "$treasury_address+$treasury_lovelace"`.
+- The same script also passes
+  `--withdrawal "$treasury_stake_address+0"`.
+- For this synthetic fixture, the intended transaction withdraws the
+  positive `rewardsLovelace` amount from `intent.json`.
+- Do not rewrite `Tx.Withdraw` to emit a zero withdrawal for this
+  synthetic golden. A zero withdrawal would make the treasury output
+  wallet-funded in the synthetic context, which is not the operator
+  intent.
+- Treat the bash `+0` behavior as unresolved live-oracle work until
+  issue #17 can capture a reward-bearing preprod transaction.

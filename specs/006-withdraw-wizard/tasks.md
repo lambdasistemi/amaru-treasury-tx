@@ -136,7 +136,7 @@ before the implementation tasks they constrain.
 
 ### Implementation for User Story 3
 
-- [ ] T037 [US3] Replace the `SWithdraw` fail-closed branch in `lib/Amaru/Treasury/TreasuryBuild.hs` with `runWithdraw`.
+- [x] T037 [US3] Replace the `SWithdraw` fail-closed branch in `lib/Amaru/Treasury/TreasuryBuild.hs` with `runWithdraw`.
 - [ ] T038 [US3] Implement `runWithdraw` in `lib/Amaru/Treasury/TreasuryBuild.hs`, including required UTxO checks, metadata label 1694, build, fee/collateral handling, and re-evaluation summary.
 - [ ] T039 [US3] Adjust `lib/Amaru/Treasury/Tx/Withdraw.hs` only if T036 proves the existing positive withdrawal amount diverges from the bash oracle.
 - [ ] T040 [US3] Generate or update `test/fixtures/withdraw/synthetic/expected.cbor` through the explicit golden update flow.

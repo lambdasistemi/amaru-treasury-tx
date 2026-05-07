@@ -32,9 +32,8 @@ evaluator so callers get a per-redeemer outcome
 ('tbrScriptResults') alongside the CBOR.
 
 In this phase-4 cut the swap and disburse branches are
-wired. Withdraw and reorganize land with
-[#45](https://github.com/lambdasistemi/amaru-treasury-tx/issues/45)
-and
+wired. Withdraw is wired through the unified dispatcher by
+feature 006. Reorganize lands with
 [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46).
 -}
 module Amaru.Treasury.TreasuryBuild
@@ -47,6 +46,7 @@ module Amaru.Treasury.TreasuryBuild
     , runFromIntent
     , runDisburse
     , runSwap
+    , runWithdraw
     ) where
 
 import Control.Exception (throwIO)
@@ -113,6 +113,9 @@ import Amaru.Treasury.Tx.Swap
     ( SwapIntent (..)
     , swapProgram
     )
+import Amaru.Treasury.Tx.Withdraw
+    ( WithdrawIntent
+    )
 
 -- | Per-script result from 'evaluateTx'.
 data ScriptResult = ScriptResult
@@ -174,8 +177,11 @@ runBuild ctx shared sa translated = case sa of
             (tsRationale shared)
             (tsWalletAddr shared)
     SWithdraw ->
-        throwIO . userError $
-            "runBuild: 'withdraw' not yet shipped (#45)"
+        runWithdraw
+            ctx
+            translated
+            (tsRationale shared)
+            (tsWalletAddr shared)
     SReorganize ->
         throwIO . userError $
             "runBuild: 'reorganize' not yet shipped (#46)"
@@ -194,6 +200,27 @@ runFromIntent ctx (SomeTreasuryIntent sa intent) = do
                 "runFromIntent: translate: " <> e
         Right (shared, translated) ->
             runBuild ctx shared sa translated
+
+-- ----------------------------------------------------
+-- Withdraw runner
+-- ----------------------------------------------------
+
+{- | Build a withdraw transaction end-to-end against a
+'ChainContext'. The dispatcher is wired in T037; the full
+build pipeline lands in T038.
+-}
+runWithdraw
+    :: ChainContext
+    -> WithdrawIntent
+    -> Metadatum
+    -- ^ CIP-1694 rationale tree (see 'Amaru.Treasury.AuxData')
+    -> Addr
+    -- ^ change address — also receives @collateral_return@
+    --     by default (see module header)
+    -> IO TreasuryBuildResult
+runWithdraw _ctx _intent _rationale _walletAddr =
+    throwIO . userError $
+        "runWithdraw: not yet implemented (T038)"
 
 -- ----------------------------------------------------
 -- Disburse runner

@@ -1,12 +1,18 @@
 {
+  "schema": 1,
+  "action": "swap",
+  "network": "mainnet",
   "wallet": {
     "txIn": "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0",
     "address": "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
   },
   "scope": {
+    "id": "network_compliance",
     "treasuryAddress": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
     "treasuryUtxos": ["64f27254f3c0311fb2e672cdb87de200089a596aa90dc09f8be4248540267cf0#0"],
     "treasuryLeftoverLovelace": 1041836734694,
+    "treasuryLeftoverUsdm": 0,
+    "treasuryLeftoverOtherAssets": {},
     "treasuryScriptHash": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
     "permissionsRewardAccount": "a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094",
     "scopesDeployedAt": "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0",
@@ -37,6 +43,8 @@
   ],
   "validityUpperBoundSlot": 186364542,
   "rationale": {
+    "event": "disburse",
+    "label": "Swap ADA<->USDM",
     "description": "Swapping ADA for $100k at a rate of $0.245 per ADA",
     "destinationLabel": "Network Compliance's treasury",
     "justification": "Required to pay Antithesis as vendor"

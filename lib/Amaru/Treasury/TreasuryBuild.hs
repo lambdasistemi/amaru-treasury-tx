@@ -31,9 +31,8 @@ The final tx is re-evaluated against the script
 evaluator so callers get a per-redeemer outcome
 ('tbrScriptResults') alongside the CBOR.
 
-In this phase-4 cut the swap and disburse branches are
-wired. Withdraw is wired through the unified dispatcher by
-feature 006. Reorganize lands with
+In this phase-4 cut the swap, disburse, and withdraw
+branches are wired. Reorganize lands with
 [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46).
 -}
 module Amaru.Treasury.TreasuryBuild
@@ -114,7 +113,8 @@ import Amaru.Treasury.Tx.Swap
     , swapProgram
     )
 import Amaru.Treasury.Tx.Withdraw
-    ( WithdrawIntent
+    ( WithdrawIntent (..)
+    , withdrawProgram
     )
 
 -- | Per-script result from 'evaluateTx'.
@@ -218,9 +218,100 @@ runWithdraw
     -- ^ change address — also receives @collateral_return@
     --     by default (see module header)
     -> IO TreasuryBuildResult
-runWithdraw _ctx _intent _rationale _walletAddr =
-    throwIO . userError $
-        "runWithdraw: not yet implemented (T038)"
+runWithdraw ctx intent rationale walletAddr = do
+    let walletInput = wiWalletUtxo intent
+        refInputs =
+            [ wiTreasuryDeployedAt intent
+            , wiRegistryDeployedAt intent
+            ]
+        utxoMap = ccUtxos ctx
+        required = walletInput : refInputs
+        missing =
+            [ i
+            | i <- required
+            , not (Map.member i utxoMap)
+            ]
+    unless (null missing) $
+        throwIO . userError $
+            "runWithdraw: missing UTxOs in context: "
+                <> show missing
+    let inputUtxos =
+            [(walletInput, utxoMap Map.! walletInput)]
+        refUtxos =
+            [ (i, utxoMap Map.! i)
+            | i <- refInputs
+            ]
+        pp = ccPParams ctx
+        -- withdrawProgram emits the treasury rewards output first;
+        -- the balancer appends wallet change after it.
+        changeOutputIndex = 1
+    let evaluator tx = do
+            m <- ccEvaluateTx ctx tx
+            pure (fmap (either (Left . show) Right) m)
+        program = do
+            withdrawProgram intent
+            setMetadata label1694 rationale
+        noCtxIO :: InterpretIO q
+        noCtxIO =
+            InterpretIO $
+                const
+                    (error "runWithdraw: unexpected ctx")
+    result <-
+        build
+            pp
+            noCtxIO
+            evaluator
+            inputUtxos
+            refUtxos
+            walletAddr
+            program
+    case result of
+        Left e ->
+            throwIO . userError $
+                "runWithdraw: build failed: "
+                    <> show (e :: BuildError ())
+        Right tx0 -> do
+            tx <-
+                case alignCardanoCliBuildFee
+                    pp
+                    refUtxos
+                    changeOutputIndex
+                    tx0 of
+                    Left e ->
+                        throwIO . userError $
+                            "runWithdraw: fee alignment failed: "
+                                <> e
+                    Right ok -> pure ok
+            let body = tx ^. bodyTxL
+                feeLov = body ^. feeTxBodyL
+                totalColl = case body
+                    ^. totalCollateralTxBodyL of
+                    SJust c -> c
+                    SNothing -> Coin 0
+            scriptMap <- ccEvaluateTx ctx tx
+            let scriptResults =
+                    [ ScriptResult
+                        purpose
+                        ( either
+                            (Left . show)
+                            Right
+                            outcome
+                        )
+                    | (purpose, outcome) <-
+                        Map.toAscList scriptMap
+                    ]
+                cbor =
+                    serialize
+                        (eraProtVerLow @ConwayEra)
+                        (tx :: ConwayTx)
+            pure
+                TreasuryBuildResult
+                    { tbrCborBytes = cbor
+                    , tbrFeeLovelace = feeLov
+                    , tbrTotalCollateralLovelace =
+                        totalColl
+                    , tbrScriptResults = scriptResults
+                    }
 
 -- ----------------------------------------------------
 -- Disburse runner

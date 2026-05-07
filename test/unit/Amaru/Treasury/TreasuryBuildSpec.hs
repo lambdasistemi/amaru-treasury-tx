@@ -14,19 +14,31 @@ test recorded in the PR description.
 -}
 module Amaru.Treasury.TreasuryBuildSpec (spec) where
 
+import Control.Exception
+    ( SomeException
+    , displayException
+    )
 import Data.IORef
     ( modifyIORef'
     , newIORef
     , readIORef
     )
+import Data.List (isInfixOf)
 import Data.Map.Strict qualified as Map
 import Test.Hspec
     ( Spec
     , describe
     , it
     , shouldBe
+    , shouldThrow
     )
 
+import Amaru.Treasury.ChainContext (ChainContext (..))
+import Amaru.Treasury.IntentJSON
+    ( decodeTreasuryIntentFile
+    )
+import Amaru.Treasury.TreasuryBuild (runFromIntent)
+import Cardano.Ledger.Api.PParams (emptyPParams)
 import Ouroboros.Network.Magic (NetworkMagic (..))
 
 import Amaru.Treasury.Backend.N2C
@@ -125,12 +137,42 @@ spec = describe "Amaru.Treasury.TreasuryBuild" $ do
             lookup "preview" knownNetworkMagics
                 `shouldBe` Just (NetworkMagic 2)
 
+    describe "runWithdraw" $
+        it "reports missing required UTxOs before balancing" $ do
+            some <-
+                expectRightIO
+                    =<< decodeTreasuryIntentFile
+                        "test/fixtures/withdraw/synthetic/intent.json"
+            let ctx =
+                    ChainContext
+                        { ccPParams = emptyPParams
+                        , ccUtxos = Map.empty
+                        , ccEvaluateTx =
+                            const (pure Map.empty)
+                        }
+            runFromIntent ctx some
+                `shouldThrow` missingWithdrawUtxos
+
 fixtureRewardAccount :: AccountAddress
 fixtureRewardAccount =
     expectRight $
         parseRewardAccountForNetwork
             "mainnet"
             "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d"
+
+missingWithdrawUtxos :: SomeException -> Bool
+missingWithdrawUtxos =
+    isInfixOf "runWithdraw: missing UTxOs"
+        . displayException
+
+expectRightIO :: (Show e) => Either e a -> IO a
+expectRightIO =
+    either
+        ( errorWithoutStackTrace
+            . ("unexpected Left: " <>)
+            . show
+        )
+        pure
 
 expectRight :: (Show e) => Either e a -> a
 expectRight =

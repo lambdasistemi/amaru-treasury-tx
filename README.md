@@ -1,13 +1,14 @@
 # amaru-treasury-tx
 
 CLI for building unsigned Conway transactions against the Amaru
-treasury contracts. Two subcommands today:
+treasury contracts. The release-facing commands are:
 
 - `swap-wizard` — typed questionnaire that produces an
   `intent.json`, verified end-to-end against a local cardano-node.
-- `tx-build` — turns any unified `intent.json` (swap today;
-  disburse / withdraw / reorganize as they ship) into the
-  unsigned Conway CBOR the user signs and submits.
+- `tx-build` — turns a unified `intent.json` into the unsigned
+  Conway CBOR the user signs and submits. Swap and ADA disburse
+  intents are wired; withdraw and reorganize are parsed but still
+  fail closed until their builders ship.
 
 Haskell port of the bash recipes in
 [`pragma-org/amaru-treasury/journal/2026/`](https://github.com/pragma-org/amaru-treasury/tree/main/journal/2026),
@@ -24,7 +25,8 @@ The full operator and developer documentation lives at
 - [Architecture](https://lambdasistemi.github.io/amaru-treasury-tx/architecture/) — module layout and data flow.
 - [Trust model](https://lambdasistemi.github.io/amaru-treasury-tx/trust-model/) — what the wizard verifies, what the operator must assert.
 - [Swap recipe](https://lambdasistemi.github.io/amaru-treasury-tx/swap/) — building a swap from an existing `intent.json`.
-- [Parity report](https://lambdasistemi.github.io/amaru-treasury-tx/parity/) — CBOR byte-diff against a known mainnet swap.
+- [ADA disburse](https://lambdasistemi.github.io/amaru-treasury-tx/disburse/) — building an existing ADA disburse intent.
+- [Parity report](https://lambdasistemi.github.io/amaru-treasury-tx/parity/) — byte-for-byte golden parity against bash/cardano-cli.
 
 ## Install
 

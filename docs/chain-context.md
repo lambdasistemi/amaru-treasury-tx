@@ -25,10 +25,10 @@ data ChainContext = ChainContext
     }
 ```
 
-`runSwapBuild` (and any future builder) accepts a `ChainContext` and
-nothing else from the live chain. Whichever way the context was
-populated — live node, snapshot, mocked evaluator — the build is the
-same code path.
+`runFromIntent` and the action-specific builders accept a
+`ChainContext` and nothing else from the live chain. Whichever way
+the context was populated — live node, snapshot, mocked evaluator —
+the build is the same code path.
 
 ## Live mode
 
@@ -67,13 +67,14 @@ A frozen `ChainContext` makes the build immune to:
 - Hard forks or governance-driven cost-model changes.
 - Network outages.
 
-The same `runSwapBuild` produces byte-identical CBOR regardless.
+The same `runFromIntent` path produces byte-identical CBOR
+regardless.
 
 ## Where it sits in the stack
 
 ```
 ┌─────────────────────────────────────────────┐
-│   amaru-treasury-tx swap   /   swap-probe   │
+│      amaru-treasury-tx tx-build             │
 └──────────────────┬──────────────────────────┘
                    │
                    ▼
@@ -83,8 +84,8 @@ The same `runSwapBuild` produces byte-identical CBOR regardless.
                    │
                    ▼
         ┌───────────────────────┐
-        │  Tx.SwapBuild         │  ← driver: build, balance,
-        │     runSwapBuild      │     post-patch collateral,
+        │  TreasuryBuild        │  ← dispatcher: translate,
+        │     runFromIntent     │     build, fee-align,
         └───────────────────────┘     re-evaluate
                    │
                    ▼
@@ -94,6 +95,7 @@ The same `runSwapBuild` produces byte-identical CBOR regardless.
         └───────────────────────┘
 ```
 
-The split is enforced by types: `swapProgram` cannot do IO,
-`runSwapBuild` cannot read pparams or query UTxOs except through the
-context, and the CLI / probe choose which constructor to use.
+The split is enforced by types: pure transaction programs cannot do
+IO, `TreasuryBuild` cannot read pparams or query UTxOs except
+through the context, and the CLI or golden harness chooses whether
+that context is live or frozen.

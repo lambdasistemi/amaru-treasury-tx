@@ -69,6 +69,8 @@ The action and the network are read from the intent's top-level
    - `Cardano.Node.Client.TxBuild.build` with the live evaluator,
    - post-patches `total_collateral` + `collateral_return`
      ([upstream #124](https://github.com/lambdasistemi/cardano-node-clients/issues/124)),
+   - aligns the final fee with `cardano-cli transaction build`'s
+     default key-witness estimate,
    - re-evaluates every redeemer against the final patched tx and
      reports script outcomes.
 6. Writes hex CBOR to stdout / `--out`. Exits non‑zero if any
@@ -87,7 +89,7 @@ Top-level shape (unified intent JSON, schema v1):
   "scope":    { "id": "<scope name>", … addresses, deployed-at refs, registry policy id … },
   "swap":     { … chunk size, amount, rate, sundae fee, USDM unit … },
   "signers":  ["<keyhash hex>", "<keyhash hex>"],
-  "validityUpperBoundSlot": 186364542,
+  "validityUpperBoundSlot": 186796799,
   "rationale": {
     "event":            "disburse",
     "label":            "Swap ADA<->USDM",
@@ -111,9 +113,9 @@ The machine-readable contract is committed at
 `docs/assets/intent-schema.json`. It is generated from
 `Amaru.Treasury.IntentJSON.Schema`; run `just update-schema`
 after changing the intent shape. `just schema-check` and CI
-diff the checked-in asset against the executable output and the
-unit suite validates both swap fixtures plus the swap wizard
-output against it.
+diff the checked-in asset against the executable output. The
+unit suite validates the tx-build swap fixture, the tx-build ADA
+disburse fixture, and the wizard output against it.
 
 ## Validation
 
@@ -128,26 +130,23 @@ This is the strongest validation possible without signatures.
 
 ## Parity status
 
-The Haskell stack reproduces an on-chain swap tx
-([`/code/swap-experiment/user-final.hex`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/001-treasury-tx-cli/contracts/cli.md))
-to the byte, except for an 8-byte numeric residue in the fee chain:
+The Haskell stack reproduces a bash/cardano-cli mainnet swap
+oracle byte-for-byte:
 
 | Field | Haskell | bash via cardano-cli | Δ |
 |---|---|---|---|
 | total bytes | 14954 | 14954 | 0 |
-| fee | 1,009,695 | 1,043,795 | −34,100 |
-| total_collateral | 1,514,543 | 1,565,693 | −51,150 |
-| collateral_return | wallet−1,514,543 | wallet−1,565,693 | +51,150 |
-| change | input−fee−sundae | input−fee−sundae | +34,100 |
+| fee | 1,039,703 | 1,039,703 | 0 |
+| total_collateral | 1,559,555 | 1,559,555 | 0 |
+| collateral_return | identical | identical | 0 |
+| change | identical | identical | 0 |
 | script_data_hash | identical | identical | 0 |
 | aux_data_hash | identical | identical | 0 |
 
-The 34,100‑lovelace residue is the `cardano-node-clients` vs
-`cardano-cli` fee-estimator gap. About 3,344 of those are size-driven
-(`build` doesn't yet count the `total_collateral` / `collateral_return`
-bytes — see upstream
-[#124](https://github.com/lambdasistemi/cardano-node-clients/issues/124));
-the rest is the same tail-of-iteration over-shoot we saw bash-vs-bash.
+The test checks two things: `test/fixtures/swap/expected.cbor`
+must equal `test/fixtures/swap/bash.oracle.tx.json.cborHex`, and
+`runFromIntent` against the frozen `ChainContext` must rebuild
+that same hex. See [Parity report](parity.md) for the provenance.
 
 ## See also
 

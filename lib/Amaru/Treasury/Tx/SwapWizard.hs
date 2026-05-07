@@ -3,7 +3,7 @@
 
 {- |
 Module      : Amaru.Treasury.Tx.SwapWizard
-Description : Typed answers + resolved env -> SwapIntentJSON
+Description : Typed answers + resolved env -> TreasuryIntent 'Swap
 Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
@@ -11,14 +11,14 @@ The wizard's pure core. 'SwapWizardQ' captures the fields a
 human actually decides for a swap; 'WizardEnv' captures
 everything the resolver pulled from the registry, the
 backend, and the curated 'NetworkConstants' table. Their
-combination feeds 'wizardToIntentJSON', which produces the
-typed
-'Amaru.Treasury.Tx.SwapIntentJSON.SwapIntentJSON' the
-existing build path consumes.
+combination feeds 'wizardToTreasuryIntent', which
+produces the typed
+'Amaru.Treasury.IntentJSON.TreasuryIntent' \'Swap the
+unified @tx-build@ subcommand consumes.
 
 The translation here is total and pure — no IO. The
 resolver and the prompt loop live elsewhere (see
-@app/amaru-treasury-tx/Main.hs@ in a later phase).
+@app/amaru-treasury-tx/Main.hs@).
 -}
 module Amaru.Treasury.Tx.SwapWizard
     ( -- * Answers
@@ -37,9 +37,7 @@ module Amaru.Treasury.Tx.SwapWizard
 
       -- * Translation
     , WizardError (..)
-    , wizardToIntentJSON
     , wizardToTreasuryIntent
-    , encodeIntentJSON
 
       -- * Resolution
     , ResolverInput (..)
@@ -83,15 +81,8 @@ import Data.Aeson
     , (.:)
     , (.:?)
     )
-import Data.Aeson.Encode.Pretty
-    ( Config (..)
-    , Indent (..)
-    , NumberFormat (..)
-    , encodePretty'
-    )
 import Data.Aeson.Types qualified as A
 import Data.ByteString.Base16 qualified as B16
-import Data.ByteString.Lazy (ByteString)
 import Data.Function (on)
 import Data.List qualified as L
 import Data.Map.Strict (Map)
@@ -119,13 +110,6 @@ import Amaru.Treasury.Scope
     , scopeFromText
     , scopeText
     )
-import Amaru.Treasury.Tx.SwapIntentJSON
-    ( RationaleInputs (..)
-    , ScopeInputs (..)
-    , SwapInputs (..)
-    , SwapIntentJSON (..)
-    , Wallet (..)
-    )
 import Amaru.Treasury.Wizard.Common
     ( isHex28
     , signerScopeFromText
@@ -136,9 +120,9 @@ import Amaru.Treasury.Wizard.Common
 -- ----------------------------------------------------
 
 {- | Free-form rationale answers. Mirrors
-'Amaru.Treasury.Tx.SwapIntentJSON.RationaleInputs' minus
-the optional/default treatment that the JSON layer
-already encodes.
+'Amaru.Treasury.IntentJSON.RationaleJSON' minus the
+optional/default treatment that the JSON layer already
+encodes.
 -}
 data RationaleAnswers = RationaleAnswers
     { raDescription :: !Text
@@ -153,7 +137,7 @@ data RationaleAnswers = RationaleAnswers
 
 {- | Real intent — the typed answers a human gives the
 wizard. Sister of
-'Amaru.Treasury.Tx.SwapIntentJSON.SwapIntentJSON' but
+'Amaru.Treasury.IntentJSON.TreasuryIntent' \'Swap but
 restricted to fields the user actually chooses.
 -}
 data SwapWizardQ = SwapWizardQ
@@ -163,7 +147,7 @@ data SwapWizardQ = SwapWizardQ
     , wqRateNumerator :: !Integer
     , wqRateDenominator :: !Integer
     , wqValidityHours :: !Word8
-    -- ^ Range [1, 48]; enforced by 'wizardToIntentJSON'.
+    -- ^ Range [1, 48]; enforced by 'wizardToTreasuryIntent'.
     , wqRationale :: !RationaleAnswers
     , wqExtraSigners :: ![Text]
     -- ^ Extra signer tokens. Each token is either a
@@ -419,37 +403,6 @@ data WizardError
       WizardScopeUnsupported !ScopeId
     deriving (Eq, Show)
 
-{- | Pure, total translation from a 'WizardEnv' and a
-'SwapWizardQ' to a 'SwapIntentJSON'.
-
-The mapping is the contract documented in
-@specs\/002-swap-wizard\/data-model.md §4@. Local
-validation produces a 'WizardError'; resolver-level
-failures (empty UTxOs, unknown network, registry walk
-failure) are caught by the resolver and never reach this
-function.
--}
-wizardToIntentJSON
-    :: WizardEnv
-    -> SwapWizardQ
-    -> Either WizardError SwapIntentJSON
-wizardToIntentJSON we q = do
-    validate q
-    signers <- resolveSigners we q
-    pure
-        SwapIntentJSON
-            { sijWallet = mkWallet (weWalletSelection we)
-            , sijScope = mkScope we
-            , sijSwap = mkSwap we q
-            , sijSigners = signers
-            , sijValidityUpperBoundSlot =
-                weCurrentTip we
-                    + ncSlotsPerHour
-                        (weNetworkConstants we)
-                        * fromIntegral (wqValidityHours q)
-            , sijRationale = mkRationale (wqRationale q)
-            }
-
 -- | Domain-level validation per FR-012 + data-model §3.
 validate :: SwapWizardQ -> Either WizardError ()
 validate q = do
@@ -521,98 +474,35 @@ scopeOwnerText ScopeOwners{..} = \case
 -- 'isHex28', 'normaliseSignerToken', and 'signerScopeFromText'
 -- moved to 'Amaru.Treasury.Wizard.Common' in T009. Imported above.
 
-mkWallet :: WalletSelection -> Wallet
-mkWallet ws =
-    Wallet
-        { wTxIn = wsTxIn ws
-        , wAddress = wsAddress ws
-        }
-
-mkScope :: WizardEnv -> ScopeInputs
-mkScope we =
-    let r = weRegistry we
-        s = svRefs (weScopeView we)
-        sel = weTreasurySelection we
-    in  ScopeInputs
-            { siTreasuryAddress_ = trAddress s
-            , siTreasuryUtxos_ = tsInputs sel
-            , siTreasuryLeftoverLovelace_ =
-                tsLeftoverLovelace sel
-            , siTreasuryScriptHash_ = trScriptHash s
-            , siPermissionsRewardAccount_ =
-                trPermissionsRewardAccount s
-            , siScopesDeployedAt_ = rvScopesDeployedAt r
-            , siPermissionsDeployedAt_ =
-                rvPermissionsDeployedAt r
-            , siTreasuryDeployedAt_ =
-                rvTreasuryDeployedAt r
-            , siRegistryDeployedAt_ =
-                rvRegistryDeployedAt r
-            , siRegistryPolicyId_ = rvRegistryPolicyId r
-            }
-
-mkSwap :: WizardEnv -> SwapWizardQ -> SwapInputs
-mkSwap we q =
-    let nc = weNetworkConstants we
-        os = rvOwners (weRegistry we)
-    in  SwapInputs
-            { swSwapOrderAddress = ncSwapOrderAddress nc
-            , swChunkSizeLovelace = wqChunkSizeLovelace q
-            , swAmountLovelace = wqAmountLovelace q
-            , swExtraPerChunkLovelace =
-                ncExtraPerChunkLovelace nc
-            , swRateNumerator = wqRateNumerator q
-            , swRateDenominator = wqRateDenominator q
-            , swPoolId = ncDefaultPoolId nc
-            , swCoreOwner = soCore os
-            , swOpsOwner = soOps os
-            , swNetworkComplianceOwner =
-                soNetworkCompliance os
-            , swMiddlewareOwner = soMiddleware os
-            , swSundaeProtocolFeeLovelace =
-                ncSundaeProtocolFeeLovelace nc
-            , swUsdmPolicy = ncUsdmPolicy nc
-            , swUsdmToken = ncUsdmToken nc
-            }
-
-mkRationale :: RationaleAnswers -> RationaleInputs
-mkRationale r =
-    RationaleInputs
-        { riEvent = fromMaybe "disburse" (raEvent r)
-        , riLabel =
-            fromMaybe "Swap ADA<->USDM" (raLabel r)
-        , riDescription = raDescription r
-        , riDestinationLabel = raDestinationLabel r
-        , riJustification = raJustification r
-        }
-
 {- | Convert wizard answers + resolved env into a typed
 'TI.TreasuryIntent' parameterised at @\'Swap@.
 
-This is the unified-intent counterpart of
-'wizardToIntentJSON'. It runs the same validation /
-signer resolution and re-shapes the result into the
-GADT carrier used by the unified @tx-build@ subcommand.
-
-The conversion is mechanical and total: every field on
-'SwapIntentJSON' has a direct counterpart on the
-'TI.TreasuryIntent' \'Swap, plus the new fields that
-v1 of the schema added (top-level @network@,
-@scope.id@, @scope.treasuryLeftoverUsdm@,
-@scope.treasuryLeftoverOtherAssets@) which are sourced
-from the resolved 'WizardEnv' and the swap-specific
-defaults (no USDM leftover on swap).
+This is the wizard's pure output: the unified
+'TI.TreasuryIntent' the @tx-build@ subcommand consumes.
+The translation is total — domain validation reports a
+'WizardError', signer resolution maps scope names /
+aliases / 28-byte hex through the registry walk, and
+every other field is a direct projection of the resolver
+'WizardEnv' or a constant from the curated
+'NetworkConstants' table (the JSON schema's v1
+additions: top-level @network@, @scope.id@,
+@scope.treasuryLeftoverUsdm@,
+@scope.treasuryLeftoverOtherAssets@).
 -}
 wizardToTreasuryIntent
     :: WizardEnv
     -> SwapWizardQ
     -> Either WizardError (TI.TreasuryIntent 'TI.Swap)
 wizardToTreasuryIntent we q = do
-    sij <- wizardToIntentJSON we q
-    let s = sijScope sij
-        sw = sijSwap sij
-        r = sijRationale sij
-        wal = sijWallet sij
+    validate q
+    signers <- resolveSigners we q
+    let r = weRegistry we
+        s = svRefs (weScopeView we)
+        sel = weTreasurySelection we
+        wal = weWalletSelection we
+        nc = weNetworkConstants we
+        os = rvOwners r
+        rat = wqRationale q
     pure
         TI.TreasuryIntent
             { TI.tiSAction = TI.SSwap
@@ -620,88 +510,74 @@ wizardToTreasuryIntent we q = do
             , TI.tiNetwork = weNetwork we
             , TI.tiWallet =
                 TI.WalletJSON
-                    { TI.wjTxIn = wTxIn wal
-                    , TI.wjAddress = wAddress wal
+                    { TI.wjTxIn = wsTxIn wal
+                    , TI.wjAddress = wsAddress wal
                     }
             , TI.tiScope =
                 TI.ScopeJSON
                     { TI.sjId = scopeText (wqScope q)
-                    , TI.sjTreasuryAddress =
-                        siTreasuryAddress_ s
-                    , TI.sjTreasuryUtxos = siTreasuryUtxos_ s
+                    , TI.sjTreasuryAddress = trAddress s
+                    , TI.sjTreasuryUtxos = tsInputs sel
                     , TI.sjTreasuryLeftoverLovelace =
-                        siTreasuryLeftoverLovelace_ s
+                        tsLeftoverLovelace sel
                     , TI.sjTreasuryLeftoverUsdm = 0
                     , TI.sjTreasuryLeftoverOtherAssets =
                         Map.empty
-                    , TI.sjTreasuryScriptHash =
-                        siTreasuryScriptHash_ s
+                    , TI.sjTreasuryScriptHash = trScriptHash s
                     , TI.sjPermissionsRewardAccount =
-                        siPermissionsRewardAccount_ s
+                        trPermissionsRewardAccount s
                     , TI.sjScopesDeployedAt =
-                        siScopesDeployedAt_ s
+                        rvScopesDeployedAt r
                     , TI.sjPermissionsDeployedAt =
-                        siPermissionsDeployedAt_ s
+                        rvPermissionsDeployedAt r
                     , TI.sjTreasuryDeployedAt =
-                        siTreasuryDeployedAt_ s
+                        rvTreasuryDeployedAt r
                     , TI.sjRegistryDeployedAt =
-                        siRegistryDeployedAt_ s
+                        rvRegistryDeployedAt r
                     , TI.sjRegistryPolicyId =
-                        siRegistryPolicyId_ s
+                        rvRegistryPolicyId r
                     }
-            , TI.tiSigners = sijSigners sij
+            , TI.tiSigners = signers
             , TI.tiValidityUpperBoundSlot =
-                sijValidityUpperBoundSlot sij
+                weCurrentTip we
+                    + ncSlotsPerHour nc
+                        * fromIntegral (wqValidityHours q)
             , TI.tiRationale =
                 TI.RationaleJSON
-                    { TI.rjEvent = riEvent r
-                    , TI.rjLabel = riLabel r
-                    , TI.rjDescription = riDescription r
-                    , TI.rjJustification = riJustification r
+                    { TI.rjEvent =
+                        fromMaybe "disburse" (raEvent rat)
+                    , TI.rjLabel =
+                        fromMaybe
+                            "Swap ADA<->USDM"
+                            (raLabel rat)
+                    , TI.rjDescription = raDescription rat
+                    , TI.rjJustification = raJustification rat
                     , TI.rjDestinationLabel =
-                        riDestinationLabel r
+                        raDestinationLabel rat
                     }
             , TI.tiPayload =
                 TI.SwapInputs
                     { TI.swiSwapOrderAddress =
-                        swSwapOrderAddress sw
+                        ncSwapOrderAddress nc
                     , TI.swiChunkSizeLovelace =
-                        swChunkSizeLovelace sw
-                    , TI.swiAmountLovelace =
-                        swAmountLovelace sw
+                        wqChunkSizeLovelace q
+                    , TI.swiAmountLovelace = wqAmountLovelace q
                     , TI.swiExtraPerChunkLovelace =
-                        swExtraPerChunkLovelace sw
-                    , TI.swiRateNumerator = swRateNumerator sw
+                        ncExtraPerChunkLovelace nc
+                    , TI.swiRateNumerator = wqRateNumerator q
                     , TI.swiRateDenominator =
-                        swRateDenominator sw
-                    , TI.swiPoolId = swPoolId sw
-                    , TI.swiCoreOwner = swCoreOwner sw
-                    , TI.swiOpsOwner = swOpsOwner sw
+                        wqRateDenominator q
+                    , TI.swiPoolId = ncDefaultPoolId nc
+                    , TI.swiCoreOwner = soCore os
+                    , TI.swiOpsOwner = soOps os
                     , TI.swiNetworkComplianceOwner =
-                        swNetworkComplianceOwner sw
-                    , TI.swiMiddlewareOwner =
-                        swMiddlewareOwner sw
+                        soNetworkCompliance os
+                    , TI.swiMiddlewareOwner = soMiddleware os
                     , TI.swiSundaeProtocolFeeLovelace =
-                        swSundaeProtocolFeeLovelace sw
-                    , TI.swiUsdmPolicy = swUsdmPolicy sw
-                    , TI.swiUsdmToken = swUsdmToken sw
+                        ncSundaeProtocolFeeLovelace nc
+                    , TI.swiUsdmPolicy = ncUsdmPolicy nc
+                    , TI.swiUsdmToken = ncUsdmToken nc
                     }
-            }
-
-{- | Stable pretty-printed encoder for 'SwapIntentJSON',
-used by golden tests. Fixed config: 4-space indent,
-@aeson-pretty@ default key ordering (alphabetical), no
-unicode escapes for ASCII text, decimals for numbers.
--}
-encodeIntentJSON :: SwapIntentJSON -> ByteString
-encodeIntentJSON = encodePretty' cfg
-  where
-    cfg =
-        Config
-            { confIndent = Spaces 4
-            , confCompare = compare
-            , confNumFormat = Generic
-            , confTrailingNewline = True
             }
 
 -- ----------------------------------------------------
@@ -968,7 +844,7 @@ selectWallet inputs =
   * largest pure-ADA wallet selection ('selectWallet')
   * a tip read via @posixMsToSlot@ (rounded to the
     closest hour boundary; the validity-window math in
-    'wizardToIntentJSON' adds @slotsPerHour * hours@)
+    'wizardToTreasuryIntent' adds @slotsPerHour * hours@)
   * the verifier-projected 'RegistryView'
 
 projecting them into the 'WizardEnv' the pure

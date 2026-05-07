@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -8,15 +9,15 @@ Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
 Loads the fixture 'WizardEnv' and 'SwapWizardQ' from
-@test/fixtures/swap-wizard/@, runs 'wizardToIntentJSON',
-and asserts:
+@test/fixtures/swap-wizard/@, runs
+'wizardToTreasuryIntent', and asserts:
 
-  * the encoded JSON round-trips through
-    'decodeSwapIntent' and
-    'translateIntent' (i.e. the existing build path
-    accepts what the wizard produced);
   * each contracted field carries the expected value per
     @specs\/002-swap-wizard\/data-model.md §4@;
+  * the encoded JSON round-trips through
+    'decodeTreasuryIntent' and 'translateIntent' (i.e. the
+    unified @tx-build@ subcommand accepts what the wizard
+    produced);
   * 'WizardError' constructors fire on the documented
     failure shapes.
 -}
@@ -40,6 +41,18 @@ import Test.Hspec
 
 import Cardano.Ledger.BaseTypes (Network (..))
 
+import Amaru.Treasury.IntentJSON
+    ( RationaleJSON (..)
+    , SAction (..)
+    , ScopeJSON (..)
+    , SomeTreasuryIntent (..)
+    , SwapInputs (..)
+    , TreasuryIntent (..)
+    , WalletJSON (..)
+    , decodeTreasuryIntent
+    , encodeSomeTreasuryIntent
+    , translateIntent
+    )
 import Amaru.Treasury.LedgerParse
     ( addrFromText
     , keyHashFromHex
@@ -51,15 +64,6 @@ import Amaru.Treasury.Registry.Verify
     , VerifiedScope (..)
     )
 import Amaru.Treasury.Scope (ScopeId (..))
-import Amaru.Treasury.Tx.SwapIntentJSON
-    ( RationaleInputs (..)
-    , ScopeInputs (..)
-    , SwapInputs (..)
-    , SwapIntentJSON (..)
-    , Wallet (..)
-    , decodeSwapIntent
-    , translateIntent
-    )
 import Amaru.Treasury.Tx.SwapWizard
     ( RegistryView (..)
     , ResolverEnv (..)
@@ -72,13 +76,12 @@ import Amaru.Treasury.Tx.SwapWizard
     , WizardEnv (..)
     , WizardError (..)
     , addrNetwork
-    , encodeIntentJSON
     , networkConstants
     , registryViewFromVerified
     , resolveWizardEnv
     , selectTreasury
     , selectWallet
-    , wizardToIntentJSON
+    , wizardToTreasuryIntent
     )
 import Test.QuickCheck
     ( Positive (..)
@@ -92,93 +95,102 @@ spec = describe "SwapWizard" $ do
     answers :: SwapWizardQ <-
         runIO (loadFixture "test/fixtures/swap-wizard/answers.json")
 
-    describe "wizardToIntentJSON" $ do
-        it "produces a SwapIntentJSON" $ do
-            wizardToIntentJSON env answers
+    describe "wizardToTreasuryIntent" $ do
+        it "produces a TreasuryIntent 'Swap" $ do
+            wizardToTreasuryIntent env answers
                 `shouldSatisfy` isRight
 
         it "preserves the wallet selection" $ do
-            let Right intent = wizardToIntentJSON env answers
-                w = sijWallet intent
-            wTxIn w
+            let Right intent = wizardToTreasuryIntent env answers
+                w = tiWallet intent
+            wjTxIn w
                 `shouldBe` "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0"
-            wAddress w
+            wjAddress w
                 `shouldBe` "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
 
         it "preserves the scope refs and selection" $ do
-            let Right intent = wizardToIntentJSON env answers
-                s = sijScope intent
-            siTreasuryAddress_ s
+            let Right intent = wizardToTreasuryIntent env answers
+                s = tiScope intent
+            sjId s `shouldBe` "core_development"
+            sjTreasuryAddress s
                 `shouldBe` "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk"
-            siTreasuryUtxos_ s
+            sjTreasuryUtxos s
                 `shouldBe` ["64f27254f3c0311fb2e672cdb87de200089a596aa90dc09f8be4248540267cf0#0"]
-            siTreasuryLeftoverLovelace_ s
+            sjTreasuryLeftoverLovelace s
                 `shouldBe` 1041836734694
-            siTreasuryScriptHash_ s
+            sjTreasuryLeftoverUsdm s `shouldBe` 0
+            sjTreasuryLeftoverOtherAssets s
+                `shouldBe` Map.empty
+            sjTreasuryScriptHash s
                 `shouldBe` "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d"
-            siPermissionsRewardAccount_ s
+            sjPermissionsRewardAccount s
                 `shouldBe` "a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094"
-            siRegistryPolicyId_ s
+            sjRegistryPolicyId s
                 `shouldBe` "38c627d45835744a2d6c727124f2b5852e5564aeab3f608e0e84ea6d"
 
         it "applies the network constants and answers in the swap block" $ do
-            let Right intent = wizardToIntentJSON env answers
-                sw = sijSwap intent
-            swSwapOrderAddress sw
+            let Right intent = wizardToTreasuryIntent env answers
+                sw = tiPayload intent
+            swiSwapOrderAddress sw
                 `shouldBe` "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n"
-            swChunkSizeLovelace sw `shouldBe` 12500000000
-            swAmountLovelace sw `shouldBe` 408163265306
-            swExtraPerChunkLovelace sw `shouldBe` 3280000
-            swRateNumerator sw `shouldBe` 245
-            swRateDenominator sw `shouldBe` 1000
-            swSundaeProtocolFeeLovelace sw `shouldBe` 1280000
-            swPoolId sw
+            swiChunkSizeLovelace sw `shouldBe` 12500000000
+            swiAmountLovelace sw `shouldBe` 408163265306
+            swiExtraPerChunkLovelace sw `shouldBe` 3280000
+            swiRateNumerator sw `shouldBe` 245
+            swiRateDenominator sw `shouldBe` 1000
+            swiSundaeProtocolFeeLovelace sw `shouldBe` 1280000
+            swiPoolId sw
                 `shouldBe` "64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef"
-            swCoreOwner sw
+            swiCoreOwner sw
                 `shouldBe` "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
-            swOpsOwner sw
+            swiOpsOwner sw
                 `shouldBe` "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
-            swNetworkComplianceOwner sw
+            swiNetworkComplianceOwner sw
                 `shouldBe` "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
-            swMiddlewareOwner sw
+            swiMiddlewareOwner sw
                 `shouldBe` "97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2"
-            swUsdmPolicy sw
+            swiUsdmPolicy sw
                 `shouldBe` "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad"
-            swUsdmToken sw `shouldBe` "0014df105553444d"
+            swiUsdmToken sw `shouldBe` "0014df105553444d"
+
+        it "carries the resolved network at the top level" $ do
+            let Right intent = wizardToTreasuryIntent env answers
+            tiNetwork intent `shouldBe` "mainnet"
+            tiSchema intent `shouldBe` 1
 
         it "infers the scope owner and appends extra signer scopes" $ do
-            let Right intent = wizardToIntentJSON env answers
-            sijSigners intent
+            let Right intent = wizardToTreasuryIntent env answers
+            tiSigners intent
                 `shouldBe` [ "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
                            , "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
                            ]
 
         it "defaults signers to the selected scope owner" $ do
             let Right intent =
-                    wizardToIntentJSON
+                    wizardToTreasuryIntent
                         env
                         answers{wqExtraSigners = []}
-            sijSigners intent
+            tiSigners intent
                 `shouldBe` [ "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
                            ]
 
         it "accepts raw key hashes for extra signers" $ do
             let Right intent =
-                    wizardToIntentJSON
+                    wizardToTreasuryIntent
                         env
                         answers
                             { wqExtraSigners =
                                 [ "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
                                 ]
                             }
-            sijSigners intent
+            tiSigners intent
                 `shouldBe` [ "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
                            , "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
                            ]
 
         it "deduplicates an explicitly repeated scope owner" $ do
             let Right intent =
-                    wizardToIntentJSON
+                    wizardToTreasuryIntent
                         env
                         answers
                             { wqExtraSigners =
@@ -187,38 +199,41 @@ spec = describe "SwapWizard" $ do
                                 , "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
                                 ]
                             }
-            sijSigners intent
+            tiSigners intent
                 `shouldBe` [ "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
                            , "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
                            ]
 
         it "computes validityUpperBoundSlot from tip + slotsPerHour * hours" $ do
-            let Right intent = wizardToIntentJSON env answers
+            let Right intent = wizardToTreasuryIntent env answers
             -- 186342942 + 3600 * 6 = 186364542
-            sijValidityUpperBoundSlot intent `shouldBe` 186364542
+            tiValidityUpperBoundSlot intent `shouldBe` 186364542
 
         it "applies rationale defaults for absent event/label" $ do
-            let Right intent = wizardToIntentJSON env answers
-                r = sijRationale intent
-            riEvent r `shouldBe` "disburse"
-            riLabel r `shouldBe` "Swap ADA<->USDM"
-            riDescription r
+            let Right intent = wizardToTreasuryIntent env answers
+                r = tiRationale intent
+            rjEvent r `shouldBe` "disburse"
+            rjLabel r `shouldBe` "Swap ADA<->USDM"
+            rjDescription r
                 `shouldBe` "Swapping ADA for $100k at a rate of $0.245 per ADA"
-            riDestinationLabel r `shouldBe` "Network Compliance's treasury"
-            riJustification r
+            rjDestinationLabel r
+                `shouldBe` "Network Compliance's treasury"
+            rjJustification r
                 `shouldBe` "Required to pay Antithesis as vendor"
 
     describe "round-trip" $ do
         it "encoded JSON parses + translates" $ do
-            let Right intent = wizardToIntentJSON env answers
-                bytes = encodeIntentJSON intent
-            case decodeSwapIntent bytes of
+            let Right intent = wizardToTreasuryIntent env answers
+                bytes =
+                    encodeSomeTreasuryIntent
+                        (SomeTreasuryIntent SSwap intent)
+            case decodeTreasuryIntent bytes of
                 Left e ->
                     expectationFailure'
-                        ( "decodeSwapIntent failed: " <> e
+                        ( "decodeTreasuryIntent failed: " <> e
                         )
-                Right parsed ->
-                    case translateIntent parsed of
+                Right (SomeTreasuryIntent sa parsed) ->
+                    case translateIntent sa parsed of
                         Left e ->
                             expectationFailure'
                                 ( "translateIntent failed: "
@@ -227,8 +242,10 @@ spec = describe "SwapWizard" $ do
                         Right _ -> pure ()
 
         it "matches golden expected.intent.json" $ do
-            let Right intent = wizardToIntentJSON env answers
-                bytes = encodeIntentJSON intent
+            let Right intent = wizardToTreasuryIntent env answers
+                bytes =
+                    encodeSomeTreasuryIntent
+                        (SomeTreasuryIntent SSwap intent)
                 goldenPath =
                     "test/fixtures/swap-wizard/expected.intent.json"
             existing <- BSL.readFile goldenPath
@@ -267,7 +284,7 @@ spec = describe "SwapWizard" $ do
 
     describe "validation" $ do
         let leftIs e q =
-                case wizardToIntentJSON env q of
+                case wizardToTreasuryIntent env q of
                     Left e' -> e' `shouldBe` e
                     Right _ ->
                         expectationFailure'
@@ -410,8 +427,8 @@ spec = describe "SwapWizard" $ do
                     -- carry the same scope view, treasury
                     -- selection, and wallet selection that
                     -- the fixture env has, so feeding it
-                    -- through wizardToIntentJSON yields the
-                    -- same byte-for-byte golden output.
+                    -- through wizardToTreasuryIntent yields
+                    -- the same byte-for-byte output.
                     let envOverMainnet =
                             env'
                                 { weNetwork = "mainnet"
@@ -425,20 +442,27 @@ spec = describe "SwapWizard" $ do
                                                 )
                                         }
                                 }
-                    case wizardToIntentJSON envOverMainnet answers of
+                    case wizardToTreasuryIntent envOverMainnet answers of
                         Left e ->
                             expectationFailure'
                                 (show e)
                         Right intent ->
-                            encodeIntentJSON intent
-                                `shouldBe` encodeIntentJSON
-                                    ( case wizardToIntentJSON
-                                        env
-                                        answers of
-                                        Right x -> x
-                                        Left _ ->
-                                            error
-                                                "fixture broken"
+                            encodeSomeTreasuryIntent
+                                ( SomeTreasuryIntent
+                                    SSwap
+                                    intent
+                                )
+                                `shouldBe` encodeSomeTreasuryIntent
+                                    ( SomeTreasuryIntent
+                                        SSwap
+                                        ( case wizardToTreasuryIntent
+                                            env
+                                            answers of
+                                            Right x -> x
+                                            Left _ ->
+                                                error
+                                                    "fixture broken"
+                                        )
                                     )
 
         it "rejects network mismatch" $ do

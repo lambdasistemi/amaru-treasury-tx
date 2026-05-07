@@ -31,6 +31,7 @@ import Ouroboros.Network.Magic (NetworkMagic (..))
 import Amaru.Treasury.Backend.N2C
     ( findSocketMagic
     , knownNetworkMagics
+    , probeResultAccepted
     )
 
 spec :: Spec
@@ -72,6 +73,14 @@ spec = describe "Amaru.Treasury.TreasuryBuild" $ do
             seen <- readIORef seenRef
             length seen `shouldBe` 1
             r `shouldBe` 1
+
+    describe "probeResultAccepted" $ do
+        it "accepts a completed probe query" $
+            probeResultAccepted (Just (Right ()))
+                `shouldBe` True
+
+        it "rejects a probe query timeout" $
+            probeResultAccepted Nothing `shouldBe` False
 
     describe "knownNetworkMagics" $ do
         it "lists the three production-relevant networks" $ do

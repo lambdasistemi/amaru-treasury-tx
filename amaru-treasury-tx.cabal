@@ -129,6 +129,7 @@ library
     , file-embed
     , filepath
     , microlens
+    , ouroboros-consensus
     , ouroboros-network:api
     , plutus-core
     , plutus-ledger-api

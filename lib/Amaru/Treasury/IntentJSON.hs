@@ -490,10 +490,37 @@ instance Eq SomeTreasuryIntent where
 -- Schema versioning
 -- ----------------------------------------------------
 
-{- | The set of schema versions this binary accepts. v0
-allow-list is @[1]@. Bumping the schema appends to this
-list; old binaries refuse new intents, new binaries
-accept old intents only if their schema is in the list.
+{- | The set of schema versions this binary accepts.
+This is the **single source of truth** for the wire
+contract on the @schema@ top-level field of an intent
+JSON; the parser ('decodeTreasuryIntent') gates the
+incoming @schema@ value against this list and rejects
+anything outside it.
+
+== Bump protocol
+
+A future schema change /adds/ a new integer to this
+list; the old number stays so old intents keep being
+accepted. The compatibility matrix is therefore:
+
+* /old binary, new intent/: rejected (schema not in
+  the binary's allow-list — fail fast with a typed
+  parse error).
+* /new binary, old intent/: accepted iff the old
+  schema is still in the list (the bump policy says
+  it stays).
+* /new binary, new intent/: accepted (new schema is
+  in the list).
+
+Removing a schema from the list is a breaking change
+for already-archived intents; reserve it for genuinely
+incompatible structural breaks and announce it in the
+release notes.
+
+The wire field itself is required (no default) so a
+silently-missing @schema@ key always becomes a parse
+error — never a silent acceptance against an implicit
+default version.
 -}
 allowedSchemas :: [Int]
 allowedSchemas = [1]

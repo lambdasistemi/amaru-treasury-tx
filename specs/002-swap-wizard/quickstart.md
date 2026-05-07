@@ -3,10 +3,16 @@
 **Plan**: [plan.md](./plan.md) · **Spec**: [spec.md](./spec.md)
 **Date**: 2026-05-05
 
+> **Updated by feature 005** (unified `tx-build`). Use
+> [`docs/quickstart.md`](../../docs/quickstart.md) on the
+> published docs site for the operator-facing walkthrough on
+> the unified shape; this page is preserved as the spec-trail
+> for feature 002, with examples retargeted to `| tx-build`.
+
 This is the operator-facing walkthrough. It mirrors the input
 side of `pragma-org/amaru-treasury/journal/2026/bin/swap.sh`,
-then hands off to the existing `swap` subcommand to produce the
-unsigned Conway transaction CBOR — all in one pipe.
+then hands off to the unified `tx-build` subcommand to produce
+the unsigned Conway transaction CBOR — all in one pipe.
 
 ## 1. Prerequisites
 
@@ -33,7 +39,7 @@ EXE='nix run github:lambdasistemi/amaru-treasury-tx/002-swap-wizard#amaru-treasu
 
 ## 2. The famous swap, end to end
 
-The full pipeline — wizard → intent.json on stdout → swap →
+The full pipeline — wizard → intent.json on stdout → tx-build →
 hex CBOR on `--out` — is one command. The exact mainnet
 parameters that produce a 33-chunk USDM swap valid for 28
 hours from the current tip:
@@ -57,26 +63,30 @@ $EXE \
         --log wizard.log \
   | $EXE \
         --node-socket /code/cardano-mainnet/ipc/node.socket \
-        --network mainnet \
-        swap \
-            --log swap.log \
+        tx-build \
+            --log build.log \
             --out swap.cbor.hex
 ```
+
+`tx-build` reads the network from the intent's top-level
+`network` field — there is no `--network` flag on the build
+side (single source of truth). On a magic mismatch between
+the socket and the intent it exits 6 before any chain query.
 
 What lands where:
 
 | Stream | Contents |
 |---|---|
 | `wizard.log` (or stderr if `--log` omitted) | Wizard's `swap-wizard:`-prefixed trace lines, one per value-affecting step |
-| pipe between the two commands | The `intent.json` payload (JSON), wizard stdout → swap stdin |
-| `swap.log` (or stderr) | Build's `swap:`-prefixed trace lines: source, connect, build, re-eval, validation |
+| pipe between the two commands | The unified `intent.json` payload (JSON), wizard stdout → tx-build stdin |
+| `build.log` (or stderr) | Build's `tx-build:`-prefixed trace lines: source, parsed, network ok / mismatch, connect, built, re-eval, validation |
 | `swap.cbor.hex` | The unsigned Conway transaction as hex |
 
 Every flag has a sensible default for the non-pipe case:
 
 - Drop `--out` from the wizard to write `intent.json` to stdout
   (this is what the pipe relies on).
-- Drop `--intent` from `swap` to read the intent from stdin
+- Drop `--intent` from `tx-build` to read the intent from stdin
   (also what the pipe relies on).
 - Drop `--log` from either to send the trace to stderr.
 
@@ -104,13 +114,15 @@ swap-wizard: intent.json -> stdout
 …and the build writes:
 
 ```
-swap: intent <- stdin
-swap: connecting to /code/cardano-mainnet/ipc/node.socket
-swap: required utxos: 6
-swap: built 15240 bytes  fee=1025037  total_collateral=1537556
-swap: re-evaluated 2 redeemers, 0 failed
-swap: cbor -> swap.cbor.hex
-swap: VALIDATION OK
+tx-build: intent <- stdin
+tx-build: parsed action=Swap network=mainnet
+tx-build: connecting to /code/cardano-mainnet/ipc/node.socket
+tx-build: required utxos: 6
+tx-build: handshake ok (magic 764824073 matches intent network=mainnet)
+tx-build: built 15240 bytes  fee=1025037  total_collateral=1537556
+tx-build: re-evaluated 2 redeemers, 0 failed
+tx-build: cbor -> swap.cbor.hex
+tx-build: VALIDATION OK
 ```
 
 Operators read this trace as the audit gate before signing.
@@ -132,16 +144,17 @@ to a file in between:
 
 ```bash
 $EXE swap-wizard ... --out intent.json
-$EXE swap --intent intent.json --out swap.cbor.hex
+$EXE tx-build --intent intent.json --out swap.cbor.hex
 ```
 
 ## 6. When something goes wrong
 
 | Exit | Action |
 |------|--------|
-| 1 (swap) | The build aborted before producing CBOR. The trace's `ABORT` line names the cause: bad intent JSON, translation error, validation failure on a re-evaluated redeemer. |
-| 3 (swap-wizard) | Metadata verification or resolver error. Check `--metadata`, local node sync, wallet fuel UTxO, treasury UTxOs. The trace's `ABORT` line names the offending step. |
+| 1 (tx-build) | The build aborted before producing CBOR. The trace's `ABORT` line names the cause: bad intent JSON, translation error, validation failure on a re-evaluated redeemer. |
+| 3 (swap-wizard / tx-build) | Setup error. Check `--metadata`, local node sync, wallet fuel UTxO, treasury UTxOs. The trace's `ABORT` line names the offending step. |
 | 4 (swap-wizard) | Translation error. Re-check `--min-rate`, `--chunk-usdm`/`--split`, `--validity-hours` in [1, 48]. |
+| 6 (tx-build) | The N2C handshake reports a network magic that disagrees with the intent's `network` field. The trace's `NETWORK MISMATCH` line names both networks; point `--node-socket` at the right node. |
 
 Both subcommands are fail-closed — neither writes a partial
 output. If the trace ends without `cbor -> …` (or

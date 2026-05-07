@@ -24,13 +24,18 @@ Haskell port of the bash recipes in
 
 | Subcommand    | Purpose                                                                                          |
 | :------------ | :----------------------------------------------------------------------------------------------- |
-| `swap-wizard` | Verify upstream `metadata.json` against the chain, resolve UTxOs + tip, emit `intent.json` (typed step trace via `WizardEvent`). |
-| `swap`        | Turn an `intent.json` into unsigned Conway CBOR; re-evaluates every redeemer against a live `ChainContext` (typed step trace via `SwapEvent`). |
+| `swap-wizard` | Verify upstream `metadata.json` against the chain, resolve UTxOs + tip, emit a unified `intent.json` (typed step trace via `WizardEvent`). |
+| `tx-build`    | Turn any unified `intent.json` into unsigned Conway CBOR; re-evaluates every redeemer against a live `ChainContext` (typed step trace via `BuildEvent`). |
 
-The library also exposes pure builders for the `disburse` and
-`withdraw` recipes (`Amaru.Treasury.Tx.Disburse`,
-`Amaru.Treasury.Tx.Withdraw`), but no CLI surface is wired today;
-they live in the library for downstream consumers.
+`tx-build` reads the action discriminator and the network from
+the intent itself (single source of truth) and dispatches to the
+matching pure builder. Today only the `swap` action is wired;
+`disburse` / `withdraw` / `reorganize` light up as they ship.
+
+The library also exposes pure builders for `disburse` and
+`withdraw` (`Amaru.Treasury.Tx.Disburse`,
+`Amaru.Treasury.Tx.Withdraw`); the `tx-build` dispatcher will
+call them once the corresponding intent payloads ship.
 
 ## Out of scope
 

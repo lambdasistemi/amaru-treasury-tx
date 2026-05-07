@@ -4,6 +4,14 @@
 **Input**: Feature specification from `/specs/002-swap-wizard/spec.md`
 **Tracking issue**: [#27](https://github.com/lambdasistemi/amaru-treasury-tx/issues/27)
 
+> **Superseded (intent shape) by feature 005** ([PR #52](https://github.com/lambdasistemi/amaru-treasury-tx/pull/52)).
+> The wizard architecture in this plan ships unchanged;
+> feature 005 unifies the produced JSON across all four
+> actions and folds the per-action build modules into a
+> single `tx-build` subcommand. See
+> [`specs/005-unified-tx-build/`](../005-unified-tx-build/)
+> for the unified shape.
+
 ## Summary
 
 Add a `swap-wizard` subcommand to `amaru-treasury-tx` that produces a

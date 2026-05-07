@@ -2,8 +2,8 @@
 
 Build a swap transaction end-to-end in one pipe — the **swap
 wizard** answers every chain-anchored field for you, the
-**swap** subcommand turns its `intent.json` into unsigned
-Conway CBOR.
+**tx-build** subcommand turns its unified `intent.json` into
+unsigned Conway CBOR.
 
 ## 1. Install
 
@@ -165,7 +165,7 @@ ticks down with the tip.
 
 ```bash
 amaru-treasury-tx swap-wizard ... --out intent.json
-amaru-treasury-tx swap --intent intent.json --out swap.cbor.hex
+amaru-treasury-tx tx-build --intent intent.json --out swap.cbor.hex
 ```
 
 Same behaviour, useful when you want to inspect or hand-edit
@@ -175,9 +175,10 @@ Same behaviour, useful when you want to inspect or hand-edit
 
 | Exit | Action |
 |------|--------|
-| 1 (swap) | The build aborted before producing CBOR. The trace's `swap: ABORT …` line names the cause: bad intent JSON, translation error, or a re-evaluated redeemer failure. |
-| 3 (swap-wizard) | Metadata verification or resolver error. The trace's `swap-wizard: ABORT …` line names the offending step (registry mismatch, empty wallet UTxO set, network mismatch, …). |
+| 1 (tx-build) | The build aborted before producing CBOR. The trace's `tx-build: ABORT …` line names the cause: bad intent JSON, translation error, or a re-evaluated redeemer failure. |
+| 3 (swap-wizard / tx-build) | Setup error. The trace's `ABORT …` line names the offending step (registry mismatch, empty wallet UTxO set, missing UTxOs in chain context, …). |
 | 4 (swap-wizard) | Translation error. Re-check `--min-rate`, `--chunk-usdm`/`--split`, and `--validity-hours ∈ [1, 48]`. |
+| 6 (tx-build) | The N2C handshake reports a network magic that disagrees with the intent's `network` field. The trace's `tx-build: NETWORK MISMATCH …` line names both networks; point `--node-socket` at the right node. |
 
 Both subcommands are fail-closed — neither writes a partial
 output. If the trace ends without `cbor -> …` (or

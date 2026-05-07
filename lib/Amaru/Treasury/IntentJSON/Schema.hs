@@ -1,0 +1,341 @@
+{-# LANGUAGE OverloadedStrings #-}
+
+{- |
+Module      : Amaru.Treasury.IntentJSON.Schema
+Description : JSON Schema for the unified TreasuryIntent contract
+Copyright   : (c) Paolo Veronelli, 2026
+License     : Apache-2.0
+
+Defines the generated JSON Schema 2020-12 document for the
+unified @intent.json@ contract consumed by @tx-build@ and
+emitted by treasury wizards.
+-}
+module Amaru.Treasury.IntentJSON.Schema
+    ( intentJsonSchema
+    , encodeIntentJsonSchema
+    ) where
+
+import Data.Aeson (Value, object, (.=))
+import Data.Aeson.Encode.Pretty
+    ( Config (..)
+    , Indent (..)
+    , NumberFormat (..)
+    , encodePretty'
+    )
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.Types (Pair)
+import Data.ByteString.Lazy (ByteString)
+import Data.Text (Text)
+import Data.Text qualified as T
+
+import Amaru.Treasury.IntentJSON (allowedSchemas)
+
+-- | JSON Schema 2020-12 for @TreasuryIntent@ schema v1.
+intentJsonSchema :: Value
+intentJsonSchema =
+    object
+        [ "$schema"
+            .= ("https://json-schema.org/draft/2020-12/schema" :: Text)
+        , "$id"
+            .= ( "https://github.com/lambdasistemi/amaru-treasury-tx/schemas/treasury-intent-v1.json"
+                    :: Text
+               )
+        , "title" .= ("Amaru TreasuryIntent JSON" :: Text)
+        , "description"
+            .= ( "Unified intent JSON contract emitted by treasury wizards and consumed by tx-build."
+                    :: Text
+               )
+        , "oneOf"
+            .= [ actionSchema "swap" "swap" (ref "swap")
+               , actionSchema "disburse" "disburse" (ref "disburse")
+               , actionSchema "withdraw" "withdraw" (ref "withdraw")
+               , actionSchema
+                    "reorganize"
+                    "reorganize"
+                    (ref "reorganize")
+               ]
+        , "$defs"
+            .= object
+                [ "wallet" .= walletSchema
+                , "scope" .= scopeSchema
+                , "assetMap" .= assetMapSchema
+                , "rationale" .= rationaleSchema
+                , "swap" .= swapSchema
+                , "disburse" .= disburseSchema
+                , "withdraw" .= emptyPayloadSchema
+                , "reorganize" .= emptyPayloadSchema
+                , "txIn" .= txInSchema
+                , "bech32Address" .= bech32AddressSchema
+                , "hex28" .= hexBytesSchema 28
+                , "assetNameHex" .= assetNameHexSchema
+                ]
+        ]
+
+-- | Stable pretty-printed encoding for the schema asset.
+encodeIntentJsonSchema :: ByteString
+encodeIntentJsonSchema = encodePretty' cfg intentJsonSchema
+  where
+    cfg =
+        Config
+            { confIndent = Spaces 4
+            , confCompare = compare
+            , confNumFormat = Generic
+            , confTrailingNewline = True
+            }
+
+actionSchema :: Text -> Text -> Value -> Value
+actionSchema actionName payloadKey payloadSchema =
+    objectSchema
+        (commonRequired <> [payloadKey])
+        ( [ ("schema", schemaVersionSchema)
+          , ("action", constStringSchema actionName)
+          , ("network", enumTextSchema ["mainnet", "preprod", "preview"])
+          , ("wallet", ref "wallet")
+          , ("scope", ref "scope")
+          , ("signers", arrayOf (ref "hex28"))
+          , ("validityUpperBoundSlot", nonNegativeIntegerSchema)
+          , ("rationale", ref "rationale")
+          ]
+            <> [(payloadKey, payloadSchema)]
+        )
+
+commonRequired :: [Text]
+commonRequired =
+    [ "schema"
+    , "action"
+    , "network"
+    , "wallet"
+    , "scope"
+    , "signers"
+    , "validityUpperBoundSlot"
+    , "rationale"
+    ]
+
+walletSchema :: Value
+walletSchema =
+    objectSchema
+        ["txIn", "address"]
+        [ ("txIn", ref "txIn")
+        , ("address", ref "bech32Address")
+        ]
+
+scopeSchema :: Value
+scopeSchema =
+    objectSchema
+        [ "id"
+        , "treasuryAddress"
+        , "treasuryUtxos"
+        , "treasuryLeftoverLovelace"
+        , "treasuryLeftoverUsdm"
+        , "treasuryLeftoverOtherAssets"
+        , "treasuryScriptHash"
+        , "permissionsRewardAccount"
+        , "scopesDeployedAt"
+        , "permissionsDeployedAt"
+        , "treasuryDeployedAt"
+        , "registryDeployedAt"
+        , "registryPolicyId"
+        ]
+        [
+            ( "id"
+            , enumTextSchema
+                [ "core_development"
+                , "ops_and_use_cases"
+                , "network_compliance"
+                , "middleware"
+                , "contingency"
+                ]
+            )
+        , ("treasuryAddress", ref "bech32Address")
+        , ("treasuryUtxos", arrayOf (ref "txIn"))
+        , ("treasuryLeftoverLovelace", nonNegativeIntegerSchema)
+        , ("treasuryLeftoverUsdm", nonNegativeIntegerSchema)
+        , ("treasuryLeftoverOtherAssets", ref "assetMap")
+        , ("treasuryScriptHash", ref "hex28")
+        , ("permissionsRewardAccount", ref "hex28")
+        , ("scopesDeployedAt", ref "txIn")
+        , ("permissionsDeployedAt", ref "txIn")
+        , ("treasuryDeployedAt", ref "txIn")
+        , ("registryDeployedAt", ref "txIn")
+        , ("registryPolicyId", ref "hex28")
+        ]
+
+assetMapSchema :: Value
+assetMapSchema =
+    object
+        [ "type" .= ("object" :: Text)
+        , "propertyNames" .= ref "hex28"
+        , "additionalProperties"
+            .= object
+                [ "type" .= ("object" :: Text)
+                , "propertyNames" .= ref "assetNameHex"
+                , "additionalProperties" .= nonNegativeIntegerSchema
+                ]
+        ]
+
+rationaleSchema :: Value
+rationaleSchema =
+    objectSchema
+        [ "event"
+        , "label"
+        , "description"
+        , "justification"
+        , "destinationLabel"
+        ]
+        [ ("event", stringSchema)
+        , ("label", stringSchema)
+        , ("description", stringSchema)
+        , ("justification", stringSchema)
+        , ("destinationLabel", stringSchema)
+        ]
+
+swapSchema :: Value
+swapSchema =
+    objectSchema
+        [ "swapOrderAddress"
+        , "chunkSizeLovelace"
+        , "amountLovelace"
+        , "extraPerChunkLovelace"
+        , "rateNumerator"
+        , "rateDenominator"
+        , "poolId"
+        , "coreOwner"
+        , "opsOwner"
+        , "networkComplianceOwner"
+        , "middlewareOwner"
+        , "sundaeProtocolFeeLovelace"
+        , "usdmPolicy"
+        , "usdmToken"
+        ]
+        [ ("swapOrderAddress", ref "bech32Address")
+        , ("chunkSizeLovelace", positiveIntegerSchema)
+        , ("amountLovelace", positiveIntegerSchema)
+        , ("extraPerChunkLovelace", nonNegativeIntegerSchema)
+        , ("rateNumerator", positiveIntegerSchema)
+        , ("rateDenominator", positiveIntegerSchema)
+        , ("poolId", ref "hex28")
+        , ("coreOwner", ref "hex28")
+        , ("opsOwner", ref "hex28")
+        , ("networkComplianceOwner", ref "hex28")
+        , ("middlewareOwner", ref "hex28")
+        , ("sundaeProtocolFeeLovelace", nonNegativeIntegerSchema)
+        , ("usdmPolicy", ref "hex28")
+        , ("usdmToken", ref "assetNameHex")
+        ]
+
+disburseSchema :: Value
+disburseSchema =
+    objectSchema
+        [ "unit"
+        , "amount"
+        , "beneficiaryAddress"
+        , "usdmPolicy"
+        , "usdmToken"
+        ]
+        [ ("unit", enumTextSchema ["ada", "usdm"])
+        , ("amount", positiveIntegerSchema)
+        , ("beneficiaryAddress", ref "bech32Address")
+        , ("usdmPolicy", ref "hex28")
+        , ("usdmToken", ref "assetNameHex")
+        ]
+
+emptyPayloadSchema :: Value
+emptyPayloadSchema = objectSchema [] []
+
+schemaVersionSchema :: Value
+schemaVersionSchema =
+    object
+        [ "type" .= ("integer" :: Text)
+        , "enum" .= allowedSchemas
+        ]
+
+txInSchema :: Value
+txInSchema =
+    object
+        [ "type" .= ("string" :: Text)
+        , "pattern" .= ("^[0-9a-fA-F]{64}#[0-9]+$" :: Text)
+        ]
+
+bech32AddressSchema :: Value
+bech32AddressSchema =
+    object
+        [ "type" .= ("string" :: Text)
+        , "pattern" .= ("^addr(_test)?1[0-9a-z]+$" :: Text)
+        ]
+
+assetNameHexSchema :: Value
+assetNameHexSchema =
+    object
+        [ "type" .= ("string" :: Text)
+        , "pattern" .= ("^([0-9a-fA-F]{2})*$" :: Text)
+        ]
+
+hexBytesSchema :: Int -> Value
+hexBytesSchema bytes =
+    object
+        [ "type" .= ("string" :: Text)
+        , "pattern"
+            .= ( "^([0-9a-fA-F]{"
+                    <> showText (bytes * 2)
+                    <> "})$"
+               )
+        ]
+
+stringSchema :: Value
+stringSchema = object ["type" .= ("string" :: Text)]
+
+positiveIntegerSchema :: Value
+positiveIntegerSchema =
+    object
+        [ "type" .= ("integer" :: Text)
+        , "minimum" .= (1 :: Int)
+        ]
+
+nonNegativeIntegerSchema :: Value
+nonNegativeIntegerSchema =
+    object
+        [ "type" .= ("integer" :: Text)
+        , "minimum" .= (0 :: Int)
+        ]
+
+arrayOf :: Value -> Value
+arrayOf itemSchema =
+    object
+        [ "type" .= ("array" :: Text)
+        , "items" .= itemSchema
+        ]
+
+enumTextSchema :: [Text] -> Value
+enumTextSchema values =
+    object
+        [ "type" .= ("string" :: Text)
+        , "enum" .= values
+        ]
+
+constStringSchema :: Text -> Value
+constStringSchema value =
+    object
+        [ "type" .= ("string" :: Text)
+        , "const" .= value
+        ]
+
+objectSchema :: [Text] -> [(Text, Value)] -> Value
+objectSchema required properties =
+    object
+        [ "type" .= ("object" :: Text)
+        , "required" .= required
+        , "properties" .= object (schemaPair <$> properties)
+        , "additionalProperties" .= False
+        ]
+
+ref :: Text -> Value
+ref name =
+    object
+        [ "$ref" .= ("#/$defs/" <> name)
+        ]
+
+schemaPair :: (Text, Value) -> Pair
+schemaPair (key, value) = Key.fromText key .= value
+
+showText :: (Show a) => a -> Text
+showText = T.pack . show

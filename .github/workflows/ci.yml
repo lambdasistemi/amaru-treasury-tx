@@ -27,6 +27,7 @@ jobs:
           .#checks.x86_64-linux.build
           .#checks.x86_64-linux.unit
           .#checks.x86_64-linux.golden
+          .#checks.x86_64-linux.schema
           .#checks.x86_64-linux.smoke
           .#checks.x86_64-linux.lint
       - name: Release version contract

@@ -5,7 +5,19 @@ let
     text = ''
       test -e ${components.library}
       test -e ${components.exes.amaru-treasury-tx}
+      test -e ${components.exes.amaru-treasury-intent-schema}
       echo "build outputs realized"
+    '';
+  };
+
+  schema = pkgs.writeShellApplication {
+    name = "schema";
+    runtimeInputs = [ components.exes.amaru-treasury-intent-schema ];
+    text = ''
+      tmp="$(mktemp)"
+      trap 'rm -f "$tmp"' EXIT
+      amaru-treasury-intent-schema > "$tmp"
+      diff -u ${src}/docs/assets/intent-schema.json "$tmp"
     '';
   };
 
@@ -122,5 +134,5 @@ let
   };
 in
 {
-  inherit build golden lint smoke unit;
+  inherit build golden lint schema smoke unit;
 }

@@ -22,6 +22,7 @@ extra-source-files:
   assets/plutus/scopes.cbor
   assets/plutus/treasury.cbor
   assets/plutus/treasury_registry.cbor
+  docs/assets/intent-schema.json
   scripts/smoke/swap-wizard-signers
   scripts/smoke/tx-build-pipe
   test/fixtures/swap-wizard/**/*.json
@@ -69,6 +70,7 @@ library
     Amaru.Treasury.Constants
     Amaru.Treasury.IntentJSON
     Amaru.Treasury.IntentJSON.Common
+    Amaru.Treasury.IntentJSON.Schema
     Amaru.Treasury.LedgerParse
     Amaru.Treasury.Metadata
     Amaru.Treasury.PParams
@@ -185,6 +187,16 @@ executable swap-probe
 
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
 
+executable amaru-treasury-intent-schema
+  import:           warnings
+  hs-source-dirs:   app/amaru-treasury-intent-schema
+  main-is:          Main.hs
+  default-language: GHC2021
+  build-depends:
+    , amaru-treasury-tx
+    , base               <5
+    , bytestring
+
 test-suite unit-tests
   import:             warnings
   type:               exitcode-stdio-1.0
@@ -193,6 +205,7 @@ test-suite unit-tests
   default-language:   GHC2021
   other-modules:
     Amaru.Treasury.AuxDataSpec
+    Amaru.Treasury.IntentJSONSchemaSpec
     Amaru.Treasury.IntentJSONSpec
     Amaru.Treasury.LedgerParseSpec
     Amaru.Treasury.MetadataSpec
@@ -230,6 +243,7 @@ test-suite unit-tests
     , containers
     , hspec
     , hspec-discover
+    , jsonschema
     , microlens
     , ouroboros-network:api
     , plutus-core

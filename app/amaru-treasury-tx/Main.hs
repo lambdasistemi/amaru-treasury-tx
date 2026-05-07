@@ -86,12 +86,15 @@ import Amaru.Treasury.Backend (Provider (..))
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.ChainContext (liveContext)
 import Amaru.Treasury.IntentJSON
-    ( ScopeJSON (..)
+    ( SAction (..)
+    , ScopeJSON (..)
     , SomeTreasuryIntent (..)
+    , SwapInputs (..)
     , TreasuryIntent (..)
     , WalletJSON (..)
     , decodeTreasuryIntent
     , decodeTreasuryIntentFile
+    , encodeSomeTreasuryIntent
     )
 import Amaru.Treasury.IntentJSON.Common
     ( parseAddr
@@ -111,10 +114,6 @@ import Amaru.Treasury.TreasuryBuild.Trace
     ( BuildEvent (..)
     , buildEventTracer
     )
-import Amaru.Treasury.Tx.SwapIntentJSON
-    ( SwapInputs (..)
-    , SwapIntentJSON (..)
-    )
 import Amaru.Treasury.Tx.SwapWizard
     ( NetworkConstants (..)
     , RationaleAnswers (..)
@@ -129,11 +128,10 @@ import Amaru.Treasury.Tx.SwapWizard
     , WalletSelection (..)
     , WizardEnv (..)
     , WizardError
-    , encodeIntentJSON
     , registryViewFromVerified
     , resolveWizardEnv
     , txInToText
-    , wizardToIntentJSON
+    , wizardToTreasuryIntent
     )
 import Amaru.Treasury.Tx.SwapWizard.Trace
     ( WizardEvent (..)
@@ -614,27 +612,34 @@ runWizard g WizardOpts{..} = do
                         abortTr tr ("resolve: " <> T.pack (show e))
                     Right e -> pure e
                 traceEnv tr env
-                intent <- case wizardToIntentJSON env answers of
-                    Left we ->
-                        abortTr
-                            tr
-                            ("translate: " <> T.pack (show (we :: WizardError)))
-                    Right i -> pure i
-                let total = swAmountLovelace (sijSwap intent)
-                    cs = swChunkSizeLovelace (sijSwap intent)
+                intent <-
+                    case wizardToTreasuryIntent env answers of
+                        Left we ->
+                            abortTr
+                                tr
+                                ( "translate: "
+                                    <> T.pack
+                                        (show (we :: WizardError))
+                                )
+                        Right i -> pure i
+                let p = tiPayload intent
+                    total = swiAmountLovelace p
+                    cs = swiChunkSizeLovelace p
                     full = total `div` cs
                     rem' = total `mod` cs
                 traceWith tr $
                     WeValidityComputed
                         (weCurrentTip env)
-                        (sijValidityUpperBoundSlot intent)
+                        (tiValidityUpperBoundSlot intent)
                 traceWith tr $
                     WeChunksComputed total cs (fromInteger full) rem'
                 traceWith tr (WeIntentReady wOptsOut)
-                let bytes = encodeIntentJSON intent
+                let bytes =
+                        encodeSomeTreasuryIntent
+                            (SomeTreasuryIntent SSwap intent)
                 case wOptsOut of
                     Nothing -> BSL.putStr bytes
-                    Just p -> BSL.writeFile p bytes
+                    Just fp -> BSL.writeFile fp bytes
 
 {- | Open the log handle indicated by '--log' (or stderr if absent),
 run the action, and close the handle on exit.

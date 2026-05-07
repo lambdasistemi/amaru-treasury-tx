@@ -356,7 +356,7 @@ clear "intent declares X, socket reports Y" error.
       intent's; assert the runner returns `Left
       NetworkMismatch{…}` (or equivalent) with both magics in
       the error.
-- [ ] T032 [P] [US2] Integration test (manual; recorded in PR
+- [X] T032 [P] [US2] Integration test (manual; recorded in PR
       description): build a preprod intent against a mainnet
       socket. Confirm exit 6 + stderr message names both
       networks.

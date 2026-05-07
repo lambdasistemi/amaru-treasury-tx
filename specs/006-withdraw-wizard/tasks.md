@@ -130,7 +130,7 @@ before the implementation tasks they constrain.
 ### Tests for User Story 3
 
 - [x] T033 [P] [US3] Author synthetic frozen fixture files `test/fixtures/withdraw/synthetic/{intent,utxos,pparams,exunits}.json`.
-- [ ] T034 [P] [US3] Author `test/fixtures/withdraw/synthetic/provenance.md` recording why the oracle is synthetic and linking issue #17 for live preprod replacement.
+- [x] T034 [P] [US3] Author `test/fixtures/withdraw/synthetic/provenance.md` recording why the oracle is synthetic and linking issue #17 for live preprod replacement.
 - [ ] T035 [US3] Add RED `test/golden/WithdrawGoldenSpec.hs` that decodes `SomeTreasuryIntent`, loads frozen `ChainContext`, and compares against `test/fixtures/withdraw/synthetic/expected.cbor`.
 - [ ] T036 [US3] Record the intended `withdraw.sh` parity decision in `test/fixtures/withdraw/synthetic/provenance.md`, including the `--withdrawal <stake>+0` discrepancy from research R5.
 

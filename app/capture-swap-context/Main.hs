@@ -7,11 +7,11 @@ Description : Capture a live ChainContext into a fixture
 Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
-Reads a swap-intent JSON, queries the live mainnet node
-for the 6 UTxOs the swap will reach for, runs the full
-'runSwapBuild' pipeline once to capture the per-redeemer
-'ExUnits', and writes the snapshot into a fixture
-directory:
+Reads a unified treasury intent JSON, queries the live
+mainnet node for the 6 UTxOs the swap will reach for,
+runs the full 'runSwap' pipeline once to capture the
+per-redeemer 'ExUnits', and writes the snapshot into a
+fixture directory:
 
 @
 \<out-dir\>/
@@ -23,7 +23,7 @@ directory:
 
 The offline golden harness then loads this directory via
 'Amaru.Treasury.ChainContext.Fixture.readSwapFixture',
-runs 'runSwapBuild' against the resulting frozen
+runs 'runFromIntent' against the resulting frozen
 'ChainContext', and byte-diffs the new CBOR against
 @expected.cbor@.
 -}
@@ -61,18 +61,19 @@ import Ouroboros.Network.Magic (NetworkMagic (..))
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.ChainContext (ChainContext (..), liveContext)
 import Amaru.Treasury.ChainContext.Fixture (writeSwapFixture)
-import Amaru.Treasury.Tx.Swap (SwapIntent (..))
-import Amaru.Treasury.Tx.SwapBuild
-    ( ScriptResult (..)
-    , SwapBuildInputs (..)
-    , SwapBuildResult (..)
-    , runSwapBuild
-    )
-import Amaru.Treasury.Tx.SwapIntentJSON
-    ( TranslatedIntent (..)
-    , decodeSwapIntentFile
+import Amaru.Treasury.IntentJSON
+    ( SAction (..)
+    , SomeTreasuryIntent (..)
+    , TranslatedShared (..)
+    , decodeTreasuryIntentFile
     , translateIntent
     )
+import Amaru.Treasury.TreasuryBuild
+    ( ScriptResult (..)
+    , TreasuryBuildResult (..)
+    , runSwap
+    )
+import Amaru.Treasury.Tx.Swap (SwapIntent (..))
 
 import Options.Applicative qualified as O
 
@@ -129,23 +130,27 @@ main = do
     socket <- resolveSocket coSocketPath
     IO.hPutStrLn stderr $
         "capture: reading " <> coIntentPath
-    parsed <- decodeSwapIntentFile coIntentPath
-    sij <- case parsed of
+    parsed <- decodeTreasuryIntentFile coIntentPath
+    some <- case parsed of
         Left e ->
             throwIO . userError $ "intent JSON: " <> e
         Right v -> pure v
-    TranslatedIntent{..} <- case translateIntent sij of
-        Left e ->
+    (shared, intent) <- case some of
+        SomeTreasuryIntent SSwap ti ->
+            case translateIntent SSwap ti of
+                Left e ->
+                    throwIO . userError $
+                        "intent translation: " <> e
+                Right v -> pure v
+        SomeTreasuryIntent _ _ ->
             throwIO . userError $
-                "intent translation: " <> e
-        Right v -> pure v
+                "capture: only swap intents are supported"
     IO.hPutStrLn stderr $
         "capture: connecting to " <> socket
     withLocalNodeBackend coNetworkMagic socket $ \backend -> do
-        let intent = tiSwapIntent
-            allRequired =
+        let allRequired =
                 Set.fromList $
-                    tiWalletTxIn
+                    tsWalletTxIn shared
                         : siTreasuryUtxos intent
                         ++ [ siScopesDeployedAt intent
                            , siPermissionsDeployedAt intent
@@ -155,25 +160,23 @@ main = do
         IO.hPutStrLn stderr "capture: querying chain context"
         ctx <- liveContext backend allRequired
         IO.hPutStrLn stderr "capture: building tx"
-        SwapBuildResult{..} <-
-            runSwapBuild
+        TreasuryBuildResult{..} <-
+            runSwap
                 ctx
-                SwapBuildInputs
-                    { sbiIntent = intent
-                    , sbiRationale = tiRationale
-                    , sbiWalletTxIn = tiWalletTxIn
-                    , sbiWalletAddr = tiWalletAddr
-                    }
+                intent
+                (tsRationale shared)
+                (tsWalletTxIn shared)
+                (tsWalletAddr shared)
         let exUnitsMap =
                 Map.fromList
                     [ (srPurpose r, ex)
                     | r@ScriptResult{srOutcome = Right ex} <-
-                        sbrScriptResults
+                        tbrScriptResults
                     ]
             failures =
                 [ (srPurpose r, e)
                 | r@ScriptResult{srOutcome = Left e} <-
-                    sbrScriptResults
+                    tbrScriptResults
                 ]
         case failures of
             [] -> pure ()
@@ -195,9 +198,9 @@ main = do
             "capture: writing utxos.json + exunits.json into "
                 <> coOutDir
         writeSwapFixture coOutDir (ccUtxos ctx) exUnitsMap
-        let cborStrict = BSL.toStrict sbrCborBytes
+        let cborStrict = BSL.toStrict tbrCborBytes
             hexed = B16.encode cborStrict
-            Coin feeLov = sbrFeeLovelace
+            Coin feeLov = tbrFeeLovelace
         BSL.writeFile
             (coOutDir <> "/expected.cbor")
             (BSL.fromStrict hexed)

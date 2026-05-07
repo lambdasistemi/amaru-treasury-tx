@@ -11,7 +11,7 @@ A one-shot harness that reproduces the swap CBOR pasted
 by the user. Connects to a local mainnet @cardano-node@,
 queries the live UTxOs referenced in the original tx,
 runs the full
-'Amaru.Treasury.Tx.SwapBuild.runSwapBuild' driver,
+'Amaru.Treasury.TreasuryBuild.runSwap' driver,
 re-evaluates every redeemer against the final tx, then
 writes the resulting CBOR (hex) to stdout for a
 byte-level diff against
@@ -66,17 +66,16 @@ import Ouroboros.Network.Magic (NetworkMagic (..))
 import Amaru.Treasury.AuxData (swapRationaleMetadatum)
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.ChainContext (liveContext)
+import Amaru.Treasury.TreasuryBuild
+    ( ScriptResult (..)
+    , TreasuryBuildResult (..)
+    , runSwap
+    )
 import Amaru.Treasury.Tx.Swap
     ( SwapIntent (..)
     , SwapOrderDatumParams (..)
     , SwapOrderOut (..)
     , swapOrderDatum
-    )
-import Amaru.Treasury.Tx.SwapBuild
-    ( ScriptResult (..)
-    , SwapBuildInputs (..)
-    , SwapBuildResult (..)
-    , runSwapBuild
     )
 
 -- ----------------------------------------------------
@@ -328,23 +327,18 @@ main = do
                     ]
                 )
         IO.hPutStrLn stderr "swap-probe: building tx"
-        let inputs =
-                SwapBuildInputs
-                    { sbiIntent = intent
-                    , sbiRationale =
-                        swapRationaleMetadatum
-                            "Swapping ADA for $100k at a rate of $0.245 per ADA"
-                            "Network Compliance's treasury"
-                            "Required to pay Antithesis as vendor"
-                            registryPolicyId
-                    , sbiWalletTxIn = walletInput
-                    , sbiWalletAddr = walletAddr
-                    }
-        SwapBuildResult{..} <- runSwapBuild ctx inputs
-        let cborStrict = BSL.toStrict sbrCborBytes
+        let rationale =
+                swapRationaleMetadatum
+                    "Swapping ADA for $100k at a rate of $0.245 per ADA"
+                    "Network Compliance's treasury"
+                    "Required to pay Antithesis as vendor"
+                    registryPolicyId
+        TreasuryBuildResult{..} <-
+            runSwap ctx intent rationale walletInput walletAddr
+        let cborStrict = BSL.toStrict tbrCborBytes
             hexed = B16.encode cborStrict
-            Coin feeLov = sbrFeeLovelace
-            Coin tcLov = sbrTotalCollateralLovelace
+            Coin feeLov = tbrFeeLovelace
+            Coin tcLov = tbrTotalCollateralLovelace
         IO.hPutStrLn stderr $
             "swap-probe: emitted "
                 <> show (BS.length cborStrict)
@@ -355,11 +349,11 @@ main = do
         let failures =
                 [ (purpose, e)
                 | ScriptResult purpose (Left e) <-
-                    sbrScriptResults
+                    tbrScriptResults
                 ]
         IO.hPutStrLn stderr $
             "swap-probe: re-evaluated "
-                <> show (length sbrScriptResults)
+                <> show (length tbrScriptResults)
                 <> " redeemers, "
                 <> show (length failures)
                 <> " failed"

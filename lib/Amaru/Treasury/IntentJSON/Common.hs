@@ -5,11 +5,7 @@ Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
 Bech32 + hex parsers shared by the unified intent JSON
-parser and by every per-action wizard. Bodies are lifted
-verbatim from
-[`Amaru.Treasury.Tx.SwapIntentJSON`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapIntentJSON.hs)
-in this commit; the originals there are deleted in T011
-(this commit).
+parser and by every per-action wizard.
 -}
 module Amaru.Treasury.IntentJSON.Common
     ( parseAddr

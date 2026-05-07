@@ -125,11 +125,11 @@
     },
     "dev-assets": {
       "locked": {
-        "lastModified": 1778180062,
-        "narHash": "sha256-AcA6ryjF1BdMrMqOJH+vhZHi6y4knyHUm0TMJsANFKo=",
+        "lastModified": 1778180981,
+        "narHash": "sha256-t50OxgT3RZFkwBa1dLBo29uMkvfF3IgLlozeAUUiDGE=",
         "owner": "paolino",
         "repo": "dev-assets",
-        "rev": "3cb965b6ac1de714ddf3fcb9092042294e5448f1",
+        "rev": "b9718cb996f6348ba3fac3c9f237370505e91402",
         "type": "github"
       },
       "original": {

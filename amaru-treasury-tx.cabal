@@ -27,6 +27,7 @@ extra-source-files:
   scripts/smoke/tx-build-pipe
   test/fixtures/disburse/**/*.cbor
   test/fixtures/disburse/**/*.json
+  test/fixtures/disburse/**/*.md
   test/fixtures/disburse-wizard/**/*.json
   test/fixtures/swap-wizard/**/*.json
 
@@ -105,7 +106,7 @@ library
     , aeson
     , aeson-pretty
     , async
-    , base                    <5
+    , base                       <5
     , base16-bytestring
     , bech32
     , bytestring
@@ -119,6 +120,7 @@ library
     , cardano-ledger-shelley
     , cardano-node-clients
     , cardano-slotting
+    , cardano-strict-containers
     , containers
     , contra-tracer
     , file-embed
@@ -172,6 +174,7 @@ executable capture-swap-context
     , bytestring
     , cardano-ledger-core
     , containers
+    , directory
     , optparse-applicative
     , ouroboros-network:api
 
@@ -288,5 +291,6 @@ test-suite golden-tests
     , containers
     , directory
     , hspec
+    , text
 
   build-tool-depends: hspec-discover:hspec-discover

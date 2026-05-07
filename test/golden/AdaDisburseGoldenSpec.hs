@@ -7,20 +7,25 @@ Loads the frozen disburse fixture under
 @test/fixtures/disburse/ada/@, decodes the unified
 @intent.json@, builds a tx via 'runFromIntent' against
 the resulting frozen 'ChainContext', and byte-diffs the
-CBOR against @body.cbor@.
+CBOR against the upstream bash/cardano-cli oracle.
 
 Mirrors 'SwapGoldenSpec'. Refuses to fall back to a live
-build; surfaces any byte diff as a regression. To
-re-record the golden after an intentional change, set
-@UPDATE_GOLDENS=1@ in the environment and re-run.
+build or self-recorded Haskell output; surfaces any byte
+diff as a regression.
 -}
 module AdaDisburseGoldenSpec (spec) where
 
+import Data.Aeson
+    ( FromJSON (..)
+    , eitherDecodeStrict'
+    , withObject
+    , (.:)
+    )
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
-import System.Directory (doesFileExist)
-import System.Environment (lookupEnv)
+import Data.Text (Text)
+import Data.Text.Encoding qualified as Text
 import Test.Hspec (Spec, describe, it, shouldBe)
 
 import Amaru.Treasury.ChainContext.Fixture
@@ -38,10 +43,17 @@ import Amaru.Treasury.TreasuryBuild
 fixtureDir :: FilePath
 fixtureDir = "test/fixtures/disburse/ada"
 
+newtype BashOracle = BashOracle Text
+
+instance FromJSON BashOracle where
+    parseJSON =
+        withObject "BashOracle" $ \o ->
+            BashOracle <$> o .: "cborHex"
+
 spec :: Spec
 spec =
     describe "ada-disburse golden (frozen ChainContext)" $
-        it "rebuilds body.cbor byte-for-byte" $ do
+        it "rebuilds the bash oracle byte-for-byte" $ do
             intent <-
                 decodeTreasuryIntentFile
                     (fixtureDir <> "/intent.json")
@@ -54,18 +66,13 @@ spec =
             let actualHex =
                     B16.encode
                         (BSL.toStrict (tbrCborBytes tbr))
-                goldenPath = fixtureDir <> "/body.cbor"
-            update <- lookupEnv "UPDATE_GOLDENS"
-            exists <- doesFileExist goldenPath
-            if not exists || update == Just "1"
-                then do
-                    BS.writeFile goldenPath actualHex
-                    error
-                        ( "Golden written to "
-                            <> goldenPath
-                            <> "; review and re-run "
-                            <> "without UPDATE_GOLDENS=1"
-                        )
-                else do
-                    expected <- BS.readFile goldenPath
-                    actualHex `shouldBe` expected
+            BashOracle oracleText <-
+                BS.readFile (fixtureDir <> "/bash.oracle.tx.json")
+                    >>= either
+                        (error . ("oracle JSON: " <>))
+                        pure
+                        . eitherDecodeStrict'
+            let oracleHex = Text.encodeUtf8 oracleText
+            expected <- BS.readFile (fixtureDir <> "/body.cbor")
+            expected `shouldBe` oracleHex
+            actualHex `shouldBe` oracleHex

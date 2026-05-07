@@ -2,15 +2,15 @@
     "exUnits": [
         {
             "ix": 1,
-            "memory": 600000,
+            "memory": 443071,
             "purpose": "spending",
-            "steps": 240000000
+            "steps": 150114110
         },
         {
             "ix": 0,
-            "memory": 200000,
+            "memory": 190942,
             "purpose": "rewarding",
-            "steps": 65000000
+            "steps": 61790746
         }
     ]
 }

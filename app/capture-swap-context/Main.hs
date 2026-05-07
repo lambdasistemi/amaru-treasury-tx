@@ -8,10 +8,10 @@ Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
 Reads a unified treasury intent JSON, queries the live
-mainnet node for the 6 UTxOs the swap will reach for,
-runs the full 'runSwap' pipeline once to capture the
-per-redeemer 'ExUnits', and writes the snapshot into a
-fixture directory:
+mainnet node for the UTxOs the supported action will
+reach for, runs the full build pipeline once to capture
+the per-redeemer 'ExUnits', and writes the snapshot into
+a fixture directory:
 
 @
 \<out-dir\>/
@@ -24,8 +24,8 @@ fixture directory:
 The offline golden harness then loads this directory via
 'Amaru.Treasury.ChainContext.Fixture.readSwapFixture',
 runs 'runFromIntent' against the resulting frozen
-'ChainContext', and byte-diffs the new CBOR against
-@expected.cbor@.
+'ChainContext', and byte-diffs the new CBOR against a
+golden oracle.
 -}
 module Main (main) where
 
@@ -51,11 +51,13 @@ import Options.Applicative
     , value
     , (<**>)
     )
+import System.Directory (createDirectoryIfMissing)
 import System.Environment (lookupEnv)
 import System.IO (stderr)
 import System.IO qualified as IO
 
 import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.TxIn (TxIn)
 import Ouroboros.Network.Magic (NetworkMagic (..))
 
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
@@ -63,17 +65,18 @@ import Amaru.Treasury.ChainContext (ChainContext (..), liveContext)
 import Amaru.Treasury.ChainContext.Fixture (writeSwapFixture)
 import Amaru.Treasury.IntentJSON
     ( SAction (..)
+    , ScopeJSON (..)
     , SomeTreasuryIntent (..)
-    , TranslatedShared (..)
+    , TreasuryIntent (..)
+    , WalletJSON (..)
     , decodeTreasuryIntentFile
-    , translateIntent
     )
+import Amaru.Treasury.IntentJSON.Common (parseTxIn)
 import Amaru.Treasury.TreasuryBuild
     ( ScriptResult (..)
     , TreasuryBuildResult (..)
-    , runSwap
+    , runFromIntent
     )
-import Amaru.Treasury.Tx.Swap (SwapIntent (..))
 
 import Options.Applicative qualified as O
 
@@ -135,38 +138,24 @@ main = do
         Left e ->
             throwIO . userError $ "intent JSON: " <> e
         Right v -> pure v
-    (shared, intent) <- case some of
-        SomeTreasuryIntent SSwap ti ->
-            case translateIntent SSwap ti of
-                Left e ->
-                    throwIO . userError $
-                        "intent translation: " <> e
-                Right v -> pure v
+    case some of
+        SomeTreasuryIntent SSwap _ -> pure ()
+        SomeTreasuryIntent SDisburse _ -> pure ()
         SomeTreasuryIntent _ _ ->
             throwIO . userError $
-                "capture: only swap intents are supported"
+                "capture: only swap and disburse intents are supported"
     IO.hPutStrLn stderr $
         "capture: connecting to " <> socket
     withLocalNodeBackend coNetworkMagic socket $ \backend -> do
-        let allRequired =
-                Set.fromList $
-                    tsWalletTxIn shared
-                        : siTreasuryUtxos intent
-                        ++ [ siScopesDeployedAt intent
-                           , siPermissionsDeployedAt intent
-                           , siTreasuryDeployedAt intent
-                           , siRegistryDeployedAt intent
-                           ]
+        allRequired <- case requiredUtxos some of
+            Left e ->
+                throwIO . userError $
+                    "required UTxOs: " <> e
+            Right s -> pure s
         IO.hPutStrLn stderr "capture: querying chain context"
         ctx <- liveContext backend allRequired
         IO.hPutStrLn stderr "capture: building tx"
-        TreasuryBuildResult{..} <-
-            runSwap
-                ctx
-                intent
-                (tsRationale shared)
-                (tsWalletTxIn shared)
-                (tsWalletAddr shared)
+        TreasuryBuildResult{..} <- runFromIntent ctx some
         let exUnitsMap =
                 Map.fromList
                     [ (srPurpose r, ex)
@@ -197,6 +186,7 @@ main = do
         IO.hPutStrLn stderr $
             "capture: writing utxos.json + exunits.json into "
                 <> coOutDir
+        createDirectoryIfMissing True coOutDir
         writeSwapFixture coOutDir (ccUtxos ctx) exUnitsMap
         let cborStrict = BSL.toStrict tbrCborBytes
             hexed = B16.encode cborStrict
@@ -222,3 +212,26 @@ resolveSocket Nothing = do
             throwIO . userError $
                 "capture-swap-context: pass --node-socket "
                     <> "or set CARDANO_NODE_SOCKET_PATH"
+
+requiredUtxos
+    :: SomeTreasuryIntent -> Either String (Set.Set TxIn)
+requiredUtxos (SomeTreasuryIntent _sa intent) = do
+    let wallet = tiWallet intent
+        scope = tiScope intent
+    walletTxIn <- parseTxIn (wjTxIn wallet)
+    treasuryUtxos <-
+        traverse parseTxIn (sjTreasuryUtxos scope)
+    scopesRef <- parseTxIn (sjScopesDeployedAt scope)
+    permissionsRef <-
+        parseTxIn (sjPermissionsDeployedAt scope)
+    treasuryRef <- parseTxIn (sjTreasuryDeployedAt scope)
+    registryRef <- parseTxIn (sjRegistryDeployedAt scope)
+    Right $
+        Set.fromList $
+            walletTxIn
+                : treasuryUtxos
+                ++ [ scopesRef
+                   , permissionsRef
+                   , treasuryRef
+                   , registryRef
+                   ]

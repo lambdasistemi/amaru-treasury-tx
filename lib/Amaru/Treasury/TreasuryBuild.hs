@@ -52,24 +52,39 @@ module Amaru.Treasury.TreasuryBuild
 import Control.Exception (throwIO)
 import Control.Monad (unless)
 import Data.ByteString.Lazy qualified as BSL
+import Data.Foldable (toList)
 import Data.Map.Strict qualified as Map
+import Data.Sequence.Strict qualified as StrictSeq
+import Data.Set qualified as Set
 
 import Cardano.Ledger.Address (Addr)
+import Cardano.Ledger.Alonzo.PParams (ppCollateralPercentageL)
 import Cardano.Ledger.Alonzo.Scripts (AsIx)
 import Cardano.Ledger.Api.Era (eraProtVerLow)
+import Cardano.Ledger.Api.Tx (estimateMinFeeTx)
 import Cardano.Ledger.Api.Tx.Body
-    ( feeTxBodyL
+    ( Withdrawals (..)
+    , collateralInputsTxBodyL
+    , collateralReturnTxBodyL
+    , feeTxBodyL
+    , inputsTxBodyL
+    , outputsTxBodyL
+    , referenceInputsTxBodyL
+    , reqSignerHashesTxBodyL
     , totalCollateralTxBodyL
+    , withdrawalsTxBodyL
     )
+import Cardano.Ledger.Api.Tx.Out (TxOut, coinTxOutL)
 import Cardano.Ledger.BaseTypes (StrictMaybe (..))
 import Cardano.Ledger.Binary (serialize)
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
-import Cardano.Ledger.Core (bodyTxL)
+import Cardano.Ledger.Core (PParams, TopTx, TxBody, bodyTxL)
 import Cardano.Ledger.Metadata (Metadatum)
 import Cardano.Ledger.Plutus (ExUnits)
 import Cardano.Ledger.TxIn (TxIn)
+import Cardano.Node.Client.Balance (refScriptsSize)
 import Cardano.Node.Client.Ledger (ConwayTx)
 import Cardano.Node.Client.TxBuild
     ( BuildError
@@ -77,7 +92,7 @@ import Cardano.Node.Client.TxBuild
     , build
     , setMetadata
     )
-import Lens.Micro ((^.))
+import Lens.Micro ((&), (.~), (^.))
 
 import Amaru.Treasury.AuxData (label1694)
 import Amaru.Treasury.ChainContext (ChainContext (..))
@@ -265,7 +280,13 @@ runDisburseAda ctx fields payload rationale walletAddr = do
             throwIO . userError $
                 "runDisburse: build failed: "
                     <> show (e :: BuildError ())
-        Right tx -> do
+        Right tx0 -> do
+            tx <- case alignCardanoCliDisburseFee pp refUtxos 2 tx0 of
+                Left e ->
+                    throwIO . userError $
+                        "runDisburse: fee alignment failed: "
+                            <> e
+                Right ok -> pure ok
             let body = tx ^. bodyTxL
                 feeLov = body ^. feeTxBodyL
                 totalColl = case body
@@ -296,6 +317,164 @@ runDisburseAda ctx fields payload rationale walletAddr = do
                         totalColl
                     , tbrScriptResults = scriptResults
                     }
+
+{- | Match @cardano-cli transaction build@'s conservative
+key-witness fee estimate for the bash-derived disburse
+oracle.
+
+The upstream bash recipe does not pass
+@--witness-override@, so @cardano-cli@ prices the unsigned
+body with its default key-witness estimate. For the ADA
+disburse oracle this is seven witnesses, not the single
+dummy witness used by @cardano-node-clients@' generic
+balancer. Without this adjustment the body shape and
+ex-units match the bash artifact, but the fee,
+collateral total, collateral return, and change output
+are all under the cardano-cli output.
+-}
+alignCardanoCliDisburseFee
+    :: PParams ConwayEra
+    -> [(TxIn, TxOut ConwayEra)]
+    -- ^ resolved reference inputs, for Conway reference-script fee
+    -> Int
+    -- ^ change output index appended by the balancer
+    -> ConwayTx
+    -> Either String ConwayTx
+alignCardanoCliDisburseFee pp refUtxos changeIx =
+    go (5 :: Int)
+  where
+    go 0 _ =
+        Left "fee did not converge"
+    go n tx =
+        let body = tx ^. bodyTxL
+            Withdrawals withdrawals =
+                body ^. withdrawalsTxBodyL
+            refBytes =
+                refScriptsSize
+                    (body ^. referenceInputsTxBodyL)
+                    refUtxos
+            witnessCount =
+                1
+                    + Set.size (body ^. inputsTxBodyL)
+                    + Set.size (body ^. collateralInputsTxBodyL)
+                    + Set.size
+                        (body ^. reqSignerHashesTxBodyL)
+                    + Map.size withdrawals
+            target =
+                estimateMinFeeTx pp tx witnessCount 0 refBytes
+            current = body ^. feeTxBodyL
+        in  if target <= current
+                then Right tx
+                else do
+                    bumped <-
+                        bumpDisburseFee
+                            pp
+                            changeIx
+                            current
+                            target
+                            tx
+                    go (n - 1) bumped
+
+bumpDisburseFee
+    :: PParams ConwayEra
+    -> Int
+    -> Coin
+    -> Coin
+    -> ConwayTx
+    -> Either String ConwayTx
+bumpDisburseFee pp changeIx oldFee newFee tx = do
+    let feeDelta = unCoin newFee - unCoin oldFee
+    outputs' <-
+        adjustOutputCoin
+            changeIx
+            feeDelta
+            (tx ^. bodyTxL . outputsTxBodyL)
+    bodyWithFee <-
+        adjustCollateralFields
+            pp
+            newFee
+            ( tx
+                ^. bodyTxL
+            )
+    Right $
+        tx
+            & bodyTxL .~ bodyWithFee
+            & bodyTxL . feeTxBodyL .~ newFee
+            & bodyTxL . outputsTxBodyL .~ outputs'
+
+adjustOutputCoin
+    :: Int
+    -> Integer
+    -> StrictSeq.StrictSeq (TxOut ConwayEra)
+    -> Either String (StrictSeq.StrictSeq (TxOut ConwayEra))
+adjustOutputCoin ix delta outs =
+    case splitAt ix (toList outs) of
+        (_, []) ->
+            Left "change output index out of range"
+        (before, changeOut : after) ->
+            let Coin current = changeOut ^. coinTxOutL
+            in  if current < delta
+                    then Left "change output cannot cover fee bump"
+                    else
+                        Right $
+                            StrictSeq.fromList $
+                                before
+                                    ++ [ changeOut
+                                            & coinTxOutL
+                                                .~ Coin
+                                                    ( current
+                                                        - delta
+                                                    )
+                                       ]
+                                    ++ after
+
+adjustCollateralFields
+    :: PParams ConwayEra
+    -> Coin
+    -> TxBody TopTx ConwayEra
+    -> Either String (TxBody TopTx ConwayEra)
+adjustCollateralFields pp newFee body =
+    case body ^. totalCollateralTxBodyL of
+        SNothing -> Right body
+        SJust oldTotal ->
+            let newTotal = collateralFor newFee
+                delta =
+                    unCoin newTotal
+                        - unCoin oldTotal
+            in  case body ^. collateralReturnTxBodyL of
+                    SNothing ->
+                        Right $
+                            body
+                                & totalCollateralTxBodyL
+                                    .~ SJust newTotal
+                    SJust retOut -> do
+                        let Coin retCoin =
+                                retOut ^. coinTxOutL
+                        if retCoin < delta
+                            then
+                                Left
+                                    "collateral return cannot cover fee bump"
+                            else
+                                Right $
+                                    body
+                                        & totalCollateralTxBodyL
+                                            .~ SJust newTotal
+                                        & collateralReturnTxBodyL
+                                            .~ SJust
+                                                ( retOut
+                                                    & coinTxOutL
+                                                        .~ Coin
+                                                            ( retCoin
+                                                                - delta
+                                                            )
+                                                )
+  where
+    collateralFor (Coin f) =
+        let pct =
+                fromIntegral
+                    (pp ^. ppCollateralPercentageL)
+            ceilDiv a b = (a + b - 1) `div` b
+        in  Coin (ceilDiv (f * pct) 100)
 
 -- ----------------------------------------------------
 -- Swap runner

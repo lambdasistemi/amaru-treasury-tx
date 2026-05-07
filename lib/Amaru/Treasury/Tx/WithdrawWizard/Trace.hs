@@ -39,6 +39,7 @@ data WithdrawWizardEvent
     | WweWalletUtxoSelected !Text
     | WweRewardAccountResolved !Text
     | WweRewardsQueried !Text !Integer
+    | WweNoRewards !Text
     | WweTipRead !Word64
     | WweValidityComputed !Word64 !Word64
     | WweIntentReady !(Maybe FilePath)
@@ -78,6 +79,10 @@ renderWithdrawWizardEvent =
                 <> account
                 <> " lovelace="
                 <> tshow lovelace
+        WweNoRewards account ->
+            "zero rewards: nothing to withdraw account="
+                <> account
+                <> " lovelace=0"
         WweTipRead slot ->
             "tip slot " <> tshow slot
         WweValidityComputed tip ub ->

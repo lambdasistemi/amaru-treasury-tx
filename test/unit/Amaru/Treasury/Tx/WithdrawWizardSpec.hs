@@ -39,10 +39,15 @@ import Amaru.Treasury.Tx.WithdrawWizard
     , WithdrawError (..)
     , WithdrawResolverEnv (..)
     , WithdrawResolverInput (..)
+    , WithdrawResult (..)
     , resolveWithdrawEnv
     , withdrawToTreasuryIntent
+    , withdrawToTreasuryResult
     )
-import Amaru.Treasury.Tx.WithdrawWizard.Trace ()
+import Amaru.Treasury.Tx.WithdrawWizard.Trace
+    ( WithdrawWizardEvent (..)
+    , renderWithdrawWizardEvent
+    )
 
 spec :: Spec
 spec =
@@ -62,6 +67,12 @@ spec =
         it
             "does not emit an intent for the zero-rewards fixture"
             zeroRewardsNoOutputCase
+        it
+            "returns a typed zero-rewards result"
+            zeroRewardsResultCase
+        it
+            "renders the zero-rewards trace event"
+            zeroRewardsTraceCase
         it
             "resolves reward account and amount from registry/provider state"
             resolverCase
@@ -165,6 +176,25 @@ zeroRewardsNoOutputCase = do
     exists `shouldBe` False
     withdrawToTreasuryIntent env answers
         `shouldBe` Left WithdrawRewardsNotPositive
+
+zeroRewardsResultCase :: IO ()
+zeroRewardsResultCase = do
+    let dir = "test/fixtures/withdraw/zero-rewards"
+    env <- eitherDecodeStrict (dir <> "/env.json") :: IO WithdrawEnv
+    answers <-
+        eitherDecodeStrict
+            "test/fixtures/withdraw/synthetic/answers.json"
+    withdrawToTreasuryResult env answers
+        `shouldBe` Right
+            ( WithdrawNoRewards
+                (weTreasuryRewardAccount env)
+            )
+
+zeroRewardsTraceCase :: IO ()
+zeroRewardsTraceCase =
+    renderWithdrawWizardEvent
+        (WweNoRewards "reward-account")
+        `shouldBe` "withdraw-wizard: zero rewards: nothing to withdraw account=reward-account lovelace=0"
 
 eitherDecodeStrict :: (Aeson.FromJSON a) => FilePath -> IO a
 eitherDecodeStrict p = do

@@ -32,7 +32,9 @@ module Amaru.Treasury.Tx.WithdrawWizard
 
       -- * Pure translation
     , WithdrawError (..)
+    , WithdrawResult (..)
     , withdrawToTreasuryIntent
+    , withdrawToTreasuryResult
     ) where
 
 import Cardano.Ledger.BaseTypes (Network (..))
@@ -130,7 +132,7 @@ data WithdrawEnv = WithdrawEnv
     , weTreasuryRewardAccount :: !Text
     -- ^ 28-byte hex stake-script hash for the selected treasury
     , weRewardsLovelace :: !Integer
-    -- ^ positive rewards balance resolved from chain state
+    -- ^ rewards balance resolved from chain state
     }
     deriving stock (Eq, Show)
 
@@ -158,6 +160,11 @@ data WithdrawError
     | WithdrawNetworkMismatch !Text !Text
     deriving stock (Eq, Show)
 
+data WithdrawResult
+    = WithdrawIntentReady !(TreasuryIntent 'Withdraw)
+    | WithdrawNoRewards !Text
+    deriving stock (Eq, Show)
+
 {- | Pure translation to the unified schema-v1
 'TreasuryIntent' withdraw shape.
 -}
@@ -165,36 +172,58 @@ withdrawToTreasuryIntent
     :: WithdrawEnv
     -> WithdrawAnswers
     -> Either WithdrawError (TreasuryIntent 'Withdraw)
-withdrawToTreasuryIntent env ans = do
-    validate env ans
-    pure
-        TreasuryIntent
-            { tiSAction = SWithdraw
-            , tiSchema = 1
-            , tiNetwork = weNetwork env
-            , tiWallet = mkWallet (weWalletSelection env)
-            , tiScope = mkScope env ans
-            , tiSigners = []
-            , tiValidityUpperBoundSlot =
-                weCurrentTip env
-                    + wncSlotsPerHour
-                        (weNetworkConstants env)
-                        * fromIntegral (waValidityHours ans)
-            , tiRationale = mkRationale ans
-            , tiPayload =
-                WithdrawInputs
-                    { wdiTreasuryRewardAccount =
-                        weTreasuryRewardAccount env
-                    , wdiRewardsLovelace = weRewardsLovelace env
-                    }
-            }
+withdrawToTreasuryIntent env ans =
+    case withdrawToTreasuryResult env ans of
+        Right (WithdrawIntentReady intent) -> Right intent
+        Right (WithdrawNoRewards _account) ->
+            Left WithdrawRewardsNotPositive
+        Left err -> Left err
 
-validate
+{- | Pure translation result including the zero-rewards no-op case.
+The existing 'withdrawToTreasuryIntent' wrapper remains fail-closed
+for callers that only know how to consume an intent.
+-}
+withdrawToTreasuryResult
+    :: WithdrawEnv -> WithdrawAnswers -> Either WithdrawError WithdrawResult
+withdrawToTreasuryResult env ans = do
+    validateAnswersAndScope env ans
+    case compare (weRewardsLovelace env) 0 of
+        LT -> Left WithdrawRewardsNotPositive
+        EQ ->
+            Right $
+                WithdrawNoRewards
+                    (weTreasuryRewardAccount env)
+        GT ->
+            Right $
+                WithdrawIntentReady $
+                    mkIntent env ans
+
+mkIntent :: WithdrawEnv -> WithdrawAnswers -> TreasuryIntent 'Withdraw
+mkIntent env ans =
+    TreasuryIntent
+        { tiSAction = SWithdraw
+        , tiSchema = 1
+        , tiNetwork = weNetwork env
+        , tiWallet = mkWallet (weWalletSelection env)
+        , tiScope = mkScope env ans
+        , tiSigners = []
+        , tiValidityUpperBoundSlot =
+            weCurrentTip env
+                + wncSlotsPerHour
+                    (weNetworkConstants env)
+                    * fromIntegral (waValidityHours ans)
+        , tiRationale = mkRationale ans
+        , tiPayload =
+            WithdrawInputs
+                { wdiTreasuryRewardAccount =
+                    weTreasuryRewardAccount env
+                , wdiRewardsLovelace = weRewardsLovelace env
+                }
+        }
+
+validateAnswersAndScope
     :: WithdrawEnv -> WithdrawAnswers -> Either WithdrawError ()
-validate env ans = do
-    when
-        (weRewardsLovelace env <= 0)
-        (Left WithdrawRewardsNotPositive)
+validateAnswersAndScope env ans = do
     let h = waValidityHours ans
     when
         (h == 0 || h > 48)

@@ -44,19 +44,36 @@ module Amaru.Treasury.Tx.DisburseWizard
       -- * Local-translation errors
     , DisburseError (..)
 
+      -- * Treasury selection
+    , selectDisburseAda
+    , selectDisburseUsdm
+
       -- * Pure translation
     , disburseToIntentJSON
     , disburseToTreasuryIntent
     ) where
 
+import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Mary.Value
+    ( AssetName (..)
+    , MaryValue (..)
+    , MultiAsset (..)
+    , PolicyID (..)
+    )
+import Cardano.Ledger.TxIn (TxIn)
 import Control.Monad (when)
 import Data.Aeson (FromJSON (..), withObject, (.:), (.:?))
+import Data.ByteString.Base16 qualified as B16
+import Data.ByteString.Short qualified as SBS
 import Data.Char (isDigit)
 import Data.List qualified as L
 import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
+import Data.Ord (Down (..))
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.Word (Word64, Word8)
 
 import Amaru.Treasury.Constants (Unit (..))
@@ -69,6 +86,7 @@ import Amaru.Treasury.IntentJSON
     , TreasuryIntent (..)
     , WalletJSON (..)
     )
+import Amaru.Treasury.Registry.Derive (scriptHashToHex)
 import Amaru.Treasury.Scope
     ( ScopeId
         ( Contingency
@@ -94,6 +112,7 @@ import Amaru.Treasury.Tx.SwapWizard
     , ScopeView (..)
     , TreasuryRefs (..)
     , WalletSelection (..)
+    , txInToText
     )
 
 -- ----------------------------------------------------
@@ -341,6 +360,158 @@ validate env ans = do
             when
                 (dtsLeftoverUsdm sel < 0)
                 (Left DisburseInsufficientTreasuryUsdm)
+
+-- ----------------------------------------------------
+-- Treasury selection
+-- ----------------------------------------------------
+
+{- | Select treasury inputs for an ADA disbursement,
+largest-first by lovelace. USDM and every other native
+asset on the selected inputs stay on the treasury
+leftover output; only the beneficiary lovelace is
+subtracted.
+-}
+selectDisburseAda
+    :: PolicyID
+    -- ^ USDM policy, excluded from @leftoverOtherAssets@
+    -> AssetName
+    -- ^ USDM token name, excluded from @leftoverOtherAssets@
+    -> [(TxIn, MaryValue)]
+    -> Integer
+    -- ^ beneficiary lovelace
+    -> Maybe DisburseTreasurySelection
+selectDisburseAda usdmPolicy usdmAsset inputs amount =
+    selectedToDisburseSelection
+        usdmPolicy
+        usdmAsset
+        amount
+        0
+        =<< selectByKey lovelaceOf inputs amount
+
+{- | Select treasury inputs for a USDM disbursement,
+largest-first by USDM quantity. The beneficiary output
+also needs a lovelace deposit; the caller supplies that
+debit so the leftover lovelace remains deterministic.
+-}
+selectDisburseUsdm
+    :: PolicyID
+    -- ^ USDM policy
+    -> AssetName
+    -- ^ USDM token name
+    -> Integer
+    -- ^ beneficiary-output lovelace deposit
+    -> [(TxIn, MaryValue)]
+    -> Integer
+    -- ^ beneficiary USDM quantity
+    -> Maybe DisburseTreasurySelection
+selectDisburseUsdm
+    usdmPolicy
+    usdmAsset
+    beneficiaryLovelace
+    inputs
+    amount =
+        selectedToDisburseSelection
+            usdmPolicy
+            usdmAsset
+            beneficiaryLovelace
+            amount
+            =<< selectByKey
+                (assetQuantity usdmPolicy usdmAsset)
+                inputs
+                amount
+
+selectByKey
+    :: (MaryValue -> Integer)
+    -> [(TxIn, MaryValue)]
+    -> Integer
+    -> Maybe [(TxIn, MaryValue)]
+selectByKey key inputs target
+    | target <= 0 = Just []
+    | total < target = Nothing
+    | otherwise = Just (go 0 [] sorted)
+  where
+    sorted = L.sortOn (Down . key . snd) inputs
+    total = sum (key . snd <$> inputs)
+    go _ picked [] = reverse picked
+    go acc picked (x@(_, value) : xs)
+        | acc >= target = reverse picked
+        | otherwise = go (acc + key value) (x : picked) xs
+
+selectedToDisburseSelection
+    :: PolicyID
+    -> AssetName
+    -> Integer
+    -- ^ lovelace debited to the beneficiary
+    -> Integer
+    -- ^ USDM debited to the beneficiary
+    -> [(TxIn, MaryValue)]
+    -> Maybe DisburseTreasurySelection
+selectedToDisburseSelection
+    usdmPolicy
+    usdmAsset
+    beneficiaryLovelace
+    beneficiaryUsdm
+    selected
+        | totalLovelace < beneficiaryLovelace = Nothing
+        | totalUsdm < beneficiaryUsdm = Nothing
+        | otherwise =
+            Just
+                DisburseTreasurySelection
+                    { dtsInputs = txInToText . fst <$> selected
+                    , dtsLeftoverLovelace =
+                        totalLovelace - beneficiaryLovelace
+                    , dtsLeftoverUsdm =
+                        totalUsdm - beneficiaryUsdm
+                    , dtsLeftoverOtherAssets =
+                        nativeAssetsExcept
+                            usdmPolicy
+                            usdmAsset
+                            (snd <$> selected)
+                    }
+      where
+        totalLovelace = sum (lovelaceOf . snd <$> selected)
+        totalUsdm =
+            sum
+                ( assetQuantity usdmPolicy usdmAsset
+                    . snd
+                    <$> selected
+                )
+
+lovelaceOf :: MaryValue -> Integer
+lovelaceOf (MaryValue (Coin lovelace) _) = lovelace
+
+assetQuantity :: PolicyID -> AssetName -> MaryValue -> Integer
+assetQuantity policy asset (MaryValue _ (MultiAsset assets)) =
+    maybe
+        0
+        (Map.findWithDefault 0 asset)
+        (Map.lookup policy assets)
+
+nativeAssetsExcept
+    :: PolicyID
+    -> AssetName
+    -> [MaryValue]
+    -> Map Text (Map Text Integer)
+nativeAssetsExcept usdmPolicy usdmAsset values =
+    Map.filter (not . Map.null) $
+        Map.fromListWith
+            (Map.unionWith (+))
+            [ ( policyIdToText policy
+              , Map.singleton (assetNameToText asset) quantity
+              )
+            | MaryValue _ (MultiAsset policies) <- values
+            , (policy, assets) <- Map.toList policies
+            , (asset, quantity) <- Map.toList assets
+            , quantity /= 0
+            , (policy, asset) /= (usdmPolicy, usdmAsset)
+            ]
+
+policyIdToText :: PolicyID -> Text
+policyIdToText (PolicyID scriptHash) = scriptHashToHex scriptHash
+
+assetNameToText :: AssetName -> Text
+assetNameToText (AssetName raw) =
+    TE.decodeUtf8Lenient (B16.encode (SBS.fromShort raw))
 
 -- ----------------------------------------------------
 -- Signer resolution (mirrors SwapWizard)

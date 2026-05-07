@@ -289,11 +289,11 @@ after running the build subcommand.
       runs `verifyRegistry` + `registryViewFromVerified`, applies the
       selection helpers, and projects into the data-model types. No
       business logic beyond that.
-- [ ] T026 [US1] Implement deterministic largest-first treasury UTxO
+- [x] T026 [US1] Implement deterministic largest-first treasury UTxO
       selection by **lovelace** ([research R4](./research.md#r4-treasury-utxo-selection--ada-vs-usdm))
       in `lib/Amaru/Treasury/Tx/DisburseWizard.hs`. Selection function
       takes `[(TxIn, MaryValue)]` so it is unit-testable without IO.
-- [ ] T027 [P] [US1] QuickCheck property in
+- [x] T027 [P] [US1] QuickCheck property in
       `test/unit/Amaru/Treasury/Tx/DisburseWizardSpec.hs`:
       largest-first selection by lovelace yields `Σ inputs ≥ amount`
       and `tsLeftoverLovelace = Σ inputs − amount`; leftover preserves
@@ -370,7 +370,7 @@ golden.
 **Independent test**: `--match "usdm-disburse"` rebuilds the tx from
 `test/fixtures/disburse/usdm/`. Pass = green.
 
-- [ ] T037 [US2] Implement deterministic largest-first treasury UTxO
+- [x] T037 [US2] Implement deterministic largest-first treasury UTxO
       selection by **USDM quantity**
       ([research R4](./research.md#r4-treasury-utxo-selection--ada-vs-usdm))
       in `lib/Amaru/Treasury/Tx/DisburseWizard.hs`. Reuse the

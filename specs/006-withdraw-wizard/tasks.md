@@ -107,7 +107,7 @@ before the implementation tasks they constrain.
 ### Tests for User Story 2
 
 - [x] T026 [P] [US2] Add zero-rewards resolver fixture in `test/fixtures/withdraw/zero-rewards/env.json`.
-- [ ] T027 [P] [US2] Add RED no-output test in `test/unit/Amaru/Treasury/Tx/WithdrawWizardSpec.hs`.
+- [x] T027 [P] [US2] Add RED no-output test in `test/unit/Amaru/Treasury/Tx/WithdrawWizardSpec.hs`.
 - [ ] T028 [P] [US2] Add RED CLI smoke case in `scripts/smoke/withdraw-wizard-zero-rewards`.
 
 ### Implementation for User Story 2

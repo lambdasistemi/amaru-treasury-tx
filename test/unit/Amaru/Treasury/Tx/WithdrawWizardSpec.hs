@@ -60,6 +60,9 @@ spec =
                 answers
                 `shouldBe` Left WithdrawRewardsNotPositive
         it
+            "does not emit an intent for the zero-rewards fixture"
+            zeroRewardsNoOutputCase
+        it
             "resolves reward account and amount from registry/provider state"
             resolverCase
 
@@ -148,6 +151,20 @@ resolverCase = do
                                     <> show err
                                 )
                     )
+
+zeroRewardsNoOutputCase :: IO ()
+zeroRewardsNoOutputCase = do
+    let dir = "test/fixtures/withdraw/zero-rewards"
+        intentPath = dir <> "/intent.json"
+    env <- eitherDecodeStrict (dir <> "/env.json") :: IO WithdrawEnv
+    answers <-
+        eitherDecodeStrict
+            "test/fixtures/withdraw/synthetic/answers.json"
+    weRewardsLovelace env `shouldBe` 0
+    exists <- doesFileExist intentPath
+    exists `shouldBe` False
+    withdrawToTreasuryIntent env answers
+        `shouldBe` Left WithdrawRewardsNotPositive
 
 eitherDecodeStrict :: (Aeson.FromJSON a) => FilePath -> IO a
 eitherDecodeStrict p = do

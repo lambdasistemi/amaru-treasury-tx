@@ -256,7 +256,7 @@ exact same `expected.cbor` bytes as the pre-PR `swap-wizard ... |
 swap` pipeline. The `swap` subcommand is removed; `tx-build` is
 the sole build entry point.
 
-- [ ] T021 [US1] Implement `Amaru.Treasury.TreasuryBuild` per
+- [x] T021 [US1] Implement `Amaru.Treasury.TreasuryBuild` per
       [data-model.md §8](./data-model.md):
       `runBuild :: ChainContext -> TranslatedShared -> SAction a
        -> Translated a -> IO TreasuryBuildResult`,
@@ -273,7 +273,7 @@ the sole build entry point.
       fills it in. `runWithdraw` and `runReorganize` are
       analogous stubs that `throwIO . userError $ "feature not
       yet shipped"`.
-- [ ] T022 [US1] Implement `translateIntent :: SAction a ->
+- [x] T022 [US1] Implement `translateIntent :: SAction a ->
       TreasuryIntent a -> Either String (TranslatedShared,
       Translated a)` in `lib/Amaru/Treasury/IntentJSON.hs`. The
       shared-block lift (`TranslatedShared`) is one body; each
@@ -292,12 +292,12 @@ the sole build entry point.
       wire `runFromIntent`. The wizard subcommand `swap-wizard`
       is unchanged operator-side but its translator now writes
       the unified intent (T030).
-- [ ] T024 [US1] Re-point
+- [x] T024 [US1] Re-point
       [`test/golden/SwapGoldenSpec.hs`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/test/golden/SwapGoldenSpec.hs)
       at `decodeTreasuryIntent` + `translateIntent SSwap` +
       `runBuild`. Assert the existing `expected.cbor` bytes are
       unchanged. **This is the SC-004 byte-identity gate.**
-- [ ] T025 [US1] Re-record
+- [x] T025 [US1] Re-record
       `test/fixtures/swap/intent.json` against the new shape:
       add `schema: 1`, `action: "swap"`, `network: "mainnet"`
       at the top level; nest the existing swap fields under a

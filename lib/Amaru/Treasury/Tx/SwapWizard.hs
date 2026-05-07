@@ -38,6 +38,7 @@ module Amaru.Treasury.Tx.SwapWizard
       -- * Translation
     , WizardError (..)
     , wizardToIntentJSON
+    , wizardToTreasuryIntent
     , encodeIntentJSON
 
       -- * Resolution
@@ -91,7 +92,6 @@ import Data.Aeson.Encode.Pretty
 import Data.Aeson.Types qualified as A
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy (ByteString)
-import Data.Char (isDigit)
 import Data.Function (on)
 import Data.List qualified as L
 import Data.Map.Strict (Map)
@@ -102,6 +102,7 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Word (Word64, Word8)
 
+import Amaru.Treasury.IntentJSON qualified as TI
 import Amaru.Treasury.Registry.Derive (scriptHashToHex)
 import Amaru.Treasury.Registry.Verify
     ( VerifiedRegistry (..)
@@ -116,6 +117,7 @@ import Amaru.Treasury.Scope
         , OpsAndUseCases
         )
     , scopeFromText
+    , scopeText
     )
 import Amaru.Treasury.Tx.SwapIntentJSON
     ( RationaleInputs (..)
@@ -126,7 +128,6 @@ import Amaru.Treasury.Tx.SwapIntentJSON
     )
 import Amaru.Treasury.Wizard.Common
     ( isHex28
-    , normaliseSignerToken
     , signerScopeFromText
     )
 
@@ -584,6 +585,108 @@ mkRationale r =
         , riDestinationLabel = raDestinationLabel r
         , riJustification = raJustification r
         }
+
+{- | Convert wizard answers + resolved env into a typed
+'TI.TreasuryIntent' parameterised at @\'Swap@.
+
+This is the unified-intent counterpart of
+'wizardToIntentJSON'. It runs the same validation /
+signer resolution and re-shapes the result into the
+GADT carrier used by the unified @tx-build@ subcommand.
+
+The conversion is mechanical and total: every field on
+'SwapIntentJSON' has a direct counterpart on the
+'TI.TreasuryIntent' \'Swap, plus the new fields that
+v1 of the schema added (top-level @network@,
+@scope.id@, @scope.treasuryLeftoverUsdm@,
+@scope.treasuryLeftoverOtherAssets@) which are sourced
+from the resolved 'WizardEnv' and the swap-specific
+defaults (no USDM leftover on swap).
+-}
+wizardToTreasuryIntent
+    :: WizardEnv
+    -> SwapWizardQ
+    -> Either WizardError (TI.TreasuryIntent 'TI.Swap)
+wizardToTreasuryIntent we q = do
+    sij <- wizardToIntentJSON we q
+    let s = sijScope sij
+        sw = sijSwap sij
+        r = sijRationale sij
+        wal = sijWallet sij
+    pure
+        TI.TreasuryIntent
+            { TI.tiSAction = TI.SSwap
+            , TI.tiSchema = 1
+            , TI.tiNetwork = weNetwork we
+            , TI.tiWallet =
+                TI.WalletJSON
+                    { TI.wjTxIn = wTxIn wal
+                    , TI.wjAddress = wAddress wal
+                    }
+            , TI.tiScope =
+                TI.ScopeJSON
+                    { TI.sjId = scopeText (wqScope q)
+                    , TI.sjTreasuryAddress =
+                        siTreasuryAddress_ s
+                    , TI.sjTreasuryUtxos = siTreasuryUtxos_ s
+                    , TI.sjTreasuryLeftoverLovelace =
+                        siTreasuryLeftoverLovelace_ s
+                    , TI.sjTreasuryLeftoverUsdm = 0
+                    , TI.sjTreasuryLeftoverOtherAssets =
+                        Map.empty
+                    , TI.sjTreasuryScriptHash =
+                        siTreasuryScriptHash_ s
+                    , TI.sjPermissionsRewardAccount =
+                        siPermissionsRewardAccount_ s
+                    , TI.sjScopesDeployedAt =
+                        siScopesDeployedAt_ s
+                    , TI.sjPermissionsDeployedAt =
+                        siPermissionsDeployedAt_ s
+                    , TI.sjTreasuryDeployedAt =
+                        siTreasuryDeployedAt_ s
+                    , TI.sjRegistryDeployedAt =
+                        siRegistryDeployedAt_ s
+                    , TI.sjRegistryPolicyId =
+                        siRegistryPolicyId_ s
+                    }
+            , TI.tiSigners = sijSigners sij
+            , TI.tiValidityUpperBoundSlot =
+                sijValidityUpperBoundSlot sij
+            , TI.tiRationale =
+                TI.RationaleJSON
+                    { TI.rjEvent = riEvent r
+                    , TI.rjLabel = riLabel r
+                    , TI.rjDescription = riDescription r
+                    , TI.rjJustification = riJustification r
+                    , TI.rjDestinationLabel =
+                        riDestinationLabel r
+                    }
+            , TI.tiPayload =
+                TI.SwapInputs
+                    { TI.swiSwapOrderAddress =
+                        swSwapOrderAddress sw
+                    , TI.swiChunkSizeLovelace =
+                        swChunkSizeLovelace sw
+                    , TI.swiAmountLovelace =
+                        swAmountLovelace sw
+                    , TI.swiExtraPerChunkLovelace =
+                        swExtraPerChunkLovelace sw
+                    , TI.swiRateNumerator = swRateNumerator sw
+                    , TI.swiRateDenominator =
+                        swRateDenominator sw
+                    , TI.swiPoolId = swPoolId sw
+                    , TI.swiCoreOwner = swCoreOwner sw
+                    , TI.swiOpsOwner = swOpsOwner sw
+                    , TI.swiNetworkComplianceOwner =
+                        swNetworkComplianceOwner sw
+                    , TI.swiMiddlewareOwner =
+                        swMiddlewareOwner sw
+                    , TI.swiSundaeProtocolFeeLovelace =
+                        swSundaeProtocolFeeLovelace sw
+                    , TI.swiUsdmPolicy = swUsdmPolicy sw
+                    , TI.swiUsdmToken = swUsdmToken sw
+                    }
+            }
 
 {- | Stable pretty-printed encoder for 'SwapIntentJSON',
 used by golden tests. Fixed config: 4-space indent,

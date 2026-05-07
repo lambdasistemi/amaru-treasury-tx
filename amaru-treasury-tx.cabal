@@ -29,6 +29,9 @@ extra-source-files:
   test/fixtures/disburse/**/*.json
   test/fixtures/disburse/**/*.md
   test/fixtures/disburse-wizard/**/*.json
+  test/fixtures/swap/**/*.cbor
+  test/fixtures/swap/**/*.json
+  test/fixtures/swap/**/*.md
   test/fixtures/swap-wizard/**/*.json
 
 flag werror

@@ -281,7 +281,7 @@ runDisburseAda ctx fields payload rationale walletAddr = do
                 "runDisburse: build failed: "
                     <> show (e :: BuildError ())
         Right tx0 -> do
-            tx <- case alignCardanoCliDisburseFee pp refUtxos 2 tx0 of
+            tx <- case alignCardanoCliBuildFee pp refUtxos 2 tx0 of
                 Left e ->
                     throwIO . userError $
                         "runDisburse: fee alignment failed: "
@@ -319,20 +319,20 @@ runDisburseAda ctx fields payload rationale walletAddr = do
                     }
 
 {- | Match @cardano-cli transaction build@'s conservative
-key-witness fee estimate for the bash-derived disburse
-oracle.
+key-witness fee estimate for bash-derived golden oracles.
 
-The upstream bash recipe does not pass
+The upstream bash recipes do not pass
 @--witness-override@, so @cardano-cli@ prices the unsigned
-body with its default key-witness estimate. For the ADA
-disburse oracle this is seven witnesses, not the single
-dummy witness used by @cardano-node-clients@' generic
-balancer. Without this adjustment the body shape and
-ex-units match the bash artifact, but the fee,
-collateral total, collateral return, and change output
-are all under the cardano-cli output.
+body with its default key-witness estimate. For the
+current swap/disburse oracles this is seven witnesses,
+not the single dummy witness used by
+@cardano-node-clients@' generic balancer. Without this
+adjustment the body shape and ex-units match the bash
+artifact, but the fee, collateral total, collateral
+return, and change output are all under the
+cardano-cli output.
 -}
-alignCardanoCliDisburseFee
+alignCardanoCliBuildFee
     :: PParams ConwayEra
     -> [(TxIn, TxOut ConwayEra)]
     -- ^ resolved reference inputs, for Conway reference-script fee
@@ -340,7 +340,7 @@ alignCardanoCliDisburseFee
     -- ^ change output index appended by the balancer
     -> ConwayTx
     -> Either String ConwayTx
-alignCardanoCliDisburseFee pp refUtxos changeIx =
+alignCardanoCliBuildFee pp refUtxos changeIx =
     go (5 :: Int)
   where
     go 0 _ =
@@ -367,7 +367,7 @@ alignCardanoCliDisburseFee pp refUtxos changeIx =
                 then Right tx
                 else do
                     bumped <-
-                        bumpDisburseFee
+                        bumpBuildFee
                             pp
                             changeIx
                             current
@@ -375,14 +375,14 @@ alignCardanoCliDisburseFee pp refUtxos changeIx =
                             tx
                     go (n - 1) bumped
 
-bumpDisburseFee
+bumpBuildFee
     :: PParams ConwayEra
     -> Int
     -> Coin
     -> Coin
     -> ConwayTx
     -> Either String ConwayTx
-bumpDisburseFee pp changeIx oldFee newFee tx = do
+bumpBuildFee pp changeIx oldFee newFee tx = do
     let feeDelta = unCoin newFee - unCoin oldFee
     outputs' <-
         adjustOutputCoin
@@ -563,7 +563,18 @@ runSwap ctx intent rationale walletInput walletAddr = do
             throwIO . userError $
                 "runSwap: build failed: "
                     <> show (e :: BuildError ())
-        Right tx -> do
+        Right tx0 -> do
+            tx <-
+                case alignCardanoCliBuildFee
+                    pp
+                    refUtxos
+                    (length (siSwapOrders intent) + 1)
+                    tx0 of
+                    Left e ->
+                        throwIO . userError $
+                            "runSwap: fee alignment failed: "
+                                <> e
+                    Right ok -> pure ok
             let body = tx ^. bodyTxL
                 feeLov = body ^. feeTxBodyL
                 totalColl = case body

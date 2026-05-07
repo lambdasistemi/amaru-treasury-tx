@@ -26,7 +26,14 @@ module Amaru.Treasury.Constants
     , minUtxoDepositLovelace
     ) where
 
+import Data.Aeson
+    ( FromJSON (..)
+    , ToJSON (..)
+    , Value (String)
+    , withText
+    )
 import Data.Text (Text)
+import Data.Text qualified as T
 
 -- | Currency selector for disburse and reorganize.
 data Unit
@@ -35,6 +42,23 @@ data Unit
     | -- | Moria USD (USDM) token.
       USDM
     deriving (Eq, Show)
+
+{- | JSON: @"ada"@ / @"usdm"@ (case-insensitive on parse;
+always lower-cased on emit).
+-}
+instance FromJSON Unit where
+    parseJSON = withText "Unit" $ \t -> case T.toLower t of
+        "ada" -> pure ADA
+        "usdm" -> pure USDM
+        other ->
+            fail $
+                "Unit: expected \"ada\" or \"usdm\", got "
+                    <> show other
+
+instance ToJSON Unit where
+    toJSON = \case
+        ADA -> String "ada"
+        USDM -> String "usdm"
 
 -- | USDM minting policy id (hex).
 usdmPolicyHex :: Text

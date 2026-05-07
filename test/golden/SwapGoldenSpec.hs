@@ -7,21 +7,26 @@ Loads the frozen swap fixture under
 @test/fixtures/swap/@, parses it as a unified
 'SomeTreasuryIntent', builds the tx via 'runFromIntent'
 against the resulting frozen 'ChainContext', and
-byte-diffs the CBOR against @expected.cbor@.
+byte-diffs the CBOR against the upstream
+bash/cardano-cli oracle.
 
-This is the **SC-004 byte-identity gate** of feature
-005: the recorded @expected.cbor@ bytes MUST NOT change
-as a result of the unification refactor. The intent
-JSON's shape changed (top-level @schema@ / @action@ /
-@network@ added, scope gained @treasuryLeftoverUsdm@ /
-@treasuryLeftoverOtherAssets@) but the on-chain
-transaction shape is preserved.
+This is the swap byte-identity gate: the checked-in
+@expected.cbor@ must be the bash oracle's @cborHex@, and
+the Haskell rebuild must match that same oracle.
 -}
 module SwapGoldenSpec (spec) where
 
+import Data.Aeson
+    ( FromJSON (..)
+    , eitherDecodeStrict'
+    , withObject
+    , (.:)
+    )
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
+import Data.Text (Text)
+import Data.Text.Encoding qualified as Text
 import Test.Hspec (Spec, describe, it, shouldBe)
 
 import Amaru.Treasury.ChainContext.Fixture
@@ -37,10 +42,17 @@ import Amaru.Treasury.TreasuryBuild
 fixtureDir :: FilePath
 fixtureDir = "test/fixtures/swap"
 
+newtype BashOracle = BashOracle Text
+
+instance FromJSON BashOracle where
+    parseJSON =
+        withObject "BashOracle" $ \o ->
+            BashOracle <$> o .: "cborHex"
+
 spec :: Spec
 spec =
     describe "swap golden (frozen ChainContext)" $ do
-        it "rebuilds expected.cbor byte-for-byte" $ do
+        it "rebuilds the bash oracle byte-for-byte" $ do
             si <-
                 decodeTreasuryIntentFile
                     (fixtureDir <> "/intent.json")
@@ -53,6 +65,14 @@ spec =
             let actualHex =
                     B16.encode
                         (BSL.toStrict (tbrCborBytes tbr))
+            BashOracle oracleText <-
+                BS.readFile (fixtureDir <> "/bash.oracle.tx.json")
+                    >>= either
+                        (error . ("oracle JSON: " <>))
+                        pure
+                        . eitherDecodeStrict'
+            let oracleHex = Text.encodeUtf8 oracleText
             expected <-
                 BS.readFile (fixtureDir <> "/expected.cbor")
-            actualHex `shouldBe` expected
+            expected `shouldBe` oracleHex
+            actualHex `shouldBe` oracleHex

@@ -1,7 +1,7 @@
 site_name: amaru-treasury-tx
 site_description: >-
   Build unsigned Amaru treasury transactions
-  (disburse, reorganize, withdraw)
+  from unified intents
 site_url: https://lambdasistemi.github.io/amaru-treasury-tx/
 repo_url: https://github.com/lambdasistemi/amaru-treasury-tx
 repo_name: lambdasistemi/amaru-treasury-tx
@@ -64,6 +64,7 @@ nav:
   - Architecture: architecture.md
   - Trust model: trust-model.md
   - Swap recipe: swap.md
+  - ADA disburse: disburse.md
   - ChainContext: chain-context.md
   - Freeze workflow: freeze-workflow.md
   - Parity report: parity.md

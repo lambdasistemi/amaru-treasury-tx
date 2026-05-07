@@ -8,9 +8,8 @@ Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
 Verifies that the generated JSON Schema asset stays in
-sync with the Haskell source of truth and that both the
-checked-in swap intents and the swap wizard output conform
-to it.
+sync with the Haskell source of truth and that checked-in
+intents plus wizard-emitted JSON conform to it.
 -}
 module Amaru.Treasury.IntentJSONSchemaSpec (spec) where
 
@@ -36,6 +35,11 @@ import Amaru.Treasury.IntentJSON
     , encodeSomeTreasuryIntent
     )
 import Amaru.Treasury.IntentJSON.Schema (intentJsonSchema)
+import Amaru.Treasury.Tx.DisburseWizard
+    ( DisburseAnswers
+    , DisburseEnv
+    , disburseToTreasuryIntent
+    )
 import Amaru.Treasury.Tx.SwapWizard
     ( SwapWizardQ
     , WizardEnv
@@ -61,6 +65,18 @@ spec = describe "Amaru.Treasury.IntentJSON.Schema" $ do
         validateJSONSchema intentJsonSchema intent
             `shouldBe` True
 
+    it "validates the disburse-wizard ADA golden intent" $ do
+        intent <-
+            decodeFile
+                "test/fixtures/disburse-wizard/expected.intent.ada.json"
+        validateJSONSchema intentJsonSchema intent
+            `shouldBe` True
+
+    it "validates the tx-build ADA disburse fixture intent" $ do
+        intent <- decodeFile "test/fixtures/disburse/ada/intent.json"
+        validateJSONSchema intentJsonSchema intent
+            `shouldBe` True
+
     it "validates JSON emitted by wizardToTreasuryIntent" $ do
         env :: WizardEnv <-
             decodeFile "test/fixtures/swap-wizard/env.json"
@@ -72,6 +88,22 @@ spec = describe "Amaru.Treasury.IntentJSON.Schema" $ do
         let bytes =
                 encodeSomeTreasuryIntent
                     (SomeTreasuryIntent SSwap intent)
+        value <- expectRight (eitherDecode bytes)
+        validateJSONSchema intentJsonSchema value
+            `shouldBe` True
+
+    it "validates JSON emitted by disburseToTreasuryIntent" $ do
+        env :: DisburseEnv <-
+            decodeFile "test/fixtures/disburse-wizard/env.ada.json"
+        answers :: DisburseAnswers <-
+            decodeFile
+                "test/fixtures/disburse-wizard/answers.ada.json"
+        intent <-
+            expectRight $
+                disburseToTreasuryIntent env answers
+        let bytes =
+                encodeSomeTreasuryIntent
+                    (SomeTreasuryIntent SDisburse intent)
         value <- expectRight (eitherDecode bytes)
         validateJSONSchema intentJsonSchema value
             `shouldBe` True

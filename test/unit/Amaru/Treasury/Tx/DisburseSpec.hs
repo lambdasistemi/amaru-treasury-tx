@@ -1,13 +1,18 @@
+{-# LANGUAGE DataKinds #-}
+
 {- |
 Module      : Amaru.Treasury.Tx.DisburseSpec
-Description : Draft-only smoke test for the @disburse@ builder
+Description : Tests for the disburse builder + JSON contract
 Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
-Drafts 'disburseAdaProgram' with synthesized ledger
-inputs and asserts the body has the expected shape.
-Structural only — byte-level golden against the
-@swap.sh@ output lands with 'Tx.Swap'.
+Two layers covered here:
+
+* Structural test of 'disburseAdaProgram' over synthesized
+  ledger inputs.
+* JSON round-trip property on 'DisburseIntentJSON':
+  @decodeDisburseIntent . encodeDisburseIntent@ is the
+  identity for any wizard-shaped value (T012).
 -}
 module Amaru.Treasury.Tx.DisburseSpec (spec) where
 
@@ -42,7 +47,6 @@ import Cardano.Ledger.Hashes
     , ScriptHash (..)
     , unsafeMakeSafeHash
     )
-import Cardano.Ledger.Keys (KeyRole (..))
 import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Slotting.Slot (SlotNo (..))
 import Data.ByteString qualified as BS
@@ -54,17 +58,63 @@ import Lens.Micro ((^.))
 import Test.Hspec
     ( Spec
     , describe
+    , expectationFailure
     , it
     , shouldBe
     , shouldSatisfy
     )
+import Test.QuickCheck
+    ( Gen
+    , Property
+    , chooseInt
+    , chooseInteger
+    , elements
+    , forAll
+    , vectorOf
+    , (===)
+    )
 
 import Cardano.Node.Client.TxBuild (draft)
 
+import Amaru.Treasury.IntentJSON
+    ( Action (..)
+    , SAction (..)
+    , SomeTreasuryIntent (..)
+    , TranslatedShared (..)
+    , TreasuryIntent
+    , decodeTreasuryIntentFile
+    , encodeSomeTreasuryIntent
+    , translateIntent
+    )
 import Amaru.Treasury.Tx.Disburse
-    ( DisburseIntent (..)
+    ( DisburseAdaPayload (..)
+    , DisburseIntent (..)
+    , DisburseIntentFields (..)
     , disburseAdaProgram
     )
+import Amaru.Treasury.Tx.DisburseIntentJSON
+    ( DisburseInputsJSON (..)
+    , DisburseIntentJSON (..)
+    , DisburseRationaleJSON (..)
+    , DisburseScopeJSON (..)
+    , DisburseWalletJSON (..)
+    , decodeDisburseIntent
+    , encodeDisburseIntent
+    )
+import Amaru.Treasury.Tx.DisburseWizard
+    ( DisburseAnswers
+    , DisburseEnv
+    , disburseToTreasuryIntent
+    )
+
+import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy qualified as BSL
+import System.Directory (doesFileExist)
+import System.Environment (lookupEnv)
+
+import Data.Map.Strict (Map)
+import Data.Text (Text)
+import Data.Text qualified as T
 
 mkHash32 :: (HashAlgorithm h) => Word8 -> Hash h a
 mkHash32 n =
@@ -104,53 +154,301 @@ permissionsRewardAcct n =
         Mainnet
         (AccountId (ScriptHashObj (ScriptHash (mkHash28 n))))
 
-intent :: DisburseIntent
-intent =
-    DisburseIntent
-        { diWalletUtxo = mkTxIn 0
-        , diBeneficiaryAddress = keyAddr 99
-        , diAmountLovelace = Coin 50_000_000
-        , diLeftoverLovelace = Coin 1_400_000_000_000
-        , diTreasuryUtxos = [mkTxIn 1]
-        , diTreasuryAddress = scriptAddr 10
-        , diPermissionsRewardAccount = permissionsRewardAcct 11
-        , diScopesDeployedAt = mkTxIn 2
-        , diPermissionsDeployedAt = mkTxIn 3
-        , diTreasuryDeployedAt = mkTxIn 4
-        , diRegistryDeployedAt = mkTxIn 5
-        , diSigners =
+fields :: DisburseIntentFields
+fields =
+    DisburseIntentFields
+        { difWalletUtxo = mkTxIn 0
+        , difBeneficiaryAddress = keyAddr 99
+        , difTreasuryUtxos = [mkTxIn 1]
+        , difTreasuryAddress = scriptAddr 10
+        , difPermissionsRewardAccount = permissionsRewardAcct 11
+        , difScopesDeployedAt = mkTxIn 2
+        , difPermissionsDeployedAt = mkTxIn 3
+        , difTreasuryDeployedAt = mkTxIn 4
+        , difRegistryDeployedAt = mkTxIn 5
+        , difSigners =
             [ KeyHash (mkHash28 20)
             , KeyHash (mkHash28 21)
             ]
-        , diUpperBound = SlotNo 1_000
+        , difUpperBound = SlotNo 1_000
+        }
+
+payload :: DisburseAdaPayload
+payload =
+    DisburseAdaPayload
+        { dapAmountLovelace = Coin 50_000_000
+        , dapLeftoverLovelace = Coin 1_400_000_000_000
         }
 
 spec :: Spec
-spec = describe "Amaru.Treasury.Tx.Disburse" $ do
-    let tx = draft emptyPParams (disburseAdaProgram intent)
-        body = tx ^. bodyTxL
-    it "spends wallet UTxO + the treasury UTxO" $
-        body
-            ^. inputsTxBodyL
-            `shouldBe` Set.fromList [mkTxIn 0, mkTxIn 1]
-    it "uses the wallet UTxO as collateral" $
-        body
-            ^. collateralInputsTxBodyL
-            `shouldBe` Set.singleton (mkTxIn 0)
-    it
-        "carries 4 reference inputs (scopes, permissions, treasury, registry)"
-        $ Set.size (body ^. referenceInputsTxBodyL) `shouldBe` 4
-    it "withdraw-zero against the permissions reward account" $
-        body
-            ^. withdrawalsTxBodyL
-            `shouldBe` Withdrawals
-                ( Map.singleton
-                    (permissionsRewardAcct 11)
-                    (Coin 0)
+spec = do
+    describe "Amaru.Treasury.Tx.Disburse" $ do
+        let tx =
+                draft
+                    emptyPParams
+                    (disburseAdaProgram fields payload)
+            body = tx ^. bodyTxL
+        it "spends wallet UTxO + the treasury UTxO" $
+            body
+                ^. inputsTxBodyL
+                `shouldBe` Set.fromList [mkTxIn 0, mkTxIn 1]
+        it "uses the wallet UTxO as collateral" $
+            body
+                ^. collateralInputsTxBodyL
+                `shouldBe` Set.singleton (mkTxIn 0)
+        it
+            "carries 4 reference inputs (scopes, permissions, treasury, registry)"
+            $ Set.size (body ^. referenceInputsTxBodyL)
+                `shouldBe` 4
+        it "withdraw-zero against the permissions reward account" $
+            body
+                ^. withdrawalsTxBodyL
+                `shouldBe` Withdrawals
+                    ( Map.singleton
+                        (permissionsRewardAcct 11)
+                        (Coin 0)
+                    )
+        it "produces exactly two outputs (leftover + beneficiary)" $
+            length (body ^. outputsTxBodyL) `shouldBe` 2
+        it "requires both scope-owner signers" $
+            body
+                ^. reqSignerHashesTxBodyL
+                `shouldSatisfy` \s -> Set.size s == 2
+
+    describe "Amaru.Treasury.Tx.DisburseIntentJSON" $
+        it
+            "decodeDisburseIntent . encodeDisburseIntent = Right"
+            roundTripProp
+
+    describe "Amaru.Treasury.Tx.DisburseWizard.disburseToTreasuryIntent" $
+        do
+            it "matches golden expected.intent.ada.json" $
+                goldenCase "ada"
+            it "matches golden expected.intent.usdm.json" $
+                goldenCase "usdm"
+
+    describe "Amaru.Treasury.IntentJSON.translateIntent" $
+        it "translates unified ADA disburse intent" $ do
+            some <-
+                expectRight
+                    =<< decodeTreasuryIntentFile
+                        "test/fixtures/disburse-wizard/expected.intent.ada.json"
+            case some of
+                SomeTreasuryIntent SDisburse intent -> do
+                    (shared, translated) <-
+                        expectRight $
+                            translateIntent SDisburse intent
+                    tsNetwork shared `shouldBe` "mainnet"
+                    case translated of
+                        DisburseAdaIntent _ ada ->
+                            dapAmountLovelace ada
+                                `shouldBe` Coin 50_000_000
+                _ ->
+                    expectationFailure
+                        "expected SDisburse intent"
+
+-- ----------------------------------------------------
+-- T020: Pure-translation goldens (ADA + USDM)
+-- ----------------------------------------------------
+
+{- | Load fixture (env, answers) for the named unit, run
+'disburseToTreasuryIntent', and assert the encoded JSON
+matches the checked-in golden byte-for-byte (modulo
+alphabetical key ordering, applied by both the encoder
+and the golden file).
+-}
+goldenCase :: FilePath -> IO ()
+goldenCase unit = do
+    let dir = "test/fixtures/disburse-wizard"
+        envPath = dir <> "/env." <> unit <> ".json"
+        ansPath = dir <> "/answers." <> unit <> ".json"
+        goldenPath =
+            dir <> "/expected.intent." <> unit <> ".json"
+    env <-
+        eitherDecodeStrict envPath :: IO DisburseEnv
+    answers <-
+        eitherDecodeStrict ansPath :: IO DisburseAnswers
+    let result = disburseToTreasuryIntent env answers
+    case result of
+        Left err ->
+            error
+                ( "disburseToTreasuryIntent failed: " <> show err
                 )
-    it "produces exactly two outputs (leftover + beneficiary)" $
-        length (body ^. outputsTxBodyL) `shouldBe` 2
-    it "requires both scope-owner signers" $
-        body
-            ^. reqSignerHashesTxBodyL
-            `shouldSatisfy` \s -> Set.size s == 2
+        Right got -> do
+            let actualBytes = stableEncode got
+            exists <- doesFileExist goldenPath
+            update <- lookupEnv "UPDATE_GOLDENS"
+            if not exists || update == Just "1"
+                then do
+                    BSL.writeFile goldenPath actualBytes
+                    error
+                        ( "Golden written to "
+                            <> goldenPath
+                            <> "; review and re-run without"
+                            <> " UPDATE_GOLDENS=1 to lock in"
+                        )
+                else do
+                    expectedBytes <- BSL.readFile goldenPath
+                    actualBytes `shouldBe` expectedBytes
+
+eitherDecodeStrict :: (Aeson.FromJSON a) => FilePath -> IO a
+eitherDecodeStrict p = do
+    bs <- BSL.readFile p
+    case Aeson.eitherDecode bs of
+        Right v -> pure v
+        Left e ->
+            error ("decode " <> p <> ": " <> e)
+
+expectRight :: (Show e) => Either e a -> IO a
+expectRight =
+    either
+        ( errorWithoutStackTrace
+            . ("unexpected Left: " <>)
+            . show
+        )
+        pure
+
+-- | Stable encoder for the unified disburse intent shape.
+stableEncode :: TreasuryIntent 'Disburse -> BSL.ByteString
+stableEncode =
+    encodeSomeTreasuryIntent . SomeTreasuryIntent SDisburse
+
+-- ----------------------------------------------------
+-- T012: JSON round-trip property
+-- ----------------------------------------------------
+
+{- | For any wizard-shaped 'DisburseIntentJSON', the
+@decode . encode@ pipeline must return the same value.
+Covers SC-003 (100% round-trip).
+-}
+roundTripProp :: Property
+roundTripProp = forAll genDisburseIntentJSON $ \dij ->
+    decodeDisburseIntent (encodeDisburseIntent dij)
+        === Right dij
+
+-- ----------------------------------------------------
+-- Generators (no Arbitrary instances per /haskell skill)
+-- ----------------------------------------------------
+
+genHexN :: Int -> Gen Text
+genHexN n =
+    T.pack
+        <$> vectorOf
+            (n * 2)
+            (elements "0123456789abcdef")
+
+genTxId :: Gen Text
+genTxId = do
+    h <- genHexN 32
+    ix <- chooseInt (0, 100)
+    pure (h <> "#" <> T.pack (show ix))
+
+genBech32Addr :: Gen Text
+genBech32Addr =
+    T.pack . ("addr1" <>)
+        <$> vectorOf
+            50
+            (elements "abcdefghjkmnpqrstuvwxyz0123456789")
+
+genAssetMap :: Gen (Map Text (Map Text Integer))
+genAssetMap = do
+    n <- chooseInt (0, 2)
+    Map.fromList <$> vectorOf n entry
+  where
+    entry = do
+        policy <- genHexN 28
+        m <- chooseInt (0, 2)
+        inner <-
+            Map.fromList
+                <$> vectorOf m innerEntry
+        pure (policy, inner)
+    innerEntry = do
+        asset <- genHexN 4
+        amount <- chooseInteger (1, 1_000_000)
+        pure (asset, amount)
+
+genWallet :: Gen DisburseWalletJSON
+genWallet =
+    DisburseWalletJSON
+        <$> genTxId
+        <*> genBech32Addr
+
+genScope :: Gen DisburseScopeJSON
+genScope = do
+    sid <-
+        elements
+            [ "core_development"
+            , "ops_and_use_cases"
+            , "network_compliance"
+            , "middleware"
+            , "contingency"
+            ]
+    addr <- genBech32Addr
+    nUtxos <- chooseInt (1, 4)
+    utxos <- vectorOf nUtxos genTxId
+    leftoverLov <- chooseInteger (0, 10_000_000_000)
+    leftoverUsdm <- chooseInteger (0, 10_000_000_000)
+    leftoverOther <- genAssetMap
+    treasuryHash <- genHexN 28
+    permissionsAcct <- genHexN 28
+    scopesRef <- genTxId
+    permissionsRef <- genTxId
+    treasuryRef <- genTxId
+    registryRef <- genTxId
+    registryPolicy <- genHexN 28
+    pure
+        DisburseScopeJSON
+            { dsjId = sid
+            , dsjTreasuryAddress = addr
+            , dsjTreasuryUtxos = utxos
+            , dsjTreasuryLeftoverLovelace = leftoverLov
+            , dsjTreasuryLeftoverUsdm = leftoverUsdm
+            , dsjTreasuryLeftoverOtherAssets = leftoverOther
+            , dsjTreasuryScriptHash = treasuryHash
+            , dsjPermissionsRewardAccount = permissionsAcct
+            , dsjScopesDeployedAt = scopesRef
+            , dsjPermissionsDeployedAt = permissionsRef
+            , dsjTreasuryDeployedAt = treasuryRef
+            , dsjRegistryDeployedAt = registryRef
+            , dsjRegistryPolicyId = registryPolicy
+            }
+
+genInputs :: Gen DisburseInputsJSON
+genInputs =
+    DisburseInputsJSON
+        <$> elements ["ada", "usdm"]
+        <*> chooseInteger (1, 10_000_000_000)
+        <*> genBech32Addr
+        <*> genHexN 28
+        <*> genHexN 4
+
+genRationale :: Gen DisburseRationaleJSON
+genRationale =
+    DisburseRationaleJSON
+        <$> elements ["disburse", "vendor", "rebate"]
+        <*> elements ["Disburse ADA", "Disburse USDM"]
+        <*> pure "A description"
+        <*> pure "A justification"
+        <*> pure "Beneficiary X"
+
+genDisburseIntentJSON :: Gen DisburseIntentJSON
+genDisburseIntentJSON = do
+    network <-
+        elements ["mainnet", "preprod", "preview"]
+    wallet <- genWallet
+    scope <- genScope
+    inputs <- genInputs
+    nSigners <- chooseInt (1, 3)
+    signers <- vectorOf nSigners (genHexN 28)
+    validity <- toEnum <$> chooseInt (1, 200_000_000)
+    rationale <- genRationale
+    pure
+        DisburseIntentJSON
+            { dijNetwork = network
+            , dijWallet = wallet
+            , dijScope = scope
+            , dijDisburse = inputs
+            , dijSigners = signers
+            , dijValidityUpperBoundSlot = validity
+            , dijRationale = rationale
+            }

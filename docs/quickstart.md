@@ -84,9 +84,9 @@ amaru-treasury-tx \
         --extra-signer core_development \
         --log wizard.log \
   | amaru-treasury-tx \
-        --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
-        swap \
-            --log swap.log \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        tx-build \
+            --log build.log \
             --out swap.cbor.hex
 ```
 
@@ -104,20 +104,20 @@ What the flags mean:
 | `--description` / `--justification` / `--destination-label` | Free-form rationale fields, pinned into the on-chain audit trail. |
 | `--extra-signer SCOPE\|HEX` | Repeated for each witness owner beyond the selected scope owner. Scope names and 28-byte key hashes are accepted; `--signer` remains as an alias. |
 | `--log PATH`   | Redirect the typed step trace to a file (default = stderr). |
-| `--out PATH`   | Wizard side: write `intent.json` here (default = stdout, which is what the pipe reads). Swap side: write hex CBOR here (default = stdout). |
+| `--out PATH`   | Wizard side: write `intent.json` here (default = stdout, which is what the pipe reads). `tx-build` side: write hex CBOR here (default = stdout). |
 
 ## 5. What lands where
 
 | Stream | Contents |
 |---|---|
 | `wizard.log` | `swap-wizard:` step trace, one event per value-affecting step (verifier acceptance, on-chain owners, UTxO selection, validity slot, chunk shape, …). |
-| pipe | `intent.json` payload — wizard stdout → swap stdin. |
-| `swap.log`   | `swap:` step trace (intent source, connect, build summary, redeemer re-eval, validation result). |
+| pipe | `intent.json` payload — wizard stdout → `tx-build` stdin. |
+| `build.log`   | `tx-build:` step trace (intent source, parse, network check, connect, build summary, redeemer re-eval, validation result). |
 | `swap.cbor.hex` | The unsigned Conway transaction as hex. |
 
 Drop `--log` from either subcommand to send the trace to stderr.
 Drop `--out` from the wizard to write `intent.json` to stdout
-(this is what the pipe relies on). Drop `--intent` from `swap`
+(this is what the pipe relies on). Drop `--intent` from `tx-build`
 to read the intent from stdin (also what the pipe relies on).
 
 ## 6. Reading the trace as the audit gate
@@ -140,13 +140,15 @@ swap-wizard: validity tip=186446659 upperBound=186547459 (+100800 slots)
 swap-wizard: chunks total=408163265306 chunkSize=12368583797 full=33 remainder=5
 swap-wizard: intent.json -> stdout
 
-swap: intent <- stdin
-swap: connecting to /path/to/cardano-node.socket
-swap: required utxos: 6
-swap: built 15240 bytes  fee=1025037  total_collateral=1537556
-swap: re-evaluated 2 redeemers, 0 failed
-swap: cbor -> swap.cbor.hex
-swap: VALIDATION OK
+tx-build: intent <- stdin
+tx-build: parsed action=Swap network=mainnet
+tx-build: connecting to /path/to/cardano-node.socket
+tx-build: required utxos: 6
+tx-build: handshake ok (magic 764824073 matches intent network=mainnet)
+tx-build: built 14954 bytes  fee=1039703  total_collateral=1559555
+tx-build: re-evaluated 2 redeemers, 0 failed
+tx-build: cbor -> swap.cbor.hex
+tx-build: VALIDATION OK
 ```
 
 The `VERIFIED scope=…` line and the `NetworkConstants` row are
@@ -184,19 +186,19 @@ Both subcommands are fail-closed — neither writes a partial
 output. If the trace ends without `cbor -> …` (or
 `intent.json -> …` from the wizard), nothing was written.
 
-## 10. Reproduce a known on-chain swap (developer)
+## 10. Reproduce the known swap oracle (developer)
 
-The `swap-probe` executable hard-codes a real mainnet swap and
-reproduces its CBOR to the byte (modulo the documented fee
-residue). Use it to validate the stack after upstream bumps:
+The golden suite rebuilds a frozen mainnet swap and compares it
+byte-for-byte against a bash/cardano-cli oracle:
 
 ```bash
-export CARDANO_NODE_SOCKET_PATH=/code/cardano-mainnet/ipc/node.socket
-nix run .#swap-probe > haskell-build.hex
-diff haskell-build.hex /code/swap-experiment/user-final.hex
+nix develop --quiet -c just golden swap
 ```
 
-See [`docs/parity.md`](parity.md) for the byte-diff explanation.
+The committed fixture freezes the protocol parameters, every
+resolved UTxO, and the live evaluator's ExUnits, so the test does
+not depend on today's chain state. See [Parity report](parity.md)
+and [Freeze workflow](freeze-workflow.md).
 
 ## 11. Smoke the signer UX (developer)
 

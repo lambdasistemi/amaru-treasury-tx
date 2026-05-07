@@ -25,6 +25,13 @@ extra-source-files:
   docs/assets/intent-schema.json
   scripts/smoke/swap-wizard-signers
   scripts/smoke/tx-build-pipe
+  test/fixtures/disburse/**/*.cbor
+  test/fixtures/disburse/**/*.json
+  test/fixtures/disburse/**/*.md
+  test/fixtures/disburse-wizard/**/*.json
+  test/fixtures/swap/**/*.cbor
+  test/fixtures/swap/**/*.json
+  test/fixtures/swap/**/*.md
   test/fixtures/swap-wizard/**/*.json
 
 flag werror
@@ -84,6 +91,11 @@ library
     Amaru.Treasury.TreasuryBuild
     Amaru.Treasury.TreasuryBuild.Trace
     Amaru.Treasury.Tx.Disburse
+    Amaru.Treasury.Tx.Disburse.Trace
+    Amaru.Treasury.Tx.DisburseBuild
+    Amaru.Treasury.Tx.DisburseIntentJSON
+    Amaru.Treasury.Tx.DisburseWizard
+    Amaru.Treasury.Tx.DisburseWizard.Trace
     Amaru.Treasury.Tx.Reorganize
     Amaru.Treasury.Tx.Swap
     Amaru.Treasury.Tx.SwapWizard
@@ -97,7 +109,7 @@ library
     , aeson
     , aeson-pretty
     , async
-    , base                    <5
+    , base                       <5
     , base16-bytestring
     , bech32
     , bytestring
@@ -111,6 +123,7 @@ library
     , cardano-ledger-shelley
     , cardano-node-clients
     , cardano-slotting
+    , cardano-strict-containers
     , containers
     , contra-tracer
     , file-embed
@@ -164,6 +177,7 @@ executable capture-swap-context
     , bytestring
     , cardano-ledger-core
     , containers
+    , directory
     , optparse-applicative
     , ouroboros-network:api
 
@@ -218,7 +232,9 @@ test-suite unit-tests
     Amaru.Treasury.ScopeSpec
     Amaru.Treasury.SummarySpec
     Amaru.Treasury.TreasuryBuildSpec
+    Amaru.Treasury.Tx.DisburseBuildSpec
     Amaru.Treasury.Tx.DisburseSpec
+    Amaru.Treasury.Tx.DisburseWizardSpec
     Amaru.Treasury.Tx.SwapSpec
     Amaru.Treasury.Tx.SwapWizardSpec
     Amaru.Treasury.Tx.WithdrawSpec
@@ -227,6 +243,7 @@ test-suite unit-tests
 
   build-depends:
     , aeson
+    , aeson-pretty
     , amaru-treasury-tx
     , base                    <5
     , base16-bytestring
@@ -241,6 +258,7 @@ test-suite unit-tests
     , cardano-node-clients
     , cardano-slotting
     , containers
+    , directory
     , hspec
     , hspec-discover
     , jsonschema
@@ -260,9 +278,11 @@ test-suite golden-tests
   main-is:            Spec.hs
   default-language:   GHC2021
   other-modules:
+    AdaDisburseGoldenSpec
     PlaceholderSpec
     RegistryWalkGoldenSpec
     SwapGoldenSpec
+    UsdmDisburseGoldenSpec
 
   build-depends:
     , aeson
@@ -272,6 +292,8 @@ test-suite golden-tests
     , base16-bytestring
     , bytestring
     , containers
+    , directory
     , hspec
+    , text
 
   build-tool-depends: hspec-discover:hspec-discover

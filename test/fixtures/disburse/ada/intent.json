@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "action": "disburse",
+  "network": "mainnet",
+  "wallet": {
+    "txIn": "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0",
+    "address": "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+  },
+  "scope": {
+    "id": "core_development",
+    "treasuryAddress": "addr1x90mk0jjjhppr36ethwj8kewpgyrxyc7q6qucl4gqru96dzlhvl999wzz8r4jhway0djuzsgxvf3up5pe3l2sq8ct56qtjz6ah",
+    "treasuryUtxos": ["7e5a1506d86ae1581197393a14d081ffc4750d7df954e2e4a79936d6a16410f8#0"],
+    "treasuryLeftoverLovelace": 2574949000000,
+    "treasuryLeftoverUsdm": 0,
+    "treasuryLeftoverOtherAssets": {},
+    "treasuryScriptHash": "5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34",
+    "permissionsRewardAccount": "03ee9cf951e89fb82c47edbff562ee90be17de85b2c24b451c7e8e39",
+    "scopesDeployedAt": "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0",
+    "permissionsDeployedAt": "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#0",
+    "treasuryDeployedAt": "87ee53271fb41021efa13c2dbe2998c18ead07d32a6ab6dda184853ed7e39aae#0",
+    "registryDeployedAt": "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#0",
+    "registryPolicyId": "1e1ee91b8e2bddc9d583d92fd1ba5ea47b8a3e62c1eacb0ec799b99b"
+  },
+  "disburse": {
+    "unit": "ada",
+    "amount": 50000000,
+    "beneficiaryAddress": "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu",
+    "usdmPolicy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+    "usdmToken": "0014df105553444d"
+  },
+  "signers": [
+    "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb",
+    "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+  ],
+  "validityUpperBoundSlot": 186796799,
+  "rationale": {
+    "event": "disburse",
+    "label": "Disburse ADA",
+    "description": "Q2 vendor invoice - translation services",
+    "justification": "Per CIP-1694 budget allocation",
+    "destinationLabel": "ACME Translations Ltd."
+  }
+}

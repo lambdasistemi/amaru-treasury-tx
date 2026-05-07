@@ -36,9 +36,10 @@ hlint:
 release-check:
     scripts/release/check-version-consistency
 
-# Smoke-test the shipped swap-wizard signer UX
+# Smoke-test the shipped CLI surface
 smoke:
     scripts/smoke/swap-wizard-signers
+    scripts/smoke/tx-build-pipe
 
 # Build all components
 build:

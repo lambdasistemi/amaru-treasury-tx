@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# scripts/smoke/tx-build-pipe — wizard | tx-build pipeline smoke.
+#
+# Runs offline-safe checks only (CI has no cardano-node socket):
+#
+#   1. `swap-wizard --help` is wired and lists the unified flags.
+#   2. `tx-build --help` is wired, accepts `--intent` / stdin / `--out`.
+#   3. The frozen `test/fixtures/swap/intent.json` decodes as a
+#      `SomeTreasuryIntent` (the parser smoke). This subsumes
+#      "wizard's stdout decodes as SomeTreasuryIntent" because the
+#      fixture is the wizard's own pretty-encoded output.
+#   4. The unit + golden suites' parser/translator round-trips run.
+#
+# Wall-clock guard: each of the two `--help` invocations of
+# the built executable must complete in < 10 s (covers feature
+# 004 SC-002 carryover — the wizard CLI startup must be snappy).
+# Cabal test runs and rebuilds are NOT under the budget; the
+# guard times only the executable invocations on the
+# pre-built artifact (not the `cabal run` wrapper, which adds
+# its own startup overhead).
+#
+# Full end-to-end (wizard | tx-build with a real socket) is the
+# manual preprod E2E recorded in the PR description (T044).
+
+# Build once up front so the binary is on disk; subsequent
+# invocations time only the exe itself.
+cabal build exe:amaru-treasury-tx -O0 >/dev/null
+
+exe="$(
+  cabal list-bin exe:amaru-treasury-tx -O0
+)"
+
+# ---- 1. swap-wizard --help -----------------------------------------------
+wizard_start=$(date +%s)
+wizard_help="$("$exe" swap-wizard --help)"
+wizard_elapsed=$(( $(date +%s) - wizard_start ))
+
+# Sanity check: every flag the unified wizard surface advertises.
+for needle in \
+  '--metadata PATH' \
+  '--scope NAME' \
+  '--usdm USDM' \
+  '--validity-hours HOURS' \
+  '--extra-signer,--signer SCOPE|HEX'
+do
+  if ! grep -F -- "$needle" >/dev/null <<<"$wizard_help"; then
+    printf 'tx-build-pipe: missing wizard flag: %s\n' "$needle" >&2
+    exit 1
+  fi
+done
+
+# ---- 2. tx-build --help --------------------------------------------------
+build_start=$(date +%s)
+build_help="$("$exe" tx-build --help)"
+build_elapsed=$(( $(date +%s) - build_start ))
+
+for needle in \
+  '--intent' \
+  '--out' \
+  '--log'
+do
+  if ! grep -F -- "$needle" >/dev/null <<<"$build_help"; then
+    printf 'tx-build-pipe: missing tx-build flag: %s\n' "$needle" >&2
+    exit 1
+  fi
+done
+
+# ---- 3 + 4. Parser + translator round-trip via the unit suite ------------
+# The 'IntentJSON' specs cover the round-trip property over 100
+# random shapes per action variant + the four negative parses.
+# 'SwapGoldenSpec' covers the byte-identity gate.
+cabal test unit-tests -O0 \
+  --test-show-details=direct \
+  --test-option=--match \
+  --test-option="IntentJSON"
+
+cabal test golden-tests -O0 \
+  --test-show-details=direct \
+  --test-option=--match \
+  --test-option="swap golden"
+
+# ---- wall-clock guard ----------------------------------------------------
+for pair in "swap-wizard:$wizard_elapsed" "tx-build:$build_elapsed"; do
+  name="${pair%%:*}"
+  secs="${pair#*:}"
+  if [[ "$secs" -gt 10 ]]; then
+    printf 'tx-build-pipe: SLOW %s --help (%ss > 10s budget)\n' \
+      "$name" "$secs" >&2
+    exit 1
+  fi
+done
+
+printf 'tx-build-pipe: OK (wizard --help %ss, tx-build --help %ss)\n' \
+  "$wizard_elapsed" "$build_elapsed"

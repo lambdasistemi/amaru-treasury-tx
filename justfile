@@ -87,6 +87,22 @@ golden match="":
             --test-option="{{ match }}"
     fi
 
+# Run red-step (TDD-pre-impl) tests. Expected to FAIL until the
+# corresponding green-step task lands. Not part of `just ci` /
+# `nix build .#checks.unit`. Use `--match` to focus a single
+# assertion (e.g. `just red "FR-001"`).
+red match="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ '{{ match }}' == "" ]]; then
+        cabal test red-tests -O0 --test-show-details=direct
+    else
+        cabal test red-tests -O0 \
+            --test-show-details=direct \
+            --test-option=--match \
+            --test-option="{{ match }}"
+    fi
+
 # Full CI pipeline (build, tests, lint, format-check)
 ci:
     just build

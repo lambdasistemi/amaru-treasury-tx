@@ -251,6 +251,7 @@ mkWallet ws =
     WalletJSON
         { wjTxIn = wsTxIn ws
         , wjAddress = wsAddress ws
+        , wjExtraTxIns = wsExtraTxIns ws
         }
 
 mkScope :: WithdrawEnv -> WithdrawAnswers -> ScopeJSON
@@ -399,10 +400,12 @@ resolveWithScope renv input =
         Just refs -> do
             walletUtxos <-
                 wreQueryWalletUtxos renv (wriWalletAddrBech32 input)
-            case selectWallet walletUtxos of
-                Nothing ->
+            case selectWallet 1 walletUtxos of
+                Left _ ->
                     pure (Left WithdrawResolverEmptyWalletUtxos)
-                Just walletRef -> do
+                Right ([], _) ->
+                    pure (Left WithdrawResolverEmptyWalletUtxos)
+                Right (walletRef : _, _) -> do
                     let rewardAccount = trScriptHash refs
                     rewards <-
                         wreQueryRewardsLovelace renv rewardAccount
@@ -426,6 +429,7 @@ resolveWithScope renv input =
                                         { wsTxIn = walletRef
                                         , wsAddress =
                                             wriWalletAddrBech32 input
+                                        , wsExtraTxIns = []
                                         }
                                 , weTreasuryRewardAccount =
                                     rewardAccount

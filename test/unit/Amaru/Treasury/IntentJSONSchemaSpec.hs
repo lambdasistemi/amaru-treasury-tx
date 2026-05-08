@@ -283,6 +283,7 @@ withdrawIntent =
         ( WalletJSON
             "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0"
             "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+            []
         )
         ( ScopeJSON
             { sjId = "network_compliance"

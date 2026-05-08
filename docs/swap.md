@@ -85,7 +85,7 @@ Top-level shape (unified intent JSON, schema v1):
   "schema":  1,
   "action":  "swap",
   "network": "mainnet",
-  "wallet":   { "txIn": "<txid>#<ix>", "address": "addr1q…" },
+  "wallet":   { "txIn": "<txid>#<ix>", "address": "addr1q…", "extraTxIns": [] },
   "scope":    { "id": "<scope name>", … addresses, deployed-at refs, registry policy id … },
   "swap":     { … chunk size, amount, rate, sundae fee, USDM unit … },
   "signers":  ["<keyhash hex>", "<keyhash hex>"],
@@ -108,6 +108,10 @@ bech32 base addresses for `wallet.address`,
 `schema` field is gated against
 `Amaru.Treasury.IntentJSON.allowedSchemas` — the bump protocol
 documented there is the single source of truth.
+
+`wallet.extraTxIns` is an optional array of additional pure-ADA
+wallet UTxOs aggregated as fuel alongside `wallet.txIn`; absent or
+empty means the head UTxO already covered the wallet target.
 
 The machine-readable contract is committed at
 `docs/assets/intent-schema.json`. It is generated from

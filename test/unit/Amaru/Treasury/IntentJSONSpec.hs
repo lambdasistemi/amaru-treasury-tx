@@ -14,6 +14,7 @@ the schema allow-list, and the missing-network failure.
 -}
 module Amaru.Treasury.IntentJSONSpec (spec) where
 
+import Data.Aeson (eitherDecode, encode)
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy.Char8 qualified as BSL8
 import Data.Map.Strict (Map)
@@ -88,6 +89,30 @@ spec = describe "Amaru.Treasury.IntentJSON" $ do
         it
             "surfaces both empty and non-empty extras"
             genWalletExtrasCoverageProp
+
+    describe "legacy wallet shape (US3)" $ do
+        it
+            "decodes a wallet block missing extraTxIns, defaulting to []"
+            $ case eitherDecode legacyWalletJSON
+                    :: Either String WalletJSON of
+                Left e ->
+                    errorWithoutStackTrace
+                        ("legacy decode failed: " <> e)
+                Right w -> wjExtraTxIns w `shouldBe` []
+        it
+            "encodes the decoded wallet back with extraTxIns: []"
+            $ case eitherDecode legacyWalletJSON
+                    :: Either String WalletJSON of
+                Left e ->
+                    errorWithoutStackTrace
+                        ("legacy decode failed: " <> e)
+                Right w ->
+                    BSL8.unpack
+                        (encode w)
+                        `shouldSatisfy` ( "\"extraTxIns\":[]"
+                                            `T.isInfixOf`
+                                        )
+                            . T.pack
 
     describe "negative cases" $ do
         it "rejects unknown schema versions" $
@@ -547,6 +572,16 @@ expectLeftContaining :: String -> Either String a -> IO ()
 expectLeftContaining needle = \case
     Left e -> e `shouldSatisfy` isInfixOf needle
     Right _ -> expectationFailure "expected Left, got Right"
+
+{- | A pre-T010 legacy 'WalletJSON' that omits the
+@extraTxIns@ field. Decodes against the post-T010 schema
+(thanks to @.!=@ defaults) and is the US3 back-compat
+witness.
+-}
+legacyWalletJSON :: ByteString
+legacyWalletJSON =
+    "{\"txIn\":\"42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0\""
+        <> ",\"address\":\"addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu\"}"
 
 {- | True when the 'Either' is 'Left' carrying a string
 containing the given infix.

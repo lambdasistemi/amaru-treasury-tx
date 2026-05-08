@@ -76,3 +76,22 @@ spec =
                 BS.readFile (fixtureDir <> "/expected.cbor")
             expected `shouldBe` oracleHex
             actualHex `shouldBe` oracleHex
+        it
+            "legacy intent without extraTxIns rebuilds byte-identical bytes"
+            $ do
+                si <-
+                    decodeTreasuryIntentFile
+                        (fixtureDir <> "/legacy/intent.json")
+                some <- case si of
+                    Left e ->
+                        error ("legacy intent JSON: " <> e)
+                    Right v -> pure v
+                fixture <- readSwapFixture fixtureDir
+                let ctx = toFrozenContext fixture
+                tbr <- runFromIntent ctx some
+                let actualHex =
+                        B16.encode
+                            (BSL.toStrict (tbrCborBytes tbr))
+                expected <-
+                    BS.readFile (fixtureDir <> "/expected.cbor")
+                actualHex `shouldBe` expected

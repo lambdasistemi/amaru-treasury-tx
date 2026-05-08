@@ -247,6 +247,12 @@
                 "address": {
                     "$ref": "#/$defs/bech32Address"
                 },
+                "extraTxIns": {
+                    "items": {
+                        "$ref": "#/$defs/txIn"
+                    },
+                    "type": "array"
+                },
                 "txIn": {
                     "$ref": "#/$defs/txIn"
                 }

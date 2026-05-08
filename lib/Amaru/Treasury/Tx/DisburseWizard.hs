@@ -668,6 +668,7 @@ mkTreasuryWallet ws =
     WalletJSON
         { wjTxIn = wsTxIn ws
         , wjAddress = wsAddress ws
+        , wjExtraTxIns = []
         }
 
 mkTreasuryScope :: DisburseEnv -> DisburseAnswers -> ScopeJSON

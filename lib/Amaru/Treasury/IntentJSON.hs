@@ -70,7 +70,9 @@ import Data.Aeson
     , object
     , withObject
     , withText
+    , (.!=)
     , (.:)
+    , (.:?)
     , (.=)
     )
 import Data.Aeson.Encode.Pretty
@@ -175,9 +177,16 @@ type family Translated (a :: Action) :: Type where
 -- | Wallet block: the fuel + collateral input.
 data WalletJSON = WalletJSON
     { wjTxIn :: !Text
-    -- ^ @\<txid hex\>#\<ix\>@
+    -- ^ @\<txid hex\>#\<ix\>@ — the head wallet UTxO that
+    -- doubles as collateral.
     , wjAddress :: !Text
     -- ^ bech32 @addr1…@
+    , wjExtraTxIns :: ![Text]
+    -- ^ Additional pure-ADA wallet UTxOs aggregated as fuel
+    -- alongside @wjTxIn@. Empty for legacy intents and for
+    -- swaps whose head UTxO already covers the wallet target;
+    -- non-empty when the wizard had to top up from smaller
+    -- wallet UTxOs.
     }
     deriving stock (Eq, Show)
 
@@ -186,12 +195,14 @@ instance FromJSON WalletJSON where
         WalletJSON
             <$> o .: "txIn"
             <*> o .: "address"
+            <*> o .:? "extraTxIns" .!= []
 
 instance ToJSON WalletJSON where
     toJSON WalletJSON{..} =
         object
             [ "txIn" .= wjTxIn
             , "address" .= wjAddress
+            , "extraTxIns" .= wjExtraTxIns
             ]
 
 {- | Scope block: the treasury inputs, leftover totals,
@@ -767,6 +778,8 @@ translateSwap ti = do
         rat = tiRationale ti
     walletAddr <- parseAddr (wjAddress wallet)
     walletTxIn <- parseTxIn (wjTxIn wallet)
+    extraWalletTxIns <-
+        traverse parseTxIn (wjExtraTxIns wallet)
     treasuryAddr <- parseAddr (sjTreasuryAddress scope)
     swapOrderAddr <- parseAddr (swiSwapOrderAddress sw)
     treasuryUtxos <-
@@ -816,6 +829,7 @@ translateSwap ti = do
         intent =
             SwapIntent
                 { siWalletUtxo = walletTxIn
+                , siExtraWalletInputs = extraWalletTxIns
                 , siSwapOrderAddress = swapOrderAddr
                 , siSwapOrders = chunks
                 , siSwapOrderExtraLovelace =

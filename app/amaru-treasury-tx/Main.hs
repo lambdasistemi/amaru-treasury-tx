@@ -128,6 +128,7 @@ import Amaru.Treasury.Tx.SwapWizard
     , RationaleAnswers (..)
     , RegistryView (..)
     , ResolverEnv (..)
+    , ResolverError (..)
     , ResolverInput (..)
     , ScopeOwners (..)
     , ScopeView (..)
@@ -138,6 +139,7 @@ import Amaru.Treasury.Tx.SwapWizard
     , WizardEnv (..)
     , WizardError
     , registryViewFromVerified
+    , renderWalletShortfall
     , resolveWizardEnv
     , txInToText
     , wizardToTreasuryIntent
@@ -725,6 +727,7 @@ runWizard g WizardOpts{..} = do
                             , riWalletAddrBech32 = wOptsWalletAddr
                             , riScope = wOptsScope
                             , riAmountLovelace = amountLov
+                            , riChunkSizeLovelace = chunkSize
                             , riRegistry = rv
                             }
                 let renv =
@@ -732,6 +735,8 @@ runWizard g WizardOpts{..} = do
                             providerToResolverEnv backend
                 er <- resolveWizardEnv renv ri
                 env <- case er of
+                    Left (ResolverWalletShortfall avail required) ->
+                        abortTr tr (renderWalletShortfall ri avail required)
                     Left e ->
                         abortTr tr ("resolve: " <> T.pack (show e))
                     Right e -> pure e
@@ -1281,6 +1286,8 @@ requiredUtxos (SomeTreasuryIntent _sa intent) = do
     let wallet = tiWallet intent
         scope = tiScope intent
     walletTxIn <- parseTxIn (wjTxIn wallet)
+    extraWalletTxIns <-
+        traverse parseTxIn (wjExtraTxIns wallet)
     treasuryUtxos <-
         traverse parseTxIn (sjTreasuryUtxos scope)
     scopesRef <- parseTxIn (sjScopesDeployedAt scope)
@@ -1291,7 +1298,8 @@ requiredUtxos (SomeTreasuryIntent _sa intent) = do
     Right $
         Set.fromList $
             walletTxIn
-                : treasuryUtxos
+                : extraWalletTxIns
+                ++ treasuryUtxos
                 ++ [ scopesRef
                    , permissionsRef
                    , treasuryRef

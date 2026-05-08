@@ -96,7 +96,18 @@ appends the leftover *after* the chunk loop.
 -}
 data SwapIntent = SwapIntent
     { siWalletUtxo :: !TxIn
-    -- ^ wallet UTxO used as both fuel and collateral
+    -- ^ Head wallet UTxO. Used as both fuel and the
+    --     transaction's collateral input. When
+    --     'siExtraWalletInputs' is non-empty, only
+    --     'siWalletUtxo' is the collateral; the extras
+    --     are fuel-only.
+    , siExtraWalletInputs :: ![TxIn]
+    -- ^ Additional pure-ADA wallet UTxOs aggregated as
+    --     fuel alongside 'siWalletUtxo'. Empty when the
+    --     head UTxO already covers the wallet target;
+    --     non-empty when the wizard had to top up from
+    --     smaller wallet UTxOs. None of these participate
+    --     in collateral.
     , siSwapOrderAddress :: !Addr
     -- ^ destination for every swap-order output
     , siSwapOrders :: ![SwapOrderOut]
@@ -146,6 +157,7 @@ swapProgram :: SwapIntent -> TxBuild q e ()
 swapProgram si = do
     _ <- spend (siWalletUtxo si)
     collateral (siWalletUtxo si)
+    forM_ (siExtraWalletInputs si) spend
     let spendRedeemer =
             RawPlutusData $
                 disburseAdaRedeemer

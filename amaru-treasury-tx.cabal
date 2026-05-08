@@ -33,6 +33,7 @@ extra-source-files:
   test/fixtures/swap/**/*.json
   test/fixtures/swap/**/*.md
   test/fixtures/swap-wizard/**/*.json
+  test/fixtures/withdraw/**/*.cbor
   test/fixtures/withdraw/**/*.json
 
 flag werror

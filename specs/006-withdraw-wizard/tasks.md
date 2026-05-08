@@ -153,7 +153,7 @@ before the implementation tasks they constrain.
 
 **Independent Test**: Schema validates withdraw fixtures and rejects mutated payload/action pairs.
 
-- [ ] T043 [P] [US4] Add schema validation for `test/fixtures/withdraw/synthetic/intent.json` in `test/unit/Amaru/Treasury/IntentJSONSchemaSpec.hs`.
+- [x] T043 [P] [US4] Add schema validation for `test/fixtures/withdraw/synthetic/intent.json` in `test/unit/Amaru/Treasury/IntentJSONSchemaSpec.hs`.
 - [ ] T044 [P] [US4] Add negative schema cases for `action = "withdraw"` with `swap`, `disburse`, and `reorganize` payloads in `test/unit/Amaru/Treasury/IntentJSONSchemaSpec.hs`.
 - [ ] T045 [US4] Confirm `nix develop --quiet -c just schema-check` and `nix develop --quiet -c just unit IntentJSONSchema` both pass.
 

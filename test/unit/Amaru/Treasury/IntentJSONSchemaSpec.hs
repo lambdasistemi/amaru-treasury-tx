@@ -85,6 +85,12 @@ spec = describe "Amaru.Treasury.IntentJSON.Schema" $ do
         validateJSONSchema intentJsonSchema intent
             `shouldBe` True
 
+    it "validates the tx-build withdraw fixture intent" $ do
+        intent <-
+            decodeFile "test/fixtures/withdraw/synthetic/intent.json"
+        validateJSONSchema intentJsonSchema intent
+            `shouldBe` True
+
     it "validates JSON emitted by wizardToTreasuryIntent" $ do
         env :: WizardEnv <-
             decodeFile "test/fixtures/swap-wizard/env.json"

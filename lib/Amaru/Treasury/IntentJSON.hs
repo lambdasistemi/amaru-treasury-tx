@@ -778,6 +778,8 @@ translateSwap ti = do
         rat = tiRationale ti
     walletAddr <- parseAddr (wjAddress wallet)
     walletTxIn <- parseTxIn (wjTxIn wallet)
+    extraWalletTxIns <-
+        traverse parseTxIn (wjExtraTxIns wallet)
     treasuryAddr <- parseAddr (sjTreasuryAddress scope)
     swapOrderAddr <- parseAddr (swiSwapOrderAddress sw)
     treasuryUtxos <-
@@ -827,7 +829,7 @@ translateSwap ti = do
         intent =
             SwapIntent
                 { siWalletUtxo = walletTxIn
-                , siExtraWalletInputs = []
+                , siExtraWalletInputs = extraWalletTxIns
                 , siSwapOrderAddress = swapOrderAddr
                 , siSwapOrders = chunks
                 , siSwapOrderExtraLovelace =

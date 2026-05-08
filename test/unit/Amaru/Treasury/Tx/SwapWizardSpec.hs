@@ -119,7 +119,7 @@ spec = describe "SwapWizard" $ do
             sjTreasuryUtxos s
                 `shouldBe` ["64f27254f3c0311fb2e672cdb87de200089a596aa90dc09f8be4248540267cf0#0"]
             sjTreasuryLeftoverLovelace s
-                `shouldBe` 1041836734694
+                `shouldBe` 1041728494694
             sjTreasuryLeftoverUsdm s `shouldBe` 0
             sjTreasuryLeftoverOtherAssets s
                 `shouldBe` Map.empty

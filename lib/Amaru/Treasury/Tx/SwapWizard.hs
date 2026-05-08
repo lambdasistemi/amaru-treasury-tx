@@ -45,6 +45,7 @@ module Amaru.Treasury.Tx.SwapWizard
     , ResolverEnv (..)
     , registryViewFromVerified
     , networkConstants
+    , chunkCountFor
     , selectTreasury
     , selectWallet
     , WalletSelectionError (..)
@@ -611,12 +612,16 @@ data ResolverInput = ResolverInput
     -- ^ bech32 wallet address for fuel + collateral
     , riScope :: !ScopeId
     , riAmountLovelace :: !Integer
-    -- ^ total lovelace to be swapped (drives treasury
-    --   selection target)
+    -- ^ total lovelace to be swapped (= chunk_total)
     , riChunkSizeLovelace :: !Integer
-    -- ^ ADA-per-chunk for the swap; combined with
+    -- ^ lovelace per chunk; combined with
     --   'riAmountLovelace' to compute the chunk count
-    --   and from there the wallet aggregation target.
+    --   @N@. Consumed by both the wallet aggregation
+    --   target and the treasury selection target raise:
+    --   the latter adds @N * ncExtraPerChunkLovelace@ so
+    --   the treasury funds the per-chunk swap-order
+    --   overhead (FR-006 single source for FR-001,
+    --   FR-002, FR-009).
     , riRegistry :: !RegistryView
     -- ^ verified projection; see 'registryViewFromVerified'
     }
@@ -842,6 +847,20 @@ selectTreasury inputs target
         | otherwise =
             go (acc + l) (ref : picked) rest
 
+{- | Number of swap-order chunks @mkChunks@ produces for
+@(amount, chunkSize)@: @amount \`div\` chunkSize@ full
+chunks plus one remainder chunk if @amount \`mod\`
+chunkSize > 0@. Total chunks is the multiplier on
+'NetworkConstants.ncExtraPerChunkLovelace' that the
+treasury must fund (FR-001/FR-006).
+-}
+chunkCountFor :: Integer -> Integer -> Integer
+chunkCountFor amount chunkSize
+    | chunkSize <= 0 = 0
+    | otherwise =
+        let (full, rem') = amount `divMod` chunkSize
+        in  full + if rem' > 0 then 1 else 0
+
 {- | Per-tx slack added on top of the chunk-driven wallet
 target so 'selectWallet' has room for fee + change. See
 @research.md §D2@.
@@ -952,6 +971,14 @@ resolveWizardEnv ResolverEnv{..} ri =
                         treasuryUtxos <-
                             reEnvQueryTreasuryUtxos
                                 (trAddress refs)
+                        let chunkCount =
+                                chunkCountFor
+                                    (riAmountLovelace ri)
+                                    (riChunkSizeLovelace ri)
+                            fundingTarget =
+                                riAmountLovelace ri
+                                    + chunkCount
+                                        * ncExtraPerChunkLovelace nc
                         if null treasuryUtxos
                             then
                                 pure
@@ -961,7 +988,7 @@ resolveWizardEnv ResolverEnv{..} ri =
                                     (\(r, l, _) -> (r, l))
                                     treasuryUtxos
                                 )
-                                (riAmountLovelace ri) of
+                                fundingTarget of
                                 Nothing ->
                                     pure
                                         ( Left
@@ -974,7 +1001,7 @@ resolveWizardEnv ResolverEnv{..} ri =
                                                         treasuryUtxos
                                                     )
                                                 )
-                                                (riAmountLovelace ri)
+                                                fundingTarget
                                             )
                                         )
                                 Just (picked, leftover)
@@ -986,13 +1013,7 @@ resolveWizardEnv ResolverEnv{..} ri =
                                                 )
                                             )
                                     | otherwise ->
-                                        let (full, rem') =
-                                                riAmountLovelace ri
-                                                    `divMod` riChunkSizeLovelace ri
-                                            chunkCount =
-                                                fromInteger full
-                                                    + (if rem' > 0 then 1 else 0)
-                                            walletTarget =
+                                        let walletTarget =
                                                 chunkCount
                                                     * ncExtraPerChunkLovelace nc
                                                     + walletFeeSlackLovelace

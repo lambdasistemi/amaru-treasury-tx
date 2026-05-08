@@ -229,6 +229,7 @@ spec = describe "SwapWizard red-step (T002 + T003 + T004 + T005)" $ do
                                 "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
                             , riScope = CoreDevelopment
                             , riAmountLovelace = amount
+                            , riChunkSizeLovelace = chunkSize
                             , riRegistry = weRegistry env
                             }
                 resolved <- resolveWizardEnv stubResolver ri
@@ -387,6 +388,7 @@ spec = describe "SwapWizard red-step (T002 + T003 + T004 + T005)" $ do
                                 "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
                             , riScope = CoreDevelopment
                             , riAmountLovelace = amount
+                            , riChunkSizeLovelace = chunkSize
                             , riRegistry = weRegistry env
                             }
                 resolved <- resolveWizardEnv stub ri
@@ -548,6 +550,7 @@ spec = describe "SwapWizard red-step (T002 + T003 + T004 + T005)" $ do
                                 "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
                             , riScope = CoreDevelopment
                             , riAmountLovelace = issueAmount
+                            , riChunkSizeLovelace = issueChunkSize
                             , riRegistry = weRegistry env
                             }
                 resolved <- resolveWizardEnv stubResolver ri

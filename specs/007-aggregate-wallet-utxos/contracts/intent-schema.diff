@@ -1,0 +1,59 @@
+# JSON Schema delta for `wallet` block
+
+The published JSON Schema asset lives at `docs/assets/intent-schema.json` and
+is generated from `lib/Amaru/Treasury/IntentJSON/Schema.hs` (the source of
+truth). The `IntentJSONSchemaSpec` test cross-checks the asset against the
+generator. After this feature, both update.
+
+## Diff (logical)
+
+```diff
+ walletSchema :: Value
+ walletSchema =
+     objectSchema
+-        ["txIn", "address"]
++        ["txIn", "address"]                    -- extraTxIns NOT required
+         [ ("txIn", ref "txIn")
++        , ("extraTxIns", arraySchema (ref "txIn"))
+         , ("address", ref "bech32Address")
+         ]
+```
+
+(The `arraySchema` helper exists or is added alongside; equivalent to
+`{ "type": "array", "items": { "$ref": "#/$defs/txIn" } }`.)
+
+## Schema fragment after the change
+
+```json
+"wallet": {
+  "type": "object",
+  "required": ["txIn", "address"],
+  "additionalProperties": false,
+  "properties": {
+    "txIn":    { "$ref": "#/$defs/txIn" },
+    "extraTxIns": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/txIn" }
+    },
+    "address": { "$ref": "#/$defs/bech32Address" }
+  }
+}
+```
+
+## Validation matrix
+
+| Intent.json shape | Pre-feature schema | Post-feature schema |
+|---|---|---|
+| `{txIn, address}` (legacy) | valid | valid (extraTxIns absent → permitted) |
+| `{txIn, extraTxIns: [], address}` (new wizard, no extras) | invalid (`additionalProperties: false`) | valid |
+| `{txIn, extraTxIns: [...], address}` (new wizard, extras) | invalid | valid |
+| `{address}` only | invalid (txIn missing) | invalid |
+| `{txIn, extraTxIns: 3, address}` (wrong type) | invalid | invalid (array required) |
+
+## Test cases (covered by `IntentJSONSchemaSpec`)
+
+- ✓ Existing fixtures (no `extraTxIns`) validate.
+- ✓ A new fixture with non-empty `extraTxIns` validates.
+- ✓ A synthetic intent with `extraTxIns: 3` fails validation (array required).
+- ✓ The schema asset under `docs/assets/intent-schema.json` matches the
+  generator output (existing test, regenerated baseline).

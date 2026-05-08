@@ -1,12 +1,14 @@
 # amaru-treasury-tx Development Guidelines
 
-Auto-generated from feature plans. Last updated: 2026-05-06
+Auto-generated from feature plans. Last updated: 2026-05-08
 
 ## Active Technologies
 - Haskell, GHC 9.6+ (matches `cardano-node-clients`). (005-unified-tx-build)
 - filesystem only — `intent.json` (wizard output), (005-unified-tx-build)
 - Haskell, GHC 9.6+ (matches `cardano-node-clients`). (004-disburse-wizard)
 - filesystem only — `intent.json` (wizard output), (004-disburse-wizard)
+- Haskell, GHC 9.6+ (matches `cardano-node-clients`). + `cardano-node-clients` (`TxBuild q e a` DSL, `selectWallet` location), `cardano-ledger-conway` (Conway tx body for `inputsTxBodyL`/`collateralInputsTxBodyL`), `aeson` (intent.json shape). (007-aggregate-wallet-utxos)
+- filesystem only — `intent.json` (wizard output, builder input). No DB or persistent state added by this feature. (007-aggregate-wallet-utxos)
 
 - Haskell, GHC 9.6+ (matches `cardano-node-clients`)
 - Cabal + Nix flake (haskell.nix, IOG cache)
@@ -71,10 +73,9 @@ nix run .#lint
 - See the `/haskell` and `/nix` skills for project-wide details.
 
 ## Recent Changes
+- 007-aggregate-wallet-utxos: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`). + `cardano-node-clients` (`TxBuild q e a` DSL, `selectWallet` location), `cardano-ledger-conway` (Conway tx body for `inputsTxBodyL`/`collateralInputsTxBodyL`), `aeson` (intent.json shape).
 - 005-unified-tx-build: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`).
 - 004-disburse-wizard: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`).
-- 003-registry-walk: Added Haskell, GHC 9.6+ (matches the rest of the
-- 002-swap-wizard: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`)
 
   research, data model, contracts, quickstart.
 

@@ -1,7 +1,48 @@
 # Swap Golden Provenance
 
-This fixture is pinned to a bash/cardano-cli swap
-transaction for the `network_compliance` treasury scope.
+This fixture pins the swap-wizard byte-identity gate for the
+`network_compliance` treasury scope.
+
+## Current state (post-T006, pre-T008)
+
+After issue [#68](https://github.com/lambdasistemi/amaru-treasury-tx/issues/68)
+shipped (T006), the disburse redeemer amount and treasury
+leftover output now include the per-chunk swap-order overhead
+(`N * extraPerChunkLovelace`). The Haskell-side tx body therefore
+no longer matches the original bash/cardano-cli oracle captured
+below — the bash recipe at
+[`pragma-org/amaru-treasury`](https://github.com/pragma-org/amaru-treasury)
+`journal/2026/bin/swap.sh` still produces today's pre-fix output
+and is tracked separately in FR-008 / T008 of
+[`specs/008-disburse-includes-overhead/tasks.md`](../../../specs/008-disburse-includes-overhead/tasks.md).
+
+The two checked-in fixture files in this directory:
+
+- `expected.cbor` — the post-fix Haskell builder's hex-encoded
+  tx body.
+- `target.tx.json` — the same hex wrapped in the `Witnessed Tx
+  ConwayEra` envelope. Renamed from the previous
+  `bash.oracle.tx.json` to avoid implying it is an independent
+  bash capture; it is **Haskell-self-generated** until T008
+  regenerates the bash recipe to produce these bytes.
+
+The intent fields that changed:
+
+- `swap.amountLovelace`: `408_163_265_306` (unchanged — chunk
+  total is still the swap input amount).
+- `scope.treasuryLeftoverLovelace`: `1_041_728_494_694` lovelace
+  (was `1_041_836_734_694` — reduced by `33 * 3_280_000`, where
+  33 is the chunk count and `3_280_000` is `extraPerChunkLovelace`).
+
+The post-fix swap golden test (`test/golden/SwapGoldenSpec.hs`)
+asserts that the Haskell rebuild matches `target.tx.json`'s
+`cborHex` byte-for-byte; the test name now reads "rebuilds the
+post-fix target tx body byte-for-byte" to match the new
+semantics. Use `UPDATE_GOLDENS=1 cabal test golden-tests
+--test-option=--match --test-option="swap golden"` to regenerate
+both files when the Haskell builder output changes.
+
+## Original bash oracle capture (pre-T006, no longer matches)
 
 Source:
 
@@ -13,7 +54,7 @@ Source:
 - node socket used for live query:
   `/code/cardano-mainnet/ipc/node.socket`
 
-The current upstream `journal/2026/bin/swap.sh` emits the
+The original upstream `journal/2026/bin/swap.sh` emits the
 treasury leftover before the swap-order outputs. The original
 parity work and this Haskell builder use the intended fixed
 ordering: all swap-order outputs first, then the treasury
@@ -40,7 +81,7 @@ FUEL=42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0 \
   ops_and_use_cases
 ```
 
-Oracle transaction:
+Original oracle transaction (pre-T006):
 
 - body file:
   `/tmp/amaru-swap-fixed-bash-provenance/disburse-network_compliance-2d9a025c12c4.cbor.json`
@@ -57,7 +98,7 @@ Oracle transaction:
 - amount: `408163265306 Lovelace`
 - chunk size: `12500000000 Lovelace`
 - rate: `0.245 USDM/ADA`
-- treasury leftover output: `1041836734694 Lovelace`
+- treasury leftover output: `1041836734694 Lovelace` (pre-fix)
 - swap outputs: 33
 
 Execution units:
@@ -69,26 +110,9 @@ Execution units:
   `a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094`:
   memory `206629`, steps `66382393`
 
-Fresh parity command used before recording:
-
-```bash
-CARDANO_NODE_SOCKET_PATH=/code/cardano-mainnet/ipc/node.socket \
-nix develop -c cabal run -O0 exe:capture-swap-context -- \
-  --intent /tmp/amaru-swap-fixed-bash-provenance/intent.fixed.json \
-  --out-dir /tmp/amaru-swap-capture \
-  --node-socket /code/cardano-mainnet/ipc/node.socket \
-  --network-magic 764824073
-
-cmp -s \
-  /tmp/amaru-swap-fixed-bash-provenance/bash.fixed.cbor \
-  /tmp/amaru-swap-capture/expected.cbor
-```
-
-The parity run printed:
-
-```text
-capture: expected.cbor 14954 bytes  fee=1039703  exUnits captured: 2
-swap_capture_byte_parity=ok
-fixture_matches_capture=ok
-oracle_body_match=ok
-```
+These pre-fix bytes are intentionally **not** retained as a
+separate oracle file. T008 will regenerate the bash recipe and
+publish a new oracle capture that matches the post-fix Haskell
+target; once that capture is checked in, this section can be
+replaced with the fresh provenance and the "Haskell ≡ live
+bash recipe" invariant is restored end-to-end.

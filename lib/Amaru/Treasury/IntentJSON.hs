@@ -826,6 +826,20 @@ translateSwap ti = do
                 , swiRateDenominator sw
                 )
                 dp
+        chunkCount =
+            toInteger (length chunks)
+        -- FR-001/FR-006: the treasury, not the operator
+        -- wallet, funds the per-chunk swap-order overhead.
+        -- The redeemer @amount@ is therefore the chunk
+        -- total plus @N * extraPerChunkLovelace@ (the
+        -- single authoritative overhead source named in
+        -- FR-006). The leftover output already shrinks
+        -- by the same amount because
+        -- 'resolveWizardEnv' raises the treasury
+        -- selection target by
+        -- @N * ncExtraPerChunkLovelace@ before
+        -- 'selectTreasury' computes
+        -- 'tsLeftoverLovelace'.
         intent =
             SwapIntent
                 { siWalletUtxo = walletTxIn
@@ -840,7 +854,11 @@ translateSwap ti = do
                     Coin (sjTreasuryLeftoverLovelace scope)
                 , siTreasuryLeftoverAsset = Nothing
                 , siRedeemerAmountLovelace =
-                    Coin (swiAmountLovelace sw)
+                    Coin
+                        ( swiAmountLovelace sw
+                            + chunkCount
+                                * swiExtraPerChunkLovelace sw
+                        )
                 , siPermissionsRewardAccount =
                     permissionsAcct
                 , siScopesDeployedAt = scopesRef

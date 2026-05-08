@@ -7,12 +7,24 @@ Loads the frozen swap fixture under
 @test/fixtures/swap/@, parses it as a unified
 'SomeTreasuryIntent', builds the tx via 'runFromIntent'
 against the resulting frozen 'ChainContext', and
-byte-diffs the CBOR against the upstream
-bash/cardano-cli oracle.
+byte-diffs the CBOR against the checked-in target
+tx body.
 
-This is the swap byte-identity gate: the checked-in
-@expected.cbor@ must be the bash oracle's @cborHex@, and
-the Haskell rebuild must match that same oracle.
+After T006 (issue #68), the post-fix tx body no longer
+matches the original upstream bash/cardano-cli oracle
+captured in @test/fixtures/swap/provenance.md@. Until
+the bash recipe is updated to fund the per-chunk
+overhead from the treasury (FR-008 / T008), the file
+@target.tx.json@ holds the **Haskell-generated**
+post-fix CBOR, not an independent bash oracle.
+@expected.cbor@ must match @target.tx.json@'s
+@cborHex@ (the byte-identity gate within the Haskell
+side). The "Haskell ≡ live bash recipe" invariant is
+restored once T008 regenerates the bash output to
+this same target.
+
+Set @UPDATE_GOLDENS=1@ to regenerate both files from
+the current Haskell builder output.
 -}
 module SwapGoldenSpec (spec) where
 
@@ -27,6 +39,7 @@ import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
 import Data.Text (Text)
 import Data.Text.Encoding qualified as Text
+import System.Environment (lookupEnv)
 import Test.Hspec (Spec, describe, it, shouldBe)
 
 import Amaru.Treasury.ChainContext.Fixture
@@ -42,17 +55,17 @@ import Amaru.Treasury.TreasuryBuild
 fixtureDir :: FilePath
 fixtureDir = "test/fixtures/swap"
 
-newtype BashOracle = BashOracle Text
+newtype Target = Target Text
 
-instance FromJSON BashOracle where
+instance FromJSON Target where
     parseJSON =
-        withObject "BashOracle" $ \o ->
-            BashOracle <$> o .: "cborHex"
+        withObject "Target" $ \o ->
+            Target <$> o .: "cborHex"
 
 spec :: Spec
 spec =
     describe "swap golden (frozen ChainContext)" $ do
-        it "rebuilds the bash oracle byte-for-byte" $ do
+        it "rebuilds the post-fix target tx body byte-for-byte" $ do
             si <-
                 decodeTreasuryIntentFile
                     (fixtureDir <> "/intent.json")
@@ -65,17 +78,36 @@ spec =
             let actualHex =
                     B16.encode
                         (BSL.toStrict (tbrCborBytes tbr))
-            BashOracle oracleText <-
-                BS.readFile (fixtureDir <> "/bash.oracle.tx.json")
+            update <- lookupEnv "UPDATE_GOLDENS"
+            case update of
+                Just "1" -> do
+                    -- Capture the current Haskell builder
+                    -- output as the post-fix target. After
+                    -- T008 the bash recipe under
+                    -- pragma-org/amaru-treasury will be
+                    -- updated to produce these bytes again,
+                    -- restoring "Haskell ≡ bash" parity.
+                    BS.writeFile
+                        (fixtureDir <> "/expected.cbor")
+                        actualHex
+                    BS.writeFile
+                        (fixtureDir <> "/target.tx.json")
+                        ( "{\n    \"type\": \"Witnessed Tx ConwayEra\",\n    \"description\": \"Ledger Cddl Format\",\n    \"cborHex\": \""
+                            <> actualHex
+                            <> "\"\n}\n"
+                        )
+                _ -> pure ()
+            Target targetText <-
+                BS.readFile (fixtureDir <> "/target.tx.json")
                     >>= either
-                        (error . ("oracle JSON: " <>))
+                        (error . ("target JSON: " <>))
                         pure
                         . eitherDecodeStrict'
-            let oracleHex = Text.encodeUtf8 oracleText
+            let targetHex = Text.encodeUtf8 targetText
             expected <-
                 BS.readFile (fixtureDir <> "/expected.cbor")
-            expected `shouldBe` oracleHex
-            actualHex `shouldBe` oracleHex
+            expected `shouldBe` targetHex
+            actualHex `shouldBe` targetHex
         it
             "legacy intent without extraTxIns rebuilds byte-identical bytes"
             $ do

@@ -148,6 +148,7 @@ intent :: SwapIntent
 intent =
     SwapIntent
         { siWalletUtxo = mkTxIn 0
+        , siExtraWalletInputs = []
         , siSwapOrderAddress = scriptAddr 50
         , siSwapOrders = mkChunks
         , siSwapOrderExtraLovelace = Coin 3_280_000

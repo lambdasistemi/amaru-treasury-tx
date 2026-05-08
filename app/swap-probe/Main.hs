@@ -286,6 +286,7 @@ intent :: SwapIntent
 intent =
     SwapIntent
         { siWalletUtxo = walletInput
+        , siExtraWalletInputs = []
         , siSwapOrderAddress = swapOrderAddr
         , siSwapOrders = mkChunks
         , siSwapOrderExtraLovelace = extraPerChunk

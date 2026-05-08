@@ -827,6 +827,7 @@ translateSwap ti = do
         intent =
             SwapIntent
                 { siWalletUtxo = walletTxIn
+                , siExtraWalletInputs = []
                 , siSwapOrderAddress = swapOrderAddr
                 , siSwapOrders = chunks
                 , siSwapOrderExtraLovelace =

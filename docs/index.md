@@ -14,6 +14,7 @@ Haskell port of the bash recipes in
 - [Trust model](trust-model.md) — what the wizard verifies, what the operator must assert.
 - [Swap recipe](swap.md) — building an existing swap intent with `tx-build`.
 - [ADA disburse](disburse.md) — building an existing disburse intent with `tx-build`.
+- [Withdraw](withdraw.md) — resolving treasury rewards with `withdraw-wizard` or building an existing withdraw intent.
 - [ChainContext](chain-context.md)
 - [Freeze workflow](freeze-workflow.md) — pinning a `ChainContext` for offline parity tests.
 - [Parity report](parity.md)
@@ -26,6 +27,7 @@ Haskell port of the bash recipes in
 | Command | Purpose |
 | :------ | :------ |
 | `swap-wizard` | Verify upstream `metadata.json` against the chain, resolve UTxOs + tip, emit a unified swap `intent.json` (typed step trace via `WizardEvent`). |
+| `withdraw-wizard` | Verify upstream `metadata.json` against the chain, resolve the treasury reward account + reward balance, emit a unified withdraw `intent.json`, or exit cleanly when rewards are zero. |
 | `tx-build` | Turn a unified `intent.json` into unsigned Conway CBOR; re-evaluates every redeemer against a live `ChainContext` (typed step trace via `BuildEvent`). |
 
 `tx-build` reads the action discriminator and the network from
@@ -36,7 +38,7 @@ matching builder.
 | :------------ | :------------- |
 | `swap` | Built from wizard output or an existing intent. Pinned by a bash/cardano-cli golden. |
 | `disburse` | ADA disburse intents build through `tx-build`. Pinned by a bash/cardano-cli golden. |
-| `withdraw` | Parsed, but build fails closed until #45 ships. |
+| `withdraw` | Built from wizard output or an existing intent. Pinned by a synthetic frozen-context golden until issue #17 records a live preprod oracle. |
 | `reorganize` | Parsed, but build fails closed until #46 ships. |
 
 ## Out of scope

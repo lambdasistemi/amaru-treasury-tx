@@ -5,10 +5,13 @@ treasury contracts. The release-facing commands are:
 
 - `swap-wizard` — typed questionnaire that produces an
   `intent.json`, verified end-to-end against a local cardano-node.
+- `withdraw-wizard` — resolves treasury reward withdrawals into a
+  unified `intent.json`; zero-rewards scopes exit cleanly without
+  writing a stale intent.
 - `tx-build` — turns a unified `intent.json` into the unsigned
-  Conway CBOR the user signs and submits. Swap and ADA disburse
-  intents are wired; withdraw and reorganize are parsed but still
-  fail closed until their builders ship.
+  Conway CBOR the user signs and submits. Swap, ADA disburse, and
+  withdraw intents are wired; reorganize is parsed but still fails
+  closed until its builder ships.
 
 Haskell port of the bash recipes in
 [`pragma-org/amaru-treasury/journal/2026/`](https://github.com/pragma-org/amaru-treasury/tree/main/journal/2026),
@@ -26,6 +29,7 @@ The full operator and developer documentation lives at
 - [Trust model](https://lambdasistemi.github.io/amaru-treasury-tx/trust-model/) — what the wizard verifies, what the operator must assert.
 - [Swap recipe](https://lambdasistemi.github.io/amaru-treasury-tx/swap/) — building a swap from an existing `intent.json`.
 - [ADA disburse](https://lambdasistemi.github.io/amaru-treasury-tx/disburse/) — building an existing ADA disburse intent.
+- [Withdraw](https://lambdasistemi.github.io/amaru-treasury-tx/withdraw/) — resolving rewards with `withdraw-wizard` or building an existing withdraw intent.
 - [Parity report](https://lambdasistemi.github.io/amaru-treasury-tx/parity/) — byte-for-byte golden parity against bash/cardano-cli.
 
 ## Install

@@ -1,9 +1,9 @@
 # Quickstart
 
-Build a swap transaction end-to-end in one pipe — the **swap
-wizard** answers every chain-anchored field for you, the
-**tx-build** subcommand turns its unified `intent.json` into
-unsigned Conway CBOR.
+Build a transaction end-to-end in one pipe. The **swap wizard** and
+**withdraw wizard** answer chain-anchored fields for you; the
+**tx-build** subcommand turns each unified `intent.json` into unsigned
+Conway CBOR.
 
 ## 1. Install
 
@@ -173,7 +173,32 @@ amaru-treasury-tx tx-build --intent intent.json --out swap.cbor.hex
 Same behaviour, useful when you want to inspect or hand-edit
 `intent.json` between the two stages.
 
-## 9. When something goes wrong
+## 9. Withdraw rewards
+
+The withdraw flow has the same wizard-to-builder shape:
+
+```bash
+amaru-treasury-tx \
+    --node-socket "$CARDANO_NODE_SOCKET_PATH" --network preprod \
+    withdraw-wizard \
+        --wallet-addr addr_test1... \
+        --metadata metadata-mainnet.json \
+        --scope core_development \
+        --validity-hours 6 \
+        --log withdraw-wizard.log \
+  | amaru-treasury-tx \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        tx-build \
+            --log withdraw-build.log \
+            --out withdraw.cbor.hex
+```
+
+If the selected treasury reward account has zero rewards,
+`withdraw-wizard` exits 0 and writes no intent. See
+[Withdraw](withdraw.md) for the existing-intent form, schema shape, and
+synthetic golden evidence.
+
+## 10. When something goes wrong
 
 | Exit | Action |
 |------|--------|
@@ -186,21 +211,23 @@ Both subcommands are fail-closed — neither writes a partial
 output. If the trace ends without `cbor -> …` (or
 `intent.json -> …` from the wizard), nothing was written.
 
-## 10. Reproduce the known swap oracle (developer)
+## 11. Reproduce the known oracles (developer)
 
-The golden suite rebuilds a frozen mainnet swap and compares it
-byte-for-byte against a bash/cardano-cli oracle:
+The golden suite rebuilds frozen transaction fixtures:
 
 ```bash
 nix develop --quiet -c just golden swap
+nix develop --quiet -c just golden withdraw
 ```
 
-The committed fixture freezes the protocol parameters, every
-resolved UTxO, and the live evaluator's ExUnits, so the test does
-not depend on today's chain state. See [Parity report](parity.md)
+The swap fixture compares byte-for-byte against a bash/cardano-cli
+oracle. The withdraw fixture is synthetic until issue #17 records a
+live preprod reward oracle. Both freeze protocol parameters, resolved
+UTxOs, and evaluator ExUnits, so the tests do not depend on today's
+chain state. See [Parity report](parity.md), [Withdraw](withdraw.md),
 and [Freeze workflow](freeze-workflow.md).
 
-## 11. Smoke the signer UX (developer)
+## 12. Smoke the signer UX and pipe contracts (developer)
 
 Before cutting a release or handing a branch to operators, run:
 
@@ -208,11 +235,11 @@ Before cutting a release or handing a branch to operators, run:
 nix develop --quiet -c just smoke
 ```
 
-The smoke check runs the focused signer regression and checks that the
-compiled `swap-wizard --help` exposes
-`--extra-signer,--signer SCOPE|HEX`.
+The smoke check runs the focused signer regression, checks the
+release-facing help surfaces, and exercises the withdraw fixture path
+through schema validation plus the synthetic CBOR golden.
 
-## 12. Trust model
+## 13. Trust model
 
 The full account of what the wizard verifies vs. what it asks
 the operator to assert lives in

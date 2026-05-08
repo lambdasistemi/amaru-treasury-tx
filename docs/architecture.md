@@ -11,12 +11,14 @@ source of truth is the bash recipe set in
 flowchart TD
     CLI[app/amaru-treasury-tx/Main.hs<br/><i>impure</i>]
     Wizard[Tx.SwapWizard<br/><i>pure</i>]
+    WithdrawWizard[Tx.WithdrawWizard<br/><i>pure</i>]
     TreasuryBuild[TreasuryBuild<br/><i>dispatcher</i>]
     Intent[IntentJSON<br/><i>unified schema</i>]
     Disburse[Tx.Disburse<br/><i>pure TxBuild q e ()</i>]
     Withdraw[Tx.Withdraw<br/><i>pure</i>]
     Verify[Registry.Verify<br/><i>pure + Provider IO</i>]
     Trace1[Tx.SwapWizard.Trace<br/><i>pure</i>]
+    TraceWithdraw[Tx.WithdrawWizard.Trace<br/><i>pure</i>]
     Trace2[TreasuryBuild.Trace<br/><i>pure</i>]
     Swap[Tx.Swap<br/><i>SwapIntent + program</i>]
     Redeemer[Redeemer]
@@ -26,11 +28,15 @@ flowchart TD
     Provider[Cardano.Node.Client.Provider<br/><i>record of functions</i>]
 
     CLI --> Wizard
+    CLI --> WithdrawWizard
     CLI --> TreasuryBuild
     CLI --> Trace1
+    CLI --> TraceWithdraw
     CLI --> Trace2
     Wizard --> Verify
     Wizard --> Intent
+    WithdrawWizard --> Verify
+    WithdrawWizard --> Intent
     TreasuryBuild --> Intent
     TreasuryBuild --> ChainContext
     TreasuryBuild --> Swap
@@ -75,6 +81,8 @@ flowchart TD
 | `Amaru.Treasury.Tx.Disburse`            | `TxBuild q e ()` for `disburse`                                 | yes |
 | `Amaru.Treasury.Tx.DisburseWizard`      | Pure disburse questionnaire translation helpers                 | yes |
 | `Amaru.Treasury.Tx.Withdraw`            | `TxBuild q e ()` for `withdraw`                                 | yes |
+| `Amaru.Treasury.Tx.WithdrawWizard`      | Pure withdraw questionnaire translation + resolver               | yes |
+| `Amaru.Treasury.Tx.WithdrawWizard.Trace` | Typed withdraw wizard event ADT + renderer                      | yes |
 | `Amaru.Treasury.Tx.Swap`                | `SwapIntent` + `swapProgram :: TxBuild q e ()`                  | yes |
 | `Amaru.Treasury.Tx.SwapWizard`          | Pure questionnaire-to-unified-intent translation + resolver     | yes |
 | `Amaru.Treasury.Tx.SwapWizard.Trace`    | Typed `WizardEvent` ADT + renderer                              | yes |
@@ -87,6 +95,7 @@ flowchart TD
 | Subcommand    | Drives                                                                   |
 | :------------ | :----------------------------------------------------------------------- |
 | `swap-wizard` | `Registry.Verify` -> `Tx.SwapWizard` -> unified `IntentJSON` (encode)    |
+| `withdraw-wizard` | `Registry.Verify` -> `Tx.WithdrawWizard` -> unified `IntentJSON` (encode) |
 | `tx-build`    | unified `IntentJSON` (decode/translate) -> `TreasuryBuild` -> action program |
 
 Both commands route every value-affecting step through a typed

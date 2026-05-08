@@ -214,6 +214,7 @@ genWallet =
     WalletJSON
         <$> genTxId
         <*> genBech32Addr
+        <*> pure []
 
 genScope :: Gen ScopeJSON
 genScope = do

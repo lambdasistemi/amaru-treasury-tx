@@ -117,6 +117,7 @@ walletSchema =
         ["txIn", "address"]
         [ ("txIn", ref "txIn")
         , ("address", ref "bech32Address")
+        , ("extraTxIns", arrayOf (ref "txIn"))
         ]
 
 scopeSchema :: Value

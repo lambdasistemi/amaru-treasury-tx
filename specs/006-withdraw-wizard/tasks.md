@@ -182,7 +182,7 @@ before the implementation tasks they constrain.
 
 - [x] T050 [P] Add `docs/withdraw.md` describing existing-intent and wizard paths.
 - [x] T051 [P] Update `docs/index.md`, `docs/quickstart.md`, `docs/architecture.md`, and `README.md` to mention withdraw support only after T042/T049 are green.
-- [ ] T052 [P] Update `docs/freeze-workflow.md` with the synthetic withdraw fixture refresh process.
+- [x] T052 [P] Update `docs/freeze-workflow.md` with the synthetic withdraw fixture refresh process.
 - [ ] T053 Add a comment to issue #17 with the exact remaining live preprod oracle work after synthetic golden lands.
 - [ ] T054 Run `nix develop github:paolino/dev-assets?dir=mkdocs --quiet -c mkdocs build --strict --site-dir site` and confirm strict docs pass.
 - [ ] T055 Run full local gate: `nix develop --quiet -c just ci && nix develop --quiet -c just cabal-check`.

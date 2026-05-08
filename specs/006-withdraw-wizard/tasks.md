@@ -180,7 +180,7 @@ before the implementation tasks they constrain.
 
 **Purpose**: Make the new withdraw path discoverable and keep known live-oracle gaps explicit.
 
-- [ ] T050 [P] Add `docs/withdraw.md` describing existing-intent and wizard paths.
+- [x] T050 [P] Add `docs/withdraw.md` describing existing-intent and wizard paths.
 - [ ] T051 [P] Update `docs/index.md`, `docs/quickstart.md`, `docs/architecture.md`, and `README.md` to mention withdraw support only after T042/T049 are green.
 - [ ] T052 [P] Update `docs/freeze-workflow.md` with the synthetic withdraw fixture refresh process.
 - [ ] T053 Add a comment to issue #17 with the exact remaining live preprod oracle work after synthetic golden lands.

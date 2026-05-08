@@ -305,3 +305,26 @@ test-suite golden-tests
     , text
 
   build-tool-depends: hspec-discover:hspec-discover
+
+-- TDD red-step bucket. Hosts assertions that capture intended
+-- post-fix behavior before the implementation lands. Tests here
+-- are expected to fail on the current builder and pass once the
+-- corresponding green-step task ships. NOT part of the default
+-- gate (`nix build .#checks.unit` / `just unit` / `just ci`); run
+-- with `just red` or `cabal test red-tests` to see the executable
+-- red proof.
+test-suite red-tests
+  import:             warnings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test/red
+  main-is:            Spec.hs
+  default-language:   GHC2021
+  other-modules:      Amaru.Treasury.Tx.SwapWizardRedSpec
+  build-depends:
+    , aeson
+    , amaru-treasury-tx
+    , base                 <5
+    , cardano-ledger-core
+    , hspec
+
+  build-tool-depends: hspec-discover:hspec-discover

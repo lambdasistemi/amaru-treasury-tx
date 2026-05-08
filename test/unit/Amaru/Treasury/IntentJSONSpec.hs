@@ -33,11 +33,14 @@ import Test.Hspec
 import Test.QuickCheck
     ( Gen
     , Property
+    , checkCoverage
     , chooseInt
     , chooseInteger
+    , cover
     , elements
     , forAll
     , listOf1
+    , property
     , vectorOf
     , (===)
     )
@@ -80,6 +83,11 @@ spec = describe "Amaru.Treasury.IntentJSON" $ do
             roundTripProp genWithdrawIntent
         it "reorganize action: decode . encode = Right" $
             roundTripProp genReorganizeIntent
+
+    describe "wjExtraTxIns generator" $ do
+        it
+            "surfaces both empty and non-empty extras"
+            genWalletExtrasCoverageProp
 
     describe "negative cases" $ do
         it "rejects unknown schema versions" $
@@ -168,6 +176,26 @@ roundTripProp gen = forAll gen $ \some ->
     decodeTreasuryIntent (encodeSomeTreasuryIntent some)
         === Right some
 
+{- | Guards against a regression where 'genWallet' silently
+collapses back to producing only the legacy empty
+'wjExtraTxIns' shape: 'checkCoverage' fails the test if
+either the empty or the non-empty case is observed below
+its threshold across the sampled draws.
+-}
+genWalletExtrasCoverageProp :: Property
+genWalletExtrasCoverageProp =
+    checkCoverage $
+        forAll genWallet $ \w ->
+            cover
+                20
+                (null (wjExtraTxIns w))
+                "empty extras"
+                $ cover
+                    60
+                    (not (null (wjExtraTxIns w)))
+                    "non-empty extras"
+                $ property True
+
 -- ----------------------------------------------------
 -- Generators (no Arbitrary instances per /haskell skill)
 -- ----------------------------------------------------
@@ -210,11 +238,12 @@ genAssetMap = do
         pure (asset, amount)
 
 genWallet :: Gen WalletJSON
-genWallet =
-    WalletJSON
-        <$> genTxId
-        <*> genBech32Addr
-        <*> pure []
+genWallet = do
+    txIn <- genTxId
+    addr <- genBech32Addr
+    nExtras <- chooseInt (0, 3)
+    extras <- vectorOf nExtras genTxId
+    pure (WalletJSON txIn addr extras)
 
 genScope :: Gen ScopeJSON
 genScope = do

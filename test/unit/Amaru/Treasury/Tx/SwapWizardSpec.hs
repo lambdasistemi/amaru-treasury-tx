@@ -73,6 +73,7 @@ import Amaru.Treasury.Tx.SwapWizard
     , SwapWizardQ (..)
     , TreasuryRefs (..)
     , WalletSelection (..)
+    , WalletSelectionError (..)
     , WizardEnv (..)
     , WizardError (..)
     , addrNetwork
@@ -374,19 +375,50 @@ spec = describe "SwapWizard" $ do
                                         == pickedSum - target
 
     describe "selectWallet" $ do
-        it "picks the largest pure-ADA UTxO" $
-            selectWallet
-                [ ("a", 100, False)
-                , ("b", 200, False)
-                , ("c", 500, True)
-                ]
-                `shouldBe` Just "b"
         it "ignores entries with native assets" $
             selectWallet
+                100
                 [ ("a", 100, True)
                 , ("b", 200, True)
                 ]
-                `shouldBe` Nothing
+                `shouldBe` Left WalletNoPureAda
+        it "single UTxO covers the target" $
+            selectWallet
+                100
+                [ ("a", 200, False)
+                , ("b", 50, False)
+                ]
+                `shouldBe` Right (["a"], 200)
+        it "two UTxOs needed: largest first, smaller second" $
+            selectWallet
+                300
+                [ ("a", 100, False)
+                , ("b", 250, False)
+                ]
+                `shouldBe` Right (["b", "a"], 350)
+        it "stops once the cumulative meets the target" $
+            selectWallet
+                300
+                [ ("a", 250, False)
+                , ("b", 100, False)
+                , ("c", 50, False)
+                ]
+                `shouldBe` Right (["a", "b"], 350)
+        it "sorts by ADA descending regardless of input order" $ do
+            let unsorted =
+                    [ ("c", 50, False)
+                    , ("a", 250, False)
+                    , ("b", 100, False)
+                    ]
+            selectWallet 300 unsorted
+                `shouldBe` Right (["a", "b"], 350)
+        it "shortfall when total is one lovelace short" $
+            selectWallet
+                301
+                [ ("a", 250, False)
+                , ("b", 50, False)
+                ]
+                `shouldBe` Left (WalletShortfall 300 301)
 
     describe "resolveWizardEnv (stub Provider)" $ do
         it "produces a WizardEnv whose translation matches the golden" $ do
@@ -417,6 +449,7 @@ spec = describe "SwapWizard" $ do
                             "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
                         , riScope = CoreDevelopment
                         , riAmountLovelace = 408163265306
+                        , riChunkSizeLovelace = 12500000000
                         , riRegistry = weRegistry env
                         }
             r <- resolveWizardEnv stub ri
@@ -482,6 +515,7 @@ spec = describe "SwapWizard" $ do
                             "addr_test1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
                         , riScope = CoreDevelopment
                         , riAmountLovelace = 1
+                        , riChunkSizeLovelace = 1
                         , riRegistry = weRegistry env
                         }
             r <- resolveWizardEnv stub ri
@@ -491,6 +525,42 @@ spec = describe "SwapWizard" $ do
                         "mainnet"
                         "testnet"
                     )
+
+        it "rejects riChunkSizeLovelace = 0" $ do
+            let stub =
+                    ResolverEnv
+                        { reEnvQueryWalletUtxos = \_ ->
+                            pure
+                                [
+                                    ( "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0"
+                                    , 1_000_000_000
+                                    , False
+                                    )
+                                ]
+                        , reEnvQueryTreasuryUtxos = \_ ->
+                            pure
+                                [
+                                    ( "64f27254f3c0311fb2e672cdb87de200089a596aa90dc09f8be4248540267cf0#0"
+                                    , 1_450_000_000_000
+                                    , False
+                                    )
+                                ]
+                        , reEnvCurrentTip = pure 186342942
+                        }
+                ri =
+                    ResolverInput
+                        { riNetwork = "mainnet"
+                        , riWalletAddrBech32 =
+                            "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+                        , riScope = CoreDevelopment
+                        , riAmountLovelace = 408163265306
+                        , riChunkSizeLovelace = 0
+                        , riRegistry = weRegistry env
+                        }
+            r <- resolveWizardEnv stub ri
+            r
+                `shouldBe` Left
+                    (ResolverInvalidChunkSize 0)
 
 tShow :: (Show a) => a -> Text
 tShow = T.pack . show

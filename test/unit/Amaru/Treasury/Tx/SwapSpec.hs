@@ -255,6 +255,31 @@ spec = describe "Amaru.Treasury.Tx.Swap" $ do
                     Constr 0 fs -> length fs
                     _ -> 0
         in  depth `shouldBe` 6
+    it
+        "spends the head wallet UTxO + extras + treasury UTxO"
+        $ let withExtras =
+                intent
+                    { siExtraWalletInputs =
+                        [mkTxIn 6, mkTxIn 7]
+                    }
+              tx2 = draft emptyPParams (swapProgram withExtras)
+              body2 = tx2 ^. bodyTxL
+          in  body2
+                ^. inputsTxBodyL
+                `shouldBe` Set.fromList
+                    [mkTxIn 0, mkTxIn 1, mkTxIn 6, mkTxIn 7]
+    it
+        "keeps collateral on the head wallet UTxO when extras are present"
+        $ let withExtras =
+                intent
+                    { siExtraWalletInputs =
+                        [mkTxIn 6, mkTxIn 7]
+                    }
+              tx2 = draft emptyPParams (swapProgram withExtras)
+              body2 = tx2 ^. bodyTxL
+          in  body2
+                ^. collateralInputsTxBodyL
+                `shouldBe` Set.singleton (mkTxIn 0)
 
 isSwapOrderValue :: MaryValue -> Bool
 isSwapOrderValue (MaryValue (Coin l) (MultiAsset _)) =

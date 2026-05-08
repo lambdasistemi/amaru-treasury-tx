@@ -725,6 +725,7 @@ runWizard g WizardOpts{..} = do
                             , riWalletAddrBech32 = wOptsWalletAddr
                             , riScope = wOptsScope
                             , riAmountLovelace = amountLov
+                            , riChunkSizeLovelace = chunkSize
                             , riRegistry = rv
                             }
                 let renv =

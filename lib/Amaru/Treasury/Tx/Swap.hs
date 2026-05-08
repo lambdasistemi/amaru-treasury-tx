@@ -157,6 +157,7 @@ swapProgram :: SwapIntent -> TxBuild q e ()
 swapProgram si = do
     _ <- spend (siWalletUtxo si)
     collateral (siWalletUtxo si)
+    forM_ (siExtraWalletInputs si) spend
     let spendRedeemer =
             RawPlutusData $
                 disburseAdaRedeemer

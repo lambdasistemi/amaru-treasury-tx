@@ -47,6 +47,8 @@ module Amaru.Treasury.Tx.SwapWizard
     , networkConstants
     , selectTreasury
     , selectWallet
+    , WalletSelectionError (..)
+    , walletFeeSlackLovelace
     , addrNetwork
     , resolveWizardEnv
 
@@ -610,6 +612,10 @@ data ResolverInput = ResolverInput
     , riAmountLovelace :: !Integer
     -- ^ total lovelace to be swapped (drives treasury
     --   selection target)
+    , riChunkSizeLovelace :: !Integer
+    -- ^ ADA-per-chunk for the swap; combined with
+    --   'riAmountLovelace' to compute the chunk count
+    --   and from there the wallet aggregation target.
     , riRegistry :: !RegistryView
     -- ^ verified projection; see 'registryViewFromVerified'
     }
@@ -625,6 +631,15 @@ data ResolverError
     | ResolverEmptyWalletUtxos
     | -- | @ResolverShortfall available requested@
       ResolverShortfall !Integer !Integer
+    | -- | @ResolverWalletShortfall available requested@.
+      -- Aggregating every pure-ADA wallet UTxO still falls
+      -- short of the wallet target (extras-per-chunk plus
+      -- 'walletFeeSlackLovelace').
+      ResolverWalletShortfall !Integer !Integer
+    | -- | @ResolverInvalidChunkSize observed@. Guards the
+      -- @divMod@ in the wallet-target derivation; raised
+      -- when @riChunkSizeLovelace <= 0@.
+      ResolverInvalidChunkSize !Integer
     | ResolverVerifiedScopeMissing !ScopeId
     | ResolverOwnerMissing !ScopeId
     | ResolverAddressEncodingFailed !Text
@@ -826,21 +841,57 @@ selectTreasury inputs target
         | otherwise =
             go (acc + l) (ref : picked) rest
 
-{- | Pick the largest pure-ADA UTxO at the wallet address
-to use as fuel + collateral. @inputs@ is a list of
-@(txInRef, lovelace, hasNativeAssets)@; only entries with
-@hasNativeAssets = False@ are eligible.
+{- | Per-tx slack added on top of the chunk-driven wallet
+target so 'selectWallet' has room for fee + change. See
+@research.md §D2@.
 -}
-selectWallet :: [(Text, Integer, Bool)] -> Maybe Text
-selectWallet inputs =
+walletFeeSlackLovelace :: Integer
+walletFeeSlackLovelace = 2_000_000
+
+-- | Failure modes for 'selectWallet'.
+data WalletSelectionError
+    = -- | @WalletShortfall available target@. Aggregating
+      -- every pure-ADA UTxO still falls short.
+      WalletShortfall !Integer !Integer
+    | -- | The wallet has no pure-ADA UTxOs at all (every
+      -- entry carries native assets).
+      WalletNoPureAda
+    deriving (Eq, Show)
+
+{- | Aggregate pure-ADA wallet UTxOs largest-first until
+their cumulative lovelace meets @target@. @inputs@ is a
+list of @(txInRef, lovelace, hasNativeAssets)@; only
+entries with @hasNativeAssets = False@ are eligible.
+
+The first ref of the returned list is the largest
+selected UTxO; downstream code uses it as both the
+wallet head and the transaction's collateral. The
+remaining refs are extras (fuel only). The 'Integer' is
+the cumulative lovelace of the selection.
+-}
+selectWallet
+    :: Integer
+    -> [(Text, Integer, Bool)]
+    -> Either WalletSelectionError ([Text], Integer)
+selectWallet target inputs =
     case filter (\(_, _, hasNa) -> not hasNa) inputs of
-        [] -> Nothing
-        xs ->
-            let (ref, _, _) =
-                    L.maximumBy
-                        (compare `on` snd3)
-                        xs
-            in  Just ref
+        [] -> Left WalletNoPureAda
+        eligible ->
+            let sorted =
+                    L.sortBy
+                        (flip compare `on` snd3)
+                        eligible
+                total = sum (snd3 <$> sorted)
+                go acc picked [] = (reverse picked, acc)
+                go acc picked ((ref, l, _) : rest)
+                    | acc >= target =
+                        (reverse picked, acc)
+                    | otherwise =
+                        go (acc + l) (ref : picked) rest
+                (refs, sumPicked) = go 0 [] sorted
+            in  if sumPicked >= target
+                    then Right (refs, sumPicked)
+                    else Left (WalletShortfall total target)
   where
     snd3 (_, l, _) = l
 
@@ -925,62 +976,98 @@ resolveWizardEnv ResolverEnv{..} ri =
                                                 (riAmountLovelace ri)
                                             )
                                         )
-                                Just (picked, leftover) ->
-                                    case selectWallet
-                                        walletUtxos of
-                                        Nothing ->
-                                            pure
-                                                ( Left
-                                                    ResolverEmptyWalletUtxos
+                                Just (picked, leftover)
+                                    | riChunkSizeLovelace ri <= 0 ->
+                                        pure
+                                            ( Left
+                                                ( ResolverInvalidChunkSize
+                                                    (riChunkSizeLovelace ri)
                                                 )
-                                        Just walletRef -> do
-                                            tip <- reEnvCurrentTip
-                                            let owners =
-                                                    rvOwners
-                                                        (riRegistry ri)
-                                                env =
-                                                    WizardEnv
-                                                        { weNetwork =
-                                                            riNetwork ri
-                                                        , weCurrentTip =
-                                                            tip
-                                                        , weNetworkConstants =
-                                                            nc
-                                                        , weRegistry =
-                                                            riRegistry ri
-                                                        , weScopeView =
-                                                            ScopeView
-                                                                { svScope =
-                                                                    riScope
-                                                                        ri
-                                                                , svRefs =
-                                                                    refs
-                                                                , svDefaultSigners =
-                                                                    maybeToList
-                                                                        ( scopeOwnerText
-                                                                            owners
-                                                                            (riScope ri)
-                                                                        )
+                                            )
+                                    | otherwise ->
+                                        let (full, rem') =
+                                                riAmountLovelace ri
+                                                    `divMod` riChunkSizeLovelace ri
+                                            chunkCount =
+                                                fromInteger full
+                                                    + (if rem' > 0 then 1 else 0)
+                                            walletTarget =
+                                                chunkCount
+                                                    * ncExtraPerChunkLovelace nc
+                                                    + walletFeeSlackLovelace
+                                        in  case selectWallet
+                                                walletTarget
+                                                walletUtxos of
+                                                Left WalletNoPureAda ->
+                                                    pure
+                                                        ( Left
+                                                            ResolverEmptyWalletUtxos
+                                                        )
+                                                Left
+                                                    ( WalletShortfall
+                                                            avail
+                                                            target
+                                                        ) ->
+                                                        pure
+                                                            ( Left
+                                                                ( ResolverWalletShortfall
+                                                                    avail
+                                                                    target
+                                                                )
+                                                            )
+                                                Right ([], _) ->
+                                                    pure
+                                                        ( Left
+                                                            ResolverEmptyWalletUtxos
+                                                        )
+                                                Right (walletHead : walletTail, _) -> do
+                                                    tip <- reEnvCurrentTip
+                                                    let owners =
+                                                            rvOwners
+                                                                (riRegistry ri)
+                                                        env =
+                                                            WizardEnv
+                                                                { weNetwork =
+                                                                    riNetwork ri
+                                                                , weCurrentTip =
+                                                                    tip
+                                                                , weNetworkConstants =
+                                                                    nc
+                                                                , weRegistry =
+                                                                    riRegistry ri
+                                                                , weScopeView =
+                                                                    ScopeView
+                                                                        { svScope =
+                                                                            riScope
+                                                                                ri
+                                                                        , svRefs =
+                                                                            refs
+                                                                        , svDefaultSigners =
+                                                                            maybeToList
+                                                                                ( scopeOwnerText
+                                                                                    owners
+                                                                                    (riScope ri)
+                                                                                )
+                                                                        }
+                                                                , weTreasurySelection =
+                                                                    TreasurySelection
+                                                                        { tsInputs =
+                                                                            picked
+                                                                        , tsLeftoverLovelace =
+                                                                            leftover
+                                                                        }
+                                                                , weWalletSelection =
+                                                                    WalletSelection
+                                                                        { wsTxIn =
+                                                                            walletHead
+                                                                        , wsAddress =
+                                                                            riWalletAddrBech32
+                                                                                ri
+                                                                        , wsExtraTxIns =
+                                                                            walletTail
+                                                                        }
                                                                 }
-                                                        , weTreasurySelection =
-                                                            TreasurySelection
-                                                                { tsInputs =
-                                                                    picked
-                                                                , tsLeftoverLovelace =
-                                                                    leftover
-                                                                }
-                                                        , weWalletSelection =
-                                                            WalletSelection
-                                                                { wsTxIn =
-                                                                    walletRef
-                                                                , wsAddress =
-                                                                    riWalletAddrBech32
-                                                                        ri
-                                                                , wsExtraTxIns =
-                                                                    []
-                                                                }
-                                                        }
-                                            pure (Right env)
+                                                    pure (Right env)
 
 {- | Effects the resolver pulls from a 'Provider'. Kept as
 its own record so tests can stub IO without depending on

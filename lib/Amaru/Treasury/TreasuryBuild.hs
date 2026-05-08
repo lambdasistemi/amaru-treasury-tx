@@ -626,7 +626,8 @@ runSwap ctx intent rationale walletInput walletAddr = do
     let utxoMap = ccUtxos ctx
         required =
             walletInput
-                : siTreasuryUtxos intent
+                : siExtraWalletInputs intent
+                ++ siTreasuryUtxos intent
                 ++ [ siScopesDeployedAt intent
                    , siPermissionsDeployedAt intent
                    , siTreasuryDeployedAt intent
@@ -644,8 +645,11 @@ runSwap ctx intent rationale walletInput walletAddr = do
     let inputUtxos =
             (walletInput, utxoMap Map.! walletInput)
                 : [ (i, utxoMap Map.! i)
-                  | i <- siTreasuryUtxos intent
+                  | i <- siExtraWalletInputs intent
                   ]
+                ++ [ (i, utxoMap Map.! i)
+                   | i <- siTreasuryUtxos intent
+                   ]
         refUtxos =
             [ (i, utxoMap Map.! i)
             | i <-

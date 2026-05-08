@@ -56,5 +56,7 @@ Withdraw amount parity decision:
   synthetic golden. A zero withdrawal would make the treasury output
   wallet-funded in the synthetic context, which is not the operator
   intent.
+- T039 conclusion: no `Tx.Withdraw` code adjustment is required for
+  the synthetic oracle; keep the positive withdrawal amount.
 - Treat the bash `+0` behavior as unresolved live-oracle work until
   issue #17 can capture a reward-bearing preprod transaction.

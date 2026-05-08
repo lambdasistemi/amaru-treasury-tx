@@ -3,7 +3,7 @@
 
 {- |
 Module      : Amaru.Treasury.Tx.SwapWizardRedSpec
-Description : T002 + T003 + T004 red-step coverage (FR-001, FR-002, FR-009)
+Description : Red-step coverage for T002–T005 (FR-001, FR-002, FR-009, SC-001)
 Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
@@ -109,7 +109,7 @@ loadFixture path = do
         Right ok -> pure ok
 
 spec :: Spec
-spec = describe "SwapWizard red-step (T002 + T003 + T004)" $ do
+spec = describe "SwapWizard red-step (T002 + T003 + T004 + T005)" $ do
     env :: WizardEnv <-
         runIO
             (loadFixture "test/fixtures/swap-wizard/env.json")
@@ -474,3 +474,181 @@ spec = describe "SwapWizard red-step (T002 + T003 + T004)" $ do
             1_200_000_000
             100_000_000
             12
+
+    -- T005 / SC-001: reproduce issue #68's captured example end-to-end
+    -- and pin the exact leftover value documented in the spec
+    -- (`specs/008-disburse-includes-overhead/spec.md`,
+    -- US1 acceptance scenario 1):
+    --
+    --   Given treasury UTxO of 1,450,000 ADA and operator wallet of
+    --   100 ADA, When the operator runs
+    --   `swap-wizard --usdm 100000 --split 12 | tx-build`,
+    --   Then ... the treasury leftover is
+    --   `1,005,555.555556 − 12 × 3.28 = 1,005,516.195556 ADA`.
+    --
+    -- Numerically:
+    --   amount       =   444_444_444_444 lovelace
+    --                    (444,444.444444 ADA;
+    --                    `--usdm 100000` at the spec-scenario rate)
+    --   chunkSize    =    37_037_037_037 lovelace
+    --                    (= amount / 12, no remainder, N = 12)
+    --   treasury     = 1_450_000_000_000 lovelace
+    --                    (1,450,000 ADA)
+    --   leftover_today  = 1_005_555_555_556 lovelace
+    --   leftover_post   = 1_005_516_195_556 lovelace
+    --   diff = 12 * extraPerChunkLovelace = 39_360_000 lovelace
+    --
+    -- This reproduces the issue with its documented expected value
+    -- and is the SC-001 regression check. It is hosted in the
+    -- red-tests bucket (consistent with T002+T003+T004) so the
+    -- default review gate stays green and the failure is an
+    -- explicit, executable proof of the bug. Today's wizard
+    -- produces the over-stated leftover; after T006 lands the
+    -- four-site fix the assertion flips green without changing
+    -- the test code.
+    describe "SC-001 / issue #68 reproduction" $ do
+        let issueAmount
+                , issueChunkSize
+                , issueTreasury
+                , expectedLeftover
+                    :: Integer
+            issueAmount = 444_444_444_444
+            issueChunkSize = 37_037_037_037
+            issueTreasury = 1_450_000_000_000
+            expectedLeftover = 1_005_516_195_556
+
+            stubResolver :: ResolverEnv IO
+            stubResolver =
+                ResolverEnv
+                    { reEnvQueryWalletUtxos = \_ ->
+                        pure
+                            [
+                                ( "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0"
+                                , 100_000_000_000
+                                , False
+                                )
+                            ]
+                    , reEnvQueryTreasuryUtxos = \_ ->
+                        pure
+                            [
+                                ( "64f27254f3c0311fb2e672cdb87de200089a596aa90dc09f8be4248540267cf0#0"
+                                , issueTreasury
+                                , False
+                                )
+                            ]
+                    , reEnvCurrentTip = pure 186342942
+                    }
+
+        let runIssuePipeline :: IO SwapIntent
+            runIssuePipeline = do
+                let ri =
+                        ResolverInput
+                            { riNetwork = "mainnet"
+                            , riWalletAddrBech32 =
+                                "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+                            , riScope = CoreDevelopment
+                            , riAmountLovelace = issueAmount
+                            , riRegistry = weRegistry env
+                            }
+                resolved <- resolveWizardEnv stubResolver ri
+                env' <- case resolved of
+                    Left e ->
+                        error
+                            ( "resolveWizardEnv: "
+                                <> show e
+                            )
+                    Right ok -> pure ok
+                let envOver =
+                        env'
+                            { weNetwork = "mainnet"
+                            , weWalletSelection =
+                                (weWalletSelection env')
+                                    { wsAddress =
+                                        wsAddress
+                                            ( weWalletSelection
+                                                env
+                                            )
+                                    }
+                            }
+                    q =
+                        answers
+                            { wqAmountLovelace = issueAmount
+                            , wqChunkSizeLovelace =
+                                issueChunkSize
+                            }
+                intent <- case wizardToTreasuryIntent envOver q of
+                    Left e ->
+                        error
+                            ( "wizardToTreasuryIntent: "
+                                <> show e
+                            )
+                    Right ok -> pure ok
+                case translateIntent SSwap intent of
+                    Left e ->
+                        error
+                            ( "translateIntent: " <> e
+                            )
+                    Right (_, ok) -> pure ok
+
+        it "splits into the documented N = 12 chunks" $ do
+            si <- runIssuePipeline
+            length (siSwapOrders si) `shouldBe` 12
+
+        it
+            "redeemer amount = chunk_total + 12 * extraPerChunkLovelace (FR-001)"
+            $ do
+                si <- runIssuePipeline
+                let chunkTotal =
+                        sum
+                            ( map
+                                (unCoin . soLovelace)
+                                (siSwapOrders si)
+                            )
+                    extra =
+                        unCoin (siSwapOrderExtraLovelace si)
+                unCoin (siRedeemerAmountLovelace si)
+                    `shouldBe` chunkTotal + 12 * extra
+
+        it
+            "treasury leftover matches spec.md US1 #1: 1,005,516.195556 ADA (FR-002 / SC-001)"
+            $ do
+                si <- runIssuePipeline
+                unCoin (siTreasuryLeftoverLovelace si)
+                    `shouldBe` expectedLeftover
+
+        it
+            "treasury covers chunks + N * extra + leftover (FR-003 / SC-001 wallet-net-spend = fee)"
+            $ do
+                -- The swap tx body produces N swap-order outputs of
+                -- value (chunk + extra) each, plus a leftover output.
+                -- For value-balance with wallet_net_spend = tx_fee,
+                -- the treasury input total must cover exactly:
+                --
+                --   sum(chunks) + N * extra + leftover
+                --
+                -- Today's leftover is computed as
+                -- @treasury_input - chunk_total@ (no overhead
+                -- subtracted), so the equation evaluates to
+                -- @treasury_input + N * extra@ — overshooting the
+                -- actual treasury by @N * extra@. The wallet has to
+                -- make up the gap, exactly the FR-003 violation
+                -- this issue documents. After T006 lands, leftover
+                -- becomes
+                -- @treasury_input - chunk_total - N * extra@ and
+                -- the equation matches @treasury_input@ exactly.
+                si <- runIssuePipeline
+                let chunkTotal =
+                        sum
+                            ( map
+                                (unCoin . soLovelace)
+                                (siSwapOrders si)
+                            )
+                    extra =
+                        unCoin (siSwapOrderExtraLovelace si)
+                    n =
+                        toInteger
+                            (length (siSwapOrders si))
+                chunkTotal
+                    + n * extra
+                    + unCoin (siTreasuryLeftoverLovelace si)
+                    `shouldBe` issueTreasury

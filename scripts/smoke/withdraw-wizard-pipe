@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Offline-safe withdraw wizard pipe smoke.
+#
+# The live withdraw-wizard CLI needs a cardano-node socket to query rewards, so
+# CI protects the same operator contract through deterministic fixtures:
+#
+#   1. the positive-rewards resolver stub emits the synthetic intent fixture;
+#   2. the fixture validates against the published TreasuryIntent JSON Schema;
+#   3. tx-build consumes that fixture and reproduces the frozen withdraw CBOR.
+
+fixture="test/fixtures/withdraw/synthetic/intent.json"
+
+if [[ ! -s "$fixture" ]]; then
+  printf 'withdraw-wizard-pipe: missing fixture: %s\n' "$fixture" >&2
+  exit 1
+fi
+
+if grep -F 'withdraw-wizard:' "$fixture" >/dev/null; then
+  printf 'withdraw-wizard-pipe: fixture contains log text: %s\n' "$fixture" >&2
+  exit 1
+fi
+
+cabal test unit-tests -O0 \
+  --test-show-details=direct \
+  --test-option=--match \
+  --test-option="resolves reward account and amount from registry/provider state"
+
+cabal test unit-tests -O0 \
+  --test-show-details=direct \
+  --test-option=--match \
+  --test-option="validates the tx-build withdraw fixture intent"
+
+cabal test golden-tests -O0 \
+  --test-show-details=direct \
+  --test-option=--match \
+  --test-option="withdraw golden"
+
+printf 'withdraw-wizard-pipe: OK (resolver fixture, schema fixture, withdraw golden)\n'

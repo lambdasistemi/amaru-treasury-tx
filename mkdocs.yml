@@ -65,6 +65,7 @@ nav:
   - Trust model: trust-model.md
   - Swap recipe: swap.md
   - ADA disburse: disburse.md
+  - Withdraw: withdraw.md
   - ChainContext: chain-context.md
   - Freeze workflow: freeze-workflow.md
   - Parity report: parity.md

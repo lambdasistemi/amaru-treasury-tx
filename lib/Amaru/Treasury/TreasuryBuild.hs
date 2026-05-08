@@ -31,10 +31,8 @@ The final tx is re-evaluated against the script
 evaluator so callers get a per-redeemer outcome
 ('tbrScriptResults') alongside the CBOR.
 
-In this phase-4 cut the swap and disburse branches are
-wired. Withdraw and reorganize land with
-[#45](https://github.com/lambdasistemi/amaru-treasury-tx/issues/45)
-and
+In this phase-4 cut the swap, disburse, and withdraw
+branches are wired. Reorganize lands with
 [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46).
 -}
 module Amaru.Treasury.TreasuryBuild
@@ -47,6 +45,7 @@ module Amaru.Treasury.TreasuryBuild
     , runFromIntent
     , runDisburse
     , runSwap
+    , runWithdraw
     ) where
 
 import Control.Exception (throwIO)
@@ -113,6 +112,10 @@ import Amaru.Treasury.Tx.Swap
     ( SwapIntent (..)
     , swapProgram
     )
+import Amaru.Treasury.Tx.Withdraw
+    ( WithdrawIntent (..)
+    , withdrawProgram
+    )
 
 -- | Per-script result from 'evaluateTx'.
 data ScriptResult = ScriptResult
@@ -174,8 +177,11 @@ runBuild ctx shared sa translated = case sa of
             (tsRationale shared)
             (tsWalletAddr shared)
     SWithdraw ->
-        throwIO . userError $
-            "runBuild: 'withdraw' not yet shipped (#45)"
+        runWithdraw
+            ctx
+            translated
+            (tsRationale shared)
+            (tsWalletAddr shared)
     SReorganize ->
         throwIO . userError $
             "runBuild: 'reorganize' not yet shipped (#46)"
@@ -194,6 +200,118 @@ runFromIntent ctx (SomeTreasuryIntent sa intent) = do
                 "runFromIntent: translate: " <> e
         Right (shared, translated) ->
             runBuild ctx shared sa translated
+
+-- ----------------------------------------------------
+-- Withdraw runner
+-- ----------------------------------------------------
+
+{- | Build a withdraw transaction end-to-end against a
+'ChainContext'. The dispatcher is wired in T037; the full
+build pipeline lands in T038.
+-}
+runWithdraw
+    :: ChainContext
+    -> WithdrawIntent
+    -> Metadatum
+    -- ^ CIP-1694 rationale tree (see 'Amaru.Treasury.AuxData')
+    -> Addr
+    -- ^ change address — also receives @collateral_return@
+    --     by default (see module header)
+    -> IO TreasuryBuildResult
+runWithdraw ctx intent rationale walletAddr = do
+    let walletInput = wiWalletUtxo intent
+        refInputs =
+            [ wiTreasuryDeployedAt intent
+            , wiRegistryDeployedAt intent
+            ]
+        utxoMap = ccUtxos ctx
+        required = walletInput : refInputs
+        missing =
+            [ i
+            | i <- required
+            , not (Map.member i utxoMap)
+            ]
+    unless (null missing) $
+        throwIO . userError $
+            "runWithdraw: missing UTxOs in context: "
+                <> show missing
+    let inputUtxos =
+            [(walletInput, utxoMap Map.! walletInput)]
+        refUtxos =
+            [ (i, utxoMap Map.! i)
+            | i <- refInputs
+            ]
+        pp = ccPParams ctx
+        -- withdrawProgram emits the treasury rewards output first;
+        -- the balancer appends wallet change after it.
+        changeOutputIndex = 1
+    let evaluator tx = do
+            m <- ccEvaluateTx ctx tx
+            pure (fmap (either (Left . show) Right) m)
+        program = do
+            withdrawProgram intent
+            setMetadata label1694 rationale
+        noCtxIO :: InterpretIO q
+        noCtxIO =
+            InterpretIO $
+                const
+                    (error "runWithdraw: unexpected ctx")
+    result <-
+        build
+            pp
+            noCtxIO
+            evaluator
+            inputUtxos
+            refUtxos
+            walletAddr
+            program
+    case result of
+        Left e ->
+            throwIO . userError $
+                "runWithdraw: build failed: "
+                    <> show (e :: BuildError ())
+        Right tx0 -> do
+            tx <-
+                case alignCardanoCliBuildFee
+                    pp
+                    refUtxos
+                    changeOutputIndex
+                    tx0 of
+                    Left e ->
+                        throwIO . userError $
+                            "runWithdraw: fee alignment failed: "
+                                <> e
+                    Right ok -> pure ok
+            let body = tx ^. bodyTxL
+                feeLov = body ^. feeTxBodyL
+                totalColl = case body
+                    ^. totalCollateralTxBodyL of
+                    SJust c -> c
+                    SNothing -> Coin 0
+            scriptMap <- ccEvaluateTx ctx tx
+            let scriptResults =
+                    [ ScriptResult
+                        purpose
+                        ( either
+                            (Left . show)
+                            Right
+                            outcome
+                        )
+                    | (purpose, outcome) <-
+                        Map.toAscList scriptMap
+                    ]
+                cbor =
+                    serialize
+                        (eraProtVerLow @ConwayEra)
+                        (tx :: ConwayTx)
+            pure
+                TreasuryBuildResult
+                    { tbrCborBytes = cbor
+                    , tbrFeeLovelace = feeLov
+                    , tbrTotalCollateralLovelace =
+                        totalColl
+                    , tbrScriptResults = scriptResults
+                    }
 
 -- ----------------------------------------------------
 -- Disburse runner

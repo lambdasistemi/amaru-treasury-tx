@@ -171,6 +171,10 @@ jobs:
           printf '%s\n' "$help_text"
           grep -F -- '--extra-signer,--signer SCOPE|HEX' \
             <<<"$help_text" >/dev/null
+          withdraw_help="$("$tmpdir/bin/amaru-treasury-tx" withdraw-wizard --help)"
+          printf '%s\n' "$withdraw_help"
+          grep -F -- '--wallet-addr BECH32' <<<"$withdraw_help" >/dev/null
+          grep -F -- '--validity-hours HOURS' <<<"$withdraw_help" >/dev/null
 
       - name: Test generated formula through local tap
         if: ${{ github.event_name == 'pull_request' }}
@@ -211,6 +215,7 @@ jobs:
           brew install "$formula_ref"
           brew test "$formula_ref"
           amaru-treasury-tx --help
+          amaru-treasury-tx withdraw-wizard --help
           test -x "$(command -v swap-probe)"
           capture-swap-context --help
           otool -L "$(which amaru-treasury-tx)"
@@ -286,6 +291,7 @@ jobs:
           brew install lambdasistemi/tap/amaru-treasury-tx
           brew test lambdasistemi/tap/amaru-treasury-tx
           amaru-treasury-tx --help
+          amaru-treasury-tx withdraw-wizard --help
           test -x "$(command -v swap-probe)"
           capture-swap-context --help
           which amaru-treasury-tx
@@ -378,6 +384,7 @@ jobs:
           brew install lambdasistemi/tap/amaru-treasury-tx-dev
           brew test lambdasistemi/tap/amaru-treasury-tx-dev
           amaru-treasury-tx --help
+          amaru-treasury-tx withdraw-wizard --help
           test -x "$(command -v swap-probe)"
           capture-swap-context --help
           otool -L "$(which amaru-treasury-tx)"

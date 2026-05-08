@@ -62,7 +62,7 @@ intentJsonSchema =
                 , "rationale" .= rationaleSchema
                 , "swap" .= swapSchema
                 , "disburse" .= disburseSchema
-                , "withdraw" .= emptyPayloadSchema
+                , "withdraw" .= withdrawSchema
                 , "reorganize" .= emptyPayloadSchema
                 , "txIn" .= txInSchema
                 , "bech32Address" .= bech32AddressSchema
@@ -237,6 +237,16 @@ disburseSchema =
         , ("beneficiaryAddress", ref "bech32Address")
         , ("usdmPolicy", ref "hex28")
         , ("usdmToken", ref "assetNameHex")
+        ]
+
+withdrawSchema :: Value
+withdrawSchema =
+    objectSchema
+        [ "treasuryRewardAccount"
+        , "rewardsLovelace"
+        ]
+        [ ("treasuryRewardAccount", ref "hex28")
+        , ("rewardsLovelace", positiveIntegerSchema)
         ]
 
 emptyPayloadSchema :: Value

@@ -33,6 +33,23 @@ The ADA disburse fixture follows the same shape under
 `test/fixtures/disburse/ada/`, with `body.cbor` as the expected
 hex file.
 
+The withdraw fixture lives under
+`test/fixtures/withdraw/synthetic/`:
+
+```
+test/fixtures/withdraw/synthetic/
+├── intent.json       # schema-valid unified withdraw intent
+├── pparams.json      # Conway pparams snapshot
+├── utxos.json        # wallet + reference UTxOs named by the intent
+├── exunits.json      # rewarding-purpose ExUnits for offline evaluation
+├── provenance.md
+└── expected.cbor     # synthetic unsigned body hex
+```
+
+This fixture is synthetic until
+[`issue #17`](https://github.com/lambdasistemi/amaru-treasury-tx/issues/17)
+captures a live reward-bearing preprod oracle.
+
 ## Refreshing the fixture
 
 When a new on-chain reference is captured:
@@ -69,12 +86,47 @@ snapshot that matches the oracle capture. The offline golden then
 loads the fixture via `frozenContext` and rebuilds the body
 deterministically.
 
+## Refreshing the synthetic withdraw fixture
+
+The withdraw fixture is not captured from the live `withdraw.sh`
+oracle yet. It is refreshed from the checked-in synthetic intent and
+frozen `ChainContext`:
+
+```bash
+# 1. Edit the fixture inputs deliberately.
+$EDITOR test/fixtures/withdraw/synthetic/intent.json
+$EDITOR test/fixtures/withdraw/synthetic/utxos.json
+$EDITOR test/fixtures/withdraw/synthetic/pparams.json
+$EDITOR test/fixtures/withdraw/synthetic/exunits.json
+
+# 2. Regenerate the expected body from those checked-in facts.
+UPDATE_GOLDENS=1 nix develop --quiet -c just golden withdraw
+
+# 3. Re-run without UPDATE_GOLDENS to prove the checked-in oracle is stable.
+nix develop --quiet -c just golden withdraw
+
+# 4. Re-run the schema check because intent.json is a public contract input.
+nix develop --quiet -c just unit IntentJSONSchema
+```
+
+Only commit the regenerated `expected.cbor` with the exact fixture facts
+that produced it. Update `provenance.md` whenever the synthetic reward
+amount, reward account, validity slot, or fixture source changes.
+
+When issue #17 supplies a live preprod oracle, replace this section's
+synthetic update flow with the same capture-and-compare discipline used
+for swap: capture live UTxOs/ExUnits/body, compare against the
+bash/cardano-cli oracle, then commit the frozen context and body hex.
+
 ## What the offline golden proves
 
 - The Haskell builders + `runFromIntent` are deterministic given a
   fixed `ChainContext`.
 - Byte-level parity against the bash/cardano-cli reference is not a
-  network artefact: it is reproduced on network-less CI.
+  network artefact for swap and ADA disburse: it is reproduced on
+  network-less CI.
+- The withdraw builder still consumes the schema-valid synthetic
+  intent and frozen context to produce the committed unsigned body.
 - Future code changes that drift the bytes are caught by the diff
   against `expected.cbor` / `body.cbor`.
 

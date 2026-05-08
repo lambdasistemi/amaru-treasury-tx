@@ -114,7 +114,24 @@ let
         fi
       done
 
-      for pair in "swap-wizard:$wizard_elapsed" "tx-build:$build_elapsed"; do
+      withdraw_start=$(date +%s)
+      withdraw_help="$(amaru-treasury-tx withdraw-wizard --help)"
+      withdraw_elapsed=$(( $(date +%s) - withdraw_start ))
+
+      for needle in \
+        '--wallet-addr BECH32' \
+        '--metadata PATH' \
+        '--scope NAME' \
+        '--validity-hours HOURS' \
+        'Produce a withdraw intent.json'
+      do
+        if ! grep -F -- "$needle" >/dev/null <<<"$withdraw_help"; then
+          printf 'smoke: missing withdraw-wizard flag: %s\n' "$needle" >&2
+          exit 1
+        fi
+      done
+
+      for pair in "swap-wizard:$wizard_elapsed" "withdraw-wizard:$withdraw_elapsed" "tx-build:$build_elapsed"; do
         name="''${pair%%:*}"
         secs="''${pair#*:}"
         if [[ "$secs" -gt 10 ]]; then
@@ -128,8 +145,8 @@ let
       unit-tests --match "IntentJSON"
       golden-tests --match "swap golden"
 
-      printf 'smoke: OK (wizard --help %ss, tx-build --help %ss)\n' \
-        "$wizard_elapsed" "$build_elapsed"
+      printf 'smoke: OK (swap-wizard --help %ss, withdraw-wizard --help %ss, tx-build --help %ss)\n' \
+        "$wizard_elapsed" "$withdraw_elapsed" "$build_elapsed"
     '';
   };
 in

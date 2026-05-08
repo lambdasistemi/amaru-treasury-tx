@@ -25,7 +25,9 @@ import Data.Word (Word64)
 import Test.Hspec
     ( Spec
     , describe
+    , expectationFailure
     , it
+    , shouldBe
     , shouldSatisfy
     )
 import Test.QuickCheck
@@ -40,8 +42,13 @@ import Test.QuickCheck
     , (===)
     )
 
+import Cardano.Ledger.Address (AccountAddress (..))
+import Cardano.Ledger.BaseTypes (Network (..))
+import Cardano.Ledger.Coin (Coin (..))
+
 import Amaru.Treasury.IntentJSON
-    ( DisburseInputs (..)
+    ( Action (..)
+    , DisburseInputs (..)
     , Payload
     , RationaleJSON (..)
     , ReorganizeInputs (..)
@@ -54,7 +61,9 @@ import Amaru.Treasury.IntentJSON
     , WithdrawInputs (..)
     , decodeTreasuryIntent
     , encodeSomeTreasuryIntent
+    , translateIntent
     )
+import Amaru.Treasury.Tx.Withdraw (WithdrawIntent (..))
 
 -- ----------------------------------------------------
 -- Specs
@@ -88,6 +97,64 @@ spec = describe "Amaru.Treasury.IntentJSON" $ do
             decodeTreasuryIntent rawSwapMissingNetwork
                 `shouldSatisfy` errorContains
                     "key \"network\" not found"
+
+    describe "withdraw contract" $ do
+        it "decodes a non-empty withdraw payload" $
+            decodeTreasuryIntent
+                ( encodeSomeTreasuryIntent
+                    ( SomeTreasuryIntent
+                        SWithdraw
+                        withdrawIntentMainnet
+                    )
+                )
+                `shouldBe` Right
+                    ( SomeTreasuryIntent
+                        SWithdraw
+                        withdrawIntentMainnet
+                    )
+
+        it "translates mainnet reward accounts as Mainnet" $ do
+            (_, wi) <-
+                expectRight $
+                    translateIntent
+                        SWithdraw
+                        withdrawIntentMainnet
+            rewardAccountNetwork
+                (wiTreasuryRewardAccount wi)
+                `shouldBe` Mainnet
+            wiRewardsAmount wi `shouldBe` Coin 12_500_000_000
+
+        it "translates preprod reward accounts as Testnet" $ do
+            (_, wi) <-
+                expectRight $
+                    translateIntent
+                        SWithdraw
+                        (withdrawIntent "preprod")
+            rewardAccountNetwork
+                (wiTreasuryRewardAccount wi)
+                `shouldBe` Testnet
+
+        it "rejects non-positive withdraw rewards" $
+            expectLeftContaining
+                "rewardsLovelace must be positive"
+                ( translateIntent
+                    SWithdraw
+                    ( withdrawIntentMainnet
+                        { tiPayload =
+                            WithdrawInputs
+                                rewardAccountHex
+                                0
+                        }
+                    )
+                )
+
+        it "rejects unknown withdraw reward-account networks" $
+            expectLeftContaining
+                "unknown network for reward account"
+                ( translateIntent
+                    SWithdraw
+                    (withdrawIntent "devnet")
+                )
 
 -- ----------------------------------------------------
 -- Round-trip property
@@ -237,6 +304,12 @@ genDisburseInputs =
         <*> genHexN 28
         <*> genHexN 4
 
+genWithdrawInputs :: Gen WithdrawInputs
+genWithdrawInputs =
+    WithdrawInputs
+        <$> genHexN 28
+        <*> chooseInteger (1, 10_000_000_000)
+
 genIntent
     :: SAction a -> Gen (Payload a) -> Gen SomeTreasuryIntent
 genIntent sa genPayload = do
@@ -267,7 +340,7 @@ genDisburseIntent :: Gen SomeTreasuryIntent
 genDisburseIntent = genIntent SDisburse genDisburseInputs
 
 genWithdrawIntent :: Gen SomeTreasuryIntent
-genWithdrawIntent = genIntent SWithdraw (pure WithdrawInputs)
+genWithdrawIntent = genIntent SWithdraw genWithdrawInputs
 
 genReorganizeIntent :: Gen SomeTreasuryIntent
 genReorganizeIntent =
@@ -375,6 +448,75 @@ rawSwapMissingNetwork =
         <> ",\"swap\":"
         <> rawSwapBlock
         <> "}"
+
+withdrawIntentMainnet :: TreasuryIntent 'Withdraw
+withdrawIntentMainnet = withdrawIntent "mainnet"
+
+withdrawIntent :: Text -> TreasuryIntent 'Withdraw
+withdrawIntent network =
+    TreasuryIntent
+        SWithdraw
+        1
+        network
+        ( WalletJSON
+            "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0"
+            "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+        )
+        ( ScopeJSON
+            { sjId = "network_compliance"
+            , sjTreasuryAddress =
+                "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk"
+            , sjTreasuryUtxos = []
+            , sjTreasuryLeftoverLovelace = 0
+            , sjTreasuryLeftoverUsdm = 0
+            , sjTreasuryLeftoverOtherAssets = Map.empty
+            , sjTreasuryScriptHash =
+                "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d"
+            , sjPermissionsRewardAccount =
+                "a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094"
+            , sjScopesDeployedAt =
+                "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0"
+            , sjPermissionsDeployedAt =
+                "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2"
+            , sjTreasuryDeployedAt =
+                "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0"
+            , sjRegistryDeployedAt =
+                "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2"
+            , sjRegistryPolicyId =
+                "38c627d45835744a2d6c727124f2b5852e5564aeab3f608e0e84ea6d"
+            }
+        )
+        []
+        186_796_799
+        ( RationaleJSON
+            "withdraw"
+            "Withdraw treasury rewards"
+            "Pull accrued rewards"
+            "Treasury accounting"
+            "Network Compliance treasury"
+        )
+        (WithdrawInputs rewardAccountHex 12_500_000_000)
+
+rewardAccountHex :: Text
+rewardAccountHex =
+    "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d"
+
+rewardAccountNetwork :: AccountAddress -> Network
+rewardAccountNetwork (AccountAddress network _) = network
+
+expectRight :: (Show e) => Either e a -> IO a
+expectRight =
+    either
+        ( errorWithoutStackTrace
+            . ("unexpected Left: " <>)
+            . show
+        )
+        pure
+
+expectLeftContaining :: String -> Either String a -> IO ()
+expectLeftContaining needle = \case
+    Left e -> e `shouldSatisfy` isInfixOf needle
+    Right _ -> expectationFailure "expected Left, got Right"
 
 {- | True when the 'Either' is 'Left' carrying a string
 containing the given infix.

@@ -11,6 +11,7 @@ module Amaru.Treasury.IntentJSON.Common
     ( parseAddr
     , parseTxIn
     , parseRewardAccount
+    , parseRewardAccountForNetwork
     , parseGuardKeyHash
     , decodeHexBytes
     , decodeHexBytesAny
@@ -88,17 +89,40 @@ accepted at the JSON layer; the user supplies one hash,
 not a full address.)
 -}
 parseRewardAccount :: Text -> Either String AccountAddress
-parseRewardAccount t = do
+parseRewardAccount =
+    parseRewardAccountForNetwork "mainnet"
+
+{- | Parse a reward-account credential as a 28-byte hex
+stake-script hash on the ledger network named by the
+unified intent. @preprod@ and @preview@ both map to the
+ledger's 'Testnet' constructor.
+-}
+parseRewardAccountForNetwork
+    :: Text -> Text -> Either String AccountAddress
+parseRewardAccountForNetwork networkText t = do
+    network <- parseNetwork networkText
     bs <- decodeHexBytes 28 t
     Right
         ( AccountAddress
-            Mainnet
+            network
             ( AccountId
                 ( ScriptHashObj
                     (ScriptHash (mkHash28 bs))
                 )
             )
         )
+
+parseNetwork :: Text -> Either String Network
+parseNetwork t =
+    case T.toLower t of
+        "mainnet" -> Right Mainnet
+        "preprod" -> Right Testnet
+        "preview" -> Right Testnet
+        other ->
+            Left
+                ( "unknown network for reward account: "
+                    <> T.unpack other
+                )
 
 {- | Parse a 28-byte hex into a 'KeyHash' under the
 'Guard' role used for required signers.

@@ -33,6 +33,8 @@ extra-source-files:
   test/fixtures/swap/**/*.json
   test/fixtures/swap/**/*.md
   test/fixtures/swap-wizard/**/*.json
+  test/fixtures/withdraw/**/*.cbor
+  test/fixtures/withdraw/**/*.json
 
 flag werror
   description: Enable -Werror
@@ -101,6 +103,8 @@ library
     Amaru.Treasury.Tx.SwapWizard
     Amaru.Treasury.Tx.SwapWizard.Trace
     Amaru.Treasury.Tx.Withdraw
+    Amaru.Treasury.Tx.WithdrawWizard
+    Amaru.Treasury.Tx.WithdrawWizard.Trace
     Amaru.Treasury.UtxoSelect
     Amaru.Treasury.Validity
     Amaru.Treasury.Wizard.Common
@@ -109,7 +113,7 @@ library
     , aeson
     , aeson-pretty
     , async
-    , base                       <5
+    , base                         <5
     , base16-bytestring
     , bech32
     , bytestring
@@ -130,6 +134,7 @@ library
     , filepath
     , microlens
     , ouroboros-consensus
+    , ouroboros-consensus:cardano
     , ouroboros-network:api
     , plutus-core
     , plutus-ledger-api
@@ -239,6 +244,7 @@ test-suite unit-tests
     Amaru.Treasury.Tx.SwapSpec
     Amaru.Treasury.Tx.SwapWizardSpec
     Amaru.Treasury.Tx.WithdrawSpec
+    Amaru.Treasury.Tx.WithdrawWizardSpec
     Amaru.Treasury.UtxoSelectSpec
     PlaceholderSpec
 
@@ -284,6 +290,7 @@ test-suite golden-tests
     RegistryWalkGoldenSpec
     SwapGoldenSpec
     UsdmDisburseGoldenSpec
+    WithdrawGoldenSpec
 
   build-depends:
     , aeson

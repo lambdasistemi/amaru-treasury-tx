@@ -214,7 +214,11 @@
               capture-swap-context
               ;
           } // darwinReleasePackages // linuxReleasePackages;
-          inherit checks;
+          # Drop the internal `scripts` attr (raw text bodies
+          # shared with apps.nix) before exposing checks to the
+          # flake — `nix flake check` would otherwise try to
+          # build it as a derivation.
+          checks = builtins.removeAttrs checks [ "apps" ];
           apps = checkApps // {
             default = {
               type = "app";

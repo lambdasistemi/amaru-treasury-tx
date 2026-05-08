@@ -51,6 +51,7 @@ module Amaru.Treasury.Tx.SwapWizard
     , walletFeeSlackLovelace
     , addrNetwork
     , resolveWizardEnv
+    , renderWalletShortfall
 
       -- * Re-usable helpers
     , txInToText
@@ -1086,3 +1087,53 @@ data ResolverEnv m = ResolverEnv
     , reEnvCurrentTip :: m Word64
     -- ^ current chain tip in slots
     }
+
+{- | Single-line operator-facing rendering of a wallet
+shortfall. Shape:
+
+@
+wallet shortfall at \<addr\>: available=\<lovelace\>
+  required=\<lovelace\> (chunks=\<N\>, perChunk=\<lovelace\>,
+  slack=\<lovelace\>)
+@
+
+(without the line breaks). The breakdown trio
+@(chunks, perChunk, slack)@ reproduces the operands of
+@walletTarget@ so the operator can see why the resolver-derived
+target landed where it did. Exposed as a pure function so the test
+suite can pin the message shape without reaching into the CLI.
+-}
+renderWalletShortfall
+    :: ResolverInput
+    -- ^ resolver input under attempt
+    -> Integer
+    -- ^ available pure-ADA lovelace
+    -> Integer
+    -- ^ required (== walletTarget)
+    -> Text
+renderWalletShortfall ri available required =
+    let (full, rem') =
+            riAmountLovelace ri `divMod` riChunkSizeLovelace ri
+        chunks =
+            fromInteger full
+                + (if rem' > 0 then 1 else 0)
+                :: Int
+        perChunk =
+            either
+                (const 0)
+                ncExtraPerChunkLovelace
+                (networkConstants (riNetwork ri))
+        slack = walletFeeSlackLovelace
+    in  "wallet shortfall at "
+            <> riWalletAddrBech32 ri
+            <> ": available="
+            <> T.pack (show available)
+            <> " required="
+            <> T.pack (show required)
+            <> " (chunks="
+            <> T.pack (show chunks)
+            <> ", perChunk="
+            <> T.pack (show perChunk)
+            <> ", slack="
+            <> T.pack (show slack)
+            <> ")"

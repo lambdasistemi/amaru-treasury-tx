@@ -78,6 +78,7 @@ import Control.Monad (when)
 import Data.Aeson
     ( FromJSON (..)
     , withObject
+    , (.!=)
     , (.:)
     , (.:?)
     )
@@ -250,7 +251,12 @@ data TreasurySelection = TreasurySelection
 -- | The wallet UTxO used as fuel + collateral.
 data WalletSelection = WalletSelection
     { wsTxIn :: !Text
+    -- ^ Head wallet UTxO that doubles as collateral.
     , wsAddress :: !Text
+    , wsExtraTxIns :: ![Text]
+    -- ^ Additional pure-ADA wallet UTxOs aggregated as
+    -- fuel alongside @wsTxIn@. Empty when the head UTxO
+    -- already covers the wallet target.
     }
     deriving (Eq, Show)
 
@@ -374,6 +380,7 @@ instance FromJSON WalletSelection where
         WalletSelection
             <$> o .: "txIn"
             <*> o .: "address"
+            <*> o .:? "extraTxIns" .!= []
 
 instance FromJSON WizardEnv where
     parseJSON = withObject "WizardEnv" $ \o ->
@@ -969,6 +976,8 @@ resolveWizardEnv ResolverEnv{..} ri =
                                                                 , wsAddress =
                                                                     riWalletAddrBech32
                                                                         ri
+                                                                , wsExtraTxIns =
+                                                                    []
                                                                 }
                                                         }
                                             pure (Right env)

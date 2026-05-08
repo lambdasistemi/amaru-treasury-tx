@@ -89,17 +89,52 @@ FAIL before the implementation that satisfies them, per Constitution V
       construction time with a clear shortfall error message. Test
       MUST fail against current `main` (today the shortcoming would
       manifest at submit time, not build time).
-- [ ] T005 [US1] Add / update an ADA-swap golden under
-      `test/golden/SwapGoldenSpec.hs` keyed off the issue's captured
-      example (`30af3b92…`, `--usdm 100000 --split 12`, mainnet,
-      1,450,000 ADA treasury UTxO + 100 ADA wallet UTxO) so the
-      resulting CBOR / decoded view shows: operator wallet net spend
-      on success ≈ tx fee only; treasury leftover smaller by
-      `12 × extraPerChunkLovelace`; redeemer `amount` equals
-      `chunk_total + 12 × extraPerChunkLovelace` (SC-001, SC-002,
-      acceptance scenario US1#1). Golden MUST fail against current
-      `main`; the post-fix expected fixture is committed alongside
-      the implementation in T006.
+- [ ] T005 [US1] Pin the issue's captured example
+      (`--usdm 100000 --split 12`, mainnet,
+      1,450,000 ADA treasury UTxO, 100 ADA wallet UTxO) in
+      `test/red/Amaru/Treasury/Tx/SwapWizardRedSpec.hs` (the
+      `red-tests` bucket established in T002, so the failing
+      assertions are executable today and the default review
+      gate stays green). The cases run the full
+      `resolveWizardEnv → wizardToTreasuryIntent → translateIntent SSwap`
+      pipeline and assert the SC-001 / SC-002 surface on the
+      resulting typed `SwapIntent`:
+
+      1. `length (siSwapOrders si) == 12` — N matches the spec
+         scenario.
+      2. `siRedeemerAmountLovelace == chunk_total + 12 * extraPerChunkLovelace`
+         (FR-001) — derived from `siSwapOrderExtraLovelace`,
+         no test-local literal overhead.
+      3. `siTreasuryLeftoverLovelace == 1_005_516_195_556`
+         lovelace (the spec's `1,005,555.555556 − 12 × 3.28 =
+         1,005,516.195556 ADA`, FR-002 / SC-001).
+      4. `chunk_total + N * siSwapOrderExtraLovelace +
+         siTreasuryLeftoverLovelace == treasury_input` — the
+         algebraic restatement of FR-003 / SC-001 that catches
+         the bug. The simpler `siRedeemerAmountLovelace +
+         siTreasuryLeftoverLovelace == treasury_input`
+         formulation is *not* a red proof: it already holds
+         today because the buggy redeemer is too small by
+         `N * extra` and the buggy leftover is too big by
+         `N * extra`, so they cancel. The on-chain value
+         flow each swap-order output actually carries is
+         `chunk + extra`, so the treasury must cover
+         `chunk_total + N * extra + leftover` for the
+         operator wallet's net spend to be the tx fee only.
+
+      A CBOR-level snapshot of the resulting tx body is left
+      to T006 (where the implementation produces the byte
+      output that any byte-identity golden would have to
+      compare against; checking in a hand-crafted
+      `expected.cbor` ahead of T006 would either be
+      pendingWith — the shape rejected for T002 — or a
+      duplicate of T006's snapshot).
+
+      The three amount assertions (2, 3, 4) MUST fail against
+      current `main`; the chunk-count assertion (1) anchors
+      the scenario and passes today (the wizard already
+      produces 12 chunks for the issue inputs — only the
+      amounts are wrong).
 
 ### Implementation
 

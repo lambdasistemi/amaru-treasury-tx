@@ -18,12 +18,14 @@ import Data.Aeson
     , Value (..)
     , eitherDecode
     , eitherDecodeFileStrict
+    , toJSON
     )
 import Data.Aeson.Key (Key)
 import Data.Aeson.KeyMap qualified as KM
 import Data.JSON.JSONSchema (validateJSONSchema)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
+import Data.Text qualified as T
 import Test.Hspec
     ( Spec
     , describe
@@ -166,6 +168,28 @@ spec = describe "Amaru.Treasury.IntentJSON.Schema" $ do
         validateJSONSchema intentJsonSchema mismatched
             `shouldBe` False
 
+    it "accepts wallet.extraTxIns as a non-empty txIn array" $ do
+        swapIntent <- decodeFile "test/fixtures/swap/intent.json"
+        let extras =
+                toJSON
+                    [ T.pack
+                        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef#1"
+                    ]
+            withExtras =
+                setWalletField "extraTxIns" extras swapIntent
+        validateJSONSchema intentJsonSchema withExtras
+            `shouldBe` True
+
+    it "rejects wallet.extraTxIns when the type is wrong" $ do
+        swapIntent <- decodeFile "test/fixtures/swap/intent.json"
+        let withScalar =
+                setWalletField
+                    "extraTxIns"
+                    (Number 3)
+                    swapIntent
+        validateJSONSchema intentJsonSchema withScalar
+            `shouldBe` False
+
 decodeFile :: (FromJSON a) => FilePath -> IO a
 decodeFile path = do
     r <- eitherDecodeFileStrict path
@@ -198,6 +222,23 @@ replaceActionBlockWithAction action oldBlock newBlock payload = \case
             KM.insert "action" (String action) $
                 KM.insert newBlock payload $
                     KM.delete oldBlock o
+    other -> other
+
+{- | Replace (or insert) a single field on the @wallet@
+sub-object of an intent JSON. Used to synthesise schema
+fixtures with custom 'extraTxIns' shapes.
+-}
+setWalletField :: Key -> Value -> Value -> Value
+setWalletField field value = \case
+    Object o ->
+        case KM.lookup "wallet" o of
+            Just (Object w) ->
+                Object $
+                    KM.insert
+                        "wallet"
+                        (Object (KM.insert field value w))
+                        o
+            _ -> Object o
     other -> other
 
 disburseBlock :: Value

@@ -8,9 +8,9 @@ Loads the synthetic frozen withdraw fixture under
 @intent.json@, and builds a transaction via 'runFromIntent'
 against the resulting frozen 'ChainContext'.
 
-The checked-in @expected.cbor@ lands later in T040. Until then this
-spec still proves that the intent and frozen context decode, while the
-byte comparison remains pending.
+Set @UPDATE_GOLDENS=1@ to regenerate @expected.cbor@ from the checked-in
+fixture. Without that explicit update flag, missing or changed bytes are
+reported by the test.
 -}
 module WithdrawGoldenSpec (spec) where
 
@@ -19,6 +19,7 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
 import System.Directory (doesFileExist)
+import System.Environment (lookupEnv)
 import Test.Hspec
     ( Spec
     , describe
@@ -56,12 +57,16 @@ spec =
             let ctx = toFrozenContext fixture
                 expectedPath = fixtureDir <> "/expected.cbor"
             expectedExists <- doesFileExist expectedPath
-            unless expectedExists $
+            update <- lookupEnv "UPDATE_GOLDENS"
+            unless (expectedExists || update == Just "1") $
                 pendingWith
-                    "T040 records expected.cbor after the withdraw builder lands"
+                    "missing expected.cbor; run UPDATE_GOLDENS=1 just golden withdraw"
             tbr <- runFromIntent ctx some
             let actualHex =
                     B16.encode
                         (BSL.toStrict (tbrCborBytes tbr))
-            expected <- BS.readFile expectedPath
-            actualHex `shouldBe` expected
+            if update == Just "1"
+                then BS.writeFile expectedPath actualHex
+                else do
+                    expected <- BS.readFile expectedPath
+                    actualHex `shouldBe` expected

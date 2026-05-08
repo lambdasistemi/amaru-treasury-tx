@@ -141,7 +141,7 @@ before the implementation tasks they constrain.
 - [x] T039 [US3] Adjust `lib/Amaru/Treasury/Tx/Withdraw.hs` only if T036 proves the existing positive withdrawal amount diverges from the bash oracle.
 - [x] T040 [US3] Generate or update `test/fixtures/withdraw/synthetic/expected.cbor` through the explicit golden update flow.
 - [x] T041 [US3] Add fixture globs for `test/fixtures/withdraw/**/*.cbor` to `amaru-treasury-tx.cabal` once `expected.cbor` exists.
-- [ ] T042 [US3] Run `nix develop --quiet -c just golden withdraw` and confirm the synthetic golden passes.
+- [x] T042 [US3] Run `nix develop --quiet -c just golden withdraw` and confirm the synthetic golden passes.
 
 **Checkpoint**: Withdraw is no longer a `tx-build` stub and has offline body-CBOR evidence.
 

@@ -68,6 +68,15 @@ spec = describe "Amaru.Treasury.IntentJSON.Schema" $ do
         validateJSONSchema intentJsonSchema intent
             `shouldBe` True
 
+    it
+        "validates the legacy swap fixture intent (no extraTxIns)"
+        $ do
+            intent <-
+                decodeFile
+                    "test/fixtures/swap/legacy/intent.json"
+            validateJSONSchema intentJsonSchema intent
+                `shouldBe` True
+
     it "validates the swap-wizard golden intent" $ do
         intent <-
             decodeFile

@@ -4,6 +4,10 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+### Features
+
+* swap-wizard aggregates multiple wallet UTxOs as fuel; intent.json gains optional `wallet.extraTxIns` array ([#65](https://github.com/lambdasistemi/amaru-treasury-tx/issues/65))
+
 ## [0.2.1.1](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.1.0...v0.2.1.1) (2026-05-07)
 
 ### Bug Fixes

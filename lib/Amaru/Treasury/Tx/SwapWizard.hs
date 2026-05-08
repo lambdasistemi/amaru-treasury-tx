@@ -519,7 +519,7 @@ wizardToTreasuryIntent we q = do
                 TI.WalletJSON
                     { TI.wjTxIn = wsTxIn wal
                     , TI.wjAddress = wsAddress wal
-                    , TI.wjExtraTxIns = []
+                    , TI.wjExtraTxIns = wsExtraTxIns wal
                     }
             , TI.tiScope =
                 TI.ScopeJSON

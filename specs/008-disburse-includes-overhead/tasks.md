@@ -43,14 +43,22 @@ FAIL before the implementation that satisfies them, per Constitution V
 
 **Purpose**: clear FR-007 before touching code.
 
-- [ ] T001 [US1] Confirm the `Disburse { amount }` arm of
+- [x] T001 [US1] Confirm the `Disburse { amount }` arm of
       `TreasurySpendRedeemer` in
-      `treasury-contracts/lib/permissions.ak` does **not** constrain
-      `amount` magnitude beyond signer approval (i.e. raising `amount`
-      by `N × extraPerChunkLovelace` does not break the multisig
-      check). Record the finding inline in `spec.md` under
-      Assumptions; if the multisig DOES inspect magnitude, reopen the
-      spec and stop.
+      [`pragma-org/amaru-treasury` `validators/permissions.ak`](https://github.com/pragma-org/amaru-treasury/blob/main/validators/permissions.ak)
+      does **not** constrain `amount` magnitude beyond signer approval
+      (i.e. raising `amount` by `N × extraPerChunkLovelace` does not
+      break the multisig check). Record the finding inline in
+      `spec.md` under Assumptions; if the multisig DOES inspect
+      magnitude, reopen the spec and stop.
+      **Verified** at `pragma-org/amaru-treasury` sha
+      `15817e6bcd6da7121f93022508572784af94a270` (origin/main,
+      2026-05-08): the `Disburse { .. }` branch of the `withdraw`
+      validator (`validators/permissions.ak:59`) uses `{ .. }`
+      pattern — no field is extracted — and dispatches to
+      `approved_by_owner_and_someone_else`, a pure multisig check.
+      No `amount` comparison is performed in `permissions.ak`.
+      Finding recorded in `spec.md` Assumptions section.
 
 **Checkpoint**: FR-007 resolved; safe to proceed.
 

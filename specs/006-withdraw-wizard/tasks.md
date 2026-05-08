@@ -169,7 +169,7 @@ before the implementation tasks they constrain.
 
 - [x] T046 [P] [US5] Add `scripts/smoke/withdraw-wizard-pipe` using fixture/stub data or a deterministic fixture mode.
 - [x] T047 [US5] Wire the pipe smoke script into `just smoke`.
-- [ ] T048 [US5] Add `--help` surface checks for `withdraw-wizard` in the release smoke path.
+- [x] T048 [US5] Add `--help` surface checks for `withdraw-wizard` in the release smoke path.
 - [ ] T049 [US5] Run `nix develop --quiet -c just smoke` and confirm withdraw pipe/help smoke passes.
 
 **Checkpoint**: The operator pipe is protected by smoke tests.

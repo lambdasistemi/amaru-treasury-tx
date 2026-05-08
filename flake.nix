@@ -153,6 +153,7 @@
             system "#{bin}/amaru-treasury-tx", "--help"
             system "#{bin}/capture-swap-context", "--help"
             system "#{bin}/amaru-treasury-tx", "swap-wizard", "--help"
+            system "#{bin}/amaru-treasury-tx", "withdraw-wizard", "--help"
           '';
           mkAmaruDarwinHomebrewBundle = args:
             mkDarwinHomebrewBundle ({

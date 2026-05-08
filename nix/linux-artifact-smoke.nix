@@ -64,9 +64,40 @@ pkgs.writeShellApplication {
       bin="$1"
       test -x "$bin"
       "$bin" --help
-      help_text="$("$bin" swap-wizard --help)"
-      printf '%s\n' "$help_text"
-      grep -F -- '--extra-signer,--signer SCOPE|HEX' <<<"$help_text" >/dev/null
+
+      help_start=$(date +%s)
+      swap_help="$("$bin" swap-wizard --help)"
+      swap_elapsed=$(( $(date +%s) - help_start ))
+      printf '%s\n' "$swap_help"
+      grep -F -- '--extra-signer,--signer SCOPE|HEX' <<<"$swap_help" >/dev/null
+
+      help_start=$(date +%s)
+      withdraw_help="$("$bin" withdraw-wizard --help)"
+      withdraw_elapsed=$(( $(date +%s) - help_start ))
+      printf '%s\n' "$withdraw_help"
+      for needle in \
+        '--wallet-addr BECH32' \
+        '--metadata PATH' \
+        '--scope NAME' \
+        '--validity-hours HOURS' \
+        'Produce a withdraw intent.json'
+      do
+        grep -F -- "$needle" <<<"$withdraw_help" >/dev/null
+      done
+
+      help_start=$(date +%s)
+      "$bin" tx-build --help >/dev/null
+      tx_build_elapsed=$(( $(date +%s) - help_start ))
+
+      for pair in "withdraw-wizard:$withdraw_elapsed" "tx-build:$tx_build_elapsed" "swap-wizard:$swap_elapsed"; do
+        name="''${pair%%:*}"
+        secs="''${pair#*:}"
+        if [ "$secs" -gt 10 ]; then
+          printf 'linux-artifact-smoke: SLOW %s --help (%ss > 10s)\n' \
+            "$name" "$secs" >&2
+          exit 1
+        fi
+      done
     }
 
     smoke_appimage() {

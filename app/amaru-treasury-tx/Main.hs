@@ -1286,6 +1286,8 @@ requiredUtxos (SomeTreasuryIntent _sa intent) = do
     let wallet = tiWallet intent
         scope = tiScope intent
     walletTxIn <- parseTxIn (wjTxIn wallet)
+    extraWalletTxIns <-
+        traverse parseTxIn (wjExtraTxIns wallet)
     treasuryUtxos <-
         traverse parseTxIn (sjTreasuryUtxos scope)
     scopesRef <- parseTxIn (sjScopesDeployedAt scope)
@@ -1296,7 +1298,8 @@ requiredUtxos (SomeTreasuryIntent _sa intent) = do
     Right $
         Set.fromList $
             walletTxIn
-                : treasuryUtxos
+                : extraWalletTxIns
+                ++ treasuryUtxos
                 ++ [ scopesRef
                    , permissionsRef
                    , treasuryRef

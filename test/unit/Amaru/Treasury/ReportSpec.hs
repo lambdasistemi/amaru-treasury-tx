@@ -283,6 +283,32 @@ spec = describe "Amaru.Treasury.Report" $ do
                                 }
                            ]
 
+    it "reports swap validation facts from the successful build" $ do
+        report <- buildSwapFixtureReport
+        trValidation report
+            `shouldBe` ValidationFacts
+                { vfIntentNetwork = "mainnet"
+                , vfSocketNetworkMagic = 764_824_073
+                , vfNetworkMatches = True
+                , vfFeeLovelace = 1_039_703
+                , vfBodySizeBytes = 14_954
+                , vfRedeemerCount = 2
+                , vfRedeemerFailures = 0
+                , vfValidationStatus = "ok"
+                , vfValidityInterval =
+                    ValidityInterval
+                        { viInvalidBefore = Nothing
+                        , viInvalidHereafter = Just 186_796_799
+                        }
+                }
+
+    it "reports selected reference inputs and metadata summary" $ do
+        report <- buildSwapFixtureReport
+        trReferenceInputs report `shouldBe` expectedSwapReferenceInputs
+        msAuxiliaryDataHash (trMetadata report)
+            `shouldBe` Just expectedSwapMetadataHash
+        msCip1694LabelPresent (trMetadata report) `shouldBe` True
+
     it "encodes every produced-output role tag" $
         toJSON (roleOutput <$> allProducedOutputRoles)
             `shouldBe` toJSON
@@ -629,6 +655,18 @@ opsOwner =
 networkComplianceOwner :: Text
 networkComplianceOwner =
     "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
+
+expectedSwapReferenceInputs :: [Text]
+expectedSwapReferenceInputs =
+    [ "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0"
+    , "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2"
+    , "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0"
+    , "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2"
+    ]
+
+expectedSwapMetadataHash :: Text
+expectedSwapMetadataHash =
+    "1163dfe0f06e30a30353b706b988721fb0a6f5168db22402ef6a76b8e677868d"
 
 allProducedOutputRoles :: [ProducedOutputRole]
 allProducedOutputRoles =

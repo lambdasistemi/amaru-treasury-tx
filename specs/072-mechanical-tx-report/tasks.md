@@ -159,15 +159,15 @@ reference inputs in the report.
 ### RED Proof for User Story 3
 
 - [X] T032 [P] [US3] Add RED signer-source tests for selected scope owner, extra signer, intent-required signer, and tx-body-required signer in `test/unit/Amaru/Treasury/ReportSpec.hs`.
-- [ ] T033 [P] [US3] Add RED validation-facts tests for intent network, socket network magic, network match, fee, body size, redeemer count, zero redeemer failures, validation status, and validity interval in `test/unit/Amaru/Treasury/ReportSpec.hs`.
-- [ ] T034 [P] [US3] Add RED reference-input and metadata-summary tests in `test/unit/Amaru/Treasury/ReportSpec.hs`.
-- [ ] T035 [US3] Add RED swap golden assertions for signers, validation facts, and selected reference inputs in `test/golden/SwapGoldenSpec.hs`.
+- [X] T033 [P] [US3] Add RED validation-facts tests for intent network, socket network magic, network match, fee, body size, redeemer count, zero redeemer failures, validation status, and validity interval in `test/unit/Amaru/Treasury/ReportSpec.hs`.
+- [X] T034 [P] [US3] Add RED reference-input and metadata-summary tests in `test/unit/Amaru/Treasury/ReportSpec.hs`.
+- [X] T035 [US3] Add RED swap golden assertions for signers, validation facts, and selected reference inputs in `test/golden/SwapGoldenSpec.hs`.
 
 ### GREEN Implementation for User Story 3
 
 - [X] T036 [US3] Implement signer requirement extraction and source labelling in `lib/Amaru/Treasury/Report.hs`.
-- [ ] T037 [US3] Expose any missing selected scope owner, extra signer, tx-body signer, reference input, validity interval, and validation summary data from `lib/Amaru/Treasury/TreasuryBuild.hs`.
-- [ ] T038 [US3] Implement validation facts, reference inputs, and metadata summary encoding in `lib/Amaru/Treasury/Report.hs`.
+- [X] T037 [US3] Expose any missing selected scope owner, extra signer, tx-body signer, reference input, validity interval, and validation summary data from `lib/Amaru/Treasury/TreasuryBuild.hs`.
+- [X] T038 [US3] Implement validation facts, reference inputs, and metadata summary encoding in `lib/Amaru/Treasury/Report.hs`.
 - [X] T039 [US3] Update `test/fixtures/swap/report.golden.json` through the golden update flow in `test/golden/SwapGoldenSpec.hs`.
 - [X] T040 [US3] Confirm GREEN for the US3 slice with `nix develop --quiet -c just unit Report` and `nix develop --quiet -c just golden swap` covering `test/unit/Amaru/Treasury/ReportSpec.hs`, `test/golden/SwapGoldenSpec.hs`, and `test/fixtures/swap/report.golden.json`.
 
@@ -179,6 +179,16 @@ scope owner and extra signer output. T033/T034/T035's validation-fact
 and reference-input assertions, T037's remaining build-result exposure,
 and T038's validation/reference/metadata encoding stay open for later
 US3 slices.
+
+**Slice split (2026-05-09 validation/reference/metadata)**:
+T033/T034/T035/T037/T038/T039/T040 cover validation facts, selected
+reference inputs, and metadata summary for the swap report. Existing
+`TreasuryBuildResult` exposure already carries the final tx body,
+script results, CBOR bytes, and fee data needed for this slice; this
+slice adds the missing auxiliary-data hash extraction from the final tx
+body, tightens unit and swap-golden assertions, and refreshes only
+`test/fixtures/swap/report.golden.json`. CLI report writing, operator
+docs, and unrelated schema expansion remain out of scope.
 
 **Checkpoint**: US3 acceptance scenarios 1-3 are met.
 

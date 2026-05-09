@@ -40,7 +40,12 @@ import Data.ByteString.Lazy qualified as BSL
 import Data.Text (Text)
 import Data.Text.Encoding qualified as Text
 import System.Environment (lookupEnv)
-import Test.Hspec (Spec, describe, it, shouldBe)
+import Test.Hspec
+    ( Spec
+    , describe
+    , it
+    , shouldBe
+    )
 
 import Amaru.Treasury.ChainContext.Fixture
     ( readSwapFixture
@@ -48,13 +53,15 @@ import Amaru.Treasury.ChainContext.Fixture
     )
 import Amaru.Treasury.IntentJSON (decodeTreasuryIntentFile)
 import Amaru.Treasury.Report
-    ( ProducedOutput (..)
+    ( MetadataSummary (..)
+    , ProducedOutput (..)
     , ProducedOutputRole (..)
     , ReportContext (..)
     , SignerRequirement (..)
     , SignerSource (..)
     , TransactionReport (..)
     , ValidationFacts (..)
+    , ValidityInterval (..)
     , WalletAccounting (..)
     , buildTransactionReport
     , encodeReport
@@ -137,6 +144,14 @@ spec =
                 secondReportBytes = encodeReport secondReport
             waNetSpendLovelace (trWalletAccounting firstReport)
                 `shouldBe` vfFeeLovelace (trValidation firstReport)
+            trValidation firstReport
+                `shouldBe` expectedSwapValidation
+            trReferenceInputs firstReport
+                `shouldBe` expectedSwapReferenceInputs
+            msAuxiliaryDataHash (trMetadata firstReport)
+                `shouldBe` Just expectedSwapMetadataHash
+            msCip1694LabelPresent (trMetadata firstReport)
+                `shouldBe` True
             trSigners firstReport
                 `shouldBe` [ SignerRequirement
                                 { srKeyHash =
@@ -213,3 +228,33 @@ assertSwapOutputCoverage report = do
     take 33 roles `shouldBe` replicate 33 OutputSwapOrder
     drop 33 roles
         `shouldBe` [OutputTreasuryLeftover, OutputWalletChange]
+
+expectedSwapValidation :: ValidationFacts
+expectedSwapValidation =
+    ValidationFacts
+        { vfIntentNetwork = "mainnet"
+        , vfSocketNetworkMagic = 764_824_073
+        , vfNetworkMatches = True
+        , vfFeeLovelace = 1_039_703
+        , vfBodySizeBytes = 14_954
+        , vfRedeemerCount = 2
+        , vfRedeemerFailures = 0
+        , vfValidationStatus = "ok"
+        , vfValidityInterval =
+            ValidityInterval
+                { viInvalidBefore = Nothing
+                , viInvalidHereafter = Just 186_796_799
+                }
+        }
+
+expectedSwapReferenceInputs :: [Text]
+expectedSwapReferenceInputs =
+    [ "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0"
+    , "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2"
+    , "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0"
+    , "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2"
+    ]
+
+expectedSwapMetadataHash :: Text
+expectedSwapMetadataHash =
+    "1163dfe0f06e30a30353b706b988721fb0a6f5168db22402ef6a76b8e677868d"

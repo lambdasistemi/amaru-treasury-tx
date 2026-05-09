@@ -28,7 +28,9 @@ import Cardano.Ledger.Address
     )
 import Cardano.Ledger.Allegra.Scripts qualified as Ledger
 import Cardano.Ledger.Api.Tx.Body
-    ( outputsTxBodyL
+    ( TxAuxDataHash (..)
+    , auxDataHashTxBodyL
+    , outputsTxBodyL
     , referenceInputsTxBodyL
     , reqSignerHashesTxBodyL
     , vldtTxBodyL
@@ -362,10 +364,7 @@ buildTransactionReport context result =
             renderTxIn
                 <$> Set.toAscList (body ^. referenceInputsTxBodyL)
         , trMetadata =
-            MetadataSummary
-                { msAuxiliaryDataHash = Nothing
-                , msCip1694LabelPresent = True
-                }
+            metadataSummary body
         }
   where
     body = tbrFinalTxBody result
@@ -540,6 +539,21 @@ renderTxIn (TxIn (TxId h) ix) =
 renderKeyHash :: KeyHash discriminator -> Text
 renderKeyHash (KeyHash h) =
     Text.decodeUtf8 (B16.encode (hashToBytes h))
+
+metadataSummary :: TxBody TopTx ConwayEra -> MetadataSummary
+metadataSummary body =
+    MetadataSummary
+        { msAuxiliaryDataHash =
+            renderAuxDataHash <$> strictMaybe (body ^. auxDataHashTxBodyL)
+        , msCip1694LabelPresent =
+            case body ^. auxDataHashTxBodyL of
+                SNothing -> False
+                SJust _ -> True
+        }
+
+renderAuxDataHash :: TxAuxDataHash -> Text
+renderAuxDataHash (TxAuxDataHash h) =
+    Text.decodeUtf8 (B16.encode (hashToBytes (extractHash h)))
 
 networkMagic :: Text -> Int
 networkMagic = \case

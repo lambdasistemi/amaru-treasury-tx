@@ -57,6 +57,11 @@ data QuotePair
 
 data QuoteProvenance
     = OperatorOverride
+    | QuoteSourceProvenance
+        { qspName :: !Text
+        , qspFetchedAt :: !Text
+        , qspRaw :: !Text
+        }
     deriving (Eq, Show)
 
 data QuoteObservation = QuoteObservation
@@ -319,12 +324,23 @@ statusText = \case
 
 quoteValue :: Text -> DerivedSwapParameters -> Value
 quoteValue observedAt derived =
-    object
-        [ "pair" .= quotePairText observation
-        , "value" .= formatRationalDecimal (qoQuote observation)
-        , "provenance" .= quoteProvenanceValue (qoProvenance observation)
-        , "observedAt" .= observedAt
-        ]
+    case qoProvenance observation of
+        OperatorOverride ->
+            object
+                [ "pair" .= quotePairText observation
+                , "value" .= formatRationalDecimal (qoQuote observation)
+                , "provenance" .= quoteProvenanceValue OperatorOverride
+                , "observedAt" .= observedAt
+                ]
+        source@QuoteSourceProvenance{} ->
+            object
+                [ "pair" .= quotePairText observation
+                , "value" .= formatRationalDecimal (qoQuote observation)
+                , "provenance" .= quoteProvenanceValue source
+                , "observedAt" .= observedAt
+                , "fetchedAt" .= qspFetchedAt source
+                , "raw" .= qspRaw source
+                ]
   where
     observation = dspQuote derived
 
@@ -338,6 +354,11 @@ quoteProvenanceValue :: QuoteProvenance -> Value
 quoteProvenanceValue = \case
     OperatorOverride ->
         object ["kind" .= ("override" :: Text)]
+    QuoteSourceProvenance name _fetchedAt _raw ->
+        object
+            [ "kind" .= ("source" :: Text)
+            , "name" .= name
+            ]
 
 slippageValue :: DerivedSwapParameters -> Value
 slippageValue derived =

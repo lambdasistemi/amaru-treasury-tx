@@ -10,6 +10,12 @@ module Amaru.Treasury.Tx.SwapQuoteSpec (spec) where
 import Data.Either (isLeft, isRight)
 import Data.Ratio ((%))
 import Data.Text qualified as T
+import Options.Applicative
+    ( ParserResult (..)
+    , defaultPrefs
+    , execParserPure
+    , info
+    )
 import Test.Hspec
     ( Expectation
     , Spec
@@ -21,6 +27,12 @@ import Test.Hspec
     , shouldSatisfy
     )
 
+import Amaru.Treasury.Cli.SwapQuote
+    ( SwapQuoteOpts (..)
+    , SwapQuoteQuoteArg (..)
+    , swapQuoteOptsP
+    )
+import Amaru.Treasury.Scope (ScopeId (..))
 import Amaru.Treasury.Tx.SwapQuote
     ( AffordabilityFailure (..)
     , AffordabilitySummary (..)
@@ -38,6 +50,13 @@ import Amaru.Treasury.Tx.SwapQuote
     , parseQuoteInput
     , parseSlippageBps
     , renderAffordabilityFailure
+    )
+import Amaru.Treasury.Tx.SwapQuote.Source
+    ( QuoteSource (..)
+    , QuoteSourceError (..)
+    , parseCoinGeckoAdaUsdResponse
+    , parseQuoteSourceName
+    , quoteSourceName
     )
 
 spec :: Spec
@@ -209,6 +228,72 @@ spec = describe "SwapQuote" $ do
                         , qoProvenance = OperatorOverride
                         }
 
+    describe "source provider parsing" $ do
+        it "parses a captured coingecko-ada-usd response with provenance" $ do
+            bytes <-
+                readFileStrict "test/fixtures/swap-quote/source.coingecko.json"
+            parseCoinGeckoAdaUsdResponse "2026-05-09T10:00:00Z" bytes
+                `shouldBe` Right
+                    QuoteObservation
+                        { qoPair = AdaUsd
+                        , qoQuote = 8123 % 10_000
+                        , qoProvenance =
+                            QuoteSourceProvenance
+                                { qspName = "coingecko-ada-usd"
+                                , qspFetchedAt = "2026-05-09T10:00:00Z"
+                                , qspRaw = "{\"cardano\":{\"usd\":0.8123}}\n"
+                                }
+                        }
+
+        it "recognises coingecko-ada-usd as the named ADA/USD source" $
+            quoteSourceName CoinGeckoAdaUsd `shouldBe` "coingecko-ada-usd"
+
+    describe "swap-quote CLI parser" $ do
+        it "accepts an explicit ADA/USD override quote input" $
+            parseSwapQuote (baseSwapQuoteArgs <> ["--ada-usd", "0.8123"])
+                `shouldBe` Right
+                    ( sampleSwapQuoteOpts
+                        ( SwapQuoteOverride
+                            QuoteObservation
+                                { qoPair = AdaUsd
+                                , qoQuote = 8123 % 10_000
+                                , qoProvenance = OperatorOverride
+                                }
+                        )
+                    )
+
+        it "accepts an explicit ADA/USDM override quote input" $
+            parseSwapQuote (baseSwapQuoteArgs <> ["--ada-usdm", "0.804177"])
+                `shouldBe` Right
+                    ( sampleSwapQuoteOpts
+                        ( SwapQuoteOverride
+                            QuoteObservation
+                                { qoPair = AdaUsdm
+                                , qoQuote = 804_177 % 1_000_000
+                                , qoProvenance = OperatorOverride
+                                }
+                        )
+                    )
+
+        it "accepts coingecko-ada-usd as the only named source" $
+            parseSwapQuote
+                (baseSwapQuoteArgs <> ["--price-source", "coingecko-ada-usd"])
+                `shouldBe` Right
+                    (sampleSwapQuoteOpts (SwapQuoteSource CoinGeckoAdaUsd))
+
+        it "requires exactly one quote input" $ do
+            parseSwapQuote baseSwapQuoteArgs `shouldSatisfy` isLeft
+            parseSwapQuote
+                ( baseSwapQuoteArgs
+                    <> ["--ada-usd", "0.8123", "--ada-usdm", "0.804177"]
+                )
+                `shouldSatisfy` isLeft
+
+        it "rejects named ADA/USDM live sources with a future-work error" $
+            parseQuoteSourceName "coingecko-ada-usdm"
+                `shouldBe` Left
+                    (NamedAdaUsdmSourceUnavailable "coingecko-ada-usdm")
+
 withDerived
     :: Either SwapQuoteError DerivedSwapParameters
     -> (DerivedSwapParameters -> Expectation)
@@ -235,4 +320,61 @@ sampleDerivedParameters =
         , dspRateDenominator = 1_000_000
         , dspAmountLovelace = 500_000_000
         , dspChunkSizeLovelace = 500_000_000
+        }
+
+readFileStrict :: FilePath -> IO T.Text
+readFileStrict path =
+    T.pack <$> readFile path
+
+parseSwapQuote :: [String] -> Either String SwapQuoteOpts
+parseSwapQuote args =
+    case execParserPure defaultPrefs (info swapQuoteOptsP mempty) args of
+        Success opts -> Right opts
+        Failure{} -> Left "parse failure"
+        CompletionInvoked{} -> Left "completion invoked"
+
+baseSwapQuoteArgs :: [String]
+baseSwapQuoteArgs =
+    [ "--wallet-addr"
+    , "addr1test"
+    , "--metadata"
+    , "metadata.json"
+    , "--scope"
+    , "network_compliance"
+    , "--usdm"
+    , "100000"
+    , "--split"
+    , "33"
+    , "--slippage-bps"
+    , "100"
+    , "--validity-hours"
+    , "28"
+    , "--description"
+    , "Treasury swap"
+    , "--justification"
+    , "Quote-derived execution"
+    , "--destination-label"
+    , "USDM reserve"
+    , "--out-dir"
+    , "swap-run"
+    ]
+
+sampleSwapQuoteOpts :: SwapQuoteQuoteArg -> SwapQuoteOpts
+sampleSwapQuoteOpts quote =
+    SwapQuoteOpts
+        { sqoWalletAddr = "addr1test"
+        , sqoMetadataPath = "metadata.json"
+        , sqoOutDir = "swap-run"
+        , sqoScope = NetworkCompliance
+        , sqoRequestedUsdm = "100000"
+        , sqoChunk = SplitInto 33
+        , sqoQuote = quote
+        , sqoSlippageBps = SlippageBps 100
+        , sqoValidityHours = 28
+        , sqoDescription = "Treasury swap"
+        , sqoJustification = "Quote-derived execution"
+        , sqoDestinationLabel = "USDM reserve"
+        , sqoEvent = Nothing
+        , sqoLabel = Nothing
+        , sqoSigners = []
         }

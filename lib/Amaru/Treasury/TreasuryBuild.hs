@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : Amaru.Treasury.TreasuryBuild
@@ -54,7 +55,9 @@ import Control.Monad (unless)
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
 import Data.Foldable (toList)
+import Data.List (find)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (listToMaybe)
 import Data.Sequence.Strict qualified as StrictSeq
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -153,6 +156,14 @@ data TreasuryBuildResult = TreasuryBuildResult
     --     deterministic reports without rebuilding
     , tbrTxId :: !Text
     -- ^ transaction id of the final balanced transaction
+    , tbrWalletInputs :: ![(TxIn, TxOut ConwayEra)]
+    -- ^ wallet-owned inputs used to fuel the build
+    , tbrWalletChangeOutput :: !(Maybe (Int, TxOut ConwayEra))
+    -- ^ final wallet change output, paired with its output index
+    , tbrCollateralInput :: !(Maybe (TxIn, TxOut ConwayEra))
+    -- ^ wallet input selected as collateral, when present
+    , tbrCollateralReturn :: !(Maybe (TxOut ConwayEra))
+    -- ^ collateral-return output from the final body, when present
     }
 
 -- ----------------------------------------------------
@@ -245,8 +256,9 @@ runWithdraw ctx intent rationale walletAddr = do
         throwIO . userError $
             "runWithdraw: missing UTxOs in context: "
                 <> show missing
-    let inputUtxos =
+    let walletInputUtxos =
             [(walletInput, utxoMap Map.! walletInput)]
+        inputUtxos = walletInputUtxos
         refUtxos =
             [ (i, utxoMap Map.! i)
             | i <- refInputs
@@ -323,6 +335,14 @@ runWithdraw ctx intent rationale walletAddr = do
                     , tbrScriptResults = scriptResults
                     , tbrFinalTxBody = body
                     , tbrTxId = txIdText tx
+                    , tbrWalletInputs = walletInputUtxos
+                    , tbrWalletChangeOutput =
+                        indexedOutputAt changeOutputIndex body
+                    , tbrCollateralInput =
+                        collateralInputFrom body walletInputUtxos
+                    , tbrCollateralReturn =
+                        strictMaybe
+                            (body ^. collateralReturnTxBodyL)
                     }
 
 -- ----------------------------------------------------
@@ -375,11 +395,13 @@ runDisburseAda ctx fields payload rationale walletAddr = do
         throwIO . userError $
             "runDisburse: missing UTxOs in context: "
                 <> show missing
-    let inputUtxos =
-            (walletInput, utxoMap Map.! walletInput)
-                : [ (i, utxoMap Map.! i)
-                  | i <- treasuryInputs
-                  ]
+    let walletInputUtxos =
+            [(walletInput, utxoMap Map.! walletInput)]
+        inputUtxos =
+            walletInputUtxos
+                ++ [ (i, utxoMap Map.! i)
+                   | i <- treasuryInputs
+                   ]
         refUtxos =
             [ (i, utxoMap Map.! i)
             | i <- refInputs
@@ -448,6 +470,14 @@ runDisburseAda ctx fields payload rationale walletAddr = do
                     , tbrScriptResults = scriptResults
                     , tbrFinalTxBody = body
                     , tbrTxId = txIdText tx
+                    , tbrWalletInputs = walletInputUtxos
+                    , tbrWalletChangeOutput =
+                        indexedOutputAt 2 body
+                    , tbrCollateralInput =
+                        collateralInputFrom body walletInputUtxos
+                    , tbrCollateralReturn =
+                        strictMaybe
+                            (body ^. collateralReturnTxBodyL)
                     }
 
 {- | Match @cardano-cli transaction build@'s conservative
@@ -656,14 +686,16 @@ runSwap ctx intent rationale walletInput walletAddr = do
         throwIO . userError $
             "runSwap: missing UTxOs in context: "
                 <> show missing
-    let inputUtxos =
+    let walletInputUtxos =
             (walletInput, utxoMap Map.! walletInput)
                 : [ (i, utxoMap Map.! i)
                   | i <- siExtraWalletInputs intent
                   ]
-                ++ [ (i, utxoMap Map.! i)
-                   | i <- siTreasuryUtxos intent
-                   ]
+        treasuryInputUtxos =
+            [ (i, utxoMap Map.! i)
+            | i <- siTreasuryUtxos intent
+            ]
+        inputUtxos = walletInputUtxos ++ treasuryInputUtxos
         refUtxos =
             [ (i, utxoMap Map.! i)
             | i <-
@@ -748,6 +780,16 @@ runSwap ctx intent rationale walletInput walletAddr = do
                     , tbrScriptResults = scriptResults
                     , tbrFinalTxBody = body
                     , tbrTxId = txIdText tx
+                    , tbrWalletInputs = walletInputUtxos
+                    , tbrWalletChangeOutput =
+                        indexedOutputAt
+                            (length (siSwapOrders intent) + 1)
+                            body
+                    , tbrCollateralInput =
+                        collateralInputFrom body walletInputUtxos
+                    , tbrCollateralReturn =
+                        strictMaybe
+                            (body ^. collateralReturnTxBodyL)
                     }
 
 txIdText :: ConwayTx -> Text
@@ -758,3 +800,27 @@ txIdText tx =
                 B16.encode $
                     hashToBytes $
                         extractHash h
+
+indexedOutputAt
+    :: Int
+    -> TxBody TopTx ConwayEra
+    -> Maybe (Int, TxOut ConwayEra)
+indexedOutputAt index body =
+    (index,) <$> listToMaybe (drop index outputs)
+  where
+    outputs = toList (body ^. outputsTxBodyL)
+
+collateralInputFrom
+    :: TxBody TopTx ConwayEra
+    -> [(TxIn, TxOut ConwayEra)]
+    -> Maybe (TxIn, TxOut ConwayEra)
+collateralInputFrom body =
+    find
+        ( \(txIn, _) ->
+            Set.member txIn (body ^. collateralInputsTxBodyL)
+        )
+
+strictMaybe :: StrictMaybe a -> Maybe a
+strictMaybe = \case
+    SNothing -> Nothing
+    SJust value -> Just value

@@ -344,12 +344,18 @@ buildTransactionReport context result =
                 }
         , trWalletAccounting =
             WalletAccounting
-                { waInputs = []
-                , waCollateralInput = Nothing
-                , waChangeOutput = Nothing
-                , waCollateralReturn = Nothing
+                { waInputs = walletInputs
+                , waCollateralInput =
+                    inputSummary
+                        <$> tbrCollateralInput result
+                , waChangeOutput =
+                    outputSummary result
+                        <$> tbrWalletChangeOutput result
+                , waCollateralReturn =
+                    collateralReturnSummary result
+                        <$> tbrCollateralReturn result
                 , waFeeLovelace = feeLovelace
-                , waNetSpendLovelace = 0
+                , waNetSpendLovelace = walletNetSpend
                 }
         , trTreasuryAccounting =
             TreasuryAccounting
@@ -397,6 +403,17 @@ buildTransactionReport context result =
     Coin feeLovelace = tbrFeeLovelace result
     Coin totalCollateral = tbrTotalCollateralLovelace result
     scriptResults = tbrScriptResults result
+    walletInputs = inputSummary <$> tbrWalletInputs result
+    walletInputLovelace =
+        sum (vsLovelace . usValue <$> walletInputs)
+    walletChangeLovelace =
+        maybe
+            0
+            ((vsLovelace . usValue) . outputSummary result)
+            (tbrWalletChangeOutput result)
+    walletNetSpend =
+        walletInputLovelace
+            - walletChangeLovelace
     redeemerFailures =
         length
             [ ()
@@ -412,6 +429,32 @@ outputFromTxOut index txOut =
         , poAddress = renderAddress (txOut ^. addrTxOutL)
         , poValue = valueSummary (txOut ^. valueTxOutL)
         , poDatum = datumSummary (txOut ^. datumTxOutL)
+        }
+
+inputSummary :: (TxIn, TxOut ConwayEra) -> UtxoSummary
+inputSummary (txIn, txOut) =
+    UtxoSummary
+        { usTxIn = renderTxIn txIn
+        , usValue = valueSummary (txOut ^. valueTxOutL)
+        }
+
+outputSummary
+    :: TreasuryBuildResult -> (Int, TxOut ConwayEra) -> UtxoSummary
+outputSummary result (index, txOut) =
+    UtxoSummary
+        { usTxIn =
+            tbrTxId result
+                <> "#"
+                <> T.pack (show index)
+        , usValue = valueSummary (txOut ^. valueTxOutL)
+        }
+
+collateralReturnSummary
+    :: TreasuryBuildResult -> TxOut ConwayEra -> UtxoSummary
+collateralReturnSummary result txOut =
+    UtxoSummary
+        { usTxIn = tbrTxId result <> "#collateral-return"
+        , usValue = valueSummary (txOut ^. valueTxOutL)
         }
 
 validityInterval :: Ledger.ValidityInterval -> ValidityInterval

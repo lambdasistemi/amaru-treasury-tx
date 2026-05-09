@@ -410,11 +410,37 @@
         }
     },
     "walletAccounting": {
-        "changeOutput": null,
-        "collateralInput": null,
-        "collateralReturn": null,
+        "changeOutput": {
+            "txIn": "bf870dafd99925512221e32df9b2ec1acb3e22f49df83a6b66dedb7513a5fa55#34",
+            "value": {
+                "assets": {},
+                "lovelace": 50006199573
+            }
+        },
+        "collateralInput": {
+            "txIn": "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0",
+            "value": {
+                "assets": {},
+                "lovelace": 50007239276
+            }
+        },
+        "collateralReturn": {
+            "txIn": "bf870dafd99925512221e32df9b2ec1acb3e22f49df83a6b66dedb7513a5fa55#collateral-return",
+            "value": {
+                "assets": {},
+                "lovelace": 50005679721
+            }
+        },
         "feeLovelace": 1039703,
-        "inputs": [],
-        "netSpendLovelace": 0
+        "inputs": [
+            {
+                "txIn": "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0",
+                "value": {
+                    "assets": {},
+                    "lovelace": 50007239276
+                }
+            }
+        ],
+        "netSpendLovelace": 1039703
     }
 }

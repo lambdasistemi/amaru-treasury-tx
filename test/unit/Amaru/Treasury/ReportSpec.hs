@@ -8,6 +8,7 @@ import Data.Aeson.KeyMap qualified as KM
 import Data.ByteString.Lazy.Char8 qualified as BSL8
 import Data.List (isInfixOf)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (isJust)
 import Data.Text (Text)
 import Test.Hspec
     ( Spec
@@ -17,10 +18,16 @@ import Test.Hspec
     , shouldSatisfy
     )
 
+import Amaru.Treasury.ChainContext.Fixture
+    ( readSwapFixture
+    , toFrozenContext
+    )
+import Amaru.Treasury.IntentJSON (decodeTreasuryIntentFile)
 import Amaru.Treasury.Report
     ( MetadataSummary (..)
     , ProducedOutput (..)
     , ProducedOutputRole (..)
+    , ReportContext (..)
     , SignerRequirement (..)
     , SignerSource (..)
     , TransactionIdentity (..)
@@ -34,6 +41,7 @@ import Amaru.Treasury.Report
     , buildTransactionReport
     , encodeReport
     )
+import Amaru.Treasury.TreasuryBuild (runFromIntent)
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Report" $ do
@@ -115,8 +123,42 @@ spec = describe "Amaru.Treasury.Report" $ do
             True
                 `shouldBe` True
 
+    it
+        "accounts for swap wallet fuel, change, and collateral without double-counting"
+        $ do
+            report <- buildSwapFixtureReport
+            let wallet = trWalletAccounting report
+            waInputs wallet `shouldSatisfy` (not . null)
+            waCollateralInput wallet `shouldSatisfy` isJust
+            waChangeOutput wallet `shouldSatisfy` isJust
+            waCollateralReturn wallet `shouldSatisfy` isJust
+            waFeeLovelace wallet
+                `shouldBe` vfFeeLovelace (trValidation report)
+            tiTotalCollateralLovelace (trIdentity report)
+                `shouldSatisfy` (> 0)
+            waNetSpendLovelace wallet
+                `shouldBe` vfFeeLovelace (trValidation report)
+
 decodedReport :: Either String Value
 decodedReport = eitherDecode (encodeReport sampleReport)
+
+buildSwapFixtureReport :: IO TransactionReport
+buildSwapFixtureReport = do
+    si <- decodeTreasuryIntentFile "test/fixtures/swap/intent.json"
+    some <- case si of
+        Left e -> error ("intent JSON: " <> e)
+        Right v -> pure v
+    fixture <- readSwapFixture "test/fixtures/swap"
+    let ctx = toFrozenContext fixture
+    tbr <- runFromIntent ctx some
+    pure $
+        buildTransactionReport
+            ReportContext
+                { rcAction = "swap"
+                , rcNetwork = "mainnet"
+                , rcSocketNetworkMagic = 764_824_073
+                }
+            tbr
 
 hasField :: String -> Value -> Either String Value -> Bool
 hasField field expected (Right (Object obj)) =

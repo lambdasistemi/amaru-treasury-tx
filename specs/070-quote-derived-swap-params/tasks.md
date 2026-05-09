@@ -163,18 +163,18 @@ a captured CoinGecko JSON fixture and no live HTTP dependency in CI.
 
 ### Tests for User Story 1
 
-- [ ] T031 [P] [US1] Add `test/fixtures/swap-quote/source.coingecko.json` with a captured `cardano.usd` response.
-- [ ] T032 [P] [US1] Add RED provider parsing tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` for `coingecko-ada-usd`, source provenance, fetch time, ADA/USD pair, and raw metadata retention.
-- [ ] T033 [P] [US1] Add RED parser tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` or a focused CLI parser spec proving exactly one of `--ada-usd`, `--ada-usdm`, and `--price-source` is accepted.
-- [ ] T034 [P] [US1] Add RED parser/source rejection tests proving named live ADA/USDM sources are rejected with a future-work message while explicit `--ada-usdm` overrides are accepted.
+- [x] T031 [P] [US1] Add `test/fixtures/swap-quote/source.coingecko.json` with a captured `cardano.usd` response.
+- [x] T032 [P] [US1] Add RED provider parsing tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` for `coingecko-ada-usd`, source provenance, fetch time, ADA/USD pair, and raw metadata retention.
+- [x] T033 [P] [US1] Add RED parser tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` or a focused CLI parser spec proving exactly one of `--ada-usd`, `--ada-usdm`, and `--price-source` is accepted.
+- [x] T034 [P] [US1] Add RED parser/source rejection tests proving named live ADA/USDM sources are rejected with a future-work message while explicit `--ada-usdm` overrides are accepted.
 
 ### Implementation for User Story 1
 
-- [ ] T035 [US1] Implement `QuoteProvider`, `QuoteSourceError`, and captured-response parsing in `lib/Amaru/Treasury/Tx/SwapQuote/Source.hs`.
-- [ ] T036 [US1] Implement the production `coingecko-ada-usd` provider in `lib/Amaru/Treasury/Tx/SwapQuote/Source.hs` with one HTTP GET, a short timeout, and typed failure before intent JSON or CBOR output.
-- [ ] T037 [US1] Add `SwapQuoteOpts` and the `swap-quote` subcommand parser to `app/amaru-treasury-tx/Main.hs`, requiring explicit slippage and exactly one quote input.
-- [ ] T038 [US1] Wire parser validation so named live ADA/USDM source support remains unavailable unless the approved spec changes, while explicit `--ada-usdm` remains supported.
-- [ ] T039 [US1] Run `nix develop --quiet -c just unit SwapQuote` and a focused `nix develop --quiet -c cabal test unit-tests --test-show-details=direct --test-options='--match swap-quote'` if a parser spec is added outside `SwapQuoteSpec`; record RED/GREEN evidence in the work-review handoff.
+- [x] T035 [US1] Implement `QuoteProvider`, `QuoteSourceError`, and captured-response parsing in `lib/Amaru/Treasury/Tx/SwapQuote/Source.hs`.
+- [x] T036 [US1] Implement the production `coingecko-ada-usd` provider in `lib/Amaru/Treasury/Tx/SwapQuote/Source.hs` with one HTTP GET, a short timeout, and typed failure before intent JSON or CBOR output.
+- [x] T037 [US1] Add `SwapQuoteOpts` and the `swap-quote` subcommand parser to `app/amaru-treasury-tx/Main.hs`, requiring explicit slippage and exactly one quote input.
+- [x] T038 [US1] Wire parser validation so named live ADA/USDM source support remains unavailable unless the approved spec changes, while explicit `--ada-usdm` remains supported.
+- [x] T039 [US1] Run `nix develop --quiet -c just unit SwapQuote` and a focused `nix develop --quiet -c cabal test unit-tests --test-show-details=direct --test-options='--match swap-quote'` if a parser spec is added outside `SwapQuoteSpec`; record RED/GREEN evidence in the work-review handoff.
 
 **Checkpoint**: US1 acceptance scenario 3 passes for the named
 ADA/USD source contract, and the explicit ADA/USDM override contract

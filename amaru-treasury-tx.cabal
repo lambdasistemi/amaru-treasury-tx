@@ -79,6 +79,7 @@ library
     Amaru.Treasury.Backend.N2C
     Amaru.Treasury.ChainContext
     Amaru.Treasury.ChainContext.Fixture
+    Amaru.Treasury.Cli.SwapQuote
     Amaru.Treasury.Cli.TxBuild
     Amaru.Treasury.Constants
     Amaru.Treasury.IntentJSON
@@ -144,6 +145,7 @@ library
     , contra-tracer
     , file-embed
     , filepath
+    , http-client
     , http-conduit
     , microlens
     , optparse-applicative

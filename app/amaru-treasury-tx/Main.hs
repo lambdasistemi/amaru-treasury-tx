@@ -24,6 +24,9 @@ Subcommands:
 * @swap-wizard --network <preprod|mainnet> --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --usdm N.NN --split N --min-rate N.NN --validity-hours N --description ... --justification ... --destination-label ... [--extra-signer SCOPE|HEX]... [--out path\/intent.json] [--log path\/wizard.log]@
   produces a swap @intent.json@ from a typed questionnaire.
   See [@specs\/002-swap-wizard\/quickstart.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/002-swap-wizard/quickstart.md).
+* @swap-quote --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --usdm N.NN --split N (--ada-usd N.NN | --ada-usdm N.NN | --price-source SOURCE) --slippage-bps N --validity-hours N --description ... --justification ... --destination-label ... --out-dir path\/run-dir@
+  parses the quote-derived swap preparation command. The composite runner lands
+  in the integration slice.
 * @withdraw-wizard --network <preprod|mainnet> --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --validity-hours N [--description ...] [--justification ...] [--destination-label ...] [--out path\/intent.json] [--log path\/wizard.log]@
   produces a withdraw @intent.json@ from resolved registry and reward state.
 -}
@@ -93,6 +96,10 @@ import Amaru.Treasury.Backend.N2C
     , withLocalNodeBackend
     )
 import Amaru.Treasury.ChainContext (liveContext)
+import Amaru.Treasury.Cli.SwapQuote
+    ( SwapQuoteOpts
+    , swapQuoteOptsP
+    )
 import Amaru.Treasury.Cli.TxBuild
     ( TxBuildOpts (..)
     , txBuildOptsP
@@ -175,6 +182,7 @@ data GlobalOpts = GlobalOpts
 
 data Cmd
     = CmdSwapWizard WizardOpts
+    | CmdSwapQuote SwapQuoteOpts
     | CmdWithdrawWizard WithdrawOpts
     | CmdTxBuild TxBuildOpts
 
@@ -322,6 +330,14 @@ cmdP =
                     (CmdSwapWizard <$> wizardOptsP)
                     ( progDesc
                         "Produce a swap intent.json from a typed questionnaire"
+                    )
+                )
+            <> command
+                "swap-quote"
+                ( info
+                    (CmdSwapQuote <$> swapQuoteOptsP)
+                    ( progDesc
+                        "Prepare a quote-derived swap run"
                     )
                 )
             <> command
@@ -603,6 +619,9 @@ main = do
     case c of
         CmdSwapWizard wo ->
             runWizard g{goSocketPath = Just socket} wo
+        CmdSwapQuote _qo ->
+            throwIO . userError $
+                "swap-quote: runner lands in the composite runner slice"
         CmdWithdrawWizard wo ->
             runWithdrawWizard g{goSocketPath = Just socket} wo
         CmdTxBuild to ->

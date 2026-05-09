@@ -77,6 +77,7 @@ library
     Amaru.Treasury.Backend.N2C
     Amaru.Treasury.ChainContext
     Amaru.Treasury.ChainContext.Fixture
+    Amaru.Treasury.Cli.TxBuild
     Amaru.Treasury.Constants
     Amaru.Treasury.IntentJSON
     Amaru.Treasury.IntentJSON.Common
@@ -96,6 +97,7 @@ library
     Amaru.Treasury.Scope
     Amaru.Treasury.Summary
     Amaru.Treasury.TreasuryBuild
+    Amaru.Treasury.TreasuryBuild.ReportWriter
     Amaru.Treasury.TreasuryBuild.Trace
     Amaru.Treasury.Tx.Disburse
     Amaru.Treasury.Tx.Disburse.Trace
@@ -139,6 +141,7 @@ library
     , file-embed
     , filepath
     , microlens
+    , optparse-applicative
     , ouroboros-consensus
     , ouroboros-consensus:cardano
     , ouroboros-network:api
@@ -283,11 +286,13 @@ test-suite unit-tests
     , cardano-node-clients
     , cardano-slotting
     , containers
+    , contra-tracer
     , directory
     , hspec
     , hspec-discover
     , jsonschema
     , microlens
+    , optparse-applicative
     , ouroboros-network:api
     , plutus-core
     , QuickCheck

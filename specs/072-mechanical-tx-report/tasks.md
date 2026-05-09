@@ -206,17 +206,24 @@ fixtures or smoke paths.
 
 ### RED Proof for CLI Writer
 
-- [ ] T041 [P] [US1] Add RED CLI parser tests for optional `--report PATH` in `test/unit/Amaru/Treasury/TreasuryBuildSpec.hs` or `test/unit/Amaru/Treasury/ReportSpec.hs`.
-- [ ] T042 [P] [US1] Add RED smoke coverage for `tx-build --report PATH`, no-report compatibility, and unwritable report path failure in `scripts/smoke/tx-build-pipe`.
-- [ ] T043 [P] [US1] Add RED trace-rendering tests for report-write success and report-write failure events in `test/unit/Amaru/Treasury/TreasuryBuildSpec.hs`.
+- [X] T041 [P] [US1] Add RED CLI parser tests for optional `--report PATH` in `test/unit/Amaru/Treasury/TreasuryBuildSpec.hs` or `test/unit/Amaru/Treasury/ReportSpec.hs`.
+- [X] T042 [P] [US1] Add RED smoke coverage for `tx-build --report PATH`, no-report compatibility, and unwritable report path failure in `scripts/smoke/tx-build-pipe`.
+- [X] T043 [P] [US1] Add RED trace-rendering tests for report-write success and report-write failure events in `test/unit/Amaru/Treasury/TreasuryBuildSpec.hs`.
 
 ### GREEN Implementation for CLI Writer
 
-- [ ] T044 [US1] Add the `--report PATH` parser field and help text for `tx-build` in `app/amaru-treasury-tx/Main.hs`.
-- [ ] T045 [US1] Wire report construction and filesystem writing after successful validation in `app/amaru-treasury-tx/Main.hs`, keeping file I/O outside pure report construction.
-- [ ] T046 [US1] Add typed report-write success and failure trace events in `lib/Amaru/Treasury/TreasuryBuild/Trace.hs`.
-- [ ] T047 [US1] Ensure requested report write failures exit non-zero and name the failed report path in `app/amaru-treasury-tx/Main.hs`.
-- [ ] T048 [US1] Confirm GREEN for the CLI writer slice with `nix develop --quiet -c just unit TreasuryBuild` and `nix develop --quiet -c just smoke` covering `test/unit/Amaru/Treasury/TreasuryBuildSpec.hs`, `scripts/smoke/tx-build-pipe`, and `app/amaru-treasury-tx/Main.hs`.
+- [X] T044 [US1] Add the `--report PATH` parser field and help text for `tx-build` in `app/amaru-treasury-tx/Main.hs`.
+- [X] T045 [US1] Wire report construction and filesystem writing after successful validation in `app/amaru-treasury-tx/Main.hs`, keeping file I/O outside pure report construction.
+- [X] T046 [US1] Add typed report-write success and failure trace events in `lib/Amaru/Treasury/TreasuryBuild/Trace.hs`.
+- [X] T047 [US1] Ensure requested report write failures exit non-zero and name the failed report path in `app/amaru-treasury-tx/Main.hs`.
+- [X] T048 [US1] Confirm GREEN for the CLI writer slice with `nix develop --quiet -c just unit TreasuryBuild` and `nix develop --quiet -c just smoke` covering `test/unit/Amaru/Treasury/TreasuryBuildSpec.hs`, `scripts/smoke/tx-build-pipe`, and `app/amaru-treasury-tx/Main.hs`.
+
+**Slice split (2026-05-09 CLI writer)**: T041-T048 cover the
+`tx-build --report PATH` parser, report construction/writing after
+successful validation, success/failure trace rendering, non-zero
+write-failure behavior that names the failed path, smoke help coverage,
+and focused parser/writer smoke calls. Operator docs T049-T054 and final
+verification T055-T059 stay open for later slices.
 
 **Checkpoint**: FR-001, FR-015, and the US1 write-failure edge case
 are met through the executable path.

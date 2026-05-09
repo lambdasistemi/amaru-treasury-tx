@@ -16,7 +16,7 @@ on stdout (or a path).
 
 Subcommands:
 
-* @tx-build [--intent path\/to\/intent.json] [--out path\/tx.cbor] [--log path\/build.log]@ —
+* @tx-build [--intent path\/to\/intent.json] [--out path\/tx.cbor] [--log path\/build.log] [--report path\/report.json]@ —
   builds any supported treasury tx from a unified
   'SomeTreasuryIntent'. With no @--intent@, reads the intent JSON from
   stdin so wizard-produced intents can pipe cleanly into the unified
@@ -93,6 +93,10 @@ import Amaru.Treasury.Backend.N2C
     , withLocalNodeBackend
     )
 import Amaru.Treasury.ChainContext (liveContext)
+import Amaru.Treasury.Cli.TxBuild
+    ( TxBuildOpts (..)
+    , txBuildOptsP
+    )
 import Amaru.Treasury.IntentJSON
     ( SAction (..)
     , ScopeJSON (..)
@@ -110,6 +114,11 @@ import Amaru.Treasury.IntentJSON.Common
     , parseTxIn
     )
 import Amaru.Treasury.Registry.Verify (verifyRegistry)
+import Amaru.Treasury.Report
+    ( ReportContext (..)
+    , buildTransactionReport
+    , encodeReport
+    )
 import Amaru.Treasury.Scope
     ( ScopeId
     , scopeFromText
@@ -118,6 +127,9 @@ import Amaru.Treasury.TreasuryBuild
     ( ScriptResult (..)
     , TreasuryBuildResult (..)
     , runFromIntent
+    )
+import Amaru.Treasury.TreasuryBuild.ReportWriter
+    ( writeReportArtifact
     )
 import Amaru.Treasury.TreasuryBuild.Trace
     ( BuildEvent (..)
@@ -165,20 +177,6 @@ data Cmd
     = CmdSwapWizard WizardOpts
     | CmdWithdrawWizard WithdrawOpts
     | CmdTxBuild TxBuildOpts
-
-{- | Flags for the unified @tx-build@ subcommand. The
-network is read from the intent's @network@ field, not
-from any CLI flag — the intent is the single source of
-truth (research §R3 of feature 005).
--}
-data TxBuildOpts = TxBuildOpts
-    { tboIntentPath :: !(Maybe FilePath)
-    -- ^ 'Nothing' = read intent.json from stdin
-    , tboOutPath :: !(Maybe FilePath)
-    -- ^ 'Nothing' = stdout
-    , tboLog :: !(Maybe FilePath)
-    -- ^ 'Nothing' = stderr
-    }
 
 {- | Two ways to express how a swap is sliced:
   * @SplitCount n@: split into @n@ approximately equal chunks
@@ -306,35 +304,6 @@ networkMagicNameMaybe (NetworkMagic m) = case m of
     1 -> Just "preprod"
     2 -> Just "preview"
     _ -> Nothing
-
-txBuildOptsP :: Parser TxBuildOpts
-txBuildOptsP =
-    TxBuildOpts
-        <$> optional
-            ( strOption
-                ( long "intent"
-                    <> short 'i'
-                    <> metavar "PATH"
-                    <> help
-                        "Path to the unified intent.json (defaults to stdin)"
-                )
-            )
-        <*> optional
-            ( strOption
-                ( long "out"
-                    <> short 'o'
-                    <> metavar "PATH"
-                    <> help "Write hex CBOR here (defaults to stdout)"
-                )
-            )
-        <*> optional
-            ( strOption
-                ( long "log"
-                    <> metavar "PATH"
-                    <> help
-                        "Where to write step-by-step trace lines (defaults to stderr)"
-                )
-            )
 
 cmdP :: Parser Cmd
 cmdP =
@@ -1263,10 +1232,49 @@ runTxBuild socket TxBuildOpts{..} = do
                     putStr "\n"
             traceWith tr (TbeWroteCbor tboOutPath)
             if null failures
-                then traceWith tr TbeValidationOk
+                then do
+                    traceWith tr TbeValidationOk
+                    case tboReportPath of
+                        Nothing -> pure ()
+                        Just reportPath -> do
+                            let report =
+                                    buildTransactionReport
+                                        (txBuildReportContext some magic)
+                                        tbr
+                            result <-
+                                writeReportArtifact
+                                    tr
+                                    reportPath
+                                    (encodeReport report)
+                            case result of
+                                Right () -> pure ()
+                                Left{} -> exitWith (ExitFailure 4)
                 else do
                     traceWith tr TbeValidationFailed
                     exitFailure
+
+txBuildReportContext
+    :: SomeTreasuryIntent -> NetworkMagic -> ReportContext
+txBuildReportContext (SomeTreasuryIntent sa intent) magic =
+    ReportContext
+        { rcAction =
+            T.toLower
+                . T.pack
+                . drop 1
+                . show
+                $ sa
+        , rcNetwork = tiNetwork intent
+        , rcSocketNetworkMagic =
+            fromIntegral (unNetworkMagic magic)
+        , rcSelectedScopeOwner =
+            case tiSigners intent of
+                owner : _ ->
+                    Just (owner, sjId (tiScope intent))
+                [] -> Nothing
+        , rcExtraSigners =
+            drop 1 (tiSigners intent)
+        , rcIntentRequiredSigners = []
+        }
 
 -- | Trace and abort with exit code 3 (parse / setup error).
 abortBuild :: Tracer IO BuildEvent -> Text -> IO a

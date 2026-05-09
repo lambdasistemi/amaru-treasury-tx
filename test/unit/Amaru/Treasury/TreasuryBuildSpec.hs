@@ -18,6 +18,7 @@ import Control.Exception
     ( SomeException
     , displayException
     )
+import Control.Tracer (Tracer (..))
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
@@ -31,8 +32,10 @@ import Data.Map.Strict qualified as Map
 import Test.Hspec
     ( Spec
     , describe
+    , expectationFailure
     , it
     , shouldBe
+    , shouldContain
     , shouldThrow
     )
 
@@ -41,6 +44,10 @@ import Amaru.Treasury.ChainContext.Fixture
     ( readSwapFixture
     , toFrozenContext
     )
+import Amaru.Treasury.Cli.TxBuild
+    ( TxBuildOpts (..)
+    , txBuildOptsP
+    )
 import Amaru.Treasury.IntentJSON
     ( decodeTreasuryIntentFile
     )
@@ -48,7 +55,21 @@ import Amaru.Treasury.TreasuryBuild
     ( TreasuryBuildResult (..)
     , runFromIntent
     )
+import Amaru.Treasury.TreasuryBuild.ReportWriter
+    ( ReportWriteError (..)
+    , writeReportArtifact
+    )
+import Amaru.Treasury.TreasuryBuild.Trace
+    ( BuildEvent (..)
+    , renderBuildEvent
+    )
 import Cardano.Ledger.Api.PParams (emptyPParams)
+import Options.Applicative
+    ( ParserResult (..)
+    , defaultPrefs
+    , execParserPure
+    , info
+    )
 import Ouroboros.Network.Magic (NetworkMagic (..))
 
 import Amaru.Treasury.Backend.N2C
@@ -147,6 +168,66 @@ spec = describe "Amaru.Treasury.TreasuryBuild" $ do
             lookup "preview" knownNetworkMagics
                 `shouldBe` Just (NetworkMagic 2)
 
+    describe "tx-build CLI parser" $ do
+        it "accepts an optional report path" $
+            parseTxBuild
+                [ "--intent"
+                , "intent.json"
+                , "--out"
+                , "tx.cbor"
+                , "--log"
+                , "build.log"
+                , "--report"
+                , "tx-report.json"
+                ]
+                `shouldBe` Right
+                    TxBuildOpts
+                        { tboIntentPath = Just "intent.json"
+                        , tboOutPath = Just "tx.cbor"
+                        , tboLog = Just "build.log"
+                        , tboReportPath = Just "tx-report.json"
+                        }
+
+        it "preserves no-report defaults" $
+            parseTxBuild []
+                `shouldBe` Right
+                    TxBuildOpts
+                        { tboIntentPath = Nothing
+                        , tboOutPath = Nothing
+                        , tboLog = Nothing
+                        , tboReportPath = Nothing
+                        }
+
+    describe "report write traces" $ do
+        it "renders report-write success with the destination path" $
+            renderBuildEvent
+                (TbeWroteReport "test/fixtures/swap/report.golden.json")
+                `shouldBe` "tx-build: report -> test/fixtures/swap/report.golden.json"
+
+        it "renders report-write failure with the failed path" $
+            renderBuildEvent
+                ( TbeReportWriteFailed
+                    "missing/report.json"
+                    "openBinaryFile: does not exist"
+                )
+                `shouldBe` "tx-build: REPORT WRITE FAILED missing/report.json: openBinaryFile: does not exist"
+
+    describe "report writer" $
+        it "reports the failed path when the report cannot be written" $ do
+            result <-
+                writeReportArtifact
+                    (Tracer (const (pure ())))
+                    "missing-parent/report.json"
+                    "{}\n"
+            case result of
+                Left (ReportWriteError path message) -> do
+                    path `shouldBe` "missing-parent/report.json"
+                    message
+                        `shouldContain` "missing-parent/report.json"
+                Right () ->
+                    expectationFailure
+                        "expected report write failure"
+
     describe "runWithdraw" $
         it "reports missing required UTxOs before balancing" $ do
             some <-
@@ -207,3 +288,10 @@ expectRight =
             . show
         )
         id
+
+parseTxBuild :: [String] -> Either String TxBuildOpts
+parseTxBuild args =
+    case execParserPure defaultPrefs (info txBuildOptsP mempty) args of
+        Success opts -> Right opts
+        Failure{} -> Left "parse failure"
+        CompletionInvoked{} -> Left "completion invoked"

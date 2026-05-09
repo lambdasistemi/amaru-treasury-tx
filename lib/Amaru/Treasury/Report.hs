@@ -30,6 +30,7 @@ import Cardano.Ledger.Allegra.Scripts qualified as Ledger
 import Cardano.Ledger.Api.Tx.Body
     ( outputsTxBodyL
     , referenceInputsTxBodyL
+    , reqSignerHashesTxBodyL
     , vldtTxBodyL
     )
 import Cardano.Ledger.Api.Tx.Out
@@ -45,7 +46,8 @@ import Cardano.Ledger.BaseTypes
     )
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
-import Cardano.Ledger.Hashes (extractHash)
+import Cardano.Ledger.Core (TopTx, TxBody)
+import Cardano.Ledger.Hashes (KeyHash (..), extractHash)
 import Cardano.Ledger.Plutus.Data qualified as PlutusData
 import Cardano.Ledger.TxIn
     ( TxId (..)
@@ -107,6 +109,9 @@ data ReportContext = ReportContext
     { rcAction :: Text
     , rcNetwork :: Text
     , rcSocketNetworkMagic :: Int
+    , rcSelectedScopeOwner :: Maybe (Text, Text)
+    , rcExtraSigners :: [Text]
+    , rcIntentRequiredSigners :: [Text]
     }
     deriving stock (Eq, Show)
 
@@ -336,7 +341,7 @@ buildTransactionReport context result =
                 (outputFromTxOut result)
                 [0 ..]
                 (toList (body ^. outputsTxBodyL))
-        , trSigners = []
+        , trSigners = signerRequirements context body
         , trValidation =
             ValidationFacts
                 { vfIntentNetwork = rcNetwork context
@@ -412,6 +417,54 @@ outputFromTxOut result index txOut =
         , poDatum = datumSummary (txOut ^. datumTxOutL)
         }
 
+signerRequirements
+    :: ReportContext -> TxBody TopTx ConwayEra -> [SignerRequirement]
+signerRequirements context body =
+    dedupeSigners $
+        selectedScopeOwnerRequirement context
+            ++ fmap
+                (signerRequirement SourceExtraSigner Nothing)
+                (rcExtraSigners context)
+            ++ fmap
+                (signerRequirement SourceIntentRequiredSigner Nothing)
+                (rcIntentRequiredSigners context)
+            ++ fmap
+                (signerRequirement SourceTxBodyRequiredSigner Nothing)
+                bodyRequiredSigners
+  where
+    bodyRequiredSigners =
+        renderKeyHash
+            <$> Set.toAscList (body ^. reqSignerHashesTxBodyL)
+
+selectedScopeOwnerRequirement :: ReportContext -> [SignerRequirement]
+selectedScopeOwnerRequirement context =
+    case rcSelectedScopeOwner context of
+        Nothing -> []
+        Just (keyHash, scope) ->
+            [ signerRequirement
+                SourceSelectedScopeOwner
+                (Just scope)
+                keyHash
+            ]
+
+signerRequirement
+    :: SignerSource -> Maybe Text -> Text -> SignerRequirement
+signerRequirement source scope keyHash =
+    SignerRequirement
+        { srKeyHash = keyHash
+        , srSource = source
+        , srScope = scope
+        }
+
+dedupeSigners :: [SignerRequirement] -> [SignerRequirement]
+dedupeSigners = go Set.empty
+  where
+    go _ [] = []
+    go seen (signer : rest)
+        | Set.member (srKeyHash signer) seen = go seen rest
+        | otherwise =
+            signer : go (Set.insert (srKeyHash signer) seen) rest
+
 inputSummary :: (TxIn, TxOut ConwayEra) -> UtxoSummary
 inputSummary (txIn, txOut) =
     UtxoSummary
@@ -483,6 +536,10 @@ renderTxIn (TxIn (TxId h) ix) =
     Text.decodeUtf8 (B16.encode (hashToBytes (extractHash h)))
         <> "#"
         <> T.pack (show (txIxToInt ix))
+
+renderKeyHash :: KeyHash discriminator -> Text
+renderKeyHash (KeyHash h) =
+    Text.decodeUtf8 (B16.encode (hashToBytes h))
 
 networkMagic :: Text -> Int
 networkMagic = \case

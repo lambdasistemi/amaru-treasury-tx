@@ -158,18 +158,27 @@ reference inputs in the report.
 
 ### RED Proof for User Story 3
 
-- [ ] T032 [P] [US3] Add RED signer-source tests for selected scope owner, extra signer, intent-required signer, and tx-body-required signer in `test/unit/Amaru/Treasury/ReportSpec.hs`.
+- [X] T032 [P] [US3] Add RED signer-source tests for selected scope owner, extra signer, intent-required signer, and tx-body-required signer in `test/unit/Amaru/Treasury/ReportSpec.hs`.
 - [ ] T033 [P] [US3] Add RED validation-facts tests for intent network, socket network magic, network match, fee, body size, redeemer count, zero redeemer failures, validation status, and validity interval in `test/unit/Amaru/Treasury/ReportSpec.hs`.
 - [ ] T034 [P] [US3] Add RED reference-input and metadata-summary tests in `test/unit/Amaru/Treasury/ReportSpec.hs`.
 - [ ] T035 [US3] Add RED swap golden assertions for signers, validation facts, and selected reference inputs in `test/golden/SwapGoldenSpec.hs`.
 
 ### GREEN Implementation for User Story 3
 
-- [ ] T036 [US3] Implement signer requirement extraction and source labelling in `lib/Amaru/Treasury/Report.hs`.
+- [X] T036 [US3] Implement signer requirement extraction and source labelling in `lib/Amaru/Treasury/Report.hs`.
 - [ ] T037 [US3] Expose any missing selected scope owner, extra signer, tx-body signer, reference input, validity interval, and validation summary data from `lib/Amaru/Treasury/TreasuryBuild.hs`.
 - [ ] T038 [US3] Implement validation facts, reference inputs, and metadata summary encoding in `lib/Amaru/Treasury/Report.hs`.
-- [ ] T039 [US3] Update `test/fixtures/swap/report.golden.json` through the golden update flow in `test/golden/SwapGoldenSpec.hs`.
-- [ ] T040 [US3] Confirm GREEN for the US3 slice with `nix develop --quiet -c just unit Report` and `nix develop --quiet -c just golden swap` covering `test/unit/Amaru/Treasury/ReportSpec.hs`, `test/golden/SwapGoldenSpec.hs`, and `test/fixtures/swap/report.golden.json`.
+- [X] T039 [US3] Update `test/fixtures/swap/report.golden.json` through the golden update flow in `test/golden/SwapGoldenSpec.hs`.
+- [X] T040 [US3] Confirm GREEN for the US3 slice with `nix develop --quiet -c just unit Report` and `nix develop --quiet -c just golden swap` covering `test/unit/Amaru/Treasury/ReportSpec.hs`, `test/golden/SwapGoldenSpec.hs`, and `test/fixtures/swap/report.golden.json`.
+
+**Slice split (2026-05-09 signer sources)**: T032/T036/T039/T040
+cover signer-source extraction only. The slice adds unit coverage for
+selected scope owner, extra signer, intent-required signer, and tx-body
+fallback source labels, plus a swap report golden refresh for selected
+scope owner and extra signer output. T033/T034/T035's validation-fact
+and reference-input assertions, T037's remaining build-result exposure,
+and T038's validation/reference/metadata encoding stay open for later
+US3 slices.
 
 **Checkpoint**: US3 acceptance scenarios 1-3 are met.
 

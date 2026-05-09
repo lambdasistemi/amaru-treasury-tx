@@ -374,7 +374,18 @@
         "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2"
     ],
     "schema": 1,
-    "signers": [],
+    "signers": [
+        {
+            "keyHash": "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+            "scope": "network_compliance",
+            "source": "selectedScopeOwner"
+        },
+        {
+            "keyHash": "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+            "scope": null,
+            "source": "extraSigner"
+        }
+    ],
     "treasuryAccounting": {
         "inputTotal": {
             "assets": {},

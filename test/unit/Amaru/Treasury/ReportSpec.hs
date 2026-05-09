@@ -241,6 +241,48 @@ spec = describe "Amaru.Treasury.Report" $ do
             drop 33 roles
                 `shouldBe` [OutputTreasuryLeftover, OutputWalletChange]
 
+    it
+        "extracts tx-body required signers from the swap fixture"
+        $ do
+            report <- buildSwapFixtureReport
+            trSigners report
+                `shouldBe` [ SignerRequirement
+                                { srKeyHash =
+                                    "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
+                                , srSource = SourceTxBodyRequiredSigner
+                                , srScope = Nothing
+                                }
+                           , SignerRequirement
+                                { srKeyHash =
+                                    "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+                                , srSource = SourceTxBodyRequiredSigner
+                                , srScope = Nothing
+                                }
+                           ]
+
+    it
+        "labels selected scope owner, extra signer, and intent signer sources"
+        $ do
+            report <- buildSwapFixtureReportWith signerSourceContext
+            trSigners report
+                `shouldBe` [ SignerRequirement
+                                { srKeyHash = networkComplianceOwner
+                                , srSource = SourceSelectedScopeOwner
+                                , srScope =
+                                    Just "network_compliance"
+                                }
+                           , SignerRequirement
+                                { srKeyHash = opsOwner
+                                , srSource = SourceExtraSigner
+                                , srScope = Nothing
+                                }
+                           , SignerRequirement
+                                { srKeyHash = sampleKeyHash
+                                , srSource = SourceIntentRequiredSigner
+                                , srScope = Nothing
+                                }
+                           ]
+
     it "encodes every produced-output role tag" $
         toJSON (roleOutput <$> allProducedOutputRoles)
             `shouldBe` toJSON
@@ -256,7 +298,10 @@ decodedReport :: Either String Value
 decodedReport = eitherDecode (encodeReport sampleReport)
 
 buildSwapFixtureReport :: IO TransactionReport
-buildSwapFixtureReport = do
+buildSwapFixtureReport = buildSwapFixtureReportWith emptyReportContext
+
+buildSwapFixtureReportWith :: ReportContext -> IO TransactionReport
+buildSwapFixtureReportWith reportContext = do
     si <- decodeTreasuryIntentFile "test/fixtures/swap/intent.json"
     some <- case si of
         Left e -> error ("intent JSON: " <> e)
@@ -266,12 +311,31 @@ buildSwapFixtureReport = do
     tbr <- runFromIntent ctx some
     pure $
         buildTransactionReport
-            ReportContext
-                { rcAction = "swap"
-                , rcNetwork = "mainnet"
-                , rcSocketNetworkMagic = 764_824_073
-                }
+            reportContext
             tbr
+
+emptyReportContext :: ReportContext
+emptyReportContext =
+    ReportContext
+        { rcAction = "swap"
+        , rcNetwork = "mainnet"
+        , rcSocketNetworkMagic = 764_824_073
+        , rcSelectedScopeOwner = Nothing
+        , rcExtraSigners = []
+        , rcIntentRequiredSigners = []
+        }
+
+signerSourceContext :: ReportContext
+signerSourceContext =
+    emptyReportContext
+        { rcSelectedScopeOwner =
+            Just
+                ( networkComplianceOwner
+                , "network_compliance"
+                )
+        , rcExtraSigners = [opsOwner]
+        , rcIntentRequiredSigners = [sampleKeyHash]
+        }
 
 hasField :: String -> Value -> Either String Value -> Bool
 hasField field expected (Right (Object obj)) =
@@ -557,6 +621,14 @@ sampleTxId =
 sampleKeyHash :: Text
 sampleKeyHash =
     "11111111111111111111111111111111111111111111111111111111"
+
+opsOwner :: Text
+opsOwner =
+    "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+
+networkComplianceOwner :: Text
+networkComplianceOwner =
+    "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
 
 allProducedOutputRoles :: [ProducedOutputRole]
 allProducedOutputRoles =

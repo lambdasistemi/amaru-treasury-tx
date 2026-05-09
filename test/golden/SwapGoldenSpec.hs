@@ -51,6 +51,8 @@ import Amaru.Treasury.Report
     ( ProducedOutput (..)
     , ProducedOutputRole (..)
     , ReportContext (..)
+    , SignerRequirement (..)
+    , SignerSource (..)
     , TransactionReport (..)
     , ValidationFacts (..)
     , WalletAccounting (..)
@@ -135,6 +137,21 @@ spec =
                 secondReportBytes = encodeReport secondReport
             waNetSpendLovelace (trWalletAccounting firstReport)
                 `shouldBe` vfFeeLovelace (trValidation firstReport)
+            trSigners firstReport
+                `shouldBe` [ SignerRequirement
+                                { srKeyHash =
+                                    "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
+                                , srSource = SourceSelectedScopeOwner
+                                , srScope =
+                                    Just "network_compliance"
+                                }
+                           , SignerRequirement
+                                { srKeyHash =
+                                    "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+                                , srSource = SourceExtraSigner
+                                , srScope = Nothing
+                                }
+                           ]
             assertSwapOutputCoverage firstReport
             update <- lookupEnv "UPDATE_GOLDENS"
             case update of
@@ -176,6 +193,15 @@ swapReport =
             { rcAction = "swap"
             , rcNetwork = "mainnet"
             , rcSocketNetworkMagic = 764_824_073
+            , rcSelectedScopeOwner =
+                Just
+                    ( "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
+                    , "network_compliance"
+                    )
+            , rcExtraSigners =
+                [ "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+                ]
+            , rcIntentRequiredSigners = []
             }
 
 assertSwapOutputCoverage :: TransactionReport -> IO ()

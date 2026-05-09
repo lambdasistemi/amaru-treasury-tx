@@ -25,8 +25,8 @@ Subcommands:
   produces a swap @intent.json@ from a typed questionnaire.
   See [@specs\/002-swap-wizard\/quickstart.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/002-swap-wizard/quickstart.md).
 * @swap-quote --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --usdm N.NN --split N (--ada-usd N.NN | --ada-usdm N.NN | --price-source SOURCE) --slippage-bps N --validity-hours N --description ... --justification ... --destination-label ... --out-dir path\/run-dir@
-  parses the quote-derived swap preparation command. The composite runner lands
-  in the integration slice.
+  derives swap parameters from a quote, writes @intent.json@ and @params.json@,
+  and builds unsigned CBOR through the existing transaction builder.
 * @withdraw-wizard --network <preprod|mainnet> --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --validity-hours N [--description ...] [--justification ...] [--destination-label ...] [--out path\/intent.json] [--log path\/wizard.log]@
   produces a withdraw @intent.json@ from resolved registry and reward state.
 -}
@@ -78,7 +78,9 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
+import Data.Time.Clock (getCurrentTime)
 import Data.Time.Clock.POSIX (getPOSIXTime)
+import Data.Time.Format (defaultTimeLocale, formatTime)
 import Data.Word (Word64, Word8)
 import Lens.Micro ((^.))
 import Ouroboros.Network.Magic (NetworkMagic (..))
@@ -86,6 +88,7 @@ import Ouroboros.Network.Magic (NetworkMagic (..))
 import Data.Set qualified as Set
 
 import Cardano.Ledger.Api.Tx.Out (valueTxOutL)
+import System.Directory (createDirectoryIfMissing)
 
 import Amaru.Treasury.Backend (Provider (..))
 import Amaru.Treasury.Backend.N2C
@@ -97,8 +100,15 @@ import Amaru.Treasury.Backend.N2C
     )
 import Amaru.Treasury.ChainContext (liveContext)
 import Amaru.Treasury.Cli.SwapQuote
-    ( SwapQuoteOpts
+    ( SwapQuoteOpts (..)
+    , SwapQuotePaths (..)
+    , SwapQuotePlan (..)
+    , SwapQuoteQuoteArg (..)
+    , SwapQuoteRunDecision (..)
+    , decideSwapQuoteRun
+    , deriveSwapQuotePlan
     , swapQuoteOptsP
+    , swapQuotePaths
     )
 import Amaru.Treasury.Cli.TxBuild
     ( TxBuildOpts (..)
@@ -142,6 +152,19 @@ import Amaru.Treasury.TreasuryBuild.Trace
     ( BuildEvent (..)
     , buildEventTracer
     )
+import Amaru.Treasury.Tx.SwapQuote
+    ( AffordabilityFailure (..)
+    , DerivedSwapParameters (..)
+    , QuoteObservation
+    , SwapQuoteAudit (..)
+    , renderAffordabilityFailure
+    , writeSwapQuoteAudit
+    )
+import Amaru.Treasury.Tx.SwapQuote.Source
+    ( coingeckoAdaUsdProvider
+    , fetchQuoteSource
+    , renderQuoteSourceError
+    )
 import Amaru.Treasury.Tx.SwapWizard
     ( NetworkConstants (..)
     , RationaleAnswers (..)
@@ -157,6 +180,7 @@ import Amaru.Treasury.Tx.SwapWizard
     , WalletSelection (..)
     , WizardEnv (..)
     , WizardError
+    , networkConstants
     , registryViewFromVerified
     , renderWalletShortfall
     , resolveWizardEnv
@@ -619,9 +643,8 @@ main = do
     case c of
         CmdSwapWizard wo ->
             runWizard g{goSocketPath = Just socket} wo
-        CmdSwapQuote _qo ->
-            throwIO . userError $
-                "swap-quote: runner lands in the composite runner slice"
+        CmdSwapQuote qo ->
+            runSwapQuote g{goSocketPath = Just socket} qo
         CmdWithdrawWizard wo ->
             runWithdrawWizard g{goSocketPath = Just socket} wo
         CmdTxBuild to ->
@@ -757,6 +780,304 @@ runWizard g WizardOpts{..} = do
                 case wOptsOut of
                     Nothing -> BSL.putStr bytes
                     Just fp -> BSL.writeFile fp bytes
+
+-- ----------------------------------------------------
+-- swap-quote subcommand
+-- ----------------------------------------------------
+
+runSwapQuote :: GlobalOpts -> SwapQuoteOpts -> IO ()
+runSwapQuote g quoteOpts@SwapQuoteOpts{..} = do
+    let socket = fromMaybe "(unset)" (goSocketPath g)
+        paths = swapQuotePaths sqoOutDir
+    createDirectoryIfMissing True sqoOutDir
+    observedAt <- currentIso8601
+    withLogHandle (Just (sqpWizardLog paths)) $ \logH -> do
+        let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
+            tr = eventTracer textTracer
+        networkName <- case resolveNetworkName g of
+            Right t -> pure t
+            Left e -> abortTr tr (T.pack e)
+        observation <- resolveSwapQuoteObservation tr observedAt sqoQuote
+        plan <- case deriveSwapQuotePlan networkName quoteOpts observation of
+            Right p -> pure p
+            Left e -> abortTr tr ("swap-quote: " <> T.pack e)
+        let NetworkMagic magic = goNetworkMagic g
+        traceWith tr (WeNetwork networkName (fromIntegral magic))
+        traceWith tr (WeMetadata sqoMetadataPath)
+
+        withLocalNodeBackend (goNetworkMagic g) socket $
+            \backend -> do
+                verified <-
+                    verifyRegistry
+                        backend
+                        sqoMetadataPath
+                        (Set.singleton sqoScope)
+                rv <- case verified of
+                    Left e ->
+                        abortTr tr ("verify: " <> T.pack (show e))
+                    Right registry ->
+                        case registryViewFromVerified
+                            sqoScope
+                            registry of
+                            Left e ->
+                                abortTr
+                                    tr
+                                    ("project: " <> T.pack (show e))
+                            Right view -> pure view
+                traceRegistryView tr sqoScope rv
+                let ri =
+                        sqpResolverInput plan $
+                            ResolverInput
+                                { riNetwork = networkName
+                                , riWalletAddrBech32 = sqoWalletAddr
+                                , riScope = sqoScope
+                                , riAmountLovelace =
+                                    dspAmountLovelace (sqpDerived plan)
+                                , riChunkSizeLovelace =
+                                    dspChunkSizeLovelace (sqpDerived plan)
+                                , riRegistry = rv
+                                }
+                    renv =
+                        traceResolverEnv tr $
+                            providerToResolverEnv backend
+                er <- resolveWizardEnv renv ri
+                env <- case er of
+                    Left (ResolverShortfall avail _required) ->
+                        abortSwapQuoteAffordability
+                            tr
+                            observedAt
+                            plan
+                            networkName
+                            avail
+                    Left (ResolverWalletShortfall avail required) ->
+                        abortTr tr (renderWalletShortfall ri avail required)
+                    Left e ->
+                        abortTr tr ("resolve: " <> T.pack (show e))
+                    Right e -> pure e
+                traceEnv tr env
+                intent <-
+                    case wizardToTreasuryIntent env (sqpAnswers plan) of
+                        Left we ->
+                            abortTr
+                                tr
+                                ( "translate: "
+                                    <> T.pack
+                                        (show (we :: WizardError))
+                                )
+                        Right i -> pure i
+                let p = tiPayload intent
+                    total = swiAmountLovelace p
+                    cs = swiChunkSizeLovelace p
+                    full = total `div` cs
+                    rem' = total `mod` cs
+                    generatedChunks = full + if rem' > 0 then 1 else 0
+                    extraPerChunk =
+                        ncExtraPerChunkLovelace (weNetworkConstants env)
+                    selectedTreasuryLovelace =
+                        total
+                            + generatedChunks * extraPerChunk
+                            + tsLeftoverLovelace
+                                (weTreasurySelection env)
+                    decision =
+                        decideSwapQuoteRun
+                            plan
+                            extraPerChunk
+                            selectedTreasuryLovelace
+                case decision of
+                    SwapQuoteRunBlocked failure audit ->
+                        writeAndAbortSwapQuoteAudit
+                            tr
+                            observedAt
+                            plan
+                            failure
+                            audit
+                    SwapQuoteRunAllowed _summary audit -> do
+                        traceWith tr $
+                            WeValidityComputed
+                                (weCurrentTip env)
+                                (tiValidityUpperBoundSlot intent)
+                        traceWith tr $
+                            WeChunksComputed total cs (fromInteger full) rem'
+                        traceWith tr (WeIntentReady (Just (sqpIntentJson paths)))
+                        BSL.writeFile
+                            (sqpIntentJson paths)
+                            ( encodeSomeTreasuryIntent
+                                (SomeTreasuryIntent SSwap intent)
+                            )
+                        runSwapQuoteBuild
+                            socket
+                            (sqpBuildLog paths)
+                            (sqpUnsignedCborHex paths)
+                            (SomeTreasuryIntent SSwap intent)
+                        writeSwapQuoteAudit
+                            (sqpParamsJson paths)
+                            (stampSwapQuoteAudit observedAt audit)
+
+currentIso8601 :: IO Text
+currentIso8601 =
+    T.pack . formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ"
+        <$> getCurrentTime
+
+resolveSwapQuoteObservation
+    :: Tracer IO WizardEvent
+    -> Text
+    -> SwapQuoteQuoteArg
+    -> IO QuoteObservation
+resolveSwapQuoteObservation tr observedAt = \case
+    SwapQuoteOverride observation ->
+        pure observation
+    SwapQuoteSource source -> do
+        result <- fetchQuoteSource coingeckoAdaUsdProvider source observedAt
+        case result of
+            Right observation ->
+                pure observation
+            Left err ->
+                abortTr tr (renderQuoteSourceError err)
+
+abortSwapQuoteAffordability
+    :: Tracer IO WizardEvent
+    -> Text
+    -> SwapQuotePlan
+    -> Text
+    -> Integer
+    -> IO a
+abortSwapQuoteAffordability tr observedAt plan networkName available =
+    case networkConstants networkName of
+        Left e ->
+            abortTr tr (T.pack e)
+        Right nc ->
+            case decideSwapQuoteRun
+                plan
+                (ncExtraPerChunkLovelace nc)
+                available of
+                SwapQuoteRunBlocked failure audit ->
+                    writeAndAbortSwapQuoteAudit
+                        tr
+                        observedAt
+                        plan
+                        failure
+                        audit
+                SwapQuoteRunAllowed{} ->
+                    abortTr tr "resolve: treasury affordability changed during resolution"
+
+writeAndAbortSwapQuoteAudit
+    :: Tracer IO WizardEvent
+    -> Text
+    -> SwapQuotePlan
+    -> AffordabilityFailure
+    -> SwapQuoteAudit
+    -> IO a
+writeAndAbortSwapQuoteAudit tr observedAt plan failure audit = do
+    writeSwapQuoteAudit
+        (sqpParamsJson (sqpPaths plan))
+        (stampSwapQuoteAudit observedAt audit)
+    abortTr tr (renderAffordabilityFailure failure)
+
+stampSwapQuoteAudit
+    :: Text
+    -> SwapQuoteAudit
+    -> SwapQuoteAudit
+stampSwapQuoteAudit observedAt audit =
+    audit{sqaObservedAt = observedAt}
+
+runSwapQuoteBuild
+    :: FilePath
+    -> FilePath
+    -> FilePath
+    -> SomeTreasuryIntent
+    -> IO ()
+runSwapQuoteBuild socket logPath cborPath some =
+    withLogHandle (Just logPath) $ \logH -> do
+        let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
+            tr = buildEventTracer textTracer
+        let (actionName, netName) =
+                case some of
+                    SomeTreasuryIntent _sa intent ->
+                        ( T.pack
+                            (drop 1 (show (tiSAction intent)))
+                        , tiNetwork intent
+                        )
+        traceWith tr (TbeIntentParsed actionName netName)
+        magic <- case netName of
+            "mainnet" -> pure (NetworkMagic 764_824_073)
+            "preprod" -> pure (NetworkMagic 1)
+            "preview" -> pure (NetworkMagic 2)
+            other ->
+                abortBuild
+                    tr
+                    ("unknown network in intent: " <> other)
+        traceWith tr (TbeConnect socket)
+        required <- case requiredUtxos some of
+            Left e ->
+                abortBuild tr ("required UTxOs: " <> T.pack e)
+            Right s -> pure s
+        traceWith
+            tr
+            (TbeRequiredUtxos (Set.size required))
+        ok <- probeNetworkMagic magic socket
+        if ok
+            then
+                traceWith
+                    tr
+                    ( TbeNetworkOk
+                        netName
+                        (unNetworkMagic magic)
+                    )
+            else do
+                socketMagic <-
+                    findSocketMagic
+                        (`probeNetworkMagic` socket)
+                        netName
+                traceWith
+                    tr
+                    ( TbeNetworkMismatch
+                        netName
+                        (unNetworkMagic magic)
+                        socketMagic
+                    )
+                exitWith (ExitFailure 6)
+        withLocalNodeBackend magic socket $ \backend -> do
+            ctx <- liveContext backend required
+            tbr <- runFromIntent ctx some
+            let cborStrict = BSL.toStrict (tbrCborBytes tbr)
+                hexed = B16.encode cborStrict
+                Coin feeLov = tbrFeeLovelace tbr
+                Coin tcLov = tbrTotalCollateralLovelace tbr
+                failures =
+                    [ (purpose, e)
+                    | ScriptResult purpose (Left e) <-
+                        tbrScriptResults tbr
+                    ]
+            traceWith
+                tr
+                ( TbeBuilt
+                    (BS.length cborStrict)
+                    feeLov
+                    tcLov
+                )
+            traceWith
+                tr
+                ( TbeReevaluated
+                    (length (tbrScriptResults tbr))
+                    (length failures)
+                )
+            mapM_
+                ( \(p, e) ->
+                    traceWith
+                        tr
+                        ( TbeScriptFail
+                            (T.pack (show p))
+                            (T.pack e)
+                        )
+                )
+                failures
+            BS.writeFile cborPath hexed
+            traceWith tr (TbeWroteCbor (Just cborPath))
+            if null failures
+                then traceWith tr TbeValidationOk
+                else do
+                    traceWith tr TbeValidationFailed
+                    exitFailure
 
 -- ----------------------------------------------------
 -- withdraw-wizard subcommand

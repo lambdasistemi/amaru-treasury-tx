@@ -194,20 +194,20 @@ stops before `swap.cbor.hex` when unaffordable.
 
 ### Tests for User Stories 1, 2, and 3
 
-- [ ] T040 [P] [US1] Add RED deterministic runner test coverage in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` proving derived `SwapWizardQ` values match the existing manual `--min-rate` path for the same derived rate.
-- [ ] T041 [P] [US2] Add RED runner test coverage in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` proving affordability failure exits before unsigned CBOR is written while still producing the failure audit summary.
-- [ ] T042 [P] [US3] Add RED output-path coverage in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` proving successful runs report `intent.json`, `swap.cbor.hex`, `params.json`, `wizard.log`, and `build.log`.
-- [ ] T043 [P] [US1] Add `scripts/smoke/swap-quote-override` with a deterministic override path using existing swap fixtures and no live quote source.
+- [x] T040 [P] [US1] Add RED deterministic runner test coverage in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` proving derived `SwapWizardQ` values match the existing manual `--min-rate` path for the same derived rate.
+- [x] T041 [P] [US2] Add RED runner test coverage in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` proving affordability failure exits before unsigned CBOR is written while still producing the failure audit summary.
+- [x] T042 [P] [US3] Add RED output-path coverage in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` proving successful runs report `intent.json`, `swap.cbor.hex`, `params.json`, `wizard.log`, and `build.log`.
+- [x] T043 [P] [US1] Add `scripts/smoke/swap-quote-override` with a deterministic override path using existing swap fixtures and no live quote source.
 
 ### Implementation for User Stories 1, 2, and 3
 
-- [ ] T044 [US1] Refactor `app/amaru-treasury-tx/Main.hs` just enough to reuse the existing swap wizard resolver and intent builder from the `swap-quote` runner without changing the manual `swap-wizard --min-rate` override path.
-- [ ] T045 [US1] Implement the `swap-quote` runner in `app/amaru-treasury-tx/Main.hs`, including quote resolution, derived `SwapWizardQ` construction, `intent.json` writing, and `wizard.log` writing.
-- [ ] T046 [US2] Integrate `checkAffordability` after generated intent/chunk values are known and before `runFromIntent` writes unsigned CBOR in `app/amaru-treasury-tx/Main.hs`.
-- [ ] T047 [US3] Integrate `params.json` writing for both built and affordability-failed results in `app/amaru-treasury-tx/Main.hs`.
-- [ ] T048 [US1] Preserve the existing manual `swap-wizard --min-rate` behavior and tests while adding `swap-quote`; no existing manual override output should change except where explicitly covered by new tests.
-- [ ] T049 [US1] Wire `scripts/smoke/swap-quote-override` into the `smoke` recipe in `justfile`.
-- [ ] T050 [US1] Run `nix develop --quiet -c just unit SwapQuote`, `nix develop --quiet -c just smoke`, and `nix develop --quiet -c just golden swap`; record RED/GREEN evidence in the work-review handoff.
+- [x] T044 [US1] Refactor `app/amaru-treasury-tx/Main.hs` just enough to reuse the existing swap wizard resolver and intent builder from the `swap-quote` runner without changing the manual `swap-wizard --min-rate` override path.
+- [x] T045 [US1] Implement the `swap-quote` runner in `app/amaru-treasury-tx/Main.hs`, including quote resolution, derived `SwapWizardQ` construction, `intent.json` writing, and `wizard.log` writing.
+- [x] T046 [US2] Integrate `checkAffordability` after generated intent/chunk values are known and before `runFromIntent` writes unsigned CBOR in `app/amaru-treasury-tx/Main.hs`.
+- [x] T047 [US3] Integrate `params.json` writing for both built and affordability-failed results in `app/amaru-treasury-tx/Main.hs`.
+- [x] T048 [US1] Preserve the existing manual `swap-wizard --min-rate` behavior and tests while adding `swap-quote`; no existing manual override output should change except where explicitly covered by new tests.
+- [x] T049 [US1] Wire `scripts/smoke/swap-quote-override` into the `smoke` recipe in `justfile`.
+- [x] T050 [US1] Run `nix develop --quiet -c just unit SwapQuote`, `nix develop --quiet -c just smoke`, and `nix develop --quiet -c just golden swap`; record RED/GREEN evidence in the work-review handoff.
 
 **Checkpoint**: US1, US2, and US3 are executable through the operator
 CLI with deterministic quote overrides and existing build artifacts.

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cabal build exe:amaru-treasury-tx -O0 >/dev/null
+exe="$(cabal list-bin exe:amaru-treasury-tx -O0)"
+help_text="$("$exe" swap-quote --help)"
+
+for needle in \
+  "--ada-usd DECIMAL" \
+  "--ada-usdm DECIMAL" \
+  "--price-source SOURCE" \
+  "--slippage-bps INT" \
+  "--out-dir PATH"
+do
+  grep -F -- "$needle" <<<"$help_text" >/dev/null || {
+    printf 'swap-quote help missing: %s\n' "$needle" >&2
+    exit 1
+  }
+done
+
+cabal test unit-tests -O0 \
+  --test-show-details=direct \
+  --test-option=--match \
+  --test-option="swap-quote runner planning"
+
+printf 'swap-quote-override: OK\n'

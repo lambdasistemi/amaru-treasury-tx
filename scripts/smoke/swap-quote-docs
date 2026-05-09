@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+require() {
+  local file="$1"
+  local needle="$2"
+  grep -F -- "$needle" "$file" >/dev/null || {
+    printf '%s missing required text: %s\n' "$file" "$needle" >&2
+    exit 1
+  }
+}
+
+reject() {
+  local file="$1"
+  local needle="$2"
+  if grep -F -- "$needle" "$file" >/dev/null; then
+    printf '%s still contains forbidden text: %s\n' "$file" "$needle" >&2
+    exit 1
+  fi
+}
+
+require docs/quickstart.md "swap-quote"
+require docs/quickstart.md "--price-source coingecko-ada-usd"
+require docs/quickstart.md "--slippage-bps"
+reject docs/quickstart.md "--min-rate 0.245"
+
+require docs/swap.md "quote-derived"
+require docs/swap.md "Expert/manual override"
+require docs/swap.md "--ada-usdm"
+require docs/swap.md "Named live ADA/USDM sources are"
+require docs/swap.md "deferred until a provider contract is approved"
+reject docs/swap.md "--min-rate 0.245"
+
+printf 'swap-quote-docs: OK\n'

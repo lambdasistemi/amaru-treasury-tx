@@ -227,15 +227,15 @@ slippage, and no recommended example keeps the stale
 
 ### Tests for User Story 4
 
-- [ ] T051 [P] [US4] Add a documentation regression check in `scripts/smoke/swap-quote-docs` or an equivalent shell check proving `docs/swap.md` does not present `--min-rate 0.245` as the recommended path.
-- [ ] T052 [P] [US4] Add `swap-quote --help` coverage to the release or smoke path in `scripts/smoke/swap-quote-override` so the new operator command is protected by CLI smoke tests.
+- [x] T051 [P] [US4] Add a documentation regression check in `scripts/smoke/swap-quote-docs` or an equivalent shell check proving `docs/swap.md` does not present `--min-rate 0.245` as the recommended path.
+- [x] T052 [P] [US4] Add `swap-quote --help` coverage to the release or smoke path in `scripts/smoke/swap-quote-override` so the new operator command is protected by CLI smoke tests.
 
 ### Implementation for User Story 4
 
-- [ ] T053 [US4] Update `docs/quickstart.md` so the primary swap example uses `swap-quote` with `--price-source coingecko-ada-usd` or a deterministic quote override plus `--slippage-bps`.
-- [ ] T054 [US4] Update `docs/swap.md` so direct `swap-wizard --min-rate` examples are labelled expert/manual override and explain the external audit responsibility.
-- [ ] T055 [US4] Document explicit `--ada-usdm` override support and the deferred named live ADA/USDM source in `docs/swap.md`.
-- [ ] T056 [US4] Wire `scripts/smoke/swap-quote-docs` into `just smoke` if a script is used, then run `nix develop --quiet -c just smoke` and strict docs build with `nix develop github:paolino/dev-assets?dir=mkdocs --quiet -c mkdocs build --strict --site-dir site`; record RED/GREEN evidence in the work-review handoff.
+- [x] T053 [US4] Update `docs/quickstart.md` so the primary swap example uses `swap-quote` with `--price-source coingecko-ada-usd` or a deterministic quote override plus `--slippage-bps`.
+- [x] T054 [US4] Update `docs/swap.md` so direct `swap-wizard --min-rate` examples are labelled expert/manual override and explain the external audit responsibility.
+- [x] T055 [US4] Document explicit `--ada-usdm` override support and the deferred named live ADA/USDM source in `docs/swap.md`.
+- [x] T056 [US4] Wire `scripts/smoke/swap-quote-docs` into `just smoke` if a script is used, then run `nix develop --quiet -c just smoke` and strict docs build with `nix develop github:paolino/dev-assets?dir=mkdocs --quiet -c mkdocs build --strict --site-dir site`; record RED/GREEN evidence in the work-review handoff.
 
 **Checkpoint**: SC-004 and SC-005 are covered by documentation and
 smoke evidence.

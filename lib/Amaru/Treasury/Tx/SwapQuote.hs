@@ -19,6 +19,10 @@ module Amaru.Treasury.Tx.SwapQuote
     , DerivedSwapParameters (..)
     , AffordabilitySummary (..)
     , AffordabilityFailure (..)
+    , SwapQuoteAudit (..)
+    , SwapQuoteAuditRequest (..)
+    , SwapQuoteOutputs (..)
+    , SwapQuoteStatus (..)
     , SwapQuoteError (..)
     , parseQuoteInput
     , parseSlippageBps
@@ -26,8 +30,19 @@ module Amaru.Treasury.Tx.SwapQuote
     , generatedChunkCount
     , checkAffordability
     , renderAffordabilityFailure
+    , encodeSwapQuoteAudit
+    , writeSwapQuoteAudit
     ) where
 
+import Data.Aeson (Value, object, (.=))
+import Data.Aeson.Encode.Pretty
+    ( Config (..)
+    , Indent (Spaces)
+    , NumberFormat (Generic)
+    , encodePretty'
+    )
+import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Lazy qualified as BSL
 import Data.Char (digitToInt, isDigit)
 import Data.Ratio (denominator, numerator, (%))
 import Data.Text (Text)
@@ -94,6 +109,40 @@ data AffordabilitySummary = AffordabilitySummary
 
 newtype AffordabilityFailure
     = Unaffordable AffordabilitySummary
+    deriving (Eq, Show)
+
+data SwapQuoteStatus
+    = SwapQuoteBuilt
+    | SwapQuoteAffordabilityFailed
+    | SwapQuoteAborted
+    deriving (Eq, Show)
+
+data SwapQuoteAuditRequest = SwapQuoteAuditRequest
+    { sqarNetwork :: !Text
+    , sqarScope :: !Text
+    , sqarRequestedUsdm :: !Rational
+    , sqarChunk :: !SwapQuoteRequestChunk
+    , sqarValidityHours :: !Integer
+    , sqarExtraSigners :: ![Text]
+    }
+    deriving (Eq, Show)
+
+data SwapQuoteOutputs = SwapQuoteOutputs
+    { sqoIntentJson :: !FilePath
+    , sqoUnsignedCborHex :: !(Maybe FilePath)
+    , sqoWizardLog :: !FilePath
+    , sqoBuildLog :: !(Maybe FilePath)
+    }
+    deriving (Eq, Show)
+
+data SwapQuoteAudit = SwapQuoteAudit
+    { sqaStatus :: !SwapQuoteStatus
+    , sqaObservedAt :: !Text
+    , sqaDerived :: !DerivedSwapParameters
+    , sqaRequest :: !SwapQuoteAuditRequest
+    , sqaAffordability :: !AffordabilitySummary
+    , sqaOutputs :: !SwapQuoteOutputs
+    }
     deriving (Eq, Show)
 
 data SwapQuoteError
@@ -225,6 +274,135 @@ renderAffordabilityFailure (Unaffordable summary) =
         ]
   where
     derived = asDerived summary
+
+encodeSwapQuoteAudit :: SwapQuoteAudit -> ByteString
+encodeSwapQuoteAudit =
+    encodePretty' auditJsonConfig . swapQuoteAuditValue
+
+writeSwapQuoteAudit :: FilePath -> SwapQuoteAudit -> IO ()
+writeSwapQuoteAudit path =
+    BSL.writeFile path . encodeSwapQuoteAudit
+
+swapQuoteAuditValue :: SwapQuoteAudit -> Value
+swapQuoteAuditValue audit =
+    object
+        [ "schema" .= (1 :: Integer)
+        , "command" .= ("swap-quote" :: Text)
+        , "status" .= statusText (sqaStatus audit)
+        , "quote" .= quoteValue (sqaObservedAt audit) derived
+        , "slippage" .= slippageValue derived
+        , "derived" .= derivedValue derived
+        , "request" .= requestValue (sqaRequest audit)
+        , "affordability" .= affordabilityValue (sqaAffordability audit)
+        , "outputs" .= outputsValue (sqaOutputs audit)
+        ]
+  where
+    derived = sqaDerived audit
+
+auditJsonConfig :: Config
+auditJsonConfig =
+    Config
+        { confIndent = Spaces 4
+        , confCompare = compare
+        , confNumFormat = Generic
+        , confTrailingNewline = True
+        }
+
+statusText :: SwapQuoteStatus -> Text
+statusText = \case
+    SwapQuoteBuilt ->
+        "built"
+    SwapQuoteAffordabilityFailed ->
+        "affordability_failed"
+    SwapQuoteAborted ->
+        "aborted"
+
+quoteValue :: Text -> DerivedSwapParameters -> Value
+quoteValue observedAt derived =
+    object
+        [ "pair" .= quotePairText observation
+        , "value" .= formatRationalDecimal (qoQuote observation)
+        , "provenance" .= quoteProvenanceValue (qoProvenance observation)
+        , "observedAt" .= observedAt
+        ]
+  where
+    observation = dspQuote derived
+
+quotePairText :: QuoteObservation -> Text
+quotePairText observation =
+    case qoPair observation of
+        AdaUsd -> "ADA/USD"
+        AdaUsdm -> "ADA/USDM"
+
+quoteProvenanceValue :: QuoteProvenance -> Value
+quoteProvenanceValue = \case
+    OperatorOverride ->
+        object ["kind" .= ("override" :: Text)]
+
+slippageValue :: DerivedSwapParameters -> Value
+slippageValue derived =
+    object
+        [ "basisPoints" .= unSlippageBps (dspSlippageBps derived)
+        ]
+
+derivedValue :: DerivedSwapParameters -> Value
+derivedValue derived =
+    object
+        [ "minRate"
+            .= formatRationalDecimal
+                (dspRateNumerator derived % dspRateDenominator derived)
+        , "rateNumerator" .= dspRateNumerator derived
+        , "rateDenominator" .= dspRateDenominator derived
+        , "amountLovelace" .= dspAmountLovelace derived
+        , "chunkSizeLovelace" .= dspChunkSizeLovelace derived
+        ]
+
+requestValue :: SwapQuoteAuditRequest -> Value
+requestValue request =
+    object
+        [ "network" .= sqarNetwork request
+        , "scope" .= sqarScope request
+        , "requestedUsdm" .= formatRationalDecimal (sqarRequestedUsdm request)
+        , "chunking" .= chunkingValue (sqarChunk request)
+        , "validityHours" .= sqarValidityHours request
+        , "extraSigners" .= sqarExtraSigners request
+        ]
+
+chunkingValue :: SwapQuoteRequestChunk -> Value
+chunkingValue = \case
+    SplitInto count ->
+        object
+            [ "kind" .= ("split" :: Text)
+            , "count" .= count
+            ]
+    ChunkUsdm amount ->
+        object
+            [ "kind" .= ("chunk_usdm" :: Text)
+            , "amountUsdm" .= formatRationalDecimal amount
+            ]
+
+affordabilityValue :: AffordabilitySummary -> Value
+affordabilityValue summary =
+    object
+        [ "amountLovelace" .= dspAmountLovelace (asDerived summary)
+        , "chunkCount" .= asChunkCount summary
+        , "extraPerChunkLovelace" .= asExtraPerChunkLovelace summary
+        , "requiredLovelace" .= asRequiredLovelace summary
+        , "selectedTreasuryLovelace" .= asAvailableLovelace summary
+        , "availableLovelace" .= asAvailableLovelace summary
+        , "shortfallLovelace" .= asShortfallLovelace summary
+        , "affordable"
+            .= (asAvailableLovelace summary >= asRequiredLovelace summary)
+        ]
+
+outputsValue :: SwapQuoteOutputs -> Value
+outputsValue outputs =
+    object
+        [ "intentJson" .= sqoIntentJson outputs
+        , "unsignedCborHex" .= sqoUnsignedCborHex outputs
+        , "wizardLog" .= sqoWizardLog outputs
+        , "buildLog" .= sqoBuildLog outputs
+        ]
 
 usdmToLovelace :: Rational -> Rational -> Integer
 usdmToLovelace usdm rate =

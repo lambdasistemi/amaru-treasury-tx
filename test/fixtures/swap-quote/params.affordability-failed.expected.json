@@ -1,0 +1,52 @@
+{
+    "affordability": {
+        "affordable": false,
+        "amountLovelace": 124350736421,
+        "availableLovelace": 124462256420,
+        "chunkCount": 34,
+        "extraPerChunkLovelace": 3280000,
+        "requiredLovelace": 124462256421,
+        "selectedTreasuryLovelace": 124462256420,
+        "shortfallLovelace": 1
+    },
+    "command": "swap-quote",
+    "derived": {
+        "amountLovelace": 124350736421,
+        "chunkSizeLovelace": 3768204133,
+        "minRate": "0.804177",
+        "rateDenominator": 1000000,
+        "rateNumerator": 804177
+    },
+    "outputs": {
+        "buildLog": null,
+        "intentJson": "swap-run-2026-05-09/intent.json",
+        "unsignedCborHex": null,
+        "wizardLog": "swap-run-2026-05-09/wizard.log"
+    },
+    "quote": {
+        "observedAt": "2026-05-09T10:00:00Z",
+        "pair": "ADA/USD",
+        "provenance": {
+            "kind": "override"
+        },
+        "value": "0.8123"
+    },
+    "request": {
+        "chunking": {
+            "count": 33,
+            "kind": "split"
+        },
+        "extraSigners": [
+            "core_development"
+        ],
+        "network": "mainnet",
+        "requestedUsdm": "100000",
+        "scope": "network_compliance",
+        "validityHours": 28
+    },
+    "schema": 1,
+    "slippage": {
+        "basisPoints": 100
+    },
+    "status": "affordability_failed"
+}

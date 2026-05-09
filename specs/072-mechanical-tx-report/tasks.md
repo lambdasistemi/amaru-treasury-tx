@@ -266,13 +266,19 @@ later slice.
 **Purpose**: Prove the completed feature preserves existing contracts
 and that the new report contract is ready for downstream tooling.
 
-- [ ] T055 Run the full local gate `bash llm/reviews/gate.sh` and record the passing output summary for `llm/reviews/work-review.md`.
-- [ ] T056 Run or confirm focused report contract validation through `nix develop --quiet -c just schema-check` for `docs/assets/tx-report-schema.json`.
-- [ ] T057 Run or confirm focused swap report golden proof through `nix develop --quiet -c just golden swap` for `test/fixtures/swap/report.golden.json`.
-- [ ] T058 Check that existing unsigned CBOR fixtures are unchanged except for intentionally refreshed report artifacts by inspecting `test/fixtures/swap/expected.cbor` and `test/fixtures/swap/report.golden.json`.
-- [ ] T059 Update the PR body or review handoff with final report contract, golden, smoke, docs, and full-gate evidence for `llm/reviews/work-review.md`.
+- [X] T055 Run the full local gate `bash llm/reviews/gate.sh` and record the passing output summary for `llm/reviews/work-review.md`.
+- [X] T056 Run or confirm focused report contract validation through `nix develop --quiet -c just schema-check` for `docs/assets/tx-report-schema.json`.
+- [X] T057 Run or confirm focused swap report golden proof through `nix develop --quiet -c just golden swap` for `test/fixtures/swap/report.golden.json`.
+- [X] T058 Check that existing unsigned CBOR fixtures are unchanged except for intentionally refreshed report artifacts by inspecting `test/fixtures/swap/expected.cbor` and `test/fixtures/swap/report.golden.json`.
+- [X] T059 Update the PR body or review handoff with final report contract, golden, smoke, docs, and full-gate evidence for `llm/reviews/work-review.md`.
 
 **Checkpoint**: The feature is ready for reviewer finalization review.
+
+**Slice split (2026-05-09 final verification)**: T055-T059 cover the
+full local gate, focused schema contract validation, focused swap
+golden proof, unsigned swap CBOR fixture diff inspection, and final
+handoff evidence. No feature code, report schema, report golden, smoke
+script, or operator documentation changed in this slice.
 
 ---
 

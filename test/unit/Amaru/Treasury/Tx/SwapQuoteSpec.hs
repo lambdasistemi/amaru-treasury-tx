@@ -29,8 +29,14 @@ import Test.Hspec
 
 import Amaru.Treasury.Cli.SwapQuote
     ( SwapQuoteOpts (..)
+    , SwapQuotePaths (..)
+    , SwapQuotePlan (..)
     , SwapQuoteQuoteArg (..)
+    , SwapQuoteRunDecision (..)
+    , decideSwapQuoteRun
+    , deriveSwapQuotePlan
     , swapQuoteOptsP
+    , swapQuotePaths
     )
 import Amaru.Treasury.Scope (ScopeId (..))
 import Amaru.Treasury.Tx.SwapQuote
@@ -42,9 +48,12 @@ import Amaru.Treasury.Tx.SwapQuote
     , QuotePair (..)
     , QuoteProvenance (..)
     , SlippageBps (..)
+    , SwapQuoteAudit (..)
     , SwapQuoteError (..)
+    , SwapQuoteOutputs (..)
     , SwapQuoteRequest (..)
     , SwapQuoteRequestChunk (..)
+    , SwapQuoteStatus (..)
     , checkAffordability
     , deriveSwapParameters
     , parseQuoteInput
@@ -57,6 +66,10 @@ import Amaru.Treasury.Tx.SwapQuote.Source
     , parseCoinGeckoAdaUsdResponse
     , parseQuoteSourceName
     , quoteSourceName
+    )
+import Amaru.Treasury.Tx.SwapWizard
+    ( RationaleAnswers (..)
+    , SwapWizardQ (..)
     )
 
 spec :: Spec
@@ -294,6 +307,69 @@ spec = describe "SwapQuote" $ do
                 `shouldBe` Left
                     (NamedAdaUsdmSourceUnavailable "coingecko-ada-usdm")
 
+    describe "swap-quote runner planning" $ do
+        it "derives the same SwapWizardQ values as the manual min-rate path" $ do
+            plan <-
+                expectRight
+                    ( deriveSwapQuotePlan
+                        "mainnet"
+                        (sampleSwapQuoteOpts sampleAdaUsdOverride)
+                        sampleAdaUsdObservation
+                    )
+            sqpAnswers plan
+                `shouldBe` SwapWizardQ
+                    { wqScope = NetworkCompliance
+                    , wqAmountLovelace = 124_350_733_732
+                    , wqChunkSizeLovelace = 3_768_204_052
+                    , wqRateNumerator = 804_177
+                    , wqRateDenominator = 1_000_000
+                    , wqValidityHours = 28
+                    , wqRationale =
+                        RationaleAnswers
+                            { raDescription = "Treasury swap"
+                            , raJustification = "Quote-derived execution"
+                            , raDestinationLabel = "USDM reserve"
+                            , raEvent = Nothing
+                            , raLabel = Nothing
+                            }
+                    , wqExtraSigners = []
+                    }
+
+        it "keeps affordability failures before unsigned CBOR output" $ do
+            plan <-
+                expectRight
+                    ( deriveSwapQuotePlan
+                        "mainnet"
+                        (sampleSwapQuoteOpts sampleAdaUsdOverride)
+                        sampleAdaUsdObservation
+                    )
+            case decideSwapQuoteRun plan 3_280_000 124_462_253_731 of
+                SwapQuoteRunBlocked failure audit -> do
+                    failure
+                        `shouldBe` Unaffordable
+                            AffordabilitySummary
+                                { asDerived = sqpDerived plan
+                                , asChunkCount = 34
+                                , asExtraPerChunkLovelace = 3_280_000
+                                , asRequiredLovelace = 124_462_253_732
+                                , asAvailableLovelace = 124_462_253_731
+                                , asShortfallLovelace = 1
+                                }
+                    sqaStatus audit `shouldBe` SwapQuoteAffordabilityFailed
+                    sqoUnsignedCborHex (sqaOutputs audit) `shouldBe` Nothing
+                SwapQuoteRunAllowed{} ->
+                    expectationFailure "expected affordability failure"
+
+        it "reports the standard swap-quote output paths" $
+            swapQuotePaths "swap-run"
+                `shouldBe` SwapQuotePaths
+                    { sqpIntentJson = "swap-run/intent.json"
+                    , sqpUnsignedCborHex = "swap-run/swap.cbor.hex"
+                    , sqpParamsJson = "swap-run/params.json"
+                    , sqpWizardLog = "swap-run/wizard.log"
+                    , sqpBuildLog = "swap-run/build.log"
+                    }
+
 withDerived
     :: Either SwapQuoteError DerivedSwapParameters
     -> (DerivedSwapParameters -> Expectation)
@@ -378,3 +454,23 @@ sampleSwapQuoteOpts quote =
         , sqoLabel = Nothing
         , sqoSigners = []
         }
+
+sampleAdaUsdOverride :: SwapQuoteQuoteArg
+sampleAdaUsdOverride =
+    SwapQuoteOverride sampleAdaUsdObservation
+
+sampleAdaUsdObservation :: QuoteObservation
+sampleAdaUsdObservation =
+    QuoteObservation
+        { qoPair = AdaUsd
+        , qoQuote = 8123 % 10_000
+        , qoProvenance = OperatorOverride
+        }
+
+expectRight :: (Show e) => Either e a -> IO a
+expectRight = \case
+    Right value ->
+        pure value
+    Left err ->
+        expectationFailure ("unexpected Left: " <> show err)
+            >> fail "unexpected Left"

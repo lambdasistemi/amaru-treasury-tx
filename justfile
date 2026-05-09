@@ -58,6 +58,7 @@ schema-check:
 # Smoke-test the shipped CLI surface
 smoke:
     scripts/smoke/swap-wizard-signers
+    scripts/smoke/swap-quote-override
     scripts/smoke/withdraw-wizard-zero-rewards
     scripts/smoke/withdraw-wizard-pipe
     scripts/smoke/tx-build-pipe

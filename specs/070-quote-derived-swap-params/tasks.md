@@ -134,17 +134,17 @@ fixtures byte-for-byte without live network access.
 
 ### Tests for User Story 3
 
-- [ ] T023 [P] [US3] Add deterministic quote fixture files `test/fixtures/swap-quote/quote.ada-usd.override.json` and `test/fixtures/swap-quote/quote.ada-usdm.override.json`.
-- [ ] T024 [P] [US3] Add `test/fixtures/swap-quote/params.built.expected.json` covering the required fields from `contracts/swap-quote-audit-json.md`.
-- [ ] T025 [P] [US3] Add `test/fixtures/swap-quote/params.affordability-failed.expected.json` proving failed affordability writes diagnostic audit data with no unsigned CBOR path.
-- [ ] T026 [US3] Add RED audit golden tests in `test/golden/SwapQuoteAuditGoldenSpec.hs` for built and affordability-failed artifacts.
+- [x] T023 [P] [US3] Add deterministic quote fixture files `test/fixtures/swap-quote/quote.ada-usd.override.json` and `test/fixtures/swap-quote/quote.ada-usdm.override.json`.
+- [x] T024 [P] [US3] Add `test/fixtures/swap-quote/params.built.expected.json` covering the required fields from `contracts/swap-quote-audit-json.md`.
+- [x] T025 [P] [US3] Add `test/fixtures/swap-quote/params.affordability-failed.expected.json` proving failed affordability writes diagnostic audit data with no unsigned CBOR path.
+- [x] T026 [US3] Add RED audit golden tests in `test/golden/SwapQuoteAuditGoldenSpec.hs` for built and affordability-failed artifacts.
 
 ### Implementation for User Story 3
 
-- [ ] T027 [US3] Implement `SwapQuoteAudit`, `SwapQuoteOutputs`, and `SwapQuoteStatus` in `lib/Amaru/Treasury/Tx/SwapQuote.hs`.
-- [ ] T028 [US3] Implement stable JSON encoding for `SwapQuoteAudit` in `lib/Amaru/Treasury/Tx/SwapQuote.hs`, preserving exact rational decision values as strings and lovelace/rate integers as JSON integers.
-- [ ] T029 [US3] Implement audit artifact writing helpers in `lib/Amaru/Treasury/Tx/SwapQuote.hs` that fail visibly when `params.json` cannot be written.
-- [ ] T030 [US3] Run `nix develop --quiet -c just golden SwapQuote` or `nix develop --quiet -c just golden SwapQuoteAudit` and record the RED failure command/result before T027-T029 plus the GREEN pass command/result after T027-T029 in the work-review handoff.
+- [x] T027 [US3] Implement `SwapQuoteAudit`, `SwapQuoteOutputs`, and `SwapQuoteStatus` in `lib/Amaru/Treasury/Tx/SwapQuote.hs`.
+- [x] T028 [US3] Implement stable JSON encoding for `SwapQuoteAudit` in `lib/Amaru/Treasury/Tx/SwapQuote.hs`, preserving exact rational decision values as strings and lovelace/rate integers as JSON integers.
+- [x] T029 [US3] Implement audit artifact writing helpers in `lib/Amaru/Treasury/Tx/SwapQuote.hs` that fail visibly when `params.json` cannot be written.
+- [x] T030 [US3] Run `nix develop --quiet -c just golden SwapQuote` or `nix develop --quiet -c just golden SwapQuoteAudit` and record the RED failure command/result before T027-T029 plus the GREEN pass command/result after T027-T029 in the work-review handoff.
 
 **Checkpoint**: US3 acceptance scenario 1 is covered for successful
 fixture runs, and scenario 2 is covered for affordability failures.

@@ -105,16 +105,16 @@ the required total uses generated chunk count and
 
 ### Tests for User Story 2
 
-- [ ] T016 [P] [US2] Add RED affordability exact-pass and one-lovelace-short tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs`.
-- [ ] T017 [P] [US2] Add RED generated-chunk-count tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` proving required lovelace is `amountLovelace + chunk_count * extraPerChunkLovelace`.
-- [ ] T018 [P] [US2] Add RED diagnostic rendering tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` covering required ADA, available ADA, quote, slippage, and shortfall in the unaffordable error.
+- [x] T016 [P] [US2] Add RED affordability exact-pass and one-lovelace-short tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs`.
+- [x] T017 [P] [US2] Add RED generated-chunk-count tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` proving required lovelace is `amountLovelace + chunk_count * extraPerChunkLovelace`.
+- [x] T018 [P] [US2] Add RED diagnostic rendering tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` covering required ADA, available ADA, quote, slippage, and shortfall in the unaffordable error.
 
 ### Implementation for User Story 2
 
-- [ ] T019 [US2] Implement `AffordabilitySummary` and `checkAffordability` in `lib/Amaru/Treasury/Tx/SwapQuote.hs`.
-- [ ] T020 [US2] Implement typed affordability failure rendering in `lib/Amaru/Treasury/Tx/SwapQuote.hs`.
-- [ ] T021 [US2] Refactor or expose the minimal generated intent/chunk-count helper needed from `lib/Amaru/Treasury/Tx/SwapWizard.hs` so `swap-quote` uses generated intent values rather than operator estimates.
-- [ ] T022 [US2] Run `nix develop --quiet -c just unit SwapQuote` and record the RED failure command/result before T019-T021 plus the GREEN pass command/result after T019-T021 in the work-review handoff.
+- [x] T019 [US2] Implement `AffordabilitySummary` and `checkAffordability` in `lib/Amaru/Treasury/Tx/SwapQuote.hs`.
+- [x] T020 [US2] Implement typed affordability failure rendering in `lib/Amaru/Treasury/Tx/SwapQuote.hs`.
+- [x] T021 [US2] Refactor or expose the minimal generated intent/chunk-count helper needed from `lib/Amaru/Treasury/Tx/SwapWizard.hs` so `swap-quote` uses generated intent values rather than operator estimates.
+- [x] T022 [US2] Run `nix develop --quiet -c just unit SwapQuote` and record the RED failure command/result before T019-T021 plus the GREEN pass command/result after T019-T021 in the work-review handoff.
 
 **Checkpoint**: US2 acceptance scenarios 1-3 pass at the pure summary
 level before CLI wiring.

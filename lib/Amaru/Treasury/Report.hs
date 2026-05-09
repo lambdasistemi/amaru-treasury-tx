@@ -46,12 +46,6 @@ import Cardano.Ledger.BaseTypes
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Hashes (extractHash)
-import Cardano.Ledger.Mary.Value
-    ( AssetName (..)
-    , MaryValue (..)
-    , MultiAsset (..)
-    , PolicyID (..)
-    )
 import Cardano.Ledger.Plutus.Data qualified as PlutusData
 import Cardano.Ledger.TxIn
     ( TxId (..)
@@ -69,18 +63,22 @@ import Data.Aeson.Encode.Pretty
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as BSL
-import Data.ByteString.Short qualified as SBS
 import Data.Either (fromRight)
 import Data.Foldable (toList)
-import Data.Map.Strict (Map)
-import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
 import Lens.Micro ((^.))
 
-import Amaru.Treasury.Registry.Derive (scriptHashToHex)
+import Amaru.Treasury.Report.Accounting
+    ( UtxoSummary (..)
+    , ValueSummary (..)
+    , emptyValue
+    , sumValueSummaries
+    , treasuryNetDebit
+    , valueSummary
+    )
 import Amaru.Treasury.TreasuryBuild
     ( ScriptResult (..)
     , TreasuryBuildResult (..)
@@ -188,18 +186,6 @@ data ValidityInterval = ValidityInterval
     }
     deriving stock (Eq, Show)
 
-data ValueSummary = ValueSummary
-    { vsLovelace :: Integer
-    , vsAssets :: Map Text (Map Text Integer)
-    }
-    deriving stock (Eq, Show)
-
-data UtxoSummary = UtxoSummary
-    { usTxIn :: Text
-    , usValue :: ValueSummary
-    }
-    deriving stock (Eq, Show)
-
 data MetadataSummary = MetadataSummary
     { msAuxiliaryDataHash :: Maybe Text
     , msCip1694LabelPresent :: Bool
@@ -303,20 +289,6 @@ instance ToJSON ValidityInterval where
             , "invalidHereafter" .= viInvalidHereafter interval
             ]
 
-instance ToJSON ValueSummary where
-    toJSON value =
-        object
-            [ "lovelace" .= vsLovelace value
-            , "assets" .= vsAssets value
-            ]
-
-instance ToJSON UtxoSummary where
-    toJSON utxo =
-        object
-            [ "txIn" .= usTxIn utxo
-            , "value" .= usValue utxo
-            ]
-
 instance ToJSON MetadataSummary where
     toJSON metadata =
         object
@@ -359,12 +331,14 @@ buildTransactionReport context result =
                 }
         , trTreasuryAccounting =
             TreasuryAccounting
-                { taInputs = []
-                , taInputTotal = emptyValue
-                , taSundaeOrderTotal = emptyValue
-                , taPerChunkOverheadLovelace = 0
-                , taTreasuryLeftover = emptyValue
-                , taNetDebit = emptyValue
+                { taInputs = treasuryInputs
+                , taInputTotal = treasuryInputTotal
+                , taSundaeOrderTotal = sundaeOrderTotal
+                , taPerChunkOverheadLovelace = perChunkOverhead
+                , taTreasuryLeftover = treasuryLeftover
+                , taNetDebit =
+                    treasuryInputTotal
+                        `treasuryNetDebit` treasuryLeftover
                 }
         , trOutputs =
             zipWith
@@ -402,8 +376,23 @@ buildTransactionReport context result =
     bodySize = fromIntegral (BSL.length (tbrCborBytes result))
     Coin feeLovelace = tbrFeeLovelace result
     Coin totalCollateral = tbrTotalCollateralLovelace result
+    Coin perChunkOverhead = tbrPerChunkOverheadLovelace result
     scriptResults = tbrScriptResults result
     walletInputs = inputSummary <$> tbrWalletInputs result
+    treasuryInputs =
+        inputSummary <$> tbrTreasuryInputs result
+    treasuryInputTotal =
+        sumValueSummaries (usValue <$> treasuryInputs)
+    sundaeOrderTotal =
+        sumValueSummaries
+            [ valueSummary (txOut ^. valueTxOutL)
+            | (_, txOut) <- tbrSundaeOrderOutputs result
+            ]
+    treasuryLeftover =
+        maybe
+            emptyValue
+            (valueSummary . (^. valueTxOutL) . snd)
+            (tbrTreasuryLeftoverOutput result)
     walletInputLovelace =
         sum (vsLovelace . usValue <$> walletInputs)
     walletChangeLovelace =
@@ -472,23 +461,6 @@ strictMaybe = \case
 slotNo :: SlotNo -> Integer
 slotNo (SlotNo value) = fromIntegral value
 
-valueSummary :: MaryValue -> ValueSummary
-valueSummary (MaryValue (Coin lovelace) (MultiAsset policies)) =
-    ValueSummary
-        { vsLovelace = lovelace
-        , vsAssets =
-            Map.filter (not . Map.null) $
-                Map.fromListWith
-                    (Map.unionWith (+))
-                    [ ( policyIdText policy
-                      , Map.singleton (assetNameText asset) quantity
-                      )
-                    | (policy, assets) <- Map.toList policies
-                    , (asset, quantity) <- Map.toList assets
-                    , quantity /= 0
-                    ]
-        }
-
 datumSummary :: PlutusData.Datum ConwayEra -> Maybe Text
 datumSummary = \case
     PlutusData.NoDatum -> Nothing
@@ -519,13 +491,6 @@ renderTxIn (TxIn (TxId h) ix) =
     Text.decodeUtf8 (B16.encode (hashToBytes (extractHash h)))
         <> "#"
         <> T.pack (show (txIxToInt ix))
-
-policyIdText :: PolicyID -> Text
-policyIdText (PolicyID scriptHash) = scriptHashToHex scriptHash
-
-assetNameText :: AssetName -> Text
-assetNameText (AssetName raw) =
-    Text.decodeUtf8 (B16.encode (SBS.fromShort raw))
 
 networkMagic :: Text -> Int
 networkMagic = \case
@@ -617,13 +582,6 @@ sampleUtxo =
         { usTxIn =
             "0000000000000000000000000000000000000000000000000000000000000000#0"
         , usValue = emptyValue
-        }
-
-emptyValue :: ValueSummary
-emptyValue =
-    ValueSummary
-        { vsLovelace = 0
-        , vsAssets = mempty
         }
 
 producedOutputRoleText :: ProducedOutputRole -> Text

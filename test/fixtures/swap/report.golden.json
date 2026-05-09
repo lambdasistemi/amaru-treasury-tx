@@ -378,21 +378,29 @@
     "treasuryAccounting": {
         "inputTotal": {
             "assets": {},
-            "lovelace": 0
+            "lovelace": 1450000000000
         },
-        "inputs": [],
+        "inputs": [
+            {
+                "txIn": "64f27254f3c0311fb2e672cdb87de200089a596aa90dc09f8be4248540267cf0#0",
+                "value": {
+                    "assets": {},
+                    "lovelace": 1450000000000
+                }
+            }
+        ],
         "netDebit": {
             "assets": {},
-            "lovelace": 0
+            "lovelace": 408271505306
         },
-        "perChunkOverheadLovelace": 0,
+        "perChunkOverheadLovelace": 3280000,
         "sundaeOrderTotal": {
             "assets": {},
-            "lovelace": 0
+            "lovelace": 408271505306
         },
         "treasuryLeftover": {
             "assets": {},
-            "lovelace": 0
+            "lovelace": 1041728494694
         }
     },
     "validation": {

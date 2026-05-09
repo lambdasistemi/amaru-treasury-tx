@@ -41,6 +41,11 @@ import Amaru.Treasury.Report
     , buildTransactionReport
     , encodeReport
     )
+import Amaru.Treasury.Report.Accounting
+    ( addValueSummary
+    , sumValueSummaries
+    , treasuryNetDebit
+    )
 import Amaru.Treasury.TreasuryBuild (runFromIntent)
 
 spec :: Spec
@@ -138,6 +143,90 @@ spec = describe "Amaru.Treasury.Report" $ do
                 `shouldSatisfy` (> 0)
             waNetSpendLovelace wallet
                 `shouldBe` vfFeeLovelace (trValidation report)
+
+    it
+        "accounts for swap treasury inputs, orders, overhead, leftover, and net debit"
+        $ do
+            report <- buildSwapFixtureReport
+            let treasury = trTreasuryAccounting report
+            taInputs treasury `shouldSatisfy` (not . null)
+            taInputTotal treasury
+                `shouldBe` ValueSummary
+                    { vsLovelace = 1_450_000_000_000
+                    , vsAssets = Map.empty
+                    }
+            taSundaeOrderTotal treasury
+                `shouldBe` ValueSummary
+                    { vsLovelace = 408_271_505_306
+                    , vsAssets = Map.empty
+                    }
+            taPerChunkOverheadLovelace treasury `shouldBe` 3_280_000
+            taTreasuryLeftover treasury
+                `shouldBe` ValueSummary
+                    { vsLovelace = 1_041_728_494_694
+                    , vsAssets = Map.empty
+                    }
+            taNetDebit treasury
+                `shouldBe` ValueSummary
+                    { vsLovelace = 408_271_505_306
+                    , vsAssets = Map.empty
+                    }
+
+    it
+        "preserves and nets treasury native assets across inputs, orders, leftover, and net debit"
+        $ do
+            let treasuryInputs =
+                    [ ValueSummary
+                        { vsLovelace = 110
+                        , vsAssets =
+                            Map.fromList
+                                [
+                                    ( "policyA"
+                                    , Map.fromList
+                                        [ ("assetA", 5)
+                                        , ("assetB", 2)
+                                        ]
+                                    )
+                                ]
+                        }
+                    , ValueSummary
+                        { vsLovelace = 40
+                        , vsAssets =
+                            Map.fromList
+                                [ ("policyA", Map.singleton "assetA" 7)
+                                , ("policyB", Map.singleton "assetC" 11)
+                                ]
+                        }
+                    ]
+                inputTotal = sumValueSummaries treasuryInputs
+                orderTotal =
+                    ValueSummary
+                        { vsLovelace = 60
+                        , vsAssets =
+                            Map.fromList
+                                [ ("policyA", Map.singleton "assetA" 8)
+                                , ("policyB", Map.singleton "assetC" 3)
+                                ]
+                        }
+                leftover =
+                    ValueSummary
+                        { vsLovelace = 90
+                        , vsAssets =
+                            Map.fromList
+                                [
+                                    ( "policyA"
+                                    , Map.fromList
+                                        [ ("assetA", 4)
+                                        , ("assetB", 2)
+                                        ]
+                                    )
+                                , ("policyB", Map.singleton "assetC" 8)
+                                ]
+                        }
+
+            inputTotal
+                `shouldBe` orderTotal `addValueSummary` leftover
+            treasuryNetDebit inputTotal leftover `shouldBe` orderTotal
 
 decodedReport :: Either String Value
 decodedReport = eitherDecode (encodeReport sampleReport)

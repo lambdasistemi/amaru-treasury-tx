@@ -158,6 +158,14 @@ data TreasuryBuildResult = TreasuryBuildResult
     -- ^ transaction id of the final balanced transaction
     , tbrWalletInputs :: ![(TxIn, TxOut ConwayEra)]
     -- ^ wallet-owned inputs used to fuel the build
+    , tbrTreasuryInputs :: ![(TxIn, TxOut ConwayEra)]
+    -- ^ treasury-owned inputs spent by the build
+    , tbrSundaeOrderOutputs :: ![(Int, TxOut ConwayEra)]
+    -- ^ final Sundae order outputs, paired with ledger output indexes
+    , tbrTreasuryLeftoverOutput :: !(Maybe (Int, TxOut ConwayEra))
+    -- ^ final treasury leftover output, when present
+    , tbrPerChunkOverheadLovelace :: !Coin
+    -- ^ per-order overhead funded by the treasury for swap builds
     , tbrWalletChangeOutput :: !(Maybe (Int, TxOut ConwayEra))
     -- ^ final wallet change output, paired with its output index
     , tbrCollateralInput :: !(Maybe (TxIn, TxOut ConwayEra))
@@ -336,6 +344,10 @@ runWithdraw ctx intent rationale walletAddr = do
                     , tbrFinalTxBody = body
                     , tbrTxId = txIdText tx
                     , tbrWalletInputs = walletInputUtxos
+                    , tbrTreasuryInputs = []
+                    , tbrSundaeOrderOutputs = []
+                    , tbrTreasuryLeftoverOutput = Nothing
+                    , tbrPerChunkOverheadLovelace = Coin 0
                     , tbrWalletChangeOutput =
                         indexedOutputAt changeOutputIndex body
                     , tbrCollateralInput =
@@ -397,11 +409,13 @@ runDisburseAda ctx fields payload rationale walletAddr = do
                 <> show missing
     let walletInputUtxos =
             [(walletInput, utxoMap Map.! walletInput)]
+        treasuryInputUtxos =
+            [ (i, utxoMap Map.! i)
+            | i <- treasuryInputs
+            ]
         inputUtxos =
             walletInputUtxos
-                ++ [ (i, utxoMap Map.! i)
-                   | i <- treasuryInputs
-                   ]
+                ++ treasuryInputUtxos
         refUtxos =
             [ (i, utxoMap Map.! i)
             | i <- refInputs
@@ -471,6 +485,10 @@ runDisburseAda ctx fields payload rationale walletAddr = do
                     , tbrFinalTxBody = body
                     , tbrTxId = txIdText tx
                     , tbrWalletInputs = walletInputUtxos
+                    , tbrTreasuryInputs = treasuryInputUtxos
+                    , tbrSundaeOrderOutputs = []
+                    , tbrTreasuryLeftoverOutput = Nothing
+                    , tbrPerChunkOverheadLovelace = Coin 0
                     , tbrWalletChangeOutput =
                         indexedOutputAt 2 body
                     , tbrCollateralInput =
@@ -781,6 +799,18 @@ runSwap ctx intent rationale walletInput walletAddr = do
                     , tbrFinalTxBody = body
                     , tbrTxId = txIdText tx
                     , tbrWalletInputs = walletInputUtxos
+                    , tbrTreasuryInputs = treasuryInputUtxos
+                    , tbrSundaeOrderOutputs =
+                        indexedOutputs
+                            0
+                            (length (siSwapOrders intent))
+                            body
+                    , tbrTreasuryLeftoverOutput =
+                        indexedOutputAt
+                            (length (siSwapOrders intent))
+                            body
+                    , tbrPerChunkOverheadLovelace =
+                        siSwapOrderExtraLovelace intent
                     , tbrWalletChangeOutput =
                         indexedOutputAt
                             (length (siSwapOrders intent) + 1)
@@ -809,6 +839,15 @@ indexedOutputAt index body =
     (index,) <$> listToMaybe (drop index outputs)
   where
     outputs = toList (body ^. outputsTxBodyL)
+
+indexedOutputs
+    :: Int
+    -> Int
+    -> TxBody TopTx ConwayEra
+    -> [(Int, TxOut ConwayEra)]
+indexedOutputs start count body =
+    take count . drop start . zip [0 ..] $
+        toList (body ^. outputsTxBodyL)
 
 collateralInputFrom
     :: TxBody TopTx ConwayEra

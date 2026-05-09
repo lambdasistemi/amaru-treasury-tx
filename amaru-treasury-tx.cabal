@@ -33,6 +33,8 @@ extra-source-files:
   test/fixtures/swap/**/*.cbor
   test/fixtures/swap/**/*.json
   test/fixtures/swap/**/*.md
+  test/fixtures/swap-quote/**/*.json
+  test/fixtures/swap-quote/**/*.md
   test/fixtures/swap-wizard/**/*.json
   test/fixtures/withdraw/**/*.cbor
   test/fixtures/withdraw/**/*.json
@@ -107,6 +109,8 @@ library
     Amaru.Treasury.Tx.DisburseWizard.Trace
     Amaru.Treasury.Tx.Reorganize
     Amaru.Treasury.Tx.Swap
+    Amaru.Treasury.Tx.SwapQuote
+    Amaru.Treasury.Tx.SwapQuote.Source
     Amaru.Treasury.Tx.SwapWizard
     Amaru.Treasury.Tx.SwapWizard.Trace
     Amaru.Treasury.Tx.Withdraw
@@ -140,6 +144,7 @@ library
     , contra-tracer
     , file-embed
     , filepath
+    , http-conduit
     , microlens
     , optparse-applicative
     , ouroboros-consensus
@@ -148,6 +153,7 @@ library
     , plutus-core
     , plutus-ledger-api
     , plutus-tx
+    , scientific
     , text
     , time
 
@@ -158,6 +164,7 @@ executable amaru-treasury-tx
   default-language: GHC2021
   build-depends:
     , aeson
+    , aeson-pretty
     , amaru-treasury-tx
     , base                   <5
     , base16-bytestring
@@ -262,6 +269,7 @@ test-suite unit-tests
     Amaru.Treasury.Tx.DisburseBuildSpec
     Amaru.Treasury.Tx.DisburseSpec
     Amaru.Treasury.Tx.DisburseWizardSpec
+    Amaru.Treasury.Tx.SwapQuoteSpec
     Amaru.Treasury.Tx.SwapSpec
     Amaru.Treasury.Tx.SwapWizardSpec
     Amaru.Treasury.Tx.WithdrawSpec
@@ -312,6 +320,7 @@ test-suite golden-tests
     PlaceholderSpec
     RegistryWalkGoldenSpec
     SwapGoldenSpec
+    SwapQuoteAuditGoldenSpec
     UsdmDisburseGoldenSpec
     WithdrawGoldenSpec
 

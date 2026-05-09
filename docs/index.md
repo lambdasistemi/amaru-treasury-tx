@@ -9,7 +9,7 @@ Haskell port of the bash recipes in
 
 ## Quick links
 
-- [**Quickstart**](quickstart.md) — the `swap-wizard | tx-build` pipe in one go.
+- [**Quickstart**](quickstart.md) — the `swap-wizard | tx-build` pipe, including the pre-signing report review step.
 - [Architecture overview](architecture.md) — modules and data flow.
 - [Trust model](trust-model.md) — what the wizard verifies, what the operator must assert.
 - [Swap recipe](swap.md) — building an existing swap intent with `tx-build`.
@@ -28,7 +28,7 @@ Haskell port of the bash recipes in
 | :------ | :------ |
 | `swap-wizard` | Verify upstream `metadata.json` against the chain, resolve UTxOs + tip, emit a unified swap `intent.json` (typed step trace via `WizardEvent`). |
 | `withdraw-wizard` | Verify upstream `metadata.json` against the chain, resolve the treasury reward account + reward balance, emit a unified withdraw `intent.json`, or exit cleanly when rewards are zero. |
-| `tx-build` | Turn a unified `intent.json` into unsigned Conway CBOR; re-evaluates every redeemer against a live `ChainContext` (typed step trace via `BuildEvent`). |
+| `tx-build` | Turn a unified `intent.json` into unsigned Conway CBOR; re-evaluates every redeemer against a live `ChainContext` (typed step trace via `BuildEvent`) and can write a deterministic pre-signing report with `--report PATH`. |
 
 `tx-build` reads the action discriminator and the network from
 the intent itself (single source of truth) and dispatches to the

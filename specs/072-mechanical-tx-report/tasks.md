@@ -240,17 +240,24 @@ quickstart/swap pages for the pre-signing report step.
 
 ### RED Proof for User Story 4
 
-- [ ] T049 [P] [US4] Add RED docs checks or review checklist entries for report-before-signing guidance in `docs/quickstart.md`.
-- [ ] T050 [P] [US4] Add RED docs checks or review checklist entries for swap-specific accounting guidance in `docs/swap.md`.
+- [X] T049 [P] [US4] Add RED docs checks or review checklist entries for report-before-signing guidance in `docs/quickstart.md`.
+- [X] T050 [P] [US4] Add RED docs checks or review checklist entries for swap-specific accounting guidance in `docs/swap.md`.
 
 ### GREEN Implementation for User Story 4
 
-- [ ] T051 [US4] Update `docs/quickstart.md` to show `tx-build --report PATH`, list expected artifacts, and direct operators to inspect the report before signing.
-- [ ] T052 [US4] Update `docs/swap.md` with wallet accounting, treasury accounting, output roles, signer sources, and validation facts from `test/fixtures/swap/report.golden.json`.
-- [ ] T053 [US4] Update `docs/index.md` or another existing docs entry point only if needed to expose the report workflow from `docs/quickstart.md`.
-- [ ] T054 [US4] Confirm GREEN docs proof with `nix develop github:paolino/dev-assets?dir=mkdocs --quiet -c mkdocs build --strict --site-dir site` covering `docs/quickstart.md`, `docs/swap.md`, and `docs/index.md`.
+- [X] T051 [US4] Update `docs/quickstart.md` to show `tx-build --report PATH`, list expected artifacts, and direct operators to inspect the report before signing.
+- [X] T052 [US4] Update `docs/swap.md` with wallet accounting, treasury accounting, output roles, signer sources, and validation facts from `test/fixtures/swap/report.golden.json`.
+- [X] T053 [US4] Update `docs/index.md` or another existing docs entry point only if needed to expose the report workflow from `docs/quickstart.md`.
+- [X] T054 [US4] Confirm GREEN docs proof with `nix develop github:paolino/dev-assets?dir=mkdocs --quiet -c mkdocs build --strict --site-dir site` covering `docs/quickstart.md`, `docs/swap.md`, and `docs/index.md`.
 
 **Checkpoint**: US4 acceptance scenarios 1-2 and SC-005 are met.
+
+**Slice split (2026-05-09 operator docs)**: T049-T054 cover the
+operator docs checklist entries, quickstart `tx-build --report PATH`
+workflow, expected artifact list, swap-specific accounting/signing
+guidance grounded in `test/fixtures/swap/report.golden.json`, and a
+strict MkDocs build. Final verification T055-T059 stays open for a
+later slice.
 
 ---
 

@@ -52,13 +52,13 @@ reviewable one vertical commit at a time.
 **Purpose**: Create the compile/test surface without changing runtime
 behavior.
 
-- [ ] T001 Add `Amaru.Treasury.Tx.SwapQuote` and `Amaru.Treasury.Tx.SwapQuote.Source` to the library exposed modules in `amaru-treasury-tx.cabal`.
-- [ ] T002 Add skeleton module files `lib/Amaru/Treasury/Tx/SwapQuote.hs` and `lib/Amaru/Treasury/Tx/SwapQuote/Source.hs` with explicit export lists.
-- [ ] T003 [P] Add `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` to the `unit-tests` stanza in `amaru-treasury-tx.cabal`.
-- [ ] T004 [P] Add `test/golden/SwapQuoteAuditGoldenSpec.hs` to the `golden-tests` stanza in `amaru-treasury-tx.cabal`.
-- [ ] T005 Add fixture globs for `test/fixtures/swap-quote/**/*.json` and `test/fixtures/swap-quote/**/*.md` to `extra-source-files` in `amaru-treasury-tx.cabal`.
-- [ ] T006 Add the required dependencies for the planned implementation to `amaru-treasury-tx.cabal`: `scientific` and `http-conduit` for the library, plus any executable-only dependencies required by the `swap-quote` runner.
-- [ ] T007 Run `nix develop --quiet -c just build` and `nix develop --quiet -c just format-check` to confirm the empty scaffolding compiles and is formatted.
+- [x] T001 Add `Amaru.Treasury.Tx.SwapQuote` and `Amaru.Treasury.Tx.SwapQuote.Source` to the library exposed modules in `amaru-treasury-tx.cabal`.
+- [x] T002 Add skeleton module files `lib/Amaru/Treasury/Tx/SwapQuote.hs` and `lib/Amaru/Treasury/Tx/SwapQuote/Source.hs` with explicit export lists.
+- [x] T003 [P] Add `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` to the `unit-tests` stanza in `amaru-treasury-tx.cabal`.
+- [x] T004 [P] Add `test/golden/SwapQuoteAuditGoldenSpec.hs` to the `golden-tests` stanza in `amaru-treasury-tx.cabal`.
+- [x] T005 Add fixture globs for `test/fixtures/swap-quote/**/*.json` and `test/fixtures/swap-quote/**/*.md` to `extra-source-files` in `amaru-treasury-tx.cabal`.
+- [x] T006 Add the required dependencies for the planned implementation to `amaru-treasury-tx.cabal`: `scientific` and `http-conduit` for the library, plus any executable-only dependencies required by the `swap-quote` runner.
+- [x] T007 Run `nix develop --quiet -c just build` and `nix develop --quiet -c just format-check` to confirm the empty scaffolding compiles and is formatted.
 
 **Checkpoint**: The package compiles with empty `SwapQuote` and
 `SwapQuote.Source` scaffolding, and no cabal fixture glob is empty.
@@ -76,17 +76,17 @@ rounding for deterministic inputs without live network access.
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] Add RED derivation tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` for `quote * (10000 - slippageBps) / 10000`, including the plan fixture `0.8123` and `100` bps producing rate numerator `804177` over denominator `1000000`.
-- [ ] T009 [P] [US1] Add RED validation tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` for missing slippage, negative slippage text, slippage `>= 10000`, unparsable quote text, zero quote, and negative quote.
-- [ ] T010 [P] [US1] Add RED ADA/USDM override tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` proving `--ada-usdm` creates an ADA/USDM override observation and never requires a named live ADA/USDM source.
-- [ ] T011 [P] [US1] Add RED rounding tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` proving rate numerator floors and requested ADA/chunk lovelace values ceiling from exact rational inputs.
+- [x] T008 [P] [US1] Add RED derivation tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` for `quote * (10000 - slippageBps) / 10000`, including the plan fixture `0.8123` and `100` bps producing rate numerator `804177` over denominator `1000000`.
+- [x] T009 [P] [US1] Add RED validation tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` for missing slippage, negative slippage text, slippage `>= 10000`, unparsable quote text, zero quote, and negative quote.
+- [x] T010 [P] [US1] Add RED ADA/USDM override tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` proving `--ada-usdm` creates an ADA/USDM override observation and never requires a named live ADA/USDM source.
+- [x] T011 [P] [US1] Add RED rounding tests in `test/unit/Amaru/Treasury/Tx/SwapQuoteSpec.hs` proving rate numerator floors and requested ADA/chunk lovelace values ceiling from exact rational inputs.
 
 ### Implementation for User Story 1
 
-- [ ] T012 [US1] Implement `QuotePair`, `QuoteProvenance`, `QuoteObservation`, `SlippageBps`, `QuoteInput`, and exact decimal parsing in `lib/Amaru/Treasury/Tx/SwapQuote.hs`.
-- [ ] T013 [US1] Implement `deriveSwapParameters` in `lib/Amaru/Treasury/Tx/SwapQuote.hs` with exact rational math, six-decimal rate denominator, floor rate rounding, and ceiling ADA conversions.
-- [ ] T014 [US1] Implement parser-facing helpers for `--ada-usd`, `--ada-usdm`, and `--slippage-bps` in `lib/Amaru/Treasury/Tx/SwapQuote.hs`, returning typed errors before any quote fetch or intent generation.
-- [ ] T015 [US1] Run `nix develop --quiet -c just unit SwapQuote` and record the RED failure command/result before T012-T014 plus the GREEN pass command/result after T012-T014 in the work-review handoff.
+- [x] T012 [US1] Implement `QuotePair`, `QuoteProvenance`, `QuoteObservation`, `SlippageBps`, `QuoteInput`, and exact decimal parsing in `lib/Amaru/Treasury/Tx/SwapQuote.hs`.
+- [x] T013 [US1] Implement `deriveSwapParameters` in `lib/Amaru/Treasury/Tx/SwapQuote.hs` with exact rational math, six-decimal rate denominator, floor rate rounding, and ceiling ADA conversions.
+- [x] T014 [US1] Implement parser-facing helpers for `--ada-usd`, `--ada-usdm`, and `--slippage-bps` in `lib/Amaru/Treasury/Tx/SwapQuote.hs`, returning typed errors before any quote fetch or intent generation.
+- [x] T015 [US1] Run `nix develop --quiet -c just unit SwapQuote` and record the RED failure command/result before T012-T014 plus the GREEN pass command/result after T012-T014 in the work-review handoff.
 
 **Checkpoint**: US1 acceptance scenarios 1 and 2 pass for explicit
 quote overrides; SC-001 is covered without live network access.
@@ -246,10 +246,10 @@ smoke evidence.
 
 **Purpose**: Prove the full feature remains Hackage-ready and CI-aligned.
 
-- [ ] T057 Run `nix develop --quiet -c just ci` and confirm build, schema check, unit tests, golden tests, format check, hlint, smoke, and release check pass.
-- [ ] T058 Run `nix develop --quiet -c just cabal-check` and confirm package metadata remains Hackage-ready after new modules, fixtures, and dependencies.
-- [ ] T059 Review `specs/070-quote-derived-swap-params/quickstart.md`, `docs/quickstart.md`, and `docs/swap.md` together to ensure the ADA/USD source path, explicit ADA/USDM override path, and deferred named live ADA/USDM source statement are consistent.
-- [ ] T060 Update the PR finalization notes or PR body draft with completed task IDs, gate commands, and any explicitly deferred follow-up for named live ADA/USDM sources.
+- [x] T057 Run `nix develop --quiet -c just ci` and confirm build, schema check, unit tests, golden tests, format check, hlint, smoke, and release check pass.
+- [x] T058 Run `nix develop --quiet -c just cabal-check` and confirm package metadata remains Hackage-ready after new modules, fixtures, and dependencies.
+- [x] T059 Review `specs/070-quote-derived-swap-params/quickstart.md`, `docs/quickstart.md`, and `docs/swap.md` together to ensure the ADA/USD source path, explicit ADA/USDM override path, and deferred named live ADA/USDM source statement are consistent.
+- [x] T060 Update the PR finalization notes or PR body draft with completed task IDs, gate commands, and any explicitly deferred follow-up for named live ADA/USDM sources.
 
 **Checkpoint**: Full local gate and Hackage-readiness checks are green;
 all implemented task IDs are ready for reviewer finalization.

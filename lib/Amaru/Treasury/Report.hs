@@ -79,6 +79,10 @@ import Amaru.Treasury.Report.Accounting
     , treasuryNetDebit
     , valueSummary
     )
+import Amaru.Treasury.Report.Classify
+    ( ProducedOutputRole (..)
+    , classifyOutputRole
+    )
 import Amaru.Treasury.TreasuryBuild
     ( ScriptResult (..)
     , TreasuryBuildResult (..)
@@ -142,15 +146,6 @@ data ProducedOutput = ProducedOutput
     , poValue :: ValueSummary
     , poDatum :: Maybe Text
     }
-    deriving stock (Eq, Show)
-
-data ProducedOutputRole
-    = OutputSwapOrder
-    | OutputTreasuryLeftover
-    | OutputWalletChange
-    | OutputCollateralReturn
-    | OutputMetadata
-    | OutputUnknown
     deriving stock (Eq, Show)
 
 data SignerRequirement = SignerRequirement
@@ -252,10 +247,6 @@ instance ToJSON ProducedOutput where
             , "datum" .= poDatum output
             ]
 
-instance ToJSON ProducedOutputRole where
-    toJSON =
-        toJSON . producedOutputRoleText
-
 instance ToJSON SignerRequirement where
     toJSON signer =
         object
@@ -342,7 +333,7 @@ buildTransactionReport context result =
                 }
         , trOutputs =
             zipWith
-                outputFromTxOut
+                (outputFromTxOut result)
                 [0 ..]
                 (toList (body ^. outputsTxBodyL))
         , trSigners = []
@@ -410,11 +401,12 @@ buildTransactionReport context result =
             ]
     interval = validityInterval (body ^. vldtTxBodyL)
 
-outputFromTxOut :: Int -> TxOut ConwayEra -> ProducedOutput
-outputFromTxOut index txOut =
+outputFromTxOut
+    :: TreasuryBuildResult -> Int -> TxOut ConwayEra -> ProducedOutput
+outputFromTxOut result index txOut =
     ProducedOutput
         { poIndex = index
-        , poRole = OutputUnknown
+        , poRole = classifyOutputRole result index
         , poAddress = renderAddress (txOut ^. addrTxOutL)
         , poValue = valueSummary (txOut ^. valueTxOutL)
         , poDatum = datumSummary (txOut ^. datumTxOutL)
@@ -583,15 +575,6 @@ sampleUtxo =
             "0000000000000000000000000000000000000000000000000000000000000000#0"
         , usValue = emptyValue
         }
-
-producedOutputRoleText :: ProducedOutputRole -> Text
-producedOutputRoleText = \case
-    OutputSwapOrder -> "swapOrder"
-    OutputTreasuryLeftover -> "treasuryLeftover"
-    OutputWalletChange -> "walletChange"
-    OutputCollateralReturn -> "collateralReturn"
-    OutputMetadata -> "metadata"
-    OutputUnknown -> "unknown"
 
 signerSourceText :: SignerSource -> Text
 signerSourceText = \case

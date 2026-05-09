@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Amaru.Treasury.ReportSpec (spec) where
@@ -227,6 +228,29 @@ spec = describe "Amaru.Treasury.Report" $ do
             inputTotal
                 `shouldBe` orderTotal `addValueSummary` leftover
             treasuryNetDebit inputTotal leftover `shouldBe` orderTotal
+
+    it
+        "classifies swap fixture outputs by mechanical role"
+        $ do
+            report <- buildSwapFixtureReport
+            let outputs = trOutputs report
+                roles = poRole <$> outputs
+            length outputs `shouldBe` 35
+            poIndex <$> outputs `shouldBe` [0 .. 34]
+            take 33 roles `shouldBe` replicate 33 OutputSwapOrder
+            drop 33 roles
+                `shouldBe` [OutputTreasuryLeftover, OutputWalletChange]
+
+    it "encodes every produced-output role tag" $
+        toJSON (roleOutput <$> allProducedOutputRoles)
+            `shouldBe` toJSON
+                [ roleJson 0 "swapOrder"
+                , roleJson 1 "treasuryLeftover"
+                , roleJson 2 "walletChange"
+                , roleJson 3 "collateralReturn"
+                , roleJson 4 "metadata"
+                , roleJson 5 "unknown"
+                ]
 
 decodedReport :: Either String Value
 decodedReport = eitherDecode (encodeReport sampleReport)
@@ -533,3 +557,42 @@ sampleTxId =
 sampleKeyHash :: Text
 sampleKeyHash =
     "11111111111111111111111111111111111111111111111111111111"
+
+allProducedOutputRoles :: [ProducedOutputRole]
+allProducedOutputRoles =
+    [ OutputSwapOrder
+    , OutputTreasuryLeftover
+    , OutputWalletChange
+    , OutputCollateralReturn
+    , OutputMetadata
+    , OutputUnknown
+    ]
+
+roleOutput :: ProducedOutputRole -> ProducedOutput
+roleOutput role =
+    ProducedOutput
+        { poIndex = roleIndex role
+        , poRole = role
+        , poAddress = "addr_test1role"
+        , poValue = emptyValue
+        , poDatum = Nothing
+        }
+
+roleIndex :: ProducedOutputRole -> Int
+roleIndex = \case
+    OutputSwapOrder -> 0
+    OutputTreasuryLeftover -> 1
+    OutputWalletChange -> 2
+    OutputCollateralReturn -> 3
+    OutputMetadata -> 4
+    OutputUnknown -> 5
+
+roleJson :: Int -> Text -> Value
+roleJson index role =
+    object
+        [ "index" .= index
+        , "role" .= role
+        , "address" .= ("addr_test1role" :: Text)
+        , "value" .= expectedValue
+        , "datum" .= (Nothing :: Maybe Value)
+        ]

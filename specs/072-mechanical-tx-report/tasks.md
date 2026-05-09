@@ -126,19 +126,19 @@ every produced output appears exactly once under a mechanical role.
 
 ### RED Proof for User Story 2
 
-- [ ] T022 [P] [US2] Add RED wallet accounting tests for wallet inputs, change, fee, collateral input, collateral return, total collateral, and no double-counting in `test/unit/Amaru/Treasury/ReportSpec.hs`.
-- [ ] T023 [P] [US2] Add RED treasury accounting tests for treasury inputs, native assets, Sundae order totals, per-chunk overhead, treasury leftover, and treasury net debit in `test/unit/Amaru/Treasury/ReportSpec.hs`.
-- [ ] T024 [P] [US2] Add RED output-role coverage tests for swap-order outputs, treasury leftover, wallet change, collateral return, metadata, and unknown fallback in `test/unit/Amaru/Treasury/ReportSpec.hs`.
-- [ ] T025 [US2] Add RED swap golden assertions in `test/golden/SwapGoldenSpec.hs` that `walletAccounting.netSpendLovelace == validation.feeLovelace` and each final transaction output appears once in `test/fixtures/swap/report.golden.json`.
+- [X] T022 [P] [US2] Add RED wallet accounting tests for wallet inputs, change, fee, collateral input, collateral return, total collateral, and no double-counting in `test/unit/Amaru/Treasury/ReportSpec.hs`.
+- [X] T023 [P] [US2] Add RED treasury accounting tests for treasury inputs, native assets, Sundae order totals, per-chunk overhead, treasury leftover, and treasury net debit in `test/unit/Amaru/Treasury/ReportSpec.hs`.
+- [X] T024 [P] [US2] Add RED output-role coverage tests for swap-order outputs, treasury leftover, wallet change, collateral return, metadata, and unknown fallback in `test/unit/Amaru/Treasury/ReportSpec.hs`.
+- [X] T025 [US2] Add RED swap golden assertions in `test/golden/SwapGoldenSpec.hs` that `walletAccounting.netSpendLovelace == validation.feeLovelace` and each final transaction output appears once in `test/fixtures/swap/report.golden.json`.
 
 ### GREEN Implementation for User Story 2
 
-- [ ] T026 [US2] Implement wallet accounting in `lib/Amaru/Treasury/Report/Accounting.hs`, including additional wallet fuel inputs and collateral-return subtraction without UTxO double-counting.
-- [ ] T027 [US2] Implement treasury accounting in `lib/Amaru/Treasury/Report/Accounting.hs`, including lovelace/native-asset totals, Sundae order totals, per-chunk overhead, treasury leftover, and net debit.
-- [ ] T028 [US2] Implement produced-output classification in `lib/Amaru/Treasury/Report/Classify.hs`, including one-role-per-output coverage and `unknown` fallback.
-- [ ] T029 [US2] Wire accounting and classification into `buildTransactionReport` in `lib/Amaru/Treasury/Report.hs`.
-- [ ] T030 [US2] Update `test/fixtures/swap/report.golden.json` through the golden update flow in `test/golden/SwapGoldenSpec.hs`.
-- [ ] T031 [US2] Confirm GREEN for the US2 slice with `nix develop --quiet -c just unit Report` and `nix develop --quiet -c just golden swap` covering `test/unit/Amaru/Treasury/ReportSpec.hs`, `test/golden/SwapGoldenSpec.hs`, and `test/fixtures/swap/report.golden.json`.
+- [X] T026 [US2] Implement wallet accounting in `lib/Amaru/Treasury/Report/Accounting.hs`, including additional wallet fuel inputs and collateral-return subtraction without UTxO double-counting.
+- [X] T027 [US2] Implement treasury accounting in `lib/Amaru/Treasury/Report/Accounting.hs`, including lovelace/native-asset totals, Sundae order totals, per-chunk overhead, treasury leftover, and net debit.
+- [X] T028 [US2] Implement produced-output classification in `lib/Amaru/Treasury/Report/Classify.hs`, including one-role-per-output coverage and `unknown` fallback.
+- [X] T029 [US2] Wire accounting and classification into `buildTransactionReport` in `lib/Amaru/Treasury/Report.hs`.
+- [X] T030 [US2] Update `test/fixtures/swap/report.golden.json` through the golden update flow in `test/golden/SwapGoldenSpec.hs`.
+- [X] T031 [US2] Confirm GREEN for the US2 slice with `nix develop --quiet -c just unit Report` and `nix develop --quiet -c just golden swap` covering `test/unit/Amaru/Treasury/ReportSpec.hs`, `test/golden/SwapGoldenSpec.hs`, and `test/fixtures/swap/report.golden.json`.
 
 **Checkpoint**: US2 acceptance scenarios 1-3 and SC-002 / SC-003 are
 met.

@@ -20,7 +20,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 0,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -30,7 +30,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 1,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -40,7 +40,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 2,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -50,7 +50,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 3,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -60,7 +60,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 4,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -70,7 +70,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 5,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -80,7 +80,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 6,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -90,7 +90,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 7,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -100,7 +100,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 8,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -110,7 +110,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 9,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -120,7 +120,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 10,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -130,7 +130,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 11,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -140,7 +140,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 12,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -150,7 +150,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 13,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -160,7 +160,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 14,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -170,7 +170,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 15,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -180,7 +180,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 16,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -190,7 +190,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 17,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -200,7 +200,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 18,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -210,7 +210,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 19,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -220,7 +220,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 20,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -230,7 +230,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 21,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -240,7 +240,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 22,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -250,7 +250,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 23,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -260,7 +260,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 24,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -270,7 +270,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 25,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -280,7 +280,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 26,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -290,7 +290,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 27,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -300,7 +300,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 28,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -310,7 +310,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 29,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -320,7 +320,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 30,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -330,7 +330,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 31,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 12503280000
@@ -340,7 +340,7 @@
             "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
             "datum": "inlineDatum",
             "index": 32,
-            "role": "unknown",
+            "role": "swapOrder",
             "value": {
                 "assets": {},
                 "lovelace": 8166545306
@@ -350,7 +350,7 @@
             "address": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
             "datum": null,
             "index": 33,
-            "role": "unknown",
+            "role": "treasuryLeftover",
             "value": {
                 "assets": {},
                 "lovelace": 1041728494694
@@ -360,7 +360,7 @@
             "address": "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu",
             "datum": null,
             "index": 34,
-            "role": "unknown",
+            "role": "walletChange",
             "value": {
                 "assets": {},
                 "lovelace": 50006199573

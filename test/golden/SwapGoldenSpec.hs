@@ -48,7 +48,12 @@ import Amaru.Treasury.ChainContext.Fixture
     )
 import Amaru.Treasury.IntentJSON (decodeTreasuryIntentFile)
 import Amaru.Treasury.Report
-    ( ReportContext (..)
+    ( ProducedOutput (..)
+    , ProducedOutputRole (..)
+    , ReportContext (..)
+    , TransactionReport (..)
+    , ValidationFacts (..)
+    , WalletAccounting (..)
     , buildTransactionReport
     , encodeReport
     )
@@ -124,20 +129,25 @@ spec =
             let ctx = toFrozenContext fixture
             first <- runFromIntent ctx some
             second <- runFromIntent ctx some
-            let firstReport = swapReportBytes first
-                secondReport = swapReportBytes second
+            let firstReport = swapReport first
+                secondReport = swapReport second
+                firstReportBytes = encodeReport firstReport
+                secondReportBytes = encodeReport secondReport
+            waNetSpendLovelace (trWalletAccounting firstReport)
+                `shouldBe` vfFeeLovelace (trValidation firstReport)
+            assertSwapOutputCoverage firstReport
             update <- lookupEnv "UPDATE_GOLDENS"
             case update of
                 Just "1" ->
                     BSL.writeFile
                         (fixtureDir <> "/report.golden.json")
-                        firstReport
+                        firstReportBytes
                 _ -> pure ()
             expectedReport <-
                 BSL.readFile
                     (fixtureDir <> "/report.golden.json")
-            firstReport `shouldBe` secondReport
-            firstReport `shouldBe` expectedReport
+            firstReportBytes `shouldBe` secondReportBytes
+            firstReportBytes `shouldBe` expectedReport
             tbrCborBytes first `shouldBe` tbrCborBytes second
         it
             "legacy intent without extraTxIns rebuilds byte-identical bytes"
@@ -159,12 +169,21 @@ spec =
                     BS.readFile (fixtureDir <> "/expected.cbor")
                 actualHex `shouldBe` expected
 
-swapReportBytes :: TreasuryBuildResult -> BSL.ByteString
-swapReportBytes =
-    encodeReport
-        . buildTransactionReport
-            ReportContext
-                { rcAction = "swap"
-                , rcNetwork = "mainnet"
-                , rcSocketNetworkMagic = 764_824_073
-                }
+swapReport :: TreasuryBuildResult -> TransactionReport
+swapReport =
+    buildTransactionReport
+        ReportContext
+            { rcAction = "swap"
+            , rcNetwork = "mainnet"
+            , rcSocketNetworkMagic = 764_824_073
+            }
+
+assertSwapOutputCoverage :: TransactionReport -> IO ()
+assertSwapOutputCoverage report = do
+    let outputs = trOutputs report
+        roles = poRole <$> outputs
+    length outputs `shouldBe` 35
+    poIndex <$> outputs `shouldBe` [0 .. 34]
+    take 33 roles `shouldBe` replicate 33 OutputSwapOrder
+    drop 33 roles
+        `shouldBe` [OutputTreasuryLeftover, OutputWalletChange]

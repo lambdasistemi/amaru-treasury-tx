@@ -7,11 +7,13 @@ License     : Apache-2.0
 -}
 module Amaru.Treasury.Tx.SwapQuoteSpec (spec) where
 
-import Data.Either (isLeft)
+import Data.Either (isLeft, isRight)
 import Data.Ratio ((%))
 import Test.Hspec
-    ( Spec
+    ( Expectation
+    , Spec
     , describe
+    , expectationFailure
     , it
     , shouldBe
     , shouldSatisfy
@@ -24,6 +26,7 @@ import Amaru.Treasury.Tx.SwapQuote
     , QuotePair (..)
     , QuoteProvenance (..)
     , SlippageBps (..)
+    , SwapQuoteError (..)
     , SwapQuoteRequest (..)
     , SwapQuoteRequestChunk (..)
     , deriveSwapParameters
@@ -50,10 +53,13 @@ spec = describe "SwapQuote" $ do
                             { sqrRequestedUsdm = 100_000
                             , sqrChunk = SplitInto 4
                             }
-            dspRateNumerator derived `shouldBe` 804_177
-            dspRateDenominator derived `shouldBe` 1_000_000
+            derived
+                `shouldSatisfy` isRight
+            withDerived derived $ \parameters -> do
+                dspRateNumerator parameters `shouldBe` 804_177
+                dspRateDenominator parameters `shouldBe` 1_000_000
 
-        it "floors rate numerator and ceilings requested ADA values" $ do
+        it "ceilings requested ADA values from the emitted minimum rate" $ do
             let observation =
                     QuoteObservation
                         { qoPair = AdaUsd
@@ -69,10 +75,30 @@ spec = describe "SwapQuote" $ do
                             { sqrRequestedUsdm = 1
                             , sqrChunk = ChunkUsdm (1 % 3)
                             }
-            dspRateNumerator derived `shouldBe` 333_333
-            dspRateDenominator derived `shouldBe` 1_000_000
-            dspAmountLovelace derived `shouldBe` 3_000_000
-            dspChunkSizeLovelace derived `shouldBe` 1_000_000
+            derived
+                `shouldSatisfy` isRight
+            withDerived derived $ \parameters -> do
+                dspRateNumerator parameters `shouldBe` 333_333
+                dspRateDenominator parameters `shouldBe` 1_000_000
+                dspAmountLovelace parameters `shouldBe` 3_000_004
+                dspChunkSizeLovelace parameters `shouldBe` 1_000_002
+
+        it "rejects tiny positive quotes with a zero floored rate numerator" $ do
+            let observation =
+                    QuoteObservation
+                        { qoPair = AdaUsd
+                        , qoQuote = 1 % 10_000_000
+                        , qoProvenance = OperatorOverride
+                        }
+                derived =
+                    deriveSwapParameters
+                        observation
+                        (SlippageBps 0)
+                        SwapQuoteRequest
+                            { sqrRequestedUsdm = 1
+                            , sqrChunk = SplitInto 1
+                            }
+            derived `shouldBe` Left ZeroMinimumRate
 
     describe "parseSlippageBps" $ do
         it "rejects missing and invalid slippage before derivation" $ do
@@ -104,3 +130,15 @@ spec = describe "SwapQuote" $ do
                         , qoQuote = 804_177 % 1_000_000
                         , qoProvenance = OperatorOverride
                         }
+
+withDerived
+    :: Either SwapQuoteError DerivedSwapParameters
+    -> (DerivedSwapParameters -> Expectation)
+    -> Expectation
+withDerived derived assertion =
+    case derived of
+        Right parameters ->
+            assertion parameters
+        Left err ->
+            expectationFailure
+                ("unexpected derivation error: " <> show err)

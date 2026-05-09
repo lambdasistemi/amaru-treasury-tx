@@ -79,6 +79,7 @@ data SwapQuoteError
     = MissingSlippage
     | InvalidSlippage !Text
     | InvalidQuote !Text
+    | ZeroMinimumRate
     deriving (Eq, Show)
 
 parseQuoteInput
@@ -114,27 +115,34 @@ deriveSwapParameters
     :: QuoteObservation
     -> SlippageBps
     -> SwapQuoteRequest
-    -> DerivedSwapParameters
+    -> Either SwapQuoteError DerivedSwapParameters
 deriveSwapParameters observation slippage request =
-    DerivedSwapParameters
-        { dspQuote = observation
-        , dspSlippageBps = slippage
-        , dspRateNumerator =
-            floor (derivedRate * fromInteger rateDenominator)
-        , dspRateDenominator = rateDenominator
-        , dspAmountLovelace =
-            usdmToLovelace
-                (sqrRequestedUsdm request)
-                derivedRate
-        , dspChunkSizeLovelace =
-            chunkSizeLovelace request derivedRate
-        }
+    if rateNumerator <= 0
+        then Left ZeroMinimumRate
+        else
+            Right
+                DerivedSwapParameters
+                    { dspQuote = observation
+                    , dspSlippageBps = slippage
+                    , dspRateNumerator = rateNumerator
+                    , dspRateDenominator = rateDenominator
+                    , dspAmountLovelace =
+                        usdmToLovelace
+                            (sqrRequestedUsdm request)
+                            emittedRate
+                    , dspChunkSizeLovelace =
+                        chunkSizeLovelace request emittedRate
+                    }
   where
     SlippageBps bps = slippage
     derivedRate =
         qoQuote observation
             * ((10_000 - bps) % 10_000)
     rateDenominator = 1_000_000
+    rateNumerator =
+        floor (derivedRate * fromInteger rateDenominator)
+    emittedRate =
+        rateNumerator % rateDenominator
 
 chunkSizeLovelace :: SwapQuoteRequest -> Rational -> Integer
 chunkSizeLovelace request derivedRate =

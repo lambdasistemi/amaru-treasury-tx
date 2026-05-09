@@ -23,6 +23,7 @@ extra-source-files:
   assets/plutus/treasury.cbor
   assets/plutus/treasury_registry.cbor
   docs/assets/intent-schema.json
+  docs/assets/tx-report-schema.json
   scripts/smoke/swap-wizard-signers
   scripts/smoke/tx-build-pipe
   test/fixtures/disburse/**/*.cbor
@@ -88,6 +89,10 @@ library
     Amaru.Treasury.Registry.Derive
     Amaru.Treasury.Registry.Metadata
     Amaru.Treasury.Registry.Verify
+    Amaru.Treasury.Report
+    Amaru.Treasury.Report.Accounting
+    Amaru.Treasury.Report.Classify
+    Amaru.Treasury.Report.Schema
     Amaru.Treasury.Scope
     Amaru.Treasury.Summary
     Amaru.Treasury.TreasuryBuild
@@ -217,6 +222,16 @@ executable amaru-treasury-intent-schema
     , base               <5
     , bytestring
 
+executable amaru-treasury-report-schema
+  import:           warnings
+  hs-source-dirs:   app/amaru-treasury-report-schema
+  main-is:          Main.hs
+  default-language: GHC2021
+  build-depends:
+    , amaru-treasury-tx
+    , base               <5
+    , bytestring
+
 test-suite unit-tests
   import:             warnings
   type:               exitcode-stdio-1.0
@@ -235,6 +250,8 @@ test-suite unit-tests
     Amaru.Treasury.Registry.DeriveSpec
     Amaru.Treasury.Registry.MetadataSpec
     Amaru.Treasury.Registry.VerifySpec
+    Amaru.Treasury.ReportSchemaSpec
+    Amaru.Treasury.ReportSpec
     Amaru.Treasury.ScopeSpec
     Amaru.Treasury.SummarySpec
     Amaru.Treasury.TreasuryBuildSpec

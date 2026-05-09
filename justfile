@@ -40,15 +40,20 @@ release-check:
 update-schema:
     cabal run -v0 -O0 exe:amaru-treasury-intent-schema \
         > docs/assets/intent-schema.json
+    cabal run -v0 -O0 exe:amaru-treasury-report-schema \
+        > docs/assets/tx-report-schema.json
 
 # Check that the committed TreasuryIntent JSON Schema is current
 schema-check:
     #!/usr/bin/env bash
     set -euo pipefail
-    tmp="$(mktemp)"
-    trap 'rm -f "$tmp"' EXIT
-    cabal run -v0 -O0 exe:amaru-treasury-intent-schema > "$tmp"
-    diff -u docs/assets/intent-schema.json "$tmp"
+    intent_tmp="$(mktemp)"
+    report_tmp="$(mktemp)"
+    trap 'rm -f "$intent_tmp" "$report_tmp"' EXIT
+    cabal run -v0 -O0 exe:amaru-treasury-intent-schema > "$intent_tmp"
+    diff -u docs/assets/intent-schema.json "$intent_tmp"
+    cabal run -v0 -O0 exe:amaru-treasury-report-schema > "$report_tmp"
+    diff -u docs/assets/tx-report-schema.json "$report_tmp"
 
 # Smoke-test the shipped CLI surface
 smoke:

@@ -1,0 +1,95 @@
+{
+    "action": "swap",
+    "identity": {
+        "bodySizeBytes": 14954,
+        "feeLovelace": 1039703,
+        "totalCollateralLovelace": 1559555,
+        "txId": "0000000000000000000000000000000000000000000000000000000000000000",
+        "validityInterval": {
+            "invalidBefore": null,
+            "invalidHereafter": 186796799
+        }
+    },
+    "metadata": {
+        "auxiliaryDataHash": null,
+        "cip1694LabelPresent": true
+    },
+    "network": "mainnet",
+    "outputs": [
+        {
+            "address": "addr_test1...",
+            "datum": null,
+            "index": 0,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 0
+            }
+        }
+    ],
+    "referenceInputs": [],
+    "schema": 1,
+    "signers": [
+        {
+            "keyHash": "11111111111111111111111111111111111111111111111111111111",
+            "scope": null,
+            "source": "extraSigner"
+        }
+    ],
+    "treasuryAccounting": {
+        "inputTotal": {
+            "assets": {},
+            "lovelace": 0
+        },
+        "inputs": [],
+        "netDebit": {
+            "assets": {},
+            "lovelace": 0
+        },
+        "perChunkOverheadLovelace": 0,
+        "sundaeOrderTotal": {
+            "assets": {},
+            "lovelace": 0
+        },
+        "treasuryLeftover": {
+            "assets": {},
+            "lovelace": 0
+        }
+    },
+    "validation": {
+        "bodySizeBytes": 14954,
+        "feeLovelace": 1039703,
+        "intentNetwork": "mainnet",
+        "networkMatches": true,
+        "redeemerCount": 2,
+        "redeemerFailures": 0,
+        "socketNetworkMagic": 764824073,
+        "validationStatus": "ok",
+        "validityInterval": {
+            "invalidBefore": null,
+            "invalidHereafter": 186796799
+        }
+    },
+    "walletAccounting": {
+        "changeOutput": null,
+        "collateralInput": {
+            "txIn": "0000000000000000000000000000000000000000000000000000000000000000#0",
+            "value": {
+                "assets": {},
+                "lovelace": 0
+            }
+        },
+        "collateralReturn": null,
+        "feeLovelace": 1039703,
+        "inputs": [
+            {
+                "txIn": "0000000000000000000000000000000000000000000000000000000000000000#0",
+                "value": {
+                    "assets": {},
+                    "lovelace": 0
+                }
+            }
+        ],
+        "netSpendLovelace": 1039703
+    }
+}

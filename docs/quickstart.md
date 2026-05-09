@@ -1,9 +1,11 @@
 # Quickstart
 
-Build a transaction end-to-end in one pipe. The **swap wizard** and
-**withdraw wizard** answer chain-anchored fields for you; the
-**tx-build** subcommand turns each unified `intent.json` into unsigned
-Conway CBOR.
+Build a transaction end-to-end. The **swap-quote** command is the
+normal swap preparation path: it fetches or accepts a fresh quote,
+requires explicit slippage, derives the swap limit price, writes an
+audit `params.json`, and builds unsigned Conway CBOR. The
+**withdraw wizard** answers chain-anchored fields for reward
+withdrawals.
 
 ## 1. Install
 
@@ -70,25 +72,20 @@ build-time pinned Plutus blobs before producing an intent.
 ```bash
 amaru-treasury-tx \
     --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
-    swap-wizard \
+    swap-quote \
         --wallet-addr addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu \
         --metadata metadata-mainnet.json \
+        --out-dir swap-run \
         --scope network_compliance \
         --usdm 100000 \
         --split 33 \
-        --min-rate 0.245 \
+        --price-source coingecko-ada-usd \
+        --slippage-bps 100 \
         --validity-hours 28 \
-        --description "Swapping ADA for \$100k at a rate of \$0.245 per ADA" \
+        --description "Swapping ADA for \$100k using a fresh ADA/USD quote" \
         --justification "Required to pay Antithesis as vendor" \
         --destination-label "Network Compliance's treasury" \
-        --extra-signer core_development \
-        --log wizard.log \
-  | amaru-treasury-tx \
-        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
-        tx-build \
-            --log build.log \
-            --report swap.report.json \
-            --out swap.cbor.hex
+        --extra-signer core_development
 ```
 
 What the flags mean:
@@ -97,56 +94,51 @@ What the flags mean:
 |---|---|
 | `--wallet-addr` | Wallet bech32 address. Wizard picks its largest pure-ADA UTxO as fuel + collateral. |
 | `--metadata`   | Local `metadata.json` (untrusted hint; verified against chain). |
+| `--out-dir`    | Directory for `intent.json`, `swap.cbor.hex`, `params.json`, `wizard.log`, and `build.log`. |
 | `--scope`      | One of `core_development`, `ops_and_use_cases`, `network_compliance`, `middleware`. |
-| `--usdm`       | Total USDM the swap should buy. ADA spend is derived as `usdm / min-rate`. |
+| `--usdm`       | Total USDM the swap should buy. ADA spend is derived from the quote and slippage policy. |
 | `--split N`    | Slice the order into N equal chunks. Use `--chunk-usdm X` instead to pin per-chunk size. |
-| `--min-rate`   | Sundae limit price (USDM per ADA). |
+| `--price-source` | Named quote source. `coingecko-ada-usd` is the approved live ADA/USD source. |
+| `--ada-usd`    | Explicit ADA/USD quote override for deterministic offline operation. |
+| `--ada-usdm`   | Explicit ADA/USDM quote override. Named live ADA/USDM sources are deferred. |
+| `--slippage-bps` | Required slippage policy in basis points. There is no hidden default. |
 | `--validity-hours` | Validity window from current tip; 1..48. |
 | `--description` / `--justification` / `--destination-label` | Free-form rationale fields, pinned into the on-chain audit trail. |
 | `--extra-signer SCOPE\|HEX` | Repeated for each witness owner beyond the selected scope owner. Scope names and 28-byte key hashes are accepted; `--signer` remains as an alias. |
-| `--log PATH`   | Redirect the typed step trace to a file (default = stderr). |
-| `--out PATH`   | Wizard side: write `intent.json` here (default = stdout, which is what the pipe reads). `tx-build` side: write hex CBOR here (default = stdout). |
-| `--report PATH` | `tx-build` side: write the deterministic JSON transaction report after successful validation. |
 
 ## 5. What lands where
 
 | Stream | Contents |
 |---|---|
-| `wizard.log` | `swap-wizard:` step trace, one event per value-affecting step (verifier acceptance, on-chain owners, UTxO selection, validity slot, chunk shape, …). |
-| pipe | `intent.json` payload — wizard stdout → `tx-build` stdin. |
-| `build.log`   | `tx-build:` step trace (intent source, parse, network check, connect, build summary, redeemer re-eval, validation result). |
-| `swap.cbor.hex` | The unsigned Conway transaction as hex. |
-| `swap.report.json` | Deterministic transaction report for pre-signing review: identity, wallet accounting, treasury accounting, outputs, required signers, validation facts, reference inputs, and metadata summary. |
+| `swap-run/wizard.log` | `swap-wizard:` step trace, one event per value-affecting step: verifier acceptance, on-chain owners, UTxO selection, validity slot, and chunk shape. |
+| `swap-run/intent.json` | Unified swap intent generated from the quote-derived parameters. |
+| `swap-run/build.log` | `tx-build:` step trace: intent parse, network check, build summary, redeemer re-eval, and validation result. |
+| `swap-run/swap.cbor.hex` | The unsigned Conway transaction as hex. |
+| `swap-run/params.json` | Quote-derived audit artifact: quote provenance, observed/fetched time, slippage, derived min rate, requested amount, affordability inputs, selected treasury total, status, and output paths. |
 
-Drop `--log` from either subcommand to send the trace to stderr.
-Drop `--out` from the wizard to write `intent.json` to stdout
-(this is what the pipe relies on). Drop `--intent` from `tx-build`
-to read the intent from stdin (also what the pipe relies on).
-Drop `--report` only when you deliberately do not want the
-pre-signing report artifact.
+If affordability fails, `swap-quote` writes `params.json` with the
+shortfall details and exits before `swap.cbor.hex` is produced.
 
-## 6. Read the report before signing
+## 6. Read the audit files before signing
 
-The wizard never asks for confirmation. Treat `swap.report.json` as
-the mechanical pre-signing review artifact and inspect it before
-handing `swap.cbor.hex` to any signer. The report is generated by the
-same successful `tx-build` run that writes the unsigned CBOR; it is not
-an LLM-written interpretation.
+The command never asks for confirmation. Inspect `swap-run/params.json`,
+`swap-run/wizard.log`, and `swap-run/build.log` before handing
+`swap-run/swap.cbor.hex` to any signer. `params.json` records how the
+limit price was chosen; the logs record the chain and build decisions
+that produced the unsigned transaction.
 
-Pre-signing report checklist:
+Pre-signing audit checklist:
 
-- `identity.txId`, `identity.feeLovelace`, `identity.bodySizeBytes`,
-  and `identity.validityInterval` match the transaction you intend to
-  sign.
-- `walletAccounting.netSpendLovelace` is the wallet debit you expect
-  for fees after change and collateral return are accounted for.
-- `treasuryAccounting.netDebit` and `treasuryAccounting.treasuryLeftover`
-  match the swap size and treasury balance you intend.
-- Every item in `outputs` has the expected role, address, datum
-  presence, and value.
-- Every item in `signers` is a key hash you expect to witness.
-- `validation.validationStatus` is `ok`, `networkMatches` is `true`,
-  and `redeemerFailures` is `0`.
+- `quote.value`, `quote.provenance`, `quote.observedAt`, and any
+  `quote.fetchedAt` match the operator decision.
+- `slippage.basisPoints` is the policy approved for the run.
+- `derived.minRate`, `derived.amountLovelace`, and
+  `derived.chunkSizeLovelace` match the intended economic request.
+- `affordability.affordable` is `true`, `shortfallLovelace` is `0`,
+  and the selected treasury total is enough for amount plus per-chunk
+  overhead.
+- `outputs.intentJson`, `outputs.unsignedCborHex`, `outputs.wizardLog`,
+  and `outputs.buildLog` point at the files produced for signing review.
 
 Use the typed traces as the second audit trail. A successful run looks
 like this:
@@ -164,17 +156,15 @@ swap-wizard: wallet utxo selected 42e4c279…#0
 swap-wizard: treasury utxos selected 64f27254…#0 leftover=1041836734694
 swap-wizard: validity tip=186446659 upperBound=186547459 (+100800 slots)
 swap-wizard: chunks total=408163265306 chunkSize=12368583797 full=33 remainder=5
-swap-wizard: intent.json -> stdout
+swap-wizard: intent.json -> swap-run/intent.json
 
-tx-build: intent <- stdin
 tx-build: parsed action=Swap network=mainnet
 tx-build: connecting to /path/to/cardano-node.socket
 tx-build: required utxos: 6
 tx-build: handshake ok (magic 764824073 matches intent network=mainnet)
 tx-build: built 14954 bytes  fee=1039703  total_collateral=1559555
 tx-build: re-evaluated 2 redeemers, 0 failed
-tx-build: cbor -> swap.cbor.hex
-tx-build: report -> swap.report.json
+tx-build: cbor -> swap-run/swap.cbor.hex
 tx-build: VALIDATION OK
 ```
 
@@ -184,25 +174,38 @@ transaction to the upstream pin. Read them before signing.
 
 ## 7. Sign + submit (out of scope for this CLI)
 
-After the report and traces pass review, pipe `swap.cbor.hex` into
-your signer (hardware wallet,
+After the audit files and traces pass review, pipe
+`swap-run/swap.cbor.hex` into your signer (hardware wallet,
 [`cardano-wallet-sign`][cws], MPC service) then
 `cardano-cli transaction submit` (or any other broadcaster).
 Submit within minutes — the wizard's `validityUpperBoundSlot`
 ticks down with the tip.
 
-## 8. Two-step form (without the pipe)
+## 8. Deterministic quote override
 
 ```bash
-amaru-treasury-tx swap-wizard ... --out intent.json
-amaru-treasury-tx tx-build \
-    --intent intent.json \
-    --out swap.cbor.hex \
-    --report swap.report.json
+amaru-treasury-tx \
+    --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
+    swap-quote \
+        --wallet-addr addr1q... \
+        --metadata metadata-mainnet.json \
+        --out-dir swap-run \
+        --scope network_compliance \
+        --usdm 100000 \
+        --split 33 \
+        --ada-usd 0.8123 \
+        --slippage-bps 100 \
+        --validity-hours 28 \
+        --description "Swapping ADA for \$100k using an operator ADA/USD quote" \
+        --justification "Required to pay Antithesis as vendor" \
+        --destination-label "Network Compliance's treasury" \
+        --extra-signer core_development
 ```
 
-Same behaviour, useful when you want to inspect or hand-edit
-`intent.json` between the two stages.
+Use `--ada-usdm` instead when the approved operator input is already
+an ADA/USDM quote. Named live ADA/USDM sources are not selected in
+this issue; use explicit `--ada-usdm` until a provider contract is
+approved.
 
 ## 9. Withdraw rewards
 
@@ -234,13 +237,18 @@ synthetic golden evidence.
 | Exit | Action |
 |------|--------|
 | 1 (tx-build) | The build aborted before producing CBOR. The trace's `tx-build: ABORT …` line names the cause: bad intent JSON, translation error, or a re-evaluated redeemer failure. |
-| 3 (swap-wizard / tx-build) | Setup error. The trace's `ABORT …` line names the offending step (registry mismatch, empty wallet UTxO set, missing UTxOs in chain context, …). |
-| 4 (swap-wizard) | Translation error. Re-check `--min-rate`, `--chunk-usdm`/`--split`, and `--validity-hours ∈ [1, 48]`. |
+| 3 (swap-quote / swap-wizard / tx-build) | Setup or economic error. The trace's `ABORT …` line names the offending step: quote source failure, registry mismatch, empty wallet UTxO set, treasury affordability shortfall, missing UTxOs in chain context, and similar fail-closed cases. |
+| 4 (swap-wizard) | Translation error in the expert manual path. Re-check `--min-rate`, `--chunk-usdm`/`--split`, and `--validity-hours` in `[1, 48]`. |
 | 6 (tx-build) | The N2C handshake reports a network magic that disagrees with the intent's `network` field. The trace's `tx-build: NETWORK MISMATCH …` line names both networks; point `--node-socket` at the right node. |
 
 Both subcommands are fail-closed — neither writes a partial
 output. If the trace ends without `cbor -> …` (or
 `intent.json -> …` from the wizard), nothing was written.
+
+Direct `swap-wizard --min-rate` remains available as an expert/manual
+override for precomputed rates. That path does not create
+`params.json`, so the operator must keep the external quote,
+slippage, arithmetic, and affordability audit record separately.
 
 ## 11. Reproduce the known oracles (developer)
 

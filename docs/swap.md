@@ -19,12 +19,63 @@ The shape mirrors
 [`pragma-org/amaru-treasury/journal/2026/bin/swap.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/bin/swap.sh)
 exactly — same redeemers, same datums, same output ordering.
 
+## Recommended quote-derived workflow
+
+Use `swap-quote` for operator swap preparation. It owns the
+quote-derived arithmetic, requires explicit slippage, reuses the
+existing swap wizard resolver and unsigned builder, and writes the
+audit files needed for signer review:
+
+```bash
+amaru-treasury-tx \
+  --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
+  swap-quote \
+    --wallet-addr addr1q... \
+    --metadata metadata-mainnet.json \
+    --out-dir swap-run \
+    --scope network_compliance \
+    --usdm 100000 \
+    --split 33 \
+    --price-source coingecko-ada-usd \
+    --slippage-bps 100 \
+    --validity-hours 28 \
+    --description "Swapping ADA for $100k using a fresh ADA/USD quote" \
+    --justification "Required to pay Antithesis as vendor" \
+    --destination-label "Network Compliance's treasury" \
+    --extra-signer core_development
+```
+
+The run writes:
+
+- `swap-run/intent.json`: generated unified swap intent.
+- `swap-run/swap.cbor.hex`: unsigned Conway transaction.
+- `swap-run/params.json`: quote, slippage, derived rate,
+  affordability, selected treasury total, status, and output paths.
+- `swap-run/wizard.log` and `swap-run/build.log`: typed traces.
+
+Use `--ada-usd DECIMAL` for an explicit ADA/USD override when the
+operator has already captured a fresh quote. Use `--ada-usdm DECIMAL`
+for an explicit ADA/USDM override. Named live ADA/USDM sources are
+deferred until a provider contract is approved; use explicit
+`--ada-usdm` in the meantime.
+
+If the selected treasury cannot fund the derived ADA amount plus
+per-chunk overhead, `swap-quote` writes an affordability-failed
+`params.json` and exits before writing unsigned CBOR.
+
+## Expert/manual override
+
+Direct `swap-wizard --min-rate` remains available for expert use with
+precomputed rates, but it is no longer the recommended operator path.
+That manual override path does not fetch a quote, does not require a
+slippage policy, and does not write `params.json`. Operators using it
+must keep the external quote, slippage policy, rate arithmetic, and
+affordability audit record separately.
+
 ## CLI usage
 
-The recommended path is to pipe the wizard's output straight in
-(see [Quickstart §4](quickstart.md#4-the-famous-swap-end-to-end)
-for the full pipe). For an `intent.json` you already have on
-disk:
+For an `intent.json` you already have on disk, use `tx-build`
+directly:
 
 ```bash
 amaru-treasury-tx \

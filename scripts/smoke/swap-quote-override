@@ -3,7 +3,13 @@ set -euo pipefail
 
 cabal build exe:amaru-treasury-tx -O0 >/dev/null
 exe="$(cabal list-bin exe:amaru-treasury-tx -O0)"
+root_help="$("$exe" --help)"
 help_text="$("$exe" swap-quote --help)"
+
+grep -F -- "swap-quote" <<<"$root_help" >/dev/null || {
+  printf 'top-level help missing swap-quote command\n' >&2
+  exit 1
+}
 
 for needle in \
   "--ada-usd DECIMAL" \

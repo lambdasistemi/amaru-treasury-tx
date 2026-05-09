@@ -24,6 +24,7 @@ extra-source-files:
   assets/plutus/treasury_registry.cbor
   docs/assets/intent-schema.json
   docs/assets/tx-report-schema.json
+  scripts/smoke/swap-quote-docs
   scripts/smoke/swap-quote-override
   scripts/smoke/swap-wizard-signers
   scripts/smoke/tx-build-pipe

@@ -4,7 +4,7 @@
         "bodySizeBytes": 14954,
         "feeLovelace": 1039703,
         "totalCollateralLovelace": 1559555,
-        "txId": "0000000000000000000000000000000000000000000000000000000000000000",
+        "txId": "bf870dafd99925512221e32df9b2ec1acb3e22f49df83a6b66dedb7513a5fa55",
         "validityInterval": {
             "invalidBefore": null,
             "invalidHereafter": 186796799
@@ -17,25 +17,364 @@
     "network": "mainnet",
     "outputs": [
         {
-            "address": "addr_test1...",
-            "datum": null,
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
             "index": 0,
             "role": "unknown",
             "value": {
                 "assets": {},
-                "lovelace": 0
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 1,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 2,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 3,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 4,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 5,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 6,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 7,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 8,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 9,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 10,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 11,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 12,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 13,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 14,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 15,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 16,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 17,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 18,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 19,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 20,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 21,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 22,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 23,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 24,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 25,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 26,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 27,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 28,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 29,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 30,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 31,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 32,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 8166545306
+            }
+        },
+        {
+            "address": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
+            "datum": null,
+            "index": 33,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 1041728494694
+            }
+        },
+        {
+            "address": "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu",
+            "datum": null,
+            "index": 34,
+            "role": "unknown",
+            "value": {
+                "assets": {},
+                "lovelace": 50006199573
             }
         }
     ],
-    "referenceInputs": [],
-    "schema": 1,
-    "signers": [
-        {
-            "keyHash": "11111111111111111111111111111111111111111111111111111111",
-            "scope": null,
-            "source": "extraSigner"
-        }
+    "referenceInputs": [
+        "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0",
+        "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+        "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+        "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2"
     ],
+    "schema": 1,
+    "signers": [],
     "treasuryAccounting": {
         "inputTotal": {
             "assets": {},
@@ -72,24 +411,10 @@
     },
     "walletAccounting": {
         "changeOutput": null,
-        "collateralInput": {
-            "txIn": "0000000000000000000000000000000000000000000000000000000000000000#0",
-            "value": {
-                "assets": {},
-                "lovelace": 0
-            }
-        },
+        "collateralInput": null,
         "collateralReturn": null,
         "feeLovelace": 1039703,
-        "inputs": [
-            {
-                "txIn": "0000000000000000000000000000000000000000000000000000000000000000#0",
-                "value": {
-                    "assets": {},
-                    "lovelace": 0
-                }
-            }
-        ],
-        "netSpendLovelace": 1039703
+        "inputs": [],
+        "netSpendLovelace": 0
     }
 }

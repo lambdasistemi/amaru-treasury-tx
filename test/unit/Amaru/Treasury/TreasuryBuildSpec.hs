@@ -18,6 +18,9 @@ import Control.Exception
     ( SomeException
     , displayException
     )
+import Data.ByteString qualified as BS
+import Data.ByteString.Base16 qualified as B16
+import Data.ByteString.Lazy qualified as BSL
 import Data.IORef
     ( modifyIORef'
     , newIORef
@@ -34,10 +37,17 @@ import Test.Hspec
     )
 
 import Amaru.Treasury.ChainContext (ChainContext (..))
+import Amaru.Treasury.ChainContext.Fixture
+    ( readSwapFixture
+    , toFrozenContext
+    )
 import Amaru.Treasury.IntentJSON
     ( decodeTreasuryIntentFile
     )
-import Amaru.Treasury.TreasuryBuild (runFromIntent)
+import Amaru.Treasury.TreasuryBuild
+    ( TreasuryBuildResult (..)
+    , runFromIntent
+    )
 import Cardano.Ledger.Api.PParams (emptyPParams)
 import Ouroboros.Network.Magic (NetworkMagic (..))
 
@@ -152,6 +162,21 @@ spec = describe "Amaru.Treasury.TreasuryBuild" $ do
                         }
             runFromIntent ctx some
                 `shouldThrow` missingWithdrawUtxos
+
+    describe "runFromIntent report data" $
+        it "preserves swap no-report CBOR while exposing the final body" $ do
+            some <-
+                expectRightIO
+                    =<< decodeTreasuryIntentFile
+                        "test/fixtures/swap/intent.json"
+            fixture <- readSwapFixture "test/fixtures/swap"
+            let ctx = toFrozenContext fixture
+            result <- runFromIntent ctx some
+            expected <-
+                BS.readFile "test/fixtures/swap/expected.cbor"
+            B16.encode (BSL.toStrict (tbrCborBytes result))
+                `shouldBe` expected
+            tbrFinalTxBody result `seq` pure ()
 
 fixtureRewardAccount :: AccountAddress
 fixtureRewardAccount =

@@ -4,6 +4,7 @@ module Amaru.Treasury.Report
     ( MetadataSummary (..)
     , ProducedOutput (..)
     , ProducedOutputRole (..)
+    , ReportContext (..)
     , SignerRequirement (..)
     , SignerSource (..)
     , TransactionIdentity (..)
@@ -14,10 +15,50 @@ module Amaru.Treasury.Report
     , ValidityInterval (..)
     , ValueSummary (..)
     , WalletAccounting (..)
+    , buildTransactionReport
     , encodeReport
     , sampleSwapReport
     ) where
 
+import Cardano.Crypto.Hash.Class (hashToBytes)
+import Cardano.Ledger.Address
+    ( Addr
+    , getNetwork
+    , serialiseAddr
+    )
+import Cardano.Ledger.Allegra.Scripts qualified as Ledger
+import Cardano.Ledger.Api.Tx.Body
+    ( outputsTxBodyL
+    , referenceInputsTxBodyL
+    , vldtTxBodyL
+    )
+import Cardano.Ledger.Api.Tx.Out
+    ( TxOut
+    , addrTxOutL
+    , datumTxOutL
+    , valueTxOutL
+    )
+import Cardano.Ledger.BaseTypes
+    ( Network (..)
+    , StrictMaybe (..)
+    , txIxToInt
+    )
+import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Conway (ConwayEra)
+import Cardano.Ledger.Hashes (extractHash)
+import Cardano.Ledger.Mary.Value
+    ( AssetName (..)
+    , MaryValue (..)
+    , MultiAsset (..)
+    , PolicyID (..)
+    )
+import Cardano.Ledger.Plutus.Data qualified as PlutusData
+import Cardano.Ledger.TxIn
+    ( TxId (..)
+    , TxIn (..)
+    )
+import Cardano.Slotting.Slot (SlotNo (..))
+import Codec.Binary.Bech32 qualified as Bech32
 import Data.Aeson (ToJSON (..), object, (.=))
 import Data.Aeson.Encode.Pretty
     ( Config (..)
@@ -25,9 +66,25 @@ import Data.Aeson.Encode.Pretty
     , NumberFormat (..)
     , encodePretty'
     )
+import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Lazy qualified as BSL
+import Data.ByteString.Short qualified as SBS
+import Data.Either (fromRight)
+import Data.Foldable (toList)
 import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as Text
+import Lens.Micro ((^.))
+
+import Amaru.Treasury.Registry.Derive (scriptHashToHex)
+import Amaru.Treasury.TreasuryBuild
+    ( ScriptResult (..)
+    , TreasuryBuildResult (..)
+    )
 
 data TransactionReport = TransactionReport
     { trSchema :: Int
@@ -41,6 +98,13 @@ data TransactionReport = TransactionReport
     , trValidation :: ValidationFacts
     , trReferenceInputs :: [Text]
     , trMetadata :: MetadataSummary
+    }
+    deriving stock (Eq, Show)
+
+data ReportContext = ReportContext
+    { rcAction :: Text
+    , rcNetwork :: Text
+    , rcSocketNetworkMagic :: Int
     }
     deriving stock (Eq, Show)
 
@@ -262,6 +326,170 @@ instance ToJSON MetadataSummary where
 
 encodeReport :: TransactionReport -> ByteString
 encodeReport = encodePretty' reportJsonConfig
+
+buildTransactionReport
+    :: ReportContext -> TreasuryBuildResult -> TransactionReport
+buildTransactionReport context result =
+    TransactionReport
+        { trSchema = 1
+        , trAction = rcAction context
+        , trNetwork = rcNetwork context
+        , trIdentity =
+            TransactionIdentity
+                { tiTxId = tbrTxId result
+                , tiBodySizeBytes = bodySize
+                , tiFeeLovelace = feeLovelace
+                , tiTotalCollateralLovelace = totalCollateral
+                , tiValidityInterval = interval
+                }
+        , trWalletAccounting =
+            WalletAccounting
+                { waInputs = []
+                , waCollateralInput = Nothing
+                , waChangeOutput = Nothing
+                , waCollateralReturn = Nothing
+                , waFeeLovelace = feeLovelace
+                , waNetSpendLovelace = 0
+                }
+        , trTreasuryAccounting =
+            TreasuryAccounting
+                { taInputs = []
+                , taInputTotal = emptyValue
+                , taSundaeOrderTotal = emptyValue
+                , taPerChunkOverheadLovelace = 0
+                , taTreasuryLeftover = emptyValue
+                , taNetDebit = emptyValue
+                }
+        , trOutputs =
+            zipWith
+                outputFromTxOut
+                [0 ..]
+                (toList (body ^. outputsTxBodyL))
+        , trSigners = []
+        , trValidation =
+            ValidationFacts
+                { vfIntentNetwork = rcNetwork context
+                , vfSocketNetworkMagic =
+                    rcSocketNetworkMagic context
+                , vfNetworkMatches =
+                    rcSocketNetworkMagic context
+                        == networkMagic (rcNetwork context)
+                , vfFeeLovelace = feeLovelace
+                , vfBodySizeBytes = bodySize
+                , vfRedeemerCount = length scriptResults
+                , vfRedeemerFailures = redeemerFailures
+                , vfValidationStatus =
+                    if redeemerFailures == 0 then "ok" else "failed"
+                , vfValidityInterval = interval
+                }
+        , trReferenceInputs =
+            renderTxIn
+                <$> Set.toAscList (body ^. referenceInputsTxBodyL)
+        , trMetadata =
+            MetadataSummary
+                { msAuxiliaryDataHash = Nothing
+                , msCip1694LabelPresent = True
+                }
+        }
+  where
+    body = tbrFinalTxBody result
+    bodySize = fromIntegral (BSL.length (tbrCborBytes result))
+    Coin feeLovelace = tbrFeeLovelace result
+    Coin totalCollateral = tbrTotalCollateralLovelace result
+    scriptResults = tbrScriptResults result
+    redeemerFailures =
+        length
+            [ ()
+            | ScriptResult{srOutcome = Left _} <- scriptResults
+            ]
+    interval = validityInterval (body ^. vldtTxBodyL)
+
+outputFromTxOut :: Int -> TxOut ConwayEra -> ProducedOutput
+outputFromTxOut index txOut =
+    ProducedOutput
+        { poIndex = index
+        , poRole = OutputUnknown
+        , poAddress = renderAddress (txOut ^. addrTxOutL)
+        , poValue = valueSummary (txOut ^. valueTxOutL)
+        , poDatum = datumSummary (txOut ^. datumTxOutL)
+        }
+
+validityInterval :: Ledger.ValidityInterval -> ValidityInterval
+validityInterval (Ledger.ValidityInterval from to) =
+    ValidityInterval
+        { viInvalidBefore = slotNo <$> strictMaybe from
+        , viInvalidHereafter = slotNo <$> strictMaybe to
+        }
+
+strictMaybe :: StrictMaybe a -> Maybe a
+strictMaybe = \case
+    SNothing -> Nothing
+    SJust value -> Just value
+
+slotNo :: SlotNo -> Integer
+slotNo (SlotNo value) = fromIntegral value
+
+valueSummary :: MaryValue -> ValueSummary
+valueSummary (MaryValue (Coin lovelace) (MultiAsset policies)) =
+    ValueSummary
+        { vsLovelace = lovelace
+        , vsAssets =
+            Map.filter (not . Map.null) $
+                Map.fromListWith
+                    (Map.unionWith (+))
+                    [ ( policyIdText policy
+                      , Map.singleton (assetNameText asset) quantity
+                      )
+                    | (policy, assets) <- Map.toList policies
+                    , (asset, quantity) <- Map.toList assets
+                    , quantity /= 0
+                    ]
+        }
+
+datumSummary :: PlutusData.Datum ConwayEra -> Maybe Text
+datumSummary = \case
+    PlutusData.NoDatum -> Nothing
+    PlutusData.DatumHash h ->
+        Just $
+            "datumHash:"
+                <> Text.decodeUtf8
+                    (B16.encode (hashToBytes (extractHash h)))
+    PlutusData.Datum _ -> Just "inlineDatum"
+
+renderAddress :: Addr -> Text
+renderAddress addr =
+    Bech32.encodeLenient
+        hrp
+        (Bech32.dataPartFromBytes (serialiseAddr addr))
+  where
+    hrp =
+        fromRight
+            (error "renderAddress: invalid hrp")
+            (Bech32.humanReadablePartFromText (addressHrp addr))
+    addressHrp target =
+        case getNetwork target of
+            Mainnet -> "addr"
+            Testnet -> "addr_test"
+
+renderTxIn :: TxIn -> Text
+renderTxIn (TxIn (TxId h) ix) =
+    Text.decodeUtf8 (B16.encode (hashToBytes (extractHash h)))
+        <> "#"
+        <> T.pack (show (txIxToInt ix))
+
+policyIdText :: PolicyID -> Text
+policyIdText (PolicyID scriptHash) = scriptHashToHex scriptHash
+
+assetNameText :: AssetName -> Text
+assetNameText (AssetName raw) =
+    Text.decodeUtf8 (B16.encode (SBS.fromShort raw))
+
+networkMagic :: Text -> Int
+networkMagic = \case
+    "mainnet" -> 764_824_073
+    "preprod" -> 1
+    "preview" -> 2
+    _ -> 0
 
 sampleSwapReport :: TransactionReport
 sampleSwapReport =

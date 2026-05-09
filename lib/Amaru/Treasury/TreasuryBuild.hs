@@ -48,19 +48,23 @@ module Amaru.Treasury.TreasuryBuild
     , runWithdraw
     ) where
 
+import Cardano.Crypto.Hash.Class (hashToBytes)
 import Control.Exception (throwIO)
 import Control.Monad (unless)
+import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
 import Data.Foldable (toList)
 import Data.Map.Strict qualified as Map
 import Data.Sequence.Strict qualified as StrictSeq
 import Data.Set qualified as Set
+import Data.Text (Text)
+import Data.Text.Encoding qualified as Text
 
 import Cardano.Ledger.Address (Addr)
 import Cardano.Ledger.Alonzo.PParams (ppCollateralPercentageL)
 import Cardano.Ledger.Alonzo.Scripts (AsIx)
 import Cardano.Ledger.Api.Era (eraProtVerLow)
-import Cardano.Ledger.Api.Tx (estimateMinFeeTx)
+import Cardano.Ledger.Api.Tx (estimateMinFeeTx, txIdTx)
 import Cardano.Ledger.Api.Tx.Body
     ( Withdrawals (..)
     , collateralInputsTxBodyL
@@ -80,9 +84,10 @@ import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
 import Cardano.Ledger.Core (PParams, TopTx, TxBody, bodyTxL)
+import Cardano.Ledger.Hashes (extractHash)
 import Cardano.Ledger.Metadata (Metadatum)
 import Cardano.Ledger.Plutus (ExUnits)
-import Cardano.Ledger.TxIn (TxIn)
+import Cardano.Ledger.TxIn (TxId (..), TxIn)
 import Cardano.Node.Client.Balance (refScriptsSize)
 import Cardano.Node.Client.Ledger (ConwayTx)
 import Cardano.Node.Client.TxBuild
@@ -143,6 +148,11 @@ data TreasuryBuildResult = TreasuryBuildResult
     , tbrScriptResults :: ![ScriptResult]
     -- ^ outcome of re-evaluating every redeemer on the
     --     fully-balanced tx
+    , tbrFinalTxBody :: !(TxBody TopTx ConwayEra)
+    -- ^ final balanced transaction body used to render
+    --     deterministic reports without rebuilding
+    , tbrTxId :: !Text
+    -- ^ transaction id of the final balanced transaction
     }
 
 -- ----------------------------------------------------
@@ -311,6 +321,8 @@ runWithdraw ctx intent rationale walletAddr = do
                     , tbrTotalCollateralLovelace =
                         totalColl
                     , tbrScriptResults = scriptResults
+                    , tbrFinalTxBody = body
+                    , tbrTxId = txIdText tx
                     }
 
 -- ----------------------------------------------------
@@ -434,6 +446,8 @@ runDisburseAda ctx fields payload rationale walletAddr = do
                     , tbrTotalCollateralLovelace =
                         totalColl
                     , tbrScriptResults = scriptResults
+                    , tbrFinalTxBody = body
+                    , tbrTxId = txIdText tx
                     }
 
 {- | Match @cardano-cli transaction build@'s conservative
@@ -732,4 +746,15 @@ runSwap ctx intent rationale walletInput walletAddr = do
                     , tbrTotalCollateralLovelace =
                         totalColl
                     , tbrScriptResults = scriptResults
+                    , tbrFinalTxBody = body
+                    , tbrTxId = txIdText tx
                     }
+
+txIdText :: ConwayTx -> Text
+txIdText tx =
+    case txIdTx tx of
+        TxId h ->
+            Text.decodeUtf8 $
+                B16.encode $
+                    hashToBytes $
+                        extractHash h

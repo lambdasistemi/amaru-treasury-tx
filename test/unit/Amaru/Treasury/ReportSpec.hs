@@ -6,6 +6,7 @@ import Data.Aeson (Value (..), eitherDecode, object, toJSON, (.=))
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
 import Data.ByteString.Lazy.Char8 qualified as BSL8
+import Data.List (isInfixOf)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Test.Hspec
@@ -30,6 +31,7 @@ import Amaru.Treasury.Report
     , ValidityInterval (..)
     , ValueSummary (..)
     , WalletAccounting (..)
+    , buildTransactionReport
     , encodeReport
     )
 
@@ -76,6 +78,43 @@ spec = describe "Amaru.Treasury.Report" $ do
     it "encodes with a trailing newline" $
         BSL8.last (encodeReport sampleReport) `shouldBe` '\n'
 
+    it "keeps report bytes deterministic and host-independent" $ do
+        let encoded = BSL8.unpack (encodeReport deterministicReport)
+        encoded
+            `shouldSatisfy` fieldsAppearInOrder
+                [ "\"action\""
+                , "\"identity\""
+                , "\"metadata\""
+                , "\"network\""
+                , "\"outputs\""
+                , "\"referenceInputs\""
+                , "\"schema\""
+                , "\"signers\""
+                , "\"treasuryAccounting\""
+                , "\"validation\""
+                , "\"walletAccounting\""
+                ]
+        encoded
+            `shouldSatisfy` fieldsAppearInOrder
+                [ "\"aPolicy\""
+                , "\"bPolicy\""
+                ]
+        encoded
+            `shouldSatisfy` fieldsAppearInOrder
+                [ "\"aAsset\""
+                , "\"zAsset\""
+                ]
+        encoded `shouldSatisfy` isInfixOf "\"index\": 0"
+        encoded `shouldSatisfy` isInfixOf "\"index\": 1"
+        encoded `shouldSatisfy` (not . isInfixOf "timestamp")
+        encoded `shouldSatisfy` (not . isInfixOf "path")
+        BSL8.last (encodeReport deterministicReport) `shouldBe` '\n'
+
+    it "exposes a pure report constructor for build results" $
+        buildTransactionReport `seq`
+            True
+                `shouldBe` True
+
 decodedReport :: Either String Value
 decodedReport = eitherDecode (encodeReport sampleReport)
 
@@ -117,6 +156,65 @@ sampleReport =
                 , msCip1694LabelPresent = True
                 }
         }
+
+deterministicReport :: TransactionReport
+deterministicReport =
+    sampleReport
+        { trOutputs =
+            [ ProducedOutput
+                { poIndex = 0
+                , poRole = OutputUnknown
+                , poAddress = "addr_test1first"
+                , poValue =
+                    ValueSummary
+                        { vsLovelace = 2
+                        , vsAssets =
+                            Map.fromList
+                                [
+                                    ( "bPolicy"
+                                    , Map.fromList
+                                        [ ("zAsset", 9)
+                                        , ("aAsset", 1)
+                                        ]
+                                    )
+                                ,
+                                    ( "aPolicy"
+                                    , Map.singleton "onlyAsset" 3
+                                    )
+                                ]
+                        }
+                , poDatum = Nothing
+                }
+            , ProducedOutput
+                { poIndex = 1
+                , poRole = OutputUnknown
+                , poAddress = "addr_test1second"
+                , poValue = emptyValue
+                , poDatum = Nothing
+                }
+            ]
+        }
+
+fieldsAppearInOrder :: [String] -> String -> Bool
+fieldsAppearInOrder =
+    go
+  where
+    go [] _ = True
+    go (field : rest) input =
+        case breakOn field input of
+            Nothing -> False
+            Just suffix -> go rest suffix
+
+breakOn :: String -> String -> Maybe String
+breakOn needle input
+    | needle `isPrefixOf` input = Just (drop (length needle) input)
+    | otherwise = case input of
+        [] -> Nothing
+        (_ : rest) -> breakOn needle rest
+
+isPrefixOf :: String -> String -> Bool
+isPrefixOf prefix input =
+    take (length prefix) input == prefix
 
 sampleIdentity :: TransactionIdentity
 sampleIdentity =

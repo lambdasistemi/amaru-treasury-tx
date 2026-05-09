@@ -47,6 +47,11 @@ import Amaru.Treasury.ChainContext.Fixture
     , toFrozenContext
     )
 import Amaru.Treasury.IntentJSON (decodeTreasuryIntentFile)
+import Amaru.Treasury.Report
+    ( ReportContext (..)
+    , buildTransactionReport
+    , encodeReport
+    )
 import Amaru.Treasury.TreasuryBuild
     ( TreasuryBuildResult (..)
     , runFromIntent
@@ -108,6 +113,32 @@ spec =
                 BS.readFile (fixtureDir <> "/expected.cbor")
             expected `shouldBe` targetHex
             actualHex `shouldBe` targetHex
+        it "generates a byte-stable report for the swap fixture" $ do
+            si <-
+                decodeTreasuryIntentFile
+                    (fixtureDir <> "/intent.json")
+            some <- case si of
+                Left e -> error ("intent JSON: " <> e)
+                Right v -> pure v
+            fixture <- readSwapFixture fixtureDir
+            let ctx = toFrozenContext fixture
+            first <- runFromIntent ctx some
+            second <- runFromIntent ctx some
+            let firstReport = swapReportBytes first
+                secondReport = swapReportBytes second
+            update <- lookupEnv "UPDATE_GOLDENS"
+            case update of
+                Just "1" ->
+                    BSL.writeFile
+                        (fixtureDir <> "/report.golden.json")
+                        firstReport
+                _ -> pure ()
+            expectedReport <-
+                BSL.readFile
+                    (fixtureDir <> "/report.golden.json")
+            firstReport `shouldBe` secondReport
+            firstReport `shouldBe` expectedReport
+            tbrCborBytes first `shouldBe` tbrCborBytes second
         it
             "legacy intent without extraTxIns rebuilds byte-identical bytes"
             $ do
@@ -127,3 +158,13 @@ spec =
                 expected <-
                     BS.readFile (fixtureDir <> "/expected.cbor")
                 actualHex `shouldBe` expected
+
+swapReportBytes :: TreasuryBuildResult -> BSL.ByteString
+swapReportBytes =
+    encodeReport
+        . buildTransactionReport
+            ReportContext
+                { rcAction = "swap"
+                , rcNetwork = "mainnet"
+                , rcSocketNetworkMagic = 764_824_073
+                }

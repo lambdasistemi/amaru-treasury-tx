@@ -123,6 +123,7 @@ library
     , bech32
     , bytestring
     , cardano-crypto-class
+    , cardano-ledger-allegra
     , cardano-ledger-alonzo
     , cardano-ledger-api
     , cardano-ledger-binary

@@ -17,16 +17,23 @@ module Amaru.Treasury.Tx.SwapQuote
     , SwapQuoteRequest (..)
     , SwapQuoteRequestChunk (..)
     , DerivedSwapParameters (..)
+    , AffordabilitySummary (..)
+    , AffordabilityFailure (..)
     , SwapQuoteError (..)
     , parseQuoteInput
     , parseSlippageBps
     , deriveSwapParameters
+    , generatedChunkCount
+    , checkAffordability
+    , renderAffordabilityFailure
     ) where
 
 import Data.Char (digitToInt, isDigit)
-import Data.Ratio ((%))
+import Data.Ratio (denominator, numerator, (%))
 import Data.Text (Text)
 import Data.Text qualified as T
+
+import Amaru.Treasury.Tx.SwapWizard (chunkCountFor)
 
 data QuotePair
     = AdaUsd
@@ -73,6 +80,20 @@ data DerivedSwapParameters = DerivedSwapParameters
     , dspAmountLovelace :: !Integer
     , dspChunkSizeLovelace :: !Integer
     }
+    deriving (Eq, Show)
+
+data AffordabilitySummary = AffordabilitySummary
+    { asDerived :: !DerivedSwapParameters
+    , asChunkCount :: !Integer
+    , asExtraPerChunkLovelace :: !Integer
+    , asRequiredLovelace :: !Integer
+    , asAvailableLovelace :: !Integer
+    , asShortfallLovelace :: !Integer
+    }
+    deriving (Eq, Show)
+
+newtype AffordabilityFailure
+    = Unaffordable AffordabilitySummary
     deriving (Eq, Show)
 
 data SwapQuoteError
@@ -157,6 +178,54 @@ chunkSizeLovelace request derivedRate =
             (sqrRequestedUsdm request)
             derivedRate
 
+generatedChunkCount :: DerivedSwapParameters -> Integer
+generatedChunkCount parameters =
+    chunkCountFor
+        (dspAmountLovelace parameters)
+        (dspChunkSizeLovelace parameters)
+
+checkAffordability
+    :: DerivedSwapParameters
+    -> Integer
+    -- ^ Extra lovelace funded by the treasury for each generated chunk.
+    -> Integer
+    -- ^ Available treasury lovelace.
+    -> Either AffordabilityFailure AffordabilitySummary
+checkAffordability parameters extraPerChunkLovelace availableLovelace =
+    if availableLovelace >= requiredLovelace
+        then Right summary
+        else Left (Unaffordable summary)
+  where
+    chunkCount = generatedChunkCount parameters
+    requiredLovelace =
+        dspAmountLovelace parameters
+            + chunkCount * extraPerChunkLovelace
+    shortfallLovelace =
+        max 0 (requiredLovelace - availableLovelace)
+    summary =
+        AffordabilitySummary
+            { asDerived = parameters
+            , asChunkCount = chunkCount
+            , asExtraPerChunkLovelace = extraPerChunkLovelace
+            , asRequiredLovelace = requiredLovelace
+            , asAvailableLovelace = availableLovelace
+            , asShortfallLovelace = shortfallLovelace
+            }
+
+renderAffordabilityFailure :: AffordabilityFailure -> Text
+renderAffordabilityFailure (Unaffordable summary) =
+    T.intercalate
+        "; "
+        [ "swap quote affordability failed"
+        , "required=" <> formatAda (asRequiredLovelace summary)
+        , "available=" <> formatAda (asAvailableLovelace summary)
+        , "quote=" <> formatQuote (dspQuote derived)
+        , "slippage=" <> formatSlippage (dspSlippageBps derived)
+        , "shortfall=" <> formatAda (asShortfallLovelace summary)
+        ]
+  where
+    derived = asDerived summary
+
 usdmToLovelace :: Rational -> Rational -> Integer
 usdmToLovelace usdm rate =
     ceiling (usdm * 1_000_000 / rate)
@@ -195,3 +264,93 @@ parseUnsignedDecimal raw
 decimalDigitsToInteger :: Text -> Integer
 decimalDigitsToInteger =
     T.foldl' (\acc c -> acc * 10 + toInteger (digitToInt c)) 0
+
+formatAda :: Integer -> Text
+formatAda lovelace =
+    decimal
+        <> " ADA ("
+        <> tshow lovelace
+        <> " lovelace)"
+  where
+    (whole, fractional) = lovelace `divMod` 1_000_000
+    decimal =
+        tshow whole
+            <> "."
+            <> leftPad 6 (tshow fractional)
+
+formatQuote :: QuoteObservation -> Text
+formatQuote observation =
+    formatRationalDecimal (qoQuote observation)
+        <> " "
+        <> case qoPair observation of
+            AdaUsd -> "ADA/USD"
+            AdaUsdm -> "ADA/USDM"
+
+formatSlippage :: SlippageBps -> Text
+formatSlippage (SlippageBps bps) =
+    tshow bps <> " bps"
+
+formatRationalDecimal :: Rational -> Text
+formatRationalDecimal value =
+    case finiteDecimalScale (denominator value) of
+        Nothing ->
+            tshow (numerator value) <> "/" <> tshow (denominator value)
+        Just scale ->
+            let scaledNumerator =
+                    numerator value
+                        * (10 ^ scale)
+                        `div` denominator value
+                raw = tshow scaledNumerator
+            in  if scale == 0
+                    then raw
+                    else trimTrailingZeros (whole raw scale <> "." <> frac raw scale)
+  where
+    whole raw scale =
+        let len = T.length raw
+        in  if len <= scale
+                then "0"
+                else T.take (len - scale) raw
+    frac raw scale =
+        let len = T.length raw
+            padded = leftPad scale raw
+        in  T.drop (max 0 (len - scale)) padded
+
+finiteDecimalScale :: Integer -> Maybe Int
+finiteDecimalScale denominatorValue =
+    if remainder == 1
+        then Just (max twos fives)
+        else Nothing
+  where
+    (twos, withoutTwos) = factorCount 2 denominatorValue
+    (fives, remainder) = factorCount 5 withoutTwos
+
+factorCount :: Integer -> Integer -> (Int, Integer)
+factorCount factor =
+    go 0
+  where
+    go count value
+        | value > 0 && value `mod` factor == 0 =
+            go (count + 1) (value `div` factor)
+        | otherwise =
+            (count, value)
+
+leftPad :: Int -> Text -> Text
+leftPad width text =
+    T.replicate (max 0 (width - T.length text)) "0" <> text
+
+trimTrailingZeros :: Text -> Text
+trimTrailingZeros text =
+    case T.breakOn "." text of
+        (_, "") ->
+            text
+        (whole, fractionalWithDot) ->
+            let fractional =
+                    T.drop 1 fractionalWithDot
+                trimmed =
+                    T.dropWhileEnd (== '0') fractional
+            in  if T.null trimmed
+                    then whole
+                    else whole <> "." <> trimmed
+
+tshow :: (Show a) => a -> Text
+tshow = T.pack . show

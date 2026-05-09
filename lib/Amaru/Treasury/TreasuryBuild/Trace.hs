@@ -5,11 +5,11 @@ Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
 Carries the steps the unified @tx-build@ subcommand
-takes that affect the produced tx CBOR or the summary
-sidecar: 'TbeIntentParsed' (the action + network read
-from the intent), 'TbeNetworkOk' / 'TbeNetworkMismatch'
-(the N2C handshake magic vs @intent.network@), and
-'TbeWroteSummary' (the summary sidecar path).
+takes that affect the produced tx CBOR or requested
+sidecar artifacts: 'TbeIntentParsed' (the action +
+network read from the intent), 'TbeNetworkOk' /
+'TbeNetworkMismatch' (the N2C handshake magic vs
+@intent.network@), and report-write events.
 
 Constructor prefix @Tbe-@ for "TreasuryBuildEvent".
 -}
@@ -81,6 +81,10 @@ data BuildEvent
       TbeWroteCbor !(Maybe FilePath)
     | -- | Where the summary JSON sidecar went.
       TbeWroteSummary !FilePath
+    | -- | Where the deterministic report JSON sidecar went.
+      TbeWroteReport !FilePath
+    | -- | The requested report JSON sidecar could not be written.
+      TbeReportWriteFailed !FilePath !Text
     | -- | The build aborted before producing CBOR.
       TbeAborted !Text
     deriving stock (Eq, Show)
@@ -140,6 +144,13 @@ renderBuildEvent =
         TbeWroteCbor (Just p) -> "cbor -> " <> T.pack p
         TbeWroteSummary p ->
             "summary -> " <> T.pack p
+        TbeWroteReport p ->
+            "report -> " <> T.pack p
+        TbeReportWriteFailed p err ->
+            "REPORT WRITE FAILED "
+                <> T.pack p
+                <> ": "
+                <> err
         TbeAborted msg -> "ABORT " <> msg
 
 {- | Lift a 'Text' sink into a 'BuildEvent' tracer via

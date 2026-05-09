@@ -6,7 +6,8 @@ set -euo pipefail
 # Runs offline-safe checks only (CI has no cardano-node socket):
 #
 #   1. `swap-wizard --help` is wired and lists the unified flags.
-#   2. `tx-build --help` is wired, accepts `--intent` / stdin / `--out`.
+#   2. `tx-build --help` is wired, accepts `--intent` / stdin / `--out` /
+#      `--report`.
 #   3. The frozen `test/fixtures/swap/intent.json` decodes as a
 #      `SomeTreasuryIntent` (the parser smoke). This subsumes
 #      "wizard's stdout decodes as SomeTreasuryIntent" because the
@@ -59,7 +60,8 @@ build_elapsed=$(( $(date +%s) - build_start ))
 for needle in \
   '--intent' \
   '--out' \
-  '--log'
+  '--log' \
+  '--report'
 do
   if ! grep -F -- "$needle" >/dev/null <<<"$build_help"; then
     printf 'tx-build-pipe: missing tx-build flag: %s\n' "$needle" >&2
@@ -71,6 +73,16 @@ done
 # The 'IntentJSON' specs cover the round-trip property over 100
 # random shapes per action variant + the four negative parses.
 # 'SwapGoldenSpec' covers the byte-identity gate.
+cabal test unit-tests -O0 \
+  --test-show-details=direct \
+  --test-option=--match \
+  --test-option="tx-build CLI parser"
+
+cabal test unit-tests -O0 \
+  --test-show-details=direct \
+  --test-option=--match \
+  --test-option="report write"
+
 cabal test unit-tests -O0 \
   --test-show-details=direct \
   --test-option=--match \

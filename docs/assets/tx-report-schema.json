@@ -1,0 +1,413 @@
+{
+    "$defs": {
+        "metadataSummary": {
+            "additionalProperties": false,
+            "properties": {
+                "auxiliaryDataHash": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "cip1694LabelPresent": {
+                    "type": "boolean"
+                }
+            },
+            "required": [
+                "auxiliaryDataHash",
+                "cip1694LabelPresent"
+            ],
+            "type": "object"
+        },
+        "producedOutput": {
+            "additionalProperties": false,
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "datum": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "index": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "role": {
+                    "enum": [
+                        "swapOrder",
+                        "treasuryLeftover",
+                        "walletChange",
+                        "collateralReturn",
+                        "metadata",
+                        "unknown"
+                    ],
+                    "type": "string"
+                },
+                "value": {
+                    "$ref": "#/$defs/valueSummary"
+                }
+            },
+            "required": [
+                "index",
+                "role",
+                "address",
+                "value",
+                "datum"
+            ],
+            "type": "object"
+        },
+        "signerRequirement": {
+            "additionalProperties": false,
+            "properties": {
+                "keyHash": {
+                    "type": "string"
+                },
+                "scope": {
+                    "anyOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "source": {
+                    "enum": [
+                        "selectedScopeOwner",
+                        "extraSigner",
+                        "intentRequiredSigner",
+                        "txBodyRequiredSigner"
+                    ],
+                    "type": "string"
+                }
+            },
+            "required": [
+                "keyHash",
+                "source",
+                "scope"
+            ],
+            "type": "object"
+        },
+        "transactionIdentity": {
+            "additionalProperties": false,
+            "properties": {
+                "bodySizeBytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "feeLovelace": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "totalCollateralLovelace": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "txId": {
+                    "type": "string"
+                },
+                "validityInterval": {
+                    "$ref": "#/$defs/validityInterval"
+                }
+            },
+            "required": [
+                "txId",
+                "bodySizeBytes",
+                "feeLovelace",
+                "totalCollateralLovelace",
+                "validityInterval"
+            ],
+            "type": "object"
+        },
+        "treasuryAccounting": {
+            "additionalProperties": false,
+            "properties": {
+                "inputTotal": {
+                    "$ref": "#/$defs/valueSummary"
+                },
+                "inputs": {
+                    "items": {
+                        "$ref": "#/$defs/utxoSummary"
+                    },
+                    "type": "array"
+                },
+                "netDebit": {
+                    "$ref": "#/$defs/valueSummary"
+                },
+                "perChunkOverheadLovelace": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "sundaeOrderTotal": {
+                    "$ref": "#/$defs/valueSummary"
+                },
+                "treasuryLeftover": {
+                    "$ref": "#/$defs/valueSummary"
+                }
+            },
+            "required": [
+                "inputs",
+                "inputTotal",
+                "sundaeOrderTotal",
+                "perChunkOverheadLovelace",
+                "treasuryLeftover",
+                "netDebit"
+            ],
+            "type": "object"
+        },
+        "utxoSummary": {
+            "additionalProperties": false,
+            "properties": {
+                "txIn": {
+                    "type": "string"
+                },
+                "value": {
+                    "$ref": "#/$defs/valueSummary"
+                }
+            },
+            "required": [
+                "txIn",
+                "value"
+            ],
+            "type": "object"
+        },
+        "validationFacts": {
+            "additionalProperties": false,
+            "properties": {
+                "bodySizeBytes": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "feeLovelace": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "intentNetwork": {
+                    "type": "string"
+                },
+                "networkMatches": {
+                    "type": "boolean"
+                },
+                "redeemerCount": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "redeemerFailures": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "socketNetworkMagic": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "validationStatus": {
+                    "type": "string"
+                },
+                "validityInterval": {
+                    "$ref": "#/$defs/validityInterval"
+                }
+            },
+            "required": [
+                "intentNetwork",
+                "socketNetworkMagic",
+                "networkMatches",
+                "feeLovelace",
+                "bodySizeBytes",
+                "redeemerCount",
+                "redeemerFailures",
+                "validationStatus",
+                "validityInterval"
+            ],
+            "type": "object"
+        },
+        "validityInterval": {
+            "additionalProperties": false,
+            "properties": {
+                "invalidBefore": {
+                    "anyOf": [
+                        {
+                            "minimum": 0,
+                            "type": "integer"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "invalidHereafter": {
+                    "anyOf": [
+                        {
+                            "minimum": 0,
+                            "type": "integer"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                }
+            },
+            "required": [
+                "invalidBefore",
+                "invalidHereafter"
+            ],
+            "type": "object"
+        },
+        "valueSummary": {
+            "additionalProperties": false,
+            "properties": {
+                "assets": {
+                    "additionalProperties": {
+                        "additionalProperties": {
+                            "minimum": 0,
+                            "type": "integer"
+                        },
+                        "type": "object"
+                    },
+                    "type": "object"
+                },
+                "lovelace": {
+                    "minimum": 0,
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "lovelace",
+                "assets"
+            ],
+            "type": "object"
+        },
+        "walletAccounting": {
+            "additionalProperties": false,
+            "properties": {
+                "changeOutput": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/utxoSummary"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "collateralInput": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/utxoSummary"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "collateralReturn": {
+                    "anyOf": [
+                        {
+                            "$ref": "#/$defs/utxoSummary"
+                        },
+                        {
+                            "type": "null"
+                        }
+                    ]
+                },
+                "feeLovelace": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "inputs": {
+                    "items": {
+                        "$ref": "#/$defs/utxoSummary"
+                    },
+                    "type": "array"
+                },
+                "netSpendLovelace": {
+                    "minimum": 0,
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "inputs",
+                "collateralInput",
+                "changeOutput",
+                "collateralReturn",
+                "feeLovelace",
+                "netSpendLovelace"
+            ],
+            "type": "object"
+        }
+    },
+    "$id": "https://github.com/lambdasistemi/amaru-treasury-tx/schemas/tx-report-v1.json",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "properties": {
+        "action": {
+            "type": "string"
+        },
+        "identity": {
+            "$ref": "#/$defs/transactionIdentity"
+        },
+        "metadata": {
+            "$ref": "#/$defs/metadataSummary"
+        },
+        "network": {
+            "type": "string"
+        },
+        "outputs": {
+            "items": {
+                "$ref": "#/$defs/producedOutput"
+            },
+            "type": "array"
+        },
+        "referenceInputs": {
+            "items": {
+                "type": "string"
+            },
+            "type": "array"
+        },
+        "schema": {
+            "const": 1,
+            "type": "integer"
+        },
+        "signers": {
+            "items": {
+                "$ref": "#/$defs/signerRequirement"
+            },
+            "type": "array"
+        },
+        "treasuryAccounting": {
+            "$ref": "#/$defs/treasuryAccounting"
+        },
+        "validation": {
+            "$ref": "#/$defs/validationFacts"
+        },
+        "walletAccounting": {
+            "$ref": "#/$defs/walletAccounting"
+        }
+    },
+    "required": [
+        "schema",
+        "action",
+        "network",
+        "identity",
+        "walletAccounting",
+        "treasuryAccounting",
+        "outputs",
+        "signers",
+        "validation",
+        "referenceInputs",
+        "metadata"
+    ],
+    "title": "Amaru Treasury Transaction Report JSON",
+    "type": "object"
+}

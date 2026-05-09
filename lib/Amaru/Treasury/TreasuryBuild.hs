@@ -1,5 +1,6 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : Amaru.Treasury.TreasuryBuild
@@ -48,19 +49,25 @@ module Amaru.Treasury.TreasuryBuild
     , runWithdraw
     ) where
 
+import Cardano.Crypto.Hash.Class (hashToBytes)
 import Control.Exception (throwIO)
 import Control.Monad (unless)
+import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
 import Data.Foldable (toList)
+import Data.List (find)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (listToMaybe)
 import Data.Sequence.Strict qualified as StrictSeq
 import Data.Set qualified as Set
+import Data.Text (Text)
+import Data.Text.Encoding qualified as Text
 
 import Cardano.Ledger.Address (Addr)
 import Cardano.Ledger.Alonzo.PParams (ppCollateralPercentageL)
 import Cardano.Ledger.Alonzo.Scripts (AsIx)
 import Cardano.Ledger.Api.Era (eraProtVerLow)
-import Cardano.Ledger.Api.Tx (estimateMinFeeTx)
+import Cardano.Ledger.Api.Tx (estimateMinFeeTx, txIdTx)
 import Cardano.Ledger.Api.Tx.Body
     ( Withdrawals (..)
     , collateralInputsTxBodyL
@@ -80,9 +87,10 @@ import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
 import Cardano.Ledger.Core (PParams, TopTx, TxBody, bodyTxL)
+import Cardano.Ledger.Hashes (extractHash)
 import Cardano.Ledger.Metadata (Metadatum)
 import Cardano.Ledger.Plutus (ExUnits)
-import Cardano.Ledger.TxIn (TxIn)
+import Cardano.Ledger.TxIn (TxId (..), TxIn)
 import Cardano.Node.Client.Balance (refScriptsSize)
 import Cardano.Node.Client.Ledger (ConwayTx)
 import Cardano.Node.Client.TxBuild
@@ -143,6 +151,27 @@ data TreasuryBuildResult = TreasuryBuildResult
     , tbrScriptResults :: ![ScriptResult]
     -- ^ outcome of re-evaluating every redeemer on the
     --     fully-balanced tx
+    , tbrFinalTxBody :: !(TxBody TopTx ConwayEra)
+    -- ^ final balanced transaction body used to render
+    --     deterministic reports without rebuilding
+    , tbrTxId :: !Text
+    -- ^ transaction id of the final balanced transaction
+    , tbrWalletInputs :: ![(TxIn, TxOut ConwayEra)]
+    -- ^ wallet-owned inputs used to fuel the build
+    , tbrTreasuryInputs :: ![(TxIn, TxOut ConwayEra)]
+    -- ^ treasury-owned inputs spent by the build
+    , tbrSundaeOrderOutputs :: ![(Int, TxOut ConwayEra)]
+    -- ^ final Sundae order outputs, paired with ledger output indexes
+    , tbrTreasuryLeftoverOutput :: !(Maybe (Int, TxOut ConwayEra))
+    -- ^ final treasury leftover output, when present
+    , tbrPerChunkOverheadLovelace :: !Coin
+    -- ^ per-order overhead funded by the treasury for swap builds
+    , tbrWalletChangeOutput :: !(Maybe (Int, TxOut ConwayEra))
+    -- ^ final wallet change output, paired with its output index
+    , tbrCollateralInput :: !(Maybe (TxIn, TxOut ConwayEra))
+    -- ^ wallet input selected as collateral, when present
+    , tbrCollateralReturn :: !(Maybe (TxOut ConwayEra))
+    -- ^ collateral-return output from the final body, when present
     }
 
 -- ----------------------------------------------------
@@ -235,8 +264,9 @@ runWithdraw ctx intent rationale walletAddr = do
         throwIO . userError $
             "runWithdraw: missing UTxOs in context: "
                 <> show missing
-    let inputUtxos =
+    let walletInputUtxos =
             [(walletInput, utxoMap Map.! walletInput)]
+        inputUtxos = walletInputUtxos
         refUtxos =
             [ (i, utxoMap Map.! i)
             | i <- refInputs
@@ -311,6 +341,20 @@ runWithdraw ctx intent rationale walletAddr = do
                     , tbrTotalCollateralLovelace =
                         totalColl
                     , tbrScriptResults = scriptResults
+                    , tbrFinalTxBody = body
+                    , tbrTxId = txIdText tx
+                    , tbrWalletInputs = walletInputUtxos
+                    , tbrTreasuryInputs = []
+                    , tbrSundaeOrderOutputs = []
+                    , tbrTreasuryLeftoverOutput = Nothing
+                    , tbrPerChunkOverheadLovelace = Coin 0
+                    , tbrWalletChangeOutput =
+                        indexedOutputAt changeOutputIndex body
+                    , tbrCollateralInput =
+                        collateralInputFrom body walletInputUtxos
+                    , tbrCollateralReturn =
+                        strictMaybe
+                            (body ^. collateralReturnTxBodyL)
                     }
 
 -- ----------------------------------------------------
@@ -363,11 +407,15 @@ runDisburseAda ctx fields payload rationale walletAddr = do
         throwIO . userError $
             "runDisburse: missing UTxOs in context: "
                 <> show missing
-    let inputUtxos =
-            (walletInput, utxoMap Map.! walletInput)
-                : [ (i, utxoMap Map.! i)
-                  | i <- treasuryInputs
-                  ]
+    let walletInputUtxos =
+            [(walletInput, utxoMap Map.! walletInput)]
+        treasuryInputUtxos =
+            [ (i, utxoMap Map.! i)
+            | i <- treasuryInputs
+            ]
+        inputUtxos =
+            walletInputUtxos
+                ++ treasuryInputUtxos
         refUtxos =
             [ (i, utxoMap Map.! i)
             | i <- refInputs
@@ -434,6 +482,20 @@ runDisburseAda ctx fields payload rationale walletAddr = do
                     , tbrTotalCollateralLovelace =
                         totalColl
                     , tbrScriptResults = scriptResults
+                    , tbrFinalTxBody = body
+                    , tbrTxId = txIdText tx
+                    , tbrWalletInputs = walletInputUtxos
+                    , tbrTreasuryInputs = treasuryInputUtxos
+                    , tbrSundaeOrderOutputs = []
+                    , tbrTreasuryLeftoverOutput = Nothing
+                    , tbrPerChunkOverheadLovelace = Coin 0
+                    , tbrWalletChangeOutput =
+                        indexedOutputAt 2 body
+                    , tbrCollateralInput =
+                        collateralInputFrom body walletInputUtxos
+                    , tbrCollateralReturn =
+                        strictMaybe
+                            (body ^. collateralReturnTxBodyL)
                     }
 
 {- | Match @cardano-cli transaction build@'s conservative
@@ -642,14 +704,16 @@ runSwap ctx intent rationale walletInput walletAddr = do
         throwIO . userError $
             "runSwap: missing UTxOs in context: "
                 <> show missing
-    let inputUtxos =
+    let walletInputUtxos =
             (walletInput, utxoMap Map.! walletInput)
                 : [ (i, utxoMap Map.! i)
                   | i <- siExtraWalletInputs intent
                   ]
-                ++ [ (i, utxoMap Map.! i)
-                   | i <- siTreasuryUtxos intent
-                   ]
+        treasuryInputUtxos =
+            [ (i, utxoMap Map.! i)
+            | i <- siTreasuryUtxos intent
+            ]
+        inputUtxos = walletInputUtxos ++ treasuryInputUtxos
         refUtxos =
             [ (i, utxoMap Map.! i)
             | i <-
@@ -732,4 +796,70 @@ runSwap ctx intent rationale walletInput walletAddr = do
                     , tbrTotalCollateralLovelace =
                         totalColl
                     , tbrScriptResults = scriptResults
+                    , tbrFinalTxBody = body
+                    , tbrTxId = txIdText tx
+                    , tbrWalletInputs = walletInputUtxos
+                    , tbrTreasuryInputs = treasuryInputUtxos
+                    , tbrSundaeOrderOutputs =
+                        indexedOutputs
+                            0
+                            (length (siSwapOrders intent))
+                            body
+                    , tbrTreasuryLeftoverOutput =
+                        indexedOutputAt
+                            (length (siSwapOrders intent))
+                            body
+                    , tbrPerChunkOverheadLovelace =
+                        siSwapOrderExtraLovelace intent
+                    , tbrWalletChangeOutput =
+                        indexedOutputAt
+                            (length (siSwapOrders intent) + 1)
+                            body
+                    , tbrCollateralInput =
+                        collateralInputFrom body walletInputUtxos
+                    , tbrCollateralReturn =
+                        strictMaybe
+                            (body ^. collateralReturnTxBodyL)
                     }
+
+txIdText :: ConwayTx -> Text
+txIdText tx =
+    case txIdTx tx of
+        TxId h ->
+            Text.decodeUtf8 $
+                B16.encode $
+                    hashToBytes $
+                        extractHash h
+
+indexedOutputAt
+    :: Int
+    -> TxBody TopTx ConwayEra
+    -> Maybe (Int, TxOut ConwayEra)
+indexedOutputAt index body =
+    (index,) <$> listToMaybe (drop index outputs)
+  where
+    outputs = toList (body ^. outputsTxBodyL)
+
+indexedOutputs
+    :: Int
+    -> Int
+    -> TxBody TopTx ConwayEra
+    -> [(Int, TxOut ConwayEra)]
+indexedOutputs start count body =
+    take count . drop start . zip [0 ..] $
+        toList (body ^. outputsTxBodyL)
+
+collateralInputFrom
+    :: TxBody TopTx ConwayEra
+    -> [(TxIn, TxOut ConwayEra)]
+    -> Maybe (TxIn, TxOut ConwayEra)
+collateralInputFrom body =
+    find
+        ( \(txIn, _) ->
+            Set.member txIn (body ^. collateralInputsTxBodyL)
+        )
+
+strictMaybe :: StrictMaybe a -> Maybe a
+strictMaybe = \case
+    SNothing -> Nothing
+    SJust value -> Just value

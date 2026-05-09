@@ -23,6 +23,7 @@ extra-source-files:
   assets/plutus/treasury.cbor
   assets/plutus/treasury_registry.cbor
   docs/assets/intent-schema.json
+  docs/assets/tx-report-schema.json
   scripts/smoke/swap-wizard-signers
   scripts/smoke/tx-build-pipe
   test/fixtures/disburse/**/*.cbor
@@ -76,6 +77,7 @@ library
     Amaru.Treasury.Backend.N2C
     Amaru.Treasury.ChainContext
     Amaru.Treasury.ChainContext.Fixture
+    Amaru.Treasury.Cli.TxBuild
     Amaru.Treasury.Constants
     Amaru.Treasury.IntentJSON
     Amaru.Treasury.IntentJSON.Common
@@ -88,9 +90,14 @@ library
     Amaru.Treasury.Registry.Derive
     Amaru.Treasury.Registry.Metadata
     Amaru.Treasury.Registry.Verify
+    Amaru.Treasury.Report
+    Amaru.Treasury.Report.Accounting
+    Amaru.Treasury.Report.Classify
+    Amaru.Treasury.Report.Schema
     Amaru.Treasury.Scope
     Amaru.Treasury.Summary
     Amaru.Treasury.TreasuryBuild
+    Amaru.Treasury.TreasuryBuild.ReportWriter
     Amaru.Treasury.TreasuryBuild.Trace
     Amaru.Treasury.Tx.Disburse
     Amaru.Treasury.Tx.Disburse.Trace
@@ -118,6 +125,7 @@ library
     , bech32
     , bytestring
     , cardano-crypto-class
+    , cardano-ledger-allegra
     , cardano-ledger-alonzo
     , cardano-ledger-api
     , cardano-ledger-binary
@@ -133,6 +141,7 @@ library
     , file-embed
     , filepath
     , microlens
+    , optparse-applicative
     , ouroboros-consensus
     , ouroboros-consensus:cardano
     , ouroboros-network:api
@@ -217,6 +226,16 @@ executable amaru-treasury-intent-schema
     , base               <5
     , bytestring
 
+executable amaru-treasury-report-schema
+  import:           warnings
+  hs-source-dirs:   app/amaru-treasury-report-schema
+  main-is:          Main.hs
+  default-language: GHC2021
+  build-depends:
+    , amaru-treasury-tx
+    , base               <5
+    , bytestring
+
 test-suite unit-tests
   import:             warnings
   type:               exitcode-stdio-1.0
@@ -235,6 +254,8 @@ test-suite unit-tests
     Amaru.Treasury.Registry.DeriveSpec
     Amaru.Treasury.Registry.MetadataSpec
     Amaru.Treasury.Registry.VerifySpec
+    Amaru.Treasury.ReportSchemaSpec
+    Amaru.Treasury.ReportSpec
     Amaru.Treasury.ScopeSpec
     Amaru.Treasury.SummarySpec
     Amaru.Treasury.TreasuryBuildSpec
@@ -265,11 +286,13 @@ test-suite unit-tests
     , cardano-node-clients
     , cardano-slotting
     , containers
+    , contra-tracer
     , directory
     , hspec
     , hspec-discover
     , jsonschema
     , microlens
+    , optparse-applicative
     , ouroboros-network:api
     , plutus-core
     , QuickCheck

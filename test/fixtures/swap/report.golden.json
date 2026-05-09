@@ -1,0 +1,465 @@
+{
+    "action": "swap",
+    "identity": {
+        "bodySizeBytes": 14954,
+        "feeLovelace": 1039703,
+        "totalCollateralLovelace": 1559555,
+        "txId": "bf870dafd99925512221e32df9b2ec1acb3e22f49df83a6b66dedb7513a5fa55",
+        "validityInterval": {
+            "invalidBefore": null,
+            "invalidHereafter": 186796799
+        }
+    },
+    "metadata": {
+        "auxiliaryDataHash": "1163dfe0f06e30a30353b706b988721fb0a6f5168db22402ef6a76b8e677868d",
+        "cip1694LabelPresent": true
+    },
+    "network": "mainnet",
+    "outputs": [
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 0,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 1,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 2,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 3,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 4,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 5,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 6,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 7,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 8,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 9,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 10,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 11,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 12,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 13,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 14,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 15,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 16,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 17,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 18,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 19,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 20,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 21,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 22,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 23,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 24,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 25,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 26,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 27,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 28,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 29,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 30,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 31,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 32,
+            "role": "swapOrder",
+            "value": {
+                "assets": {},
+                "lovelace": 8166545306
+            }
+        },
+        {
+            "address": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
+            "datum": null,
+            "index": 33,
+            "role": "treasuryLeftover",
+            "value": {
+                "assets": {},
+                "lovelace": 1041728494694
+            }
+        },
+        {
+            "address": "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu",
+            "datum": null,
+            "index": 34,
+            "role": "walletChange",
+            "value": {
+                "assets": {},
+                "lovelace": 50006199573
+            }
+        }
+    ],
+    "referenceInputs": [
+        "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0",
+        "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+        "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+        "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2"
+    ],
+    "schema": 1,
+    "signers": [
+        {
+            "keyHash": "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+            "scope": "network_compliance",
+            "source": "selectedScopeOwner"
+        },
+        {
+            "keyHash": "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+            "scope": null,
+            "source": "extraSigner"
+        }
+    ],
+    "treasuryAccounting": {
+        "inputTotal": {
+            "assets": {},
+            "lovelace": 1450000000000
+        },
+        "inputs": [
+            {
+                "txIn": "64f27254f3c0311fb2e672cdb87de200089a596aa90dc09f8be4248540267cf0#0",
+                "value": {
+                    "assets": {},
+                    "lovelace": 1450000000000
+                }
+            }
+        ],
+        "netDebit": {
+            "assets": {},
+            "lovelace": 408271505306
+        },
+        "perChunkOverheadLovelace": 3280000,
+        "sundaeOrderTotal": {
+            "assets": {},
+            "lovelace": 408271505306
+        },
+        "treasuryLeftover": {
+            "assets": {},
+            "lovelace": 1041728494694
+        }
+    },
+    "validation": {
+        "bodySizeBytes": 14954,
+        "feeLovelace": 1039703,
+        "intentNetwork": "mainnet",
+        "networkMatches": true,
+        "redeemerCount": 2,
+        "redeemerFailures": 0,
+        "socketNetworkMagic": 764824073,
+        "validationStatus": "ok",
+        "validityInterval": {
+            "invalidBefore": null,
+            "invalidHereafter": 186796799
+        }
+    },
+    "walletAccounting": {
+        "changeOutput": {
+            "txIn": "bf870dafd99925512221e32df9b2ec1acb3e22f49df83a6b66dedb7513a5fa55#34",
+            "value": {
+                "assets": {},
+                "lovelace": 50006199573
+            }
+        },
+        "collateralInput": {
+            "txIn": "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0",
+            "value": {
+                "assets": {},
+                "lovelace": 50007239276
+            }
+        },
+        "collateralReturn": {
+            "txIn": "bf870dafd99925512221e32df9b2ec1acb3e22f49df83a6b66dedb7513a5fa55#collateral-return",
+            "value": {
+                "assets": {},
+                "lovelace": 50005679721
+            }
+        },
+        "feeLovelace": 1039703,
+        "inputs": [
+            {
+                "txIn": "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0",
+                "value": {
+                    "assets": {},
+                    "lovelace": 50007239276
+                }
+            }
+        ],
+        "netSpendLovelace": 1039703
+    }
+}

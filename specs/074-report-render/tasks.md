@@ -24,12 +24,12 @@ without changing runtime behavior.
 all user stories consume. Fold T004-T009 into one vertical contract
 commit.
 
-- [ ] T004 Add RED unit tests for `TxBuildOutput`, `TxBuildOutputResult`, `TxBuildSuccess`, and `TxCborHex` encoding/decoding in `test/unit/Amaru/Treasury/ReportSpec.hs`
-- [ ] T005 Add RED schema tests for required `intent`, required `result`, success `tx-cbor`, nested success `report`, failure `failure`, and no duplicate action/type in `test/unit/Amaru/Treasury/ReportSchemaSpec.hs`
-- [ ] T006 Implement `TxBuildOutput`, `TxBuildOutputResult`, `TxBuildSuccess`, and `TxCborHex` plus JSON instances in `lib/Amaru/Treasury/Report.hs`
-- [ ] T007 Remove any duplicate transaction-type/action carrier from the nested mechanical report JSON contract in `lib/Amaru/Treasury/Report.hs`
-- [ ] T008 Update schema generation for the build-output envelope in `lib/Amaru/Treasury/Report/Schema.hs` and `docs/assets/tx-report-schema.json`
-- [ ] T009 Run the envelope contract gate with `nix build --quiet --no-link ".#checks.${SYS}.unit" ".#checks.${SYS}.schema" ".#checks.${SYS}.lint"`
+- [x] T004 Add RED unit tests for `TxBuildOutput`, `TxBuildOutputResult`, `TxBuildSuccess`, and `TxCborHex` encoding/decoding in `test/unit/Amaru/Treasury/ReportSpec.hs`
+- [x] T005 Add RED schema tests for required `intent`, required `result`, success `tx-cbor`, nested success `report`, failure `failure`, and no duplicate action/type in `test/unit/Amaru/Treasury/ReportSchemaSpec.hs`
+- [x] T006 Implement `TxBuildOutput`, `TxBuildOutputResult`, `TxBuildSuccess`, and `TxCborHex` plus JSON instances in `lib/Amaru/Treasury/Report.hs`
+- [x] T007 Remove any duplicate transaction-type/action carrier from the nested mechanical report JSON contract in `lib/Amaru/Treasury/Report.hs`
+- [x] T008 Update schema generation for the build-output envelope in `lib/Amaru/Treasury/Report/Schema.hs` and `docs/assets/tx-report-schema.json`
+- [x] T009 Run the envelope contract gate with `nix build --quiet --no-link ".#checks.${SYS}.unit" ".#checks.${SYS}.schema" ".#checks.${SYS}.lint"`
 
 ## Phase 3: User Story 1 - Render Mechanical Report Markdown (P1)
 
@@ -100,7 +100,7 @@ Fold T033-T045 into one vertical pipeline commit.
 - [ ] T039 [US3] Implement JSON envelope decode, default stdin/stdout IO, explicit `--in` and `--out`, and output-write failure handling in `app/amaru-treasury-tx/Main.hs`
 - [ ] T040 [US3] Implement failure-envelope diagnostic rendering with non-zero exit in `app/amaru-treasury-tx/Main.hs`
 - [ ] T041 [US3] Extend `tx-build --report` to accept `-` as stdout in `lib/Amaru/Treasury/Cli/TxBuild.hs`
-- [ ] T042 [US3] Wrap successful `tx-build --report` output as `{ intent, result: { tx-cbor, report } }` in `lib/Amaru/Treasury/TreasuryBuild/ReportWriter.hs`
+- [x] T042 [US3] Wrap successful `tx-build --report` output as `{ intent, result: { tx-cbor, report } }` in `app/amaru-treasury-tx/Main.hs`
 - [ ] T043 [US3] Wrap post-intent-decode build failures as `{ intent, result: { failure } }` in `lib/Amaru/Treasury/Cli/TxBuild.hs`
 - [ ] T044 [US3] Add smoke coverage for `report-render --help` and `tx-build --report - | report-render` in `nix/checks.nix`
 - [ ] T045 [US3] Run the US3 gate with `nix build --quiet --no-link ".#checks.${SYS}.unit" ".#checks.${SYS}.golden" ".#checks.${SYS}.smoke" ".#checks.${SYS}.lint"`
@@ -164,4 +164,3 @@ be authored in parallel.
    identifiers.
 4. Add US3 pipeline behavior and invalid/failure diagnostics.
 5. Finish with US4 docs/helper and the full local gate.
-

@@ -7,9 +7,10 @@ module Amaru.Treasury.Report.Classify
     , producedOutputRoleText
     ) where
 
-import Data.Aeson (ToJSON (..))
+import Data.Aeson (FromJSON (..), ToJSON (..), withText)
 import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Text qualified as T
 
 import Amaru.Treasury.TreasuryBuild
     ( TreasuryBuildResult (..)
@@ -27,6 +28,16 @@ data ProducedOutputRole
 instance ToJSON ProducedOutputRole where
     toJSON =
         toJSON . producedOutputRoleText
+
+instance FromJSON ProducedOutputRole where
+    parseJSON = withText "ProducedOutputRole" $ \case
+        "swapOrder" -> pure OutputSwapOrder
+        "treasuryLeftover" -> pure OutputTreasuryLeftover
+        "walletChange" -> pure OutputWalletChange
+        "collateralReturn" -> pure OutputCollateralReturn
+        "metadata" -> pure OutputMetadata
+        "unknown" -> pure OutputUnknown
+        other -> fail ("unknown produced-output role: " <> T.unpack other)
 
 classifyOutputRole :: TreasuryBuildResult -> Int -> ProducedOutputRole
 classifyOutputRole result index

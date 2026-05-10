@@ -1,5 +1,21 @@
 {
     "$defs": {
+        "buildFailure": {
+            "additionalProperties": false,
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            },
+            "required": [
+                "code",
+                "message"
+            ],
+            "type": "object"
+        },
         "metadataSummary": {
             "additionalProperties": false,
             "properties": {
@@ -131,6 +147,64 @@
             ],
             "type": "object"
         },
+        "transactionReport": {
+            "additionalProperties": false,
+            "properties": {
+                "identity": {
+                    "$ref": "#/$defs/transactionIdentity"
+                },
+                "metadata": {
+                    "$ref": "#/$defs/metadataSummary"
+                },
+                "network": {
+                    "type": "string"
+                },
+                "outputs": {
+                    "items": {
+                        "$ref": "#/$defs/producedOutput"
+                    },
+                    "type": "array"
+                },
+                "referenceInputs": {
+                    "items": {
+                        "type": "string"
+                    },
+                    "type": "array"
+                },
+                "schema": {
+                    "const": 1,
+                    "type": "integer"
+                },
+                "signers": {
+                    "items": {
+                        "$ref": "#/$defs/signerRequirement"
+                    },
+                    "type": "array"
+                },
+                "treasuryAccounting": {
+                    "$ref": "#/$defs/treasuryAccounting"
+                },
+                "validation": {
+                    "$ref": "#/$defs/validationFacts"
+                },
+                "walletAccounting": {
+                    "$ref": "#/$defs/walletAccounting"
+                }
+            },
+            "required": [
+                "schema",
+                "network",
+                "identity",
+                "walletAccounting",
+                "treasuryAccounting",
+                "outputs",
+                "signers",
+                "validation",
+                "referenceInputs",
+                "metadata"
+            ],
+            "type": "object"
+        },
         "treasuryAccounting": {
             "additionalProperties": false,
             "properties": {
@@ -164,6 +238,43 @@
                 "perChunkOverheadLovelace",
                 "treasuryLeftover",
                 "netDebit"
+            ],
+            "type": "object"
+        },
+        "txBuildOutputResult": {
+            "anyOf": [
+                {
+                    "$ref": "#/$defs/txBuildSuccess"
+                },
+                {
+                    "additionalProperties": false,
+                    "properties": {
+                        "failure": {
+                            "$ref": "#/$defs/buildFailure"
+                        }
+                    },
+                    "required": [
+                        "failure"
+                    ],
+                    "type": "object"
+                }
+            ]
+        },
+        "txBuildSuccess": {
+            "additionalProperties": false,
+            "properties": {
+                "report": {
+                    "$ref": "#/$defs/transactionReport"
+                },
+                "tx-cbor": {
+                    "minLength": 2,
+                    "pattern": "^([0-9a-f]{2})+$",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "tx-cbor",
+                "report"
             ],
             "type": "object"
         },
@@ -351,63 +462,17 @@
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,
     "properties": {
-        "action": {
-            "type": "string"
+        "intent": {
+            "type": "object"
         },
-        "identity": {
-            "$ref": "#/$defs/transactionIdentity"
-        },
-        "metadata": {
-            "$ref": "#/$defs/metadataSummary"
-        },
-        "network": {
-            "type": "string"
-        },
-        "outputs": {
-            "items": {
-                "$ref": "#/$defs/producedOutput"
-            },
-            "type": "array"
-        },
-        "referenceInputs": {
-            "items": {
-                "type": "string"
-            },
-            "type": "array"
-        },
-        "schema": {
-            "const": 1,
-            "type": "integer"
-        },
-        "signers": {
-            "items": {
-                "$ref": "#/$defs/signerRequirement"
-            },
-            "type": "array"
-        },
-        "treasuryAccounting": {
-            "$ref": "#/$defs/treasuryAccounting"
-        },
-        "validation": {
-            "$ref": "#/$defs/validationFacts"
-        },
-        "walletAccounting": {
-            "$ref": "#/$defs/walletAccounting"
+        "result": {
+            "$ref": "#/$defs/txBuildOutputResult"
         }
     },
     "required": [
-        "schema",
-        "action",
-        "network",
-        "identity",
-        "walletAccounting",
-        "treasuryAccounting",
-        "outputs",
-        "signers",
-        "validation",
-        "referenceInputs",
-        "metadata"
+        "intent",
+        "result"
     ],
-    "title": "Amaru Treasury Transaction Report JSON",
+    "title": "Amaru Treasury Transaction Build Output JSON",
     "type": "object"
 }

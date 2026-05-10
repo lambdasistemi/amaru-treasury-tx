@@ -25,39 +25,25 @@ txReportJsonSchema =
             .= ( "https://github.com/lambdasistemi/amaru-treasury-tx/schemas/tx-report-v1.json"
                     :: Text
                )
-        , "title" .= ("Amaru Treasury Transaction Report JSON" :: Text)
+        , "title" .= ("Amaru Treasury Transaction Build Output JSON" :: Text)
         , "type" .= ("object" :: Text)
         , "required"
-            .= [ "schema" :: Text
-               , "action"
-               , "network"
-               , "identity"
-               , "walletAccounting"
-               , "treasuryAccounting"
-               , "outputs"
-               , "signers"
-               , "validation"
-               , "referenceInputs"
-               , "metadata"
+            .= [ "intent" :: Text
+               , "result"
                ]
         , "properties"
             .= object
-                [ "schema" .= constInteger 1
-                , "action" .= stringSchema
-                , "network" .= stringSchema
-                , "identity" .= ref "transactionIdentity"
-                , "walletAccounting" .= ref "walletAccounting"
-                , "treasuryAccounting" .= ref "treasuryAccounting"
-                , "outputs" .= arrayOf (ref "producedOutput")
-                , "signers" .= arrayOf (ref "signerRequirement")
-                , "validation" .= ref "validationFacts"
-                , "referenceInputs" .= arrayOf stringSchema
-                , "metadata" .= ref "metadataSummary"
+                [ "intent" .= object ["type" .= ("object" :: Text)]
+                , "result" .= ref "txBuildOutputResult"
                 ]
         , "additionalProperties" .= False
         , "$defs"
             .= object
-                [ "transactionIdentity" .= transactionIdentitySchema
+                [ "txBuildOutputResult" .= txBuildOutputResultSchema
+                , "txBuildSuccess" .= txBuildSuccessSchema
+                , "buildFailure" .= buildFailureSchema
+                , "transactionReport" .= transactionReportSchema
+                , "transactionIdentity" .= transactionIdentitySchema
                 , "walletAccounting" .= walletAccountingSchema
                 , "treasuryAccounting" .= treasuryAccountingSchema
                 , "producedOutput" .= producedOutputSchema
@@ -72,6 +58,57 @@ txReportJsonSchema =
 
 encodeTxReportJsonSchema :: ByteString
 encodeTxReportJsonSchema = encodePretty' schemaJsonConfig txReportJsonSchema
+
+txBuildOutputResultSchema :: Value
+txBuildOutputResultSchema =
+    object
+        [ "anyOf"
+            .= [ ref "txBuildSuccess"
+               , objectSchema ["failure"] [("failure", ref "buildFailure")]
+               ]
+        ]
+
+txBuildSuccessSchema :: Value
+txBuildSuccessSchema =
+    objectSchema
+        ["tx-cbor", "report"]
+        [ ("tx-cbor", txCborHexSchema)
+        , ("report", ref "transactionReport")
+        ]
+
+buildFailureSchema :: Value
+buildFailureSchema =
+    objectSchema
+        ["code", "message"]
+        [ ("code", stringSchema)
+        , ("message", stringSchema)
+        ]
+
+transactionReportSchema :: Value
+transactionReportSchema =
+    objectSchema
+        [ "schema"
+        , "network"
+        , "identity"
+        , "walletAccounting"
+        , "treasuryAccounting"
+        , "outputs"
+        , "signers"
+        , "validation"
+        , "referenceInputs"
+        , "metadata"
+        ]
+        [ ("schema", constInteger 1)
+        , ("network", stringSchema)
+        , ("identity", ref "transactionIdentity")
+        , ("walletAccounting", ref "walletAccounting")
+        , ("treasuryAccounting", ref "treasuryAccounting")
+        , ("outputs", arrayOf (ref "producedOutput"))
+        , ("signers", arrayOf (ref "signerRequirement"))
+        , ("validation", ref "validationFacts")
+        , ("referenceInputs", arrayOf stringSchema)
+        , ("metadata", ref "metadataSummary")
+        ]
 
 transactionIdentitySchema :: Value
 transactionIdentitySchema =
@@ -275,6 +312,14 @@ enumTextSchema values =
 
 stringSchema :: Value
 stringSchema = object ["type" .= ("string" :: Text)]
+
+txCborHexSchema :: Value
+txCborHexSchema =
+    object
+        [ "type" .= ("string" :: Text)
+        , "minLength" .= (2 :: Int)
+        , "pattern" .= ("^([0-9a-f]{2})+$" :: Text)
+        ]
 
 booleanSchema :: Value
 booleanSchema = object ["type" .= ("boolean" :: Text)]

@@ -3,10 +3,18 @@
 
 module Amaru.Treasury.ReportSpec (spec) where
 
-import Data.Aeson (Value (..), eitherDecode, object, toJSON, (.=))
+import Data.Aeson
+    ( Value (..)
+    , eitherDecode
+    , encode
+    , object
+    , toJSON
+    , (.=)
+    )
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KM
 import Data.ByteString.Lazy.Char8 qualified as BSL8
+import Data.Either (isLeft)
 import Data.List (isInfixOf)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (isJust)
@@ -23,9 +31,13 @@ import Amaru.Treasury.ChainContext.Fixture
     ( readSwapFixture
     , toFrozenContext
     )
-import Amaru.Treasury.IntentJSON (decodeTreasuryIntentFile)
+import Amaru.Treasury.IntentJSON
+    ( SomeTreasuryIntent
+    , decodeTreasuryIntentFile
+    )
 import Amaru.Treasury.Report
-    ( MetadataSummary (..)
+    ( BuildFailure (..)
+    , MetadataSummary (..)
     , ProducedOutput (..)
     , ProducedOutputRole (..)
     , ReportContext (..)
@@ -34,12 +46,17 @@ import Amaru.Treasury.Report
     , TransactionIdentity (..)
     , TransactionReport (..)
     , TreasuryAccounting (..)
+    , TxBuildOutput (..)
+    , TxBuildOutputResult (..)
+    , TxBuildSuccess (..)
+    , TxCborHex (..)
     , UtxoSummary (..)
     , ValidationFacts (..)
     , ValidityInterval (..)
     , ValueSummary (..)
     , WalletAccounting (..)
     , buildTransactionReport
+    , encodeBuildOutput
     , encodeReport
     )
 import Amaru.Treasury.Report.Accounting
@@ -92,12 +109,81 @@ spec = describe "Amaru.Treasury.Report" $ do
     it "encodes with a trailing newline" $
         BSL8.last (encodeReport sampleReport) `shouldBe` '\n'
 
+    it "encodes and decodes a tx-build success envelope" $ do
+        some <- sampleIntent
+        let output = sampleBuildOutput some
+            decoded = eitherDecode (encodeBuildOutput output)
+            decodedValue = eitherDecode (encodeBuildOutput output)
+            expectedResult =
+                object
+                    [ "tx-cbor" .= ("84a4" :: Text)
+                    , "report" .= expectedReport
+                    ]
+        decoded `shouldBe` Right output
+        decodedValue `shouldSatisfy` hasField "intent" (toJSON some)
+        decodedValue `shouldSatisfy` hasField "result" expectedResult
+        BSL8.last (encodeBuildOutput output) `shouldBe` '\n'
+
+    it "encodes failure envelopes without tx-cbor or report" $ do
+        some <- sampleIntent
+        let output =
+                TxBuildOutput
+                    { txoIntent = some
+                    , txoResult =
+                        TxBuildOutputFailure
+                            BuildFailure
+                                { bfCode = "validation-failed"
+                                , bfMessage = "script validation failed"
+                                }
+                    }
+            expectedResult =
+                object
+                    [ "failure"
+                        .= object
+                            [ "code" .= ("validation-failed" :: Text)
+                            , "message"
+                                .= ( "script validation failed"
+                                        :: Text
+                                   )
+                            ]
+                    ]
+        eitherDecode (encodeBuildOutput output) `shouldBe` Right output
+        eitherDecode (encodeBuildOutput output)
+            `shouldSatisfy` hasField "result" expectedResult
+
+    it "rejects malformed tx-cbor in success envelopes" $ do
+        some <- sampleIntent
+        let bad =
+                object
+                    [ "intent" .= some
+                    , "result"
+                        .= object
+                            [ "tx-cbor" .= ("84A4" :: Text)
+                            , "report" .= sampleReport
+                            ]
+                    ]
+        (eitherDecode (encode bad) :: Either String TxBuildOutput)
+            `shouldSatisfy` isLeft
+
+    it "rejects nested report transaction-type duplication" $ do
+        some <- sampleIntent
+        let bad =
+                object
+                    [ "intent" .= some
+                    , "result"
+                        .= object
+                            [ "tx-cbor" .= ("84a4" :: Text)
+                            , "report" .= reportWithAction
+                            ]
+                    ]
+        (eitherDecode (encode bad) :: Either String TxBuildOutput)
+            `shouldSatisfy` isLeft
+
     it "keeps report bytes deterministic and host-independent" $ do
         let encoded = BSL8.unpack (encodeReport deterministicReport)
         encoded
             `shouldSatisfy` fieldsAppearInOrder
-                [ "\"action\""
-                , "\"identity\""
+                [ "\"identity\""
                 , "\"metadata\""
                 , "\"network\""
                 , "\"outputs\""
@@ -323,6 +409,36 @@ spec = describe "Amaru.Treasury.Report" $ do
 decodedReport :: Either String Value
 decodedReport = eitherDecode (encodeReport sampleReport)
 
+sampleIntent :: IO SomeTreasuryIntent
+sampleIntent = do
+    si <- decodeTreasuryIntentFile "test/fixtures/swap/intent.json"
+    case si of
+        Left e -> error ("intent JSON: " <> e)
+        Right v -> pure v
+
+sampleBuildOutput :: SomeTreasuryIntent -> TxBuildOutput
+sampleBuildOutput some =
+    TxBuildOutput
+        { txoIntent = some
+        , txoResult =
+            TxBuildOutputSuccess
+                TxBuildSuccess
+                    { tbsTxCbor = TxCborHex "84a4"
+                    , tbsReport = sampleReport
+                    }
+        }
+
+reportWithAction :: Value
+reportWithAction =
+    case toJSON sampleReport of
+        Object obj ->
+            Object $
+                KM.insert
+                    (Key.fromString "action")
+                    (String "swap")
+                    obj
+        other -> other
+
 buildSwapFixtureReport :: IO TransactionReport
 buildSwapFixtureReport = buildSwapFixtureReportWith emptyReportContext
 
@@ -343,8 +459,7 @@ buildSwapFixtureReportWith reportContext = do
 emptyReportContext :: ReportContext
 emptyReportContext =
     ReportContext
-        { rcAction = "swap"
-        , rcNetwork = "mainnet"
+        { rcNetwork = "mainnet"
         , rcSocketNetworkMagic = 764_824_073
         , rcSelectedScopeOwner = Nothing
         , rcExtraSigners = []
@@ -372,7 +487,6 @@ sampleReport :: TransactionReport
 sampleReport =
     TransactionReport
         { trSchema = 1
-        , trAction = "swap"
         , trNetwork = "mainnet"
         , trIdentity = sampleIdentity
         , trWalletAccounting = sampleWalletAccounting
@@ -533,7 +647,6 @@ expectedReport :: Value
 expectedReport =
     object
         [ "schema" .= (1 :: Int)
-        , "action" .= ("swap" :: String)
         , "network" .= ("mainnet" :: String)
         , "identity" .= expectedIdentity
         , "walletAccounting" .= expectedWalletAccounting

@@ -40,7 +40,6 @@ import Amaru.Treasury.Report
     , TxBuildSuccess (..)
     , TxCborHex (..)
     , UtxoSummary (..)
-    , ValidityInterval (..)
     , ValueSummary (..)
     , WalletAccounting (..)
     )
@@ -59,6 +58,9 @@ import Amaru.Treasury.Report.Render.Markdown
     , heading1
     , heading2
     , renderMarkdown
+    )
+import Amaru.Treasury.Report.Render.Time
+    ( renderValidityInterval
     )
 
 newtype RenderOutput = RenderOutput
@@ -110,7 +112,12 @@ leadingLines intent success =
     [ bullet ("Transaction id: " <> tiTxId identity)
     , bullet ("Explorer: " <> explorerUrl report)
     , bullet ("CBOR fingerprint: " <> cborFingerprint (tbsTxCbor success))
-    , bullet ("Validity: " <> validityLine (tiValidityInterval identity))
+    , bullet
+        ( "Validity: "
+            <> renderValidityInterval
+                (trNetwork report)
+                (tiValidityInterval identity)
+        )
     , bullet ("Conservation: " <> conservationLine report)
     , bullet ("CIP-1694 rationale: " <> rationaleLine intent)
     , bullet ("Auxiliary data: " <> metadataLine (trMetadata report))
@@ -169,17 +176,6 @@ cborFingerprint (TxCborHex hex) =
     shown
         | T.length hex <= 32 = hex
         | otherwise = T.take 16 hex <> "..." <> T.takeEnd 16 hex
-
-validityLine :: ValidityInterval -> Text
-validityLine interval =
-    "invalid before "
-        <> slotText (viInvalidBefore interval)
-        <> "; invalid hereafter "
-        <> slotText (viInvalidHereafter interval)
-  where
-    slotText = \case
-        Nothing -> "none"
-        Just slot -> "slot " <> tshow slot
 
 conservationLine :: TransactionReport -> Text
 conservationLine report =

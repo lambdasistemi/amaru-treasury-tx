@@ -24,7 +24,7 @@ markers in the technical context after the decisions below.
     real `report.json` path through to `tx-build`.
   - A Haskell `build-swop` executable — rejected as scope creep;
     the helper carries no logic the library doesn't already.
-  - Default-off Markdown — rejected; spec FR-026 mandates default-on
+  - Default-off Markdown — rejected; spec FR-029 mandates default-on
     with a documented opt-out.
 
 ## R2 — Leading-section bound for SC-001
@@ -32,17 +32,19 @@ markers in the technical context after the decisions below.
 - **Decision**: pin the leading section to the **first 25 lines**
   of rendered output, measured after the level-1 title line and
   the first blank line that follows it.
-- **Rationale**: 25 lines comfortably covers title + action +
-  scope + transaction id + explorer link + UTC validity bounds +
-  conservation line + signer-roles list + swap-deal block (when
-  present), while staying below the 30-line ceiling implied by
-  the issue's "first 30 lines" framing. The bound is asserted
-  by a per-fixture leading-section snippet golden in addition to
-  the full-document byte-identity golden.
+- **Rationale**: 25 lines comfortably covers title + transaction
+  type from inline intent + scope + transaction id + explorer link
+  + CBOR fingerprint/hash + UTC validity bounds + conservation line
+  + signer-roles list + swap-deal block (when present), while
+  staying below the 30-line ceiling implied by the issue's "first
+  30 lines" framing. The bound is asserted by a per-fixture
+  leading-section snippet golden in addition to the full-document
+  byte-identity golden.
 - **Alternatives considered**:
   - 30 lines (issue's literal wording) — rejected as the upper
     bound but not the assertable bound; 25 leaves slack.
-  - "Up to first blank line after the action line" — rejected
+  - "Up to first blank line after the transaction-type line" -
+    rejected
     because some fixtures produce a longer leading section
     (full swap-deal block) and the bound would not be uniform.
   - Soft bound via word-count — rejected as not byte-stable.
@@ -60,7 +62,7 @@ markers in the technical context after the decisions below.
 - **Alternatives considered**:
   - `XDG_CONFIG_HOME/amaru-treasury/metadata.json` — rejected;
     operator metadata lives next to the journal, not user config.
-  - Required `--metadata` — rejected; FR-014 says metadata is
+  - Required `--metadata` - rejected; FR-018 says metadata is
     one of several resolution sources, with a clear unresolved
     fallback when none is supplied.
 
@@ -76,7 +78,7 @@ markers in the technical context after the decisions below.
 - **Alternatives considered**:
   - Hard-code per-network anchors — rejected; brittle across era
     changes and not faithful to the report's own data.
-  - Render only slot numbers — rejected; FR-010 mandates UTC
+  - Render only slot numbers - rejected; FR-014 mandates UTC
     alongside slots.
 
 ## R5 — Bare-bech32 / bare-hex post-condition
@@ -85,7 +87,7 @@ markers in the technical context after the decisions below.
   no bare bech32 (regex matching `addr1[a-z0-9]+` or `stake1...`)
   and no bare 28-byte hex (regex `[0-9a-f]{56}`) outside an
   explicit `unresolved (...)` wrapper.
-- **Rationale**: this is the strongest form of FR-015/FR-016/SC-003
+- **Rationale**: this is the strongest form of FR-019/FR-020/SC-003
   — a regex post-condition is byte-stable, fixture-independent,
   and catches accidental new code paths that print raw values.
 - **Alternatives considered**:
@@ -100,25 +102,40 @@ markers in the technical context after the decisions below.
   guarantee with a hand-written renderer that prints exact bytes.
 - **Rationale**: third-party Markdown libraries optimise for
   Markdown → HTML, not byte-stable Markdown emission. We need
-  byte-stability (FR-007, SC-002).
+  byte-stability (FR-011, SC-002).
 - **Alternatives considered**:
   - `commonmark-pure` / `pandoc` — rejected; both privilege
     rendering downstream formats and reformat input on a normal
     pretty pass.
 
-## R7 — Inline intent shape
+## R7 — Build-output envelope and inline intent shape
 
-- **Decision**: the `intent` field on `report.json` carries the
-  exact same `SomeTreasuryIntent` JSON shape produced by the
-  wizards (`Amaru.Treasury.IntentJSON.encodeUnifiedIntentJSON`).
-  No translation, no projection.
-- **Rationale**: zero translation cost; downstream tools (issue
+- **Decision**: `tx-build --report` writes a build-output envelope
+  with top-level `intent` and top-level `result`. The `intent`
+  field carries the exact same `SomeTreasuryIntent` JSON shape
+  produced by the wizards
+  (`Amaru.Treasury.IntentJSON.encodeUnifiedIntentJSON`). No
+  translation, no projection. On success, `result` carries
+  `tx-cbor` and nested mechanical `report`; on build failure after
+  intent decoding, `result` carries structured `failure` data.
+  The nested report does not carry intent, transaction CBOR, or a
+  duplicate transaction-type/action field.
+- **Rationale**: zero translation cost for the pass-through intent;
+  downstream tools (issue
   [#70](https://github.com/lambdasistemi/amaru-treasury-tx/issues/70))
-  can consume the inline copy with the existing intent decoder.
+  can consume the inline copy with the existing intent decoder, while
+  the renderer can bind human-readable facts to the exact unsigned
+  transaction CBOR without parsing CBOR for semantics.
 - **Alternatives considered**:
   - A projected "swap-deal summary" sub-shape — rejected;
     would require a second source of truth and complicate
     backward-compatibility.
+  - A separate `--intent` renderer argument - rejected; the renderer
+    must be a pure pipe stage over one self-contained envelope, and
+    unreadable inline intent is not a renderable report.
+  - Keeping a transaction `action` or `type` field in the nested
+    report - rejected; transaction type belongs to the intent and
+    duplicating it creates two sources of truth.
 
 ## R8 — Explorer URL pattern
 

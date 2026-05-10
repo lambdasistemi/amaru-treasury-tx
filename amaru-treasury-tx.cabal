@@ -313,6 +313,7 @@ test-suite unit-tests
     , directory
     , hspec
     , hspec-discover
+    , http-client
     , jsonschema
     , microlens
     , optparse-applicative

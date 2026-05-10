@@ -4,7 +4,8 @@ set -euo pipefail
 cabal build exe:amaru-treasury-tx -O0 >/dev/null
 exe="$(cabal list-bin exe:amaru-treasury-tx -O0)"
 root_help="$("$exe" --help)"
-help_text="$("$exe" swap-quote --help)"
+quote_help="$("$exe" swap-quote --help)"
+wizard_help="$("$exe" swap-wizard --help)"
 
 grep -F -- "swap-quote" <<<"$root_help" >/dev/null || {
   printf 'top-level help missing swap-quote command\n' >&2
@@ -18,8 +19,21 @@ for needle in \
   "--slippage-bps INT" \
   "--out-dir PATH"
 do
-  grep -F -- "$needle" <<<"$help_text" >/dev/null || {
+  grep -F -- "$needle" <<<"$quote_help" >/dev/null || {
     printf 'swap-quote help missing: %s\n' "$needle" >&2
+    exit 1
+  }
+done
+
+for needle in \
+  "--ada-usd DECIMAL" \
+  "--ada-usdm DECIMAL" \
+  "--price-source SOURCE" \
+  "--slippage-bps INT" \
+  "--out PATH"
+do
+  grep -F -- "$needle" <<<"$wizard_help" >/dev/null || {
+    printf 'swap-wizard help missing: %s\n' "$needle" >&2
     exit 1
   }
 done

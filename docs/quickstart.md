@@ -1,11 +1,11 @@
 # Quickstart
 
-Build a transaction end-to-end. The **swap-quote** command is the
-normal swap preparation path: it fetches or accepts a fresh quote,
-requires explicit slippage, derives the swap limit price, writes an
-audit `params.json`, and builds unsigned Conway CBOR. The
-**withdraw wizard** answers chain-anchored fields for reward
-withdrawals.
+Build a transaction end-to-end. The **swap wizard** answers
+chain-anchored swap fields, can derive its rate from a fresh quote,
+and emits a unified intent on stdout. Pipe that intent into
+`tx-build --report -`, then pipe the build-output envelope into
+`report-render`. The **withdraw wizard** answers chain-anchored fields
+for reward withdrawals.
 
 ## 1. Install
 
@@ -67,15 +67,14 @@ The wizard treats this file as an untrusted hint and verifies
 every consumed field against the on-chain registry NFT and
 build-time pinned Plutus blobs before producing an intent.
 
-## 4. The famous swap, end to end
+## 4. The famous swap, end to end, no intermediate files
 
 ```bash
 amaru-treasury-tx \
     --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
-    swap-quote \
+    swap-wizard \
         --wallet-addr addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu \
         --metadata metadata-mainnet.json \
-        --out-dir swap-run \
         --scope network_compliance \
         --usdm 100000 \
         --split 33 \
@@ -85,7 +84,12 @@ amaru-treasury-tx \
         --description "Swapping ADA for \$100k using a fresh ADA/USD quote" \
         --justification "Required to pay Antithesis as vendor" \
         --destination-label "Network Compliance's treasury" \
-        --extra-signer core_development
+        --extra-signer core_development \
+| amaru-treasury-tx \
+    --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
+    tx-build --out /dev/null --report - \
+| amaru-treasury-tx \
+    report-render --metadata metadata-mainnet.json
 ```
 
 What the flags mean:
@@ -94,7 +98,6 @@ What the flags mean:
 |---|---|
 | `--wallet-addr` | Wallet bech32 address. Wizard picks its largest pure-ADA UTxO as fuel + collateral. |
 | `--metadata`   | Local `metadata.json` (untrusted hint; verified against chain). |
-| `--out-dir`    | Directory for `intent.json`, `swap.cbor.hex`, `params.json`, `wizard.log`, and `build.log`. |
 | `--scope`      | One of `core_development`, `ops_and_use_cases`, `network_compliance`, `middleware`. |
 | `--usdm`       | Total USDM the swap should buy. ADA spend is derived from the quote and slippage policy. |
 | `--split N`    | Slice the order into N equal chunks. Use `--chunk-usdm X` instead to pin per-chunk size. |
@@ -105,53 +108,33 @@ What the flags mean:
 | `--validity-hours` | Validity window from current tip; 1..48. |
 | `--description` / `--justification` / `--destination-label` | Free-form rationale fields, pinned into the on-chain audit trail. |
 | `--extra-signer SCOPE\|HEX` | Repeated for each witness owner beyond the selected scope owner. Scope names and 28-byte key hashes are accepted; `--signer` remains as an alias. |
+| `tx-build --report -` | Emits `{ intent, result }` on stdout. Successful `result` contains both `tx-cbor` and the mechanical report. |
+| `report-render` | Reads the build-output envelope from stdin and renders Markdown. |
 
-## 5. What lands where
+## 5. What flows where
 
 | Stream | Contents |
 |---|---|
-| `swap-run/wizard.log` | `swap-wizard:` step trace, one event per value-affecting step: verifier acceptance, on-chain owners, UTxO selection, validity slot, and chunk shape. |
-| `swap-run/intent.json` | Unified swap intent generated from the quote-derived parameters. |
-| `swap-run/build.log` | `tx-build:` step trace: intent parse, network check, build summary, redeemer re-eval, and validation result. |
-| `swap-run/swap.cbor.hex` | The unsigned Conway transaction as hex. |
-| `swap-run/params.json` | Quote-derived audit artifact: quote provenance, observed/fetched time, slippage, derived min rate, requested amount, affordability inputs, selected treasury total, status, and output paths. |
-
-If affordability fails, `swap-quote` writes `params.json` with the
-shortfall details and exits before `swap.cbor.hex` is produced.
+| `swap-wizard` stdout | Unified swap intent generated from the quote-derived parameters. |
+| `tx-build` stdout | Build-output envelope: top-level `intent` plus top-level `result`. |
+| successful `result` | Contains required `tx-cbor` and `report`. |
+| final stdout | Markdown review report. |
+| stderr | `swap-wizard:` and `tx-build:` typed traces. |
 
 ## 6. Read the audit files before signing
 
-The command never asks for confirmation. Inspect `swap-run/params.json`,
-`swap-run/wizard.log`, and `swap-run/build.log` before handing
-`swap-run/swap.cbor.hex` to any signer. `params.json` records how the
-limit price was chosen; the logs record the chain and build decisions
-that produced the unsigned transaction.
-
-For the Markdown pre-signing review artifact, build the same intent
-through the report helper:
-
-```bash
-scripts/ops/build-swop --out review-run --intent swap-run/intent.json
-```
-
-This writes `review-run/swap.cbor.hex`, `review-run/report.json`, and
-`review-run/report.md`. The JSON is the build-output envelope with
-top-level `intent` plus top-level `result`; the Markdown is derived
-from that envelope and is the human review surface. Use
-`--no-markdown` only when a JSON-only review bundle is intended.
+The command never asks for confirmation. Read the rendered Markdown
+report before handing `result.tx-cbor` to any signer. The report is
+derived from the same build-output envelope that carries the inline
+intent and transaction CBOR.
 
 Pre-signing audit checklist:
 
-- `quote.value`, `quote.provenance`, `quote.observedAt`, and any
-  `quote.fetchedAt` match the operator decision.
-- `slippage.basisPoints` is the policy approved for the run.
-- `derived.minRate`, `derived.amountLovelace`, and
-  `derived.chunkSizeLovelace` match the intended economic request.
-- `affordability.affordable` is `true`, `shortfallLovelace` is `0`,
-  and the selected treasury total is enough for amount plus per-chunk
-  overhead.
-- `outputs.intentJson`, `outputs.unsignedCborHex`, `outputs.wizardLog`,
-  and `outputs.buildLog` point at the files produced for signing review.
+- the rendered transaction type is `swap`;
+- the scope, required signers, and rationale match the operator decision;
+- the validity slot and rendered UTC instant are acceptable;
+- conservation has zero residual;
+- `result.tx-cbor` is present in the JSON envelope used for rendering.
 
 Use the typed traces as the second audit trail. A successful run looks
 like this:
@@ -169,7 +152,7 @@ swap-wizard: wallet utxo selected 42e4c279…#0
 swap-wizard: treasury utxos selected 64f27254…#0 leftover=1041836734694
 swap-wizard: validity tip=186446659 upperBound=186547459 (+100800 slots)
 swap-wizard: chunks total=408163265306 chunkSize=12368583797 full=33 remainder=5
-swap-wizard: intent.json -> swap-run/intent.json
+swap-wizard: intent.json -> stdout
 
 tx-build: parsed action=Swap network=mainnet
 tx-build: connecting to /path/to/cardano-node.socket
@@ -177,7 +160,7 @@ tx-build: required utxos: 6
 tx-build: handshake ok (magic 764824073 matches intent network=mainnet)
 tx-build: built 14954 bytes  fee=1039703  total_collateral=1559555
 tx-build: re-evaluated 2 redeemers, 0 failed
-tx-build: cbor -> swap-run/swap.cbor.hex
+tx-build: cbor -> /dev/null
 tx-build: VALIDATION OK
 ```
 
@@ -187,8 +170,8 @@ transaction to the upstream pin. Read them before signing.
 
 ## 7. Sign + submit (out of scope for this CLI)
 
-After the audit files and traces pass review, pipe
-`swap-run/swap.cbor.hex` into your signer (hardware wallet,
+After the report and traces pass review, extract `result.tx-cbor`
+from the JSON envelope and pass it to your signer (hardware wallet,
 [`cardano-wallet-sign`][cws], MPC service) then
 `cardano-cli transaction submit` (or any other broadcaster).
 Submit within minutes — the wizard's `validityUpperBoundSlot`
@@ -199,10 +182,9 @@ ticks down with the tip.
 ```bash
 amaru-treasury-tx \
     --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
-    swap-quote \
+    swap-wizard \
         --wallet-addr addr1q... \
         --metadata metadata-mainnet.json \
-        --out-dir swap-run \
         --scope network_compliance \
         --usdm 100000 \
         --split 33 \

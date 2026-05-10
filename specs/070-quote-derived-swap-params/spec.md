@@ -157,7 +157,7 @@ flow must use the quote-derived command with explicit slippage, while direct
 ### Functional Requirements
 
 - **FR-001**: System MUST expose an operator-facing CLI path for quote-derived
-  SWOP/swap parameter filling that can run the existing `swap-wizard` plus
+  swap parameter filling that can run the existing `swap-wizard` plus
   `tx-build` flow without requiring the user to hand-compute `--min-rate`.
 - **FR-002**: The quote-derived path MUST accept either an explicit quote
   override, such as ADA/USD or ADA/USDM, or a named quote source. Every run MUST

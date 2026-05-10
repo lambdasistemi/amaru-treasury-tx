@@ -92,7 +92,7 @@ An operator following the public docs wants the supported review flow to say wha
 ### Explicit Exclusions
 
 - This feature does not sign or submit transactions.
-- This feature does not implement the quote-derived SWOP parameter-filling workflow from issue [#70](https://github.com/lambdasistemi/amaru-treasury-tx/issues/70), though #70 may later consume the same report data.
+- This feature does not implement the quote-derived swap parameter-filling workflow from issue [#70](https://github.com/lambdasistemi/amaru-treasury-tx/issues/70), though #70 may later consume the same report data.
 - This feature does not require a human-readable Markdown or text report in v1.
 - This feature does not use an LLM or hand-authored interpretive prose to explain transaction contents.
 - This feature does not change on-chain validators, redeemer formats, or the transaction semantics required for existing golden CBOR fixtures except where report artifacts are added.
@@ -139,7 +139,7 @@ An operator following the public docs wants the supported review flow to say wha
 ## Assumptions
 
 - The default operator workflow remains `swap-wizard` or another intent producer feeding `tx-build`; this issue adds a build report, not a new economic-parameter workflow.
-- Issue #70 may later wrap `swap-wizard` and `tx-build` in a higher-level SWOP path. That later command should be able to reuse or forward this report, but issue #72 does not depend on #70 being complete.
+- Issue #70 may later wrap `swap-wizard` and `tx-build` in a higher-level `swap-quote` path. That later command should be able to reuse or forward this report, but issue #72 does not depend on #70 being complete.
 - The checked-in swap fixture represents the treasury-funded-overhead success path after issue #68's behavior, so it is the right minimum golden-report fixture for wallet-net-spend proof.
 - Existing build traces remain useful diagnostics, but the report is the durable audit artifact for successful builds.
 - A future text or Markdown rendering is useful for operators, but JSON is the required v1 contract because downstream tooling needs structured fields.

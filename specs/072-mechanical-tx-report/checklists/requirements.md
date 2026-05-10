@@ -33,4 +33,4 @@
 
 - Items marked incomplete require spec updates before `/speckit.clarify` or `/speckit.plan`.
 - **Caveat noted, not blocking**: the issue itself requires a Haskell-generated artifact, a `tx-build` reporting surface, and JSON suitable for downstream tooling. The spec names those public contracts to keep scope and acceptance criteria precise; it does not prescribe internal module structure.
-- **Boundary noted**: issue #70 is treated as an integration boundary only. Quote-derived SWOP parameter filling is explicitly excluded from issue #72.
+- **Boundary noted**: issue #70 is treated as an integration boundary only. Quote-derived swap parameter filling is explicitly excluded from issue #72.

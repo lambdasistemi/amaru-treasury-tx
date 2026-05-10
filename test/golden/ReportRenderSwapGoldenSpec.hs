@@ -13,7 +13,9 @@ import Data.Aeson
     ( eitherDecodeStrict'
     )
 import Data.ByteString qualified as BS
+import Data.Char (isDigit)
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import System.Directory (doesFileExist)
 import System.Environment (lookupEnv)
@@ -56,6 +58,8 @@ spec =
                         then do
                             expected <- TIO.readFile goldenPath
                             actual `shouldBe` expected
+                            assertNoBareAddresses actual
+                            assertNoBareHex28 actual
                         else
                             expectationFailure
                                 ( "missing "
@@ -76,3 +80,30 @@ readBuildOutput = do
     case eitherDecodeStrict' bytes of
         Left err -> fail ("decode failed: " <> err)
         Right output -> pure output
+
+assertNoBareAddresses :: Text -> IO ()
+assertNoBareAddresses rendered = do
+    T.isInfixOf "addr1" rendered
+        `shouldBe` False
+    T.isInfixOf "addr_test1" rendered
+        `shouldBe` False
+
+assertNoBareHex28 :: Text -> IO ()
+assertNoBareHex28 rendered =
+    case filter isBareHex28 (T.words rendered) of
+        [] -> pure ()
+        (raw : _) ->
+            expectationFailure
+                ("rendered Markdown leaked a bare 28-byte hex: " <> T.unpack raw)
+  where
+    isBareHex28 token =
+        let stripped =
+                T.dropAround
+                    (`elem` (",.;:()[]{}" :: String))
+                    token
+        in  T.length stripped == 56
+                && T.all isLowerHex stripped
+
+    isLowerHex c =
+        isDigit c
+            || ('a' <= c && c <= 'f')

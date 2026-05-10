@@ -85,9 +85,9 @@ spec = describe "Amaru.Treasury.Report.Render" $ do
     it "collapses identical produced outputs by role address and amount" $ do
         rendered <- renderFixture fixtureReport
         rendered
-            `shouldContainText` "- 2 x unknown -> addr_test1same: 2000000 lovelace (2.000000 ADA)"
+            `shouldContainText` "- 2 x unknown -> unresolved (addr_test1same): 2000000 lovelace (2.000000 ADA)"
         rendered
-            `shouldContainText` "- 1 x treasuryLeftover -> addr_test1leftover: 10000000 lovelace (10.000000 ADA)"
+            `shouldContainText` "- 1 x treasuryLeftover -> unresolved (addr_test1leftover): 10000000 lovelace (10.000000 ADA)"
 
     it "rejects build-failure envelopes as non-success reports" $ do
         some <- sampleIntent

@@ -16,7 +16,7 @@ without changing runtime behavior.
 
 - [x] T001 Create placeholder modules with explicit export lists for `lib/Amaru/Treasury/Report/Render.hs`, `lib/Amaru/Treasury/Report/Render/Address.hs`, `lib/Amaru/Treasury/Report/Render/Markdown.hs`, `lib/Amaru/Treasury/Report/Render/Time.hs`, `lib/Amaru/Treasury/Report/Identity.hs`, `lib/Amaru/Treasury/Report/Identity/Resolve.hs`, `lib/Amaru/Treasury/Report/Identity/Constants.hs`, and `lib/Amaru/Treasury/Report/Cli.hs`
 - [x] T002 Wire the new library modules and planned test modules into `amaru-treasury-tx.cabal`
-- [ ] T003 [P] Create fixture directories for `test/fixtures/disburse/`, `test/fixtures/withdraw/`, and additional report-render files under `test/fixtures/swap/`
+- [x] T003 [P] Create fixture directories for `test/fixtures/disburse/`, `test/fixtures/withdraw/`, and additional report-render files under `test/fixtures/swap/`
 
 ## Phase 2: Foundational Envelope Contract
 
@@ -67,18 +67,18 @@ the Markdown contains no bare bech32 address or bare 28-byte hex key
 hash outside `unresolved (...)`. Fold T021-T032 into one vertical
 identity commit.
 
-- [ ] T021 [P] [US2] Add RED address-book resolution priority tests in `test/unit/Amaru/Treasury/Report/IdentitySpec.hs`
-- [ ] T022 [P] [US2] Add RED signer identity-map tests for role labels, no personal names, and unresolved fallback in `test/unit/Amaru/Treasury/Report/IdentitySpec.hs`
-- [ ] T023 [P] [US2] Add RED bare bech32 and bare 28-byte hex post-condition assertions in `test/golden/ReportRenderSwapGoldenSpec.hs`
-- [ ] T024 [US2] Implement address-book and identity-map types in `lib/Amaru/Treasury/Report/Identity.hs`
-- [ ] T025 [US2] Implement built-in constants for USDM, Sundae pool, and Sundae fee identifiers in `lib/Amaru/Treasury/Report/Identity/Constants.hs`
-- [ ] T026 [US2] Implement metadata, built-in, script-derivation, intent, and unresolved resolution order in `lib/Amaru/Treasury/Report/Identity/Resolve.hs`
-- [ ] T027 [US2] Implement safe address and key-hash formatting helpers in `lib/Amaru/Treasury/Report/Render/Address.hs`
-- [ ] T028 [US2] Source transaction type and scope from inline intent in `lib/Amaru/Treasury/Report/Render.hs`
-- [ ] T029 [US2] Apply resolved labels to inputs, outputs, reference inputs, and signer sections in `lib/Amaru/Treasury/Report/Render.hs`
-- [ ] T030 [US2] Add disburse success envelope and Markdown golden fixtures in `test/fixtures/disburse/report.golden.json` and `test/fixtures/disburse/report.golden.md`
-- [ ] T031 [US2] Add withdraw success envelope and Markdown golden fixtures in `test/fixtures/withdraw/report.golden.json` and `test/fixtures/withdraw/report.golden.md`
-- [ ] T032 [US2] Run the US2 gate with `nix build --quiet --no-link ".#checks.${SYS}.unit" ".#checks.${SYS}.golden" ".#checks.${SYS}.lint"`
+- [x] T021 [P] [US2] Add RED address-book resolution priority tests in `test/unit/Amaru/Treasury/Report/IdentitySpec.hs`
+- [x] T022 [P] [US2] Add RED signer identity-map tests for role labels, no personal names, and unresolved fallback in `test/unit/Amaru/Treasury/Report/IdentitySpec.hs`
+- [x] T023 [P] [US2] Add RED bare bech32 and bare 28-byte hex post-condition assertions in `test/golden/ReportRenderSwapGoldenSpec.hs`
+- [x] T024 [US2] Implement address-book and identity-map types in `lib/Amaru/Treasury/Report/Identity.hs`
+- [x] T025 [US2] Implement built-in constants for USDM, Sundae pool, and Sundae fee identifiers in `lib/Amaru/Treasury/Report/Identity/Constants.hs`
+- [x] T026 [US2] Implement metadata, built-in, script-derivation, intent, and unresolved resolution order in `lib/Amaru/Treasury/Report/Identity/Resolve.hs`
+- [x] T027 [US2] Implement safe address and key-hash formatting helpers in `lib/Amaru/Treasury/Report/Render/Address.hs`
+- [x] T028 [US2] Source transaction type and scope from inline intent in `lib/Amaru/Treasury/Report/Render.hs`
+- [x] T029 [US2] Apply resolved labels to inputs, outputs, reference inputs, and signer sections in `lib/Amaru/Treasury/Report/Render.hs`
+- [x] T030 [US2] Add disburse success envelope and Markdown golden fixtures in `test/fixtures/disburse/report.golden.json` and `test/fixtures/disburse/report.golden.md`
+- [x] T031 [US2] Add withdraw success envelope and Markdown golden fixtures in `test/fixtures/withdraw/report.golden.json` and `test/fixtures/withdraw/report.golden.md`
+- [x] T032 [US2] Run the US2 gate with `nix build --quiet --no-link ".#checks.${SYS}.unit" ".#checks.${SYS}.golden" ".#checks.${SYS}.lint"`
 
 ## Phase 5: User Story 3 - Pipeline and CLI Composition (P1)
 

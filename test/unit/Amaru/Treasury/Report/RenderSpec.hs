@@ -42,6 +42,11 @@ import Amaru.Treasury.Report.Render
     , RenderOutput (..)
     , renderBuildOutput
     )
+import Amaru.Treasury.Report.Render.Time
+    ( SlotTimeConfig
+    , networkSlotTimeConfig
+    , slotToUtcText
+    )
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Report.Render" $ do
@@ -55,9 +60,22 @@ spec = describe "Amaru.Treasury.Report.Render" $ do
         rendered
             `shouldContainText` "- CBOR fingerprint: 84a4 (4 hex chars)"
         rendered
-            `shouldContainText` "- Validity: invalid before none; invalid hereafter slot 186796799"
+            `shouldContainText` "- Validity: invalid before none; invalid hereafter slot 186796799 (2026-05-09T21:44:50Z)"
         rendered
             `shouldContainText` "- CIP-1694 rationale: Swap ADA<->USDM - Swapping ADA for $100k at a rate of $0.245 per ADA; Required to pay Antithesis as vendor; destination Network Compliance's treasury"
+
+    it "derives UTC validity instants from network slot data" $ do
+        mainnet <- expectSlotConfig "mainnet"
+        preprod <- expectSlotConfig "preprod"
+        slotToUtcText mainnet 186_796_799
+            `shouldBe` Just "2026-05-09T21:44:50Z"
+        slotToUtcText preprod 112_700_800
+            `shouldBe` Just "2026-01-14T09:46:40Z"
+
+    it "falls back to slot-only validity when slot data is absent" $ do
+        rendered <- renderFixture fixtureReport{trNetwork = "customnet"}
+        rendered
+            `shouldContainText` "- Validity: invalid before none; invalid hereafter slot 186796799"
 
     it "pairs lovelace values with ADA and computes conservation" $ do
         rendered <- renderFixture fixtureReport
@@ -109,6 +127,14 @@ sampleIntent :: IO SomeTreasuryIntent
 sampleIntent = do
     decoded <- decodeTreasuryIntentFile "test/fixtures/swap/intent.json"
     either (fail . ("intent JSON: " <>)) pure decoded
+
+expectSlotConfig
+    :: Text
+    -> IO SlotTimeConfig
+expectSlotConfig network =
+    case networkSlotTimeConfig network of
+        Nothing -> fail ("missing slot time config for " <> T.unpack network)
+        Just config -> pure config
 
 fixtureReport :: TransactionReport
 fixtureReport =

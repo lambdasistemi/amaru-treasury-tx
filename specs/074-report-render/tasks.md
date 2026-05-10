@@ -44,11 +44,11 @@ leading-section facts and matches `test/fixtures/swap/report.golden.md`.
 Fold T010-T020 into one vertical renderer commit.
 
 - [x] T010 [P] [US1] Add RED pure-render tests for lovelace/ADA formatting, output collapsing, conservation arithmetic, explorer URL, and CBOR fingerprint/hash in `test/unit/Amaru/Treasury/Report/RenderSpec.hs`
-- [ ] T011 [P] [US1] Add RED slot-to-UTC derivation tests using report era/network data in `test/unit/Amaru/Treasury/Report/RenderSpec.hs`
+- [x] T011 [P] [US1] Add RED slot-to-UTC derivation tests using report era/network data in `test/unit/Amaru/Treasury/Report/RenderSpec.hs`
 - [ ] T012 [P] [US1] Add RED swap Markdown golden test in `test/golden/ReportRenderSwapGoldenSpec.hs`
 - [x] T013 [US1] Add success envelope fixture with inline intent, `result.tx-cbor`, and nested `result.report` in `test/fixtures/swap/report.golden.json`
 - [x] T014 [US1] Implement deterministic Markdown builder primitives in `lib/Amaru/Treasury/Report/Render/Markdown.hs`
-- [ ] T015 [US1] Implement slot-to-UTC derivation from report era/network data in `lib/Amaru/Treasury/Report/Render/Time.hs`
+- [x] T015 [US1] Implement slot-to-UTC derivation from report era/network data in `lib/Amaru/Treasury/Report/Render/Time.hs`
 - [x] T016 [US1] Implement success report rendering and section ordering in `lib/Amaru/Treasury/Report/Render.hs`
 - [x] T017 [US1] Implement produced-output grouping and amount display in `lib/Amaru/Treasury/Report/Render.hs`
 - [x] T018 [US1] Render transaction id, explorer URL, CBOR fingerprint/hash, validity bounds, conservation line, and CIP-1694 rationale in `lib/Amaru/Treasury/Report/Render.hs`

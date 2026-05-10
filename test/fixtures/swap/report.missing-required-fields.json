@@ -1,0 +1,8 @@
+{
+    "result": {
+        "failure": {
+            "code": "missing-intent",
+            "message": "fixture intentionally omits the required intent"
+        }
+    }
+}

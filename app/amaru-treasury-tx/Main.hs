@@ -33,7 +33,13 @@ Subcommands:
 module Main (main) where
 
 import Control.Applicative ((<|>))
-import Control.Exception (throwIO)
+import Control.Exception
+    ( IOException
+    , SomeException
+    , displayException
+    , throwIO
+    , try
+    )
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
@@ -88,7 +94,10 @@ import Ouroboros.Network.Magic (NetworkMagic (..))
 import Data.Set qualified as Set
 
 import Cardano.Ledger.Api.Tx.Out (valueTxOutL)
-import System.Directory (createDirectoryIfMissing)
+import System.Directory
+    ( createDirectoryIfMissing
+    , doesFileExist
+    )
 
 import Amaru.Treasury.Backend (Provider (..))
 import Amaru.Treasury.Backend.N2C
@@ -130,15 +139,26 @@ import Amaru.Treasury.IntentJSON.Common
     , parseRewardAccountForNetwork
     , parseTxIn
     )
+import Amaru.Treasury.Metadata
+    ( TreasuryMetadata
+    , readMetadataFile
+    )
 import Amaru.Treasury.Registry.Verify (verifyRegistry)
 import Amaru.Treasury.Report
-    ( ReportContext (..)
+    ( BuildFailure (..)
+    , ReportContext (..)
     , TxBuildOutput (..)
     , TxBuildOutputResult (..)
     , TxBuildSuccess (..)
     , buildTransactionReport
     , encodeBuildOutput
     , txCborHexFromBytes
+    )
+import Amaru.Treasury.Report.Cli
+    ( ReportRenderOpts (..)
+    , decodeReportRenderInput
+    , renderReportRenderOutput
+    , reportRenderOptsP
     )
 import Amaru.Treasury.Scope
     ( ScopeId
@@ -213,6 +233,7 @@ data Cmd
     | CmdSwapQuote SwapQuoteOpts
     | CmdWithdrawWizard WithdrawOpts
     | CmdTxBuild TxBuildOpts
+    | CmdReportRender ReportRenderOpts
 
 {- | Two ways to express how a swap is sliced:
   * @SplitCount n@: split into @n@ approximately equal chunks
@@ -352,6 +373,14 @@ cmdP =
                     "Build any treasury transaction from a unified intent.json"
                 )
             )
+            <> command
+                "report-render"
+                ( info
+                    (CmdReportRender <$> reportRenderOptsP)
+                    ( progDesc
+                        "Render a tx-build report envelope as Markdown"
+                    )
+                )
             <> command
                 "swap-wizard"
                 ( info
@@ -643,16 +672,93 @@ opts =
 main :: IO ()
 main = do
     (g, c) <- execParser opts
-    socket <- resolveSocket (goSocketPath g)
     case c of
+        CmdReportRender ro ->
+            runReportRender ro
         CmdSwapWizard wo ->
-            runWizard g{goSocketPath = Just socket} wo
+            withSocket g $ \socket ->
+                runWizard g{goSocketPath = Just socket} wo
         CmdSwapQuote qo ->
-            runSwapQuote g{goSocketPath = Just socket} qo
+            withSocket g $ \socket ->
+                runSwapQuote g{goSocketPath = Just socket} qo
         CmdWithdrawWizard wo ->
-            runWithdrawWizard g{goSocketPath = Just socket} wo
+            withSocket g $ \socket ->
+                runWithdrawWizard g{goSocketPath = Just socket} wo
         CmdTxBuild to ->
-            runTxBuild socket to
+            withSocket g $ \socket ->
+                runTxBuild socket to
+
+withSocket :: GlobalOpts -> (FilePath -> IO a) -> IO a
+withSocket g action = do
+    socket <- resolveSocket (goSocketPath g)
+    action socket
+
+runReportRender :: ReportRenderOpts -> IO ()
+runReportRender ReportRenderOpts{..} = do
+    metadata <- loadReportRenderMetadata rrMetadataPath
+    bytes <- case rrInPath of
+        Nothing -> BS.hGetContents IO.stdin
+        Just path -> BS.readFile path
+    output <- case decodeReportRenderInput bytes of
+        Left err -> do
+            TIO.hPutStrLn stderr err
+            exitWith (ExitFailure 3)
+        Right decoded -> pure decoded
+    rendered <- case renderReportRenderOutput metadata output of
+        Left err -> do
+            TIO.hPutStrLn stderr err
+            exitWith (ExitFailure 5)
+        Right text -> pure text
+    writeRenderedReport rrOutPath rendered
+
+loadReportRenderMetadata
+    :: Maybe FilePath -> IO (Maybe TreasuryMetadata)
+loadReportRenderMetadata requestedPath = do
+    metadataPath <- case requestedPath of
+        Just path -> pure (Just path)
+        Nothing -> do
+            exists <- doesFileExist defaultReportRenderMetadataPath
+            pure $
+                if exists
+                    then Just defaultReportRenderMetadataPath
+                    else Nothing
+    case metadataPath of
+        Nothing -> pure Nothing
+        Just path -> do
+            result <-
+                try (readMetadataFile path)
+                    :: IO (Either SomeException TreasuryMetadata)
+            case result of
+                Right metadata -> pure (Just metadata)
+                Left err -> do
+                    TIO.hPutStrLn
+                        stderr
+                        ( "report-render: metadata read failed "
+                            <> T.pack path
+                            <> ": "
+                            <> T.pack (displayException err)
+                        )
+                    exitWith (ExitFailure 3)
+
+defaultReportRenderMetadataPath :: FilePath
+defaultReportRenderMetadataPath = "journal/2026/metadata.json"
+
+writeRenderedReport :: Maybe FilePath -> Text -> IO ()
+writeRenderedReport Nothing text =
+    TIO.putStr text
+writeRenderedReport (Just path) text = do
+    result <- try (TIO.writeFile path text) :: IO (Either IOException ())
+    case result of
+        Right () -> pure ()
+        Left err -> do
+            TIO.hPutStrLn
+                stderr
+                ( "report-render: output write failed "
+                    <> T.pack path
+                    <> ": "
+                    <> T.pack (displayException err)
+                )
+            exitWith (ExitFailure 4)
 
 resolveSocket :: Maybe FilePath -> IO FilePath
 resolveSocket (Just p) = pure p
@@ -1536,7 +1642,19 @@ runTxBuild socket TxBuildOpts{..} = do
                 exitWith (ExitFailure 6)
         withLocalNodeBackend magic socket $ \backend -> do
             ctx <- liveContext backend required
-            tbr <- runFromIntent ctx some
+            buildResult <-
+                try (runFromIntent ctx some)
+                    :: IO (Either SomeException TreasuryBuildResult)
+            tbr <- case buildResult of
+                Right result -> pure result
+                Left err -> do
+                    writeFailureReport
+                        tr
+                        tboReportPath
+                        some
+                        "build-failed"
+                        (T.pack (displayException err))
+                    exitFailure
             let cborStrict = BSL.toStrict (tbrCborBytes tbr)
                 hexed = B16.encode cborStrict
                 Coin feeLov = tbrFeeLovelace tbr
@@ -1569,9 +1687,10 @@ runTxBuild socket TxBuildOpts{..} = do
                         )
                 )
                 failures
-            case tboOutPath of
-                Just p -> BS.writeFile p hexed
-                Nothing -> do
+            case (tboOutPath, tboReportPath == Just "-") of
+                (Just p, _) -> BS.writeFile p hexed
+                (Nothing, True) -> pure ()
+                (Nothing, False) -> do
                     BS.putStr hexed
                     putStr "\n"
             traceWith tr (TbeWroteCbor tboOutPath)
@@ -1597,17 +1716,68 @@ runTxBuild socket TxBuildOpts{..} = do
                                                     , tbsReport = report
                                                     }
                                         }
-                            result <-
-                                writeReportArtifact
-                                    tr
-                                    reportPath
-                                    (encodeBuildOutput output)
-                            case result of
-                                Right () -> pure ()
-                                Left{} -> exitWith (ExitFailure 4)
+                            writeBuildReportOrExit
+                                tr
+                                reportPath
+                                output
                 else do
                     traceWith tr TbeValidationFailed
+                    writeFailureReport
+                        tr
+                        tboReportPath
+                        some
+                        "validation-failed"
+                        (renderValidationFailures failures)
                     exitFailure
+
+writeFailureReport
+    :: Tracer IO BuildEvent
+    -> Maybe FilePath
+    -> SomeTreasuryIntent
+    -> Text
+    -> Text
+    -> IO ()
+writeFailureReport _ Nothing _ _ _ =
+    pure ()
+writeFailureReport tr (Just reportPath) some code message =
+    writeBuildReportOrExit
+        tr
+        reportPath
+        TxBuildOutput
+            { txoIntent = some
+            , txoResult =
+                TxBuildOutputFailure
+                    BuildFailure
+                        { bfCode = code
+                        , bfMessage = message
+                        }
+            }
+
+writeBuildReportOrExit
+    :: Tracer IO BuildEvent
+    -> FilePath
+    -> TxBuildOutput
+    -> IO ()
+writeBuildReportOrExit tr "-" output = do
+    BSL.putStr (encodeBuildOutput output)
+    traceWith tr (TbeWroteReport "-")
+writeBuildReportOrExit tr reportPath output = do
+    result <-
+        writeReportArtifact
+            tr
+            reportPath
+            (encodeBuildOutput output)
+    case result of
+        Right () -> pure ()
+        Left{} -> exitWith (ExitFailure 4)
+
+renderValidationFailures :: [(a, String)] -> Text
+renderValidationFailures failures =
+    T.intercalate
+        "; "
+        [ T.pack reason
+        | (_, reason) <- failures
+        ]
 
 txBuildReportContext
     :: SomeTreasuryIntent -> NetworkMagic -> ReportContext

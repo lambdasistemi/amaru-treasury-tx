@@ -12,7 +12,9 @@ module Amaru.Treasury.Report.Render
     ( RenderError (..)
     , RenderOutput (..)
     , renderBuildOutput
+    , renderBuildOutputWithMetadata
     , renderSuccessReport
+    , renderSuccessReportWithMetadata
     ) where
 
 import Data.List (sortOn)
@@ -27,6 +29,9 @@ import Amaru.Treasury.IntentJSON
     , SomeTreasuryIntent (..)
     , TreasuryIntent (..)
     , WalletJSON (..)
+    )
+import Amaru.Treasury.Metadata
+    ( TreasuryMetadata
     )
 import Amaru.Treasury.Report
     ( BuildFailure (..)
@@ -104,16 +109,36 @@ data OutputGroup = OutputGroup
     deriving stock (Eq, Show)
 
 renderBuildOutput :: TxBuildOutput -> Either RenderError RenderOutput
-renderBuildOutput output =
+renderBuildOutput =
+    renderBuildOutputWithMetadata Nothing
+
+renderBuildOutputWithMetadata
+    :: Maybe TreasuryMetadata
+    -> TxBuildOutput
+    -> Either RenderError RenderOutput
+renderBuildOutputWithMetadata metadata output =
     case txoResult output of
         TxBuildOutputSuccess success ->
-            Right (renderSuccessReport (txoIntent output) success)
+            Right
+                ( renderSuccessReportWithMetadata
+                    metadata
+                    (txoIntent output)
+                    success
+                )
         TxBuildOutputFailure failure ->
             Left (RenderBuildFailure failure)
 
 renderSuccessReport
     :: SomeTreasuryIntent -> TxBuildSuccess -> RenderOutput
-renderSuccessReport intent success =
+renderSuccessReport =
+    renderSuccessReportWithMetadata Nothing
+
+renderSuccessReportWithMetadata
+    :: Maybe TreasuryMetadata
+    -> SomeTreasuryIntent
+    -> TxBuildSuccess
+    -> RenderOutput
+renderSuccessReportWithMetadata metadata intent success =
     RenderOutput . renderMarkdown $
         [ heading1 (intentTitle intent)
         , blank
@@ -139,7 +164,7 @@ renderSuccessReport intent success =
     report = tbsReport success
     resolutionInputs =
         ResolutionInputs
-            { riMetadata = Nothing
+            { riMetadata = metadata
             , riIntent = intent
             , riReport = report
             }

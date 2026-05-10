@@ -17,6 +17,11 @@ import Amaru.Treasury.IntentJSON
     ( SomeTreasuryIntent
     , decodeTreasuryIntentFile
     )
+import Amaru.Treasury.Metadata
+    ( ScopeMetadata (..)
+    , ScriptRef (..)
+    , TreasuryMetadata (..)
+    )
 import Amaru.Treasury.Report
     ( BuildFailure (..)
     , MetadataSummary (..)
@@ -41,11 +46,15 @@ import Amaru.Treasury.Report.Render
     ( RenderError (..)
     , RenderOutput (..)
     , renderBuildOutput
+    , renderBuildOutputWithMetadata
     )
 import Amaru.Treasury.Report.Render.Time
     ( SlotTimeConfig
     , networkSlotTimeConfig
     , slotToUtcText
+    )
+import Amaru.Treasury.Scope
+    ( ScopeId (..)
     )
 
 spec :: Spec
@@ -88,6 +97,17 @@ spec = describe "Amaru.Treasury.Report.Render" $ do
             `shouldContainText` "- 2 x unknown -> unresolved (addr_test1same): 2000000 lovelace (2.000000 ADA)"
         rendered
             `shouldContainText` "- 1 x treasuryLeftover -> unresolved (addr_test1leftover): 10000000 lovelace (10.000000 ADA)"
+
+    it "uses supplied metadata for output identity labels" $ do
+        some <- sampleIntent
+        rendered <-
+            case renderBuildOutputWithMetadata
+                (Just (metadataWithTreasuryAddress "addr_test1same"))
+                (successOutput some fixtureReport) of
+                Left err -> fail ("render failed: " <> show err)
+                Right (RenderOutput text) -> pure text
+        rendered
+            `shouldContainText` "- 2 x unknown -> core_development treasury: 2000000 lovelace (2.000000 ADA)"
 
     it "rejects build-failure envelopes as non-success reports" $ do
         some <- sampleIntent
@@ -236,6 +256,34 @@ lovelace amount =
     ValueSummary
         { vsLovelace = amount
         , vsAssets = Map.empty
+        }
+
+metadataWithTreasuryAddress :: Text -> TreasuryMetadata
+metadataWithTreasuryAddress address =
+    TreasuryMetadata
+        { tmScopeOwners = "scope-owners#0"
+        , tmTreasuries =
+            Map.singleton
+                CoreDevelopment
+                ScopeMetadata
+                    { smOwner =
+                        Just
+                            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                    , smBudget = Nothing
+                    , smAddress = address
+                    , smTreasury =
+                        ScriptRef
+                            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                            "treasury#0"
+                    , smPermissions =
+                        ScriptRef
+                            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+                            "permissions#0"
+                    , smRegistry =
+                        ScriptRef
+                            "dddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+                            "registry#0"
+                    }
         }
 
 shouldContainText :: Text -> Text -> IO ()

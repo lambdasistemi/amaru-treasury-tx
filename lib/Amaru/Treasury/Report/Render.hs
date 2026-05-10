@@ -26,12 +26,14 @@ import Amaru.Treasury.IntentJSON
     , ScopeJSON (..)
     , SomeTreasuryIntent (..)
     , TreasuryIntent (..)
+    , WalletJSON (..)
     )
 import Amaru.Treasury.Report
     ( BuildFailure (..)
     , MetadataSummary (..)
     , ProducedOutput (..)
     , SignerRequirement (..)
+    , SignerSource (..)
     , TransactionIdentity (..)
     , TransactionReport (..)
     , TreasuryAccounting (..)
@@ -51,6 +53,27 @@ import Amaru.Treasury.Report.Accounting
 import Amaru.Treasury.Report.Classify
     ( ProducedOutputRole
     , producedOutputRoleText
+    )
+import Amaru.Treasury.Report.Identity
+    ( AddressBook
+    , IdentityMap
+    , ReferenceInputMap
+    , ResolutionInputs (..)
+    , buildAddressBook
+    , buildIdentityMap
+    , buildReferenceInputMap
+    , resolveAddress
+    , resolveReferenceInput
+    , resolveSigner
+    )
+import Amaru.Treasury.Report.Identity.Constants
+    ( labelAsset
+    )
+import Amaru.Treasury.Report.Render.Address
+    ( formatAddress
+    , formatKeyHash
+    , formatReferenceInput
+    , truncateIdentifier
     )
 import Amaru.Treasury.Report.Render.Markdown
     ( blank
@@ -74,7 +97,7 @@ newtype RenderError
 
 data OutputGroup = OutputGroup
     { ogRole :: ProducedOutputRole
-    , ogAddress :: Text
+    , ogDestination :: Text
     , ogValue :: ValueSummary
     , ogCount :: Int
     }
@@ -97,19 +120,38 @@ renderSuccessReport intent success =
         ]
             <> leadingLines intent success
             <> [ blank
+               , heading2 "Consumed Inputs"
+               ]
+            <> consumedInputLines intent report addressBook
+            <> [ blank
                , heading2 "Produced Outputs"
                ]
-            <> producedOutputLines (trOutputs report)
+            <> producedOutputLines addressBook (trOutputs report)
+            <> [ blank
+               , heading2 "Reference Inputs"
+               ]
+            <> referenceInputLines referenceInputs report
             <> [ blank
                , heading2 "Required Signers"
                ]
-            <> signerLines report
+            <> signerLines identityMap report
   where
     report = tbsReport success
+    resolutionInputs =
+        ResolutionInputs
+            { riMetadata = Nothing
+            , riIntent = intent
+            , riReport = report
+            }
+    addressBook = buildAddressBook resolutionInputs
+    identityMap = buildIdentityMap resolutionInputs
+    referenceInputs = buildReferenceInputMap resolutionInputs
 
 leadingLines :: SomeTreasuryIntent -> TxBuildSuccess -> [Text]
 leadingLines intent success =
     [ bullet ("Transaction id: " <> tiTxId identity)
+    , bullet ("Transaction type: " <> actionTextFromIntent intent)
+    , bullet ("Scope: " <> scopeTextFromIntent intent)
     , bullet ("Explorer: " <> explorerUrl report)
     , bullet ("CBOR fingerprint: " <> cborFingerprint (tbsTxCbor success))
     , bullet
@@ -129,6 +171,14 @@ leadingLines intent success =
 intentTitle :: SomeTreasuryIntent -> Text
 intentTitle (SomeTreasuryIntent sa intent) =
     actionText sa <> " on " <> sjId (tiScope intent)
+
+actionTextFromIntent :: SomeTreasuryIntent -> Text
+actionTextFromIntent (SomeTreasuryIntent sa _) =
+    actionText sa
+
+scopeTextFromIntent :: SomeTreasuryIntent -> Text
+scopeTextFromIntent (SomeTreasuryIntent _ intent) =
+    sjId (tiScope intent)
 
 actionText :: SAction a -> Text
 actionText = \case
@@ -203,56 +253,114 @@ conservationLine report =
     residual =
         inputTotal `subtractValueSummary` (outputTotal `addValueSummary` fee)
 
-producedOutputLines :: [ProducedOutput] -> [Text]
-producedOutputLines outputs =
-    renderGroup <$> groupOutputs outputs
+consumedInputLines
+    :: SomeTreasuryIntent -> TransactionReport -> AddressBook -> [Text]
+consumedInputLines (SomeTreasuryIntent _ intent) report addressBook =
+    walletLines <> treasuryLines
+  where
+    walletLabel =
+        formatAddress
+            (resolveAddress addressBook (wjAddress (tiWallet intent)))
+            (wjAddress (tiWallet intent))
+    treasuryLabel =
+        formatAddress
+            (resolveAddress addressBook (sjTreasuryAddress scope))
+            (sjTreasuryAddress scope)
+    scope = tiScope intent
 
-groupOutputs :: [ProducedOutput] -> [OutputGroup]
-groupOutputs =
-    foldl' addOutput []
+    walletLines =
+        renderInput (walletLabel <> " input") <$> waInputs wallet
+    treasuryLines =
+        renderInput (treasuryLabel <> " input") <$> taInputs treasury
 
-addOutput :: [OutputGroup] -> ProducedOutput -> [OutputGroup]
-addOutput [] output = [newGroup output]
-addOutput (group : rest) output
-    | groupMatches group output =
-        group{ogCount = ogCount group + 1} : rest
-    | otherwise =
-        group : addOutput rest output
+    wallet = trWalletAccounting report
+    treasury = trTreasuryAccounting report
 
-newGroup :: ProducedOutput -> OutputGroup
-newGroup output =
-    OutputGroup
-        { ogRole = poRole output
-        , ogAddress = poAddress output
-        , ogValue = poValue output
-        , ogCount = 1
-        }
-
-groupMatches :: OutputGroup -> ProducedOutput -> Bool
-groupMatches group output =
-    ogRole group == poRole output
-        && ogAddress group == poAddress output
-        && ogValue group == poValue output
-
-renderGroup :: OutputGroup -> Text
-renderGroup group =
+renderInput :: Text -> UtxoSummary -> Text
+renderInput label input =
     bullet $
-        tshow (ogCount group)
-            <> " x "
-            <> producedOutputRoleText (ogRole group)
-            <> " -> "
-            <> ogAddress group
+        label
+            <> " "
+            <> truncateIdentifier (usTxIn input)
             <> ": "
-            <> formatValueSummary (ogValue group)
+            <> formatValueSummary (usValue input)
 
-signerLines :: TransactionReport -> [Text]
-signerLines report =
+producedOutputLines :: AddressBook -> [ProducedOutput] -> [Text]
+producedOutputLines addressBook outputs =
+    renderGroup <$> groupOutputs outputs
+  where
+    renderGroup group =
+        bullet $
+            tshow (ogCount group)
+                <> " x "
+                <> producedOutputRoleText (ogRole group)
+                <> " -> "
+                <> ogDestination group
+                <> ": "
+                <> formatValueSummary (ogValue group)
+
+    groupOutputs =
+        foldl' addOutput []
+
+    addOutput [] output = [newGroup output]
+    addOutput (group : rest) output
+        | groupMatches group output =
+            group{ogCount = ogCount group + 1} : rest
+        | otherwise =
+            group : addOutput rest output
+
+    newGroup output =
+        OutputGroup
+            { ogRole = poRole output
+            , ogDestination = outputDestination output
+            , ogValue = poValue output
+            , ogCount = 1
+            }
+
+    groupMatches group output =
+        ogRole group == poRole output
+            && ogDestination group == outputDestination output
+            && ogValue group == poValue output
+
+    outputDestination output =
+        formatAddress
+            (resolveAddress addressBook (poAddress output))
+            (poAddress output)
+
+referenceInputLines
+    :: ReferenceInputMap -> TransactionReport -> [Text]
+referenceInputLines referenceInputs report =
+    case trReferenceInputs report of
+        [] -> [bullet "none"]
+        inputs ->
+            [ bullet $
+                formatReferenceInput
+                    (resolveReferenceInput referenceInputs txIn)
+                    txIn
+            | txIn <- inputs
+            ]
+
+signerLines :: IdentityMap -> TransactionReport -> [Text]
+signerLines identityMap report =
     case trSigners report of
         [] -> [bullet "none"]
         signers ->
-            [ bullet (srKeyHash signer)
+            [ bullet $
+                formatKeyHash
+                    (resolveSigner identityMap (srKeyHash signer))
+                    (srKeyHash signer)
+                    <> " ("
+                    <> signerSourceLabel (srSource signer)
+                    <> ")"
             | signer <- signers
             ]
+
+signerSourceLabel :: SignerSource -> Text
+signerSourceLabel = \case
+    SourceSelectedScopeOwner -> "selected scope owner"
+    SourceExtraSigner -> "extra signer"
+    SourceIntentRequiredSigner -> "intent required signer"
+    SourceTxBodyRequiredSigner -> "tx-body required signer"
 
 formatValueSummary :: ValueSummary -> Text
 formatValueSummary value =
@@ -264,10 +372,24 @@ formatValueSummary value =
             " + assets "
                 <> T.intercalate
                     ", "
-                    [ policy <> "." <> asset <> "=" <> tshow quantity
+                    [ formatAssetQuantity policy asset quantity
                     | (policy, assets) <- Map.toList (vsAssets value)
                     , (asset, quantity) <- sortOn fst (Map.toList assets)
                     ]
+
+formatAssetQuantity :: Text -> Text -> Integer -> Text
+formatAssetQuantity policy asset quantity =
+    assetLabel <> "=" <> tshow quantity
+  where
+    assetLabel =
+        case labelAsset policy asset of
+            Just label -> label
+            Nothing ->
+                "unresolved asset ("
+                    <> truncateIdentifier policy
+                    <> "."
+                    <> truncateIdentifier asset
+                    <> ")"
 
 formatLovelace :: Integer -> Text
 formatLovelace lovelace =

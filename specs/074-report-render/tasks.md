@@ -14,8 +14,8 @@ handoff or review.
 **Purpose**: Add the empty structure needed for incremental slices
 without changing runtime behavior.
 
-- [ ] T001 Create placeholder modules with explicit export lists for `lib/Amaru/Treasury/Report/Render.hs`, `lib/Amaru/Treasury/Report/Render/Address.hs`, `lib/Amaru/Treasury/Report/Render/Markdown.hs`, `lib/Amaru/Treasury/Report/Render/Time.hs`, `lib/Amaru/Treasury/Report/Identity.hs`, `lib/Amaru/Treasury/Report/Identity/Resolve.hs`, `lib/Amaru/Treasury/Report/Identity/Constants.hs`, and `lib/Amaru/Treasury/Report/Cli.hs`
-- [ ] T002 Wire the new library modules and planned test modules into `amaru-treasury-tx.cabal`
+- [x] T001 Create placeholder modules with explicit export lists for `lib/Amaru/Treasury/Report/Render.hs`, `lib/Amaru/Treasury/Report/Render/Address.hs`, `lib/Amaru/Treasury/Report/Render/Markdown.hs`, `lib/Amaru/Treasury/Report/Render/Time.hs`, `lib/Amaru/Treasury/Report/Identity.hs`, `lib/Amaru/Treasury/Report/Identity/Resolve.hs`, `lib/Amaru/Treasury/Report/Identity/Constants.hs`, and `lib/Amaru/Treasury/Report/Cli.hs`
+- [x] T002 Wire the new library modules and planned test modules into `amaru-treasury-tx.cabal`
 - [ ] T003 [P] Create fixture directories for `test/fixtures/disburse/`, `test/fixtures/withdraw/`, and additional report-render files under `test/fixtures/swap/`
 
 ## Phase 2: Foundational Envelope Contract
@@ -43,15 +43,15 @@ twice and verify byte-identical output that includes the required
 leading-section facts and matches `test/fixtures/swap/report.golden.md`.
 Fold T010-T020 into one vertical renderer commit.
 
-- [ ] T010 [P] [US1] Add RED pure-render tests for lovelace/ADA formatting, output collapsing, conservation arithmetic, explorer URL, and CBOR fingerprint/hash in `test/unit/Amaru/Treasury/Report/RenderSpec.hs`
+- [x] T010 [P] [US1] Add RED pure-render tests for lovelace/ADA formatting, output collapsing, conservation arithmetic, explorer URL, and CBOR fingerprint/hash in `test/unit/Amaru/Treasury/Report/RenderSpec.hs`
 - [ ] T011 [P] [US1] Add RED slot-to-UTC derivation tests using report era/network data in `test/unit/Amaru/Treasury/Report/RenderSpec.hs`
 - [ ] T012 [P] [US1] Add RED swap Markdown golden test in `test/golden/ReportRenderSwapGoldenSpec.hs`
-- [ ] T013 [US1] Add success envelope fixture with inline intent, `result.tx-cbor`, and nested `result.report` in `test/fixtures/swap/report.golden.json`
-- [ ] T014 [US1] Implement deterministic Markdown builder primitives in `lib/Amaru/Treasury/Report/Render/Markdown.hs`
+- [x] T013 [US1] Add success envelope fixture with inline intent, `result.tx-cbor`, and nested `result.report` in `test/fixtures/swap/report.golden.json`
+- [x] T014 [US1] Implement deterministic Markdown builder primitives in `lib/Amaru/Treasury/Report/Render/Markdown.hs`
 - [ ] T015 [US1] Implement slot-to-UTC derivation from report era/network data in `lib/Amaru/Treasury/Report/Render/Time.hs`
-- [ ] T016 [US1] Implement success report rendering and section ordering in `lib/Amaru/Treasury/Report/Render.hs`
-- [ ] T017 [US1] Implement produced-output grouping and amount display in `lib/Amaru/Treasury/Report/Render.hs`
-- [ ] T018 [US1] Render transaction id, explorer URL, CBOR fingerprint/hash, validity bounds, conservation line, and CIP-1694 rationale in `lib/Amaru/Treasury/Report/Render.hs`
+- [x] T016 [US1] Implement success report rendering and section ordering in `lib/Amaru/Treasury/Report/Render.hs`
+- [x] T017 [US1] Implement produced-output grouping and amount display in `lib/Amaru/Treasury/Report/Render.hs`
+- [x] T018 [US1] Render transaction id, explorer URL, CBOR fingerprint/hash, validity bounds, conservation line, and CIP-1694 rationale in `lib/Amaru/Treasury/Report/Render.hs`
 - [ ] T019 [US1] Add full swap Markdown golden output in `test/fixtures/swap/report.golden.md`
 - [ ] T020 [US1] Run the US1 gate with `nix build --quiet --no-link ".#checks.${SYS}.unit" ".#checks.${SYS}.golden" ".#checks.${SYS}.lint"`
 

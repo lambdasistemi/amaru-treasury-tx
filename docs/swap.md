@@ -72,6 +72,22 @@ slippage policy, and does not write `params.json`. Operators using it
 must keep the external quote, slippage policy, rate arithmetic, and
 affordability audit record separately.
 
+## Review helper
+
+For a unified swap intent that is ready to build, the operator helper
+creates the default pre-signing review bundle:
+
+```bash
+scripts/ops/build-swop --out swap-review --intent path/to/intent.json
+```
+
+It runs `tx-build --report`, writes `swap-review/swap.cbor.hex`,
+`swap-review/report.json`, and renders `swap-review/report.md`. The
+Markdown report is the primary human review artifact; the JSON
+envelope remains the durable machine-readable contract. Use
+`--no-markdown` to suppress only `report.md` while still producing
+`report.json`.
+
 ## CLI usage
 
 For an `intent.json` you already have on disk, use `tx-build`
@@ -102,6 +118,15 @@ tracer. `--log PATH` redirects them to a file (default = stderr).
 `--report PATH` writes the deterministic JSON transaction report after
 successful validation. If the requested report cannot be written,
 `tx-build` exits non-zero and names the failed path in the trace.
+To render the Markdown review manually, run:
+
+```bash
+amaru-treasury-tx report-render \
+  --in swap.report.json \
+  --out swap.report.md \
+  --metadata metadata-mainnet.json
+```
+
 The action and the network are read from the intent's top-level
 `action` and `network` fields — there are no `--network` /
 `--action` CLI flags on `tx-build` (single source of truth).
@@ -134,12 +159,12 @@ The action and the network are read from the intent's top-level
 ## Pre-signing report review
 
 Generate `swap.report.json` with the same `tx-build` command that
-writes `swap.cbor.hex`, then inspect the report before signing. The
-JSON is a build-output envelope using the public schema in
-`docs/assets/tx-report-schema.json`: top-level `intent` plus
-top-level `result`. For successful builds, `result.tx-cbor` contains
-the unsigned transaction bytes and `result.report` contains the
-mechanical report facts below.
+writes `swap.cbor.hex`, then render `swap.report.md` and inspect the
+Markdown before signing. The JSON is a build-output envelope using the
+public schema in `docs/assets/tx-report-schema.json`: top-level
+`intent` plus top-level `result`. For successful builds,
+`result.tx-cbor` contains the unsigned transaction bytes and
+`result.report` contains the mechanical report facts below.
 
 Swap report review checklist:
 

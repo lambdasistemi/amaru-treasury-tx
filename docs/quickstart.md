@@ -127,6 +127,19 @@ The command never asks for confirmation. Inspect `swap-run/params.json`,
 limit price was chosen; the logs record the chain and build decisions
 that produced the unsigned transaction.
 
+For the Markdown pre-signing review artifact, build the same intent
+through the report helper:
+
+```bash
+scripts/ops/build-swop --out review-run --intent swap-run/intent.json
+```
+
+This writes `review-run/swap.cbor.hex`, `review-run/report.json`, and
+`review-run/report.md`. The JSON is the build-output envelope with
+top-level `intent` plus top-level `result`; the Markdown is derived
+from that envelope and is the human review surface. Use
+`--no-markdown` only when a JSON-only review bundle is intended.
+
 Pre-signing audit checklist:
 
 - `quote.value`, `quote.provenance`, `quote.observedAt`, and any

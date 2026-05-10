@@ -1,0 +1,117 @@
+#!/usr/bin/env sh
+set -eu
+
+usage() {
+    cat <<'EOF'
+Usage: scripts/ops/build-swop [--out DIR] [--intent PATH] [--log PATH] [--metadata PATH] [--no-markdown]
+
+Build a swap transaction review bundle from a unified intent.
+
+Options:
+  --out DIR        Directory for swap.cbor.hex, report.json, and report.md.
+                   Defaults to the current directory.
+  --intent PATH    Read the unified intent from PATH instead of stdin.
+  --log PATH       Write tx-build trace output to PATH.
+  --metadata PATH  Metadata source passed to report-render for identity labels.
+  --no-markdown    Do not render report.md. report.json is still written.
+  -h, --help       Show this help text.
+
+Environment:
+  AMARU_TREASURY_TX  Executable path to use. Defaults to amaru-treasury-tx.
+
+The helper removes any existing report.md before each run so an opt-out
+or failed renderer cannot leave a stale Markdown review artifact behind.
+EOF
+}
+
+die() {
+    printf 'build-swop: %s\n' "$*" >&2
+    exit 2
+}
+
+out_dir=.
+intent_path=
+log_path=
+metadata_path=
+no_markdown=0
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --out)
+            [ "$#" -ge 2 ] || die "--out requires DIR"
+            out_dir=$2
+            shift 2
+            ;;
+        --out=*)
+            out_dir=${1#--out=}
+            shift
+            ;;
+        --intent)
+            [ "$#" -ge 2 ] || die "--intent requires PATH"
+            intent_path=$2
+            shift 2
+            ;;
+        --intent=*)
+            intent_path=${1#--intent=}
+            shift
+            ;;
+        --log)
+            [ "$#" -ge 2 ] || die "--log requires PATH"
+            log_path=$2
+            shift 2
+            ;;
+        --log=*)
+            log_path=${1#--log=}
+            shift
+            ;;
+        --metadata)
+            [ "$#" -ge 2 ] || die "--metadata requires PATH"
+            metadata_path=$2
+            shift 2
+            ;;
+        --metadata=*)
+            metadata_path=${1#--metadata=}
+            shift
+            ;;
+        --no-markdown)
+            no_markdown=1
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        *)
+            die "unknown option: $1"
+            ;;
+    esac
+done
+
+exe=${AMARU_TREASURY_TX:-amaru-treasury-tx}
+
+mkdir -p "$out_dir"
+
+cbor_path=$out_dir/swap.cbor.hex
+report_path=$out_dir/report.json
+markdown_path=$out_dir/report.md
+
+rm -f "$markdown_path"
+
+set -- tx-build --out "$cbor_path" --report "$report_path"
+if [ -n "$intent_path" ]; then
+    set -- "$@" --intent "$intent_path"
+fi
+if [ -n "$log_path" ]; then
+    set -- "$@" --log "$log_path"
+fi
+"$exe" "$@"
+
+if [ "$no_markdown" -eq 1 ]; then
+    exit 0
+fi
+
+set -- report-render --in "$report_path" --out "$markdown_path"
+if [ -n "$metadata_path" ]; then
+    set -- "$@" --metadata "$metadata_path"
+fi
+"$exe" "$@"

@@ -85,6 +85,9 @@ let
         components.exes.amaru-treasury-tx
         components.tests.unit-tests
         components.tests.golden-tests
+        pkgs.coreutils
+        pkgs.diffutils
+        pkgs.gnugrep
       ];
       text = ''
         # ---- swap-wizard signer UX (carried over from feature 002) ----
@@ -191,6 +194,92 @@ let
           printf 'smoke: report-render output differs from swap Markdown golden\n' >&2
           exit 1
         fi
+
+        helper_tmp="$(mktemp -d)"
+        trap 'rm -rf "$helper_tmp"' EXIT
+        mock_exe="$helper_tmp/amaru-treasury-tx"
+        cat > "$mock_exe" <<'EOF'
+        #!/usr/bin/env sh
+        set -eu
+
+        cmd=$1
+        shift
+        case "$cmd" in
+          tx-build)
+            out_path=
+            report_path=
+            while [ "$#" -gt 0 ]; do
+              case "$1" in
+                --out)
+                  out_path=$2
+                  shift 2
+                  ;;
+                --report)
+                  report_path=$2
+                  shift 2
+                  ;;
+                --intent|--log)
+                  shift 2
+                  ;;
+                *)
+                  shift
+                  ;;
+              esac
+            done
+            test -n "$out_path"
+            test -n "$report_path"
+            printf '84a4\n' > "$out_path"
+            cat test/fixtures/swap/report.golden.json > "$report_path"
+            ;;
+          report-render)
+            exec amaru-treasury-tx report-render "$@"
+            ;;
+          *)
+            printf 'mock amaru-treasury-tx: unexpected command %s\n' "$cmd" >&2
+            exit 99
+            ;;
+        esac
+EOF
+        chmod +x "$mock_exe"
+
+        helper_default="$helper_tmp/default"
+        AMARU_TREASURY_TX="$mock_exe" \
+          ${pkgs.bash}/bin/bash ${src}/scripts/ops/build-swop --out "$helper_default" \
+          < test/fixtures/swap/intent.json
+        test -s "$helper_default/swap.cbor.hex"
+        diff -u test/fixtures/swap/report.golden.json "$helper_default/report.json"
+        diff -u test/fixtures/swap/report.golden.md "$helper_default/report.md"
+
+        helper_optout="$helper_tmp/no-markdown"
+        mkdir -p "$helper_optout"
+        printf 'stale\n' > "$helper_optout/report.md"
+        AMARU_TREASURY_TX="$mock_exe" \
+          ${pkgs.bash}/bin/bash ${src}/scripts/ops/build-swop --out "$helper_optout" --no-markdown \
+          < test/fixtures/swap/intent.json
+        test -s "$helper_optout/swap.cbor.hex"
+        diff -u test/fixtures/swap/report.golden.json "$helper_optout/report.json"
+        if [[ -e "$helper_optout/report.md" ]]; then
+          printf 'smoke: build-swop --no-markdown left report.md behind\n' >&2
+          exit 1
+        fi
+
+        for needle in \
+          'pre-signing review artifact' \
+          'top-level intent plus top-level result' \
+          'treasury metadata, built-in constants, script-hash derivation, embedded intent, and unresolved fallback' \
+          'scripts/ops/build-swop' \
+          '--no-markdown'
+        do
+          if ! grep -F -- "$needle" docs/report-render.md >/dev/null; then
+            printf 'smoke: docs/report-render.md missing text: %s\n' "$needle" >&2
+            exit 1
+          fi
+        done
+
+        grep -F -- 'report.md' docs/quickstart.md >/dev/null
+        grep -F -- 'pre-signing review artifact' docs/quickstart.md >/dev/null
+        grep -F -- 'scripts/ops/build-swop' docs/swap.md >/dev/null
+        grep -F -- '--no-markdown' docs/swap.md >/dev/null
 
         printf 'smoke: OK (swap-wizard --help %ss, withdraw-wizard --help %ss, tx-build --help %ss, report-render --help %ss)\n' \
           "$wizard_elapsed" "$withdraw_elapsed" "$build_elapsed" "$render_elapsed"

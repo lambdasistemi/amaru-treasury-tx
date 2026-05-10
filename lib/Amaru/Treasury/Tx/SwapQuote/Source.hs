@@ -16,6 +16,7 @@ module Amaru.Treasury.Tx.SwapQuote.Source
     , quoteSourceName
     , parseQuoteSourceName
     , parseCoinGeckoAdaUsdResponse
+    , coinGeckoRequest
     , fetchQuoteSource
     , coingeckoAdaUsdProvider
     , renderQuoteSourceError
@@ -29,6 +30,7 @@ import Data.Aeson
     , (.:)
     )
 import Data.Aeson.Types (Parser, parseEither)
+import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Scientific (Scientific)
 import Data.Text (Text)
@@ -37,6 +39,7 @@ import Data.Text.Encoding qualified as TE
 import Data.Text.Encoding.Error (lenientDecode)
 import Network.HTTP.Client
     ( Request (responseTimeout)
+    , requestHeaders
     , responseTimeoutMicro
     )
 import Network.HTTP.Simple
@@ -142,11 +145,7 @@ coingeckoAdaUsdProvider =
 fetchCoinGecko
     :: Text -> IO (Either QuoteSourceError QuoteObservation)
 fetchCoinGecko fetchedAt = do
-    request0 <- parseRequest coinGeckoUrl
-    let request =
-            request0
-                { responseTimeout = responseTimeoutMicro 5_000_000
-                }
+    request <- coinGeckoRequest
     result <-
         try (httpLBS request)
             :: IO (Either SomeException (Response BSL.ByteString))
@@ -166,6 +165,20 @@ fetchCoinGecko fetchedAt = do
 coinGeckoUrl :: String
 coinGeckoUrl =
     "https://api.coingecko.com/api/v3/simple/price?ids=cardano&vs_currencies=usd"
+
+coinGeckoRequest :: IO Request
+coinGeckoRequest = do
+    request0 <- parseRequest coinGeckoUrl
+    pure
+        request0
+            { responseTimeout = responseTimeoutMicro 5_000_000
+            , requestHeaders =
+                ("User-Agent", coinGeckoUserAgent) : requestHeaders request0
+            }
+
+coinGeckoUserAgent :: ByteString
+coinGeckoUserAgent =
+    "amaru-treasury-tx/0.2.1.1 (https://github.com/lambdasistemi/amaru-treasury-tx)"
 
 decodeUtf8Lenient :: BSL.ByteString -> Text
 decodeUtf8Lenient =

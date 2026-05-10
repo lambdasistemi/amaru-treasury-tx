@@ -12,8 +12,10 @@ shapes the renderer needs. All types live under
 ### `Amaru.Treasury.Report.TxBuildOutput`
 
 `tx-build --report` writes one top-level envelope. The envelope always
-carries the decoded unified intent, then carries either a structured
-failure or the successful transaction payload.
+carries the decoded unified intent as pass-through context, then
+carries the result of attempting to build that intent: either a
+structured failure explaining why no transaction was created, or the
+successful transaction payload.
 
 ```haskell
 newtype TxCborHex = TxCborHex Text
@@ -26,7 +28,9 @@ data TxBuildOutput = TxBuildOutput
 
 data TxBuildOutputResult
     = TxBuildOutputFailure !BuildFailure
+    -- ^ No transaction was created; explain why.
     | TxBuildOutputSuccess !TxBuildSuccess
+    -- ^ Transaction was created; include bytes plus report.
 
 data TxBuildSuccess = TxBuildSuccess
     { tbsTxCbor :: !TxCborHex
@@ -84,6 +88,9 @@ data TransactionReport = TransactionReport
 The envelope encoder always emits `intent` and `result`. On success,
 `result` always emits `tx-cbor` and `report`. On failure, `result`
 emits `failure` and MUST NOT emit `tx-cbor` or `report`.
+The nested report explains the relevant transaction facts that the
+builder already derived, so a renderer does not have to parse CBOR to
+describe what the transaction does.
 
 ## New types
 

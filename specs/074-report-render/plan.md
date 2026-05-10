@@ -32,8 +32,12 @@ To make the pipeline end-to-end stream-capable, `tx-build` accepts
 `--report -` as a sibling change and writes a build-output envelope:
 top-level `intent` plus top-level `result`. The result is either a
 structured failure or a success object carrying `tx-cbor` and nested
-mechanical `report`. The renderer has no separate intent-file
-argument and no degraded rendering mode for missing intent.
+mechanical `report`. The intent is pass-through context for the build
+attempt; success means a transaction was created and the report
+explains the relevant facts without requiring CBOR parsing, while
+failure means no transaction was created and the result explains why.
+The renderer has no separate intent-file argument and no degraded
+rendering mode for missing intent.
 
 The repository's operator-facing helper `scripts/ops/build-swop`
 (created by this feature) wraps the build flow and produces the

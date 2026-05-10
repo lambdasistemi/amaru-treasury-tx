@@ -94,8 +94,8 @@ amaru-treasury-tx tx-build
 This change makes the end-to-end pipeline
 `tx-build --report - | report-render > report.md` an in-tree
 contract. Envelopes newly produced by the in-tree build path include
-the required top-level `intent` value that was consumed to build the
-transaction, using the same unified-intent JSON shape as the
+the required top-level `intent` value that was decoded and passed
+through unchanged, using the same unified-intent JSON shape as the
 standalone intent file, and required top-level `result`.
 
 On success, `result` is:
@@ -117,8 +117,11 @@ On failure after intent decoding, `result` is:
 
 The success `tx-cbor` value contains the unsigned transaction CBOR as
 lowercase hex. The success `report` value contains the mechanical
-report. If the originating intent cannot be decoded, the build path
-cannot form the envelope and exits with the existing parse failure.
+report: the builder's explanation of the relevant transaction facts,
+so consumers do not need to parse CBOR to understand what was built.
+The failure value explains why no transaction was created. If the
+originating intent cannot be decoded, the build path cannot form the
+envelope and exits with the existing parse failure.
 
 ## `scripts/ops/build-swop` (new helper)
 

@@ -1,12 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module Amaru.Treasury.Report
-    ( MetadataSummary (..)
+    ( BuildFailure (..)
+    , MetadataSummary (..)
     , ProducedOutput (..)
     , ProducedOutputRole (..)
     , ReportContext (..)
     , SignerRequirement (..)
     , SignerSource (..)
+    , TxBuildOutput (..)
+    , TxBuildOutputResult (..)
+    , TxBuildSuccess (..)
+    , TxCborHex (..)
     , TransactionIdentity (..)
     , TransactionReport (..)
     , TreasuryAccounting (..)
@@ -16,8 +21,11 @@ module Amaru.Treasury.Report
     , ValueSummary (..)
     , WalletAccounting (..)
     , buildTransactionReport
+    , encodeBuildOutput
     , encodeReport
+    , mkTxCborHex
     , sampleSwapReport
+    , txCborHexFromBytes
     ) where
 
 import Cardano.Crypto.Hash.Class (hashToBytes)
@@ -57,16 +65,31 @@ import Cardano.Ledger.TxIn
     )
 import Cardano.Slotting.Slot (SlotNo (..))
 import Codec.Binary.Bech32 qualified as Bech32
-import Data.Aeson (ToJSON (..), object, (.=))
+import Control.Monad (unless)
+import Data.Aeson
+    ( FromJSON (..)
+    , Object
+    , ToJSON (..)
+    , Value (Object)
+    , object
+    , withObject
+    , withText
+    , (.:)
+    , (.=)
+    )
 import Data.Aeson.Encode.Pretty
     ( Config (..)
     , Indent (..)
     , NumberFormat (..)
     , encodePretty'
     )
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KM
+import Data.Aeson.Types (Parser)
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as BSL
+import Data.Char (isDigit)
 import Data.Either (fromRight)
 import Data.Foldable (toList)
 import Data.Set qualified as Set
@@ -75,6 +98,7 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
 import Lens.Micro ((^.))
 
+import Amaru.Treasury.IntentJSON (SomeTreasuryIntent)
 import Amaru.Treasury.Report.Accounting
     ( UtxoSummary (..)
     , ValueSummary (..)
@@ -92,9 +116,36 @@ import Amaru.Treasury.TreasuryBuild
     , TreasuryBuildResult (..)
     )
 
+data TxBuildOutput = TxBuildOutput
+    { txoIntent :: SomeTreasuryIntent
+    , txoResult :: TxBuildOutputResult
+    }
+    deriving stock (Eq, Show)
+
+data TxBuildOutputResult
+    = TxBuildOutputFailure BuildFailure
+    | TxBuildOutputSuccess TxBuildSuccess
+    deriving stock (Eq, Show)
+
+data TxBuildSuccess = TxBuildSuccess
+    { tbsTxCbor :: TxCborHex
+    , tbsReport :: TransactionReport
+    }
+    deriving stock (Eq, Show)
+
+newtype TxCborHex = TxCborHex
+    { unTxCborHex :: Text
+    }
+    deriving stock (Eq, Ord, Show)
+
+data BuildFailure = BuildFailure
+    { bfCode :: Text
+    , bfMessage :: Text
+    }
+    deriving stock (Eq, Show)
+
 data TransactionReport = TransactionReport
     { trSchema :: Int
-    , trAction :: Text
     , trNetwork :: Text
     , trIdentity :: TransactionIdentity
     , trWalletAccounting :: WalletAccounting
@@ -108,8 +159,7 @@ data TransactionReport = TransactionReport
     deriving stock (Eq, Show)
 
 data ReportContext = ReportContext
-    { rcAction :: Text
-    , rcNetwork :: Text
+    { rcNetwork :: Text
     , rcSocketNetworkMagic :: Int
     , rcSelectedScopeOwner :: Maybe (Text, Text)
     , rcExtraSigners :: [Text]
@@ -194,11 +244,79 @@ data MetadataSummary = MetadataSummary
     }
     deriving stock (Eq, Show)
 
+instance ToJSON TxBuildOutput where
+    toJSON output =
+        object
+            [ "intent" .= txoIntent output
+            , "result" .= txoResult output
+            ]
+
+instance FromJSON TxBuildOutput where
+    parseJSON = withObject "TxBuildOutput" $ \o -> do
+        expectOnlyKeys "TxBuildOutput" ["intent", "result"] o
+        TxBuildOutput
+            <$> o .: "intent"
+            <*> o .: "result"
+
+instance ToJSON TxBuildOutputResult where
+    toJSON = \case
+        TxBuildOutputFailure failure ->
+            object ["failure" .= failure]
+        TxBuildOutputSuccess success ->
+            toJSON success
+
+instance FromJSON TxBuildOutputResult where
+    parseJSON = withObject "TxBuildOutputResult" $ \o -> do
+        let has key = KM.member (Key.fromString key) o
+        case (has "failure", has "tx-cbor", has "report") of
+            (True, False, False) ->
+                TxBuildOutputFailure <$> o .: "failure"
+            (False, True, True) ->
+                TxBuildOutputSuccess <$> parseJSON (Object o)
+            (True, _, _) ->
+                fail "failure result must not include tx-cbor or report"
+            _ ->
+                fail "result must contain failure or tx-cbor and report"
+
+instance ToJSON TxBuildSuccess where
+    toJSON success =
+        object
+            [ "tx-cbor" .= tbsTxCbor success
+            , "report" .= tbsReport success
+            ]
+
+instance FromJSON TxBuildSuccess where
+    parseJSON = withObject "TxBuildSuccess" $ \o -> do
+        expectOnlyKeys "TxBuildSuccess" ["tx-cbor", "report"] o
+        TxBuildSuccess
+            <$> o .: "tx-cbor"
+            <*> o .: "report"
+
+instance ToJSON TxCborHex where
+    toJSON = toJSON . unTxCborHex
+
+instance FromJSON TxCborHex where
+    parseJSON = withText "TxCborHex" $ \text ->
+        either (fail . T.unpack) pure (mkTxCborHex text)
+
+instance ToJSON BuildFailure where
+    toJSON failure =
+        object
+            [ "code" .= bfCode failure
+            , "message" .= bfMessage failure
+            ]
+
+instance FromJSON BuildFailure where
+    parseJSON = withObject "BuildFailure" $ \o -> do
+        expectOnlyKeys "BuildFailure" ["code", "message"] o
+        BuildFailure
+            <$> o .: "code"
+            <*> o .: "message"
+
 instance ToJSON TransactionReport where
     toJSON report =
         object
             [ "schema" .= trSchema report
-            , "action" .= trAction report
             , "network" .= trNetwork report
             , "identity" .= trIdentity report
             , "walletAccounting" .= trWalletAccounting report
@@ -209,6 +327,34 @@ instance ToJSON TransactionReport where
             , "referenceInputs" .= trReferenceInputs report
             , "metadata" .= trMetadata report
             ]
+
+instance FromJSON TransactionReport where
+    parseJSON = withObject "TransactionReport" $ \o -> do
+        expectOnlyKeys
+            "TransactionReport"
+            [ "schema"
+            , "network"
+            , "identity"
+            , "walletAccounting"
+            , "treasuryAccounting"
+            , "outputs"
+            , "signers"
+            , "validation"
+            , "referenceInputs"
+            , "metadata"
+            ]
+            o
+        TransactionReport
+            <$> o .: "schema"
+            <*> o .: "network"
+            <*> o .: "identity"
+            <*> o .: "walletAccounting"
+            <*> o .: "treasuryAccounting"
+            <*> o .: "outputs"
+            <*> o .: "signers"
+            <*> o .: "validation"
+            <*> o .: "referenceInputs"
+            <*> o .: "metadata"
 
 instance ToJSON TransactionIdentity where
     toJSON identity =
@@ -221,6 +367,15 @@ instance ToJSON TransactionIdentity where
             , "validityInterval" .= tiValidityInterval identity
             ]
 
+instance FromJSON TransactionIdentity where
+    parseJSON = withObject "TransactionIdentity" $ \o ->
+        TransactionIdentity
+            <$> o .: "txId"
+            <*> o .: "bodySizeBytes"
+            <*> o .: "feeLovelace"
+            <*> o .: "totalCollateralLovelace"
+            <*> o .: "validityInterval"
+
 instance ToJSON WalletAccounting where
     toJSON accounting =
         object
@@ -231,6 +386,16 @@ instance ToJSON WalletAccounting where
             , "feeLovelace" .= waFeeLovelace accounting
             , "netSpendLovelace" .= waNetSpendLovelace accounting
             ]
+
+instance FromJSON WalletAccounting where
+    parseJSON = withObject "WalletAccounting" $ \o ->
+        WalletAccounting
+            <$> o .: "inputs"
+            <*> o .: "collateralInput"
+            <*> o .: "changeOutput"
+            <*> o .: "collateralReturn"
+            <*> o .: "feeLovelace"
+            <*> o .: "netSpendLovelace"
 
 instance ToJSON TreasuryAccounting where
     toJSON accounting =
@@ -244,6 +409,16 @@ instance ToJSON TreasuryAccounting where
             , "netDebit" .= taNetDebit accounting
             ]
 
+instance FromJSON TreasuryAccounting where
+    parseJSON = withObject "TreasuryAccounting" $ \o ->
+        TreasuryAccounting
+            <$> o .: "inputs"
+            <*> o .: "inputTotal"
+            <*> o .: "sundaeOrderTotal"
+            <*> o .: "perChunkOverheadLovelace"
+            <*> o .: "treasuryLeftover"
+            <*> o .: "netDebit"
+
 instance ToJSON ProducedOutput where
     toJSON output =
         object
@@ -254,6 +429,15 @@ instance ToJSON ProducedOutput where
             , "datum" .= poDatum output
             ]
 
+instance FromJSON ProducedOutput where
+    parseJSON = withObject "ProducedOutput" $ \o ->
+        ProducedOutput
+            <$> o .: "index"
+            <*> o .: "role"
+            <*> o .: "address"
+            <*> o .: "value"
+            <*> o .: "datum"
+
 instance ToJSON SignerRequirement where
     toJSON signer =
         object
@@ -262,9 +446,24 @@ instance ToJSON SignerRequirement where
             , "scope" .= srScope signer
             ]
 
+instance FromJSON SignerRequirement where
+    parseJSON = withObject "SignerRequirement" $ \o ->
+        SignerRequirement
+            <$> o .: "keyHash"
+            <*> o .: "source"
+            <*> o .: "scope"
+
 instance ToJSON SignerSource where
     toJSON =
         toJSON . signerSourceText
+
+instance FromJSON SignerSource where
+    parseJSON = withText "SignerSource" $ \case
+        "selectedScopeOwner" -> pure SourceSelectedScopeOwner
+        "extraSigner" -> pure SourceExtraSigner
+        "intentRequiredSigner" -> pure SourceIntentRequiredSigner
+        "txBodyRequiredSigner" -> pure SourceTxBodyRequiredSigner
+        other -> fail ("unknown signer source: " <> T.unpack other)
 
 instance ToJSON ValidationFacts where
     toJSON facts =
@@ -280,12 +479,31 @@ instance ToJSON ValidationFacts where
             , "validityInterval" .= vfValidityInterval facts
             ]
 
+instance FromJSON ValidationFacts where
+    parseJSON = withObject "ValidationFacts" $ \o ->
+        ValidationFacts
+            <$> o .: "intentNetwork"
+            <*> o .: "socketNetworkMagic"
+            <*> o .: "networkMatches"
+            <*> o .: "feeLovelace"
+            <*> o .: "bodySizeBytes"
+            <*> o .: "redeemerCount"
+            <*> o .: "redeemerFailures"
+            <*> o .: "validationStatus"
+            <*> o .: "validityInterval"
+
 instance ToJSON ValidityInterval where
     toJSON interval =
         object
             [ "invalidBefore" .= viInvalidBefore interval
             , "invalidHereafter" .= viInvalidHereafter interval
             ]
+
+instance FromJSON ValidityInterval where
+    parseJSON = withObject "ValidityInterval" $ \o ->
+        ValidityInterval
+            <$> o .: "invalidBefore"
+            <*> o .: "invalidHereafter"
 
 instance ToJSON MetadataSummary where
     toJSON metadata =
@@ -294,15 +512,47 @@ instance ToJSON MetadataSummary where
             , "cip1694LabelPresent" .= msCip1694LabelPresent metadata
             ]
 
+instance FromJSON MetadataSummary where
+    parseJSON = withObject "MetadataSummary" $ \o ->
+        MetadataSummary
+            <$> o .: "auxiliaryDataHash"
+            <*> o .: "cip1694LabelPresent"
+
+encodeBuildOutput :: TxBuildOutput -> ByteString
+encodeBuildOutput = encodePretty' reportJsonConfig
+
 encodeReport :: TransactionReport -> ByteString
 encodeReport = encodePretty' reportJsonConfig
+
+mkTxCborHex :: Text -> Either Text TxCborHex
+mkTxCborHex text
+    | T.null text = Left "tx-cbor must be non-empty"
+    | odd (T.length text) = Left "tx-cbor must have an even length"
+    | T.any (not . isLowerHexChar) text =
+        Left "tx-cbor must be lowercase hexadecimal"
+    | otherwise = Right (TxCborHex text)
+
+txCborHexFromBytes :: ByteString -> TxCborHex
+txCborHexFromBytes =
+    TxCborHex . Text.decodeUtf8 . B16.encode . BSL.toStrict
+
+isLowerHexChar :: Char -> Bool
+isLowerHexChar c =
+    isDigit c || ('a' <= c && c <= 'f')
+
+expectOnlyKeys :: String -> [String] -> Object -> Parser ()
+expectOnlyKeys label fields o =
+    unless
+        (all (`KM.member` o) keys && KM.size o == length keys)
+        (fail (label <> " has missing or unexpected fields"))
+  where
+    keys = Key.fromString <$> fields
 
 buildTransactionReport
     :: ReportContext -> TreasuryBuildResult -> TransactionReport
 buildTransactionReport context result =
     TransactionReport
         { trSchema = 1
-        , trAction = rcAction context
         , trNetwork = rcNetwork context
         , trIdentity =
             TransactionIdentity
@@ -566,7 +816,6 @@ sampleSwapReport :: TransactionReport
 sampleSwapReport =
     TransactionReport
         { trSchema = 1
-        , trAction = "swap"
         , trNetwork = "mainnet"
         , trIdentity =
             TransactionIdentity

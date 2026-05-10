@@ -135,8 +135,11 @@ The action and the network are read from the intent's top-level
 
 Generate `swap.report.json` with the same `tx-build` command that
 writes `swap.cbor.hex`, then inspect the report before signing. The
-report is mechanically generated from the successful build result and
-uses the public schema in `docs/assets/tx-report-schema.json`.
+JSON is a build-output envelope using the public schema in
+`docs/assets/tx-report-schema.json`: top-level `intent` plus
+top-level `result`. For successful builds, `result.tx-cbor` contains
+the unsigned transaction bytes and `result.report` contains the
+mechanical report facts below.
 
 Swap report review checklist:
 
@@ -153,26 +156,27 @@ Swap report review checklist:
   network match, fee, body size, redeemer count, redeemer failures,
   validation status, and validity interval.
 
-The frozen swap fixture report at
-`test/fixtures/swap/report.golden.json` currently records these facts:
+The frozen swap fixture envelope at
+`test/fixtures/swap/report.golden.json` currently records these nested
+`result.report` facts:
 
 | Report field | Fixture value |
 |---|---:|
-| `walletAccounting.inputs[0].value.lovelace` | 50,007,239,276 |
-| `walletAccounting.changeOutput.value.lovelace` | 50,006,199,573 |
-| `walletAccounting.collateralReturn.value.lovelace` | 50,005,679,721 |
-| `walletAccounting.feeLovelace` | 1,039,703 |
-| `walletAccounting.netSpendLovelace` | 1,039,703 |
-| `treasuryAccounting.inputTotal.lovelace` | 1,450,000,000,000 |
-| `treasuryAccounting.sundaeOrderTotal.lovelace` | 408,271,505,306 |
-| `treasuryAccounting.perChunkOverheadLovelace` | 3,280,000 |
-| `treasuryAccounting.treasuryLeftover.lovelace` | 1,041,728,494,694 |
-| `treasuryAccounting.netDebit.lovelace` | 408,271,505,306 |
-| `validation.feeLovelace` | 1,039,703 |
-| `validation.bodySizeBytes` | 14,954 |
-| `validation.socketNetworkMagic` | 764,824,073 |
-| `validation.redeemerCount` | 2 |
-| `validation.redeemerFailures` | 0 |
+| `result.report.walletAccounting.inputs[0].value.lovelace` | 50,007,239,276 |
+| `result.report.walletAccounting.changeOutput.value.lovelace` | 50,006,199,573 |
+| `result.report.walletAccounting.collateralReturn.value.lovelace` | 50,005,679,721 |
+| `result.report.walletAccounting.feeLovelace` | 1,039,703 |
+| `result.report.walletAccounting.netSpendLovelace` | 1,039,703 |
+| `result.report.treasuryAccounting.inputTotal.lovelace` | 1,450,000,000,000 |
+| `result.report.treasuryAccounting.sundaeOrderTotal.lovelace` | 408,271,505,306 |
+| `result.report.treasuryAccounting.perChunkOverheadLovelace` | 3,280,000 |
+| `result.report.treasuryAccounting.treasuryLeftover.lovelace` | 1,041,728,494,694 |
+| `result.report.treasuryAccounting.netDebit.lovelace` | 408,271,505,306 |
+| `result.report.validation.feeLovelace` | 1,039,703 |
+| `result.report.validation.bodySizeBytes` | 14,954 |
+| `result.report.validation.socketNetworkMagic` | 764,824,073 |
+| `result.report.validation.redeemerCount` | 2 |
+| `result.report.validation.redeemerFailures` | 0 |
 
 The same fixture has 35 produced outputs: 33 `swapOrder` outputs, one
 `treasuryLeftover` output, and one `walletChange` output. The first 32
@@ -187,11 +191,13 @@ Signer review for the fixture requires two witnesses:
 | `selectedScopeOwner` | `network_compliance` | `8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1` |
 | `extraSigner` | | `f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e` |
 
-Validation review should confirm `validation.validationStatus` is
-`ok`, `validation.networkMatches` is `true`, and
-`validation.validityInterval.invalidHereafter` is `186796799`. The
-metadata summary records CIP-1694 label presence and auxiliary data
-hash `1163dfe0f06e30a30353b706b988721fb0a6f5168db22402ef6a76b8e677868d`.
+Validation review should confirm
+`result.report.validation.validationStatus` is `ok`,
+`result.report.validation.networkMatches` is `true`, and
+`result.report.validation.validityInterval.invalidHereafter` is
+`186796799`. The metadata summary records CIP-1694 label presence and
+auxiliary data hash
+`1163dfe0f06e30a30353b706b988721fb0a6f5168db22402ef6a76b8e677868d`.
 
 ## intent.json schema
 

@@ -18,7 +18,14 @@ import Cardano.Ledger.Mary.Value
     , MultiAsset (..)
     , PolicyID (..)
     )
-import Data.Aeson (ToJSON (..), object, (.=))
+import Data.Aeson
+    ( FromJSON (..)
+    , ToJSON (..)
+    , object
+    , withObject
+    , (.:)
+    , (.=)
+    )
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Short qualified as SBS
 import Data.Map.Strict (Map)
@@ -47,12 +54,24 @@ instance ToJSON ValueSummary where
             , "assets" .= vsAssets value
             ]
 
+instance FromJSON ValueSummary where
+    parseJSON = withObject "ValueSummary" $ \o ->
+        ValueSummary
+            <$> o .: "lovelace"
+            <*> o .: "assets"
+
 instance ToJSON UtxoSummary where
     toJSON utxo =
         object
             [ "txIn" .= usTxIn utxo
             , "value" .= usValue utxo
             ]
+
+instance FromJSON UtxoSummary where
+    parseJSON = withObject "UtxoSummary" $ \o ->
+        UtxoSummary
+            <$> o .: "txIn"
+            <*> o .: "value"
 
 emptyValue :: ValueSummary
 emptyValue =

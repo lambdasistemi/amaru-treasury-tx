@@ -51,7 +51,10 @@ import Amaru.Treasury.ChainContext.Fixture
     ( readSwapFixture
     , toFrozenContext
     )
-import Amaru.Treasury.IntentJSON (decodeTreasuryIntentFile)
+import Amaru.Treasury.IntentJSON
+    ( SomeTreasuryIntent
+    , decodeTreasuryIntentFile
+    )
 import Amaru.Treasury.Report
     ( MetadataSummary (..)
     , ProducedOutput (..)
@@ -60,11 +63,16 @@ import Amaru.Treasury.Report
     , SignerRequirement (..)
     , SignerSource (..)
     , TransactionReport (..)
+    , TxBuildOutput (..)
+    , TxBuildOutputResult (..)
+    , TxBuildSuccess (..)
+    , TxCborHex
     , ValidationFacts (..)
     , ValidityInterval (..)
     , WalletAccounting (..)
     , buildTransactionReport
-    , encodeReport
+    , encodeBuildOutput
+    , txCborHexFromBytes
     )
 import Amaru.Treasury.TreasuryBuild
     ( TreasuryBuildResult (..)
@@ -139,9 +147,10 @@ spec =
             first <- runFromIntent ctx some
             second <- runFromIntent ctx some
             let firstReport = swapReport first
-                secondReport = swapReport second
-                firstReportBytes = encodeReport firstReport
-                secondReportBytes = encodeReport secondReport
+                firstReportBytes =
+                    encodeBuildOutput (swapBuildOutput some first)
+                secondReportBytes =
+                    encodeBuildOutput (swapBuildOutput some second)
             waNetSpendLovelace (trWalletAccounting firstReport)
                 `shouldBe` vfFeeLovelace (trValidation firstReport)
             trValidation firstReport
@@ -205,8 +214,7 @@ swapReport :: TreasuryBuildResult -> TransactionReport
 swapReport =
     buildTransactionReport
         ReportContext
-            { rcAction = "swap"
-            , rcNetwork = "mainnet"
+            { rcNetwork = "mainnet"
             , rcSocketNetworkMagic = 764_824_073
             , rcSelectedScopeOwner =
                 Just
@@ -218,6 +226,23 @@ swapReport =
                 ]
             , rcIntentRequiredSigners = []
             }
+
+swapBuildOutput
+    :: SomeTreasuryIntent -> TreasuryBuildResult -> TxBuildOutput
+swapBuildOutput some result =
+    TxBuildOutput
+        { txoIntent = some
+        , txoResult =
+            TxBuildOutputSuccess
+                TxBuildSuccess
+                    { tbsTxCbor = txCborHex result
+                    , tbsReport = swapReport result
+                    }
+        }
+
+txCborHex :: TreasuryBuildResult -> TxCborHex
+txCborHex =
+    txCborHexFromBytes . tbrCborBytes
 
 assertSwapOutputCoverage :: TransactionReport -> IO ()
 assertSwapOutputCoverage report = do

@@ -133,8 +133,12 @@ import Amaru.Treasury.IntentJSON.Common
 import Amaru.Treasury.Registry.Verify (verifyRegistry)
 import Amaru.Treasury.Report
     ( ReportContext (..)
+    , TxBuildOutput (..)
+    , TxBuildOutputResult (..)
+    , TxBuildSuccess (..)
     , buildTransactionReport
-    , encodeReport
+    , encodeBuildOutput
+    , txCborHexFromBytes
     )
 import Amaru.Treasury.Scope
     ( ScopeId
@@ -1581,11 +1585,23 @@ runTxBuild socket TxBuildOpts{..} = do
                                     buildTransactionReport
                                         (txBuildReportContext some magic)
                                         tbr
+                                output =
+                                    TxBuildOutput
+                                        { txoIntent = some
+                                        , txoResult =
+                                            TxBuildOutputSuccess
+                                                TxBuildSuccess
+                                                    { tbsTxCbor =
+                                                        txCborHexFromBytes
+                                                            (tbrCborBytes tbr)
+                                                    , tbsReport = report
+                                                    }
+                                        }
                             result <-
                                 writeReportArtifact
                                     tr
                                     reportPath
-                                    (encodeReport report)
+                                    (encodeBuildOutput output)
                             case result of
                                 Right () -> pure ()
                                 Left{} -> exitWith (ExitFailure 4)
@@ -1595,15 +1611,9 @@ runTxBuild socket TxBuildOpts{..} = do
 
 txBuildReportContext
     :: SomeTreasuryIntent -> NetworkMagic -> ReportContext
-txBuildReportContext (SomeTreasuryIntent sa intent) magic =
+txBuildReportContext (SomeTreasuryIntent _ intent) magic =
     ReportContext
-        { rcAction =
-            T.toLower
-                . T.pack
-                . drop 1
-                . show
-                $ sa
-        , rcNetwork = tiNetwork intent
+        { rcNetwork = tiNetwork intent
         , rcSocketNetworkMagic =
             fromIntegral (unNetworkMagic magic)
         , rcSelectedScopeOwner =

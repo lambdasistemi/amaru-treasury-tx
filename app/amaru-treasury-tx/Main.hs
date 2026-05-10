@@ -23,6 +23,9 @@ Subcommands:
   builder.
 * @swap-wizard --network <preprod|mainnet> --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --usdm N.NN --split N --min-rate N.NN --validity-hours N --description ... --justification ... --destination-label ... [--extra-signer SCOPE|HEX]... [--out path\/intent.json] [--log path\/wizard.log]@
   produces a swap @intent.json@ from a typed questionnaire.
+  The rate can also be derived from @--ada-usd@, @--ada-usdm@, or
+  @--price-source@ plus @--slippage-bps@ while keeping the same stdout
+  intent contract.
   See [@specs\/002-swap-wizard\/quickstart.md@](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/specs/002-swap-wizard/quickstart.md).
 * @swap-quote --wallet-addr ... --metadata path\/to\/metadata.json --scope ... --usdm N.NN --split N (--ada-usd N.NN | --ada-usdm N.NN | --price-source SOURCE) --slippage-bps N --validity-hours N --description ... --justification ... --destination-label ... --out-dir path\/run-dir@
   derives swap parameters from a quote, writes @intent.json@ and @params.json@,
@@ -116,6 +119,8 @@ import Amaru.Treasury.Cli.SwapQuote
     , SwapQuoteRunDecision (..)
     , decideSwapQuoteRun
     , deriveSwapQuotePlan
+    , quoteP
+    , slippageReader
     , swapQuoteOptsP
     , swapQuotePaths
     )
@@ -180,10 +185,12 @@ import Amaru.Treasury.Tx.SwapQuote
     ( AffordabilityFailure (..)
     , DerivedSwapParameters (..)
     , QuoteObservation
+    , SlippageBps
     , SwapQuoteAudit (..)
     , renderAffordabilityFailure
     , writeSwapQuoteAudit
     )
+import Amaru.Treasury.Tx.SwapQuote qualified as SQ
 import Amaru.Treasury.Tx.SwapQuote.Source
     ( coingeckoAdaUsdProvider
     , fetchQuoteSource
@@ -246,6 +253,17 @@ data ChunkSpec
     = SplitCount !Int
     | ChunkUsdm !Double
 
+data WizardRate
+    = WizardMinRate !Double
+    | WizardQuoteRate !SwapQuoteQuoteArg !SlippageBps
+
+data WizardSwapParameters = WizardSwapParameters
+    { wspAmountLovelace :: !Integer
+    , wspChunkSizeLovelace :: !Integer
+    , wspRateNumerator :: !Integer
+    , wspRateDenominator :: !Integer
+    }
+
 {- | Flags for the @swap-wizard@ subcommand.
 Mirrors @specs/002-swap-wizard/contracts/swap-wizard-cli.md §1@.
 -}
@@ -263,8 +281,8 @@ data WizardOpts = WizardOpts
     --   @usdm \/ min-rate@.
     , wOptsChunkSpec :: !ChunkSpec
     -- ^ how to split the amount into chunks
-    , wOptsMinRate :: !Double
-    -- ^ minimum acceptable USDM per ADA, decimal
+    , wOptsRate :: !WizardRate
+    -- ^ minimum acceptable USDM per ADA, either explicit or quote-derived
     , wOptsValidityHours :: !Word8
     , wOptsDescription :: !Text
     , wOptsJustification :: !Text
@@ -484,12 +502,7 @@ wizardOptsP =
                                 "Per-chunk USDM size (alternative to --split; decimals OK)"
                         )
             )
-        <*> option
-            auto
-            ( long "min-rate"
-                <> metavar "USDM_PER_ADA"
-                <> help "Min acceptable rate, e.g. 0.245"
-            )
+        <*> wizardRateP
         <*> option
             auto
             ( long "validity-hours"
@@ -534,6 +547,29 @@ wizardOptsP =
                         "Repeat for each extra signer (scope name/alias or 28-byte hex)"
                 )
             )
+
+wizardRateP :: Parser WizardRate
+wizardRateP =
+    explicitMinRateP <|> quoteDerivedRateP
+  where
+    explicitMinRateP =
+        WizardMinRate
+            <$> option
+                auto
+                ( long "min-rate"
+                    <> metavar "USDM_PER_ADA"
+                    <> help "Min acceptable rate, e.g. 0.245"
+                )
+    quoteDerivedRateP =
+        WizardQuoteRate
+            <$> quoteP
+            <*> option
+                slippageReader
+                ( long "slippage-bps"
+                    <> metavar "INT"
+                    <> help
+                        "Derive min-rate from quote after explicit slippage policy in basis points; 0 <= INT < 10000"
+                )
 
 withdrawOptsP :: Parser WithdrawOpts
 withdrawOptsP =
@@ -640,6 +676,57 @@ the @r * 1_000_000@ scaling.
 rateToFraction :: Double -> (Integer, Integer)
 rateToFraction r =
     (round (toRational r * 1_000_000), 1_000_000)
+
+resolveWizardSwapParameters
+    :: Tracer IO WizardEvent
+    -> Text
+    -> Double
+    -> ChunkSpec
+    -> WizardRate
+    -> IO WizardSwapParameters
+resolveWizardSwapParameters tr observedAt usdm chunkSpec = \case
+    WizardMinRate minRate ->
+        let amountLov = usdmToLovelace usdm minRate
+            chunkSize = case chunkSpec of
+                -- 'positiveSplit' rejects N < 1 at parse time.
+                SplitCount n -> amountLov `div` toInteger n
+                ChunkUsdm x -> usdmToLovelace x minRate
+            (rateNum, rateDen) = rateToFraction minRate
+        in  pure
+                WizardSwapParameters
+                    { wspAmountLovelace = amountLov
+                    , wspChunkSizeLovelace = chunkSize
+                    , wspRateNumerator = rateNum
+                    , wspRateDenominator = rateDen
+                    }
+    WizardQuoteRate quoteArg slippage -> do
+        observation <- resolveSwapQuoteObservation tr observedAt quoteArg
+        derived <-
+            case SQ.deriveSwapParameters
+                observation
+                slippage
+                SQ.SwapQuoteRequest
+                    { SQ.sqrRequestedUsdm = toRational usdm
+                    , SQ.sqrChunk = swapQuoteRequestChunk chunkSpec
+                    } of
+                Right value ->
+                    pure value
+                Left err ->
+                    abortTr tr ("derive swap parameters: " <> T.pack (show err))
+        pure
+            WizardSwapParameters
+                { wspAmountLovelace = SQ.dspAmountLovelace derived
+                , wspChunkSizeLovelace = SQ.dspChunkSizeLovelace derived
+                , wspRateNumerator = SQ.dspRateNumerator derived
+                , wspRateDenominator = SQ.dspRateDenominator derived
+                }
+
+swapQuoteRequestChunk :: ChunkSpec -> SQ.SwapQuoteRequestChunk
+swapQuoteRequestChunk = \case
+    SplitCount n ->
+        SQ.SplitInto n
+    ChunkUsdm x ->
+        SQ.ChunkUsdm (toRational x)
 
 {- | Resolve the canonical network name from
 'GlobalOpts'. Returns 'Left' if the user passed a custom
@@ -796,19 +883,23 @@ runWizard g WizardOpts{..} = do
         traceWith tr (WeMetadata wOptsMetadataPath)
 
         -- Convert human-friendly answers to wire types.
-        let amountLov = usdmToLovelace wOptsUsdm wOptsMinRate
-            chunkSize = case wOptsChunkSpec of
-                -- 'positiveSplit' rejects N < 1 at parse time.
-                SplitCount n -> amountLov `div` toInteger n
-                ChunkUsdm x -> usdmToLovelace x wOptsMinRate
-            (rateNum, rateDen) = rateToFraction wOptsMinRate
+        observedAt <- currentIso8601
+        params <-
+            resolveWizardSwapParameters
+                tr
+                observedAt
+                wOptsUsdm
+                wOptsChunkSpec
+                wOptsRate
+        let amountLov = wspAmountLovelace params
+            chunkSize = wspChunkSizeLovelace params
             answers =
                 SwapWizardQ
                     { wqScope = wOptsScope
                     , wqAmountLovelace = amountLov
                     , wqChunkSizeLovelace = chunkSize
-                    , wqRateNumerator = rateNum
-                    , wqRateDenominator = rateDen
+                    , wqRateNumerator = wspRateNumerator params
+                    , wqRateDenominator = wspRateDenominator params
                     , wqValidityHours = wOptsValidityHours
                     , wqRationale =
                         RationaleAnswers

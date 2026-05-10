@@ -10,6 +10,7 @@ module Amaru.Treasury.Tx.SwapQuoteSpec (spec) where
 import Data.Either (isLeft, isRight)
 import Data.Ratio ((%))
 import Data.Text qualified as T
+import Network.HTTP.Client (requestHeaders)
 import Options.Applicative
     ( ParserResult (..)
     , defaultPrefs
@@ -63,6 +64,7 @@ import Amaru.Treasury.Tx.SwapQuote
 import Amaru.Treasury.Tx.SwapQuote.Source
     ( QuoteSource (..)
     , QuoteSourceError (..)
+    , coinGeckoRequest
     , parseCoinGeckoAdaUsdResponse
     , parseQuoteSourceName
     , quoteSourceName
@@ -260,6 +262,12 @@ spec = describe "SwapQuote" $ do
 
         it "recognises coingecko-ada-usd as the named ADA/USD source" $
             quoteSourceName CoinGeckoAdaUsd `shouldBe` "coingecko-ada-usd"
+
+        it "sends CoinGecko a descriptive User-Agent" $ do
+            request <- coinGeckoRequest
+            lookup "User-Agent" (requestHeaders request)
+                `shouldBe` Just
+                    "amaru-treasury-tx/0.2.1.1 (https://github.com/lambdasistemi/amaru-treasury-tx)"
 
     describe "swap-quote CLI parser" $ do
         it "accepts an explicit ADA/USD override quote input" $

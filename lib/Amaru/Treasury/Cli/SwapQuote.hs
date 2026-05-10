@@ -12,6 +12,8 @@ module Amaru.Treasury.Cli.SwapQuote
     , SwapQuotePlan (..)
     , SwapQuoteRunDecision (..)
     , swapQuoteOptsP
+    , quoteP
+    , slippageReader
     , swapQuotePaths
     , deriveSwapQuotePlan
     , decideSwapQuoteRun

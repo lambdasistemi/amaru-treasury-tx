@@ -116,13 +116,13 @@ verify default JSON plus Markdown output, then verify `--no-markdown`
 keeps JSON and suppresses Markdown. Fold T046-T052 into one vertical
 docs/helper commit.
 
-- [ ] T046 [P] [US4] Add RED smoke assertions for helper default-on Markdown behavior in `nix/checks.nix`
-- [ ] T047 [P] [US4] Add RED smoke assertions for helper `--no-markdown` behavior in `nix/checks.nix`
-- [ ] T048 [US4] Implement POSIX-shell helper in `scripts/ops/build-swop`
-- [ ] T049 [US4] Document renderer contract, envelope shape, identity sources, determinism, failure handling, and helper opt-out in `docs/report-render.md`
-- [ ] T050 [US4] Update the pre-signing review flow in `docs/quickstart.md`
-- [ ] T051 [US4] Update the swap operator flow in `docs/swap.md`
-- [ ] T052 [US4] Run the US4 gate with `nix build --quiet --no-link ".#checks.${SYS}.smoke" ".#checks.${SYS}.lint"`
+- [x] T046 [P] [US4] Add RED smoke assertions for helper default-on Markdown behavior in `nix/checks.nix`
+- [x] T047 [P] [US4] Add RED smoke assertions for helper `--no-markdown` behavior in `nix/checks.nix`
+- [x] T048 [US4] Implement POSIX-shell helper in `scripts/ops/build-swop`
+- [x] T049 [US4] Document renderer contract, envelope shape, identity sources, determinism, failure handling, and helper opt-out in `docs/report-render.md`
+- [x] T050 [US4] Update the pre-signing review flow in `docs/quickstart.md`
+- [x] T051 [US4] Update the swap operator flow in `docs/swap.md`
+- [x] T052 [US4] Run the US4 gate with `nix build --quiet --no-link ".#checks.${SYS}.smoke" ".#checks.${SYS}.lint"`
 
 ## Phase 7: Polish and Cross-Cutting Gates
 

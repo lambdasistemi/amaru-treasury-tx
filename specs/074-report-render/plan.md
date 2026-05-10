@@ -23,14 +23,17 @@ script hashes already in the report, and the inline intent — and
 labels every printed address, signer key hash, and reference input
 with a semantic role tag, with an explicit `unresolved` fallback so
 no bare bech32 / bare 28-byte hex ever leaves the renderer untagged.
-The leading section names the action kind and touched scope so a
-multisig reviewer cannot mistake a swap for a disburse.
+The leading section names the transaction type from the inline intent
+and the touched scope so a multisig reviewer cannot mistake a swap
+for a disburse. The report does not duplicate transaction type in a
+separate top-level `action` field.
 
 To make the pipeline end-to-end stream-capable, `tx-build` accepts
-`--report -` as a sibling change, and the JSON report additively
-carries the originating intent under one new optional top-level
-field. Older reports without that field still render, with the
-swap-deal section omitted and a clear note explaining why.
+`--report -` as a sibling change and writes a build-output envelope:
+top-level `intent` plus top-level `result`. The result is either a
+structured failure or a success object carrying `tx-cbor` and nested
+mechanical `report`. The renderer has no separate intent-file
+argument and no degraded rendering mode for missing intent.
 
 The repository's operator-facing helper `scripts/ops/build-swop`
 (created by this feature) wraps the build flow and produces the
@@ -58,31 +61,35 @@ pre-signing review artefact.
 - No new third-party dependency. Markdown rendering is plain `Text`
   builder; explorer URLs are pure functions of `network` + `txId`.
 
-**Storage**: filesystem only — `report.json` (input), `report.md`
+**Storage**: filesystem only — `report.json` build-output envelope
+(input), `report.md`
 (default sibling output via the helper), optional `metadata.json`
-(default `journal/2026/metadata.json`), optional explicit
-`intent.json` (override). No DB or persistent state.
+(default `journal/2026/metadata.json`). No DB or persistent state.
+The envelope's top-level `intent` is the only intent source used by
+the renderer; success `result.tx-cbor` is the transaction-byte source
+used for CBOR fingerprint/hash display.
 
 **Testing**:
 
 - Unit tests (Hspec) for: address-book / identity-map construction,
   resolution priority order, unresolved fallback, swap-output
   collapsing, ADA/lovelace pairing, slot→UTC derivation,
-  conservation-line arithmetic, leading-section action-kind
-  classification, CLI option parsing, and `--no-intent` /
-  `--intent <path>` precedence.
+  conservation-line arithmetic, leading-section transaction-type
+  classification from inline intent, CLI option parsing, and
+  rejection of envelopes whose `intent`, `result`, success
+  `tx-cbor`, or success nested `report` is missing or malformed.
 - Golden tests (byte-identical Markdown) for the regression set
-  named in FR-025 / SC-001..SC-008. Goldens live under
-  `test/fixtures/swap/` (extending the existing fixture) and a new
-  `test/fixtures/swap-legacy/` (older report without inline
-  intent), `test/fixtures/disburse/`, `test/fixtures/withdraw/`.
+  named in FR-027 / SC-001..SC-008. Goldens live under
+  `test/fixtures/swap/` (extending the existing fixture),
+  `test/fixtures/disburse/`, and `test/fixtures/withdraw/`.
 - Smoke test (flake `smoke` stage) for: `report-render --help`
   surface, end-to-end `tx-build --report - | report-render`
   pipeline against the swap fixture, helper-script default-on
   behaviour, helper-script opt-out behaviour.
-- Schema test (existing `schema` stage) extended only to assert the
-  inline-intent field is optional and additive (no breaking change
-  to the existing checked-in schema asset).
+- Schema test (existing `schema` stage) extended to assert the
+  build-output envelope shape: top-level `intent`, top-level
+  `result`, success `tx-cbor`, and success nested `report`.
+  Unit/smoke coverage asserts that malformed envelopes are rejected.
 - Documentation render check via the existing `lint`/format gate.
 
 **Target Platform**: existing CLI platforms — Linux CI, macOS dev.
@@ -100,23 +107,27 @@ Negligible relative to a real `tx-build` run.
   reads/writes streams.
 - Build-only boundary (constitution IV): no signing, submission, or
   key material.
-- Determinism (FR-007): no wall-clock, no random, no environment
+- Determinism (FR-009): no wall-clock, no random, no environment
   reads beyond declared inputs, byte-identical output for identical
   inputs.
-- Additive JSON change only (FR-005, SC-005): existing report fields
-  unchanged; new field is optional; older reports must render.
-- No personal-name signer labels (FR-016): role labels only.
+- JSON contract change is constrained (FR-005..FR-008, SC-005):
+  existing mechanical report fields move under `result.report`,
+  success `tx-cbor` sits beside it, top-level `intent` is required,
+  and no separate transaction-type/action field is present.
+- No personal-name signer labels (FR-018): role labels only.
 - No bare bech32 / bare 28-byte hex anywhere in rendered output
-  (FR-015, FR-016, SC-003).
+  (FR-017, FR-018, SC-003).
 
 **Scale/Scope**:
 
 - One new module family under `lib/Amaru/Treasury/Report/` plus a
   small `Cli` parser module.
-- One additive field on the `report.json` contract.
+- One build-output envelope shape for `report.json`: `intent` plus
+  `result` (`failure` or `{ tx-cbor, report }`), with duplicate
+  action/type removed.
 - One new helper script `scripts/ops/build-swop`.
-- Three new fixture trees (swap-legacy, disburse, withdraw) plus
-  golden Markdown for the existing swap fixture.
+- Two new fixture trees (disburse, withdraw) plus golden Markdown and
+  invalid-report fixtures for the existing swap fixture.
 - One subcommand wired through `app/amaru-treasury-tx/Main.hs`.
 - Focused docs updates in `docs/swap.md`, `docs/quickstart.md`, and
   a new `docs/report-render.md`.
@@ -168,8 +179,11 @@ lib/Amaru/Treasury/Report/
 │   └── Constants.hs                 # Built-in constants (USDM, Sundae, etc.)
 └── Cli.hs                           # `report-render` subcommand options + parser
 
-lib/Amaru/Treasury/Report.hs         # Adds `trInlineIntent :: Maybe SomeTreasuryIntent`
-                                     # (additive optional field) and re-exports.
+lib/Amaru/Treasury/Report.hs         # Adds `TxBuildOutput`,
+                                     # `TxBuildOutputResult`,
+                                     # `TxBuildSuccess`, `TxCborHex`;
+                                     # nested report removes duplicate
+                                     # top-level action/type.
 
 app/amaru-treasury-tx/
 └── Main.hs                          # Dispatch `report-render`; extend tx-build
@@ -186,16 +200,15 @@ docs/
 └── swap.md                          # Updated: end-to-end pipeline example.
 
 test/fixtures/swap/
-├── report.golden.json               # Existing — extended additively to
-                                     # carry `intent` inline (regenerated).
+├── report.golden.json               # Existing — regenerated as build-output
+                                     # envelope with success result.
 ├── intent.json                      # Existing.
 ├── report.golden.md                 # New: full-resolution Markdown golden.
 ├── report.no-metadata.golden.md     # New: no metadata source supplied.
-└── report.no-intent.golden.md       # New: `--no-intent` opt-out applied.
-
-test/fixtures/swap-legacy/
-└── report.legacy.json               # New: pre-inline-intent shape.
-└── report.legacy.golden.md          # New: renders with section-omitted note.
+├── report.missing-required-fields.json
+│                                    # New: invalid report fixture.
+└── report.malformed-required-fields.json
+                                     # New: invalid report fixture.
 
 test/fixtures/disburse/
 ├── report.golden.json               # New
@@ -208,13 +221,13 @@ test/fixtures/withdraw/
 test/unit/Amaru/Treasury/Report/
 ├── IdentitySpec.hs                  # Resolution priority, fallback, label uniqueness.
 ├── RenderSpec.hs                    # Collapsing, ADA pairing, conservation,
-                                     # slot→UTC, action-kind classification.
-└── CliSpec.hs                       # Parser, `--in`, `--out`, `--intent`,
-                                     # `--no-intent`, `--metadata`, stdio aliases.
+                                     # slot→UTC, intent transaction-type classification.
+└── CliSpec.hs                       # Parser, `--in`, `--out`,
+                                     # `--metadata`, stdio aliases,
+                                     # invalid required-field diagnostics.
 
 test/golden/
 ├── ReportRenderSwapGoldenSpec.hs    # Byte-identical Markdown for swap fixture set.
-├── ReportRenderSwapLegacyGoldenSpec.hs
 ├── ReportRenderDisburseGoldenSpec.hs
 └── ReportRenderWithdrawGoldenSpec.hs
 ```
@@ -272,7 +285,7 @@ concrete pin so the planner-review gate can check them mechanically.
      if `journal/2026/metadata.json` exists relative to the current
      working directory, use it; otherwise, render without metadata
      (still produces Markdown; addresses fall back to `unresolved`).
-   - Documented in FR-014's plan trace below and in
+   - Documented in FR-018's plan trace below and in
      `docs/report-render.md`.
 
 ## FR / SC Traceability
@@ -286,46 +299,68 @@ more concrete technical decisions and test artefacts.
 | FR-002  | `Report.Cli`: when no `--in` / `--out`, default to `BSL.getContents` / `BSL.putStr`.      |
 | FR-003  | `Report.Cli`: independent `--in PATH` / `--out PATH`; both accept `-` as stdio alias.     |
 | FR-004  | `Cli.TxBuild`: extend `--report` parser to accept `-` (stdout sentinel); Main writes to stdout when sentinel matches. |
-| FR-005  | `Amaru.Treasury.Report`: add `trInlineIntent :: Maybe SomeTreasuryIntent`; encoder emits field only when `Just`. Schema asset updated to declare `intent` as additive optional. |
-| FR-006  | `Report.Cli`: `--intent PATH` (override) takes precedence over inline; `--no-intent` zeroes the intent before rendering. Unit test `CliSpec` asserts precedence. |
-| FR-007  | `Render` is `Text -> Text` (after decode); no `IO` import; no `getCurrentTime`, `getEnvironment`, randomness. Golden test renders twice, asserts byte-identity. |
-| FR-008  | `Render`: group produced outputs by `(role, resolvedLabel, lovelace, asset-bag-hash)`; emit "N × <amount>" when `n > 1`, individual lines otherwise. Unit `RenderSpec`. |
-| FR-009  | `Render.Markdown`: `formatLovelaceWithAda` helper; every value-table line passes through it. Unit `RenderSpec`. |
-| FR-010  | `Render.Time`: `slotToUtc :: NetworkId -> EraSummaries -> SlotNo -> UTCTime` derived from the report's era summary; no IO. Unit `RenderSpec` covers preprod and mainnet. |
-| FR-011  | `Render`: when `metadataSummary.cip1694LabelPresent` is true and the inline intent supplies the rationale fields, render description, justification, destination label, event, label as a Markdown block. Unit `RenderSpec`. |
-| FR-012  | `Render`: print one conservation line `inputs = outputs + fee, residual = X`; pure arithmetic over the report's totals. Unit `RenderSpec`. |
-| FR-013  | `Render`: explorer URL is `cardanoscan.io/transaction/<txid>` for mainnet, `preprod.cardanoscan.io/transaction/<txid>` for preprod; pure function of `network` + `txId`. |
-| FR-014  | `Identity.Resolve`: priority-ordered resolution: explicit `--metadata` → built-in constants (`Identity.Constants`) → script-hash derivations (`Registry.Derive`) → inline intent → `unresolved`. Default metadata path `journal/2026/metadata.json` (see Pinned Decisions §3). |
-| FR-015  | `Render.Address`: every printed bech32 is wrapped via `formatAddress :: AddressBook -> Addr -> Text` which never returns a bare bech32 — the function returns either `<role label> (<truncated bech32>)` or `unresolved (<truncated bech32>)`. SC-003 enforces this via golden text scan. |
-| FR-016  | `Identity`: `IdentityMap` carries `KeyHash -> RoleLabel`; `Render` wraps every required-signer key hash through `formatSigner` mirroring `formatAddress`. No personal-name field exists in `IdentityMap`. |
-| FR-017  | `Render`: reference-input section uses the `IdentityMap` enriched by `Registry.Derive` for `scopes registry`, `permissions deployed-at`, `treasury deployed-at [<scope>]`, `registry deployed-at [<scope>]`. |
-| FR-018  | `Identity`: a single `AddressBook` value is constructed once per render; the same `Map` answers every section. Unit `IdentitySpec` asserts label idempotence on repeat lookups. |
-| FR-019  | `Render`: leading section emits action-kind line + scope line in the first 25 rendered lines (see Pinned Decisions §2). Action kind comes from `report.action`; scope comes from the inline intent or from address-book classification of the produced outputs (treasury / swap-order destination). |
-| FR-020  | `Render`: when `action == swap` and inline intent is `Just`, leading section appends a swap-deal sub-block (target USDM, committed ADA, min rate, quote source/timestamp, slippage, treasury leftover) sourced from the swap intent fields. Unit `RenderSpec` + swap golden. |
-| FR-021  | `Render`: when no intent is available (older report or `--no-intent`), the swap-deal sub-block is replaced by a one-line note: `_swap-deal summary unavailable: report did not carry the originating intent_`. Golden `report.no-intent.golden.md` and `report.legacy.golden.md`. |
-| FR-022  | `Render`: outputs whose role is not in the JSON contract render under a generic `other` role with their resolved/unresolved address label preserved. Unit `RenderSpec`. |
-| FR-023  | `app/Main.hs`: `report-render` exits with `ExitFailure 1` and prints to stderr when `BSL.writeFile` / `hPutStr` raises. Unit `CliSpec` (mock handle) + smoke test. |
-| FR-024  | `Render` and all helpers under `Amaru.Treasury.Report.Render.*` and `Amaru.Treasury.Report.Identity.*` are written without `IO`; their signatures take `Text`/`Value`/decoded records and return `Text`. Verified by GHC type signatures. |
-| FR-025  | Golden set: swap (full + no-metadata + no-intent) + swap-legacy + disburse + withdraw. The set demonstrates FR-019 disambiguation across action kinds. |
-| FR-026  | `scripts/ops/build-swop` default-on Markdown; `--no-markdown` opt-out; smoke test in `nix/checks.nix` `smoke` stage exercises both. |
-| FR-027  | `docs/report-render.md` (new), `docs/quickstart.md` (review step), `docs/swap.md` (pipeline example) — each documents the renderer, the inline-intent additivity, and the helper default + opt-out. Lint stage covers formatting; existing `docs/` checks cover link integrity. |
-| SC-001  | Leading-section golden snippet (first 25 lines) per fixture; reviewer can read action + scope at a glance. |
+| FR-005  | `TxBuildOutput`: required top-level `intent` + `result`; schema and `ReportSpec` assert the envelope shape. |
+| FR-006  | `TxBuildOutputResult`: `failure` variant or success `{ tx-cbor, report }`; schema and unit tests cover both constructors. |
+| FR-007  | Decoder/schema reject missing or malformed `intent`, `result`, success `tx-cbor`, and success `report`; `CliSpec` asserts clear diagnostics. |
+| FR-008  | Nested `TransactionReport` has no duplicate top-level action/type; transaction type is derived from `txoIntent`. |
+| FR-009  | `Report.Cli`: no `--intent` or `--no-intent`; unknown-flag tests assert both are rejected. |
+| FR-010  | `Render`: leading section prints a deterministic hash/fingerprint derived from success `tx-cbor`. |
+| FR-011  | `Render` is pure after decode; no wall-clock, env, or randomness; golden test renders twice and asserts byte identity. |
+| FR-012  | `Render`: group produced outputs by `(role, resolvedLabel, lovelace, asset-bag-hash)`; emit "N × <amount>" when `n > 1`, individual lines otherwise. |
+| FR-013  | `Render.Markdown`: `formatLovelaceWithAda` helper; every value-table line passes through it. |
+| FR-014  | `Render.Time`: slot-to-UTC from nested report era/network data; no IO. |
+| FR-015  | `Render`: inline CIP-1694 rationale from nested report facts and intent fields. |
+| FR-016  | `Render`: conservation line over nested report totals. |
+| FR-017  | `Render`: explorer URL is pure function of network + transaction id. |
+| FR-018  | `Identity.Resolve`: explicit metadata -> built-ins -> script-hash derivations -> envelope intent -> unresolved. |
+| FR-019  | `Render.Address`: every printed address is labelled or wrapped as `unresolved (...)`; SC-003 scans goldens. |
+| FR-020  | `Identity`: required signer hashes are role-labelled; no personal-name field exists. |
+| FR-021  | `Render`: reference-input labels from script-hash derivations and metadata. |
+| FR-022  | `Identity`: one address book/identity map per render; unit tests assert idempotent lookup. |
+| FR-023  | `Render`: first-screen transaction type and scope come from envelope intent plus address-book classification. |
+| FR-024  | `Render`: swap intent adds swap-deal summary sourced from the inline intent. |
+| FR-025  | `Render`: all nested report outputs render; unknown roles use generic labels with resolved/unresolved address preserved. |
+| FR-026  | `app/Main.hs`: output write failures exit non-zero and print stderr; `CliSpec` + smoke cover it. |
+| FR-027  | Pure render modules under `Amaru.Treasury.Report.Render.*` and `Identity.*` have no `IO` in core signatures. |
+| FR-028  | Golden set: swap success (full + no metadata) + disburse success + withdraw success; invalid-envelope tests cover required fields. |
+| FR-029  | `scripts/ops/build-swop` default-on Markdown; `--no-markdown` opt-out; smoke exercises both. |
+| FR-030  | `docs/report-render.md`, `docs/quickstart.md`, `docs/swap.md` document the envelope, renderer, identity sources, helper default, and opt-out. |
+| SC-001  | Leading-section golden snippet per success fixture; reviewer can read transaction type + scope at a glance. |
 | SC-002  | `ReportRenderSwapGoldenSpec`: render swap fixture twice; assert byte-identity; assert against `report.golden.md`. |
 | SC-003  | Golden test post-condition: `T.findIndex` of any bare bech32 (`addr_*` / `addr1*`) or any naked 28-byte hex outside an `unresolved (...)` wrapper returns `Nothing` for the rendered Markdown. |
-| SC-004  | Smoke stage: `tx-build --report - | report-render` against swap fixture; `diff` against `report.golden.md`. |
-| SC-005  | `ReportRenderSwapLegacyGoldenSpec`: legacy report renders, swap-deal section is omitted, note line present. |
+| SC-004  | Smoke stage: `tx-build --report - | report-render` asserts envelope has top-level `intent`, success `tx-cbor`, success `report`, then diffs Markdown against `report.golden.md`. |
+| SC-005  | `ReportSpec` / `CliSpec`: malformed envelopes fail with clear diagnostics. |
 | SC-006  | `ReportRenderSwapGoldenSpec`: parse conservation line; assert `inputs == outputs + fee + residual`. |
-| SC-007  | Lint/docs check: assert presence of the helper-default and opt-out wording in `docs/report-render.md` (grep gate). |
-| SC-008  | Smoke stage: invoke `scripts/ops/build-swop` with default flags → both `report.json` and `report.md` exist; with `--no-markdown` → only `report.json` exists. |
+| SC-007  | Lint/docs check: assert presence of envelope, helper-default, and opt-out wording in `docs/report-render.md`. |
+| SC-008  | Smoke stage: helper default writes both `report.json` envelope and `report.md`; `--no-markdown` writes only the envelope. |
 
 ## Contract And Proof Strategy
 
-The renderer is bound to the existing JSON report contract from
-issue [#72](https://github.com/lambdasistemi/amaru-treasury-tx/issues/72) plus one additive optional top-level field
-`intent`. The schema asset
-`docs/assets/tx-report-schema.json` (existing) is updated only to
-add `intent` to the property set, with no `required` change. The
-existing `schema` flake check picks this up.
+The renderer is bound to a build-output envelope written by
+`tx-build --report`:
+
+```json
+{
+  "intent": { "...": "unified intent JSON" },
+  "result": {
+    "tx-cbor": "84a4...",
+    "report": { "...": "mechanical report JSON" }
+  }
+}
+```
+
+For failures after intent decoding, `result` is:
+
+```json
+{
+  "failure": { "...": "structured build failure JSON" }
+}
+```
+
+The schema asset is updated to validate the envelope, including the
+success result's required `tx-cbor` and `report`. The nested
+mechanical report keeps the issue #72 accounting/validation fields
+but does not carry intent, transaction CBOR, or transaction type.
 
 The renderer's *output* contract is a Markdown file with three
 load-bearing properties:
@@ -333,7 +368,7 @@ load-bearing properties:
 1. **Byte determinism** — golden test compares the rendered output
    to a checked-in `report.golden.md` file.
 2. **First-screen unmistakability** — the first 25 lines after the
-   title + blank line must contain the action kind and scope, and
+   title + blank line must contain the transaction type and scope, and
    must not contain any unresolved address (the per-fixture
    leading-section snippet golden enforces this).
 3. **No bare bech32 / no bare 28-byte hex** — a regex post-condition
@@ -356,19 +391,16 @@ Each slice is one durable commit. Each slice:
 Slice ordering is chosen so each commit can land independently and
 the bisect surface is clean.
 
-1. **Slice A — Report carries inline intent (additive)**
-   - RED: extend `ReportSpec` to assert that round-tripping a
-     `TransactionReport` with `trInlineIntent = Just sampleIntent`
-     yields a JSON object that contains an `intent` field equal to
-     the unified-intent encoding, and that omitting it produces a
-     report byte-identical to the previous golden.
-   - GREEN: add `trInlineIntent :: Maybe SomeTreasuryIntent` to
-     `Amaru.Treasury.Report` (additive), update encoder to emit the
-     field only when `Just`, regenerate `report.golden.json` with
-     the inline intent, update `docs/assets/tx-report-schema.json`
-     to declare `intent` optional.
-   - Gate: schema check passes; existing golden updates only one
-     fixture (swap) and remains byte-stable thereafter.
+1. **Slice A — Build-output envelope**
+   - RED: extend `ReportSpec` to assert that encoding a successful
+     build output yields top-level `intent` and success
+     `result.tx-cbor` / `result.report`, and that missing or
+     malformed required fields fail decode.
+   - GREEN: add `TxBuildOutput`, `TxBuildOutputResult`,
+     `TxBuildSuccess`, and `TxCborHex`; nest the mechanical
+     `TransactionReport` under success `result.report`; update the
+     schema to the envelope shape.
+   - Gate: unit + schema.
 
 2. **Slice B — Identity types and resolution priority**
    - RED: `IdentitySpec` exercises `resolveAddress` with each source
@@ -391,8 +423,8 @@ the bisect surface is clean.
 
 4. **Slice D — Pure renderer assembled, no CLI**
    - RED: `ReportRenderSwapGoldenSpec` calls a pure
-     `renderReport :: AddressBook -> TransactionReport -> Maybe SomeTreasuryIntent -> Text`
-     against the swap fixture (with metadata) and compares against
+     `renderBuildOutput :: AddressBook -> TxBuildOutput -> Text`
+     against the swap success envelope (with metadata) and compares against
      `test/fixtures/swap/report.golden.md`. The golden file is
      committed in this slice. The leading-section snippet golden
      (first 25 lines) is asserted alongside. SC-003 (no bare
@@ -400,7 +432,8 @@ the bisect surface is clean.
      rendered text.
    - GREEN: add `Amaru.Treasury.Report.Render`, glue
      identity + markdown primitives + classification, emit the full
-     document. Add `report.golden.md`.
+     document from envelope intent + success `tx-cbor` + nested
+     report. Add `report.golden.md`.
    - Gate: unit + golden + lint + schema.
 
 5. **Slice E — `report-render` CLI subcommand and `--report -`**
@@ -408,8 +441,9 @@ the bisect surface is clean.
      stage adds the pipeline `tx-build --report - | report-render`
      against the swap fixture, diffing the rendered Markdown
      against `report.golden.md`. The smoke stage also asserts
-     `--in -` / `--out -` aliases and the `--no-intent` /
-     `--intent <path>` flags.
+     `--in -` / `--out -` aliases and invalid-envelope failure
+     diagnostics; parser tests assert `--intent` and `--no-intent`
+     are rejected unknown flags.
    - GREEN: add `Amaru.Treasury.Report.Cli` with `ReportRenderOpts`
      and a parser; wire `report-render` into
      `app/amaru-treasury-tx/Main.hs`; teach `tx-build`'s `--report`
@@ -418,8 +452,8 @@ the bisect surface is clean.
    - Gate: full `gate.sh` (build + unit + golden + schema + smoke
      + lint).
 
-6. **Slice F — Coverage breadth: legacy + no-metadata + no-intent + disburse + withdraw**
-   - RED: four additional golden specs + four fixture trees; each
+6. **Slice F — Coverage breadth: no-metadata + disburse + withdraw**
+   - RED: additional golden specs + fixture trees; each
      asserts byte-identity, the no-bare-bech32 / no-bare-hex
      post-condition, and the leading-section snippet.
    - GREEN: add the fixtures and matching `*.golden.md` files. No
@@ -444,7 +478,7 @@ the bisect surface is clean.
      existing `lint` or `smoke` stage) requires that
      `docs/report-render.md`, `docs/quickstart.md`, and `docs/swap.md`
      mention the Markdown rendering as the pre-signing review
-     artefact, the inline-intent additivity, the resolution
+     artefact, the build-output envelope shape, the resolution
      sources, and the helper default + opt-out.
    - GREEN: write `docs/report-render.md`; update `docs/quickstart.md`
      to direct reviewers at the Markdown report; update `docs/swap.md`
@@ -467,10 +501,10 @@ flake check derivation — it extends the existing ones:
 | Stage   | Change                                                                                  |
 |---------|------------------------------------------------------------------------------------------|
 | `build` | New library modules under `Amaru.Treasury.Report.Render.*` and `Amaru.Treasury.Report.Identity.*` build clean with `-Werror`. |
-| `unit`  | New specs: `IdentitySpec`, `RenderSpec`, `CliSpec`. Existing `ReportSpec` extended for inline intent additivity. |
-| `golden`| Four new spec modules: `ReportRenderSwapGoldenSpec`, `ReportRenderSwapLegacyGoldenSpec`, `ReportRenderDisburseGoldenSpec`, `ReportRenderWithdrawGoldenSpec`. Existing CBOR golden fixtures untouched. |
-| `schema`| `docs/assets/tx-report-schema.json` adds optional `intent` property; the existing `schema` check picks this up unchanged. |
-| `smoke` | Adds `report-render --help` surface check, the `tx-build --report - | report-render` pipeline check, and `scripts/ops/build-swop` default-on / opt-out checks. |
+| `unit`  | New specs: `IdentitySpec`, `RenderSpec`, `CliSpec`. Existing `ReportSpec` extended for build-output envelope encoding/decoding and invalid-envelope failures. |
+| `golden`| Three new spec modules: `ReportRenderSwapGoldenSpec`, `ReportRenderDisburseGoldenSpec`, `ReportRenderWithdrawGoldenSpec`. Existing CBOR golden fixtures untouched. |
+| `schema`| `docs/assets/tx-report-schema.json` validates top-level `intent` + `result`, success `{ tx-cbor, report }`, and failure `{ failure }`. |
+| `smoke` | Adds `report-render --help` surface check, the `tx-build --report - | report-render` pipeline check including assertion that the stream is a valid success envelope, invalid-envelope rejection, and `scripts/ops/build-swop` default-on / opt-out checks. |
 | `lint`  | New Haskell sources covered by the existing fourmolu / hlint / cabal-fmt loop. Docs additions covered by the existing `docs/` lint pass. |
 
 No new flake derivation is needed.
@@ -486,18 +520,16 @@ No new flake derivation is needed.
   the derivation lives under `Registry.Derive` — extend it in
   Slice B if the existing helper does not yet cover the
   `swapOrderAddress` derivation explicitly.
-- **Mixed-amount swap-order outputs**: the collapsing rule in FR-008
+- **Mixed-amount swap-order outputs**: the collapsing rule in FR-012
   groups by `(role, resolvedLabel, lovelace, asset-bag-hash)`; an
   output with a different per-output amount (the remainder chunk)
   is listed alongside the collapsed group. Covered by
   `RenderSpec`.
-- **`--no-intent` on a fresh report**: the renderer must zero the
-  inline intent before rendering, not silently ignore the flag.
-  Unit `CliSpec`.
-- **`--intent <path>` with a fresh report carrying inline intent**:
-  the override wins; the renderer must not silently mix the two.
-  Unit `CliSpec` asserts that the rendered swap-deal block reflects
-  the override fields only.
+- **Failure envelope**: a valid failure result carries `intent` and
+  `failure`, but no `tx-cbor` or `report`; renderer output must make
+  clear that it is not a signable transaction review.
+- **Rejected side-channel intent**: `--intent` and `--no-intent` are
+  unknown flags. Unit `CliSpec`.
 - **Address that is both a built-in and a metadata address**:
   resolution priority ranks `--metadata` first to allow operators
   to override the built-in, with a unit test covering the case.
@@ -507,8 +539,9 @@ No new flake derivation is needed.
 
 ## Public Contract Changes
 
-- Additive optional `intent` field on `report.json` (FR-005). Old
-  consumers continue to read existing fields verbatim.
+- `tx-build --report` now writes a build-output envelope
+  `{ intent, result }`, where success result is
+  `{ tx-cbor, report }` and failure result is `{ failure }`.
 - New `report-render` subcommand on `amaru-treasury-tx`. No
   existing subcommand changes shape.
 - `tx-build`'s `--report` argument now also accepts `-` for stdout.

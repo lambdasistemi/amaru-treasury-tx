@@ -8,8 +8,10 @@ documents the additive `--report -` change to the existing
 
 ## `amaru-treasury-tx report-render`
 
-Reads a JSON `report.json` (issue
-[#72](https://github.com/lambdasistemi/amaru-treasury-tx/issues/72)) and emits operator-friendly Markdown.
+Reads a JSON build-output envelope written by `tx-build --report`
+and emits operator-friendly Markdown. On success envelopes, the
+nested `result.report` is the mechanical report from issue
+[#72](https://github.com/lambdasistemi/amaru-treasury-tx/issues/72).
 
 ### Synopsis
 
@@ -18,20 +20,15 @@ amaru-treasury-tx report-render
     [--in PATH | --in -]
     [--out PATH | --out -]
     [--metadata PATH]
-    [--intent PATH | --no-intent]
 ```
 
 ### Options
 
 | Flag             | Argument | Default                                | Effect |
 |------------------|----------|----------------------------------------|--------|
-| `--in`           | `PATH` or `-` | stdin                            | Read the JSON report from this stream. |
+| `--in`           | `PATH` or `-` | stdin                            | Read the JSON build-output envelope from this stream. |
 | `--out`          | `PATH` or `-` | stdout                           | Write the Markdown rendering to this stream. |
 | `--metadata`     | `PATH`   | `journal/2026/metadata.json` if it exists, else none | Treasury metadata source for identity resolution. |
-| `--intent`       | `PATH`   | inline intent from report if present   | Override the intent used for the swap-deal section. |
-| `--no-intent`    | (none)   | off                                    | Suppress the swap-deal section even if an intent is available. |
-
-Mutually exclusive: `--intent` and `--no-intent`.
 
 ### Streams
 
@@ -41,11 +38,23 @@ Mutually exclusive: `--intent` and `--no-intent`.
 - `-` is accepted as the explicit stdio alias for `--in` and
   `--out` and is equivalent to omitting the flag.
 - Output write failures cause the command to exit with a non-zero
-  status and print the failure to stderr (FR-023).
+  status and print the failure to stderr (FR-025).
+- Envelopes whose top-level `intent` or `result` field is missing or
+  malformed are invalid; success results whose `tx-cbor` or `report`
+  field is missing or malformed are invalid. The command exits
+  non-zero and reports the decode failure.
+- Valid failure envelopes may be rendered as failure diagnostics, but
+  they are not signable transaction reviews and the command exits
+  non-zero so a shell pipeline does not mask the failed build.
+- There is no renderer argument for a separate intent file. The
+  envelope's top-level `intent` is the only source of intent data.
+- The rendered transaction type is read from the inline `intent`.
+  Envelopes and nested reports do not carry a separate top-level
+  action/type field.
 
 ### Determinism
 
-- Output is byte-identical for identical inputs (FR-007, SC-002).
+- Output is byte-identical for identical inputs (FR-009, SC-002).
 - No wall-clock, randomness, environment reads beyond declared
   inputs, or local-machine state.
 
@@ -53,13 +62,13 @@ Mutually exclusive: `--intent` and `--no-intent`.
 
 The rendered Markdown follows this top-level structure:
 
-1. `# <action> on <scope>` — title (line 1).
+1. `# <transaction-type> on <scope>` — title (line 1).
 2. Blank line.
 3. **Leading section** (lines 3..27, i.e. first 25 lines after the
-   title and blank): action kind, scope, transaction id with
-   explorer link, validity bounds (slots + UTC), conservation
-   line, required signers (role labels), and — when applicable —
-   a swap-deal summary block.
+   title and blank): transaction type from the inline intent, scope,
+   transaction id with explorer link, CBOR fingerprint/hash, validity
+   bounds (slots + UTC), conservation line, required signers (role
+   labels), and, for swap intents, a swap-deal summary block.
 4. Sections: produced outputs (collapsed where applicable), inputs,
    reference inputs, signers, validation facts, CIP-1694 rationale
    (when present).
@@ -84,7 +93,32 @@ amaru-treasury-tx tx-build
 
 This change makes the end-to-end pipeline
 `tx-build --report - | report-render > report.md` an in-tree
-contract.
+contract. Envelopes newly produced by the in-tree build path include
+the required top-level `intent` value that was consumed to build the
+transaction, using the same unified-intent JSON shape as the
+standalone intent file, and required top-level `result`.
+
+On success, `result` is:
+
+```json
+{
+  "tx-cbor": "84a4...",
+  "report": {}
+}
+```
+
+On failure after intent decoding, `result` is:
+
+```json
+{
+  "failure": {}
+}
+```
+
+The success `tx-cbor` value contains the unsigned transaction CBOR as
+lowercase hex. The success `report` value contains the mechanical
+report. If the originating intent cannot be decoded, the build path
+cannot form the envelope and exits with the existing parse failure.
 
 ## `scripts/ops/build-swop` (new helper)
 
@@ -105,7 +139,8 @@ scripts/ops/build-swop [--no-markdown] [other build flags...]
 
 ### `--no-markdown`
 
-Suppresses the second step. The JSON report is still produced.
+Suppresses the second step. The JSON build-output envelope is still
+produced.
 Documented as the supported way to skip Markdown.
 
 ### Failure mode

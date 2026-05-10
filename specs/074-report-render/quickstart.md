@@ -27,8 +27,8 @@ swap-wizard \
 This pipeline:
 
 - builds the unsigned transaction (`swap.cbor.hex`),
-- writes the JSON report (now carrying the inline intent) to stdout,
-- pipes the JSON report into the renderer,
+- writes the JSON build-output envelope to stdout,
+- pipes the build-output envelope into the renderer,
 - writes the operator-friendly Markdown to `report.md`.
 
 No intermediate side files. No chain access during rendering.
@@ -38,34 +38,26 @@ No intermediate side files. No chain access during rendering.
 For day-to-day swap builds, the helper wraps the pipeline:
 
 ```bash
-scripts/ops/build-swop --intent intent.json --out artefacts/
+scripts/ops/build-swop --out artefacts/ < intent.json
 # produces: artefacts/swap.cbor.hex, artefacts/report.json, artefacts/report.md
 
-scripts/ops/build-swop --intent intent.json --out artefacts/ --no-markdown
+scripts/ops/build-swop --out artefacts/ --no-markdown < intent.json
 # produces: artefacts/swap.cbor.hex, artefacts/report.json (no report.md)
 ```
 
 `--no-markdown` is the documented way to skip the Markdown
 rendering when a reviewer does not want it.
 
-## Re-rendering an older report
+## Invalid reports
 
-A `report.json` written before this feature does not carry the
-inline intent. The renderer still renders it, with the swap-deal
-section omitted and a one-line note explaining why:
-
-```bash
-cat older/report.json | amaru-treasury-tx report-render > older/report.md
-```
-
-To re-render an older report against a current intent file, use
-the override:
+A `report.json` without readable top-level `intent` and `result`
+fields is not a valid input to the renderer. A success result must
+also contain readable `tx-cbor` and `report` fields. The command
+fails instead of accepting a separate intent file or producing a
+partial report:
 
 ```bash
-amaru-treasury-tx report-render \
-    --in older/report.json \
-    --intent current/intent.json \
-    --out older/report.md
+amaru-treasury-tx report-render --in older/report.json --out older/report.md
 ```
 
 ## Fixture-driven smoke check
@@ -85,12 +77,10 @@ amaru-treasury-tx report-render \
     --in test/fixtures/swap/report.golden.json \
   | diff -u test/fixtures/swap/report.no-metadata.golden.md -
 
-# `--no-intent` opt-out (swap-deal section omitted).
-amaru-treasury-tx report-render \
-    --in test/fixtures/swap/report.golden.json \
-    --metadata journal/2026/metadata.json \
-    --no-intent \
-  | diff -u test/fixtures/swap/report.no-intent.golden.md -
+# Invalid envelope check (missing required fields).
+! amaru-treasury-tx report-render \
+    --in test/fixtures/swap/report.missing-required-fields.json \
+    --out /tmp/report.md
 ```
 
 Each diff should be empty.
@@ -99,6 +89,8 @@ Each diff should be empty.
 
 The Markdown rendering is the **pre-signing review artefact** for
 multisig reviewers. It is generated mechanically from the JSON
-report and the metadata; the JSON remains the durable
-machine-readable contract. See [`docs/report-render.md`](../../docs/report-render.md)
-for the full contract.
+build-output envelope, including its inline intent, transaction CBOR,
+and nested mechanical report; the JSON remains the durable
+machine-readable contract. See
+[`docs/report-render.md`](../../docs/report-render.md) for the full
+contract.

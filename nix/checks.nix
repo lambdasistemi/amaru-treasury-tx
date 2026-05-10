@@ -129,10 +129,27 @@ let
         for needle in \
           '--intent' \
           '--out' \
-          '--log'
+          '--log' \
+          '--report'
         do
           if ! grep -F -- "$needle" >/dev/null <<<"$build_help"; then
             printf 'smoke: missing tx-build flag: %s\n' "$needle" >&2
+            exit 1
+          fi
+        done
+
+        render_start=$(date +%s)
+        render_help="$(amaru-treasury-tx report-render --help)"
+        render_elapsed=$(( $(date +%s) - render_start ))
+
+        for needle in \
+          '--in PATH' \
+          '--out PATH' \
+          '--metadata PATH' \
+          'Render a tx-build report envelope as Markdown'
+        do
+          if ! grep -F -- "$needle" >/dev/null <<<"$render_help"; then
+            printf 'smoke: missing report-render help text: %s\n' "$needle" >&2
             exit 1
           fi
         done
@@ -154,7 +171,7 @@ let
           fi
         done
 
-        for pair in "swap-wizard:$wizard_elapsed" "withdraw-wizard:$withdraw_elapsed" "tx-build:$build_elapsed"; do
+        for pair in "swap-wizard:$wizard_elapsed" "withdraw-wizard:$withdraw_elapsed" "tx-build:$build_elapsed" "report-render:$render_elapsed"; do
           name="''${pair%%:*}"
           secs="''${pair#*:}"
           if [[ "$secs" -gt 10 ]]; then
@@ -168,8 +185,15 @@ let
         unit-tests --match "IntentJSON"
         golden-tests --match "swap golden"
 
-        printf 'smoke: OK (swap-wizard --help %ss, withdraw-wizard --help %ss, tx-build --help %ss)\n' \
-          "$wizard_elapsed" "$withdraw_elapsed" "$build_elapsed"
+        rendered_report="$(amaru-treasury-tx report-render < test/fixtures/swap/report.golden.json)"
+        expected_report="$(< test/fixtures/swap/report.golden.md)"
+        if [[ "$rendered_report" != "$expected_report" ]]; then
+          printf 'smoke: report-render output differs from swap Markdown golden\n' >&2
+          exit 1
+        fi
+
+        printf 'smoke: OK (swap-wizard --help %ss, withdraw-wizard --help %ss, tx-build --help %ss, report-render --help %ss)\n' \
+          "$wizard_elapsed" "$withdraw_elapsed" "$build_elapsed" "$render_elapsed"
       '';
     };
   };

@@ -91,19 +91,19 @@ and failure-result diagnostics.
 stdio aliases. Invalid envelopes fail non-zero with clear diagnostics.
 Fold T033-T045 into one vertical pipeline commit.
 
-- [ ] T033 [P] [US3] Add RED CLI parser tests for `report-render`, `--in`, `--out`, `--metadata`, and stdio aliases in `test/unit/Amaru/Treasury/Report/CliSpec.hs`
-- [ ] T034 [P] [US3] Add RED parser rejection tests proving `report-render` has no `--intent` or `--no-intent` argument in `test/unit/Amaru/Treasury/Report/CliSpec.hs`
-- [ ] T035 [P] [US3] Add RED invalid-envelope tests for missing or malformed `intent`, `result`, success `tx-cbor`, and success `report` in `test/unit/Amaru/Treasury/Report/CliSpec.hs`
-- [ ] T036 [P] [US3] Add invalid envelope fixtures in `test/fixtures/swap/report.missing-required-fields.json` and `test/fixtures/swap/report.malformed-required-fields.json`
-- [ ] T037 [US3] Implement `ReportRenderOpts` and parser helpers in `lib/Amaru/Treasury/Report/Cli.hs`
-- [ ] T038 [US3] Wire the `report-render` subcommand into `app/amaru-treasury-tx/Main.hs`
-- [ ] T039 [US3] Implement JSON envelope decode, default stdin/stdout IO, explicit `--in` and `--out`, and output-write failure handling in `app/amaru-treasury-tx/Main.hs`
-- [ ] T040 [US3] Implement failure-envelope diagnostic rendering with non-zero exit in `app/amaru-treasury-tx/Main.hs`
-- [ ] T041 [US3] Extend `tx-build --report` to accept `-` as stdout in `lib/Amaru/Treasury/Cli/TxBuild.hs`
+- [x] T033 [P] [US3] Add RED CLI parser tests for `report-render`, `--in`, `--out`, `--metadata`, and stdio aliases in `test/unit/Amaru/Treasury/Report/CliSpec.hs`
+- [x] T034 [P] [US3] Add RED parser rejection tests proving `report-render` has no `--intent` or `--no-intent` argument in `test/unit/Amaru/Treasury/Report/CliSpec.hs`
+- [x] T035 [P] [US3] Add RED invalid-envelope tests for missing or malformed `intent`, `result`, success `tx-cbor`, and success `report` in `test/unit/Amaru/Treasury/Report/CliSpec.hs`
+- [x] T036 [P] [US3] Add invalid envelope fixtures in `test/fixtures/swap/report.missing-required-fields.json` and `test/fixtures/swap/report.malformed-required-fields.json`
+- [x] T037 [US3] Implement `ReportRenderOpts` and parser helpers in `lib/Amaru/Treasury/Report/Cli.hs`
+- [x] T038 [US3] Wire the `report-render` subcommand into `app/amaru-treasury-tx/Main.hs`
+- [x] T039 [US3] Implement JSON envelope decode, default stdin/stdout IO, explicit `--in` and `--out`, and output-write failure handling in `app/amaru-treasury-tx/Main.hs`
+- [x] T040 [US3] Implement failure-envelope diagnostic rendering with non-zero exit in `app/amaru-treasury-tx/Main.hs`
+- [x] T041 [US3] Extend `tx-build --report` to accept `-` as stdout in `lib/Amaru/Treasury/Cli/TxBuild.hs`
 - [x] T042 [US3] Wrap successful `tx-build --report` output as `{ intent, result: { tx-cbor, report } }` in `app/amaru-treasury-tx/Main.hs`
-- [ ] T043 [US3] Wrap post-intent-decode build failures as `{ intent, result: { failure } }` in `lib/Amaru/Treasury/Cli/TxBuild.hs`
-- [ ] T044 [US3] Add smoke coverage for `report-render --help` and `tx-build --report - | report-render` in `nix/checks.nix`
-- [ ] T045 [US3] Run the US3 gate with `nix build --quiet --no-link ".#checks.${SYS}.unit" ".#checks.${SYS}.golden" ".#checks.${SYS}.smoke" ".#checks.${SYS}.lint"`
+- [x] T043 [US3] Wrap post-intent-decode build failures as `{ intent, result: { failure } }` in `lib/Amaru/Treasury/Cli/TxBuild.hs`
+- [x] T044 [US3] Add smoke coverage for `report-render --help` and `tx-build --report - | report-render` in `nix/checks.nix`
+- [x] T045 [US3] Run the US3 gate with `nix build --quiet --no-link ".#checks.${SYS}.unit" ".#checks.${SYS}.golden" ".#checks.${SYS}.smoke" ".#checks.${SYS}.lint"`
 
 ## Phase 6: User Story 4 - Documentation and Operator Helper (P2)
 

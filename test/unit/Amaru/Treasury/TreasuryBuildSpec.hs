@@ -188,6 +188,16 @@ spec = describe "Amaru.Treasury.TreasuryBuild" $ do
                         , tboReportPath = Just "tx-report.json"
                         }
 
+        it "accepts report stdout alias" $
+            parseTxBuild ["--report", "-"]
+                `shouldBe` Right
+                    TxBuildOpts
+                        { tboIntentPath = Nothing
+                        , tboOutPath = Nothing
+                        , tboLog = Nothing
+                        , tboReportPath = Just "-"
+                        }
+
         it "preserves no-report defaults" $
             parseTxBuild []
                 `shouldBe` Right

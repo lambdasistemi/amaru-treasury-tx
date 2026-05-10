@@ -273,6 +273,7 @@ test-suite unit-tests
     Amaru.Treasury.Registry.DeriveSpec
     Amaru.Treasury.Registry.MetadataSpec
     Amaru.Treasury.Registry.VerifySpec
+    Amaru.Treasury.Report.CliSpec
     Amaru.Treasury.Report.IdentitySpec
     Amaru.Treasury.Report.RenderSpec
     Amaru.Treasury.ReportSchemaSpec

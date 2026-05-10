@@ -98,6 +98,14 @@ library
     Amaru.Treasury.Report
     Amaru.Treasury.Report.Accounting
     Amaru.Treasury.Report.Classify
+    Amaru.Treasury.Report.Cli
+    Amaru.Treasury.Report.Identity
+    Amaru.Treasury.Report.Identity.Constants
+    Amaru.Treasury.Report.Identity.Resolve
+    Amaru.Treasury.Report.Render
+    Amaru.Treasury.Report.Render.Address
+    Amaru.Treasury.Report.Render.Markdown
+    Amaru.Treasury.Report.Render.Time
     Amaru.Treasury.Report.Schema
     Amaru.Treasury.Scope
     Amaru.Treasury.Summary
@@ -265,6 +273,7 @@ test-suite unit-tests
     Amaru.Treasury.Registry.DeriveSpec
     Amaru.Treasury.Registry.MetadataSpec
     Amaru.Treasury.Registry.VerifySpec
+    Amaru.Treasury.Report.RenderSpec
     Amaru.Treasury.ReportSchemaSpec
     Amaru.Treasury.ReportSpec
     Amaru.Treasury.ScopeSpec

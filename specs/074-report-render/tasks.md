@@ -128,12 +128,12 @@ docs/helper commit.
 
 **Purpose**: Verify the whole PR after the vertical slices have landed.
 
-- [ ] T053 Add Haddock notes for public renderer and envelope APIs in `lib/Amaru/Treasury/Report.hs` and `lib/Amaru/Treasury/Report/Render.hs`
-- [ ] T054 Regenerate any checked-in golden JSON or Markdown fixture updates through the repository's existing golden workflow documented in `test/`
-- [ ] T055 Run `git diff --check`
-- [ ] T056 Run the full local gate with `nix build --quiet --no-link ".#checks.${SYS}.build" ".#checks.${SYS}.unit" ".#checks.${SYS}.golden" ".#checks.${SYS}.schema" ".#checks.${SYS}.lint" ".#checks.${SYS}.smoke"`
-- [ ] T057 Review the PR title and body against `specs/074-report-render/spec.md`, `specs/074-report-render/contracts/report-render-cli.md`, and issue #74
-- [ ] T058 Handoff for external review without self-approving the PR in GitHub
+- [x] T053 Add Haddock notes for public renderer and envelope APIs in `lib/Amaru/Treasury/Report.hs` and `lib/Amaru/Treasury/Report/Render.hs`
+- [x] T054 Regenerate any checked-in golden JSON or Markdown fixture updates through the repository's existing golden workflow documented in `test/`
+- [x] T055 Run `git diff --check`
+- [x] T056 Run the full local gate with `nix build --quiet --no-link ".#checks.${SYS}.build" ".#checks.${SYS}.unit" ".#checks.${SYS}.golden" ".#checks.${SYS}.schema" ".#checks.${SYS}.lint" ".#checks.${SYS}.smoke"`
+- [x] T057 Review the PR title and body against `specs/074-report-render/spec.md`, `specs/074-report-render/contracts/report-render-cli.md`, and issue #74
+- [x] T058 Handoff for external review without self-approving the PR in GitHub
 
 ## Dependencies
 

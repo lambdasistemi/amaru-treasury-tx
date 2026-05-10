@@ -1,5 +1,21 @@
 {-# LANGUAGE OverloadedStrings #-}
 
+{- |
+Module      : Amaru.Treasury.Report
+Description : Mechanical transaction reports and tx-build envelopes
+License     : Apache-2.0
+
+The mechanical 'TransactionReport' explains the ledger facts that
+@tx-build@ derived while constructing an unsigned transaction. The
+public @--report@ artifact is the surrounding 'TxBuildOutput'
+envelope: the decoded inline intent plus the result of attempting the
+build. Success results carry the unsigned transaction CBOR and the
+nested mechanical report; failure results carry structured failure
+data and no transaction bytes.
+
+The inline intent is the only transaction-type carrier. The nested
+report intentionally does not duplicate an action or type field.
+-}
 module Amaru.Treasury.Report
     ( BuildFailure (..)
     , MetadataSummary (..)
@@ -116,34 +132,48 @@ import Amaru.Treasury.TreasuryBuild
     , TreasuryBuildResult (..)
     )
 
+-- | Self-contained artifact written by @tx-build --report@.
 data TxBuildOutput = TxBuildOutput
     { txoIntent :: SomeTreasuryIntent
+    -- ^ Decoded originating intent, passed through unchanged.
     , txoResult :: TxBuildOutputResult
+    -- ^ Build result: either failure data or transaction bytes plus report.
     }
     deriving stock (Eq, Show)
 
+-- | Result of attempting to build the inline intent.
 data TxBuildOutputResult
-    = TxBuildOutputFailure BuildFailure
-    | TxBuildOutputSuccess TxBuildSuccess
+    = -- | No transaction was created.
+      TxBuildOutputFailure BuildFailure
+    | -- | Transaction was created and can be reviewed for signing.
+      TxBuildOutputSuccess TxBuildSuccess
     deriving stock (Eq, Show)
 
+-- | Successful build payload bound to the exact unsigned transaction.
 data TxBuildSuccess = TxBuildSuccess
     { tbsTxCbor :: TxCborHex
+    -- ^ Unsigned transaction CBOR as lowercase hex.
     , tbsReport :: TransactionReport
+    -- ^ Mechanical facts needed by renderers and reviewers.
     }
     deriving stock (Eq, Show)
 
+-- | Lowercase, non-empty, even-length hex encoding of transaction CBOR.
 newtype TxCborHex = TxCborHex
     { unTxCborHex :: Text
     }
     deriving stock (Eq, Ord, Show)
 
+-- | Structured failure result for post-intent-decode build failures.
 data BuildFailure = BuildFailure
     { bfCode :: Text
+    -- ^ Stable machine-facing failure class.
     , bfMessage :: Text
+    -- ^ Operator-facing diagnostic.
     }
     deriving stock (Eq, Show)
 
+-- | Nested mechanical report for successful build-output envelopes.
 data TransactionReport = TransactionReport
     { trSchema :: Int
     , trNetwork :: Text

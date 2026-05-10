@@ -7,6 +7,12 @@ License     : Apache-2.0
 
 Renders a decoded build-output envelope into deterministic Markdown.
 This module is pure; CLI stream handling lives outside the renderer.
+
+The leading review section is intentionally compact: after the level-1
+title and blank line, the first 25 lines carry the transaction type,
+scope, transaction id, explorer link, CBOR fingerprint, validity,
+conservation, rationale, and signer/output identity context that a
+multisig reviewer needs on first screen.
 -}
 module Amaru.Treasury.Report.Render
     ( RenderError (..)
@@ -108,10 +114,16 @@ data OutputGroup = OutputGroup
     }
     deriving stock (Eq, Show)
 
+-- | Render a build-output envelope without an external metadata source.
 renderBuildOutput :: TxBuildOutput -> Either RenderError RenderOutput
 renderBuildOutput =
     renderBuildOutputWithMetadata Nothing
 
+{- | Render a build-output envelope with optional treasury metadata.
+
+Failure envelopes are returned as 'RenderBuildFailure' because they
+are diagnostics, not signable transaction reviews.
+-}
 renderBuildOutputWithMetadata
     :: Maybe TreasuryMetadata
     -> TxBuildOutput
@@ -128,11 +140,13 @@ renderBuildOutputWithMetadata metadata output =
         TxBuildOutputFailure failure ->
             Left (RenderBuildFailure failure)
 
+-- | Render a successful build result using only built-ins and intent data.
 renderSuccessReport
     :: SomeTreasuryIntent -> TxBuildSuccess -> RenderOutput
 renderSuccessReport =
     renderSuccessReportWithMetadata Nothing
 
+-- | Render a successful build result with optional metadata labels.
 renderSuccessReportWithMetadata
     :: Maybe TreasuryMetadata
     -> SomeTreasuryIntent

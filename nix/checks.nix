@@ -276,10 +276,11 @@ EOF
           fi
         done
 
-        grep -F -- 'report.md' docs/quickstart.md >/dev/null
-        grep -F -- 'pre-signing review artifact' docs/quickstart.md >/dev/null
-        grep -F -- 'scripts/ops/build-swop' docs/swap.md >/dev/null
-        grep -F -- '--no-markdown' docs/swap.md >/dev/null
+        grep -F -- 'no intermediate files' docs/quickstart.md >/dev/null
+        grep -F -- 'tx-build --out /dev/null --report -' docs/quickstart.md >/dev/null
+        grep -F -- 'result.tx-cbor' docs/quickstart.md >/dev/null
+        grep -F -- 'swap-wizard' docs/swap.md >/dev/null
+        grep -F -- 'tx-build --out /dev/null --report -' docs/swap.md >/dev/null
 
         printf 'smoke: OK (swap-wizard --help %ss, withdraw-wizard --help %ss, tx-build --help %ss, report-render --help %ss)\n' \
           "$wizard_elapsed" "$withdraw_elapsed" "$build_elapsed" "$render_elapsed"

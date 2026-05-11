@@ -12,8 +12,8 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 
-import Amaru.Treasury.TreasuryBuild
-    ( TreasuryBuildResult (..)
+import Amaru.Treasury.Build
+    ( BuildResult (..)
     )
 
 data ProducedOutputRole
@@ -39,17 +39,17 @@ instance FromJSON ProducedOutputRole where
         "unknown" -> pure OutputUnknown
         other -> fail ("unknown produced-output role: " <> T.unpack other)
 
-classifyOutputRole :: TreasuryBuildResult -> Int -> ProducedOutputRole
+classifyOutputRole :: BuildResult -> Int -> ProducedOutputRole
 classifyOutputRole result index
     | Set.member index swapOrderIndexes = OutputSwapOrder
-    | Just index == (fst <$> tbrTreasuryLeftoverOutput result) =
+    | Just index == (fst <$> brTreasuryLeftoverOutput result) =
         OutputTreasuryLeftover
-    | Just index == (fst <$> tbrWalletChangeOutput result) =
+    | Just index == (fst <$> brWalletChangeOutput result) =
         OutputWalletChange
     | otherwise = OutputUnknown
   where
     swapOrderIndexes =
-        Set.fromList (fst <$> tbrSundaeOrderOutputs result)
+        Set.fromList (fst <$> brSundaeOrderOutputs result)
 
 producedOutputRoleText :: ProducedOutputRole -> Text
 producedOutputRoleText = \case

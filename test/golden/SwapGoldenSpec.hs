@@ -47,6 +47,10 @@ import Test.Hspec
     , shouldBe
     )
 
+import Amaru.Treasury.Build
+    ( BuildResult (..)
+    , runFromIntent
+    )
 import Amaru.Treasury.ChainContext.Fixture
     ( readSwapFixture
     , toFrozenContext
@@ -74,10 +78,6 @@ import Amaru.Treasury.Report
     , encodeBuildOutput
     , txCborHexFromBytes
     )
-import Amaru.Treasury.TreasuryBuild
-    ( TreasuryBuildResult (..)
-    , runFromIntent
-    )
 
 fixtureDir :: FilePath
 fixtureDir = "test/fixtures/swap"
@@ -104,7 +104,7 @@ spec =
             tbr <- runFromIntent ctx some
             let actualHex =
                     B16.encode
-                        (BSL.toStrict (tbrCborBytes tbr))
+                        (BSL.toStrict (brCborBytes tbr))
             update <- lookupEnv "UPDATE_GOLDENS"
             case update of
                 Just "1" -> do
@@ -189,7 +189,7 @@ spec =
                     (fixtureDir <> "/report.golden.json")
             firstReportBytes `shouldBe` secondReportBytes
             firstReportBytes `shouldBe` expectedReport
-            tbrCborBytes first `shouldBe` tbrCborBytes second
+            brCborBytes first `shouldBe` brCborBytes second
         it
             "legacy intent without extraTxIns rebuilds byte-identical bytes"
             $ do
@@ -205,12 +205,12 @@ spec =
                 tbr <- runFromIntent ctx some
                 let actualHex =
                         B16.encode
-                            (BSL.toStrict (tbrCborBytes tbr))
+                            (BSL.toStrict (brCborBytes tbr))
                 expected <-
                     BS.readFile (fixtureDir <> "/expected.cbor")
                 actualHex `shouldBe` expected
 
-swapReport :: TreasuryBuildResult -> TransactionReport
+swapReport :: BuildResult -> TransactionReport
 swapReport =
     buildTransactionReport
         ReportContext
@@ -228,7 +228,7 @@ swapReport =
             }
 
 swapBuildOutput
-    :: SomeTreasuryIntent -> TreasuryBuildResult -> TxBuildOutput
+    :: SomeTreasuryIntent -> BuildResult -> TxBuildOutput
 swapBuildOutput some result =
     TxBuildOutput
         { txoIntent = some
@@ -240,9 +240,9 @@ swapBuildOutput some result =
                     }
         }
 
-txCborHex :: TreasuryBuildResult -> TxCborHex
+txCborHex :: BuildResult -> TxCborHex
 txCborHex =
-    txCborHexFromBytes . tbrCborBytes
+    txCborHexFromBytes . brCborBytes
 
 assertSwapOutputCoverage :: TransactionReport -> IO ()
 assertSwapOutputCoverage report = do

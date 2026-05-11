@@ -114,6 +114,10 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
 import Lens.Micro ((^.))
 
+import Amaru.Treasury.Build
+    ( BuildResult (..)
+    , ScriptResult (..)
+    )
 import Amaru.Treasury.IntentJSON (SomeTreasuryIntent)
 import Amaru.Treasury.Report.Accounting
     ( UtxoSummary (..)
@@ -126,10 +130,6 @@ import Amaru.Treasury.Report.Accounting
 import Amaru.Treasury.Report.Classify
     ( ProducedOutputRole (..)
     , classifyOutputRole
-    )
-import Amaru.Treasury.TreasuryBuild
-    ( ScriptResult (..)
-    , TreasuryBuildResult (..)
     )
 
 -- | Self-contained artifact written by @tx-build --report@.
@@ -579,14 +579,14 @@ expectOnlyKeys label fields o =
     keys = Key.fromString <$> fields
 
 buildTransactionReport
-    :: ReportContext -> TreasuryBuildResult -> TransactionReport
+    :: ReportContext -> BuildResult -> TransactionReport
 buildTransactionReport context result =
     TransactionReport
         { trSchema = 1
         , trNetwork = rcNetwork context
         , trIdentity =
             TransactionIdentity
-                { tiTxId = tbrTxId result
+                { tiTxId = brTxId result
                 , tiBodySizeBytes = bodySize
                 , tiFeeLovelace = feeLovelace
                 , tiTotalCollateralLovelace = totalCollateral
@@ -597,13 +597,13 @@ buildTransactionReport context result =
                 { waInputs = walletInputs
                 , waCollateralInput =
                     inputSummary
-                        <$> tbrCollateralInput result
+                        <$> brCollateralInput result
                 , waChangeOutput =
                     outputSummary result
-                        <$> tbrWalletChangeOutput result
+                        <$> brWalletChangeOutput result
                 , waCollateralReturn =
                     collateralReturnSummary result
-                        <$> tbrCollateralReturn result
+                        <$> brCollateralReturn result
                 , waFeeLovelace = feeLovelace
                 , waNetSpendLovelace = walletNetSpend
                 }
@@ -647,34 +647,34 @@ buildTransactionReport context result =
             metadataSummary body
         }
   where
-    body = tbrFinalTxBody result
-    bodySize = fromIntegral (BSL.length (tbrCborBytes result))
-    Coin feeLovelace = tbrFeeLovelace result
-    Coin totalCollateral = tbrTotalCollateralLovelace result
-    Coin perChunkOverhead = tbrPerChunkOverheadLovelace result
-    scriptResults = tbrScriptResults result
-    walletInputs = inputSummary <$> tbrWalletInputs result
+    body = brFinalTxBody result
+    bodySize = fromIntegral (BSL.length (brCborBytes result))
+    Coin feeLovelace = brFeeLovelace result
+    Coin totalCollateral = brTotalCollateralLovelace result
+    Coin perChunkOverhead = brPerChunkOverheadLovelace result
+    scriptResults = brScriptResults result
+    walletInputs = inputSummary <$> brWalletInputs result
     treasuryInputs =
-        inputSummary <$> tbrTreasuryInputs result
+        inputSummary <$> brTreasuryInputs result
     treasuryInputTotal =
         sumValueSummaries (usValue <$> treasuryInputs)
     sundaeOrderTotal =
         sumValueSummaries
             [ valueSummary (txOut ^. valueTxOutL)
-            | (_, txOut) <- tbrSundaeOrderOutputs result
+            | (_, txOut) <- brSundaeOrderOutputs result
             ]
     treasuryLeftover =
         maybe
             emptyValue
             (valueSummary . (^. valueTxOutL) . snd)
-            (tbrTreasuryLeftoverOutput result)
+            (brTreasuryLeftoverOutput result)
     walletInputLovelace =
         sum (vsLovelace . usValue <$> walletInputs)
     walletChangeLovelace =
         maybe
             0
             ((vsLovelace . usValue) . outputSummary result)
-            (tbrWalletChangeOutput result)
+            (brWalletChangeOutput result)
     walletNetSpend =
         walletInputLovelace
             - walletChangeLovelace
@@ -686,7 +686,7 @@ buildTransactionReport context result =
     interval = validityInterval (body ^. vldtTxBodyL)
 
 outputFromTxOut
-    :: TreasuryBuildResult -> Int -> TxOut ConwayEra -> ProducedOutput
+    :: BuildResult -> Int -> TxOut ConwayEra -> ProducedOutput
 outputFromTxOut result index txOut =
     ProducedOutput
         { poIndex = index
@@ -752,21 +752,21 @@ inputSummary (txIn, txOut) =
         }
 
 outputSummary
-    :: TreasuryBuildResult -> (Int, TxOut ConwayEra) -> UtxoSummary
+    :: BuildResult -> (Int, TxOut ConwayEra) -> UtxoSummary
 outputSummary result (index, txOut) =
     UtxoSummary
         { usTxIn =
-            tbrTxId result
+            brTxId result
                 <> "#"
                 <> T.pack (show index)
         , usValue = valueSummary (txOut ^. valueTxOutL)
         }
 
 collateralReturnSummary
-    :: TreasuryBuildResult -> TxOut ConwayEra -> UtxoSummary
+    :: BuildResult -> TxOut ConwayEra -> UtxoSummary
 collateralReturnSummary result txOut =
     UtxoSummary
-        { usTxIn = tbrTxId result <> "#collateral-return"
+        { usTxIn = brTxId result <> "#collateral-return"
         , usValue = valueSummary (txOut ^. valueTxOutL)
         }
 

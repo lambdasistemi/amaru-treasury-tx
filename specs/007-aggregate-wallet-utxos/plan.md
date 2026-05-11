@@ -17,7 +17,7 @@ Replace the wizard's single-largest-pure-ADA-UTxO `selectWallet` with a largest-
 **Project Type**: Single Haskell library + CLI executable (one cabal package).
 **Performance Goals**: N/A — selection runs over ≤ a few dozen wallet UTxOs in O(n log n) sort + O(n) accumulate. Performance not a feature axis here.
 **Constraints**: Conway era, mainnet+preprod constants only; SundaeSwap V3 order datum shape is upstream — we don't change it.
-**Scale/Scope**: Single feature inside `swap-wizard`. Touches `Tx/SwapWizard.hs`, `Tx/Swap.hs`, `IntentJSON.hs`, `IntentJSON/Schema.hs`, `TreasuryBuild.hs`, the `app/amaru-treasury-tx/Main.hs` CLI, and `app/swap-probe/Main.hs`. Out of scope: `Tx/DisburseWizard.hs`, `Tx/WithdrawWizard.hs`, and the `Tx/DisburseIntentJSON.hs` legacy schema.
+**Scale/Scope**: Single feature inside `swap-wizard`. Touches `Tx/SwapWizard.hs`, `Tx/Swap.hs`, `IntentJSON.hs`, `IntentJSON/Schema.hs`, `Build.hs`, the `app/amaru-treasury-tx/Main.hs` CLI, and `app/swap-probe/Main.hs`. Out of scope: `Tx/DisburseWizard.hs`, `Tx/WithdrawWizard.hs`, and the `Tx/DisburseIntentJSON.hs` legacy schema.
 
 ## Constitution Check
 
@@ -59,7 +59,7 @@ amaru-treasury-tx/
 ├── lib/Amaru/Treasury/
 │   ├── IntentJSON.hs                  # +wjExtraTxIns; translateSwap reads it
 │   ├── IntentJSON/Schema.hs           # walletSchema gains optional extraTxIns
-│   ├── TreasuryBuild.hs               # runSwap includes extras in inputUtxos
+│   ├── Build.hs               # runSwap includes extras in inputUtxos
 │   └── Tx/
 │       ├── Swap.hs                    # +siExtraWalletInputs; swapProgram spends them
 │       └── SwapWizard.hs              # selectWallet → aggregator;

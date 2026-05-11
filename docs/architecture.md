@@ -12,14 +12,14 @@ flowchart TD
     CLI[app/amaru-treasury-tx/Main.hs<br/><i>impure</i>]
     Wizard[Tx.SwapWizard<br/><i>pure</i>]
     WithdrawWizard[Tx.WithdrawWizard<br/><i>pure</i>]
-    TreasuryBuild[TreasuryBuild<br/><i>dispatcher</i>]
+    Build[Build<br/><i>dispatcher</i>]
     Intent[IntentJSON<br/><i>unified schema</i>]
     Disburse[Tx.Disburse<br/><i>pure TxBuild q e ()</i>]
     Withdraw[Tx.Withdraw<br/><i>pure</i>]
     Verify[Registry.Verify<br/><i>pure + Provider IO</i>]
     Trace1[Tx.SwapWizard.Trace<br/><i>pure</i>]
     TraceWithdraw[Tx.WithdrawWizard.Trace<br/><i>pure</i>]
-    Trace2[TreasuryBuild.Trace<br/><i>pure</i>]
+    Trace2[Build.Trace<br/><i>pure</i>]
     Swap[Tx.Swap<br/><i>SwapIntent + program</i>]
     Redeemer[Redeemer]
     AuxData[AuxData]
@@ -29,7 +29,7 @@ flowchart TD
 
     CLI --> Wizard
     CLI --> WithdrawWizard
-    CLI --> TreasuryBuild
+    CLI --> Build
     CLI --> Trace1
     CLI --> TraceWithdraw
     CLI --> Trace2
@@ -37,11 +37,11 @@ flowchart TD
     Wizard --> Intent
     WithdrawWizard --> Verify
     WithdrawWizard --> Intent
-    TreasuryBuild --> Intent
-    TreasuryBuild --> ChainContext
-    TreasuryBuild --> Swap
-    TreasuryBuild --> Disburse
-    TreasuryBuild --> Withdraw
+    Build --> Intent
+    Build --> ChainContext
+    Build --> Swap
+    Build --> Disburse
+    Build --> Withdraw
     Swap --> Redeemer
     Swap --> AuxData
     Disburse --> Redeemer
@@ -76,8 +76,8 @@ flowchart TD
 | `Amaru.Treasury.Registry.Derive`        | Re-derive script hashes from the pinned blobs                   | yes |
 | `Amaru.Treasury.Registry.Metadata`      | Parse upstream `metadata.json`                                  | yes |
 | `Amaru.Treasury.Registry.Verify`        | Walk the registry NFT, verify metadata against chain anchors    | **no** (Provider IO) |
-| `Amaru.Treasury.TreasuryBuild`          | Unified `tx-build` dispatcher and action runners                | **no** (`ChainContext` evaluator) |
-| `Amaru.Treasury.TreasuryBuild.Trace`    | Typed `tx-build` trace ADT + renderer                           | yes |
+| `Amaru.Treasury.Build`          | Unified `tx-build` dispatcher and action runners                | **no** (`ChainContext` evaluator) |
+| `Amaru.Treasury.Build.Trace`    | Typed `tx-build` trace ADT + renderer                           | yes |
 | `Amaru.Treasury.Tx.Disburse`            | `TxBuild q e ()` for `disburse`                                 | yes |
 | `Amaru.Treasury.Tx.DisburseWizard`      | Pure disburse questionnaire translation helpers                 | yes |
 | `Amaru.Treasury.Tx.Withdraw`            | `TxBuild q e ()` for `withdraw`                                 | yes |
@@ -96,7 +96,7 @@ flowchart TD
 | :------------ | :----------------------------------------------------------------------- |
 | `swap-wizard` | `Registry.Verify` -> `Tx.SwapWizard` -> unified `IntentJSON` (encode)    |
 | `withdraw-wizard` | `Registry.Verify` -> `Tx.WithdrawWizard` -> unified `IntentJSON` (encode) |
-| `tx-build`    | unified `IntentJSON` (decode/translate) -> `TreasuryBuild` -> action program |
+| `tx-build`    | unified `IntentJSON` (decode/translate) -> `Build` -> action program |
 
 Both commands route every value-affecting step through a typed
 `Tracer` — `WizardEvent` and `BuildEvent` respectively. See the

@@ -738,7 +738,7 @@ encodeSomeTreasuryIntent = encodePretty' cfg
 
 {- | Shared translated boundary fields — the part of the
 intent that doesn't depend on the action variant. The
-typed lift consumed by 'TreasuryBuild.runBuild' is
+typed lift consumed by 'Build.runBuild' is
 @(TranslatedShared, Translated a)@.
 -}
 data TranslatedShared = TranslatedShared

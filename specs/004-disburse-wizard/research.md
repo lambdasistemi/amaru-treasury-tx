@@ -29,7 +29,7 @@ operator-facing contract.
   `Amaru.Treasury.IntentJSON.TreasuryIntent 'Disburse`.
 - **Legacy compatibility** `Amaru.Treasury.Tx.DisburseBuild` —
   the unified dispatcher now owns the real build entry point as
-  `Amaru.Treasury.TreasuryBuild.runDisburse`.
+  `Amaru.Treasury.Build.runDisburse`.
 - **New** `Amaru.Treasury.Tx.DisburseWizard` — `DisburseAnswers` ADT,
   `DisburseEnv`, `disburseToTreasuryIntent :: DisburseEnv ->
   DisburseAnswers -> Either DisburseError (TreasuryIntent 'Disburse)`

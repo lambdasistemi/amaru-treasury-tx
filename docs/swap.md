@@ -100,7 +100,7 @@ amaru-treasury-tx tx-build < intent.json > swap.cbor.hex
 
 Every value-affecting step emits one `tx-build:` line through
 the typed
-[`BuildEvent`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/TreasuryBuild/Trace.hs)
+[`BuildEvent`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Build/Trace.hs)
 tracer. `--log PATH` redirects them to a file (default = stderr).
 `--report PATH` writes the deterministic build-output envelope. On
 success, that envelope contains the transaction CBOR and mechanical
@@ -135,7 +135,7 @@ The action and the network are read from the intent's top-level
 4. Builds a `liveContext` by querying the node for every `TxIn`
    the build will reference (wallet, treasury inputs, the four
    reference inputs for scripts and registry).
-5. Runs `Amaru.Treasury.TreasuryBuild.runSwap`:
+5. Runs `Amaru.Treasury.Build.runSwap`:
    - `Cardano.Node.Client.TxBuild.build` with the live evaluator,
    - post-patches `total_collateral` + `collateral_return`
      ([upstream #124](https://github.com/lambdasistemi/cardano-node-clients/issues/124)),

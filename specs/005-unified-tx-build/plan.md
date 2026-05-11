@@ -100,7 +100,7 @@ operator workstation (matches feature 004 SC-002).
 - **Pure builders** (Constitution II): `swapProgram`,
   `disburseAdaProgram` (and any future `disburseUsdmProgram`)
   remain pure `TxBuild q e ()`. The dispatcher in
-  `runTreasuryBuild` is the only new IO seam, and it just selects
+  `runBuild` is the only new IO seam, and it just selects
   which builder to call.
 - **Build, never sign or submit** (Constitution IV): unchanged.
 - **Test-first with golden CBOR fixtures** (Constitution V,
@@ -116,7 +116,7 @@ operator workstation (matches feature 004 SC-002).
 - 4 new library modules — `Amaru.Treasury.IntentJSON`,
   `Amaru.Treasury.IntentJSON.Common`,
   `Amaru.Treasury.Wizard.Common`,
-  `Amaru.Treasury.TreasuryBuild`.
+  `Amaru.Treasury.Build`.
 - 3 modules collapse / get retired — `Tx.SwapIntentJSON`,
   `Tx.SwapBuild`, `Tx.SwapWizard` (split into the unified shape).
 - 1 module rewired — `app/amaru-treasury-tx/Main.hs` (subcommand
@@ -137,7 +137,7 @@ operator workstation (matches feature 004 SC-002).
 | Principle | Status | Notes |
 |-----------|--------|-------|
 | I. Faithful port of bash recipes | ✅ | The unification touches the JSON contract and the CLI surface, not the on-chain shape. CBOR bodies stay byte-identical (gated by SC-004). |
-| II. Pure builders, impure shell | ✅ | All `TxBuild` programs stay pure. The new `runTreasuryBuild` is an IO dispatcher over the existing pure builders. |
+| II. Pure builders, impure shell | ✅ | All `TxBuild` programs stay pure. The new `runBuild` is an IO dispatcher over the existing pure builders. |
 | III. Pluggable data source | ✅ | Reuses the existing `Backend`/`Provider IO` typeclass. No new direct N2C dependency. |
 | IV. Build, never sign or submit | ✅ | Builder still emits unsigned hex CBOR + summary; nothing about this feature touches keys or submission. |
 | V. Test-first with golden CBOR fixtures | ✅ | The existing swap golden's `expected.cbor` is the no-behaviour-change reference; any byte diff blocks merge. The round-trip property on `TreasuryIntent` lands red before the parser is rewritten. |
@@ -181,10 +181,10 @@ lib/Amaru/Treasury/
 │                                 # mkHash32). Used by both
 │                                 # IntentJSON and the wizard
 │                                 # resolver.
-├── TreasuryBuild.hs              # NEW: runTreasuryBuild ::
+├── Build.hs              # NEW: runBuild ::
 │                                 # ChainContext ->
-│                                 # TreasuryBuildInputs ->
-│                                 # IO TreasuryBuildResult,
+│                                 # BuildInputs ->
+│                                 # IO BuildResult,
 │                                 # dispatching on the action
 │                                 # variant.
 └── Wizard/
@@ -197,7 +197,7 @@ lib/Amaru/Treasury/
 
 lib/Amaru/Treasury/Tx/
 ├── Swap.hs                       # unchanged (pure builder)
-├── SwapBuild.hs                  # collapsed into TreasuryBuild;
+├── SwapBuild.hs                  # collapsed into Build;
 │                                 # this file is removed.
 ├── SwapIntentJSON.hs             # collapsed into IntentJSON;
 │                                 # this file is removed.
@@ -259,7 +259,7 @@ specs/002-swap-wizard/            # spec.md, plan.md, quickstart.md,
 **Structure Decision**: Two new top-level library directories
 (`IntentJSON/` and `Wizard/`) hold the shared modules. The
 per-action build modules collapse into the unified
-`Treasury.TreasuryBuild`. The wizard side keeps a per-action module
+`Treasury.Build`. The wizard side keeps a per-action module
 (`Tx.SwapWizard`, plus future `Tx.DisburseWizard`,
 `Tx.WithdrawWizard`, `Tx.ReorganizeWizard`) because each wizard
 asks distinct questions; only the *consumer* of the intent (the

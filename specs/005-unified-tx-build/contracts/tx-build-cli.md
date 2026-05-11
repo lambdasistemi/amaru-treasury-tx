@@ -89,31 +89,31 @@ Top-level fields:
 ## 5. Trace event categories
 
 Typed events emitted on `--log`. Constructors live in a new
-`Amaru.Treasury.TreasuryBuild.Trace` module; the constructors
+`Amaru.Treasury.Build.Trace` module; the constructors
 mirror today's `Tx.Swap.Trace.SwapEvent` shape but the prefix
-becomes `Tbe-` (for "TreasuryBuildEvent"):
+becomes `BuildEvent-` (for "BuildEvent"):
 
-- `TbeIntentSource`: path or `<stdin>`.
-- `TbeIntentParsed`: the action and network read from the parsed
+- `BuildEventIntentSource`: path or `<stdin>`.
+- `BuildEventIntentParsed`: the action and network read from the parsed
   intent (so the trace shows what kind of tx the build is about
   to construct).
-- `TbeConnect`: socket path.
-- `TbeNetworkOk`: handshake magic matches `intent.network`.
-- `TbeNetworkMismatch`: handshake magic differs from
+- `BuildEventConnect`: socket path.
+- `BuildEventNetworkOk`: handshake magic matches `intent.network`.
+- `BuildEventNetworkMismatch`: handshake magic differs from
   `intent.network`. Terminal event for non-zero exit (code 6).
-- `TbeRequiredUtxos`: count of UTxOs needed for the build.
-- `TbeBuilt`: cbor byte length, fee, total collateral.
-- `TbeReevaluated`: total redeemer count, failure count.
-- `TbeScriptFail`: one event per failed redeemer with purpose +
+- `BuildEventRequiredUtxos`: count of UTxOs needed for the build.
+- `BuildEventBuilt`: cbor byte length, fee, total collateral.
+- `BuildEventReevaluated`: total redeemer count, failure count.
+- `BuildEventScriptFail`: one event per failed redeemer with purpose +
   error string.
-- `TbeWroteCbor`: output path or `<stdout>`.
-- `TbeWroteSummary`: summary path.
-- `TbeValidationOk` / `TbeValidationFailed`: terminal event.
-- `TbeAborted`: typed error message (terminal event for parse /
+- `BuildEventWroteCbor`: output path or `<stdout>`.
+- `BuildEventWroteSummary`: summary path.
+- `BuildEventValidationOk` / `BuildEventValidationFailed`: terminal event.
+- `BuildEventAborted`: typed error message (terminal event for parse /
   translate / build failures).
 
 Mirrors `Amaru.Treasury.Tx.Swap.Trace.SwapEvent` 1:1 but with the
-new `TbeIntentParsed` / `TbeNetworkOk` / `TbeNetworkMismatch`
+new `BuildEventIntentParsed` / `BuildEventNetworkOk` / `BuildEventNetworkMismatch`
 events to surface the unified-intent invariants.
 
 ## 6. Out of scope for v0

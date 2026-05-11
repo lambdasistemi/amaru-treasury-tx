@@ -29,8 +29,8 @@ workflow and labels direct `--min-rate` usage as manually audited.
 - Existing `Amaru.Treasury.Tx.SwapWizard` for registry verification,
   network constants, wallet/treasury selection, chunk counting, and
   pure `wizardToTreasuryIntent`.
-- Existing `Amaru.Treasury.TreasuryBuild` and
-  `Amaru.Treasury.TreasuryBuild.Trace` for unsigned CBOR generation.
+- Existing `Amaru.Treasury.Build` and
+  `Amaru.Treasury.Build.Trace` for unsigned CBOR generation.
 - Existing `Amaru.Treasury.IntentJSON` for stable intent encoding and
   schema validation.
 - `optparse-applicative`, `aeson`, `aeson-pretty`, `time`, and `text`

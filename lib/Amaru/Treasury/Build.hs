@@ -3,7 +3,7 @@
 {-# LANGUAGE TupleSections #-}
 
 {- |
-Module      : Amaru.Treasury.TreasuryBuild
+Module      : Amaru.Treasury.Build
 Description : Unified IO build pipeline (action-polymorphic)
 Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
@@ -30,22 +30,16 @@ needed.
 
 The final tx is re-evaluated against the script
 evaluator so callers get a per-redeemer outcome
-('tbrScriptResults') alongside the CBOR.
+('brScriptResults') alongside the CBOR.
 
 In this phase-4 cut the swap, disburse, and withdraw
 branches are wired. Reorganize lands with
 [#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46).
 -}
-module Amaru.Treasury.TreasuryBuild
-    ( -- * Outputs
-      BuildDiagnostic (..)
-    , BuildErrorContext (..)
-    , BuildFailurePhase (..)
-    , TreasuryBuildAction (..)
-    , TreasuryBuildError (..)
-    , TreasuryBuildException (..)
-    , TreasuryBuildResult (..)
-    , ScriptResult (..)
+module Amaru.Treasury.Build
+    ( -- * Outputs and diagnostics
+      module Amaru.Treasury.Build.Error
+    , module Amaru.Treasury.Build.Result
 
       -- * Drivers
     , runBuild
@@ -54,22 +48,9 @@ module Amaru.Treasury.TreasuryBuild
     , runDisburse
     , runSwap
     , runWithdraw
-
-      -- * Diagnostics
-    , mapTreasuryBuildExceptionContext
-    , renderTreasuryBuildError
-    , treasuryBuildErrorCode
-    , treasuryBuildErrorFromBuildError
-    , withBuildErrorContext
-    , withTreasuryBuildExceptionContext
     ) where
 
 import Cardano.Crypto.Hash.Class (hashToBytes)
-import Control.Exception
-    ( Exception (..)
-    , throwIO
-    , try
-    )
 import Control.Monad (unless)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Except
@@ -79,7 +60,6 @@ import Control.Monad.Trans.Except
     , withExceptT
     )
 import Data.ByteString.Base16 qualified as B16
-import Data.ByteString.Lazy qualified as BSL
 import Data.Foldable (toList)
 import Data.List (find)
 import Data.Map.Strict qualified as Map
@@ -92,7 +72,6 @@ import Data.Text.Encoding qualified as Text
 
 import Cardano.Ledger.Address (Addr)
 import Cardano.Ledger.Alonzo.PParams (ppCollateralPercentageL)
-import Cardano.Ledger.Alonzo.Scripts (AsIx)
 import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.Api.Tx (estimateMinFeeTx, txIdTx)
 import Cardano.Ledger.Api.Tx.Body
@@ -112,26 +91,29 @@ import Cardano.Ledger.BaseTypes (StrictMaybe (..))
 import Cardano.Ledger.Binary (serialize)
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
-import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
 import Cardano.Ledger.Core (PParams, TopTx, TxBody, bodyTxL)
 import Cardano.Ledger.Hashes (extractHash)
 import Cardano.Ledger.Metadata (Metadatum)
-import Cardano.Ledger.Plutus (ExUnits)
 import Cardano.Ledger.TxIn (TxId (..), TxIn)
-import Cardano.Node.Client.Balance
-    ( BalanceError (..)
-    , refScriptsSize
-    )
+import Cardano.Node.Client.Balance (refScriptsSize)
 import Cardano.Node.Client.Ledger (ConwayTx)
 import Cardano.Node.Client.TxBuild
-    ( BuildError (..)
-    , InterpretIO (..)
+    ( InterpretIO (..)
     , build
     , setMetadata
     )
+import Cardano.Node.Client.TxBuild qualified as TxBuild
 import Lens.Micro ((&), (.~), (^.))
 
 import Amaru.Treasury.AuxData (label1694)
+import Amaru.Treasury.Build.Error
+import Amaru.Treasury.Build.Error.Convert
+    ( diagnosticFromTxBuildError
+    , missingUtxosError
+    , runActionBuild
+    , throwBuildException
+    )
+import Amaru.Treasury.Build.Result
 import Amaru.Treasury.ChainContext (ChainContext (..))
 import Amaru.Treasury.IntentJSON
     ( SAction (..)
@@ -155,335 +137,6 @@ import Amaru.Treasury.Tx.Withdraw
     , withdrawProgram
     )
 
--- | Per-script result from 'evaluateTx'.
-data ScriptResult = ScriptResult
-    { srPurpose
-        :: !( ConwayPlutusPurpose
-                AsIx
-                ConwayEra
-            )
-    , srOutcome :: !(Either String ExUnits)
-    -- ^ @Right ex@ on success carrying the evaluator's
-    --     ExUnits; @Left e@ on script failure.
-    }
-    deriving (Show)
-
--- | What the build pipeline returns.
-data TreasuryBuildResult = TreasuryBuildResult
-    { tbrCborBytes :: !BSL.ByteString
-    -- ^ raw Conway tx CBOR
-    , tbrFeeLovelace :: !Coin
-    -- ^ fee assigned by 'build'
-    , tbrTotalCollateralLovelace :: !Coin
-    -- ^ @total_collateral@ as recorded in the final
-    --     body. 'Coin' 0 if the body has no
-    --     @total_collateral@ field (a non-script tx).
-    , tbrScriptResults :: ![ScriptResult]
-    -- ^ outcome of re-evaluating every redeemer on the
-    --     fully-balanced tx
-    , tbrFinalTxBody :: !(TxBody TopTx ConwayEra)
-    -- ^ final balanced transaction body used to render
-    --     deterministic reports without rebuilding
-    , tbrTxId :: !Text
-    -- ^ transaction id of the final balanced transaction
-    , tbrWalletInputs :: ![(TxIn, TxOut ConwayEra)]
-    -- ^ wallet-owned inputs used to fuel the build
-    , tbrTreasuryInputs :: ![(TxIn, TxOut ConwayEra)]
-    -- ^ treasury-owned inputs spent by the build
-    , tbrSundaeOrderOutputs :: ![(Int, TxOut ConwayEra)]
-    -- ^ final Sundae order outputs, paired with ledger output indexes
-    , tbrTreasuryLeftoverOutput :: !(Maybe (Int, TxOut ConwayEra))
-    -- ^ final treasury leftover output, when present
-    , tbrPerChunkOverheadLovelace :: !Coin
-    -- ^ per-order overhead funded by the treasury for swap builds
-    , tbrWalletChangeOutput :: !(Maybe (Int, TxOut ConwayEra))
-    -- ^ final wallet change output, paired with its output index
-    , tbrCollateralInput :: !(Maybe (TxIn, TxOut ConwayEra))
-    -- ^ wallet input selected as collateral, when present
-    , tbrCollateralReturn :: !(Maybe (TxOut ConwayEra))
-    -- ^ collateral-return output from the final body, when present
-    }
-
--- | Treasury action whose build path produced a diagnostic.
-data TreasuryBuildAction
-    = BuildActionSwap
-    | BuildActionDisburse
-    | BuildActionWithdraw
-    | BuildActionReorganize
-    | BuildActionIntent
-    deriving stock (Eq, Show)
-
--- | Coarse phase where an expected build failure occurred.
-data BuildFailurePhase
-    = BuildPhaseTranslate
-    | BuildPhaseGatherInputs
-    | BuildPhaseBuild
-    | BuildPhaseFeeAlignment
-    | BuildPhaseUnsupported
-    deriving stock (Eq, Show)
-
--- | Extra structured context added while an error moves outward.
-data BuildErrorContext
-    = ContextIntentAction !Text
-    | ContextBuildPhase !BuildFailurePhase
-    | ContextWalletInput !Text
-    | ContextReportDestination !FilePath
-    | ContextNetwork !Text
-    deriving stock (Eq, Show)
-
--- | Stable project-owned build diagnostic.
-data BuildDiagnostic
-    = DiagnosticScriptEvaluationFailed !Text !Text
-    | DiagnosticInsufficientFee !Coin !Coin
-    | DiagnosticFeeNotConverged
-    | DiagnosticCollateralShortfall !Coin !Coin
-    | DiagnosticChecksFailed !Text
-    | DiagnosticBumpFeeFailed !Text
-    | DiagnosticMissingUtxos ![Text]
-    | DiagnosticFeeAlignmentFailed !Text
-    | DiagnosticTranslateFailed !Text
-    | DiagnosticUnsupportedAction !Text
-    deriving stock (Eq, Show)
-
--- | Expected treasury build failure with stable rendering.
-data TreasuryBuildError = TreasuryBuildError
-    { tbeAction :: !TreasuryBuildAction
-    , tbePhase :: !BuildFailurePhase
-    , tbeContext :: ![BuildErrorContext]
-    , tbeDiagnostic :: !BuildDiagnostic
-    }
-    deriving stock (Eq, Show)
-
--- | Compatibility exception for callers that still use throwing APIs.
-newtype TreasuryBuildException
-    = TreasuryBuildException TreasuryBuildError
-    deriving stock (Show)
-
-instance Exception TreasuryBuildException where
-    displayException (TreasuryBuildException err) =
-        T.unpack (renderTreasuryBuildError err)
-
-data ActionBuildError = ActionBuildError
-    { abePhase :: !BuildFailurePhase
-    , abeContext :: ![BuildErrorContext]
-    , abeDiagnostic :: !BuildDiagnostic
-    }
-    deriving stock (Eq, Show)
-
-treasuryBuildError
-    :: TreasuryBuildAction
-    -> BuildFailurePhase
-    -> BuildDiagnostic
-    -> TreasuryBuildError
-treasuryBuildError action phase diagnostic =
-    TreasuryBuildError
-        { tbeAction = action
-        , tbePhase = phase
-        , tbeContext = []
-        , tbeDiagnostic = diagnostic
-        }
-
-actionBuildError
-    :: BuildFailurePhase
-    -> BuildDiagnostic
-    -> ActionBuildError
-actionBuildError phase diagnostic =
-    ActionBuildError
-        { abePhase = phase
-        , abeContext = []
-        , abeDiagnostic = diagnostic
-        }
-
-nestActionBuildError
-    :: TreasuryBuildAction
-    -> ActionBuildError
-    -> TreasuryBuildError
-nestActionBuildError action err =
-    TreasuryBuildError
-        { tbeAction = action
-        , tbePhase = abePhase err
-        , tbeContext = abeContext err
-        , tbeDiagnostic = abeDiagnostic err
-        }
-
-withBuildErrorContext
-    :: BuildErrorContext
-    -> TreasuryBuildError
-    -> TreasuryBuildError
-withBuildErrorContext ctx err =
-    err{tbeContext = ctx : tbeContext err}
-
-mapTreasuryBuildExceptionContext
-    :: BuildErrorContext
-    -> TreasuryBuildException
-    -> TreasuryBuildException
-mapTreasuryBuildExceptionContext ctx (TreasuryBuildException err) =
-    TreasuryBuildException (withBuildErrorContext ctx err)
-
-withTreasuryBuildExceptionContext
-    :: BuildErrorContext
-    -> IO a
-    -> IO a
-withTreasuryBuildExceptionContext ctx action = do
-    result <- try action
-    case result of
-        Left err ->
-            throwIO (mapTreasuryBuildExceptionContext ctx err)
-        Right ok -> pure ok
-
-treasuryBuildErrorFromBuildError
-    :: TreasuryBuildAction
-    -> BuildFailurePhase
-    -> BuildError ()
-    -> TreasuryBuildError
-treasuryBuildErrorFromBuildError action phase =
-    treasuryBuildError action phase . diagnosticFromBuildError
-
-diagnosticFromBuildError :: BuildError () -> BuildDiagnostic
-diagnosticFromBuildError = \case
-    EvalFailure purpose reason ->
-        DiagnosticScriptEvaluationFailed
-            (T.pack (show purpose))
-            (T.pack reason)
-    BalanceFailed balanceError ->
-        diagnosticFromBalanceError balanceError
-    ChecksFailed checks ->
-        DiagnosticChecksFailed (T.pack (show checks))
-    BumpFeeFailed reason ->
-        DiagnosticBumpFeeFailed (T.pack reason)
-
-diagnosticFromBalanceError :: BalanceError -> BuildDiagnostic
-diagnosticFromBalanceError = \case
-    InsufficientFee required available ->
-        DiagnosticInsufficientFee required available
-    FeeNotConverged ->
-        DiagnosticFeeNotConverged
-    CollateralShortfall required available ->
-        DiagnosticCollateralShortfall required available
-
-treasuryBuildErrorCode :: TreasuryBuildError -> Text
-treasuryBuildErrorCode err =
-    case tbeDiagnostic err of
-        DiagnosticScriptEvaluationFailed{} ->
-            "script-evaluation-failed"
-        DiagnosticInsufficientFee{} ->
-            "insufficient-fee-capacity"
-        DiagnosticFeeNotConverged ->
-            "fee-not-converged"
-        DiagnosticCollateralShortfall{} ->
-            "collateral-shortfall"
-        DiagnosticChecksFailed{} ->
-            "final-validation-failed"
-        DiagnosticBumpFeeFailed{} ->
-            "fee-bump-failed"
-        DiagnosticMissingUtxos{} ->
-            "missing-utxos"
-        DiagnosticFeeAlignmentFailed{} ->
-            "fee-alignment-failed"
-        DiagnosticTranslateFailed{} ->
-            "intent-translation-failed"
-        DiagnosticUnsupportedAction{} ->
-            "unsupported-action"
-
-renderTreasuryBuildError :: TreasuryBuildError -> Text
-renderTreasuryBuildError err =
-    "tx-build: "
-        <> renderAction (tbeAction err)
-        <> " failed "
-        <> renderPhase (tbePhase err)
-        <> ": "
-        <> renderDiagnostic (tbeDiagnostic err)
-        <> renderContexts (tbeContext err)
-
-renderAction :: TreasuryBuildAction -> Text
-renderAction = \case
-    BuildActionSwap -> "swap"
-    BuildActionDisburse -> "disburse"
-    BuildActionWithdraw -> "withdraw"
-    BuildActionReorganize -> "reorganize"
-    BuildActionIntent -> "intent"
-
-renderPhase :: BuildFailurePhase -> Text
-renderPhase = \case
-    BuildPhaseTranslate -> "while translating the intent"
-    BuildPhaseGatherInputs -> "while gathering inputs"
-    BuildPhaseBuild -> "while building the transaction"
-    BuildPhaseFeeAlignment -> "while aligning the final fee"
-    BuildPhaseUnsupported -> "because the action is unsupported"
-
-renderDiagnostic :: BuildDiagnostic -> Text
-renderDiagnostic = \case
-    DiagnosticScriptEvaluationFailed purpose reason ->
-        "script evaluation failed for "
-            <> purpose
-            <> ": "
-            <> reason
-    DiagnosticInsufficientFee (Coin required) (Coin available) ->
-        "insufficient fee capacity; required lovelace: "
-            <> T.pack (show required)
-            <> "; available lovelace: "
-            <> T.pack (show available)
-    DiagnosticFeeNotConverged ->
-        "fee did not converge; retry with fresh chain state or report protocol-parameter drift"
-    DiagnosticCollateralShortfall (Coin required) (Coin available) ->
-        "collateral shortfall; required collateral lovelace: "
-            <> T.pack (show required)
-            <> "; available collateral lovelace: "
-            <> T.pack (show available)
-    DiagnosticChecksFailed checks ->
-        "final validation checks failed: " <> checks
-    DiagnosticBumpFeeFailed reason ->
-        "fee bump failed: " <> reason
-    DiagnosticMissingUtxos missing ->
-        "missing required UTxOs from the chain context: "
-            <> T.intercalate ", " missing
-    DiagnosticFeeAlignmentFailed reason ->
-        "fee alignment failed: " <> reason
-    DiagnosticTranslateFailed reason ->
-        "intent translation failed: " <> reason
-    DiagnosticUnsupportedAction action ->
-        action <> " is not implemented"
-
-renderContexts :: [BuildErrorContext] -> Text
-renderContexts [] = ""
-renderContexts contexts =
-    " (context: "
-        <> T.intercalate "; " (renderContext <$> contexts)
-        <> ")"
-
-renderContext :: BuildErrorContext -> Text
-renderContext = \case
-    ContextIntentAction action ->
-        "action=" <> action
-    ContextBuildPhase phase ->
-        "phase=" <> T.pack (show phase)
-    ContextWalletInput input ->
-        "wallet-input=" <> input
-    ContextReportDestination path ->
-        "report=" <> T.pack path
-    ContextNetwork network ->
-        "network=" <> network
-
-throwTreasuryBuildException :: TreasuryBuildError -> IO a
-throwTreasuryBuildException =
-    throwIO . TreasuryBuildException
-
-runActionBuild
-    :: TreasuryBuildAction
-    -> ExceptT ActionBuildError IO a
-    -> IO a
-runActionBuild action buildAction = do
-    result <-
-        runExceptT $
-            withExceptT (nestActionBuildError action) buildAction
-    either throwTreasuryBuildException pure result
-
-missingUtxosError :: [TxIn] -> ActionBuildError
-missingUtxosError missing =
-    actionBuildError
-        BuildPhaseGatherInputs
-        (DiagnosticMissingUtxos (T.pack . show <$> missing))
-
 -- ----------------------------------------------------
 -- Driver
 -- ----------------------------------------------------
@@ -500,17 +153,17 @@ runBuild
     -> TranslatedShared
     -> SAction a
     -> Translated a
-    -> IO TreasuryBuildResult
+    -> IO BuildResult
 runBuild ctx shared sa translated = do
     result <- runExceptT (runBuildExcept ctx shared sa translated)
-    either throwTreasuryBuildException pure result
+    either throwBuildException pure result
 
 runBuildExcept
     :: ChainContext
     -> TranslatedShared
     -> SAction a
     -> Translated a
-    -> ExceptT TreasuryBuildError IO TreasuryBuildResult
+    -> ExceptT BuildError IO BuildResult
 runBuildExcept ctx shared sa translated = case sa of
     SSwap ->
         withExceptT
@@ -542,7 +195,7 @@ runBuildExcept ctx shared sa translated = case sa of
             )
     SReorganize ->
         throwE $
-            treasuryBuildError
+            buildError
                 BuildActionReorganize
                 BuildPhaseUnsupported
                 (DiagnosticUnsupportedAction "reorganize")
@@ -553,21 +206,21 @@ return type. Decodes-then-translates-then-builds.
 runFromIntent
     :: ChainContext
     -> SomeTreasuryIntent
-    -> IO TreasuryBuildResult
+    -> IO BuildResult
 runFromIntent ctx some = do
     result <- runFromIntentEither ctx some
-    either throwTreasuryBuildException pure result
+    either throwBuildException pure result
 
 runFromIntentEither
     :: ChainContext
     -> SomeTreasuryIntent
-    -> IO (Either TreasuryBuildError TreasuryBuildResult)
+    -> IO (Either BuildError BuildResult)
 runFromIntentEither ctx (SomeTreasuryIntent sa intent) =
     runExceptT $ do
         case translateIntent sa intent of
             Left e ->
                 throwE $
-                    treasuryBuildError
+                    buildError
                         BuildActionIntent
                         BuildPhaseTranslate
                         (DiagnosticTranslateFailed (T.pack e))
@@ -590,7 +243,7 @@ runWithdraw
     -> Addr
     -- ^ change address — also receives @collateral_return@
     --     by default (see module header)
-    -> IO TreasuryBuildResult
+    -> IO BuildResult
 runWithdraw ctx intent rationale walletAddr =
     runActionBuild BuildActionWithdraw $
         runWithdrawAction ctx intent rationale walletAddr
@@ -600,7 +253,7 @@ runWithdrawAction
     -> WithdrawIntent
     -> Metadatum
     -> Addr
-    -> ExceptT ActionBuildError IO TreasuryBuildResult
+    -> ExceptT ActionBuildError IO BuildResult
 runWithdrawAction ctx intent rationale walletAddr = do
     let walletInput = wiWalletUtxo intent
         refInputs =
@@ -653,7 +306,7 @@ runWithdrawAction ctx intent rationale walletAddr = do
             throwE $
                 actionBuildError
                     BuildPhaseBuild
-                    (diagnosticFromBuildError (e :: BuildError ()))
+                    (diagnosticFromTxBuildError (e :: TxBuild.BuildError ()))
         Right tx0 -> do
             tx <-
                 case alignCardanoCliBuildFee
@@ -690,24 +343,24 @@ runWithdrawAction ctx intent rationale walletAddr = do
                         (eraProtVerLow @ConwayEra)
                         (tx :: ConwayTx)
             pure
-                TreasuryBuildResult
-                    { tbrCborBytes = cbor
-                    , tbrFeeLovelace = feeLov
-                    , tbrTotalCollateralLovelace =
+                BuildResult
+                    { brCborBytes = cbor
+                    , brFeeLovelace = feeLov
+                    , brTotalCollateralLovelace =
                         totalColl
-                    , tbrScriptResults = scriptResults
-                    , tbrFinalTxBody = body
-                    , tbrTxId = txIdText tx
-                    , tbrWalletInputs = walletInputUtxos
-                    , tbrTreasuryInputs = []
-                    , tbrSundaeOrderOutputs = []
-                    , tbrTreasuryLeftoverOutput = Nothing
-                    , tbrPerChunkOverheadLovelace = Coin 0
-                    , tbrWalletChangeOutput =
+                    , brScriptResults = scriptResults
+                    , brFinalTxBody = body
+                    , brTxId = txIdText tx
+                    , brWalletInputs = walletInputUtxos
+                    , brTreasuryInputs = []
+                    , brSundaeOrderOutputs = []
+                    , brTreasuryLeftoverOutput = Nothing
+                    , brPerChunkOverheadLovelace = Coin 0
+                    , brWalletChangeOutput =
                         indexedOutputAt changeOutputIndex body
-                    , tbrCollateralInput =
+                    , brCollateralInput =
                         collateralInputFrom body walletInputUtxos
-                    , tbrCollateralReturn =
+                    , brCollateralReturn =
                         strictMaybe
                             (body ^. collateralReturnTxBodyL)
                     }
@@ -729,7 +382,7 @@ runDisburse
     -> Addr
     -- ^ change address — also receives @collateral_return@
     --     by default (see module header)
-    -> IO TreasuryBuildResult
+    -> IO BuildResult
 runDisburse ctx intent rationale walletAddr =
     runActionBuild BuildActionDisburse $
         runDisburseAction ctx intent rationale walletAddr
@@ -739,7 +392,7 @@ runDisburseAction
     -> DisburseIntent
     -> Metadatum
     -> Addr
-    -> ExceptT ActionBuildError IO TreasuryBuildResult
+    -> ExceptT ActionBuildError IO BuildResult
 runDisburseAction ctx intent rationale walletAddr = case intent of
     DisburseAdaIntent fields payload ->
         runDisburseAdaAction ctx fields payload rationale walletAddr
@@ -751,7 +404,7 @@ runDisburseAdaAction
     -> DisburseAdaPayload
     -> Metadatum
     -> Addr
-    -> ExceptT ActionBuildError IO TreasuryBuildResult
+    -> ExceptT ActionBuildError IO BuildResult
 runDisburseAdaAction ctx fields payload rationale walletAddr = do
     let walletInput = difWalletUtxo fields
         treasuryInputs = difTreasuryUtxos fields
@@ -810,7 +463,7 @@ runDisburseAdaAction ctx fields payload rationale walletAddr = do
             throwE $
                 actionBuildError
                     BuildPhaseBuild
-                    (diagnosticFromBuildError (e :: BuildError ()))
+                    (diagnosticFromTxBuildError (e :: TxBuild.BuildError ()))
         Right tx0 -> do
             tx <- case alignCardanoCliBuildFee pp refUtxos 2 tx0 of
                 Left e ->
@@ -842,24 +495,24 @@ runDisburseAdaAction ctx fields payload rationale walletAddr = do
                         (eraProtVerLow @ConwayEra)
                         (tx :: ConwayTx)
             pure
-                TreasuryBuildResult
-                    { tbrCborBytes = cbor
-                    , tbrFeeLovelace = feeLov
-                    , tbrTotalCollateralLovelace =
+                BuildResult
+                    { brCborBytes = cbor
+                    , brFeeLovelace = feeLov
+                    , brTotalCollateralLovelace =
                         totalColl
-                    , tbrScriptResults = scriptResults
-                    , tbrFinalTxBody = body
-                    , tbrTxId = txIdText tx
-                    , tbrWalletInputs = walletInputUtxos
-                    , tbrTreasuryInputs = treasuryInputUtxos
-                    , tbrSundaeOrderOutputs = []
-                    , tbrTreasuryLeftoverOutput = Nothing
-                    , tbrPerChunkOverheadLovelace = Coin 0
-                    , tbrWalletChangeOutput =
+                    , brScriptResults = scriptResults
+                    , brFinalTxBody = body
+                    , brTxId = txIdText tx
+                    , brWalletInputs = walletInputUtxos
+                    , brTreasuryInputs = treasuryInputUtxos
+                    , brSundaeOrderOutputs = []
+                    , brTreasuryLeftoverOutput = Nothing
+                    , brPerChunkOverheadLovelace = Coin 0
+                    , brWalletChangeOutput =
                         indexedOutputAt 2 body
-                    , tbrCollateralInput =
+                    , brCollateralInput =
                         collateralInputFrom body walletInputUtxos
-                    , tbrCollateralReturn =
+                    , brCollateralReturn =
                         strictMaybe
                             (body ^. collateralReturnTxBodyL)
                     }
@@ -1049,7 +702,7 @@ runSwap
     -> Addr
     -- ^ change address — also receives @collateral_return@
     --     by default (see module header)
-    -> IO TreasuryBuildResult
+    -> IO BuildResult
 runSwap ctx intent rationale walletInput walletAddr =
     runActionBuild BuildActionSwap $
         runSwapAction ctx intent rationale walletInput walletAddr
@@ -1060,7 +713,7 @@ runSwapAction
     -> Metadatum
     -> TxIn
     -> Addr
-    -> ExceptT ActionBuildError IO TreasuryBuildResult
+    -> ExceptT ActionBuildError IO BuildResult
 runSwapAction ctx intent rationale walletInput walletAddr = do
     let utxoMap = ccUtxos ctx
         required =
@@ -1125,7 +778,7 @@ runSwapAction ctx intent rationale walletInput walletAddr = do
             throwE $
                 actionBuildError
                     BuildPhaseBuild
-                    (diagnosticFromBuildError (e :: BuildError ()))
+                    (diagnosticFromTxBuildError (e :: TxBuild.BuildError ()))
         Right tx0 -> do
             tx <-
                 case alignCardanoCliBuildFee
@@ -1168,34 +821,34 @@ runSwapAction ctx intent rationale walletInput walletAddr = do
                         (eraProtVerLow @ConwayEra)
                         (tx :: ConwayTx)
             pure
-                TreasuryBuildResult
-                    { tbrCborBytes = cbor
-                    , tbrFeeLovelace = feeLov
-                    , tbrTotalCollateralLovelace =
+                BuildResult
+                    { brCborBytes = cbor
+                    , brFeeLovelace = feeLov
+                    , brTotalCollateralLovelace =
                         totalColl
-                    , tbrScriptResults = scriptResults
-                    , tbrFinalTxBody = body
-                    , tbrTxId = txIdText tx
-                    , tbrWalletInputs = walletInputUtxos
-                    , tbrTreasuryInputs = treasuryInputUtxos
-                    , tbrSundaeOrderOutputs =
+                    , brScriptResults = scriptResults
+                    , brFinalTxBody = body
+                    , brTxId = txIdText tx
+                    , brWalletInputs = walletInputUtxos
+                    , brTreasuryInputs = treasuryInputUtxos
+                    , brSundaeOrderOutputs =
                         indexedOutputs
                             0
                             (length (siSwapOrders intent))
                             body
-                    , tbrTreasuryLeftoverOutput =
+                    , brTreasuryLeftoverOutput =
                         indexedOutputAt
                             (length (siSwapOrders intent))
                             body
-                    , tbrPerChunkOverheadLovelace =
+                    , brPerChunkOverheadLovelace =
                         siSwapOrderExtraLovelace intent
-                    , tbrWalletChangeOutput =
+                    , brWalletChangeOutput =
                         indexedOutputAt
                             (length (siSwapOrders intent) + 1)
                             body
-                    , tbrCollateralInput =
+                    , brCollateralInput =
                         collateralInputFrom body walletInputUtxos
-                    , tbrCollateralReturn =
+                    , brCollateralReturn =
                         strictMaybe
                             (body ^. collateralReturnTxBodyL)
                     }

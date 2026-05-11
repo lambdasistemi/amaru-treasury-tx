@@ -1,4 +1,4 @@
-module Amaru.Treasury.TreasuryBuild.ReportWriter
+module Amaru.Treasury.Build.ReportWriter
     ( ReportWriteError (..)
     , writeReportArtifact
     ) where
@@ -9,7 +9,7 @@ import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Text qualified as T
 
-import Amaru.Treasury.TreasuryBuild.Trace
+import Amaru.Treasury.Build.Trace
     ( BuildEvent (..)
     )
 
@@ -28,11 +28,11 @@ writeReportArtifact tr path bytes = do
     result <- try (BSL.writeFile path bytes)
     case result of
         Right () -> do
-            traceWith tr (TbeWroteReport path)
+            traceWith tr (BuildEventWroteReport path)
             pure (Right ())
         Left err -> do
             let message = displayReportWriteError path err
-            traceWith tr (TbeReportWriteFailed path (T.pack message))
+            traceWith tr (BuildEventReportWriteFailed path (T.pack message))
             pure (Left (ReportWriteError path message))
 
 displayReportWriteError :: FilePath -> IOException -> String

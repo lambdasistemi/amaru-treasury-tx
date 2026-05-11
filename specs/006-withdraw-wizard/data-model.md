@@ -195,7 +195,7 @@ The shared translation result keeps:
 
 ## 7. Build result
 
-`TreasuryBuild.runWithdraw` mirrors `runSwap` and `runDisburse`:
+`Build.runWithdraw` mirrors `runSwap` and `runDisburse`:
 
 ```haskell
 runWithdraw
@@ -203,7 +203,7 @@ runWithdraw
     -> WithdrawIntent
     -> Metadatum
     -> Addr
-    -> IO TreasuryBuildResult
+    -> IO BuildResult
 ```
 
 Required context:

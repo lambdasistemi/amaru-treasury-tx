@@ -200,7 +200,7 @@ knownNetworkMagics =
 walking the candidates that are NOT the intent's
 declared network. The probe function is injected so this
 helper is unit-testable without a real Unix socket
-('test/unit/Amaru/Treasury/TreasuryBuildSpec.hs'). The
+('test/unit/Amaru/Treasury/BuildSpec.hs'). The
 production caller wires
 'flip probeNetworkMagic socket' as the probe.
 

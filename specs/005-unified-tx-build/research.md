@@ -79,7 +79,7 @@ concrete types.
 - **Code-sharing wins downstream.** Helpers parameterised by the
   action index (`translateIntent :: TreasuryIntent a -> Either
   String (Translated a)`, `runBuild :: ChainContext ->
-  Translated a -> IO TreasuryBuildResult`) are written *once*
+  Translated a -> IO BuildResult`) are written *once*
   with `forall a` — the type families pick the right per-action
   types at each call site. Adding a fifth action is a new row in
   each type family + a new `SAction` constructor + the per-
@@ -141,14 +141,14 @@ our scope.
 runBuild
     :: ChainContext
     -> Translated a
-    -> IO TreasuryBuildResult
+    -> IO BuildResult
 
 -- Dispatcher at the parser boundary — the only place a runtime
 -- case on the singleton appears.
 runFromIntent
     :: ChainContext
     -> SomeTreasuryIntent
-    -> IO TreasuryBuildResult
+    -> IO BuildResult
 runFromIntent ctx (SomeTreasuryIntent sa intent) = do
     translated <- case translateIntent sa intent of
         Right t -> pure t
@@ -235,8 +235,8 @@ with a clear "unknown intent schema version" error.
 - `Amaru.Treasury.Wizard.Common` — shared signer-resolver
   (`signerScopeFromText`, `normaliseSignerToken`, `isHex28`,
   `ownerForScope`) and the `NetworkConstants` table.
-- `Amaru.Treasury.TreasuryBuild` — `runTreasuryBuild ::
-  ChainContext -> TreasuryBuildInputs -> IO TreasuryBuildResult`,
+- `Amaru.Treasury.Build` — `runBuild ::
+  ChainContext -> BuildInputs -> IO BuildResult`,
   dispatches on the action variant.
 
 Three modules collapse / are removed:
@@ -244,9 +244,9 @@ Three modules collapse / are removed:
 - `Amaru.Treasury.Tx.SwapIntentJSON` — folded into
   `Amaru.Treasury.IntentJSON`.
 - `Amaru.Treasury.Tx.SwapBuild` — folded into
-  `Amaru.Treasury.TreasuryBuild`.
+  `Amaru.Treasury.Build`.
 - `Amaru.Treasury.Tx.Swap.Trace` — folded into a new shared
-  `Amaru.Treasury.TreasuryBuild.Trace` (constructors gain an
+  `Amaru.Treasury.Build.Trace` (constructors gain an
   action prefix so traces are still distinguishable).
 
 The existing `Amaru.Treasury.Tx.Swap` (pure

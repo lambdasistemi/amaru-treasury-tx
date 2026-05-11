@@ -371,7 +371,7 @@ unified type-family.
 ## 8. Build dispatcher
 
 ```haskell
-module Amaru.Treasury.TreasuryBuild where
+module Amaru.Treasury.Build where
 
 -- | Action-polymorphic build entry. The type-family makes 'a'
 -- pick the right translated record at each call site.
@@ -380,7 +380,7 @@ runBuild
     -> TranslatedShared
     -> SAction a
     -> Translated a
-    -> IO TreasuryBuildResult
+    -> IO BuildResult
 runBuild ctx shared sa translated = case sa of
     SSwap        -> runSwap ctx shared translated
     SDisburse    -> runDisburse ctx shared translated
@@ -391,7 +391,7 @@ runBuild ctx shared sa translated = case sa of
 runFromIntent
     :: ChainContext
     -> SomeTreasuryIntent
-    -> IO TreasuryBuildResult
+    -> IO BuildResult
 runFromIntent ctx (SomeTreasuryIntent sa intent) = do
     (shared, translated) <- case translateIntent sa intent of
         Right v -> pure v
@@ -406,27 +406,27 @@ runSwap
     :: ChainContext
     -> TranslatedShared
     -> Translated 'Swap
-    -> IO TreasuryBuildResult
+    -> IO BuildResult
 
 runDisburse
     :: ChainContext
     -> TranslatedShared
     -> Translated 'Disburse
-    -> IO TreasuryBuildResult
+    -> IO BuildResult
 -- Internally: case translated of
 --   DisburseAdaIntent  fields payload -> runDisburseAda  ctx shared fields payload
 --   DisburseUsdmIntent fields payload -> runDisburseUsdm ctx shared fields payload
 
 -- Withdraw and reorganize: stub bodies that throw 'feature not
 -- shipped' until #45 / #46 land.
-runWithdraw   :: ChainContext -> TranslatedShared -> Translated 'Withdraw   -> IO TreasuryBuildResult
-runReorganize :: ChainContext -> TranslatedShared -> Translated 'Reorganize -> IO TreasuryBuildResult
+runWithdraw   :: ChainContext -> TranslatedShared -> Translated 'Withdraw   -> IO BuildResult
+runReorganize :: ChainContext -> TranslatedShared -> Translated 'Reorganize -> IO BuildResult
 
-data TreasuryBuildResult = TreasuryBuildResult
-    { tbrCborBytes :: !ByteString.Lazy
-    , tbrFeeLovelace :: !Coin
-    , tbrTotalCollateralLovelace :: !Coin
-    , tbrScriptResults :: ![ScriptResult]
+data BuildResult = BuildResult
+    { brCborBytes :: !ByteString.Lazy
+    , brFeeLovelace :: !Coin
+    , brTotalCollateralLovelace :: !Coin
+    , brScriptResults :: ![ScriptResult]
     }
 ```
 
@@ -538,14 +538,14 @@ fixture, the swap-wizard golden fixture, and fresh
 Concrete code-sharing wins from the GADT + type-family design,
 versus the plain-sum design that was the earlier draft:
 
-- **Single trace event type.** `data BuildEvent = … | TbeBuilt … |
-  TbeReevaluated … | TbeAborted …` is uniform — events that carry
-  per-action data (e.g. `TbeIntentParsed (Some SAction)
+- **Single trace event type.** `data BuildEvent = … | BuildEventBuilt … |
+  BuildEventReevaluated … | BuildEventAborted …` is uniform — events that carry
+  per-action data (e.g. `BuildEventIntentParsed (Some SAction)
   Network`) carry the singleton, but the trace module isn't
   duplicated per action. With a plain sum, helpers that project
   `ActionPayload` to a trace would have one branch per action.
 - **Single summary writer.** `summaryOf :: SAction a -> Translated
-  a -> TreasuryBuildResult -> Summary` has one body that uses
+  a -> BuildResult -> Summary` has one body that uses
   type-class methods (`SummaryFor a`) to project per-action
   details. Plain sum needs a separate body per action.
 - **Single validator.** `validateIntent :: SAction a ->

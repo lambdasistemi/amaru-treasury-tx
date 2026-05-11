@@ -28,16 +28,16 @@ import Data.Text (Text)
 import Data.Text.Encoding qualified as Text
 import Test.Hspec (Spec, describe, it, shouldBe)
 
+import Amaru.Treasury.Build
+    ( BuildResult (..)
+    , runFromIntent
+    )
 import Amaru.Treasury.ChainContext.Fixture
     ( readSwapFixture
     , toFrozenContext
     )
 import Amaru.Treasury.IntentJSON
     ( decodeTreasuryIntentFile
-    )
-import Amaru.Treasury.TreasuryBuild
-    ( TreasuryBuildResult (..)
-    , runFromIntent
     )
 
 fixtureDir :: FilePath
@@ -65,7 +65,7 @@ spec =
             tbr <- runFromIntent ctx some
             let actualHex =
                     B16.encode
-                        (BSL.toStrict (tbrCborBytes tbr))
+                        (BSL.toStrict (brCborBytes tbr))
             BashOracle oracleText <-
                 BS.readFile (fixtureDir <> "/bash.oracle.tx.json")
                     >>= either

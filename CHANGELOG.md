@@ -4,6 +4,17 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.3.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.2.0...v0.2.3.0) (2026-05-11)
+
+### Features
+
+* **disburse:** add USDM unified build support ([a99441a](https://github.com/lambdasistemi/amaru-treasury-tx/commit/a99441a2efacc1ab9b61803bc3bf5210b1877804))
+
+### Bug Fixes
+
+* **swap-wizard:** require only fee slack from wallet ([7587d20](https://github.com/lambdasistemi/amaru-treasury-tx/commit/7587d205c3fef9fe859e06aca3edca3283d3b7e6))
+* **tx-build:** normalize builder failures ([c2ae1aa](https://github.com/lambdasistemi/amaru-treasury-tx/commit/c2ae1aadc76b56390468c65a61c0355fb7f54f33))
+
 ## [0.2.2.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.1.1...v0.2.2.0) (2026-05-11)
 
 ### Features

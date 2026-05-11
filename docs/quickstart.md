@@ -4,8 +4,9 @@ Build a transaction end-to-end. The **swap wizard** answers
 chain-anchored swap fields, can derive its rate from a fresh quote,
 and emits a unified intent on stdout. Pipe that intent into
 `tx-build --report -`, then pipe the build-output envelope into
-`report-render`. The **withdraw wizard** answers chain-anchored fields
-for reward withdrawals.
+`report-render`. The **disburse wizard** resolves ADA or USDM
+treasury disbursements. The **withdraw wizard** answers
+chain-anchored fields for reward withdrawals.
 
 ## 1. Install
 
@@ -202,7 +203,42 @@ an ADA/USDM quote. Named live ADA/USDM sources are not selected in
 this issue; use explicit `--ada-usdm` until a provider contract is
 approved.
 
-## 9. Withdraw rewards
+## 9. Disburse USDM or ADA
+
+Most operator disbursements pay USDM, so `disburse-wizard` defaults to
+`--unit usdm`. `--amount` is always in the smallest unit: 1e-6 USDM
+for USDM, lovelace for ADA.
+
+```bash
+amaru-treasury-tx \
+    --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
+    disburse-wizard \
+        --wallet-addr addr1q... \
+        --metadata metadata-mainnet.json \
+        --scope network_compliance \
+        --beneficiary-addr addr1qvendor... \
+        --amount 100000000 \
+        --validity-hours 6 \
+        --description "Settle March vendor invoice" \
+        --justification "Approved network-compliance budget line" \
+        --destination-label "Vendor Ltd." \
+        --log disburse-wizard.log \
+  | amaru-treasury-tx \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        tx-build \
+            --log disburse-build.log \
+            --out disburse.cbor.hex
+```
+
+The example pays 100 USDM. For ADA, add `--unit ada` and pass
+lovelace in `--amount`. The wizard verifies the registry anchors,
+selects wallet fuel, selects treasury UTxOs, computes validity, and
+emits a unified `action = "disburse"` intent for `tx-build`.
+
+See [Disburse](disburse.md) for the existing-intent form, payload
+shape, USDM selection rules, and test evidence.
+
+## 10. Withdraw rewards
 
 The withdraw flow has the same wizard-to-builder shape:
 
@@ -227,12 +263,12 @@ If the selected treasury reward account has zero rewards,
 [Withdraw](withdraw.md) for the existing-intent form, schema shape, and
 synthetic golden evidence.
 
-## 10. When something goes wrong
+## 11. When something goes wrong
 
 | Exit | Action |
 |------|--------|
 | 1 (tx-build) | The build aborted before producing CBOR. Expected builder failures print a normalized `tx-build: ... failed ...` diagnostic; report output, when requested, carries the same stable failure code/message. |
-| 3 (swap-quote / swap-wizard / tx-build) | Setup or economic error. The trace's `ABORT …` line names the offending step: quote source failure, registry mismatch, empty wallet UTxO set, treasury affordability shortfall, missing UTxOs in chain context, and similar fail-closed cases. |
+| 3 (swap-quote / swap-wizard / disburse-wizard / tx-build) | Setup or economic error. The trace's `ABORT …` line names the offending step: quote source failure, registry mismatch, empty wallet UTxO set, treasury affordability shortfall, beneficiary network mismatch, missing UTxOs in chain context, and similar fail-closed cases. |
 | 4 (swap-wizard) | Translation error in the expert manual path. Re-check `--min-rate`, `--chunk-usdm`/`--split`, and `--validity-hours` in `[1, 48]`. |
 | 6 (tx-build) | The N2C handshake reports a network magic that disagrees with the intent's `network` field. The trace's `tx-build: NETWORK MISMATCH …` line names both networks; point `--node-socket` at the right node. |
 
@@ -245,7 +281,7 @@ override for precomputed rates. That path does not create
 `params.json`, so the operator must keep the external quote,
 slippage, arithmetic, and affordability audit record separately.
 
-## 11. Reproduce the known oracles (developer)
+## 12. Reproduce the known oracles (developer)
 
 The golden suite rebuilds frozen transaction fixtures:
 
@@ -261,7 +297,7 @@ UTxOs, and evaluator ExUnits, so the tests do not depend on today's
 chain state. See [Parity report](parity.md), [Withdraw](withdraw.md),
 and [Freeze workflow](freeze-workflow.md).
 
-## 12. Smoke the signer UX and pipe contracts (developer)
+## 13. Smoke the signer UX and pipe contracts (developer)
 
 Before cutting a release or handing a branch to operators, run:
 
@@ -273,7 +309,7 @@ The smoke check runs the focused signer regression, checks the
 release-facing help surfaces, and exercises the withdraw fixture path
 through schema validation plus the synthetic CBOR golden.
 
-## 13. Trust model
+## 14. Trust model
 
 The full account of what the wizard verifies vs. what it asks
 the operator to assert lives in

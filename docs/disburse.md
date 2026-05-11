@@ -1,14 +1,69 @@
-# Building an ADA disburse transaction
+# Building a disburse transaction
 
-`tx-build` can build a unified ADA disburse `intent.json` into
-unsigned Conway CBOR. There is no release-facing `disburse-wizard`
-command yet, so this page assumes the intent already exists.
+`disburse-wizard` resolves treasury state into a unified disburse
+`intent.json`, and `tx-build` turns that intent into unsigned Conway
+CBOR. The wizard supports both ADA and USDM; when `--unit` is omitted,
+it defaults to USDM.
 
-## CLI usage
+## Wizard pipeline
 
 ```bash
 export CARDANO_NODE_SOCKET_PATH=/path/to/cardano-node.socket
 
+amaru-treasury-tx \
+    --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
+    disburse-wizard \
+        --wallet-addr addr1q... \
+        --metadata metadata-mainnet.json \
+        --scope network_compliance \
+        --beneficiary-addr addr1qvendor... \
+        --amount 100000000 \
+        --validity-hours 6 \
+        --description "Settle March vendor invoice" \
+        --justification "Approved network-compliance budget line" \
+        --destination-label "Vendor Ltd." \
+        --log disburse-wizard.log \
+  | amaru-treasury-tx \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        tx-build \
+            --log disburse-build.log \
+            --out disburse.cbor.hex
+```
+
+The example above pays `100000000` smallest USDM units, or 100 USDM.
+To pay ADA instead, add `--unit ada` and pass lovelace in `--amount`:
+
+```bash
+amaru-treasury-tx ... disburse-wizard \
+    --unit ada \
+    --amount 50000000 \
+    ...
+```
+
+## What the wizard resolves
+
+The wizard verifies the local `metadata.json` hint against the
+on-chain registry, then resolves:
+
+- the selected scope's treasury address, script hash, owner keyhash,
+  deployed scripts, and permissions reward account;
+- wallet UTxOs for fuel and collateral;
+- treasury UTxOs for the selected unit;
+- current tip and validity upper bound;
+- USDM policy and asset name constants.
+
+For USDM, treasury UTxOs are selected largest-first by USDM quantity
+until both the requested USDM amount and the beneficiary ADA deposit
+are covered. The beneficiary output receives the requested USDM plus
+the required lovelace. The treasury leftover output receives leftover
+lovelace, leftover USDM, and any other non-USDM assets preserved from
+the selected treasury inputs.
+
+## Existing intent
+
+If an intent has already been reviewed, build it directly:
+
+```bash
 amaru-treasury-tx \
   --node-socket "$CARDANO_NODE_SOCKET_PATH" \
   tx-build \
@@ -21,20 +76,22 @@ The intent's top-level `network` field is the source of truth.
 `tx-build` probes the socket against that network before querying
 UTxOs or balancing.
 
-## Supported payload
+## Payload shape
 
-The shipped disburse branch supports ADA disburse intents:
+The shipped disburse branch supports ADA and USDM disburse intents:
 
 ```json
 {
-  "schema": 1,
-  "action": "disburse",
-  "network": "mainnet",
-  "disburse": {
-    "unit": "ada",
-    "amount": 50000000,
-    "beneficiaryAddress": "addr1..."
-  }
+    "schema": 1,
+    "action": "disburse",
+    "network": "mainnet",
+    "disburse": {
+        "unit": "usdm",
+        "amount": 100000000,
+        "beneficiaryAddress": "addr1...",
+        "usdmPolicy": "c48cbb3d...",
+        "usdmToken": "0014df105553444d"
+    }
 }
 ```
 
@@ -44,7 +101,7 @@ described by `docs/assets/intent-schema.json`.
 
 ## Validation
 
-The build path queries a live `ChainContext`, builds the tx,
+The build path queries a live `ChainContext`, builds the transaction,
 aligns the fee with the bash/cardano-cli oracle behaviour, and
 re-runs the evaluator against the final body. A successful log ends
 with:
@@ -55,9 +112,9 @@ tx-build: cbor -> disburse.cbor.hex
 tx-build: VALIDATION OK
 ```
 
-## Golden evidence
+## Golden and regression evidence
 
-`test/fixtures/disburse/ada/` pins an ADA disburse
+`test/fixtures/disburse/ada/` pins the ADA disburse
 bash/cardano-cli oracle:
 
 - `body.cbor` is the expected body hex;
@@ -68,3 +125,8 @@ bash/cardano-cli oracle:
 The golden suite asserts both `body.cbor ==
 bash.oracle.tx.json.cborHex` and `runFromIntent` against the
 frozen fixture rebuilds that same oracle byte-for-byte.
+
+USDM coverage is structural: unit tests assert intent translation,
+beneficiary and treasury leftover values, treasury UTxO selection
+until the beneficiary ADA deposit is covered, and beneficiary network
+mismatch rejection.

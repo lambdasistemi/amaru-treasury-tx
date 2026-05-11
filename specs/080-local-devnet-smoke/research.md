@@ -127,3 +127,32 @@ outside the repository.
   because it complicates dependency resolution for the Amaru package.
 - Ask maintainers to install `cardano-node` manually: rejected because
   it makes the quickstart less reproducible.
+
+## Decision 8: Rewarding uses protocol treasury withdrawals, not key rewards
+
+**Decision**: The `withdraw` smoke must prepare a script reward account
+for the Amaru treasury script. Local key-delegation rewards are not
+accepted as positive-path evidence for Amaru `withdraw`, even if they
+prove that the short-epoch devnet can accrue rewards.
+
+**Rationale**: `withdrawProgram` uses `withdrawScript` against the
+treasury reward account and pays the withdrawn ADA to the treasury
+script address. The pinned Shelley genesis pre-delegation map is keyed
+by staking key hashes, not script credentials, and the pinned genesis
+allocates all ADA as initial funds, leaving no protocol reserve/treasury
+source for Conway treasury withdrawals. A real smoke therefore needs a
+copied genesis that leaves reserves available, short epochs so treasury
+state can grow, and a setup step that enacts a treasury-withdrawal
+governance action to the treasury script stake credential.
+
+**Alternatives considered**:
+
+- Observe the existing pool reward account from the pinned genesis:
+  rejected because it is key-backed and does not exercise Amaru's script
+  reward-account path.
+- Move genesis funds to a delegated key address: rejected because it
+  still proves only key rewards, not the treasury script `Rewarding`
+  purpose used by `withdraw`.
+- Fund only a treasury script UTxO: useful for `disburse`, but
+  insufficient for `withdraw` because reward-account funds live in
+  ledger reward state, not in spendable UTxOs.

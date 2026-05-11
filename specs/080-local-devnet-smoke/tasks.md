@@ -101,10 +101,10 @@ last reward value, tip, epoch, and wait budget.
 
 ### Implementation for User Story 2
 
-- [ ] T026 [US2] Implement reward-source discovery for the pinned devnet genesis in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
+- [ ] T026 [US2] Prepare the script reward source with a copied short-epoch genesis, non-zero protocol reserves, and a treasury-withdrawal setup action in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
 - [ ] T027 [US2] Implement reward polling through `queryStakeRewardsLovelace` in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
 - [ ] T028 [US2] Implement `REWARDS_TIMEOUT` summaries with last reward, tip, epoch, and wait budget in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
-- [ ] T029 [US2] Emit `withdraw/intent.json` only after rewards are positive in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
+- [ ] T029 [US2] Emit `withdraw/intent.json` only after the treasury script reward account has positive rewards in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
 - [ ] T030 [US2] Run `just devnet-smoke withdraw` and verify the positive path or typed timeout evidence
 
 **Checkpoint**: Withdrawal reward observation is live-chain evidence,

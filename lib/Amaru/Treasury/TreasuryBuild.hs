@@ -38,20 +38,46 @@ branches are wired. Reorganize lands with
 -}
 module Amaru.Treasury.TreasuryBuild
     ( -- * Outputs
-      TreasuryBuildResult (..)
+      BuildDiagnostic (..)
+    , BuildErrorContext (..)
+    , BuildFailurePhase (..)
+    , TreasuryBuildAction (..)
+    , TreasuryBuildError (..)
+    , TreasuryBuildException (..)
+    , TreasuryBuildResult (..)
     , ScriptResult (..)
 
       -- * Drivers
     , runBuild
     , runFromIntent
+    , runFromIntentEither
     , runDisburse
     , runSwap
     , runWithdraw
+
+      -- * Diagnostics
+    , mapTreasuryBuildExceptionContext
+    , renderTreasuryBuildError
+    , treasuryBuildErrorCode
+    , treasuryBuildErrorFromBuildError
+    , withBuildErrorContext
+    , withTreasuryBuildExceptionContext
     ) where
 
 import Cardano.Crypto.Hash.Class (hashToBytes)
-import Control.Exception (throwIO)
+import Control.Exception
+    ( Exception (..)
+    , throwIO
+    , try
+    )
 import Control.Monad (unless)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans.Except
+    ( ExceptT
+    , runExceptT
+    , throwE
+    , withExceptT
+    )
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
 import Data.Foldable (toList)
@@ -61,6 +87,7 @@ import Data.Maybe (listToMaybe)
 import Data.Sequence.Strict qualified as StrictSeq
 import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
 
 import Cardano.Ledger.Address (Addr)
@@ -91,10 +118,13 @@ import Cardano.Ledger.Hashes (extractHash)
 import Cardano.Ledger.Metadata (Metadatum)
 import Cardano.Ledger.Plutus (ExUnits)
 import Cardano.Ledger.TxIn (TxId (..), TxIn)
-import Cardano.Node.Client.Balance (refScriptsSize)
+import Cardano.Node.Client.Balance
+    ( BalanceError (..)
+    , refScriptsSize
+    )
 import Cardano.Node.Client.Ledger (ConwayTx)
 import Cardano.Node.Client.TxBuild
-    ( BuildError
+    ( BuildError (..)
     , InterpretIO (..)
     , build
     , setMetadata
@@ -174,6 +204,286 @@ data TreasuryBuildResult = TreasuryBuildResult
     -- ^ collateral-return output from the final body, when present
     }
 
+-- | Treasury action whose build path produced a diagnostic.
+data TreasuryBuildAction
+    = BuildActionSwap
+    | BuildActionDisburse
+    | BuildActionWithdraw
+    | BuildActionReorganize
+    | BuildActionIntent
+    deriving stock (Eq, Show)
+
+-- | Coarse phase where an expected build failure occurred.
+data BuildFailurePhase
+    = BuildPhaseTranslate
+    | BuildPhaseGatherInputs
+    | BuildPhaseBuild
+    | BuildPhaseFeeAlignment
+    | BuildPhaseUnsupported
+    deriving stock (Eq, Show)
+
+-- | Extra structured context added while an error moves outward.
+data BuildErrorContext
+    = ContextIntentAction !Text
+    | ContextBuildPhase !BuildFailurePhase
+    | ContextWalletInput !Text
+    | ContextReportDestination !FilePath
+    | ContextNetwork !Text
+    deriving stock (Eq, Show)
+
+-- | Stable project-owned build diagnostic.
+data BuildDiagnostic
+    = DiagnosticScriptEvaluationFailed !Text !Text
+    | DiagnosticInsufficientFee !Coin !Coin
+    | DiagnosticFeeNotConverged
+    | DiagnosticCollateralShortfall !Coin !Coin
+    | DiagnosticChecksFailed !Text
+    | DiagnosticBumpFeeFailed !Text
+    | DiagnosticMissingUtxos ![Text]
+    | DiagnosticFeeAlignmentFailed !Text
+    | DiagnosticTranslateFailed !Text
+    | DiagnosticUnsupportedAction !Text
+    deriving stock (Eq, Show)
+
+-- | Expected treasury build failure with stable rendering.
+data TreasuryBuildError = TreasuryBuildError
+    { tbeAction :: !TreasuryBuildAction
+    , tbePhase :: !BuildFailurePhase
+    , tbeContext :: ![BuildErrorContext]
+    , tbeDiagnostic :: !BuildDiagnostic
+    }
+    deriving stock (Eq, Show)
+
+-- | Compatibility exception for callers that still use throwing APIs.
+newtype TreasuryBuildException
+    = TreasuryBuildException TreasuryBuildError
+    deriving stock (Show)
+
+instance Exception TreasuryBuildException where
+    displayException (TreasuryBuildException err) =
+        T.unpack (renderTreasuryBuildError err)
+
+data ActionBuildError = ActionBuildError
+    { abePhase :: !BuildFailurePhase
+    , abeContext :: ![BuildErrorContext]
+    , abeDiagnostic :: !BuildDiagnostic
+    }
+    deriving stock (Eq, Show)
+
+treasuryBuildError
+    :: TreasuryBuildAction
+    -> BuildFailurePhase
+    -> BuildDiagnostic
+    -> TreasuryBuildError
+treasuryBuildError action phase diagnostic =
+    TreasuryBuildError
+        { tbeAction = action
+        , tbePhase = phase
+        , tbeContext = []
+        , tbeDiagnostic = diagnostic
+        }
+
+actionBuildError
+    :: BuildFailurePhase
+    -> BuildDiagnostic
+    -> ActionBuildError
+actionBuildError phase diagnostic =
+    ActionBuildError
+        { abePhase = phase
+        , abeContext = []
+        , abeDiagnostic = diagnostic
+        }
+
+nestActionBuildError
+    :: TreasuryBuildAction
+    -> ActionBuildError
+    -> TreasuryBuildError
+nestActionBuildError action err =
+    TreasuryBuildError
+        { tbeAction = action
+        , tbePhase = abePhase err
+        , tbeContext = abeContext err
+        , tbeDiagnostic = abeDiagnostic err
+        }
+
+withBuildErrorContext
+    :: BuildErrorContext
+    -> TreasuryBuildError
+    -> TreasuryBuildError
+withBuildErrorContext ctx err =
+    err{tbeContext = ctx : tbeContext err}
+
+mapTreasuryBuildExceptionContext
+    :: BuildErrorContext
+    -> TreasuryBuildException
+    -> TreasuryBuildException
+mapTreasuryBuildExceptionContext ctx (TreasuryBuildException err) =
+    TreasuryBuildException (withBuildErrorContext ctx err)
+
+withTreasuryBuildExceptionContext
+    :: BuildErrorContext
+    -> IO a
+    -> IO a
+withTreasuryBuildExceptionContext ctx action = do
+    result <- try action
+    case result of
+        Left err ->
+            throwIO (mapTreasuryBuildExceptionContext ctx err)
+        Right ok -> pure ok
+
+treasuryBuildErrorFromBuildError
+    :: TreasuryBuildAction
+    -> BuildFailurePhase
+    -> BuildError ()
+    -> TreasuryBuildError
+treasuryBuildErrorFromBuildError action phase =
+    treasuryBuildError action phase . diagnosticFromBuildError
+
+diagnosticFromBuildError :: BuildError () -> BuildDiagnostic
+diagnosticFromBuildError = \case
+    EvalFailure purpose reason ->
+        DiagnosticScriptEvaluationFailed
+            (T.pack (show purpose))
+            (T.pack reason)
+    BalanceFailed balanceError ->
+        diagnosticFromBalanceError balanceError
+    ChecksFailed checks ->
+        DiagnosticChecksFailed (T.pack (show checks))
+    BumpFeeFailed reason ->
+        DiagnosticBumpFeeFailed (T.pack reason)
+
+diagnosticFromBalanceError :: BalanceError -> BuildDiagnostic
+diagnosticFromBalanceError = \case
+    InsufficientFee required available ->
+        DiagnosticInsufficientFee required available
+    FeeNotConverged ->
+        DiagnosticFeeNotConverged
+    CollateralShortfall required available ->
+        DiagnosticCollateralShortfall required available
+
+treasuryBuildErrorCode :: TreasuryBuildError -> Text
+treasuryBuildErrorCode err =
+    case tbeDiagnostic err of
+        DiagnosticScriptEvaluationFailed{} ->
+            "script-evaluation-failed"
+        DiagnosticInsufficientFee{} ->
+            "insufficient-fee-capacity"
+        DiagnosticFeeNotConverged ->
+            "fee-not-converged"
+        DiagnosticCollateralShortfall{} ->
+            "collateral-shortfall"
+        DiagnosticChecksFailed{} ->
+            "final-validation-failed"
+        DiagnosticBumpFeeFailed{} ->
+            "fee-bump-failed"
+        DiagnosticMissingUtxos{} ->
+            "missing-utxos"
+        DiagnosticFeeAlignmentFailed{} ->
+            "fee-alignment-failed"
+        DiagnosticTranslateFailed{} ->
+            "intent-translation-failed"
+        DiagnosticUnsupportedAction{} ->
+            "unsupported-action"
+
+renderTreasuryBuildError :: TreasuryBuildError -> Text
+renderTreasuryBuildError err =
+    "tx-build: "
+        <> renderAction (tbeAction err)
+        <> " failed "
+        <> renderPhase (tbePhase err)
+        <> ": "
+        <> renderDiagnostic (tbeDiagnostic err)
+        <> renderContexts (tbeContext err)
+
+renderAction :: TreasuryBuildAction -> Text
+renderAction = \case
+    BuildActionSwap -> "swap"
+    BuildActionDisburse -> "disburse"
+    BuildActionWithdraw -> "withdraw"
+    BuildActionReorganize -> "reorganize"
+    BuildActionIntent -> "intent"
+
+renderPhase :: BuildFailurePhase -> Text
+renderPhase = \case
+    BuildPhaseTranslate -> "while translating the intent"
+    BuildPhaseGatherInputs -> "while gathering inputs"
+    BuildPhaseBuild -> "while building the transaction"
+    BuildPhaseFeeAlignment -> "while aligning the final fee"
+    BuildPhaseUnsupported -> "because the action is unsupported"
+
+renderDiagnostic :: BuildDiagnostic -> Text
+renderDiagnostic = \case
+    DiagnosticScriptEvaluationFailed purpose reason ->
+        "script evaluation failed for "
+            <> purpose
+            <> ": "
+            <> reason
+    DiagnosticInsufficientFee (Coin required) (Coin available) ->
+        "insufficient fee capacity; required lovelace: "
+            <> T.pack (show required)
+            <> "; available lovelace: "
+            <> T.pack (show available)
+    DiagnosticFeeNotConverged ->
+        "fee did not converge; retry with fresh chain state or report protocol-parameter drift"
+    DiagnosticCollateralShortfall (Coin required) (Coin available) ->
+        "collateral shortfall; required collateral lovelace: "
+            <> T.pack (show required)
+            <> "; available collateral lovelace: "
+            <> T.pack (show available)
+    DiagnosticChecksFailed checks ->
+        "final validation checks failed: " <> checks
+    DiagnosticBumpFeeFailed reason ->
+        "fee bump failed: " <> reason
+    DiagnosticMissingUtxos missing ->
+        "missing required UTxOs from the chain context: "
+            <> T.intercalate ", " missing
+    DiagnosticFeeAlignmentFailed reason ->
+        "fee alignment failed: " <> reason
+    DiagnosticTranslateFailed reason ->
+        "intent translation failed: " <> reason
+    DiagnosticUnsupportedAction action ->
+        action <> " is not implemented"
+
+renderContexts :: [BuildErrorContext] -> Text
+renderContexts [] = ""
+renderContexts contexts =
+    " (context: "
+        <> T.intercalate "; " (renderContext <$> contexts)
+        <> ")"
+
+renderContext :: BuildErrorContext -> Text
+renderContext = \case
+    ContextIntentAction action ->
+        "action=" <> action
+    ContextBuildPhase phase ->
+        "phase=" <> T.pack (show phase)
+    ContextWalletInput input ->
+        "wallet-input=" <> input
+    ContextReportDestination path ->
+        "report=" <> T.pack path
+    ContextNetwork network ->
+        "network=" <> network
+
+throwTreasuryBuildException :: TreasuryBuildError -> IO a
+throwTreasuryBuildException =
+    throwIO . TreasuryBuildException
+
+runActionBuild
+    :: TreasuryBuildAction
+    -> ExceptT ActionBuildError IO a
+    -> IO a
+runActionBuild action buildAction = do
+    result <-
+        runExceptT $
+            withExceptT (nestActionBuildError action) buildAction
+    either throwTreasuryBuildException pure result
+
+missingUtxosError :: [TxIn] -> ActionBuildError
+missingUtxosError missing =
+    actionBuildError
+        BuildPhaseGatherInputs
+        (DiagnosticMissingUtxos (T.pack . show <$> missing))
+
 -- ----------------------------------------------------
 -- Driver
 -- ----------------------------------------------------
@@ -191,29 +501,51 @@ runBuild
     -> SAction a
     -> Translated a
     -> IO TreasuryBuildResult
-runBuild ctx shared sa translated = case sa of
+runBuild ctx shared sa translated = do
+    result <- runExceptT (runBuildExcept ctx shared sa translated)
+    either throwTreasuryBuildException pure result
+
+runBuildExcept
+    :: ChainContext
+    -> TranslatedShared
+    -> SAction a
+    -> Translated a
+    -> ExceptT TreasuryBuildError IO TreasuryBuildResult
+runBuildExcept ctx shared sa translated = case sa of
     SSwap ->
-        runSwap
-            ctx
-            translated
-            (tsRationale shared)
-            (tsWalletTxIn shared)
-            (tsWalletAddr shared)
+        withExceptT
+            (nestActionBuildError BuildActionSwap)
+            ( runSwapAction
+                ctx
+                translated
+                (tsRationale shared)
+                (tsWalletTxIn shared)
+                (tsWalletAddr shared)
+            )
     SDisburse ->
-        runDisburse
-            ctx
-            translated
-            (tsRationale shared)
-            (tsWalletAddr shared)
+        withExceptT
+            (nestActionBuildError BuildActionDisburse)
+            ( runDisburseAction
+                ctx
+                translated
+                (tsRationale shared)
+                (tsWalletAddr shared)
+            )
     SWithdraw ->
-        runWithdraw
-            ctx
-            translated
-            (tsRationale shared)
-            (tsWalletAddr shared)
+        withExceptT
+            (nestActionBuildError BuildActionWithdraw)
+            ( runWithdrawAction
+                ctx
+                translated
+                (tsRationale shared)
+                (tsWalletAddr shared)
+            )
     SReorganize ->
-        throwIO . userError $
-            "runBuild: 'reorganize' not yet shipped (#46)"
+        throwE $
+            treasuryBuildError
+                BuildActionReorganize
+                BuildPhaseUnsupported
+                (DiagnosticUnsupportedAction "reorganize")
 
 {- | Caller-friendly wrapper for the parser's existential
 return type. Decodes-then-translates-then-builds.
@@ -222,13 +554,25 @@ runFromIntent
     :: ChainContext
     -> SomeTreasuryIntent
     -> IO TreasuryBuildResult
-runFromIntent ctx (SomeTreasuryIntent sa intent) = do
-    case translateIntent sa intent of
-        Left e ->
-            throwIO . userError $
-                "runFromIntent: translate: " <> e
-        Right (shared, translated) ->
-            runBuild ctx shared sa translated
+runFromIntent ctx some = do
+    result <- runFromIntentEither ctx some
+    either throwTreasuryBuildException pure result
+
+runFromIntentEither
+    :: ChainContext
+    -> SomeTreasuryIntent
+    -> IO (Either TreasuryBuildError TreasuryBuildResult)
+runFromIntentEither ctx (SomeTreasuryIntent sa intent) =
+    runExceptT $ do
+        case translateIntent sa intent of
+            Left e ->
+                throwE $
+                    treasuryBuildError
+                        BuildActionIntent
+                        BuildPhaseTranslate
+                        (DiagnosticTranslateFailed (T.pack e))
+            Right (shared, translated) ->
+                runBuildExcept ctx shared sa translated
 
 -- ----------------------------------------------------
 -- Withdraw runner
@@ -247,7 +591,17 @@ runWithdraw
     -- ^ change address — also receives @collateral_return@
     --     by default (see module header)
     -> IO TreasuryBuildResult
-runWithdraw ctx intent rationale walletAddr = do
+runWithdraw ctx intent rationale walletAddr =
+    runActionBuild BuildActionWithdraw $
+        runWithdrawAction ctx intent rationale walletAddr
+
+runWithdrawAction
+    :: ChainContext
+    -> WithdrawIntent
+    -> Metadatum
+    -> Addr
+    -> ExceptT ActionBuildError IO TreasuryBuildResult
+runWithdrawAction ctx intent rationale walletAddr = do
     let walletInput = wiWalletUtxo intent
         refInputs =
             [ wiTreasuryDeployedAt intent
@@ -261,9 +615,7 @@ runWithdraw ctx intent rationale walletAddr = do
             , not (Map.member i utxoMap)
             ]
     unless (null missing) $
-        throwIO . userError $
-            "runWithdraw: missing UTxOs in context: "
-                <> show missing
+        throwE (missingUtxosError missing)
     let walletInputUtxos =
             [(walletInput, utxoMap Map.! walletInput)]
         inputUtxos = walletInputUtxos
@@ -285,21 +637,23 @@ runWithdraw ctx intent rationale walletAddr = do
         noCtxIO =
             InterpretIO $
                 const
-                    (error "runWithdraw: unexpected ctx")
+                    (error "treasury build: unexpected context request")
     result <-
-        build
-            pp
-            noCtxIO
-            evaluator
-            inputUtxos
-            refUtxos
-            walletAddr
-            program
+        liftIO $
+            build
+                pp
+                noCtxIO
+                evaluator
+                inputUtxos
+                refUtxos
+                walletAddr
+                program
     case result of
         Left e ->
-            throwIO . userError $
-                "runWithdraw: build failed: "
-                    <> show (e :: BuildError ())
+            throwE $
+                actionBuildError
+                    BuildPhaseBuild
+                    (diagnosticFromBuildError (e :: BuildError ()))
         Right tx0 -> do
             tx <-
                 case alignCardanoCliBuildFee
@@ -308,9 +662,10 @@ runWithdraw ctx intent rationale walletAddr = do
                     changeOutputIndex
                     tx0 of
                     Left e ->
-                        throwIO . userError $
-                            "runWithdraw: fee alignment failed: "
-                                <> e
+                        throwE $
+                            actionBuildError
+                                BuildPhaseFeeAlignment
+                                (DiagnosticFeeAlignmentFailed (T.pack e))
                     Right ok -> pure ok
             let body = tx ^. bodyTxL
                 feeLov = body ^. feeTxBodyL
@@ -318,7 +673,7 @@ runWithdraw ctx intent rationale walletAddr = do
                     ^. totalCollateralTxBodyL of
                     SJust c -> c
                     SNothing -> Coin 0
-            scriptMap <- ccEvaluateTx ctx tx
+            scriptMap <- liftIO $ ccEvaluateTx ctx tx
             let scriptResults =
                     [ ScriptResult
                         purpose
@@ -375,19 +730,29 @@ runDisburse
     -- ^ change address — also receives @collateral_return@
     --     by default (see module header)
     -> IO TreasuryBuildResult
-runDisburse ctx intent rationale walletAddr = case intent of
+runDisburse ctx intent rationale walletAddr =
+    runActionBuild BuildActionDisburse $
+        runDisburseAction ctx intent rationale walletAddr
+
+runDisburseAction
+    :: ChainContext
+    -> DisburseIntent
+    -> Metadatum
+    -> Addr
+    -> ExceptT ActionBuildError IO TreasuryBuildResult
+runDisburseAction ctx intent rationale walletAddr = case intent of
     DisburseAdaIntent fields payload ->
-        runDisburseAda ctx fields payload rationale walletAddr
+        runDisburseAdaAction ctx fields payload rationale walletAddr
 
 -- | The ADA-disburse build pipeline.
-runDisburseAda
+runDisburseAdaAction
     :: ChainContext
     -> DisburseIntentFields
     -> DisburseAdaPayload
     -> Metadatum
     -> Addr
-    -> IO TreasuryBuildResult
-runDisburseAda ctx fields payload rationale walletAddr = do
+    -> ExceptT ActionBuildError IO TreasuryBuildResult
+runDisburseAdaAction ctx fields payload rationale walletAddr = do
     let walletInput = difWalletUtxo fields
         treasuryInputs = difTreasuryUtxos fields
         refInputs =
@@ -404,9 +769,7 @@ runDisburseAda ctx fields payload rationale walletAddr = do
             , not (Map.member i utxoMap)
             ]
     unless (null missing) $
-        throwIO . userError $
-            "runDisburse: missing UTxOs in context: "
-                <> show missing
+        throwE (missingUtxosError missing)
     let walletInputUtxos =
             [(walletInput, utxoMap Map.! walletInput)]
         treasuryInputUtxos =
@@ -431,27 +794,30 @@ runDisburseAda ctx fields payload rationale walletAddr = do
         noCtxIO =
             InterpretIO $
                 const
-                    (error "runDisburse: unexpected ctx")
+                    (error "treasury build: unexpected context request")
     result <-
-        build
-            pp
-            noCtxIO
-            evaluator
-            inputUtxos
-            refUtxos
-            walletAddr
-            program
+        liftIO $
+            build
+                pp
+                noCtxIO
+                evaluator
+                inputUtxos
+                refUtxos
+                walletAddr
+                program
     case result of
         Left e ->
-            throwIO . userError $
-                "runDisburse: build failed: "
-                    <> show (e :: BuildError ())
+            throwE $
+                actionBuildError
+                    BuildPhaseBuild
+                    (diagnosticFromBuildError (e :: BuildError ()))
         Right tx0 -> do
             tx <- case alignCardanoCliBuildFee pp refUtxos 2 tx0 of
                 Left e ->
-                    throwIO . userError $
-                        "runDisburse: fee alignment failed: "
-                            <> e
+                    throwE $
+                        actionBuildError
+                            BuildPhaseFeeAlignment
+                            (DiagnosticFeeAlignmentFailed (T.pack e))
                 Right ok -> pure ok
             let body = tx ^. bodyTxL
                 feeLov = body ^. feeTxBodyL
@@ -459,7 +825,7 @@ runDisburseAda ctx fields payload rationale walletAddr = do
                     ^. totalCollateralTxBodyL of
                     SJust c -> c
                     SNothing -> Coin 0
-            scriptMap <- ccEvaluateTx ctx tx
+            scriptMap <- liftIO $ ccEvaluateTx ctx tx
             let scriptResults =
                     [ ScriptResult
                         purpose
@@ -684,7 +1050,18 @@ runSwap
     -- ^ change address — also receives @collateral_return@
     --     by default (see module header)
     -> IO TreasuryBuildResult
-runSwap ctx intent rationale walletInput walletAddr = do
+runSwap ctx intent rationale walletInput walletAddr =
+    runActionBuild BuildActionSwap $
+        runSwapAction ctx intent rationale walletInput walletAddr
+
+runSwapAction
+    :: ChainContext
+    -> SwapIntent
+    -> Metadatum
+    -> TxIn
+    -> Addr
+    -> ExceptT ActionBuildError IO TreasuryBuildResult
+runSwapAction ctx intent rationale walletInput walletAddr = do
     let utxoMap = ccUtxos ctx
         required =
             walletInput
@@ -701,9 +1078,7 @@ runSwap ctx intent rationale walletInput walletAddr = do
             , not (Map.member i utxoMap)
             ]
     unless (null missing) $
-        throwIO . userError $
-            "runSwap: missing UTxOs in context: "
-                <> show missing
+        throwE (missingUtxosError missing)
     let walletInputUtxos =
             (walletInput, utxoMap Map.! walletInput)
                 : [ (i, utxoMap Map.! i)
@@ -734,21 +1109,23 @@ runSwap ctx intent rationale walletInput walletAddr = do
         noCtxIO =
             InterpretIO $
                 const
-                    (error "runSwap: unexpected ctx")
+                    (error "treasury build: unexpected context request")
     result <-
-        build
-            pp
-            noCtxIO
-            evaluator
-            inputUtxos
-            refUtxos
-            walletAddr
-            program
+        liftIO $
+            build
+                pp
+                noCtxIO
+                evaluator
+                inputUtxos
+                refUtxos
+                walletAddr
+                program
     case result of
         Left e ->
-            throwIO . userError $
-                "runSwap: build failed: "
-                    <> show (e :: BuildError ())
+            throwE $
+                actionBuildError
+                    BuildPhaseBuild
+                    (diagnosticFromBuildError (e :: BuildError ()))
         Right tx0 -> do
             tx <-
                 case alignCardanoCliBuildFee
@@ -757,9 +1134,10 @@ runSwap ctx intent rationale walletInput walletAddr = do
                     (length (siSwapOrders intent) + 1)
                     tx0 of
                     Left e ->
-                        throwIO . userError $
-                            "runSwap: fee alignment failed: "
-                                <> e
+                        throwE $
+                            actionBuildError
+                                BuildPhaseFeeAlignment
+                                (DiagnosticFeeAlignmentFailed (T.pack e))
                     Right ok -> pure ok
             let body = tx ^. bodyTxL
                 feeLov = body ^. feeTxBodyL
@@ -773,7 +1151,7 @@ runSwap ctx intent rationale walletInput walletAddr = do
             -- above drove the balancing fixpoint; this
             -- second call captures script results once
             -- the body is settled.
-            scriptMap <- ccEvaluateTx ctx tx
+            scriptMap <- liftIO $ ccEvaluateTx ctx tx
             let scriptResults =
                     [ ScriptResult
                         purpose

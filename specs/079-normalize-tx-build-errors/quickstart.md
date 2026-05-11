@@ -38,8 +38,8 @@ Expected stdout shape:
   "intent": {},
   "result": {
     "failure": {
-      "code": "balance-insufficient-fee",
-      "message": "tx-build: balance failed: insufficient fee capacity ..."
+      "code": "insufficient-fee-capacity",
+      "message": "tx-build: swap failed while building the transaction: insufficient fee capacity ..."
     }
   }
 }
@@ -50,7 +50,7 @@ Expected stderr/log:
 ```text
 tx-build: parsed action=...
 tx-build: ...
-tx-build: balance failed: insufficient fee capacity ...
+tx-build: swap failed while building the transaction: insufficient fee capacity ...
 ```
 
 The output must not contain:

@@ -16,9 +16,9 @@ Phase 0 decisions for issue #79.
 
 ## D2. Error flow with ExceptT
 
-**Decision**: use `ExceptT TreasuryBuildError IO` inside the IO build runners if it materially reduces nested `case` and repeated `throwIO . userError` code. Expose a normal `IO` runner for compatibility, but let `runTxBuild` consume an `Either`-returning entry point where practical.
+**Decision**: use an inner action-level `ExceptT ActionBuildError IO` in IO build runners when it materially reduces nested `case` and repeated `throwIO . userError` code. At dispatcher boundaries, lift that nested error into the public `TreasuryBuildError` with `withExceptT`, so the outer diagnostic carries the action while lower-level code stays action-agnostic. Expose a normal `IO` runner for compatibility, but let `runTxBuild` consume an `Either`-returning entry point where practical.
 
-**Rationale**: the runners are IO boundaries already. `ExceptT` is appropriate for expected build failures: missing UTxOs, upstream `BuildError`, fee alignment failure, and validation failure. It keeps the pure `TxBuild q e a` builders unchanged while making error exits explicit and testable.
+**Rationale**: the runners are IO boundaries already. `ExceptT` is appropriate for expected build failures: missing UTxOs, upstream `BuildError`, fee alignment failure, and validation failure. `withExceptT` is the right tool for nesting the action-local error into the public diagnostic without hand-written `Either` plumbing at every call site. It keeps the pure `TxBuild q e a` builders unchanged while making error exits explicit and testable.
 
 **Alternatives considered**:
 
@@ -76,11 +76,12 @@ Implementation note: `mapException` is the reference shape for pure exception ma
 
 **Decision**: use stable lowercase hyphenated codes in `BuildFailure.bfCode`, for example:
 
-- `balance-insufficient-fee`
-- `balance-fee-not-converged`
-- `balance-collateral-shortfall`
+- `insufficient-fee-capacity`
+- `fee-not-converged`
+- `collateral-shortfall`
 - `script-evaluation-failed`
-- `validation-failed`
+- `final-validation-failed`
+- `fee-bump-failed`
 - `fee-alignment-failed`
 - `missing-utxos`
 - `unsupported-action`

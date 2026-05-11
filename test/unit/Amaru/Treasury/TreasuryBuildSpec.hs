@@ -17,6 +17,11 @@ module Amaru.Treasury.TreasuryBuildSpec (spec) where
 import Control.Exception
     ( SomeException
     , displayException
+    , evaluate
+    , mapException
+    , throw
+    , throwIO
+    , try
     )
 import Control.Tracer (Tracer (..))
 import Data.ByteString qualified as BS
@@ -29,6 +34,7 @@ import Data.IORef
     )
 import Data.List (isInfixOf)
 import Data.Map.Strict qualified as Map
+import Data.Text qualified as T
 import Test.Hspec
     ( Spec
     , describe
@@ -36,6 +42,7 @@ import Test.Hspec
     , it
     , shouldBe
     , shouldContain
+    , shouldSatisfy
     , shouldThrow
     )
 
@@ -51,9 +58,24 @@ import Amaru.Treasury.Cli.TxBuild
 import Amaru.Treasury.IntentJSON
     ( decodeTreasuryIntentFile
     )
+import Amaru.Treasury.Report
+    ( BuildFailure (..)
+    )
 import Amaru.Treasury.TreasuryBuild
-    ( TreasuryBuildResult (..)
+    ( BuildDiagnostic (..)
+    , BuildErrorContext (..)
+    , BuildFailurePhase (..)
+    , TreasuryBuildAction (..)
+    , TreasuryBuildError (..)
+    , TreasuryBuildException (..)
+    , TreasuryBuildResult (..)
+    , mapTreasuryBuildExceptionContext
+    , renderTreasuryBuildError
     , runFromIntent
+    , runFromIntentEither
+    , treasuryBuildErrorCode
+    , treasuryBuildErrorFromBuildError
+    , withTreasuryBuildExceptionContext
     )
 import Amaru.Treasury.TreasuryBuild.ReportWriter
     ( ReportWriteError (..)
@@ -86,6 +108,12 @@ import Cardano.Ledger.Address
     , AccountId (..)
     )
 import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Node.Client.Balance
+    ( BalanceError (..)
+    )
+import Cardano.Node.Client.TxBuild
+    ( BuildError (..)
+    )
 
 spec :: Spec
 spec = describe "Amaru.Treasury.TreasuryBuild" $ do
@@ -238,7 +266,116 @@ spec = describe "Amaru.Treasury.TreasuryBuild" $ do
                     expectationFailure
                         "expected report write failure"
 
-    describe "runWithdraw" $
+    describe "normalized build diagnostics" $ do
+        it
+            "renders insufficient-fee failures with stable code and labeled fields"
+            $ do
+                let err =
+                        treasuryBuildErrorFromBuildError
+                            BuildActionSwap
+                            BuildPhaseBuild
+                            ( BalanceFailed
+                                (InsufficientFee (Coin 1_200) (Coin 700))
+                                :: BuildError ()
+                            )
+                    message = renderTreasuryBuildError err
+                treasuryBuildErrorCode err
+                    `shouldBe` "insufficient-fee-capacity"
+                message `shouldSatisfy` T.isInfixOf "required lovelace: 1200"
+                message `shouldSatisfy` T.isInfixOf "available lovelace: 700"
+                T.unpack message
+                    `shouldSatisfy` (not . isInfixOf "BalanceFailed")
+
+        it "renders fee convergence failures with stable retry guidance" $ do
+            let err =
+                    treasuryBuildErrorFromBuildError
+                        BuildActionSwap
+                        BuildPhaseBuild
+                        ( BalanceFailed FeeNotConverged
+                            :: BuildError ()
+                        )
+            treasuryBuildErrorCode err
+                `shouldBe` "fee-not-converged"
+            renderTreasuryBuildError err
+                `shouldSatisfy` T.isInfixOf "retry with fresh chain state"
+
+        it "feeds report failures with the normalized code and message" $ do
+            let err =
+                    TreasuryBuildError
+                        { tbeAction = BuildActionSwap
+                        , tbePhase = BuildPhaseFeeAlignment
+                        , tbeContext = []
+                        , tbeDiagnostic =
+                            DiagnosticFeeAlignmentFailed
+                                "fee did not converge"
+                        }
+                failure =
+                    BuildFailure
+                        { bfCode = treasuryBuildErrorCode err
+                        , bfMessage = renderTreasuryBuildError err
+                        }
+            bfCode failure `shouldBe` "fee-alignment-failed"
+            bfMessage failure
+                `shouldSatisfy` T.isInfixOf "fee did not converge"
+
+        it "adds structured context with mapException for pure exceptions" $ do
+            let ctx = ContextBuildPhase BuildPhaseFeeAlignment
+                base =
+                    TreasuryBuildException
+                        TreasuryBuildError
+                            { tbeAction = BuildActionSwap
+                            , tbePhase = BuildPhaseBuild
+                            , tbeContext = []
+                            , tbeDiagnostic =
+                                DiagnosticFeeAlignmentFailed "boom"
+                            }
+                expr =
+                    mapException
+                        (mapTreasuryBuildExceptionContext ctx)
+                        (throw base :: ())
+            result <-
+                try (evaluate expr)
+                    :: IO (Either TreasuryBuildException ())
+            case result of
+                Left (TreasuryBuildException err) ->
+                    tbeContext err `shouldBe` [ctx]
+                Right () ->
+                    expectationFailure
+                        "expected TreasuryBuildException"
+
+        it "adds structured context around IO exceptions" $ do
+            let ctx = ContextReportDestination "report.json"
+                base =
+                    TreasuryBuildException
+                        TreasuryBuildError
+                            { tbeAction = BuildActionSwap
+                            , tbePhase = BuildPhaseBuild
+                            , tbeContext = []
+                            , tbeDiagnostic =
+                                DiagnosticFeeAlignmentFailed "boom"
+                            }
+            result <-
+                try $
+                    withTreasuryBuildExceptionContext ctx $
+                        throwIO base
+                    :: IO (Either TreasuryBuildException ())
+            case result of
+                Left (TreasuryBuildException err) ->
+                    tbeContext err `shouldBe` [ctx]
+                Right () ->
+                    expectationFailure
+                        "expected TreasuryBuildException"
+
+        it "does not keep the legacy raw build-failed strings" $ do
+            source <- readFile "lib/Amaru/Treasury/TreasuryBuild.hs"
+            source
+                `shouldSatisfy` (not . isInfixOf "runSwap: build failed")
+            source
+                `shouldSatisfy` (not . isInfixOf "runDisburse: build failed")
+            source
+                `shouldSatisfy` (not . isInfixOf "runWithdraw: build failed")
+
+    describe "runWithdraw" $ do
         it "reports missing required UTxOs before balancing" $ do
             some <-
                 expectRightIO
@@ -253,6 +390,51 @@ spec = describe "Amaru.Treasury.TreasuryBuild" $ do
                         }
             runFromIntent ctx some
                 `shouldThrow` missingWithdrawUtxos
+
+        it "returns typed missing UTxO diagnostics on the Either path" $ do
+            some <-
+                expectRightIO
+                    =<< decodeTreasuryIntentFile
+                        "test/fixtures/withdraw/synthetic/intent.json"
+            let ctx =
+                    ChainContext
+                        { ccPParams = emptyPParams
+                        , ccUtxos = Map.empty
+                        , ccEvaluateTx =
+                            const (pure Map.empty)
+                        }
+            result <- runFromIntentEither ctx some
+            case result of
+                Left err -> do
+                    treasuryBuildErrorCode err `shouldBe` "missing-utxos"
+                    T.unpack (renderTreasuryBuildError err)
+                        `shouldSatisfy` (not . isInfixOf "runWithdraw")
+                Right{} ->
+                    expectationFailure "expected typed missing-UTxO error"
+
+    describe "runSwap" $
+        it "returns a normalized swap runner failure on the Either path" $ do
+            some <-
+                expectRightIO
+                    =<< decodeTreasuryIntentFile
+                        "test/fixtures/swap/intent.json"
+            let ctx =
+                    ChainContext
+                        { ccPParams = emptyPParams
+                        , ccUtxos = Map.empty
+                        , ccEvaluateTx =
+                            const (pure Map.empty)
+                        }
+            result <- runFromIntentEither ctx some
+            case result of
+                Left err -> do
+                    treasuryBuildErrorCode err `shouldBe` "missing-utxos"
+                    renderTreasuryBuildError err
+                        `shouldSatisfy` T.isInfixOf "tx-build: swap failed"
+                    T.unpack (renderTreasuryBuildError err)
+                        `shouldSatisfy` (not . isInfixOf "runSwap")
+                Right{} ->
+                    expectationFailure "expected typed swap error"
 
     describe "runFromIntent report data" $
         it "preserves swap no-report CBOR while exposing the final body" $ do
@@ -278,7 +460,7 @@ fixtureRewardAccount =
 
 missingWithdrawUtxos :: SomeException -> Bool
 missingWithdrawUtxos =
-    isInfixOf "runWithdraw: missing UTxOs"
+    isInfixOf "tx-build: withdraw failed while gathering inputs"
         . displayException
 
 expectRightIO :: (Show e) => Either e a -> IO a

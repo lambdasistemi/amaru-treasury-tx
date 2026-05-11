@@ -8,8 +8,11 @@ treasury contracts. The release-facing commands are:
 - `withdraw-wizard` — resolves treasury reward withdrawals into a
   unified `intent.json`; zero-rewards scopes exit cleanly without
   writing a stale intent.
+- `disburse-wizard` — resolves ADA or USDM treasury disbursements
+  into a unified `intent.json`; USDM is the default unit because that
+  is the common operator path.
 - `tx-build` — turns a unified `intent.json` into the unsigned
-  Conway CBOR the user signs and submits. Swap, ADA disburse, and
+  Conway CBOR the user signs and submits. Swap, ADA/USDM disburse, and
   withdraw intents are wired; reorganize is parsed but still fails
   closed until its builder ships.
 
@@ -24,11 +27,11 @@ built on the
 The full operator and developer documentation lives at
 **<https://lambdasistemi.github.io/amaru-treasury-tx/>**:
 
-- [**Quickstart**](https://lambdasistemi.github.io/amaru-treasury-tx/quickstart/) — the `swap-wizard | tx-build` pipeline end to end.
+- [**Quickstart**](https://lambdasistemi.github.io/amaru-treasury-tx/quickstart/) — wizard-to-`tx-build` pipelines end to end.
 - [Architecture](https://lambdasistemi.github.io/amaru-treasury-tx/architecture/) — module layout and data flow.
 - [Trust model](https://lambdasistemi.github.io/amaru-treasury-tx/trust-model/) — what the wizard verifies, what the operator must assert.
 - [Swap recipe](https://lambdasistemi.github.io/amaru-treasury-tx/swap/) — building a swap from an existing `intent.json`.
-- [ADA disburse](https://lambdasistemi.github.io/amaru-treasury-tx/disburse/) — building an existing ADA disburse intent.
+- [Disburse](https://lambdasistemi.github.io/amaru-treasury-tx/disburse/) — resolving ADA or USDM disbursements with `disburse-wizard`, or building an existing disburse intent.
 - [Withdraw](https://lambdasistemi.github.io/amaru-treasury-tx/withdraw/) — resolving rewards with `withdraw-wizard` or building an existing withdraw intent.
 - [Parity report](https://lambdasistemi.github.io/amaru-treasury-tx/parity/) — byte-for-byte golden parity against bash/cardano-cli.
 

@@ -9,11 +9,11 @@ Haskell port of the bash recipes in
 
 ## Quick links
 
-- [**Quickstart**](quickstart.md) — the `swap-wizard | tx-build` pipe, including the pre-signing report review step.
+- [**Quickstart**](quickstart.md) — wizard-to-`tx-build` pipes, including the pre-signing report review step.
 - [Architecture overview](architecture.md) — modules and data flow.
 - [Trust model](trust-model.md) — what the wizard verifies, what the operator must assert.
 - [Swap recipe](swap.md) — building an existing swap intent with `tx-build`.
-- [ADA disburse](disburse.md) — building an existing disburse intent with `tx-build`.
+- [Disburse](disburse.md) — resolving ADA or USDM disbursements with `disburse-wizard`, or building an existing disburse intent with `tx-build`.
 - [Withdraw](withdraw.md) — resolving treasury rewards with `withdraw-wizard` or building an existing withdraw intent.
 - [ChainContext](chain-context.md)
 - [Freeze workflow](freeze-workflow.md) — pinning a `ChainContext` for offline parity tests.
@@ -28,6 +28,7 @@ Haskell port of the bash recipes in
 | :------ | :------ |
 | `swap-wizard` | Verify upstream `metadata.json` against the chain, resolve UTxOs + tip, emit a unified swap `intent.json` (typed step trace via `WizardEvent`). |
 | `withdraw-wizard` | Verify upstream `metadata.json` against the chain, resolve the treasury reward account + reward balance, emit a unified withdraw `intent.json`, or exit cleanly when rewards are zero. |
+| `disburse-wizard` | Verify upstream `metadata.json` against the chain, resolve wallet and treasury UTxOs, emit a unified ADA or USDM disburse `intent.json`. USDM is the default unit. |
 | `tx-build` | Turn a unified `intent.json` into unsigned Conway CBOR; re-evaluates every redeemer against a live `ChainContext` (typed step trace via `BuildEvent`) and can write a deterministic pre-signing report with `--report PATH`. |
 
 `tx-build` reads the action discriminator and the network from
@@ -37,7 +38,7 @@ matching builder.
 | Intent action | Release status |
 | :------------ | :------------- |
 | `swap` | Built from wizard output or an existing intent. Pinned by a bash/cardano-cli golden. |
-| `disburse` | ADA disburse intents build through `tx-build`. Pinned by a bash/cardano-cli golden. |
+| `disburse` | ADA and USDM disburse intents build through `tx-build`. ADA remains pinned by a bash/cardano-cli golden; USDM has structural builder and resolver regression coverage. |
 | `withdraw` | Built from wizard output or an existing intent. Pinned by a synthetic frozen-context golden until issue #17 records a live preprod oracle. |
 | `reorganize` | Parsed, but build fails closed until #46 ships. |
 

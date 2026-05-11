@@ -165,7 +165,10 @@ Encoded with `encodeSomeTreasuryIntent`:
 This is the same encoder strategy used for every
 `SomeTreasuryIntent`.
 
-## 5. Out of scope for v0
+## 5. Supported build dispatch
 
-- USDM build dispatch. The JSON shape already accepts `"unit":
-  "usdm"`; the pure USDM builder and body-CBOR golden land in Phase 5.
+`tx-build` dispatches both `"unit": "ada"` and `"unit": "usdm"`
+disburse intents. ADA is pinned by the historical body-CBOR golden.
+USDM is covered by structural builder tests and resolver tests for
+beneficiary output value, treasury leftover value, and ADA deposit
+coverage.

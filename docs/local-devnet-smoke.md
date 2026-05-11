@@ -68,6 +68,28 @@ state preparation. Until those phases land, successful node smoke is
 only node-boundary evidence, not proof that a withdrawal or disburse
 transaction was built on the local chain.
 
+## Funding Model
+
+The local smoke has to keep two funding paths separate:
+
+- `withdraw` consumes a reward balance from the treasury script's
+  reward account and pays it back to the treasury script address. On a
+  local Conway devnet, that reward balance must come from protocol
+  treasury state, for example by running short epochs with non-zero
+  reserves and enacting a treasury-withdrawal governance action to the
+  treasury script stake credential. A delegated key reward account is
+  useful for proving epoch reward mechanics, but it is not an Amaru
+  treasury-reward proof.
+- `disburse` consumes ordinary UTxOs locked at the per-scope treasury
+  script address. Those UTxOs can be provided by a deterministic setup
+  transaction from the devnet genesis wallet, or by a copied genesis
+  that starts with funds at the treasury script address.
+
+The pinned `cardano-node-clients` genesis currently allocates all ADA
+as initial wallet funds, so the protocol reserve/treasury path needs a
+copied-genesis override before a real `withdraw` smoke can observe a
+positive treasury script reward balance.
+
 ## Failure Shape
 
 The node phase fails before any treasury action if:

@@ -168,6 +168,7 @@ library
     , scientific
     , text
     , time
+    , transformers
 
 executable amaru-treasury-tx
   import:           warnings

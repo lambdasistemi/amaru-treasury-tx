@@ -172,7 +172,10 @@ import Amaru.Treasury.Scope
 import Amaru.Treasury.TreasuryBuild
     ( ScriptResult (..)
     , TreasuryBuildResult (..)
+    , renderTreasuryBuildError
     , runFromIntent
+    , runFromIntentEither
+    , treasuryBuildErrorCode
     )
 import Amaru.Treasury.TreasuryBuild.ReportWriter
     ( writeReportArtifact
@@ -1733,18 +1736,18 @@ runTxBuild socket TxBuildOpts{..} = do
                 exitWith (ExitFailure 6)
         withLocalNodeBackend magic socket $ \backend -> do
             ctx <- liveContext backend required
-            buildResult <-
-                try (runFromIntent ctx some)
-                    :: IO (Either SomeException TreasuryBuildResult)
+            buildResult <- runFromIntentEither ctx some
             tbr <- case buildResult of
                 Right result -> pure result
                 Left err -> do
+                    let message = renderTreasuryBuildError err
+                    TIO.hPutStrLn stderr message
                     writeFailureReport
                         tr
                         tboReportPath
                         some
-                        "build-failed"
-                        (T.pack (displayException err))
+                        (treasuryBuildErrorCode err)
+                        message
                     exitFailure
             let cborStrict = BSL.toStrict (tbrCborBytes tbr)
                 hexed = B16.encode cborStrict

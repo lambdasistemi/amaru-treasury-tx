@@ -46,7 +46,7 @@ spec =
 
 missingDisburseUtxos :: SomeException -> Bool
 missingDisburseUtxos =
-    isInfixOf "runDisburse: missing UTxOs"
+    isInfixOf "tx-build: disburse failed while gathering inputs"
         . displayException
 
 expectRight :: (Show e) => Either e a -> IO a

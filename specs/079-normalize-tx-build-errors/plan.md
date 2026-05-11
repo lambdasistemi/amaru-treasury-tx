@@ -5,12 +5,18 @@
 
 ## Summary
 
-Introduce a project-owned typed build diagnostic layer for expected `tx-build` failures. Convert upstream `BuildError` and local runner failures into structured diagnostics before CLI/report output. Use `ExceptT TreasuryBuildError IO` inside the action runners if it simplifies the current nested `case` and repeated `throwIO . userError` style. Use the `mapException` pattern at compatibility boundaries to add structured context without flattening to strings: base `mapException` where pure exception mapping applies, and a typed `try`/`catch` helper for `IO` exceptions. Pure transaction builders stay unchanged.
+Introduce a project-owned typed build diagnostic layer for expected `tx-build` failures. Convert upstream `BuildError` and local runner failures into structured diagnostics before CLI/report output. Use action-local `ExceptT ActionBuildError IO` inside the runners and lift it to the public `TreasuryBuildError` with `withExceptT` at dispatcher boundaries. Use the `mapException` pattern at compatibility boundaries to add structured context without flattening to strings: base `mapException` where pure exception mapping applies, and a typed `try`/`catch` helper for `IO` exceptions. Pure transaction builders stay unchanged.
+
+## Status
+
+**Completed**: typed diagnostic model, `withExceptT` runner lifting, compatibility exception rendering, `runFromIntentEither`, CLI/report wiring, docs updates, focused RED/GREEN tests, formatting, `just build`, and full `just ci`.
+**Current**: ready for review.
+**Blockers**: none.
 
 ## Technical Context
 
 **Language/Version**: Haskell, GHC 9.12.3 in current Nix dev shell.
-**Primary Dependencies**: `cardano-node-clients` (`BuildError`, `BalanceError`), base `Control.Exception.mapException`, `transformers` or `mtl` for `ExceptT`.
+**Primary Dependencies**: `cardano-node-clients` (`BuildError`, `BalanceError`), base `Control.Exception.mapException`, `transformers` for `ExceptT` and `withExceptT`.
 **Storage**: N/A.
 **Testing**: Hspec unit tests, golden/report tests where failure envelope bytes are deterministic.
 **Target Platform**: CLI on Linux and macOS.
@@ -24,7 +30,7 @@ Introduce a project-owned typed build diagnostic layer for expected `tx-build` f
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
 - **I. Faithful port of the bash recipes.** Pass. This changes error reporting after build failure, not transaction semantics or bash-compatible payloads.
-- **II. Pure builders, impure shell.** Pass. The pure `TxBuild` programs stay pure; `ExceptT` and `mapException` are confined to the IO runner and compatibility exception layers.
+- **II. Pure builders, impure shell.** Pass. The pure `TxBuild` programs stay pure; `ExceptT`, `withExceptT`, and `mapException` are confined to the IO runner and compatibility exception layers.
 - **III. Pluggable data source, local-node default.** Pass. No backend contract change.
 - **IV. Build, never sign or submit.** Pass. No signing/submission scope.
 - **V. Test-first with golden CBOR fixtures.** Pass with TDD requirement: add failing normalization tests before changing runner code. Existing golden success CBOR must remain unchanged.
@@ -52,7 +58,7 @@ specs/079-normalize-tx-build-errors/
 
 ```text
 lib/Amaru/Treasury/
-+-- TreasuryBuild.hs                 # typed build errors, ExceptT runner flow, mapException context wrapping
++-- TreasuryBuild.hs                 # typed build errors, withExceptT runner flow, mapException context wrapping
 +-- Report.hs                        # failure envelope keeps normalized code/message
 +-- TreasuryBuild/Trace.hs           # only if trace wording needs a new event
 
@@ -71,7 +77,7 @@ test/unit/Amaru/Treasury/
 See [research.md](./research.md). Main decisions:
 
 - project-owned diagnostic type;
-- `ExceptT TreasuryBuildError IO` inside IO runners when it reduces syntax noise;
+- nested `ExceptT ActionBuildError IO` inside IO runners, lifted with `withExceptT`;
 - structured exception context composed with `mapException` at exception boundaries;
 - typed `runFromIntentEither` entry point with compatibility wrapper;
 - conservative `InsufficientFee` wording;
@@ -87,4 +93,4 @@ See:
 
 ## Complexity Tracking
 
-No constitution violations. `ExceptT` and `mapException` are not added architectural layers in the pure builders; they are local IO error-flow and compatibility-exception plumbing at boundaries that already perform effects and can fail.
+No constitution violations. `ExceptT`, `withExceptT`, and `mapException` are not added architectural layers in the pure builders; they are local IO error-flow and compatibility-exception plumbing at boundaries that already perform effects and can fail.

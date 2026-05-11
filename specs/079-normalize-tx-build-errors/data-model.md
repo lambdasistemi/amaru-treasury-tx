@@ -22,6 +22,31 @@ Validation rules:
 - `tbeContext` is an ordered outer-to-inner list of structured context entries added by runner boundaries.
 - `tbeDiagnostic` carries the stable code and fields used by report/CLI rendering.
 
+### `ActionBuildError`
+
+Action runners may use a smaller nested error while they are still
+action-agnostic:
+
+```haskell
+data ActionBuildError = ActionBuildError
+    { abePhase :: !BuildFailurePhase
+    , abeContext :: ![BuildErrorContext]
+    , abeDiagnostic :: !BuildDiagnostic
+    }
+```
+
+Dispatcher boundaries lift that nested error into the public diagnostic
+with `withExceptT`:
+
+```haskell
+withExceptT
+    (nestActionBuildError BuildActionSwap)
+    runSwapAction
+```
+
+This keeps repeated action context out of lower-level helpers while
+preserving a single public `TreasuryBuildError`.
+
 Context composition:
 
 ```haskell
@@ -66,12 +91,11 @@ Where the build failed.
 
 ```haskell
 data BuildFailurePhase
-    = BuildPhaseInputResolution
-    | BuildPhaseBalance
+    = BuildPhaseTranslate
+    | BuildPhaseGatherInputs
+    | BuildPhaseBuild
     | BuildPhaseFeeAlignment
-    | BuildPhaseScriptEvaluation
-    | BuildPhaseValidation
-    | BuildPhaseUnsupportedAction
+    | BuildPhaseUnsupported
 ```
 
 ### `BuildDiagnostic`
@@ -151,6 +175,8 @@ Mapping:
 
 ```text
 Upstream BuildError / local runner failure
+  -> ActionBuildError
+  -> withExceptT action wrapper
   -> TreasuryBuildError
   -> optional mapException enrichment at exception boundaries
   -> CLI stderr message

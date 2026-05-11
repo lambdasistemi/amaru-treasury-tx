@@ -14,7 +14,7 @@ The diagnostic:
 Example shape:
 
 ```text
-tx-build: balance failed: insufficient fee capacity (requiredFeeLovelace=577583, availableInputLovelace=1450020000000)
+tx-build: swap failed while building the transaction: insufficient fee capacity; required lovelace: 577583; available lovelace: 1450020000000
 ```
 
 The exact wording may change during implementation, but the message must keep labeled fields and stable failure class language.
@@ -30,8 +30,8 @@ The existing failure envelope shape remains:
   "intent": { "...": "inline intent JSON" },
   "result": {
     "failure": {
-      "code": "balance-insufficient-fee",
-      "message": "tx-build: balance failed: insufficient fee capacity (requiredFeeLovelace=577583, availableInputLovelace=1450020000000)"
+      "code": "insufficient-fee-capacity",
+      "message": "tx-build: swap failed while building the transaction: insufficient fee capacity; required lovelace: 577583; available lovelace: 1450020000000"
     }
   }
 }
@@ -43,11 +43,11 @@ The existing failure envelope shape remains:
 
 | Failure | Code |
 |---|---|
-| Insufficient fee balance failure | `balance-insufficient-fee` |
-| Fee convergence failure | `balance-fee-not-converged` |
-| Collateral shortfall | `balance-collateral-shortfall` |
+| Insufficient fee balance failure | `insufficient-fee-capacity` |
+| Fee convergence failure | `fee-not-converged` |
+| Collateral shortfall | `collateral-shortfall` |
 | Script evaluation failure | `script-evaluation-failed` |
-| Final validation failure | `validation-failed` |
+| Final validation failure | `final-validation-failed` |
 | Fee bump failure | `fee-bump-failed` |
 | Missing required UTxOs | `missing-utxos` |
 | Fee alignment failure | `fee-alignment-failed` |

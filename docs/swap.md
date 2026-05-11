@@ -53,6 +53,9 @@ amaru-treasury-tx \
 The middle command emits `{ intent, result }`. On success,
 `result.tx-cbor` is the unsigned Conway transaction and
 `result.report` is the mechanical report used by the renderer.
+On an expected build failure, `result.failure.code` and
+`result.failure.message` carry the normalized tx-build diagnostic and
+no `tx-cbor` or nested report is present.
 
 Use `--ada-usd DECIMAL` for an explicit ADA/USD override when the
 operator has already captured a fresh quote. Use `--ada-usdm DECIMAL`
@@ -99,9 +102,12 @@ Every value-affecting step emits one `tx-build:` line through
 the typed
 [`BuildEvent`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/TreasuryBuild/Trace.hs)
 tracer. `--log PATH` redirects them to a file (default = stderr).
-`--report PATH` writes the deterministic JSON transaction report after
-successful validation. If the requested report cannot be written,
-`tx-build` exits non-zero and names the failed path in the trace.
+`--report PATH` writes the deterministic build-output envelope. On
+success, that envelope contains the transaction CBOR and mechanical
+report. On expected build or validation failure, it contains
+`result.failure.code` and `result.failure.message`. If the requested
+report cannot be written, `tx-build` exits non-zero and names the
+failed path in the trace.
 To render the Markdown review manually, run:
 
 ```bash

@@ -108,7 +108,7 @@ What the flags mean:
 | `--validity-hours` | Validity window from current tip; 1..48. |
 | `--description` / `--justification` / `--destination-label` | Free-form rationale fields, pinned into the on-chain audit trail. |
 | `--extra-signer SCOPE\|HEX` | Repeated for each witness owner beyond the selected scope owner. Scope names and 28-byte key hashes are accepted; `--signer` remains as an alias. |
-| `tx-build --report -` | Emits `{ intent, result }` on stdout. Successful `result` contains both `tx-cbor` and the mechanical report. |
+| `tx-build --report -` | Emits `{ intent, result }` on stdout. Successful `result` contains both `tx-cbor` and the mechanical report; expected build failures contain `result.failure.code` and `result.failure.message`. |
 | `report-render` | Reads the build-output envelope from stdin and renders Markdown. |
 
 ## 5. What flows where
@@ -231,7 +231,7 @@ synthetic golden evidence.
 
 | Exit | Action |
 |------|--------|
-| 1 (tx-build) | The build aborted before producing CBOR. The trace's `tx-build: ABORT …` line names the cause: bad intent JSON, translation error, or a re-evaluated redeemer failure. |
+| 1 (tx-build) | The build aborted before producing CBOR. Expected builder failures print a normalized `tx-build: ... failed ...` diagnostic; report output, when requested, carries the same stable failure code/message. |
 | 3 (swap-quote / swap-wizard / tx-build) | Setup or economic error. The trace's `ABORT …` line names the offending step: quote source failure, registry mismatch, empty wallet UTxO set, treasury affordability shortfall, missing UTxOs in chain context, and similar fail-closed cases. |
 | 4 (swap-wizard) | Translation error in the expert manual path. Re-check `--min-rate`, `--chunk-usdm`/`--split`, and `--validity-hours` in `[1, 48]`. |
 | 6 (tx-build) | The N2C handshake reports a network magic that disagrees with the intent's `network` field. The trace's `tx-build: NETWORK MISMATCH …` line names both networks; point `--node-socket` at the right node. |

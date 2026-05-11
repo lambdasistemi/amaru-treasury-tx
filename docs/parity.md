@@ -13,7 +13,7 @@ Reproducing a real on-chain swap, to the byte.
   one-line ordering shim used to preserve the intended swap-order
   layout.
 - **Ours**: the Haskell stack on this PR — `Tx.Swap.swapProgram`
-  feeding the unified `TreasuryBuild.runSwap` path against a frozen
+  feeding the unified `Build.runSwap` path against a frozen
   `ChainContext` captured from the local mainnet node socket
   (`/code/cardano-mainnet/ipc/node.socket`).
 

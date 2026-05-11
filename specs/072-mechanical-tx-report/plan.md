@@ -37,8 +37,8 @@ the transaction fee and returned collateral is not double-counted.
   runner.
 - Existing `Amaru.Treasury.IntentJSON` parsed intent and
   `translateIntent` result.
-- Existing `Amaru.Treasury.TreasuryBuild` build runners and
-  `TreasuryBuildResult`.
+- Existing `Amaru.Treasury.Build` build runners and
+  `BuildResult`.
 - Existing `Amaru.Treasury.ChainContext` / fixture helpers for
   resolved UTxO values.
 - Existing `aeson`, `aeson-pretty`, `jsonschema`, `hspec`, and golden
@@ -90,7 +90,7 @@ queries and script evaluation.
 - One new report module family under `lib/Amaru/Treasury/Report/`.
 - One new report schema generator or checked contract asset under
   `docs/assets/`.
-- Small `TreasuryBuildResult` extension so callers can inspect the
+- Small `BuildResult` extension so callers can inspect the
   final balanced transaction body and translated build context without
   re-decoding CBOR.
 - One `tx-build` CLI option for the report destination.
@@ -138,9 +138,9 @@ lib/Amaru/Treasury/
 |   |-- Accounting.hs                 # Pure wallet/treasury accounting.
 |   |-- Classify.hs                   # Produced-output role classifier.
 |   `-- Schema.hs                     # JSON Schema generator/asset source.
-|-- TreasuryBuild.hs                  # Extend result with final tx/body data
+|-- Build.hs                  # Extend result with final tx/body data
 |                                      # needed by report construction.
-`-- TreasuryBuild/Trace.hs            # Add report-write trace events.
+`-- Build/Trace.hs            # Add report-write trace events.
 
 app/amaru-treasury-tx/
 `-- Main.hs                           # Add --report PATH, build report

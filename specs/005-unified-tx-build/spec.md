@@ -266,8 +266,8 @@ swap`. After this feature lands, no occurrences remain.
   `ReorganizePayload`). Only the variants for actions whose feature
   has shipped are populated; the others are placeholders.
 - **TranslatedTreasuryIntent**: the typed lift to ledger types
-  consumed by `runTreasuryBuild`.
-- **TreasuryBuildResult**: the build pipeline's output
+  consumed by `runBuild`.
+- **BuildResult**: the build pipeline's output
   (`cborBytes`, `feeLovelace`, `totalCollateralLovelace`,
   `scriptResults`). Identical shape to today's per-action results.
 
@@ -328,7 +328,7 @@ swap`. After this feature lands, no occurrences remain.
   [`Amaru.Treasury.Tx.SwapBuild`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapBuild.hs)
   and
   [`Amaru.Treasury.Tx.DisburseBuild`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/004-disburse-wizard/lib/Amaru/Treasury/Tx/DisburseBuild.hs)
-  drivers can be merged into a single `runTreasuryBuild` that
+  drivers can be merged into a single `runBuild` that
   dispatches on the action variant. The IO-side plumbing
   (`ChainContext`, the balancer call, the re-eval pass) is
   unchanged.

@@ -27,7 +27,7 @@ before the implementation tasks they constrain.
 - Unified intent code: `lib/Amaru/Treasury/IntentJSON.hs`,
   `lib/Amaru/Treasury/IntentJSON/Schema.hs`,
   `lib/Amaru/Treasury/IntentJSON/Common.hs`
-- Builder dispatcher: `lib/Amaru/Treasury/TreasuryBuild.hs`
+- Builder dispatcher: `lib/Amaru/Treasury/Build.hs`
 - Pure builder: `lib/Amaru/Treasury/Tx/Withdraw.hs`
 - Wizard code: `lib/Amaru/Treasury/Tx/WithdrawWizard.hs`,
   `lib/Amaru/Treasury/Tx/WithdrawWizard/Trace.hs`
@@ -136,8 +136,8 @@ before the implementation tasks they constrain.
 
 ### Implementation for User Story 3
 
-- [x] T037 [US3] Replace the `SWithdraw` fail-closed branch in `lib/Amaru/Treasury/TreasuryBuild.hs` with `runWithdraw`.
-- [x] T038 [US3] Implement `runWithdraw` in `lib/Amaru/Treasury/TreasuryBuild.hs`, including required UTxO checks, metadata label 1694, build, fee/collateral handling, and re-evaluation summary.
+- [x] T037 [US3] Replace the `SWithdraw` fail-closed branch in `lib/Amaru/Treasury/Build.hs` with `runWithdraw`.
+- [x] T038 [US3] Implement `runWithdraw` in `lib/Amaru/Treasury/Build.hs`, including required UTxO checks, metadata label 1694, build, fee/collateral handling, and re-evaluation summary.
 - [x] T039 [US3] Adjust `lib/Amaru/Treasury/Tx/Withdraw.hs` only if T036 proves the existing positive withdrawal amount diverges from the bash oracle.
 - [x] T040 [US3] Generate or update `test/fixtures/withdraw/synthetic/expected.cbor` through the explicit golden update flow.
 - [x] T041 [US3] Add fixture globs for `test/fixtures/withdraw/**/*.cbor` to `amaru-treasury-tx.cabal` once `expected.cbor` exists.

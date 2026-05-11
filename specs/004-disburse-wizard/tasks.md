@@ -14,7 +14,7 @@
 merged the unified `TreasuryIntent` JSON contract and `tx-build`
 dispatcher first. Remaining 004 work therefore targets
 `disburse-wizard | tx-build`, `TreasuryIntent 'Disburse`, and
-`Amaru.Treasury.TreasuryBuild.runDisburse`. Earlier tasks that mention
+`Amaru.Treasury.Build.runDisburse`. Earlier tasks that mention
 `DisburseIntentJSON`, `DisburseBuild`, or a per-action `disburse`
 subcommand are preserved as branch history but superseded for the
 public contract.
@@ -44,7 +44,7 @@ Phases 4 and 5.
 ## Path conventions
 
 - Library modules: `lib/Amaru/Treasury/Tx/DisburseWizard.hs` plus
-  `lib/Amaru/Treasury/TreasuryBuild.hs` for the unified disburse
+  `lib/Amaru/Treasury/Build.hs` for the unified disburse
   build branch. `Tx/DisburseIntentJSON` and `Tx/DisburseBuild` are
   branch-local compatibility modules from the pre-#52 shape.
 - Trace modules: `lib/Amaru/Treasury/Tx/Disburse/Trace.hs`,
@@ -300,11 +300,11 @@ after running the build subcommand.
       every other asset present on the inputs verbatim.
 - [x] T028 [US1] Implement the ADA disburse build branch as
       `runDisburse :: ChainContext -> DisburseIntent -> Metadatum ->
-      Addr -> IO TreasuryBuildResult` in
-      `lib/Amaru/Treasury/TreasuryBuild.hs`. Body shape mirrors
+      Addr -> IO BuildResult` in
+      `lib/Amaru/Treasury/Build.hs`. Body shape mirrors
       the unified `runSwap` branch:
       load pparams, build via `disburseAdaProgram`, balance,
-      re-evaluate per-redeemer ExUnits, return `TreasuryBuildResult`.
+      re-evaluate per-redeemer ExUnits, return `BuildResult`.
       On any redeemer re-evaluation failure, emit `ScriptResult …
       (Left err)` for that index but continue producing a complete
       `DisburseBuildResult` (CBOR + fee + collateral). The runner in
@@ -399,7 +399,7 @@ golden.
       usdmPolicy usdmAsset amount)` and the leftover output carries
       every other asset present on inputs (including spent ADA).
 - [ ] T039 [US2] Extend `runDisburse` in
-      `lib/Amaru/Treasury/TreasuryBuild.hs` to dispatch to
+      `lib/Amaru/Treasury/Build.hs` to dispatch to
       `disburseUsdmProgram` when the translated intent is
       `DisburseUsdmIntent`.
 - [ ] T040 [P] [US2] Author USDM body-CBOR fixture set under
@@ -450,7 +450,7 @@ exactly one line of hex characters.
       `tx-build` defaults `--intent` to stdin, `--out` to stdout, and
       `--log` to stderr; summary sidecar wiring remains T054.
 - [ ] T047 [US4] Wire the typed tracer for `disburse-wizard` and the
-      existing `TreasuryBuild.Trace` tracer into the full pipe. On
+      existing `Build.Trace` tracer into the full pipe. On
       success, the only stdout content is the intent JSON
       (wizard) or the hex CBOR (build). Stderr (or `--log`) carries
       events one per line.

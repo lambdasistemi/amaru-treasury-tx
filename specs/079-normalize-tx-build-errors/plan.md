@@ -5,7 +5,7 @@
 
 ## Summary
 
-Introduce a project-owned typed build diagnostic layer for expected `tx-build` failures. Convert upstream `BuildError` and local runner failures into structured diagnostics before CLI/report output. Use action-local `ExceptT ActionBuildError IO` inside the runners and lift it to the public `TreasuryBuildError` with `withExceptT` at dispatcher boundaries. Use the `mapException` pattern at compatibility boundaries to add structured context without flattening to strings: base `mapException` where pure exception mapping applies, and a typed `try`/`catch` helper for `IO` exceptions. Pure transaction builders stay unchanged.
+Introduce a project-owned typed build diagnostic layer for expected `tx-build` failures. Convert upstream `BuildError` and local runner failures into structured diagnostics before CLI/report output. Use action-local `ExceptT ActionBuildError IO` inside the runners and lift it to the public `BuildError` with `withExceptT` at dispatcher boundaries. Use the `mapException` pattern at compatibility boundaries to add structured context without flattening to strings: base `mapException` where pure exception mapping applies, and a typed `try`/`catch` helper for `IO` exceptions. Pure transaction builders stay unchanged.
 
 ## Status
 
@@ -23,7 +23,7 @@ Introduce a project-owned typed build diagnostic layer for expected `tx-build` f
 **Project Type**: Single Haskell library plus CLI executable.
 **Performance Goals**: N/A; error rendering is not performance-sensitive.
 **Constraints**: Do not change transaction balancing semantics. Do not change pure `TxBuild q e a` programs. Preserve success report schema.
-**Scale/Scope**: `lib/Amaru/Treasury/TreasuryBuild.hs`, `app/amaru-treasury-tx/Main.hs`, report failure envelopes, and focused tests.
+**Scale/Scope**: `lib/Amaru/Treasury/Build.hs`, `app/amaru-treasury-tx/Main.hs`, report failure envelopes, and focused tests.
 
 ## Constitution Check
 
@@ -58,19 +58,19 @@ specs/079-normalize-tx-build-errors/
 
 ```text
 lib/Amaru/Treasury/
-+-- TreasuryBuild.hs                 # typed build errors, withExceptT runner flow, mapException context wrapping
++-- Build.hs                 # typed build errors, withExceptT runner flow, mapException context wrapping
 +-- Report.hs                        # failure envelope keeps normalized code/message
-+-- TreasuryBuild/Trace.hs           # only if trace wording needs a new event
++-- Build/Trace.hs           # only if trace wording needs a new event
 
 app/amaru-treasury-tx/
 +-- Main.hs                          # consume typed build failures for report/non-report CLI
 
 test/unit/Amaru/Treasury/
-+-- TreasuryBuildSpec.hs             # normalizer and runner failure tests
++-- BuildSpec.hs             # normalizer and runner failure tests
 +-- ReportSpec.hs                    # failure envelope code/message tests if needed
 ```
 
-**Structure Decision**: keep changes in the existing single package. Add a small error model near `TreasuryBuild` unless implementation shows a separate `TreasuryBuild.Error` module makes the export list clearer.
+**Structure Decision**: keep changes in the existing single package. Add a small error model near `Build` unless implementation shows a separate `Build.Error` module makes the export list clearer.
 
 ## Phase 0: Research Output
 

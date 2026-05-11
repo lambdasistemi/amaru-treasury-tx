@@ -1,19 +1,19 @@
 {- |
-Module      : Amaru.Treasury.TreasuryBuild.Trace
+Module      : Amaru.Treasury.Build.Trace
 Description : Tracer events for the unified tx-build pipeline
 Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
 Carries the steps the unified @tx-build@ subcommand
 takes that affect the produced tx CBOR or requested
-sidecar artifacts: 'TbeIntentParsed' (the action +
-network read from the intent), 'TbeNetworkOk' /
-'TbeNetworkMismatch' (the N2C handshake magic vs
+sidecar artifacts: 'BuildEventIntentParsed' (the action +
+network read from the intent), 'BuildEventNetworkOk' /
+'BuildEventNetworkMismatch' (the N2C handshake magic vs
 @intent.network@), and report-write events.
 
-Constructor prefix @Tbe-@ for "TreasuryBuildEvent".
+Constructor prefix @BuildEvent-@ for "BuildEvent".
 -}
-module Amaru.Treasury.TreasuryBuild.Trace
+module Amaru.Treasury.Build.Trace
     ( BuildEvent (..)
     , renderBuildEvent
     , buildEventTracer
@@ -30,21 +30,21 @@ affect the produced tx CBOR or the summary sidecar.
 data BuildEvent
     = -- | Where the intent.json came from
       --   ('Nothing' = stdin, 'Just' = file path).
-      TbeIntentSource !(Maybe FilePath)
+      BuildEventIntentSource !(Maybe FilePath)
     | -- | Action + network read from the parsed intent.
       --   Surfaces the action the build is about to
       --   construct, sourced from the intent.
-      TbeIntentParsed
+      BuildEventIntentParsed
         !Text
         -- ^ action name ("swap", "disburse", …)
         !Text
         -- ^ network ("mainnet", "preprod", "preview")
     | -- | About to connect to the local cardano-node.
-      TbeConnect !FilePath
+      BuildEventConnect !FilePath
     | -- | N2C handshake's magic matches @intent.network@'s
       --   magic — single source of truth for network is
       --   honoured.
-      TbeNetworkOk
+      BuildEventNetworkOk
         !Text
         -- ^ network name from intent
         !Word32
@@ -52,7 +52,7 @@ data BuildEvent
     | -- | N2C handshake reported a magic differing from
       --   @intent.network@'s magic. Terminal event for
       --   exit code 6.
-      TbeNetworkMismatch
+      BuildEventNetworkMismatch
         !Text
         -- ^ intent.network name
         !Word32
@@ -62,31 +62,31 @@ data BuildEvent
     | -- | Number of UTxOs the build will pull from the
       --   chain (wallet TxIn + treasury TxIns + reference
       --   inputs).
-      TbeRequiredUtxos !Int
+      BuildEventRequiredUtxos !Int
     | -- | Built: bytes, fee lovelace, total collateral
       --   lovelace.
-      TbeBuilt !Int !Integer !Integer
+      BuildEventBuilt !Int !Integer !Integer
     | -- | Re-evaluation summary: replayed N redeemers,
       --   M failed.
-      TbeReevaluated !Int !Int
+      BuildEventReevaluated !Int !Int
     | -- | One re-evaluated script failure (purpose +
       --   message).
-      TbeScriptFail !Text !Text
+      BuildEventScriptFail !Text !Text
     | -- | All redeemers re-evaluated cleanly.
-      TbeValidationOk
+      BuildEventValidationOk
     | -- | At least one redeemer failed re-evaluation.
-      TbeValidationFailed
+      BuildEventValidationFailed
     | -- | Where the hex CBOR went
       --   ('Nothing' = stdout, 'Just' = file path).
-      TbeWroteCbor !(Maybe FilePath)
+      BuildEventWroteCbor !(Maybe FilePath)
     | -- | Where the summary JSON sidecar went.
-      TbeWroteSummary !FilePath
+      BuildEventWroteSummary !FilePath
     | -- | Where the deterministic report JSON sidecar went.
-      TbeWroteReport !FilePath
+      BuildEventWroteReport !FilePath
     | -- | The requested report JSON sidecar could not be written.
-      TbeReportWriteFailed !FilePath !Text
+      BuildEventReportWriteFailed !FilePath !Text
     | -- | The build aborted before producing CBOR.
-      TbeAborted !Text
+      BuildEventAborted !Text
     deriving stock (Eq, Show)
 
 -- | Single-line, prefix-tagged rendering for log output.
@@ -95,23 +95,23 @@ renderBuildEvent =
     ("tx-build: " <>) . body
   where
     body = \case
-        TbeIntentSource Nothing -> "intent <- stdin"
-        TbeIntentSource (Just p) ->
+        BuildEventIntentSource Nothing -> "intent <- stdin"
+        BuildEventIntentSource (Just p) ->
             "intent <- " <> T.pack p
-        TbeIntentParsed action network ->
+        BuildEventIntentParsed action network ->
             "parsed action="
                 <> action
                 <> " network="
                 <> network
-        TbeConnect socket ->
+        BuildEventConnect socket ->
             "connecting to " <> T.pack socket
-        TbeNetworkOk network magic ->
+        BuildEventNetworkOk network magic ->
             "handshake ok (magic "
                 <> tshow magic
                 <> " matches intent network="
                 <> network
                 <> ")"
-        TbeNetworkMismatch
+        BuildEventNetworkMismatch
             intentName
             intentMagic
             socketMagic ->
@@ -121,37 +121,37 @@ renderBuildEvent =
                     <> tshow intentMagic
                     <> "), socket reports magic "
                     <> tshow socketMagic
-        TbeRequiredUtxos n ->
+        BuildEventRequiredUtxos n ->
             "required utxos: " <> tshow n
-        TbeBuilt bytes fee tc ->
+        BuildEventBuilt bytes fee tc ->
             "built "
                 <> tshow bytes
                 <> " bytes  fee="
                 <> tshow fee
                 <> "  total_collateral="
                 <> tshow tc
-        TbeReevaluated total fails ->
+        BuildEventReevaluated total fails ->
             "re-evaluated "
                 <> tshow total
                 <> " redeemers, "
                 <> tshow fails
                 <> " failed"
-        TbeScriptFail purpose err ->
+        BuildEventScriptFail purpose err ->
             "FAIL " <> purpose <> " — " <> err
-        TbeValidationOk -> "VALIDATION OK"
-        TbeValidationFailed -> "VALIDATION FAILED"
-        TbeWroteCbor Nothing -> "cbor -> stdout"
-        TbeWroteCbor (Just p) -> "cbor -> " <> T.pack p
-        TbeWroteSummary p ->
+        BuildEventValidationOk -> "VALIDATION OK"
+        BuildEventValidationFailed -> "VALIDATION FAILED"
+        BuildEventWroteCbor Nothing -> "cbor -> stdout"
+        BuildEventWroteCbor (Just p) -> "cbor -> " <> T.pack p
+        BuildEventWroteSummary p ->
             "summary -> " <> T.pack p
-        TbeWroteReport p ->
+        BuildEventWroteReport p ->
             "report -> " <> T.pack p
-        TbeReportWriteFailed p err ->
+        BuildEventReportWriteFailed p err ->
             "REPORT WRITE FAILED "
                 <> T.pack p
                 <> ": "
                 <> err
-        TbeAborted msg -> "ABORT " <> msg
+        BuildEventAborted msg -> "ABORT " <> msg
 
 {- | Lift a 'Text' sink into a 'BuildEvent' tracer via
 'renderBuildEvent'.

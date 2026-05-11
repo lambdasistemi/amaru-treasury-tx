@@ -28,16 +28,16 @@ import Test.Hspec
     , shouldBe
     )
 
+import Amaru.Treasury.Build
+    ( BuildResult (..)
+    , runFromIntent
+    )
 import Amaru.Treasury.ChainContext.Fixture
     ( readSwapFixture
     , toFrozenContext
     )
 import Amaru.Treasury.IntentJSON
     ( decodeTreasuryIntentFile
-    )
-import Amaru.Treasury.TreasuryBuild
-    ( TreasuryBuildResult (..)
-    , runFromIntent
     )
 
 fixtureDir :: FilePath
@@ -64,7 +64,7 @@ spec =
             tbr <- runFromIntent ctx some
             let actualHex =
                     B16.encode
-                        (BSL.toStrict (tbrCborBytes tbr))
+                        (BSL.toStrict (brCborBytes tbr))
             if update == Just "1"
                 then BS.writeFile expectedPath actualHex
                 else do

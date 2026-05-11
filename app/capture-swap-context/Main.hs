@@ -61,6 +61,11 @@ import Cardano.Ledger.TxIn (TxIn)
 import Ouroboros.Network.Magic (NetworkMagic (..))
 
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
+import Amaru.Treasury.Build
+    ( BuildResult (..)
+    , ScriptResult (..)
+    , runFromIntent
+    )
 import Amaru.Treasury.ChainContext (ChainContext (..), liveContext)
 import Amaru.Treasury.ChainContext.Fixture (writeSwapFixture)
 import Amaru.Treasury.IntentJSON
@@ -72,11 +77,6 @@ import Amaru.Treasury.IntentJSON
     , decodeTreasuryIntentFile
     )
 import Amaru.Treasury.IntentJSON.Common (parseTxIn)
-import Amaru.Treasury.TreasuryBuild
-    ( ScriptResult (..)
-    , TreasuryBuildResult (..)
-    , runFromIntent
-    )
 
 import Options.Applicative qualified as O
 
@@ -155,17 +155,17 @@ main = do
         IO.hPutStrLn stderr "capture: querying chain context"
         ctx <- liveContext backend allRequired
         IO.hPutStrLn stderr "capture: building tx"
-        TreasuryBuildResult{..} <- runFromIntent ctx some
+        BuildResult{..} <- runFromIntent ctx some
         let exUnitsMap =
                 Map.fromList
                     [ (srPurpose r, ex)
                     | r@ScriptResult{srOutcome = Right ex} <-
-                        tbrScriptResults
+                        brScriptResults
                     ]
             failures =
                 [ (srPurpose r, e)
                 | r@ScriptResult{srOutcome = Left e} <-
-                    tbrScriptResults
+                    brScriptResults
                 ]
         case failures of
             [] -> pure ()
@@ -188,9 +188,9 @@ main = do
                 <> coOutDir
         createDirectoryIfMissing True coOutDir
         writeSwapFixture coOutDir (ccUtxos ctx) exUnitsMap
-        let cborStrict = BSL.toStrict tbrCborBytes
+        let cborStrict = BSL.toStrict brCborBytes
             hexed = B16.encode cborStrict
-            Coin feeLov = tbrFeeLovelace
+            Coin feeLov = brFeeLovelace
         BSL.writeFile
             (coOutDir <> "/expected.cbor")
             (BSL.fromStrict hexed)

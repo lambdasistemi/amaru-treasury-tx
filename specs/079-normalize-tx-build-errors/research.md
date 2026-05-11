@@ -11,12 +11,12 @@ Phase 0 decisions for issue #79.
 **Alternatives considered**:
 
 - Render `show (BuildError ())` directly. Rejected: this is the current defect.
-- Pattern-match only in `app/Main.hs`. Rejected: the raw `userError` strings are already produced in `TreasuryBuild`; normalizing later means parsing exceptions or losing structure.
+- Pattern-match only in `app/Main.hs`. Rejected: the raw `userError` strings are already produced in `Build`; normalizing later means parsing exceptions or losing structure.
 - Change upstream `cardano-node-clients`. Rejected for this issue: the project can define a better user contract without waiting on dependency changes.
 
 ## D2. Error flow with ExceptT
 
-**Decision**: use an inner action-level `ExceptT ActionBuildError IO` in IO build runners when it materially reduces nested `case` and repeated `throwIO . userError` code. At dispatcher boundaries, lift that nested error into the public `TreasuryBuildError` with `withExceptT`, so the outer diagnostic carries the action while lower-level code stays action-agnostic. Expose a normal `IO` runner for compatibility, but let `runTxBuild` consume an `Either`-returning entry point where practical.
+**Decision**: use an inner action-level `ExceptT ActionBuildError IO` in IO build runners when it materially reduces nested `case` and repeated `throwIO . userError` code. At dispatcher boundaries, lift that nested error into the public `BuildError` with `withExceptT`, so the outer diagnostic carries the action while lower-level code stays action-agnostic. Expose a normal `IO` runner for compatibility, but let `runTxBuild` consume an `Either`-returning entry point where practical.
 
 **Rationale**: the runners are IO boundaries already. `ExceptT` is appropriate for expected build failures: missing UTxOs, upstream `BuildError`, fee alignment failure, and validation failure. `withExceptT` is the right tool for nesting the action-local error into the public diagnostic without hand-written `Either` plumbing at every call site. It keeps the pure `TxBuild q e a` builders unchanged while making error exits explicit and testable.
 
@@ -42,7 +42,7 @@ mapException
 
 **Rationale**: the same failure can gain context as it moves outward: action, phase, selected wallet input, report destination, or intent network. That context should be data on the exception, not a string prefix. This mirrors the trace design: producers emit structured events, boundaries map or add context, and only the final tracer/renderer turns them into text.
 
-Implementation note: `mapException` is the reference shape for pure exception mapping. Expected builder failures in this project mostly arise in `IO`, so a helper should expose the same `TreasuryBuildException -> TreasuryBuildException` transformation and apply it with typed `try`/`catch` where the exception is thrown with `throwIO`.
+Implementation note: `mapException` is the reference shape for pure exception mapping. Expected builder failures in this project mostly arise in `IO`, so a helper should expose the same `BuildException -> BuildException` transformation and apply it with typed `try`/`catch` where the exception is thrown with `throwIO`.
 
 **Alternatives considered**:
 
@@ -52,7 +52,7 @@ Implementation note: `mapException` is the reference shape for pure exception ma
 
 ## D4. Public API shape
 
-**Decision**: add a typed entry point such as `runFromIntentEither :: ChainContext -> SomeTreasuryIntent -> IO (Either TreasuryBuildError TreasuryBuildResult)`, then keep `runFromIntent` as a compatibility wrapper that throws a typed exception rendered from `TreasuryBuildError`.
+**Decision**: add a typed entry point such as `runFromIntentEither :: ChainContext -> SomeTreasuryIntent -> IO (Either BuildError BuildResult)`, then keep `runFromIntent` as a compatibility wrapper that throws a typed exception rendered from `BuildError`.
 
 **Rationale**: existing callers can keep using `runFromIntent`, while `app/Main.hs` can switch to the typed entry point and stop catching `SomeException` for expected builder failures.
 

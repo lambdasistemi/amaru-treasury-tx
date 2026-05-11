@@ -84,7 +84,7 @@ regardless.
                    │
                    ▼
         ┌───────────────────────┐
-        │  TreasuryBuild        │  ← dispatcher: translate,
+        │  Build        │  ← dispatcher: translate,
         │     runFromIntent     │     build, fee-align,
         └───────────────────────┘     re-evaluate
                    │
@@ -96,6 +96,6 @@ regardless.
 ```
 
 The split is enforced by types: pure transaction programs cannot do
-IO, `TreasuryBuild` cannot read pparams or query UTxOs except
+IO, `Build` cannot read pparams or query UTxOs except
 through the context, and the CLI or golden harness chooses whether
 that context is live or frozen.

@@ -48,9 +48,9 @@ path directly — its only output is the JSON document.
   [`Tx/SwapWizard`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapWizard.hs),
   [`Tx/SwapWizard/Trace`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapWizard/Trace.hs).
 - existing unified build-side modules —
-  [`TreasuryBuild`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/TreasuryBuild.hs),
+  [`Build`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Build.hs),
   [`IntentJSON`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/IntentJSON.hs),
-  [`TreasuryBuild/Trace`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/TreasuryBuild/Trace.hs).
+  [`Build/Trace`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Build/Trace.hs).
 - `cardano-node-clients` `Provider IO` for queries (UTxOs at address,
   registry NFT walk, current tip, slot conversion, protocol
   parameters).
@@ -97,7 +97,7 @@ correctness >> speed.
 
 - **Pure builders** (Constitution II): `disburseAdaProgram` /
   `disburseUsdmProgram` stay pure `TxBuild q e ()`; the new
-  `runDisburse` branch in `TreasuryBuild` lives in IO on the build
+  `runDisburse` branch in `Build` lives in IO on the build
   side. The new `disburseToTreasuryIntent :: DisburseEnv ->
   DisburseAnswers -> Either DisburseError (TreasuryIntent 'Disburse)`
   is pure.
@@ -181,7 +181,7 @@ lib/Amaru/Treasury/Tx/
 ├── DisburseIntentJSON.hs        # LEGACY compatibility from the
 │                                # pre-#52 branch shape
 ├── DisburseBuild.hs             # LEGACY compatibility; unified
-│                                # build is TreasuryBuild.runDisburse
+│                                # build is Build.runDisburse
 ├── DisburseWizard.hs            # NEW: DisburseAnswers ADT,
 │                                # DisburseEnv, the pure
 │                                # disburseToTreasuryIntent, plus the

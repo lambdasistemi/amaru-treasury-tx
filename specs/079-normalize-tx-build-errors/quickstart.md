@@ -9,7 +9,7 @@ Verify expected builder failures travel through the same normalized diagnostic p
 Run the focused tests after implementation:
 
 ```bash
-nix develop --quiet -c just unit "TreasuryBuild"
+nix develop --quiet -c just unit "Build"
 nix develop --quiet -c just unit "Report"
 ```
 

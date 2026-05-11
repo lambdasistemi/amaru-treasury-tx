@@ -31,5 +31,5 @@
 
 ## Notes
 
-- The stakeholder spec intentionally says `SHOULD use ExceptT or equivalent` because the user explicitly requested that design consideration. The implementation plan pins the concrete recommendation: action-local `ExceptT ActionBuildError IO` inside the IO runners, lifted into `TreasuryBuildError` with `withExceptT`, pure builders unchanged.
+- The stakeholder spec intentionally says `SHOULD use ExceptT or equivalent` because the user explicitly requested that design consideration. The implementation plan pins the concrete recommendation: action-local `ExceptT ActionBuildError IO` inside the IO runners, lifted into `BuildError` with `withExceptT`, pure builders unchanged.
 - `mapException` is recommended where pure exception mapping applies. For `IO` exceptions from `throwIO`, the implementation should use a typed `try`/`catch` helper with the same structured mapping function. The primary expected-failure path can still be typed `Either`/`ExceptT`.

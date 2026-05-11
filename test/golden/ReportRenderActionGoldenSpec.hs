@@ -28,6 +28,10 @@ import Test.Hspec
     , shouldBe
     )
 
+import Amaru.Treasury.Build
+    ( BuildResult (..)
+    , runFromIntent
+    )
 import Amaru.Treasury.ChainContext.Fixture
     ( readSwapFixture
     , toFrozenContext
@@ -50,10 +54,6 @@ import Amaru.Treasury.Report
 import Amaru.Treasury.Report.Render
     ( RenderOutput (..)
     , renderBuildOutput
-    )
-import Amaru.Treasury.TreasuryBuild
-    ( TreasuryBuildResult (..)
-    , runFromIntent
     )
 
 data RenderFixture = RenderFixture
@@ -125,7 +125,7 @@ buildOutput fixtureDir some = do
                 TxBuildOutputSuccess
                     TxBuildSuccess
                         { tbsTxCbor =
-                            txCborHexFromBytes (tbrCborBytes result)
+                            txCborHexFromBytes (brCborBytes result)
                         , tbsReport =
                             buildTransactionReport
                                 (reportContext some)

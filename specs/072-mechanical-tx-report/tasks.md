@@ -36,14 +36,14 @@ for one vertical slice.
   `lib/Amaru/Treasury/Report/Accounting.hs`,
   `lib/Amaru/Treasury/Report/Classify.hs`,
   `lib/Amaru/Treasury/Report/Schema.hs`
-- Build integration: `lib/Amaru/Treasury/TreasuryBuild.hs` and
-  `lib/Amaru/Treasury/TreasuryBuild/Trace.hs`
+- Build integration: `lib/Amaru/Treasury/Build.hs` and
+  `lib/Amaru/Treasury/Build/Trace.hs`
 - CLI: `app/amaru-treasury-tx/Main.hs`
 - Public schema: `docs/assets/tx-report-schema.json`
 - Unit tests:
   `test/unit/Amaru/Treasury/ReportSpec.hs`,
   `test/unit/Amaru/Treasury/ReportSchemaSpec.hs`,
-  `test/unit/Amaru/Treasury/TreasuryBuildSpec.hs`
+  `test/unit/Amaru/Treasury/BuildSpec.hs`
 - Golden tests: `test/golden/SwapGoldenSpec.hs`
 - Swap report fixture: `test/fixtures/swap/report.golden.json`
 - Operator docs: `docs/quickstart.md` and `docs/swap.md`
@@ -99,12 +99,12 @@ report JSON byte strings are identical.
 
 - [ ] T014 [P] [US1] Add RED deterministic encoder tests in `test/unit/Amaru/Treasury/ReportSpec.hs` proving stable key order, stable array ordering, trailing newline, and no timestamp/path fields.
 - [ ] T015 [P] [US1] Add RED frozen-fixture report generation tests in `test/golden/SwapGoldenSpec.hs` that build the swap fixture twice and compare `test/fixtures/swap/report.golden.json` byte-for-byte.
-- [ ] T016 [P] [US1] Add RED no-report compatibility tests in `test/unit/Amaru/Treasury/TreasuryBuildSpec.hs` proving existing no-report `tx-build` result data and CBOR bytes are unchanged when no report path is supplied.
+- [ ] T016 [P] [US1] Add RED no-report compatibility tests in `test/unit/Amaru/Treasury/BuildSpec.hs` proving existing no-report `tx-build` result data and CBOR bytes are unchanged when no report path is supplied.
 
 ### GREEN Implementation for User Story 1
 
 - [ ] T017 [US1] Implement deterministic report encoding details in `lib/Amaru/Treasury/Report.hs`, including stable field ordering, canonical asset-map ordering, ledger-order output arrays, and a trailing newline.
-- [ ] T018 [US1] Extend `TreasuryBuildResult` in `lib/Amaru/Treasury/TreasuryBuild.hs` with the final balanced transaction body, transaction identity facts, fee/collateral facts, and validation facts needed by report construction.
+- [ ] T018 [US1] Extend `BuildResult` in `lib/Amaru/Treasury/Build.hs` with the final balanced transaction body, transaction identity facts, fee/collateral facts, and validation facts needed by report construction.
 - [ ] T019 [US1] Implement pure `buildTransactionReport` plumbing from parsed intent, translated intent, resolved context, final build result, and validation result in `lib/Amaru/Treasury/Report.hs`.
 - [ ] T020 [US1] Generate `test/fixtures/swap/report.golden.json` from the frozen swap fixture through `test/golden/SwapGoldenSpec.hs`.
 - [ ] T021 [US1] Confirm GREEN for the US1 slice with `nix develop --quiet -c just unit Report` and `nix develop --quiet -c just golden swap` covering `test/unit/Amaru/Treasury/ReportSpec.hs`, `test/golden/SwapGoldenSpec.hs`, and `test/fixtures/swap/report.golden.json`.
@@ -166,7 +166,7 @@ reference inputs in the report.
 ### GREEN Implementation for User Story 3
 
 - [X] T036 [US3] Implement signer requirement extraction and source labelling in `lib/Amaru/Treasury/Report.hs`.
-- [X] T037 [US3] Expose any missing selected scope owner, extra signer, tx-body signer, reference input, validity interval, and validation summary data from `lib/Amaru/Treasury/TreasuryBuild.hs`.
+- [X] T037 [US3] Expose any missing selected scope owner, extra signer, tx-body signer, reference input, validity interval, and validation summary data from `lib/Amaru/Treasury/Build.hs`.
 - [X] T038 [US3] Implement validation facts, reference inputs, and metadata summary encoding in `lib/Amaru/Treasury/Report.hs`.
 - [X] T039 [US3] Update `test/fixtures/swap/report.golden.json` through the golden update flow in `test/golden/SwapGoldenSpec.hs`.
 - [X] T040 [US3] Confirm GREEN for the US3 slice with `nix develop --quiet -c just unit Report` and `nix develop --quiet -c just golden swap` covering `test/unit/Amaru/Treasury/ReportSpec.hs`, `test/golden/SwapGoldenSpec.hs`, and `test/fixtures/swap/report.golden.json`.
@@ -183,7 +183,7 @@ US3 slices.
 **Slice split (2026-05-09 validation/reference/metadata)**:
 T033/T034/T035/T037/T038/T039/T040 cover validation facts, selected
 reference inputs, and metadata summary for the swap report. Existing
-`TreasuryBuildResult` exposure already carries the final tx body,
+`BuildResult` exposure already carries the final tx body,
 script results, CBOR bytes, and fee data needed for this slice; this
 slice adds the missing auxiliary-data hash extraction from the final tx
 body, tightens unit and swap-golden assertions, and refreshes only
@@ -206,17 +206,17 @@ fixtures or smoke paths.
 
 ### RED Proof for CLI Writer
 
-- [X] T041 [P] [US1] Add RED CLI parser tests for optional `--report PATH` in `test/unit/Amaru/Treasury/TreasuryBuildSpec.hs` or `test/unit/Amaru/Treasury/ReportSpec.hs`.
+- [X] T041 [P] [US1] Add RED CLI parser tests for optional `--report PATH` in `test/unit/Amaru/Treasury/BuildSpec.hs` or `test/unit/Amaru/Treasury/ReportSpec.hs`.
 - [X] T042 [P] [US1] Add RED smoke coverage for `tx-build --report PATH`, no-report compatibility, and unwritable report path failure in `scripts/smoke/tx-build-pipe`.
-- [X] T043 [P] [US1] Add RED trace-rendering tests for report-write success and report-write failure events in `test/unit/Amaru/Treasury/TreasuryBuildSpec.hs`.
+- [X] T043 [P] [US1] Add RED trace-rendering tests for report-write success and report-write failure events in `test/unit/Amaru/Treasury/BuildSpec.hs`.
 
 ### GREEN Implementation for CLI Writer
 
 - [X] T044 [US1] Add the `--report PATH` parser field and help text for `tx-build` in `app/amaru-treasury-tx/Main.hs`.
 - [X] T045 [US1] Wire report construction and filesystem writing after successful validation in `app/amaru-treasury-tx/Main.hs`, keeping file I/O outside pure report construction.
-- [X] T046 [US1] Add typed report-write success and failure trace events in `lib/Amaru/Treasury/TreasuryBuild/Trace.hs`.
+- [X] T046 [US1] Add typed report-write success and failure trace events in `lib/Amaru/Treasury/Build/Trace.hs`.
 - [X] T047 [US1] Ensure requested report write failures exit non-zero and name the failed report path in `app/amaru-treasury-tx/Main.hs`.
-- [X] T048 [US1] Confirm GREEN for the CLI writer slice with `nix develop --quiet -c just unit TreasuryBuild` and `nix develop --quiet -c just smoke` covering `test/unit/Amaru/Treasury/TreasuryBuildSpec.hs`, `scripts/smoke/tx-build-pipe`, and `app/amaru-treasury-tx/Main.hs`.
+- [X] T048 [US1] Confirm GREEN for the CLI writer slice with `nix develop --quiet -c just unit Build` and `nix develop --quiet -c just smoke` covering `test/unit/Amaru/Treasury/BuildSpec.hs`, `scripts/smoke/tx-build-pipe`, and `app/amaru-treasury-tx/Main.hs`.
 
 **Slice split (2026-05-09 CLI writer)**: T041-T048 cover the
 `tx-build --report PATH` parser, report construction/writing after

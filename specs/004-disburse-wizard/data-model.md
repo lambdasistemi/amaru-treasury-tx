@@ -13,7 +13,7 @@ pipeline.
 `TreasuryIntent` shape from feature 005. Feature 004's pure wizard
 translation produces `TreasuryIntent 'Disburse`; `tx-build` decodes
 `SomeTreasuryIntent` and dispatches through
-`Amaru.Treasury.TreasuryBuild.runFromIntent`.
+`Amaru.Treasury.Build.runFromIntent`.
 
 ## 1. DisburseAnswers — the typed answers
 
@@ -299,33 +299,33 @@ disburseAdaProgram
 --     :: DisburseIntentFields -> DisburseUsdmPayload -> TxBuild q e ()
 ```
 
-## 6. TreasuryBuildResult / runDisburse
+## 6. BuildResult / runDisburse
 
 ```haskell
-module Amaru.Treasury.TreasuryBuild where
+module Amaru.Treasury.Build where
 
-data TreasuryBuildResult = TreasuryBuildResult
-    { tbrCborBytes :: !ByteString.Lazy
-    , tbrFeeLovelace :: !Coin
-    , tbrTotalCollateralLovelace :: !Coin
-    , tbrScriptResults :: ![ScriptResult]
+data BuildResult = BuildResult
+    { brCborBytes :: !ByteString.Lazy
+    , brFeeLovelace :: !Coin
+    , brTotalCollateralLovelace :: !Coin
+    , brScriptResults :: ![ScriptResult]
     -- ^ One entry per redeemer; mirrors SwapBuild.ScriptResult.
     }
 
 runFromIntent
     :: ChainContext
     -> SomeTreasuryIntent
-    -> IO TreasuryBuildResult
+    -> IO BuildResult
 
 runDisburse
     :: ChainContext
     -> DisburseIntent
     -> Metadatum
     -> Addr
-    -> IO TreasuryBuildResult
+    -> IO BuildResult
 ```
 
-`ScriptResult`, `TreasuryBuildResult`, `runFromIntent`, and
+`ScriptResult`, `BuildResult`, `runFromIntent`, and
 `runDisburse` live in the unified dispatcher. The older
 `Tx.DisburseBuild` module is compatibility scaffolding while the
 branch is finalised.

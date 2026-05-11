@@ -20,15 +20,15 @@ import Test.Hspec
 
 import Cardano.Ledger.Api.PParams (emptyPParams)
 
+import Amaru.Treasury.Build (runFromIntent)
 import Amaru.Treasury.ChainContext (ChainContext (..))
 import Amaru.Treasury.IntentJSON
     ( decodeTreasuryIntentFile
     )
-import Amaru.Treasury.TreasuryBuild (runFromIntent)
 
 spec :: Spec
 spec =
-    describe "Amaru.Treasury.TreasuryBuild.runDisburse" $
+    describe "Amaru.Treasury.Build.runDisburse" $
         it "reports missing required UTxOs before balancing" $ do
             some <-
                 expectRight

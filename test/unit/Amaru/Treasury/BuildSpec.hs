@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 {- |
-Module      : Amaru.Treasury.TreasuryBuildSpec
+Module      : Amaru.Treasury.BuildSpec
 Description : Unit tests for the unified build pipeline
 License     : Apache-2.0
 
@@ -12,7 +12,7 @@ behaviour without spinning up a real Unix socket — that
 end-to-end verification is the manual T032 integration
 test recorded in the PR description.
 -}
-module Amaru.Treasury.TreasuryBuildSpec (spec) where
+module Amaru.Treasury.BuildSpec (spec) where
 
 import Control.Exception
     ( SomeException
@@ -46,6 +46,30 @@ import Test.Hspec
     , shouldThrow
     )
 
+import Amaru.Treasury.Build
+    ( BuildAction (..)
+    , BuildDiagnostic (..)
+    , BuildError (..)
+    , BuildErrorContext (..)
+    , BuildException (..)
+    , BuildFailurePhase (..)
+    , BuildResult (..)
+    , buildErrorCode
+    , buildErrorFromTxBuildError
+    , mapBuildExceptionContext
+    , renderBuildError
+    , runFromIntent
+    , runFromIntentEither
+    , withBuildExceptionContext
+    )
+import Amaru.Treasury.Build.ReportWriter
+    ( ReportWriteError (..)
+    , writeReportArtifact
+    )
+import Amaru.Treasury.Build.Trace
+    ( BuildEvent (..)
+    , renderBuildEvent
+    )
 import Amaru.Treasury.ChainContext (ChainContext (..))
 import Amaru.Treasury.ChainContext.Fixture
     ( readSwapFixture
@@ -60,30 +84,6 @@ import Amaru.Treasury.IntentJSON
     )
 import Amaru.Treasury.Report
     ( BuildFailure (..)
-    )
-import Amaru.Treasury.TreasuryBuild
-    ( BuildDiagnostic (..)
-    , BuildErrorContext (..)
-    , BuildFailurePhase (..)
-    , TreasuryBuildAction (..)
-    , TreasuryBuildError (..)
-    , TreasuryBuildException (..)
-    , TreasuryBuildResult (..)
-    , mapTreasuryBuildExceptionContext
-    , renderTreasuryBuildError
-    , runFromIntent
-    , runFromIntentEither
-    , treasuryBuildErrorCode
-    , treasuryBuildErrorFromBuildError
-    , withTreasuryBuildExceptionContext
-    )
-import Amaru.Treasury.TreasuryBuild.ReportWriter
-    ( ReportWriteError (..)
-    , writeReportArtifact
-    )
-import Amaru.Treasury.TreasuryBuild.Trace
-    ( BuildEvent (..)
-    , renderBuildEvent
     )
 import Cardano.Ledger.Api.PParams (emptyPParams)
 import Options.Applicative
@@ -111,12 +111,10 @@ import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Node.Client.Balance
     ( BalanceError (..)
     )
-import Cardano.Node.Client.TxBuild
-    ( BuildError (..)
-    )
+import Cardano.Node.Client.TxBuild qualified as TxBuild
 
 spec :: Spec
-spec = describe "Amaru.Treasury.TreasuryBuild" $ do
+spec = describe "Amaru.Treasury.Build" $ do
     describe "stakeRewardLovelaceFromRewards" $ do
         it "returns the selected account reward balance" $ do
             let AccountAddress _ (AccountId credential) =
@@ -239,12 +237,12 @@ spec = describe "Amaru.Treasury.TreasuryBuild" $ do
     describe "report write traces" $ do
         it "renders report-write success with the destination path" $
             renderBuildEvent
-                (TbeWroteReport "test/fixtures/swap/report.golden.json")
+                (BuildEventWroteReport "test/fixtures/swap/report.golden.json")
                 `shouldBe` "tx-build: report -> test/fixtures/swap/report.golden.json"
 
         it "renders report-write failure with the failed path" $
             renderBuildEvent
-                ( TbeReportWriteFailed
+                ( BuildEventReportWriteFailed
                     "missing/report.json"
                     "openBinaryFile: does not exist"
                 )
@@ -271,15 +269,15 @@ spec = describe "Amaru.Treasury.TreasuryBuild" $ do
             "renders insufficient-fee failures with stable code and labeled fields"
             $ do
                 let err =
-                        treasuryBuildErrorFromBuildError
+                        buildErrorFromTxBuildError
                             BuildActionSwap
                             BuildPhaseBuild
-                            ( BalanceFailed
+                            ( TxBuild.BalanceFailed
                                 (InsufficientFee (Coin 1_200) (Coin 700))
-                                :: BuildError ()
+                                :: TxBuild.BuildError ()
                             )
-                    message = renderTreasuryBuildError err
-                treasuryBuildErrorCode err
+                    message = renderBuildError err
+                buildErrorCode err
                     `shouldBe` "insufficient-fee-capacity"
                 message `shouldSatisfy` T.isInfixOf "required lovelace: 1200"
                 message `shouldSatisfy` T.isInfixOf "available lovelace: 700"
@@ -288,31 +286,31 @@ spec = describe "Amaru.Treasury.TreasuryBuild" $ do
 
         it "renders fee convergence failures with stable retry guidance" $ do
             let err =
-                    treasuryBuildErrorFromBuildError
+                    buildErrorFromTxBuildError
                         BuildActionSwap
                         BuildPhaseBuild
-                        ( BalanceFailed FeeNotConverged
-                            :: BuildError ()
+                        ( TxBuild.BalanceFailed FeeNotConverged
+                            :: TxBuild.BuildError ()
                         )
-            treasuryBuildErrorCode err
+            buildErrorCode err
                 `shouldBe` "fee-not-converged"
-            renderTreasuryBuildError err
+            renderBuildError err
                 `shouldSatisfy` T.isInfixOf "retry with fresh chain state"
 
         it "feeds report failures with the normalized code and message" $ do
             let err =
-                    TreasuryBuildError
-                        { tbeAction = BuildActionSwap
-                        , tbePhase = BuildPhaseFeeAlignment
-                        , tbeContext = []
-                        , tbeDiagnostic =
+                    BuildError
+                        { beAction = BuildActionSwap
+                        , bePhase = BuildPhaseFeeAlignment
+                        , beContext = []
+                        , beDiagnostic =
                             DiagnosticFeeAlignmentFailed
                                 "fee did not converge"
                         }
                 failure =
                     BuildFailure
-                        { bfCode = treasuryBuildErrorCode err
-                        , bfMessage = renderTreasuryBuildError err
+                        { bfCode = buildErrorCode err
+                        , bfMessage = renderBuildError err
                         }
             bfCode failure `shouldBe` "fee-alignment-failed"
             bfMessage failure
@@ -321,53 +319,53 @@ spec = describe "Amaru.Treasury.TreasuryBuild" $ do
         it "adds structured context with mapException for pure exceptions" $ do
             let ctx = ContextBuildPhase BuildPhaseFeeAlignment
                 base =
-                    TreasuryBuildException
-                        TreasuryBuildError
-                            { tbeAction = BuildActionSwap
-                            , tbePhase = BuildPhaseBuild
-                            , tbeContext = []
-                            , tbeDiagnostic =
+                    BuildException
+                        BuildError
+                            { beAction = BuildActionSwap
+                            , bePhase = BuildPhaseBuild
+                            , beContext = []
+                            , beDiagnostic =
                                 DiagnosticFeeAlignmentFailed "boom"
                             }
                 expr =
                     mapException
-                        (mapTreasuryBuildExceptionContext ctx)
+                        (mapBuildExceptionContext ctx)
                         (throw base :: ())
             result <-
                 try (evaluate expr)
-                    :: IO (Either TreasuryBuildException ())
+                    :: IO (Either BuildException ())
             case result of
-                Left (TreasuryBuildException err) ->
-                    tbeContext err `shouldBe` [ctx]
+                Left (BuildException err) ->
+                    beContext err `shouldBe` [ctx]
                 Right () ->
                     expectationFailure
-                        "expected TreasuryBuildException"
+                        "expected BuildException"
 
         it "adds structured context around IO exceptions" $ do
             let ctx = ContextReportDestination "report.json"
                 base =
-                    TreasuryBuildException
-                        TreasuryBuildError
-                            { tbeAction = BuildActionSwap
-                            , tbePhase = BuildPhaseBuild
-                            , tbeContext = []
-                            , tbeDiagnostic =
+                    BuildException
+                        BuildError
+                            { beAction = BuildActionSwap
+                            , bePhase = BuildPhaseBuild
+                            , beContext = []
+                            , beDiagnostic =
                                 DiagnosticFeeAlignmentFailed "boom"
                             }
             result <-
                 try $
-                    withTreasuryBuildExceptionContext ctx $
+                    withBuildExceptionContext ctx $
                         throwIO base
-                    :: IO (Either TreasuryBuildException ())
+                    :: IO (Either BuildException ())
             case result of
-                Left (TreasuryBuildException err) ->
-                    tbeContext err `shouldBe` [ctx]
+                Left (BuildException err) ->
+                    beContext err `shouldBe` [ctx]
                 Right () ->
                     expectationFailure
-                        "expected TreasuryBuildException"
+                        "expected BuildException"
 
         it "does not keep the legacy raw build-failed strings" $ do
-            source <- readFile "lib/Amaru/Treasury/TreasuryBuild.hs"
+            source <- readFile "lib/Amaru/Treasury/Build.hs"
             source
                 `shouldSatisfy` (not . isInfixOf "runSwap: build failed")
             source
@@ -406,8 +404,8 @@ spec = describe "Amaru.Treasury.TreasuryBuild" $ do
             result <- runFromIntentEither ctx some
             case result of
                 Left err -> do
-                    treasuryBuildErrorCode err `shouldBe` "missing-utxos"
-                    T.unpack (renderTreasuryBuildError err)
+                    buildErrorCode err `shouldBe` "missing-utxos"
+                    T.unpack (renderBuildError err)
                         `shouldSatisfy` (not . isInfixOf "runWithdraw")
                 Right{} ->
                     expectationFailure "expected typed missing-UTxO error"
@@ -428,10 +426,10 @@ spec = describe "Amaru.Treasury.TreasuryBuild" $ do
             result <- runFromIntentEither ctx some
             case result of
                 Left err -> do
-                    treasuryBuildErrorCode err `shouldBe` "missing-utxos"
-                    renderTreasuryBuildError err
+                    buildErrorCode err `shouldBe` "missing-utxos"
+                    renderBuildError err
                         `shouldSatisfy` T.isInfixOf "tx-build: swap failed"
-                    T.unpack (renderTreasuryBuildError err)
+                    T.unpack (renderBuildError err)
                         `shouldSatisfy` (not . isInfixOf "runSwap")
                 Right{} ->
                     expectationFailure "expected typed swap error"
@@ -447,9 +445,9 @@ spec = describe "Amaru.Treasury.TreasuryBuild" $ do
             result <- runFromIntent ctx some
             expected <-
                 BS.readFile "test/fixtures/swap/expected.cbor"
-            B16.encode (BSL.toStrict (tbrCborBytes result))
+            B16.encode (BSL.toStrict (brCborBytes result))
                 `shouldBe` expected
-            tbrFinalTxBody result `seq` pure ()
+            brFinalTxBody result `seq` pure ()
 
 fixtureRewardAccount :: AccountAddress
 fixtureRewardAccount =

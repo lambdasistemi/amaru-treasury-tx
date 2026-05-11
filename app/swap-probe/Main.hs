@@ -11,7 +11,7 @@ A one-shot harness that reproduces the swap CBOR pasted
 by the user. Connects to a local mainnet @cardano-node@,
 queries the live UTxOs referenced in the original tx,
 runs the full
-'Amaru.Treasury.TreasuryBuild.runSwap' driver,
+'Amaru.Treasury.Build.runSwap' driver,
 re-evaluates every redeemer against the final tx, then
 writes the resulting CBOR (hex) to stdout for a
 byte-level diff against
@@ -65,12 +65,12 @@ import Ouroboros.Network.Magic (NetworkMagic (..))
 
 import Amaru.Treasury.AuxData (swapRationaleMetadatum)
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
-import Amaru.Treasury.ChainContext (liveContext)
-import Amaru.Treasury.TreasuryBuild
-    ( ScriptResult (..)
-    , TreasuryBuildResult (..)
+import Amaru.Treasury.Build
+    ( BuildResult (..)
+    , ScriptResult (..)
     , runSwap
     )
+import Amaru.Treasury.ChainContext (liveContext)
 import Amaru.Treasury.Tx.Swap
     ( SwapIntent (..)
     , SwapOrderDatumParams (..)
@@ -334,12 +334,12 @@ main = do
                     "Network Compliance's treasury"
                     "Required to pay Antithesis as vendor"
                     registryPolicyId
-        TreasuryBuildResult{..} <-
+        BuildResult{..} <-
             runSwap ctx intent rationale walletInput walletAddr
-        let cborStrict = BSL.toStrict tbrCborBytes
+        let cborStrict = BSL.toStrict brCborBytes
             hexed = B16.encode cborStrict
-            Coin feeLov = tbrFeeLovelace
-            Coin tcLov = tbrTotalCollateralLovelace
+            Coin feeLov = brFeeLovelace
+            Coin tcLov = brTotalCollateralLovelace
         IO.hPutStrLn stderr $
             "swap-probe: emitted "
                 <> show (BS.length cborStrict)
@@ -350,11 +350,11 @@ main = do
         let failures =
                 [ (purpose, e)
                 | ScriptResult purpose (Left e) <-
-                    tbrScriptResults
+                    brScriptResults
                 ]
         IO.hPutStrLn stderr $
             "swap-probe: re-evaluated "
-                <> show (length tbrScriptResults)
+                <> show (length brScriptResults)
                 <> " redeemers, "
                 <> show (length failures)
                 <> " failed"

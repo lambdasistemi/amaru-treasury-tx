@@ -25,7 +25,7 @@ planning in this branch until implementation is explicitly requested.
 **Primary Dependencies**:
 
 - `Amaru.Treasury.IntentJSON` for the unified action-indexed intent.
-- `Amaru.Treasury.TreasuryBuild` for the action dispatcher.
+- `Amaru.Treasury.Build` for the action dispatcher.
 - `Amaru.Treasury.Tx.Withdraw` for the existing pure `withdrawProgram`.
 - `Amaru.Treasury.Tx.SwapWizard` / `DisburseWizard` patterns for wizard
   resolver shape, trace rendering, signer conventions, and fixture
@@ -72,7 +72,7 @@ must stay within the same operator expectations as swap/disburse.
   payload.
 - Extend `IntentJSON.Schema` and `docs/assets/intent-schema.json`.
 - Add withdraw wizard and trace module.
-- Add withdraw build branch in `TreasuryBuild`.
+- Add withdraw build branch in `Build`.
 - Add fixtures and goldens under `test/fixtures/withdraw/` and
   `test/golden/`.
 - No new package, no new executable, no new backend.
@@ -119,7 +119,7 @@ lib/Amaru/Treasury/
 ├── IntentJSON.hs                 # extend WithdrawInputs + translation
 ├── IntentJSON/Schema.hs          # extend withdraw schema
 ├── IntentJSON/Common.hs          # network-aware reward-account parse
-├── TreasuryBuild.hs              # replace withdraw fail-closed branch
+├── Build.hs              # replace withdraw fail-closed branch
 └── Tx/
     ├── Withdraw.hs               # keep pure builder; adjust only if parity demands
     ├── WithdrawWizard.hs         # new answers/env/translation/resolver

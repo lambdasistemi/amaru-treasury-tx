@@ -79,6 +79,16 @@ library
     Amaru.Treasury.AuxData
     Amaru.Treasury.Backend
     Amaru.Treasury.Backend.N2C
+    Amaru.Treasury.Build
+    Amaru.Treasury.Build.Error
+    Amaru.Treasury.Build.Error.Context
+    Amaru.Treasury.Build.Error.Convert
+    Amaru.Treasury.Build.Error.Exception
+    Amaru.Treasury.Build.Error.Render
+    Amaru.Treasury.Build.Error.Types
+    Amaru.Treasury.Build.ReportWriter
+    Amaru.Treasury.Build.Result
+    Amaru.Treasury.Build.Trace
     Amaru.Treasury.ChainContext
     Amaru.Treasury.ChainContext.Fixture
     Amaru.Treasury.Cli.SwapQuote
@@ -109,9 +119,6 @@ library
     Amaru.Treasury.Report.Schema
     Amaru.Treasury.Scope
     Amaru.Treasury.Summary
-    Amaru.Treasury.TreasuryBuild
-    Amaru.Treasury.TreasuryBuild.ReportWriter
-    Amaru.Treasury.TreasuryBuild.Trace
     Amaru.Treasury.Tx.Disburse
     Amaru.Treasury.Tx.Disburse.Trace
     Amaru.Treasury.Tx.DisburseBuild
@@ -264,6 +271,7 @@ test-suite unit-tests
   default-language:   GHC2021
   other-modules:
     Amaru.Treasury.AuxDataSpec
+    Amaru.Treasury.BuildSpec
     Amaru.Treasury.IntentJSONSchemaSpec
     Amaru.Treasury.IntentJSONSpec
     Amaru.Treasury.LedgerParseSpec
@@ -281,7 +289,6 @@ test-suite unit-tests
     Amaru.Treasury.ReportSpec
     Amaru.Treasury.ScopeSpec
     Amaru.Treasury.SummarySpec
-    Amaru.Treasury.TreasuryBuildSpec
     Amaru.Treasury.Tx.DisburseBuildSpec
     Amaru.Treasury.Tx.DisburseSpec
     Amaru.Treasury.Tx.DisburseWizardSpec

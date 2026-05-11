@@ -5,7 +5,7 @@ Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
 Sister of the swap branch in
-[`Amaru.Treasury.TreasuryBuild`](Amaru.Treasury.TreasuryBuild.html).
+[`Amaru.Treasury.Build`](Amaru.Treasury.Build.html).
 Threads a 'DisburseIntent' + rationale 'Metadatum'
 through a 'ChainContext' and runs the full
 [`Cardano.Node.Client.TxBuild.build`](https://github.com/lambdasistemi/cardano-node-clients)
@@ -62,8 +62,8 @@ import Cardano.Node.Client.TxBuild
 import Lens.Micro ((^.))
 
 import Amaru.Treasury.AuxData (label1694)
+import Amaru.Treasury.Build (ScriptResult (..))
 import Amaru.Treasury.ChainContext (ChainContext (..))
-import Amaru.Treasury.TreasuryBuild (ScriptResult (..))
 import Amaru.Treasury.Tx.Disburse
     ( DisburseAdaPayload
     , DisburseIntent (..)
@@ -82,11 +82,11 @@ data DisburseBuildInputs = DisburseBuildInputs
     , dbiWalletAddr :: !Addr
     -- ^ change address — also receives
     --     @collateral_return@ by default
-    --     (see 'Amaru.Treasury.TreasuryBuild' header)
+    --     (see 'Amaru.Treasury.Build' header)
     }
 
 {- | What 'runDisburseBuild' returns. Field set is identical
-to 'Amaru.Treasury.TreasuryBuild.TreasuryBuildResult'.
+to 'Amaru.Treasury.Build.BuildResult'.
 -}
 data DisburseBuildResult = DisburseBuildResult
     { dbrCborBytes :: !BSL.ByteString

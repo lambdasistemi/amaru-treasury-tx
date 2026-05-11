@@ -110,6 +110,21 @@ import Amaru.Treasury.Backend.N2C
     , queryStakeRewardsLovelace
     , withLocalNodeBackend
     )
+import Amaru.Treasury.Build
+    ( BuildResult (..)
+    , ScriptResult (..)
+    , buildErrorCode
+    , renderBuildError
+    , runFromIntent
+    , runFromIntentEither
+    )
+import Amaru.Treasury.Build.ReportWriter
+    ( writeReportArtifact
+    )
+import Amaru.Treasury.Build.Trace
+    ( BuildEvent (..)
+    , buildEventTracer
+    )
 import Amaru.Treasury.ChainContext (liveContext)
 import Amaru.Treasury.Cli.SwapQuote
     ( SwapQuoteOpts (..)
@@ -168,21 +183,6 @@ import Amaru.Treasury.Report.Cli
 import Amaru.Treasury.Scope
     ( ScopeId
     , scopeFromText
-    )
-import Amaru.Treasury.TreasuryBuild
-    ( ScriptResult (..)
-    , TreasuryBuildResult (..)
-    , renderTreasuryBuildError
-    , runFromIntent
-    , runFromIntentEither
-    , treasuryBuildErrorCode
-    )
-import Amaru.Treasury.TreasuryBuild.ReportWriter
-    ( writeReportArtifact
-    )
-import Amaru.Treasury.TreasuryBuild.Trace
-    ( BuildEvent (..)
-    , buildEventTracer
     )
 import Amaru.Treasury.Tx.SwapQuote
     ( AffordabilityFailure (..)
@@ -1201,7 +1201,7 @@ runSwapQuoteBuild socket logPath cborPath some =
                             (drop 1 (show (tiSAction intent)))
                         , tiNetwork intent
                         )
-        traceWith tr (TbeIntentParsed actionName netName)
+        traceWith tr (BuildEventIntentParsed actionName netName)
         magic <- case netName of
             "mainnet" -> pure (NetworkMagic 764_824_073)
             "preprod" -> pure (NetworkMagic 1)
@@ -1210,20 +1210,20 @@ runSwapQuoteBuild socket logPath cborPath some =
                 abortBuild
                     tr
                     ("unknown network in intent: " <> other)
-        traceWith tr (TbeConnect socket)
+        traceWith tr (BuildEventConnect socket)
         required <- case requiredUtxos some of
             Left e ->
                 abortBuild tr ("required UTxOs: " <> T.pack e)
             Right s -> pure s
         traceWith
             tr
-            (TbeRequiredUtxos (Set.size required))
+            (BuildEventRequiredUtxos (Set.size required))
         ok <- probeNetworkMagic magic socket
         if ok
             then
                 traceWith
                     tr
-                    ( TbeNetworkOk
+                    ( BuildEventNetworkOk
                         netName
                         (unNetworkMagic magic)
                     )
@@ -1234,7 +1234,7 @@ runSwapQuoteBuild socket logPath cborPath some =
                         netName
                 traceWith
                     tr
-                    ( TbeNetworkMismatch
+                    ( BuildEventNetworkMismatch
                         netName
                         (unNetworkMagic magic)
                         socketMagic
@@ -1243,44 +1243,44 @@ runSwapQuoteBuild socket logPath cborPath some =
         withLocalNodeBackend magic socket $ \backend -> do
             ctx <- liveContext backend required
             tbr <- runFromIntent ctx some
-            let cborStrict = BSL.toStrict (tbrCborBytes tbr)
+            let cborStrict = BSL.toStrict (brCborBytes tbr)
                 hexed = B16.encode cborStrict
-                Coin feeLov = tbrFeeLovelace tbr
-                Coin tcLov = tbrTotalCollateralLovelace tbr
+                Coin feeLov = brFeeLovelace tbr
+                Coin tcLov = brTotalCollateralLovelace tbr
                 failures =
                     [ (purpose, e)
                     | ScriptResult purpose (Left e) <-
-                        tbrScriptResults tbr
+                        brScriptResults tbr
                     ]
             traceWith
                 tr
-                ( TbeBuilt
+                ( BuildEventBuilt
                     (BS.length cborStrict)
                     feeLov
                     tcLov
                 )
             traceWith
                 tr
-                ( TbeReevaluated
-                    (length (tbrScriptResults tbr))
+                ( BuildEventReevaluated
+                    (length (brScriptResults tbr))
                     (length failures)
                 )
             mapM_
                 ( \(p, e) ->
                     traceWith
                         tr
-                        ( TbeScriptFail
+                        ( BuildEventScriptFail
                             (T.pack (show p))
                             (T.pack e)
                         )
                 )
                 failures
             BS.writeFile cborPath hexed
-            traceWith tr (TbeWroteCbor (Just cborPath))
+            traceWith tr (BuildEventWroteCbor (Just cborPath))
             if null failures
-                then traceWith tr TbeValidationOk
+                then traceWith tr BuildEventValidationOk
                 else do
-                    traceWith tr TbeValidationFailed
+                    traceWith tr BuildEventValidationFailed
                     exitFailure
 
 -- ----------------------------------------------------
@@ -1673,7 +1673,7 @@ runTxBuild socket TxBuildOpts{..} = do
     withLogHandle tboLog $ \logH -> do
         let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
             tr = buildEventTracer textTracer
-        traceWith tr (TbeIntentSource tboIntentPath)
+        traceWith tr (BuildEventIntentSource tboIntentPath)
         parsed <- case tboIntentPath of
             Just p -> decodeTreasuryIntentFile p
             Nothing ->
@@ -1689,7 +1689,7 @@ runTxBuild socket TxBuildOpts{..} = do
                         (drop 1 (show (tiSAction intent)))
                     , tiNetwork intent
                     )
-        traceWith tr (TbeIntentParsed actionName netName)
+        traceWith tr (BuildEventIntentParsed actionName netName)
         magic <- case netName of
             "mainnet" -> pure (NetworkMagic 764_824_073)
             "preprod" -> pure (NetworkMagic 1)
@@ -1699,14 +1699,14 @@ runTxBuild socket TxBuildOpts{..} = do
                     tr
                     ( "unknown network in intent: " <> other
                     )
-        traceWith tr (TbeConnect socket)
+        traceWith tr (BuildEventConnect socket)
         required <- case requiredUtxos some of
             Left e ->
                 abortBuild tr ("required UTxOs: " <> T.pack e)
             Right s -> pure s
         traceWith
             tr
-            (TbeRequiredUtxos (Set.size required))
+            (BuildEventRequiredUtxos (Set.size required))
         -- Network handshake: probe the intent's magic against
         -- the socket; if it refuses, identify the socket's
         -- actual network by trying the two remaining known
@@ -1717,7 +1717,7 @@ runTxBuild socket TxBuildOpts{..} = do
             then
                 traceWith
                     tr
-                    ( TbeNetworkOk
+                    ( BuildEventNetworkOk
                         netName
                         (unNetworkMagic magic)
                     )
@@ -1728,7 +1728,7 @@ runTxBuild socket TxBuildOpts{..} = do
                         netName
                 traceWith
                     tr
-                    ( TbeNetworkMismatch
+                    ( BuildEventNetworkMismatch
                         netName
                         (unNetworkMagic magic)
                         socketMagic
@@ -1740,42 +1740,42 @@ runTxBuild socket TxBuildOpts{..} = do
             tbr <- case buildResult of
                 Right result -> pure result
                 Left err -> do
-                    let message = renderTreasuryBuildError err
+                    let message = renderBuildError err
                     TIO.hPutStrLn stderr message
                     writeFailureReport
                         tr
                         tboReportPath
                         some
-                        (treasuryBuildErrorCode err)
+                        (buildErrorCode err)
                         message
                     exitFailure
-            let cborStrict = BSL.toStrict (tbrCborBytes tbr)
+            let cborStrict = BSL.toStrict (brCborBytes tbr)
                 hexed = B16.encode cborStrict
-                Coin feeLov = tbrFeeLovelace tbr
-                Coin tcLov = tbrTotalCollateralLovelace tbr
+                Coin feeLov = brFeeLovelace tbr
+                Coin tcLov = brTotalCollateralLovelace tbr
                 failures =
                     [ (purpose, e)
                     | ScriptResult purpose (Left e) <-
-                        tbrScriptResults tbr
+                        brScriptResults tbr
                     ]
             traceWith
                 tr
-                ( TbeBuilt
+                ( BuildEventBuilt
                     (BS.length cborStrict)
                     feeLov
                     tcLov
                 )
             traceWith
                 tr
-                ( TbeReevaluated
-                    (length (tbrScriptResults tbr))
+                ( BuildEventReevaluated
+                    (length (brScriptResults tbr))
                     (length failures)
                 )
             mapM_
                 ( \(p, e) ->
                     traceWith
                         tr
-                        ( TbeScriptFail
+                        ( BuildEventScriptFail
                             (T.pack (show p))
                             (T.pack e)
                         )
@@ -1787,10 +1787,10 @@ runTxBuild socket TxBuildOpts{..} = do
                 (Nothing, False) -> do
                     BS.putStr hexed
                     putStr "\n"
-            traceWith tr (TbeWroteCbor tboOutPath)
+            traceWith tr (BuildEventWroteCbor tboOutPath)
             if null failures
                 then do
-                    traceWith tr TbeValidationOk
+                    traceWith tr BuildEventValidationOk
                     case tboReportPath of
                         Nothing -> pure ()
                         Just reportPath -> do
@@ -1806,7 +1806,7 @@ runTxBuild socket TxBuildOpts{..} = do
                                                 TxBuildSuccess
                                                     { tbsTxCbor =
                                                         txCborHexFromBytes
-                                                            (tbrCborBytes tbr)
+                                                            (brCborBytes tbr)
                                                     , tbsReport = report
                                                     }
                                         }
@@ -1815,7 +1815,7 @@ runTxBuild socket TxBuildOpts{..} = do
                                 reportPath
                                 output
                 else do
-                    traceWith tr TbeValidationFailed
+                    traceWith tr BuildEventValidationFailed
                     writeFailureReport
                         tr
                         tboReportPath
@@ -1854,7 +1854,7 @@ writeBuildReportOrExit
     -> IO ()
 writeBuildReportOrExit tr "-" output = do
     BSL.putStr (encodeBuildOutput output)
-    traceWith tr (TbeWroteReport "-")
+    traceWith tr (BuildEventWroteReport "-")
 writeBuildReportOrExit tr reportPath output = do
     result <-
         writeReportArtifact
@@ -1893,7 +1893,7 @@ txBuildReportContext (SomeTreasuryIntent _ intent) magic =
 -- | Trace and abort with exit code 3 (parse / setup error).
 abortBuild :: Tracer IO BuildEvent -> Text -> IO a
 abortBuild tr msg = do
-    traceWith tr (TbeAborted msg)
+    traceWith tr (BuildEventAborted msg)
     exitWith (ExitFailure 3)
 
 {- | Compute the set of UTxOs the build needs to query.

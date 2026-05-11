@@ -27,6 +27,7 @@ import Test.Hspec
     , shouldSatisfy
     )
 
+import Amaru.Treasury.Build (runFromIntent)
 import Amaru.Treasury.ChainContext.Fixture
     ( readSwapFixture
     , toFrozenContext
@@ -64,7 +65,6 @@ import Amaru.Treasury.Report.Accounting
     , sumValueSummaries
     , treasuryNetDebit
     )
-import Amaru.Treasury.TreasuryBuild (runFromIntent)
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Report" $ do

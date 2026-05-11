@@ -38,13 +38,13 @@ no-behaviour-change gate.
   `lib/Amaru/Treasury/IntentJSON.hs`,
   `lib/Amaru/Treasury/IntentJSON/Common.hs`,
   `lib/Amaru/Treasury/Wizard/Common.hs`,
-  `lib/Amaru/Treasury/TreasuryBuild.hs`,
-  `lib/Amaru/Treasury/TreasuryBuild/Trace.hs`.
+  `lib/Amaru/Treasury/Build.hs`,
+  `lib/Amaru/Treasury/Build/Trace.hs`.
 - Modules collapsed / removed: `Tx/SwapIntentJSON.hs`,
   `Tx/SwapBuild.hs`, `Tx/Swap/Trace.hs`.
 - Subcommand wiring: `app/amaru-treasury-tx/Main.hs`.
 - Unit tests: `test/unit/Amaru/Treasury/IntentJSONSpec.hs`,
-  `test/unit/Amaru/Treasury/TreasuryBuildSpec.hs`.
+  `test/unit/Amaru/Treasury/BuildSpec.hs`.
 - Re-recorded fixture: `test/fixtures/swap/intent.json` (the
   CBOR `expected.cbor` is unchanged).
 
@@ -59,15 +59,15 @@ production code yet.
       (`Amaru.Treasury.IntentJSON`,
       `Amaru.Treasury.IntentJSON.Common`,
       `Amaru.Treasury.Wizard.Common`,
-      `Amaru.Treasury.TreasuryBuild`,
-      `Amaru.Treasury.TreasuryBuild.Trace`) to the library
+      `Amaru.Treasury.Build`,
+      `Amaru.Treasury.Build.Trace`) to the library
       `exposed-modules` list in `amaru-treasury-tx.cabal`. Mark
       `Tx/SwapIntentJSON`, `Tx/SwapBuild`, `Tx/Swap/Trace` for
       removal in T011 / T021. Run `nix develop -c just
       cabal-check` and confirm pass.
 - [x] T002 [P] Add the new unit specs
       (`Amaru.Treasury.IntentJSONSpec`,
-      `Amaru.Treasury.TreasuryBuildSpec`) to the `unit-tests`
+      `Amaru.Treasury.BuildSpec`) to the `unit-tests`
       stanza's `other-modules`. The existing
       `Amaru.Treasury.Tx.SwapWizardSpec` stays under
       `unit-tests`; the existing `SwapGoldenSpec` (under
@@ -145,12 +145,12 @@ the parser/encoder helpers shared across actions.
       The existing copies in `Tx.SwapWizard` are deleted in
       T012.
 - [x] T010 [P] Implement
-      `Amaru.Treasury.TreasuryBuild.Trace.BuildEvent` (typed
+      `Amaru.Treasury.Build.Trace.BuildEvent` (typed
       trace events for the unified build path). Constructor list
       per
       [contracts/tx-build-cli.md §5](./contracts/tx-build-cli.md).
       Mirrors `Tx.Swap.Trace.SwapEvent` shape but adds
-      `TbeIntentParsed`, `TbeNetworkOk`, `TbeNetworkMismatch`.
+      `BuildEventIntentParsed`, `BuildEventNetworkOk`, `BuildEventNetworkMismatch`.
       The existing `Tx.Swap.Trace` module is deleted in T028
       alongside the other now-unused per-action modules.
 - [x] T011 Delete *only* the helper functions (parser /
@@ -256,12 +256,12 @@ exact same `expected.cbor` bytes as the pre-PR `swap-wizard ... |
 swap` pipeline. The `swap` subcommand is removed; `tx-build` is
 the sole build entry point.
 
-- [x] T021 [US1] Implement `Amaru.Treasury.TreasuryBuild` per
+- [x] T021 [US1] Implement `Amaru.Treasury.Build` per
       [data-model.md §8](./data-model.md):
       `runBuild :: ChainContext -> TranslatedShared -> SAction a
-       -> Translated a -> IO TreasuryBuildResult`,
+       -> Translated a -> IO BuildResult`,
       `runFromIntent :: ChainContext -> SomeTreasuryIntent ->
-       IO TreasuryBuildResult`, and the per-action runners
+       IO BuildResult`, and the per-action runners
       (`runSwap`, `runDisburse`, `runWithdraw`,
       `runReorganize`). `runSwap`'s body is the existing
       [`Tx.SwapBuild.runSwapBuild`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Tx/SwapBuild.hs)
@@ -341,7 +341,7 @@ clear "intent declares X, socket reports Y" error.
       `withLocalNodeBackend` connects. Compare against
       `intent.network`'s magic
       (`networkNameToPair :: Text -> Word32`). On mismatch,
-      emit `TbeNetworkMismatch (intentNet, intentMagic)
+      emit `BuildEventNetworkMismatch (intentNet, intentMagic)
       (socketNet, socketMagic)`, write a single-line stderr
       message, and exit 6.
 - [X] T030 [US2] Refactor
@@ -351,7 +351,7 @@ clear "intent declares X, socket reports Y" error.
       <name>` into the unified intent. The wizard's flag set is
       unchanged (still takes `--network`).
 - [X] T031 [P] [US2] Unit test in
-      `test/unit/Amaru/Treasury/TreasuryBuildSpec.hs`: stub
+      `test/unit/Amaru/Treasury/BuildSpec.hs`: stub
       `Provider IO` reports a network magic differing from the
       intent's; assert the runner returns `Left
       NetworkMismatch{…}` (or equivalent) with both magics in

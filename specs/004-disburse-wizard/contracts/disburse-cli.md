@@ -37,7 +37,7 @@ Notes:
   stdout if omitted) as exactly one line: hex characters, no prefix,
   no whitespace, no trailing JSON.
 - The summary JSON sidecar is added in Phase 7; the unified build
-  trace already reserves a `TbeWroteSummary` event for that path.
+  trace already reserves a `BuildEventWroteSummary` event for that path.
 - Step-by-step typed trace events go to `--log` (or stderr).
 - Errors go to stderr as a single line with `tx-build: <message>`
   prefix.
@@ -77,25 +77,25 @@ populated by the disburse path:
 ## 5. Trace event categories
 
 Typed events emitted on `--log` (constructors live in
-`Amaru.Treasury.TreasuryBuild.Trace`):
+`Amaru.Treasury.Build.Trace`):
 
-- `TbeIntentSource`: path or `<stdin>`.
-- `TbeIntentParsed`: action and network read from the intent.
-- `TbeConnect`: socket path.
-- `TbeNetworkOk` / `TbeNetworkMismatch`: socket magic vs
+- `BuildEventIntentSource`: path or `<stdin>`.
+- `BuildEventIntentParsed`: action and network read from the intent.
+- `BuildEventConnect`: socket path.
+- `BuildEventNetworkOk` / `BuildEventNetworkMismatch`: socket magic vs
   `intent.network`.
-- `TbeRequiredUtxos`: count of UTxOs needed for the build.
-- `TbeBuilt`: cbor byte length, fee, total collateral.
-- `TbeReevaluated`: total redeemer count, failure count.
-- `TbeScriptFail`: one event per failed redeemer with purpose + error
+- `BuildEventRequiredUtxos`: count of UTxOs needed for the build.
+- `BuildEventBuilt`: cbor byte length, fee, total collateral.
+- `BuildEventReevaluated`: total redeemer count, failure count.
+- `BuildEventScriptFail`: one event per failed redeemer with purpose + error
   string.
-- `TbeWroteCbor`: output path or `<stdout>`.
-- `TbeWroteSummary`: summary path once Phase 7 lands.
-- `TbeValidationOk` / `TbeValidationFailed`: terminal event.
-- `TbeAborted`: typed error message (terminal event for parse /
+- `BuildEventWroteCbor`: output path or `<stdout>`.
+- `BuildEventWroteSummary`: summary path once Phase 7 lands.
+- `BuildEventValidationOk` / `BuildEventValidationFailed`: terminal event.
+- `BuildEventAborted`: typed error message (terminal event for parse /
   translate / build failures).
 
-The constructor prefix `Tbe-` distinguishes the unified treasury build
+The constructor prefix `BuildEvent-` distinguishes the unified treasury build
 events from wizard-specific events.
 
 ## 6. Out of scope for v0

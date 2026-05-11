@@ -71,7 +71,7 @@ Additive type and schema scaffolding. After this phase the codebase compiles and
   1. Compute `walletTarget = walletFeeSlackLovelace`. The treasury target, not the wallet target, covers `chunkCount * ncExtraPerChunkLovelace nc`.
   2. Call new `selectWallet walletTarget walletUtxos`. On `Right (refs, _)`, populate `WalletSelection` with `wsTxIn = head refs`, `wsExtraTxIns = tail refs`. On `Left WalletShortfall`, return `Left (ResolverWalletShortfall available walletTarget)`. On `Left WalletNoPureAda`, return `Left ResolverEmptyWalletUtxos` (existing).
 - [ ] T044 [US1] Update `app/amaru-treasury-tx/Main.hs` swap-wizard subcommand to pass `riChunkSizeLovelace = chunkSize` in the `ResolverInput` literal.
-- [ ] T045 [US1] Update `runSwap` in `lib/Amaru/Treasury/TreasuryBuild.hs`:
+- [ ] T045 [US1] Update `runSwap` in `lib/Amaru/Treasury/Build.hs`:
   1. Add `siExtraWalletInputs intent` references to the `required` UTxO presence check.
   2. Add `[(i, utxoMap Map.! i) | i <- siExtraWalletInputs intent]` to `inputUtxos`.
   3. Update the Haddock to describe wallet aggregation.

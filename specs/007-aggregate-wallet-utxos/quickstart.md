@@ -14,9 +14,9 @@ against an operator wallet whose ADA is split across multiple pure-ADA UTxOs.
   ```
 
 - Mainnet operator wallet at a known bech32 address whose pure-ADA UTxOs
-  sum to ≥ `chunkCount × 3.28 ADA + 2 ADA` but whose largest single
-  pure-ADA UTxO is *less* than that target. (To set this up cleanly: send
-  three small UTxOs of e.g. 15 / 12 / 8 ADA to the wallet from any
+  sum to at least the 2 ADA fee/change slack but whose largest single
+  pure-ADA UTxO is less than that target. (To set this up cleanly: send
+  three small UTxOs of e.g. 1.2 / 0.7 / 0.3 ADA to the wallet from any
   funding source.)
 - The corresponding `metadata.json` (mainnet manifest) on disk.
 
@@ -52,8 +52,8 @@ WALLET=addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p4
 
 1. **Wizard log** (`wizard.log`) contains a `WeWalletUtxoSelected` line
    listing the head UTxO + N extra UTxOs whose cumulative ADA covers
-   `walletTarget = 10 × 3.28 ADA + 2 ADA = 34.8 ADA`. The head is the
-   largest pure-ADA UTxO at `$WALLET`.
+   `walletTarget = 2 ADA`. The head is the largest pure-ADA UTxO at
+   `$WALLET`.
 
 2. **Wizard exit code** is 0; an intent.json is emitted on stdout
    containing:
@@ -79,14 +79,14 @@ WALLET=addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p4
 
 ## Failure-mode smoke (P2)
 
-Repeat against a wallet with total pure-ADA below the target (e.g. 5 ADA
+Repeat against a wallet with total pure-ADA below the target (e.g. 1 ADA
 across three dust UTxOs):
 
 ```bash
 # expected wizard exit:
 amaru-treasury-tx: wallet shortfall: address addr1...
-  available: 5_000_000 lovelace
-  required:  34_800_000 lovelace (10 chunks × 3.28 ADA + 2 ADA slack)
+  available: 1_000_000 lovelace
+  required:  2_000_000 lovelace (2 ADA fee/change slack)
 exit 3
 ```
 

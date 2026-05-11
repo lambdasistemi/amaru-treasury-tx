@@ -5,7 +5,7 @@
 
 ## Summary
 
-Replace the wizard's single-largest-pure-ADA-UTxO `selectWallet` with a largest-first aggregator that picks UTxOs until the cumulative ADA covers the wallet's per-chunk SundaeSwap deposit obligation plus a 2 ADA fee slack. Thread the resulting list through the resolver env, the unified `TreasuryIntent` JSON via a new optional `wallet.extraTxIns` field, and `swapProgram` so every selected UTxO becomes a tx input (head also serves as collateral). Replace the silent fall-through to `BalanceFailed (InsufficientFee ...)` with a typed `ResolverWalletShortfall` error emitted by the resolver before any intent is written. Backwards-compatible: pre-feature intent.json files (no `extraTxIns`) decode into `siExtraWalletInputs = []` and produce byte-identical txs.
+Replace the wizard's single-largest-pure-ADA-UTxO `selectWallet` with a largest-first aggregator that picks UTxOs until the cumulative ADA covers the wallet's 2 ADA fee/change slack. The treasury self-funds swap amount plus per-chunk SundaeSwap overhead. Thread the resulting wallet list through the resolver env, the unified `TreasuryIntent` JSON via a new optional `wallet.extraTxIns` field, and `swapProgram` so every selected UTxO becomes a tx input (head also serves as collateral). Replace the silent fall-through to `BalanceFailed (InsufficientFee ...)` with a typed `ResolverWalletShortfall` error emitted by the resolver before any intent is written. Backwards-compatible: pre-feature intent.json files (no `extraTxIns`) decode into `siExtraWalletInputs = []` and produce byte-identical txs.
 
 ## Technical Context
 
@@ -17,7 +17,7 @@ Replace the wizard's single-largest-pure-ADA-UTxO `selectWallet` with a largest-
 **Project Type**: Single Haskell library + CLI executable (one cabal package).
 **Performance Goals**: N/A — selection runs over ≤ a few dozen wallet UTxOs in O(n log n) sort + O(n) accumulate. Performance not a feature axis here.
 **Constraints**: Conway era, mainnet+preprod constants only; SundaeSwap V3 order datum shape is upstream — we don't change it.
-**Scale/Scope**: Single feature inside `swap-wizard`. Touches `Tx/SwapWizard.hs`, `Tx/Swap.hs`, `IntentJSON.hs`, `IntentJSON/Schema.hs`, `TreasuryBuild.hs`, the `app/amaru-treasury-tx/Main.hs` CLI, and `app/swap-probe/Main.hs`. Out of scope: `Tx/DisburseWizard.hs`, `Tx/WithdrawWizard.hs`, the `Tx/DisburseIntentJSON.hs` legacy schema, and the #64 root-cause fix (treasury self-funds extras).
+**Scale/Scope**: Single feature inside `swap-wizard`. Touches `Tx/SwapWizard.hs`, `Tx/Swap.hs`, `IntentJSON.hs`, `IntentJSON/Schema.hs`, `TreasuryBuild.hs`, the `app/amaru-treasury-tx/Main.hs` CLI, and `app/swap-probe/Main.hs`. Out of scope: `Tx/DisburseWizard.hs`, `Tx/WithdrawWizard.hs`, and the `Tx/DisburseIntentJSON.hs` legacy schema.
 
 ## Constitution Check
 

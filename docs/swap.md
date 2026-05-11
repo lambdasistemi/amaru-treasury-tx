@@ -61,7 +61,9 @@ deferred until a provider contract is approved; use explicit
 `--ada-usdm` in the meantime.
 
 If the selected treasury cannot fund the derived ADA amount plus
-per-chunk overhead, the wizard exits before emitting an intent.
+per-chunk overhead, the wizard exits before emitting an intent. The
+operator wallet is only preflighted for fee/change slack; it does not
+fund the order min-UTxO or Sundae per-order fee.
 
 ## Expert/manual override
 

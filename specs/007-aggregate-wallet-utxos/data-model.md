@@ -115,7 +115,7 @@ data ResolverInput = ResolverInput
     }
 ```
 
-`riChunkSizeLovelace` lets the resolver compute `chunkCount = ⌈riAmountLovelace / riChunkSizeLovelace⌉` without taking a dependency on `SwapWizardQ` (which is a separate translation-stage input). The CLI passes `chunkSize` already computed in `Main.hs:557`.
+`riChunkSizeLovelace` lets the resolver compute the treasury funding target `riAmountLovelace + chunkCount × extraPerChunkLovelace` without taking a dependency on `SwapWizardQ` (which is a separate translation-stage input). The CLI passes `chunkSize` already computed in `Main.hs:557`.
 
 ### `ResolverError` (resolver failure variants)
 
@@ -160,10 +160,10 @@ The resolver maps `WalletShortfall` to `ResolverWalletShortfall` and `WalletNoPu
 ## Constants (lib/Amaru/Treasury/Tx/SwapWizard.hs)
 
 ```haskell
--- | Slack added to the per-chunk SundaeSwap-deposit obligation when sizing
--- wallet fuel. Covers the on-chain tx fee and the wallet change output's
--- min-UTxO requirement. 2 ADA is empirically sufficient for a Conway-era
--- 10-chunk swap on mainnet (typical fee well under 1 ADA).
+-- | Wallet-side fee/change slack. The treasury funds the swap amount and
+-- per-chunk order overhead; the wallet only needs enough pure ADA to pay
+-- the successful transaction fee and receive change. 2 ADA is empirically
+-- sufficient for a Conway-era 10-chunk swap on mainnet.
 walletFeeSlackLovelace :: Integer
 walletFeeSlackLovelace = 2_000_000
 ```

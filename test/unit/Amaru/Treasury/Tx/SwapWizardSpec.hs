@@ -535,6 +535,42 @@ spec = describe "SwapWizard" $ do
                     )
 
         it
+            "accepts a small wallet when the treasury covers per-chunk overhead"
+            $ do
+                let walletRef =
+                        "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0"
+                    stub =
+                        ResolverEnv
+                            { reEnvQueryWalletUtxos = \_ ->
+                                pure [(walletRef, 5_000_000, False)]
+                            , reEnvQueryTreasuryUtxos = \_ ->
+                                pure
+                                    [
+                                        ( "64f27254f3c0311fb2e672cdb87de200089a596aa90dc09f8be4248540267cf0#0"
+                                        , 1_450_000_000_000
+                                        , False
+                                        )
+                                    ]
+                            , reEnvCurrentTip = pure 186342942
+                            }
+                    ri =
+                        ResolverInput
+                            { riNetwork = "mainnet"
+                            , riWalletAddrBech32 =
+                                "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+                            , riScope = CoreDevelopment
+                            , riAmountLovelace = 408163265306
+                            , riChunkSizeLovelace = 12500000000
+                            , riRegistry = weRegistry env
+                            }
+                r <- resolveWizardEnv stub ri
+                case r of
+                    Left e -> expectationFailure' (show e)
+                    Right env' -> do
+                        wsTxIn (weWalletSelection env') `shouldBe` walletRef
+                        wsExtraTxIns (weWalletSelection env') `shouldBe` []
+
+        it
             "reports a typed wallet shortfall when pure-ADA total is below target"
             $ do
                 let stub =
@@ -573,12 +609,8 @@ spec = describe "SwapWizard" $ do
                         -- amount=408_163_265_306,
                         -- chunkSize=12_500_000_000
                         --   → full=32, rem=663_265_306, chunks=33.
-                        -- perChunk (mainnet)=3_280_000,
-                        --   slack=2_000_000.
-                        -- target = 33*3_280_000 + 2_000_000
-                        --        = 110_240_000.
                         avail `shouldBe` 1_000_000
-                        req `shouldBe` 110_240_000
+                        req `shouldBe` 2_000_000
                     other ->
                         expectationFailure'
                             ( "expected ResolverWalletShortfall, got: "
@@ -634,8 +666,8 @@ spec = describe "SwapWizard" $ do
                     , riChunkSizeLovelace = 12500000000
                     , riRegistry = weRegistry env
                     }
-          in  renderWalletShortfall ri 1_000_000 110_240_000
-                `shouldBe` "wallet shortfall at addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu: available=1000000 required=110240000 (chunks=33, perChunk=3280000, slack=2000000)"
+          in  renderWalletShortfall ri 1_000_000 2_000_000
+                `shouldBe` "wallet shortfall at addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu: available=1000000 required=2000000 (feeSlack=2000000)"
 
 tShow :: (Show a) => a -> Text
 tShow = T.pack . show

@@ -616,12 +616,9 @@ data ResolverInput = ResolverInput
     , riChunkSizeLovelace :: !Integer
     -- ^ lovelace per chunk; combined with
     --   'riAmountLovelace' to compute the chunk count
-    --   @N@. Consumed by both the wallet aggregation
-    --   target and the treasury selection target raise:
-    --   the latter adds @N * ncExtraPerChunkLovelace@ so
-    --   the treasury funds the per-chunk swap-order
-    --   overhead (FR-006 single source for FR-001,
-    --   FR-002, FR-009).
+    --   @N@. The treasury selection target adds
+    --   @N * ncExtraPerChunkLovelace@ so the treasury
+    --   funds the per-chunk swap-order overhead.
     , riRegistry :: !RegistryView
     -- ^ verified projection; see 'registryViewFromVerified'
     }
@@ -639,11 +636,10 @@ data ResolverError
       ResolverShortfall !Integer !Integer
     | -- | @ResolverWalletShortfall available requested@.
       -- Aggregating every pure-ADA wallet UTxO still falls
-      -- short of the wallet target (extras-per-chunk plus
-      -- 'walletFeeSlackLovelace').
+      -- short of the wallet fee/change slack target.
       ResolverWalletShortfall !Integer !Integer
     | -- | @ResolverInvalidChunkSize observed@. Guards the
-      -- @divMod@ in the wallet-target derivation; raised
+      -- @divMod@ in the treasury-target derivation; raised
       -- when @riChunkSizeLovelace <= 0@.
       ResolverInvalidChunkSize !Integer
     | ResolverVerifiedScopeMissing !ScopeId
@@ -861,9 +857,10 @@ chunkCountFor amount chunkSize
         let (full, rem') = amount `divMod` chunkSize
         in  full + if rem' > 0 then 1 else 0
 
-{- | Per-tx slack added on top of the chunk-driven wallet
-target so 'selectWallet' has room for fee + change. See
-@research.md §D2@.
+{- | Wallet-side fee/change slack. The treasury funds the
+swap amount and per-chunk order overhead; the operator
+wallet only needs enough pure ADA to pay the successful
+transaction fee and receive change.
 -}
 walletFeeSlackLovelace :: Integer
 walletFeeSlackLovelace = 2_000_000
@@ -1014,9 +1011,7 @@ resolveWizardEnv ResolverEnv{..} ri =
                                             )
                                     | otherwise ->
                                         let walletTarget =
-                                                chunkCount
-                                                    * ncExtraPerChunkLovelace nc
-                                                    + walletFeeSlackLovelace
+                                                walletFeeSlackLovelace
                                         in  case selectWallet
                                                 walletTarget
                                                 walletUtxos of
@@ -1114,14 +1109,10 @@ shortfall. Shape:
 
 @
 wallet shortfall at \<addr\>: available=\<lovelace\>
-  required=\<lovelace\> (chunks=\<N\>, perChunk=\<lovelace\>,
-  slack=\<lovelace\>)
+  required=\<lovelace\> (feeSlack=\<lovelace\>)
 @
 
-(without the line breaks). The breakdown trio
-@(chunks, perChunk, slack)@ reproduces the operands of
-@walletTarget@ so the operator can see why the resolver-derived
-target landed where it did. Exposed as a pure function so the test
+(without the line break). Exposed as a pure function so the test
 suite can pin the message shape without reaching into the CLI.
 -}
 renderWalletShortfall
@@ -1133,28 +1124,12 @@ renderWalletShortfall
     -- ^ required (== walletTarget)
     -> Text
 renderWalletShortfall ri available required =
-    let (full, rem') =
-            riAmountLovelace ri `divMod` riChunkSizeLovelace ri
-        chunks =
-            fromInteger full
-                + (if rem' > 0 then 1 else 0)
-                :: Int
-        perChunk =
-            either
-                (const 0)
-                ncExtraPerChunkLovelace
-                (networkConstants (riNetwork ri))
-        slack = walletFeeSlackLovelace
-    in  "wallet shortfall at "
-            <> riWalletAddrBech32 ri
-            <> ": available="
-            <> T.pack (show available)
-            <> " required="
-            <> T.pack (show required)
-            <> " (chunks="
-            <> T.pack (show chunks)
-            <> ", perChunk="
-            <> T.pack (show perChunk)
-            <> ", slack="
-            <> T.pack (show slack)
-            <> ")"
+    "wallet shortfall at "
+        <> riWalletAddrBech32 ri
+        <> ": available="
+        <> T.pack (show available)
+        <> " required="
+        <> T.pack (show required)
+        <> " (feeSlack="
+        <> T.pack (show walletFeeSlackLovelace)
+        <> ")"

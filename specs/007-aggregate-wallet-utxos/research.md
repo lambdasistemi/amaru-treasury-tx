@@ -16,16 +16,17 @@ Phase 0 design notes. Each section captures a decision, the rationale, and alter
 
 ## D2. Wallet target formula
 
-**Decision**: `walletTarget = chunkCount × ncExtraPerChunkLovelace + walletFeeSlackLovelace` with `walletFeeSlackLovelace = 2_000_000` (2 ADA).
+**Decision**: `walletTarget = walletFeeSlackLovelace` with `walletFeeSlackLovelace = 2_000_000` (2 ADA).
 
-**Rationale**: under current semantics (this feature does *not* fix issue #64), the operator wallet must front the per-chunk SundaeSwap deposits because the wizard's `selectTreasury` only sizes the leftover treasury output to absorb the swap target, not the deposits. Slack covers (a) the on-chain tx fee — empirically <1 ADA on a 10-chunk Conway tx with refs and ~5 script witnesses — and (b) the wallet change output's min-UTxO requirement (≈0.85 ADA for a pure-ADA output). 2 ADA leaves headroom for fee variance across protocol-parameter updates.
+**Rationale**: issue #64 makes the treasury selection target absorb the swap amount plus all per-chunk SundaeSwap overhead. The operator wallet should not front value that belongs to the treasury action. Slack covers (a) the on-chain tx fee — empirically <1 ADA on a 10-chunk Conway tx with refs and ~5 script witnesses — and (b) the wallet change output's min-UTxO requirement (≈0.85 ADA for a pure-ADA output). 2 ADA leaves headroom for fee variance across protocol-parameter updates.
 
 **Alternatives**:
 
-- **`chunkCount × extraPerChunkLovelace` exactly, no slack.** Rejected: any fee > leftover lovelace makes balance fail. The point of this feature is to stop the silent-fail mode.
+- **`chunkCount × extraPerChunkLovelace + walletFeeSlackLovelace`.** Rejected after #64: this double-counts per-chunk overhead, because the treasury now funds it directly.
+- **`chunkCount × extraPerChunkLovelace` exactly, no slack.** Rejected: the wallet should not fund per-chunk overhead, and any fee > leftover lovelace makes balance fail.
 - **Operator-supplied slack via CLI flag.** Rejected: pushes a wizard-internal accounting concern onto every operator invocation. The current 2 ADA constant can be revisited if mainnet fee inflation makes it tight; bumping a constant is a one-line change.
 - **Empirical slack derived from a fee-estimation pre-pass.** Rejected: the resolver runs before the typed builder constructs a tx body, so there's no candidate body to estimate against at this point. A pre-pass would require hoisting fee estimation into the resolver, creating a layering inversion.
-- **Account for the SundaeSwap reclaim**: the deposit ~2 ADA per chunk is refunded by the matchmaker in a later tx (see `journal/ledger.md:117`). We don't credit this against the wallet target because reclaim happens *after* this tx settles — at intent-build time the wallet still has to lock the full deposit.
+- **Account for the SundaeSwap reclaim**: the deposit ~2 ADA per chunk is refunded by the matchmaker in a later tx (see `journal/ledger.md:117`). This is treasury accounting, not wallet fuel sizing.
 
 ## D3. Collateral selection within the aggregated set
 

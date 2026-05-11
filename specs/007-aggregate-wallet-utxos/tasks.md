@@ -68,9 +68,8 @@ Additive type and schema scaffolding. After this phase the codebase compiles and
 - [ ] T041 [US1] Add `riChunkSizeLovelace :: !Integer` to `ResolverInput` in the same file. Update `Eq`/`Show` derived instances; no JSON instances on `ResolverInput`.
 - [ ] T042 [US1] Add `walletFeeSlackLovelace :: Integer = 2_000_000` constant with Haddock referencing `research.md` D2.
 - [ ] T043 [US1] Update `resolveWizardEnv` to:
-  1. Compute `chunkCount = let (full, rem') = riAmountLovelace ri \`divMod\` riChunkSizeLovelace ri in fromInteger full + (if rem' > 0 then 1 else 0)`.
-  2. Compute `walletTarget = chunkCount * ncExtraPerChunkLovelace nc + walletFeeSlackLovelace`.
-  3. Call new `selectWallet walletTarget walletUtxos`. On `Right (refs, _)`, populate `WalletSelection` with `wsTxIn = head refs`, `wsExtraTxIns = tail refs`. On `Left WalletShortfall`, return `Left (ResolverWalletShortfall available walletTarget)`. On `Left WalletNoPureAda`, return `Left ResolverEmptyWalletUtxos` (existing).
+  1. Compute `walletTarget = walletFeeSlackLovelace`. The treasury target, not the wallet target, covers `chunkCount * ncExtraPerChunkLovelace nc`.
+  2. Call new `selectWallet walletTarget walletUtxos`. On `Right (refs, _)`, populate `WalletSelection` with `wsTxIn = head refs`, `wsExtraTxIns = tail refs`. On `Left WalletShortfall`, return `Left (ResolverWalletShortfall available walletTarget)`. On `Left WalletNoPureAda`, return `Left ResolverEmptyWalletUtxos` (existing).
 - [ ] T044 [US1] Update `app/amaru-treasury-tx/Main.hs` swap-wizard subcommand to pass `riChunkSizeLovelace = chunkSize` in the `ResolverInput` literal.
 - [ ] T045 [US1] Update `runSwap` in `lib/Amaru/Treasury/TreasuryBuild.hs`:
   1. Add `siExtraWalletInputs intent` references to the `required` UTxO presence check.
@@ -95,7 +94,7 @@ Additive type and schema scaffolding. After this phase the codebase compiles and
 ### Implementation for User Story 2
 
 - [ ] T060 [US2] Add `ResolverWalletShortfall !Integer !Integer` to `ResolverError` in `lib/Amaru/Treasury/Tx/SwapWizard.hs` (between existing constructors; preserve `Eq`/`Show` derivations).
-- [ ] T061 [US2] Update `app/amaru-treasury-tx/Main.hs` `WeAborted` rendering or the `abortTr tr ("resolve: " <> ...)` branch to format a shortfall as a single-line human-readable message: `wallet shortfall at <addr>: available=<lovelace> required=<lovelace> (chunks=<N>, perChunk=<lovelace>, slack=<lovelace>)`. Other `ResolverError` variants keep their existing rendering.
+- [ ] T061 [US2] Update `app/amaru-treasury-tx/Main.hs` `WeAborted` rendering or the `abortTr tr ("resolve: " <> ...)` branch to format a shortfall as a single-line human-readable message: `wallet shortfall at <addr>: available=<lovelace> required=<lovelace> (feeSlack=<lovelace>)`. Other `ResolverError` variants keep their existing rendering.
 - [ ] T062 [US2] Run T050–T051. They MUST pass.
 
 ---

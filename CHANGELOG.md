@@ -4,9 +4,56 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.2.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.1.1...v0.2.2.0) (2026-05-11)
+
 ### Features
 
-* swap-wizard aggregates multiple wallet UTxOs as fuel; intent.json gains optional `wallet.extraTxIns` array ([#65](https://github.com/lambdasistemi/amaru-treasury-tx/issues/65))
+* **006:** implement withdraw intent contract ([73b1fce](https://github.com/lambdasistemi/amaru-treasury-tx/commit/73b1fce19cef4ab318876ffebd8679262974f887))
+* **006:** pure withdraw-wizard translation ([a0be2c0](https://github.com/lambdasistemi/amaru-treasury-tx/commit/a0be2c0be70022c2620772334237de3486e86966))
+* **006:** resolve withdraw wizard environment ([4ccbda1](https://github.com/lambdasistemi/amaru-treasury-tx/commit/4ccbda186c7d6bfb67bd8cffe90bcbee9d86c743))
+* **006:** withdraw-wizard CLI runner ([f3d7bad](https://github.com/lambdasistemi/amaru-treasury-tx/commit/f3d7bad7cd7d1783d9cbe78e3378dc56ea87e699))
+* **006:** wire live withdraw rewards query ([37d6e92](https://github.com/lambdasistemi/amaru-treasury-tx/commit/37d6e92de2755cf955c2931e167cc4e2648b5d68))
+* **006:** typed withdraw zero-rewards result ([5519f8c](https://github.com/lambdasistemi/amaru-treasury-tx/commit/5519f8ca87185fd4aa91a9f2f57b4a7fde93432c))
+* **006:** no-op withdraw zero rewards ([99f08bc](https://github.com/lambdasistemi/amaru-treasury-tx/commit/99f08bc45814013f9cb1e21451eee25b45138dc8))
+* **006:** wire withdraw build dispatcher ([5ab9364](https://github.com/lambdasistemi/amaru-treasury-tx/commit/5ab93646af6b74b6eff5db72e26f7ec7d5e0f745))
+* **006:** implement withdraw runner ([de25174](https://github.com/lambdasistemi/amaru-treasury-tx/commit/de25174bf66bbf130bfc8b4e682142527fc15d83))
+* **intent-json:** add wallet extraTxIns field ([4f1cc16](https://github.com/lambdasistemi/amaru-treasury-tx/commit/4f1cc16a8869c71c7427ead672b444ae7251000c))
+* **swap-wizard:** accept extra wallet inputs in env ([b3a1fa7](https://github.com/lambdasistemi/amaru-treasury-tx/commit/b3a1fa73eb8eecdac4217c6a9747e5031c6fdaab))
+* **swap:** add extra wallet inputs to intent ([77a19aa](https://github.com/lambdasistemi/amaru-treasury-tx/commit/77a19aa5e36a1054bc11279f6932a85b5c8d6cc2))
+* **intent-json:** parse extra wallet inputs ([cf435cf](https://github.com/lambdasistemi/amaru-treasury-tx/commit/cf435cf3cf7aa0c0773063d1e261fbb1b9eac0ab))
+* **swap-wizard:** emit extra wallet inputs ([abe646c](https://github.com/lambdasistemi/amaru-treasury-tx/commit/abe646c77f50b974d7ade8da915811203dda57fe))
+* **swap-wizard:** aggregate wallet fuel inputs ([639170a](https://github.com/lambdasistemi/amaru-treasury-tx/commit/639170a4bf7f628532f1493e518d0db4f0a5001f))
+* **swap-wizard:** render wallet shortfalls ([0cc6c04](https://github.com/lambdasistemi/amaru-treasury-tx/commit/0cc6c041ad2f862394a34c31f9cfdc7adb0c3702))
+* **072:** establish transaction report contract ([06a1be3](https://github.com/lambdasistemi/amaru-treasury-tx/commit/06a1be30558319feca852db781d4f30d0699dd37))
+* **072:** build deterministic transaction reports ([995d17f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/995d17fd31206b4691a931cca65d51467bbfed87))
+* **072:** account swap wallet report facts ([34d9b83](https://github.com/lambdasistemi/amaru-treasury-tx/commit/34d9b83478d1dadad16fb96b460ebc1df8d0a205))
+* **072:** account swap treasury report facts ([9271cfa](https://github.com/lambdasistemi/amaru-treasury-tx/commit/9271cfa0748d9594e305c3bb230f2d15e68847ba))
+* **072:** classify swap report outputs ([9d3e6e0](https://github.com/lambdasistemi/amaru-treasury-tx/commit/9d3e6e0526ce325a9304c550a5efbc186fc40e3d))
+* **072:** report signer source requirements ([4cc840a](https://github.com/lambdasistemi/amaru-treasury-tx/commit/4cc840a3ac5bd420512802f455ed31257f72cc73))
+* **072:** report validation metadata facts ([50d3577](https://github.com/lambdasistemi/amaru-treasury-tx/commit/50d35775096fb4ee154e6208476b970e200ea602))
+* **072:** add tx-build report writer ([942794d](https://github.com/lambdasistemi/amaru-treasury-tx/commit/942794ddaf433f522939447ea5b3220a3e579713))
+* **070:** derive quote swap parameters ([fa2762f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/fa2762f5b8e3d74d18aea74ce43af7dc0ae4dab7))
+* **070:** add swap quote affordability checks ([6d8f866](https://github.com/lambdasistemi/amaru-treasury-tx/commit/6d8f866a7dc3fe17d46691cccf025dadc8cddcb6))
+* **070:** add swap quote audit JSON ([11ecbb7](https://github.com/lambdasistemi/amaru-treasury-tx/commit/11ecbb747a12e1e94f4b29985c7783a4a60cd37b))
+* **070:** add swap quote source parser ([ee4b745](https://github.com/lambdasistemi/amaru-treasury-tx/commit/ee4b745557fe8a33d5476bc79c767679b1235959))
+* **070:** add swap quote composite runner ([a56ec32](https://github.com/lambdasistemi/amaru-treasury-tx/commit/a56ec320f5fdd99382a9c7d5b3f8fa34167ea82e))
+* **report-render:** start specs scaffold for issue #74 ([76d1564](https://github.com/lambdasistemi/amaru-treasury-tx/commit/76d1564994368f3e03b2e31a383cba9525d977d6))
+* **report-render:** emit tx-build output envelope ([1d713e6](https://github.com/lambdasistemi/amaru-treasury-tx/commit/1d713e664e1fb66eaa13e65a164cae224e6ab519))
+* **report-render:** add pure markdown renderer ([f6a449e](https://github.com/lambdasistemi/amaru-treasury-tx/commit/f6a449e7c5214144933543c0441921b96727c5b6))
+* **report-render:** derive validity UTC times ([0c5adf4](https://github.com/lambdasistemi/amaru-treasury-tx/commit/0c5adf4544342854265fe2d0fdd3ddbdc7eeed6f))
+* **report-render:** add swap markdown golden ([0419dd5](https://github.com/lambdasistemi/amaru-treasury-tx/commit/0419dd5271ecc3ea570348da7aad480960182f05))
+* **report-render:** resolve rendered identities ([4a789fb](https://github.com/lambdasistemi/amaru-treasury-tx/commit/4a789fbc37facbbc459987e360d676cc41117443))
+* **report-render:** add pipe-native CLI ([c614352](https://github.com/lambdasistemi/amaru-treasury-tx/commit/c6143529ed0e06a9e6c746747570e3bb75017318))
+* **report-render:** add operator review helper ([de7fb57](https://github.com/lambdasistemi/amaru-treasury-tx/commit/de7fb5705c333a93dafc6f8883f1a697e94da8fc))
+
+### Bug Fixes
+
+* **rebase:** adapt to withdraw-wizard merge ([41b48bc](https://github.com/lambdasistemi/amaru-treasury-tx/commit/41b48bc8de8c04e5cabc38c24e915b311a2b36de))
+* **tx-build:** include wallet extras in chain-context fetch ([62d8185](https://github.com/lambdasistemi/amaru-treasury-tx/commit/62d81858d2bca4ea68c6b1dc271953f5b751038c))
+* **nix:** expose checks as runCommand wrappers around writeShellApplication apps ([46317ad](https://github.com/lambdasistemi/amaru-treasury-tx/commit/46317adb61865e534202a778175544122d470331))
+* **008:** fund swap order overhead from treasury ([632020f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/632020f6358545aef2d1924cfabdf006cd9acf7d))
+* **070:** derive quote swap amounts from emitted rate ([c4eed14](https://github.com/lambdasistemi/amaru-treasury-tx/commit/c4eed14ec04d72d917d19718e4fbf35a4f974a0e))
+* **swap-wizard:** restore quote-derived pipe flow ([652f413](https://github.com/lambdasistemi/amaru-treasury-tx/commit/652f413337c2074f80bcbaa4bd500505def350aa))
 
 ## [0.2.1.1](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.1.0...v0.2.1.1) (2026-05-07)
 

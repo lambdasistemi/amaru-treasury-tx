@@ -21,11 +21,11 @@ default CI behavior.
 These tasks fold into the node smoke slice unless they are committed as
 part of the non-runtime Spec Kit planning slice.
 
-- [ ] T001 Add `test/devnet/Spec.hs` and `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` skeletons for the new live smoke suite
-- [ ] T002 Update `amaru-treasury-tx.cabal` with a manual `devnet-tests` test-suite depending on `cardano-node-clients:devnet`
-- [ ] T003 Update `flake.nix` so `nix develop` exposes the `cardano-node` binary required by `cardano-node-clients:devnet`
-- [ ] T004 Add `scripts/smoke/devnet-local` as the stable script entrypoint for the contract in `specs/080-local-devnet-smoke/contracts/local-devnet-smoke.md`
-- [ ] T005 Add a `devnet-smoke phase="node"` recipe to `justfile` and keep it out of `just ci`
+- [x] T001 Add `test/devnet/Spec.hs` and `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` skeletons for the new live smoke suite
+- [x] T002 Update `amaru-treasury-tx.cabal` with a manual `devnet-tests` test-suite depending on `cardano-node-clients:devnet`
+- [x] T003 Update `flake.nix` so `nix develop` exposes the `cardano-node` binary required by `cardano-node-clients:devnet`
+- [x] T004 Add `scripts/smoke/devnet-local` as the stable script entrypoint for the contract in `specs/080-local-devnet-smoke/contracts/local-devnet-smoke.md`
+- [x] T005 Add a `devnet-smoke phase="node"` recipe to `justfile` and keep it out of `just ci`
 
 ---
 
@@ -67,17 +67,17 @@ network magic, tip, and epoch duration.
 
 ### Tests for User Story 1
 
-- [ ] T016 [US1] Add a failing node-phase live smoke test in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
-- [ ] T017 [US1] Run `cabal test devnet-tests -O0 --test-show-details=direct --test-option=--match --test-option node` and capture the expected red failure
+- [x] T016 [US1] Add a failing node-phase live smoke test in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
+- [x] T017 [US1] Run `cabal test devnet-tests -O0 --test-show-details=direct --test-option=--match --test-option node` and capture node-boundary gate evidence
 
 ### Implementation for User Story 1
 
-- [ ] T018 [US1] Implement run-directory creation and stale-artifact rejection in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
-- [ ] T019 [US1] Use `Cardano.Node.Client.E2E.Devnet.withCardanoNode` from `cardano-node-clients:devnet` in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
-- [ ] T020 [US1] Read and record `epochLength`, `slotLength`, and network magic from the devnet genesis in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
-- [ ] T021 [US1] Probe the started socket with magic `42` using existing N2C helpers in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
-- [ ] T022 [US1] Make `scripts/smoke/devnet-local` run the node phase through `cabal test devnet-tests` and forward `--run-dir`
-- [ ] T023 [US1] Run `just devnet-smoke node` and verify the node-ready output and artifacts
+- [x] T018 [US1] Implement run-directory creation and stale-artifact rejection in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
+- [x] T019 [US1] Use `Cardano.Node.Client.E2E.Devnet.withCardanoNode` from `cardano-node-clients:devnet` in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
+- [x] T020 [US1] Read and record `epochLength`, `slotLength`, and network magic from the devnet genesis in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
+- [x] T021 [US1] Probe the started socket with magic `42` using existing N2C helpers in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
+- [x] T022 [US1] Make `scripts/smoke/devnet-local` run the node phase through `cabal test devnet-tests` and forward `--run-dir`
+- [x] T023 [US1] Run `just devnet-smoke node` and verify the node-ready output and artifacts
 
 **Checkpoint**: The local devnet boundary is proven independently.
 Tasks T016-T023 form one vertical reviewed commit with the setup tasks
@@ -161,7 +161,7 @@ the behavior slice that introduces them.
 - [ ] T042 Update `docs/release.md` with a manual release-evidence checklist item for `just devnet-smoke node|withdraw|disburse`
 - [ ] T043 Run `just format` for Haskell/Cabal/Nix formatting
 - [ ] T044 Run `just unit`
-- [ ] T045 Run `cabal test devnet-tests -O0 --test-show-details=direct --test-option=--match --test-option node`
+- [x] T045 Run `cabal test devnet-tests -O0 --test-show-details=direct --test-option=--match --test-option node`
 - [ ] T046 Run `just smoke`
 - [ ] T047 Run `just cabal-check`
 

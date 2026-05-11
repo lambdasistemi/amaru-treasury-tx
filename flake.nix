@@ -36,10 +36,13 @@
         "github:intersectmbo/cardano-haskell-packages/887d73ce434831e3a67df48e070f4f979b3ac5a6";
       flake = false;
     };
+    cardano-node = {
+      url = "github:IntersectMBO/cardano-node/10.7.0";
+    };
   };
 
   outputs = inputs@{ self, nixpkgs, lintNixpkgs, flake-parts
-    , haskellNix, hackageNix, iohkNix, CHaP, ... }:
+    , haskellNix, hackageNix, iohkNix, CHaP, cardano-node, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [ "x86_64-linux" "aarch64-darwin" ];
       perSystem = { system, ... }:
@@ -56,6 +59,15 @@
           lintPkgs = import lintNixpkgs { inherit system; };
           indexState = "2026-02-17T10:15:41Z";
           indexTool = { index-state = indexState; };
+          cardanoNodeClientsSrc = pkgs.fetchgit {
+            url = "https://github.com/lambdasistemi/cardano-node-clients";
+            rev = "c170cfe64fa2a2507e46636630a0317ce147954c";
+            sha256 = "08xkrn6kdpk453znx7wqh44cmcpwvq3m9gy0m32ms78m4qdgqzzf";
+          };
+          devnetGenesis =
+            pkgs.runCommand "cardano-node-clients-devnet-genesis" { } ''
+              cp -r ${cardanoNodeClientsSrc}/e2e-test/genesis $out
+            '';
           cabalLines =
             pkgs.lib.splitString "\n"
             (builtins.readFile ./amaru-treasury-tx.cabal);
@@ -104,11 +116,13 @@
                 pkgs.curl
                 pkgs.cacert
                 pkgs.lmdb
+                cardano-node.packages.${system}.cardano-node
               ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
                 pkgs.liburing
               ];
               shellHook = ''
                 export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+                export E2E_GENESIS_DIR=${devnetGenesis}
               '';
             };
             modules = [ fix-libs ]

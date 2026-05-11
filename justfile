@@ -117,6 +117,10 @@ red match="":
             --test-option="{{ match }}"
     fi
 
+# Run the opt-in local cardano-node-clients devnet smoke
+devnet-smoke phase="node":
+    scripts/smoke/devnet-local --phase "{{ phase }}"
+
 # Full CI pipeline (build, tests, lint, format-check)
 ci:
     just build

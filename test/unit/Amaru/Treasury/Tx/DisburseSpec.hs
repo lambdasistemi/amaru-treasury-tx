@@ -32,6 +32,7 @@ import Cardano.Ledger.Api.Tx.Body
     , reqSignerHashesTxBodyL
     , withdrawalsTxBodyL
     )
+import Cardano.Ledger.Api.Tx.Out (valueTxOutL)
 import Cardano.Ledger.BaseTypes
     ( Network (..)
     , mkTxIxPartial
@@ -47,9 +48,17 @@ import Cardano.Ledger.Hashes
     , ScriptHash (..)
     , unsafeMakeSafeHash
     )
+import Cardano.Ledger.Mary.Value
+    ( AssetName (..)
+    , MaryValue (..)
+    , MultiAsset (..)
+    , PolicyID (..)
+    )
 import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Slotting.Slot (SlotNo (..))
 import Data.ByteString qualified as BS
+import Data.ByteString.Short qualified as SBS
+import Data.Foldable (toList)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromJust)
 import Data.Set qualified as Set
@@ -90,7 +99,9 @@ import Amaru.Treasury.Tx.Disburse
     ( DisburseAdaPayload (..)
     , DisburseIntent (..)
     , DisburseIntentFields (..)
+    , DisburseUsdmPayload (..)
     , disburseAdaProgram
+    , disburseUsdmProgram
     )
 import Amaru.Treasury.Tx.DisburseIntentJSON
     ( DisburseInputsJSON (..)
@@ -180,6 +191,32 @@ payload =
         , dapLeftoverLovelace = Coin 1_400_000_000_000
         }
 
+usdmPolicy :: PolicyID
+usdmPolicy = PolicyID (ScriptHash (mkHash28 88))
+
+usdmAsset :: AssetName
+usdmAsset = AssetName (SBS.toShort "USDM")
+
+otherPolicy :: PolicyID
+otherPolicy = PolicyID (ScriptHash (mkHash28 89))
+
+otherAsset :: AssetName
+otherAsset = AssetName (SBS.toShort "OTHER")
+
+usdmPayload :: DisburseUsdmPayload
+usdmPayload =
+    DisburseUsdmPayload
+        { dupUsdmPolicy = usdmPolicy
+        , dupUsdmAsset = usdmAsset
+        , dupAmountUsdm = 100_000_000
+        , dupLeftoverLovelace = Coin 1_400_000_000_000
+        , dupLeftoverUsdm = 50_000_000
+        , dupLeftoverOtherAssets =
+            MultiAsset $
+                Map.singleton otherPolicy $
+                    Map.singleton otherAsset 7
+        }
+
 spec :: Spec
 spec = do
     describe "Amaru.Treasury.Tx.Disburse" $ do
@@ -215,6 +252,42 @@ spec = do
                 ^. reqSignerHashesTxBodyL
                 `shouldSatisfy` \s -> Set.size s == 2
 
+        it "builds USDM beneficiary and treasury leftover values" $ do
+            let usdmTx =
+                    draft
+                        emptyPParams
+                        ( disburseUsdmProgram
+                            fields
+                            usdmPayload
+                            (Coin 2_000_000)
+                        )
+                usdmBody = usdmTx ^. bodyTxL
+                values =
+                    (^. valueTxOutL)
+                        <$> toList (usdmBody ^. outputsTxBodyL)
+            values
+                `shouldBe` [ MaryValue
+                                (Coin 1_400_000_000_000)
+                                ( MultiAsset $
+                                    Map.fromList
+                                        [
+                                            ( usdmPolicy
+                                            , Map.singleton usdmAsset 50_000_000
+                                            )
+                                        ,
+                                            ( otherPolicy
+                                            , Map.singleton otherAsset 7
+                                            )
+                                        ]
+                                )
+                           , MaryValue
+                                (Coin 2_000_000)
+                                ( MultiAsset $
+                                    Map.singleton usdmPolicy $
+                                        Map.singleton usdmAsset 100_000_000
+                                )
+                           ]
+
     describe "Amaru.Treasury.Tx.DisburseIntentJSON" $
         it
             "decodeDisburseIntent . encodeDisburseIntent = Right"
@@ -243,6 +316,9 @@ spec = do
                         DisburseAdaIntent _ ada ->
                             dapAmountLovelace ada
                                 `shouldBe` Coin 50_000_000
+                        DisburseUsdmIntent{} ->
+                            expectationFailure
+                                "expected ADA disburse payload"
                 _ ->
                     expectationFailure
                         "expected SDisburse intent"

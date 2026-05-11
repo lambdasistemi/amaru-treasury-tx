@@ -28,12 +28,27 @@ import Amaru.Treasury.IntentJSON
 
 spec :: Spec
 spec =
-    describe "Amaru.Treasury.Build.runDisburse" $
+    describe "Amaru.Treasury.Build.runDisburse" $ do
         it "reports missing required UTxOs before balancing" $ do
             some <-
                 expectRight
                     =<< decodeTreasuryIntentFile
                         "test/fixtures/disburse/ada/intent.json"
+            let ctx =
+                    ChainContext
+                        { ccPParams = emptyPParams
+                        , ccUtxos = Map.empty
+                        , ccEvaluateTx =
+                            const (pure Map.empty)
+                        }
+            runFromIntent ctx some
+                `shouldThrow` missingDisburseUtxos
+
+        it "translates USDM intents before gathering inputs" $ do
+            some <-
+                expectRight
+                    =<< decodeTreasuryIntentFile
+                        "test/fixtures/disburse/usdm/intent.json"
             let ctx =
                     ChainContext
                         { ccPParams = emptyPParams

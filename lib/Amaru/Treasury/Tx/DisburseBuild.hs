@@ -11,9 +11,10 @@ through a 'ChainContext' and runs the full
 [`Cardano.Node.Client.TxBuild.build`](https://github.com/lambdasistemi/cardano-node-clients)
 loop.
 
-This phase-4 cut handles the ADA disburse case
-('DisburseAdaIntent'). The USDM dispatch lands in
-T039 (feature 004 phase 5).
+This compatibility module handles the ADA disburse case
+('DisburseAdaIntent'). The unified dispatcher in
+'Amaru.Treasury.Build.runFromIntent' handles both ADA and
+USDM disburse intents.
 
 The final tx is re-evaluated against the script
 evaluator so callers get a per-redeemer outcome
@@ -113,9 +114,10 @@ UTxOs, script evaluator); supplying a frozen one
 ('Amaru.Treasury.ChainContext.frozenContext') makes the
 build deterministic across chain drift.
 
-USDM dispatch lands in T039; for now the function only
-matches 'DisburseAdaIntent'. A 'DisburseUsdmIntent' would
-land here once the USDM constructor is added to the ADT.
+USDM disburse intents are intentionally rejected here so
+legacy direct callers do not accidentally use the pre-#52
+compatibility path; call 'Amaru.Treasury.Build.runFromIntent'
+for the unified dispatcher.
 -}
 runDisburseBuild
     :: ChainContext
@@ -124,6 +126,10 @@ runDisburseBuild
 runDisburseBuild ctx dbi = case dbiIntent dbi of
     DisburseAdaIntent fields payload ->
         runAda ctx dbi fields payload
+    DisburseUsdmIntent{} ->
+        throwIO . userError $
+            "runDisburseBuild: USDM disburse requires "
+                <> "Amaru.Treasury.Build.runFromIntent"
 
 -- | The ADA-disburse build pipeline.
 runAda

@@ -39,16 +39,16 @@ boundaries.
 Tasks T006-T015 form one vertical reviewed commit: RED tests plus the
 GREEN network identity implementation.
 
-- [ ] T006 [P] Add failing unit coverage for `--network devnet`, magic `42`, and unknown-network errors in `test/unit/Amaru/Treasury/BuildSpec.hs`
-- [ ] T007 [P] Add failing reward-account coverage showing `devnet` maps to ledger `Testnet` in `test/unit/Amaru/Treasury/IntentJSONSpec.hs`
+- [x] T006 [P] Add failing unit coverage for `--network devnet`, magic `42`, and unknown-network errors in `test/unit/Amaru/Treasury/BuildSpec.hs`
+- [x] T007 [P] Add failing reward-account coverage showing `devnet` maps to ledger `Testnet` in `test/unit/Amaru/Treasury/IntentJSONSpec.hs`
 - [ ] T008 [P] Add failing wizard network-family coverage for `devnet` in `test/unit/Amaru/Treasury/Tx/DisburseWizardSpec.hs`
-- [ ] T009 [P] Add failing wizard network-family coverage for `devnet` in `test/unit/Amaru/Treasury/Tx/WithdrawWizardSpec.hs`
-- [ ] T010 Add `devnet` name/magic support to `lib/Amaru/Treasury/Cli/Common.hs`
-- [ ] T011 Add `devnet` to socket probing and known network magic resolution in `lib/Amaru/Treasury/Backend/N2C.hs` and `lib/Amaru/Treasury/Cli/TxBuild.hs`
-- [ ] T012 Add `devnet` reward-account parsing as `Testnet` in `lib/Amaru/Treasury/IntentJSON/Common.hs`
-- [ ] T013 Add `devnet` network-family support in `lib/Amaru/Treasury/Tx/DisburseWizard.hs` and `lib/Amaru/Treasury/Tx/WithdrawWizard.hs`
-- [ ] T014 Add `devnet` report network magic support in `lib/Amaru/Treasury/Report.hs` and matching report unit coverage in `test/unit/Amaru/Treasury/ReportSpec.hs`
-- [ ] T015 Run `just unit "network"` to prove the network alias tests now pass
+- [x] T009 [P] Add failing wizard network-family coverage for `devnet` in `test/unit/Amaru/Treasury/Tx/WithdrawWizardSpec.hs`
+- [x] T010 Add `devnet` name/magic support to `lib/Amaru/Treasury/Cli/Common.hs`
+- [x] T011 Add `devnet` to socket probing and known network magic resolution in `lib/Amaru/Treasury/Backend/N2C.hs` and `lib/Amaru/Treasury/Cli/TxBuild.hs`
+- [x] T012 Add `devnet` reward-account parsing as `Testnet` in `lib/Amaru/Treasury/IntentJSON/Common.hs`
+- [x] T013 Add `devnet` network-family support in `lib/Amaru/Treasury/Tx/DisburseWizard.hs` and `lib/Amaru/Treasury/Tx/WithdrawWizard.hs`
+- [x] T014 Add `devnet` report network magic support in `lib/Amaru/Treasury/Report.hs` and matching report unit coverage in `test/unit/Amaru/Treasury/ReportSpec.hs`
+- [x] T015 Run `just unit "network"` to prove the network alias tests now pass
 
 **Checkpoint**: `devnet` is accepted as a local-only testnet network
 name without changing mainnet/preprod/preview behavior.

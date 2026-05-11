@@ -86,7 +86,7 @@ globalOptsP =
             ( long "network"
                 <> metavar "NAME"
                 <> help
-                    "mainnet | preprod | preview (alternative to --network-magic)"
+                    "mainnet | preprod | preview | devnet (alternative to --network-magic)"
             )
     byMagic =
         (\m -> (NetworkMagic m, networkMagicNameMaybe (NetworkMagic m)))
@@ -95,7 +95,7 @@ globalOptsP =
                 ( long "network-magic"
                     <> metavar "WORD32"
                     <> help
-                        "Custom network magic (mainnet=764824073, preprod=1, preview=2)"
+                        "Custom network magic (mainnet=764824073, preprod=1, preview=2, devnet=42)"
                 )
     defaultMainnet =
         ( NetworkMagic 764_824_073
@@ -115,11 +115,12 @@ networkNameToPair s = case s of
         Right (NetworkMagic 764_824_073, Just "mainnet")
     "preprod" -> Right (NetworkMagic 1, Just "preprod")
     "preview" -> Right (NetworkMagic 2, Just "preview")
+    "devnet" -> Right (NetworkMagic 42, Just "devnet")
     _ ->
         Left
             ( "unknown network name: "
                 <> s
-                <> " (expected mainnet|preprod|preview)"
+                <> " (expected mainnet|preprod|preview|devnet)"
             )
 
 networkMagicNameMaybe :: NetworkMagic -> Maybe Text
@@ -127,6 +128,7 @@ networkMagicNameMaybe (NetworkMagic m) = case m of
     764824073 -> Just "mainnet"
     1 -> Just "preprod"
     2 -> Just "preview"
+    42 -> Just "devnet"
     _ -> Nothing
 
 {- | Resolve the canonical network name from
@@ -142,7 +144,7 @@ resolveNetworkName g = case goNetworkName g of
                 ( "cli: --network-magic "
                     <> show m
                     <> " is not a known network; pass "
-                    <> "--network mainnet|preprod|preview "
+                    <> "--network mainnet|preprod|preview|devnet "
                     <> "or a known magic"
                 )
 

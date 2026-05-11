@@ -91,6 +91,7 @@ import Options.Applicative
     , defaultPrefs
     , execParserPure
     , info
+    , renderFailure
     )
 import Ouroboros.Network.Magic (NetworkMagic (..))
 
@@ -99,6 +100,14 @@ import Amaru.Treasury.Backend.N2C
     , knownNetworkMagics
     , probeResultAccepted
     , stakeRewardLovelaceFromRewards
+    )
+import Amaru.Treasury.Cli
+    ( Cmd (..)
+    , opts
+    )
+import Amaru.Treasury.Cli.Common
+    ( GlobalOpts (..)
+    , resolveNetworkName
     )
 import Amaru.Treasury.IntentJSON.Common
     ( parseRewardAccountForNetwork
@@ -183,9 +192,9 @@ spec = describe "Amaru.Treasury.Build" $ do
             probeResultAccepted Nothing `shouldBe` False
 
     describe "knownNetworkMagics" $ do
-        it "lists the three production-relevant networks" $ do
+        it "lists public networks plus the local devnet" $ do
             map fst knownNetworkMagics
-                `shouldBe` ["mainnet", "preprod", "preview"]
+                `shouldBe` ["mainnet", "preprod", "preview", "devnet"]
         it "uses the canonical magic numbers" $ do
             lookup "mainnet" knownNetworkMagics
                 `shouldBe` Just (NetworkMagic 764_824_073)
@@ -193,6 +202,34 @@ spec = describe "Amaru.Treasury.Build" $ do
                 `shouldBe` Just (NetworkMagic 1)
             lookup "preview" knownNetworkMagics
                 `shouldBe` Just (NetworkMagic 2)
+            lookup "devnet" knownNetworkMagics
+                `shouldBe` Just (NetworkMagic 42)
+
+    describe "global network parser" $ do
+        it "accepts the local devnet network name" $ do
+            case parseCli ["--network", "devnet", "tx-build"] of
+                Right (g, CmdTxBuild _) -> do
+                    goNetworkMagic g `shouldBe` NetworkMagic 42
+                    resolveNetworkName g `shouldBe` Right "devnet"
+                Right _ ->
+                    expectationFailure "expected tx-build command"
+                Left e -> expectationFailure e
+
+        it "maps network magic 42 back to the local devnet name" $ do
+            case parseCli ["--network-magic", "42", "tx-build"] of
+                Right (g, CmdTxBuild _) -> do
+                    goNetworkMagic g `shouldBe` NetworkMagic 42
+                    resolveNetworkName g `shouldBe` Right "devnet"
+                Right _ ->
+                    expectationFailure "expected tx-build command"
+                Left e -> expectationFailure e
+
+        it "mentions devnet in unknown network errors" $
+            case parseCli ["--network", "localnet", "tx-build"] of
+                Left err ->
+                    err `shouldContain` "devnet"
+                Right _ ->
+                    expectationFailure "expected parse failure"
 
     describe "tx-build CLI parser" $ do
         it "accepts an optional report path" $
@@ -482,6 +519,15 @@ expectRight =
 parseTxBuild :: [String] -> Either String TxBuildOpts
 parseTxBuild args =
     case execParserPure defaultPrefs (info txBuildOptsP mempty) args of
-        Success opts -> Right opts
+        Success parsed -> Right parsed
         Failure{} -> Left "parse failure"
+        CompletionInvoked{} -> Left "completion invoked"
+
+parseCli :: [String] -> Either String (GlobalOpts, Cmd)
+parseCli args =
+    case execParserPure defaultPrefs opts args of
+        Success parsed -> Right parsed
+        Failure failure ->
+            let (msg, _) = renderFailure failure "amaru-treasury-tx"
+            in  Left msg
         CompletionInvoked{} -> Left "completion invoked"

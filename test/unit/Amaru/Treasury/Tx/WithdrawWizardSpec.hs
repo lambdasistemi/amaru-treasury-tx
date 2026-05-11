@@ -38,6 +38,7 @@ import Amaru.Treasury.Tx.WithdrawWizard
     , WithdrawEnv (..)
     , WithdrawError (..)
     , WithdrawResolverEnv (..)
+    , WithdrawResolverError (..)
     , WithdrawResolverInput (..)
     , WithdrawResult (..)
     , resolveWithdrawEnv
@@ -76,6 +77,9 @@ spec =
         it
             "resolves reward account and amount from registry/provider state"
             resolverCase
+        it
+            "accepts devnet as a testnet-family resolver network"
+            resolverDevnetNetworkCase
 
 goldenCase :: IO ()
 goldenCase = do
@@ -163,6 +167,36 @@ resolverCase = do
                                     <> show err
                                 )
                     )
+
+resolverDevnetNetworkCase :: IO ()
+resolverDevnetNetworkCase = do
+    fixtureEnv <-
+        eitherDecodeStrict
+            "test/fixtures/withdraw/synthetic/env.json"
+            :: IO WithdrawEnv
+    answers <-
+        eitherDecodeStrict
+            "test/fixtures/withdraw/synthetic/answers.json"
+            :: IO WithdrawAnswers
+    let testnetWallet =
+            "addr_test1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+        stub =
+            WithdrawResolverEnv
+                { wreQueryWalletUtxos = \addr -> do
+                    addr `shouldBe` testnetWallet
+                    pure []
+                , wreQueryRewardsLovelace = \_ -> pure 0
+                , wreCurrentTip = pure 0
+                }
+        input =
+            WithdrawResolverInput
+                { wriNetwork = "devnet"
+                , wriWalletAddrBech32 = testnetWallet
+                , wriScope = waScope answers
+                , wriRegistry = weRegistry fixtureEnv
+                }
+    result <- resolveWithdrawEnv stub input
+    result `shouldBe` Left WithdrawResolverEmptyWalletUtxos
 
 zeroRewardsNoOutputCase :: IO ()
 zeroRewardsNoOutputCase = do

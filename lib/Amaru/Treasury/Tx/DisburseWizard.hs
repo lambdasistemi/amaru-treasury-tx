@@ -821,6 +821,7 @@ networkFamily n = case T.toLower n of
     "mainnet" -> Just Mainnet
     "preprod" -> Just Testnet
     "preview" -> Just Testnet
+    "devnet" -> Just Testnet
     _ -> Nothing
 
 networkText :: Network -> Text

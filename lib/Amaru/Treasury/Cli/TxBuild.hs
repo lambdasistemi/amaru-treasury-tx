@@ -265,6 +265,7 @@ magicFromIntent tr = \case
     "mainnet" -> pure (NetworkMagic 764_824_073)
     "preprod" -> pure (NetworkMagic 1)
     "preview" -> pure (NetworkMagic 2)
+    "devnet" -> pure (NetworkMagic 42)
     other ->
         abortBuild
             tr

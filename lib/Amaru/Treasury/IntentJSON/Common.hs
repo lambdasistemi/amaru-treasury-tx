@@ -95,7 +95,8 @@ parseRewardAccount =
 {- | Parse a reward-account credential as a 28-byte hex
 stake-script hash on the ledger network named by the
 unified intent. @preprod@ and @preview@ both map to the
-ledger's 'Testnet' constructor.
+ledger's 'Testnet' constructor; @devnet@ does the same
+for the local smoke network.
 -}
 parseRewardAccountForNetwork
     :: Text -> Text -> Either String AccountAddress
@@ -118,6 +119,7 @@ parseNetwork t =
         "mainnet" -> Right Mainnet
         "preprod" -> Right Testnet
         "preview" -> Right Testnet
+        "devnet" -> Right Testnet
         other ->
             Left
                 ( "unknown network for reward account: "

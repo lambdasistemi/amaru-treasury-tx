@@ -840,6 +840,7 @@ networkMagic = \case
     "mainnet" -> 764_824_073
     "preprod" -> 1
     "preview" -> 2
+    "devnet" -> 42
     _ -> 0
 
 sampleSwapReport :: TransactionReport

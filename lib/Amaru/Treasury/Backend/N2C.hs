@@ -187,13 +187,15 @@ probeResultAccepted _ = False
 
 {- | Curated allow-list of network names ↔ magics. Mirrors
 the case in 'app/amaru-treasury-tx/Main.hs' that maps
-'tiNetwork' to a 'NetworkMagic'.
+'tiNetwork' to a 'NetworkMagic'. @devnet@ is a
+local-only test network used by the opt-in smoke harness.
 -}
 knownNetworkMagics :: [(Text, NetworkMagic)]
 knownNetworkMagics =
     [ ("mainnet", NetworkMagic 764_824_073)
     , ("preprod", NetworkMagic 1)
     , ("preview", NetworkMagic 2)
+    , ("devnet", NetworkMagic 42)
     ]
 
 {- | Identify the socket's actual network magic by

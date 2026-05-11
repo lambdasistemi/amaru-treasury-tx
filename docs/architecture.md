@@ -76,8 +76,12 @@ flowchart TD
 | `Amaru.Treasury.Registry.Derive`        | Re-derive script hashes from the pinned blobs                   | yes |
 | `Amaru.Treasury.Registry.Metadata`      | Parse upstream `metadata.json`                                  | yes |
 | `Amaru.Treasury.Registry.Verify`        | Walk the registry NFT, verify metadata against chain anchors    | **no** (Provider IO) |
-| `Amaru.Treasury.Build`          | Unified `tx-build` dispatcher and action runners                | **no** (`ChainContext` evaluator) |
-| `Amaru.Treasury.Build.Trace`    | Typed `tx-build` trace ADT + renderer                           | yes |
+| `Amaru.Treasury.Build`                  | Unified `tx-build` dispatcher and public build facade            | **no** (`ChainContext` evaluator) |
+| `Amaru.Treasury.Build.Common`           | Shared fee-alignment and final-output helpers                    | yes |
+| `Amaru.Treasury.Build.Swap`             | Swap action runner                                               | **no** (`ChainContext` evaluator) |
+| `Amaru.Treasury.Build.Disburse`         | Disburse action runner                                           | **no** (`ChainContext` evaluator) |
+| `Amaru.Treasury.Build.Withdraw`         | Withdraw action runner                                           | **no** (`ChainContext` evaluator) |
+| `Amaru.Treasury.Build.Trace`            | Typed `tx-build` trace ADT + renderer                            | yes |
 | `Amaru.Treasury.Tx.Disburse`            | `TxBuild q e ()` for `disburse`                                 | yes |
 | `Amaru.Treasury.Tx.DisburseWizard`      | Pure disburse questionnaire translation helpers                 | yes |
 | `Amaru.Treasury.Tx.Withdraw`            | `TxBuild q e ()` for `withdraw`                                 | yes |

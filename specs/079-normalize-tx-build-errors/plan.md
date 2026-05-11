@@ -58,9 +58,16 @@ specs/079-normalize-tx-build-errors/
 
 ```text
 lib/Amaru/Treasury/
-+-- Build.hs                 # typed build errors, withExceptT runner flow, mapException context wrapping
++-- Build.hs                         # dispatcher facade and runFromIntentEither
++-- Build/Common.hs                  # shared fee/output helpers
++-- Build/Swap.hs                    # swap runner with withExceptT-compatible action error
++-- Build/Disburse.hs                # disburse runner with shared normalization
++-- Build/Withdraw.hs                # withdraw runner with shared normalization
++-- Build/Error.hs                   # public diagnostic facade
++-- Build/Error/*.hs                 # structured errors, rendering, exception/context helpers
++-- Build/Result.hs                  # build result records
 +-- Report.hs                        # failure envelope keeps normalized code/message
-+-- Build/Trace.hs           # only if trace wording needs a new event
++-- Build/Trace.hs                   # typed tx-build trace events
 
 app/amaru-treasury-tx/
 +-- Main.hs                          # consume typed build failures for report/non-report CLI

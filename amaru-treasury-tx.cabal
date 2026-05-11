@@ -80,6 +80,8 @@ library
     Amaru.Treasury.Backend
     Amaru.Treasury.Backend.N2C
     Amaru.Treasury.Build
+    Amaru.Treasury.Build.Common
+    Amaru.Treasury.Build.Disburse
     Amaru.Treasury.Build.Error
     Amaru.Treasury.Build.Error.Context
     Amaru.Treasury.Build.Error.Convert
@@ -88,7 +90,9 @@ library
     Amaru.Treasury.Build.Error.Types
     Amaru.Treasury.Build.ReportWriter
     Amaru.Treasury.Build.Result
+    Amaru.Treasury.Build.Swap
     Amaru.Treasury.Build.Trace
+    Amaru.Treasury.Build.Withdraw
     Amaru.Treasury.ChainContext
     Amaru.Treasury.ChainContext.Fixture
     Amaru.Treasury.Cli.SwapQuote

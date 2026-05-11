@@ -1,14 +1,14 @@
-# Quickstart: Local Devnet Smoke
+# Quickstart: DevNet Governance Action Slice
 
-This is the target maintainer flow after implementation.
+This is the target maintainer flow for #82.
 
-## Start the Dev Shell
+## Start The Dev Shell
 
 ```bash
 nix develop --quiet
 ```
 
-## Verify the Local Node Boundary
+## Verify The Local Node Boundary
 
 ```bash
 just devnet-smoke node
@@ -19,41 +19,27 @@ Expected result within 2 minutes:
 - a fresh run directory path
 - `network devnet magic 42`
 - the node socket path
-- the effective epoch duration, expected to be about 50 seconds with
-  the pinned `cardano-node-clients` genesis
+- effective short-epoch timing
 
-## Verify Withdrawal Rewards
-
-```bash
-just devnet-smoke withdraw
-```
-
-Expected result within 10 minutes:
-
-- a positive `rewards-lovelace` value, or a `REWARDS_TIMEOUT` failure
-  with the last observed reward value, tip, and wait budget
-- `withdraw/intent.json` in the run directory when rewards are positive
-
-## Verify Disburse and Build
+## Run The Governance Slice
 
 ```bash
-just devnet-smoke disburse
+just devnet-smoke governance
 ```
 
-Expected successful artifacts:
+Expected successful artifacts after implementation:
 
-- `disburse/intent.json`
-- `disburse/build.log`
-- `disburse/unsigned.cbor`
-- `disburse/report.json`
-- `disburse/report.md`
+- `governance/certificates.json`
+- `governance/action.json`
+- `governance/summary.json`
+- tx id(s), governance action id, reward account(s), amount(s), and epoch/tip context in the top-level summary
 
-If local registry, permissions, treasury, or wallet UTxOs are missing,
-the command must fail with `MISSING_TREASURY_STATE` and leave a summary
-that names the missing boundary.
+If required upstream support is missing, the command must fail with
+`MISSING_UPSTREAM_GOVERNANCE_SUPPORT` and link the blocking upstream
+issue or PR.
 
-## Release Evidence
+## Follow-Up Slices
 
-Record the run directory in release notes when this smoke is used as
-manual live evidence. Keep it separate from `just ci`, which remains
-the deterministic unit/golden/smoke gate.
+Withdrawal is tracked by #83. Swap is tracked by #84. Do not treat a
+successful governance run as proof that either follow-up transaction
+has been built.

@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Local Devnet Smoke
+# Specification Quality Checklist: DevNet Governance Action Slice
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-05-11  
@@ -6,31 +6,29 @@
 
 ## Content Quality
 
-- [x] No implementation details (languages, frameworks, APIs)
-- [x] Focused on user value and business needs
-- [x] Written for non-technical stakeholders
-- [x] All mandatory sections completed
+- [x] No implementation details in stakeholder requirements
+- [x] Focused on the governance action slice
+- [x] Written for maintainer/release value
+- [x] Mandatory sections completed
 
 ## Requirement Completeness
 
 - [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
-- [x] Success criteria are technology-agnostic
-- [x] All acceptance scenarios are defined
+- [x] Governance, withdrawal, and swap boundaries are separated
+- [x] Upstream dependencies are identified
 - [x] Edge cases are identified
-- [x] Scope is clearly bounded
-- [x] Dependencies and assumptions identified
 
 ## Feature Readiness
 
-- [x] All functional requirements have clear acceptance criteria
-- [x] User scenarios cover primary flows
+- [x] Functional requirements have acceptance criteria
+- [x] User scenarios cover node readiness, governance action, and handoff
 - [x] Feature meets measurable outcomes defined in Success Criteria
-- [x] No implementation details leak into specification
+- [x] Follow-up tickets are linked
 
 ## Notes
 
-- The user explicitly selected the existing `cardano-node-clients`
-  devnet as the local network source. The specification records this
-  as an assumption; concrete wiring belongs in `plan.md`.
+- The first DevNet ticket is #82, governance action.
+- Withdrawal is #83.
+- Swap is #84.

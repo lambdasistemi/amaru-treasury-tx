@@ -1,145 +1,128 @@
-# Feature Specification: Local Devnet Smoke
+# Feature Specification: DevNet Governance Action Slice
 
 **Feature Branch**: `080-local-devnet-smoke`  
 **Created**: 2026-05-11  
 **Status**: Draft  
-**Input**: User description: "Run a local network to actually test the operator steps. Use the cardano-node-clients devnet, and use a short epochLength for withdrawal rewards to operate."
+**GitHub Issue**: [#82](https://github.com/lambdasistemi/amaru-treasury-tx/issues/82)
+**Input**: User description: "Make the first DevNet experiment slice the governance action slice. Then split withdrawal and swap into their own DevNet tickets."
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 - Start a Short-Epoch Local Network (Priority: P1)
+### User Story 1 - Prove the Local DevNet Boundary (Priority: P1)
 
-As a maintainer preparing an Amaru treasury release, I need a
-repeatable local-network smoke environment so I can verify the tool
-against a live Cardano node socket instead of relying only on frozen
-fixtures.
+As a maintainer preparing the release, I need a repeatable local
+DevNet that starts quickly, exposes a node socket, and uses short
+epochs so later governance and reward experiments can complete during
+one manual verification session.
 
-**Why this priority**: Every later live smoke depends on a reachable
-node, the expected test network identity, and fast epoch progression.
+**Why this priority**: The governance action cannot be trusted until
+the local network identity and timing are proven.
 
-**Independent Test**: Start the local network smoke and verify that it
-reports the node socket, accepted network magic, current tip, and
-configured epoch duration before any treasury-specific action runs.
-
-**Acceptance Scenarios**:
-
-1. **Given** a clean checkout with the approved local devnet dependency, **When** the maintainer starts the local-network smoke, **Then** the smoke reports a reachable node socket and the expected local test-network identity.
-2. **Given** the local network is running, **When** the smoke reads chain timing, **Then** it confirms epochs are short enough for a withdrawal reward scenario to complete during a manual verification session.
-3. **Given** the local node is unavailable or on the wrong network, **When** the smoke runs, **Then** it fails before attempting any treasury action and prints the observed boundary failure.
-
----
-
-### User Story 2 - Exercise Withdrawal With Accrued Rewards (Priority: P2)
-
-As a maintainer validating the withdrawal workflow, I need the local
-network to produce a positive reward balance quickly so the
-withdrawal path can be tested against live chain state without waiting
-for public-network epochs.
-
-**Why this priority**: The current withdrawal golden is synthetic
-because public-network treasury rewards were zero; this is the first
-live proof that the withdrawal resolver can observe positive rewards.
-
-**Independent Test**: Run only the withdrawal local-network smoke and
-verify that it waits for a positive reward balance, emits a
-positive-rewards intent, and records the reward account and reward
-amount observed from the live chain.
+**Independent Test**: Run the node phase and verify that it reports a
+fresh run directory, node socket, network magic, tip, and short epoch
+timing before any governance setup runs.
 
 **Acceptance Scenarios**:
 
-1. **Given** the local network has short epochs and a prepared reward source, **When** enough epochs have elapsed, **Then** the smoke observes a reward account with rewards greater than zero.
-2. **Given** the reward balance is positive, **When** the withdrawal resolver runs, **Then** it emits an intent with a positive `rewardsLovelace` value and does not take the zero-rewards no-op path.
-3. **Given** rewards do not become positive within the configured wait budget, **When** the smoke exits, **Then** it reports the wait budget, last observed epoch/tip, and last observed reward value.
+1. **Given** a clean checkout with the approved local DevNet dependency, **When** the maintainer starts the node smoke, **Then** it reports a reachable node socket and the expected local network identity.
+2. **Given** the local node is running, **When** the smoke reads chain timing, **Then** it records the effective epoch duration used by later governance and reward checks.
+3. **Given** the node is unavailable or on the wrong network, **When** the smoke runs, **Then** it fails before attempting any governance action and records the observed boundary failure.
 
 ---
 
-### User Story 3 - Exercise Disburse and Build Steps Against Live State (Priority: P3)
+### User Story 2 - Submit the Treasury-Withdrawal Governance Action (Priority: P1)
 
-As a maintainer validating release-facing operator steps, I need a
-local chain state that can drive a wizard-to-build flow for treasury
-actions, so documentation and release claims are backed by live
-socket verification.
+As a maintainer validating the Amaru treasury setup path, I need the
+local DevNet to create and submit the Conway treasury-withdrawal
+governance action that funds the Amaru treasury script reward account.
 
-**Why this priority**: Disburse and build already have strong fixture
-coverage, but release confidence improves when the documented steps
-also run against a live local chain.
+**Why this priority**: Withdrawal testing requires treasury reward
+state. A delegated key reward account is not enough; the funded account
+must be the Amaru script stake credential used by the withdrawal
+transaction.
 
-**Independent Test**: Run the disburse/build local-network smoke and
-verify that it produces reviewed artifacts from live chain queries:
-intent JSON, build log, unsigned transaction CBOR, and report data.
+**Independent Test**: Run the governance phase and verify that it
+prepares the script stake credential, submits the governance action,
+and records the resulting action id, tx id, reward account, amount,
+and chain context.
 
 **Acceptance Scenarios**:
 
-1. **Given** the local network has prepared wallet and treasury state, **When** the disburse wizard runs, **Then** it resolves live UTxOs and emits an intent without relying on frozen fixture data.
-2. **Given** a live-resolved disburse intent, **When** the build step runs, **Then** it emits unsigned transaction CBOR and a report showing successful validation.
-3. **Given** required local treasury state is missing, **When** the smoke runs, **Then** it fails with a specific missing-state diagnostic rather than producing partial artifacts.
+1. **Given** a running short-epoch DevNet with deterministic setup funds, **When** the governance phase starts, **Then** it prepares the Amaru treasury script stake credential and vote-delegation state.
+2. **Given** the script stake credential is prepared, **When** the governance action is built and submitted, **Then** the smoke records the treasury-withdrawal action id, transaction id, reward account, and amount.
+3. **Given** required upstream support is missing, **When** the governance phase reaches that boundary, **Then** it fails with a typed missing-upstream diagnostic instead of replacing the library path with permanent shell code.
 
 ---
+
+### User Story 3 - Leave a Clean Handoff for Withdrawal and Swap (Priority: P2)
+
+As a maintainer continuing the DevNet experiment, I need the governance
+slice to produce artifacts that the withdrawal and swap slices can
+consume without rediscovering setup assumptions.
+
+**Why this priority**: Tomorrow's work should start from explicit
+state: governance action first, withdrawal second, swap third.
+
+**Independent Test**: Inspect the governance run directory and issue
+links; the next slice can identify the funded reward account and the
+exact upstream capabilities still required.
+
+**Acceptance Scenarios**:
+
+1. **Given** the governance phase succeeds, **When** the withdrawal slice starts, **Then** it can locate the funded reward account and chain context from the governance summary.
+2. **Given** the governance phase is blocked by upstream library support, **When** the issue is reviewed, **Then** the blocking upstream issue or PR is linked from the summary.
+3. **Given** the DevNet experiment backlog is reviewed, **When** maintainers inspect the tickets, **Then** governance, withdrawal, and swap are separate issues with explicit dependencies.
 
 ### Edge Cases
 
-- The local devnet starts but never reaches a usable tip within the
-  wait budget.
-- The local devnet accepts a different network identity than the smoke
-  expects.
-- Short epochs are configured but rewards remain zero because the
-  reward source is not delegated, not registered, or not active.
-- Required treasury, registry, or wallet UTxOs are missing or already
-  spent on the local chain.
-- A previous smoke run left stale artifacts that could be mistaken for
-  fresh results.
-- The smoke is interrupted while the local network is running.
+- The DevNet starts but never reaches a usable tip within the wait budget.
+- The DevNet accepts a network identity other than magic `42`.
+- The copied or patched genesis leaves no protocol treasury/reserve funds for a treasury-withdrawal action.
+- The treasury script stake credential is registered with the wrong certificate shape.
+- Governance action submission succeeds, but the action cannot be observed before the wait budget expires.
+- Required support in `cardano-node-clients` is missing for certificates, proposal procedures, or node queries.
+- A previous run directory contains stale governance artifacts.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST provide a documented local-network smoke that starts from a clean run directory and records all generated artifacts in that directory.
-- **FR-002**: The smoke MUST verify the local node socket and network identity before running any treasury wizard or build step.
-- **FR-003**: The smoke MUST use a short-epoch local network suitable for observing withdrawal rewards during one manual verification session.
-- **FR-004**: The smoke MUST report the effective epoch duration or equivalent timing evidence used to justify the withdrawal wait budget.
-- **FR-005**: The smoke MUST prepare or require deterministic local chain state for wallet funds, treasury state, registry anchors, and reward observation before running release-facing treasury actions.
-- **FR-006**: The withdrawal smoke MUST distinguish zero rewards from positive rewards and MUST only claim the positive path after observing rewards greater than zero from live chain state.
-- **FR-007**: The withdrawal smoke MUST produce a withdrawal intent artifact when rewards are positive and MUST record the reward account and reward amount used.
-- **FR-008**: The disburse/build smoke MUST produce intent, log, unsigned transaction, and report artifacts from live local chain queries.
-- **FR-009**: The smoke MUST fail closed with actionable diagnostics when node readiness, network identity, rewards, or required treasury state are missing.
-- **FR-010**: The smoke MUST keep signing and submission by the Amaru treasury CLI out of scope; any required chain preparation must not change the release-facing rule that this tool builds unsigned transactions.
-- **FR-011**: The documentation MUST explain how to run the local-network smoke, how long it is expected to take, and how to inspect the generated artifacts.
-- **FR-012**: The release checklist MUST reference this smoke as manual live evidence distinct from CI fixture evidence.
+- **FR-001**: The system MUST provide an opt-in local DevNet smoke that records all artifacts in a fresh run directory.
+- **FR-002**: The smoke MUST verify the local node socket, network magic `42`, and short epoch timing before running governance setup.
+- **FR-003**: The governance phase MUST prepare the treasury script stake credential using the original Amaru certificate intent: registration plus always-abstain vote delegation.
+- **FR-004**: The governance phase MUST create and submit a Conway treasury-withdrawal governance action that targets the Amaru script reward account.
+- **FR-005**: The governance summary MUST record tx id, governance action id, reward account, amount, epoch/tip context, and run directory.
+- **FR-006**: Missing upstream library capabilities MUST be reported as typed blockers with links to the upstream issue or PR.
+- **FR-007**: Any signing/submission required for DevNet setup MUST remain inside the smoke harness and MUST NOT become release-facing `amaru-treasury-tx` CLI behavior.
+- **FR-008**: The documentation MUST present governance action as slice 1, withdrawal as slice 2, and swap as slice 3.
+- **FR-009**: Withdrawal transaction building MUST remain out of scope for this slice and tracked by #83.
+- **FR-010**: Swap DevNet evidence MUST remain out of scope for this slice and tracked by #84.
 
 ### Key Entities
 
-- **Local Devnet Run**: One isolated smoke execution with a node
-  socket, chain timing evidence, logs, and generated artifacts.
-- **Epoch Timing Evidence**: The observed or configured values that
-  prove withdrawal rewards can be tested without public-network epoch
-  delays.
-- **Prepared Treasury State**: Local wallet funds, treasury outputs,
-  registry anchors, and reward source needed by the live smoke.
-- **Withdrawal Observation**: The reward account, last observed reward
-  value, and tip/epoch context captured before intent generation.
-- **Smoke Artifact Set**: Intent JSON, command logs, unsigned CBOR,
-  report output, and a summary transcript for review.
+- **Local DevNet Run**: One isolated smoke execution with node socket, timing evidence, logs, and generated artifacts.
+- **Governance Setup State**: Local funds, stake credential state, certificate artifacts, and proposal/action inputs needed to submit the treasury-withdrawal action.
+- **Treasury Withdrawal Governance Action**: The submitted Conway governance action that moves protocol treasury funds to an Amaru script reward account.
+- **Governance Evidence Set**: Summary JSON/log data containing tx id, action id, reward account, amount, epoch/tip context, and upstream blockers.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: A maintainer can start the local-network smoke from a clean checkout and receive a node-ready or node-failed result within 2 minutes.
-- **SC-002**: The withdrawal smoke can observe a positive reward balance within 10 minutes on the short-epoch local network, or fails with the last observed reward value and timing context.
-- **SC-003**: Successful withdrawal smoke output includes a positive `rewardsLovelace` value, the reward account, and the intent artifact path.
-- **SC-004**: Successful disburse/build smoke output includes paths to live-generated intent JSON, build log, unsigned CBOR, and report artifacts.
-- **SC-005**: Re-running the smoke from a clean run directory produces fresh artifacts and does not reuse stale output from a prior run.
-- **SC-006**: A maintainer following the documentation can identify whether a failure is due to node readiness, network mismatch, missing rewards, or missing treasury state.
+- **SC-001**: A maintainer can run the node phase from a clean checkout and receive a node-ready or node-failed result within 2 minutes.
+- **SC-002**: The governance phase either submits the treasury-withdrawal governance action or fails with a typed upstream/local-state blocker.
+- **SC-003**: Successful governance output includes tx id, governance action id, reward account, amount, epoch/tip context, and run directory.
+- **SC-004**: The governance run directory contains enough evidence for #83 to start withdrawal testing without rediscovering governance setup.
+- **SC-005**: README and release docs identify the implemented DevNet evidence and do not claim withdrawal or swap proof before #83/#84 land.
 
 ## Assumptions
 
-- The approved local network source is the existing
-  `cardano-node-clients` devnet pinned by this repository.
-- The live smoke is manual or opt-in because it starts a real local
-  node and waits for chain progress; it is not part of default CI.
-- A short epoch length is acceptable for the local smoke because it is
-  a verification environment, not a public-network compatibility
-  claim.
-- The smoke validates build artifacts and resolver behavior; final
-  multisig signing and submission remain outside `amaru-treasury-tx`.
+- The approved local network source remains the pinned
+  `cardano-node-clients` DevNet.
+- The first DevNet implementation slice may require upstream
+  `cardano-node-clients` changes, especially issues #130 and #131.
+- Temporary `cardano-cli` calls may appear only as explicit blockers or
+  migration aids inside the DevNet harness; the desired state is
+  library support.
+- The local DevNet governance action is release evidence for setup
+  mechanics, not a public-network governance claim.

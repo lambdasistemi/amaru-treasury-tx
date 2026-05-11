@@ -33,6 +33,7 @@ The full operator and developer documentation lives at
 - [Swap recipe](https://lambdasistemi.github.io/amaru-treasury-tx/swap/) — building a swap from an existing `intent.json`.
 - [Disburse](https://lambdasistemi.github.io/amaru-treasury-tx/disburse/) — resolving ADA or USDM disbursements with `disburse-wizard`, or building an existing disburse intent.
 - [Withdraw](https://lambdasistemi.github.io/amaru-treasury-tx/withdraw/) — resolving rewards with `withdraw-wizard` or building an existing withdraw intent.
+- [Local devnet smoke](https://lambdasistemi.github.io/amaru-treasury-tx/local-devnet-smoke/) — opt-in `cardano-node-clients` devnet check for live node boundary evidence.
 - [Parity report](https://lambdasistemi.github.io/amaru-treasury-tx/parity/) — byte-for-byte golden parity against bash/cardano-cli.
 
 ## Install
@@ -71,6 +72,12 @@ Smoke the release-facing signer path locally with:
 
 ```bash
 nix develop --quiet -c just smoke
+```
+
+Run the opt-in local devnet node smoke with:
+
+```bash
+nix develop --quiet -c just devnet-smoke node
 ```
 
 ## License

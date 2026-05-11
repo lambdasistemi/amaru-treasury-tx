@@ -26,6 +26,7 @@ extra-source-files:
   docs/assets/treasury-inspect-schema.json
   docs/assets/tx-report-schema.json
   scripts/smoke/cardano-cli-envelope-oracle
+  scripts/smoke/devnet-local
   scripts/smoke/swap-quote-docs
   scripts/smoke/swap-quote-override
   scripts/smoke/swap-wizard-signers
@@ -456,5 +457,29 @@ test-suite red-tests
     , base                 <5
     , cardano-ledger-core
     , hspec
+
+  build-tool-depends: hspec-discover:hspec-discover
+
+test-suite devnet-tests
+  import:             warnings
+  type:               exitcode-stdio-1.0
+  hs-source-dirs:     test/devnet
+  main-is:            Spec.hs
+  default-language:   GHC2021
+  other-modules:      Amaru.Treasury.Devnet.SmokeSpec
+  build-depends:
+    , aeson
+    , amaru-treasury-tx
+    , base                         <5
+    , bytestring
+    , cardano-node-clients
+    , cardano-node-clients:devnet
+    , directory
+    , filepath
+    , hspec
+    , hspec-discover
+    , ouroboros-network:api
+    , text
+    , time
 
   build-tool-depends: hspec-discover:hspec-discover

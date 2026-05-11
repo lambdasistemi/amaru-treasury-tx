@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+phase="node"
+run_dir=""
+reward_timeout_seconds="600"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --phase)
+      phase="${2:?missing value for --phase}"
+      shift 2
+      ;;
+    --run-dir)
+      run_dir="${2:?missing value for --run-dir}"
+      shift 2
+      ;;
+    --reward-timeout-seconds)
+      reward_timeout_seconds="${2:?missing value for --reward-timeout-seconds}"
+      shift 2
+      ;;
+    node|withdraw|disburse|all)
+      phase="$1"
+      shift
+      ;;
+    *)
+      echo "devnet-smoke: unknown argument: $1" >&2
+      exit 64
+      ;;
+  esac
+done
+
+if [[ "$phase" != "node" ]]; then
+  echo "devnet-smoke: phase $phase is planned but not implemented in the node MVP" >&2
+  exit 64
+fi
+
+if [[ -z "$run_dir" ]]; then
+  run_dir="runs/devnet/$(date -u +%Y%m%dT%H%M%SZ)"
+fi
+
+export DEVNET_SMOKE_PHASE="$phase"
+export DEVNET_SMOKE_RUN_DIR="$run_dir"
+export DEVNET_SMOKE_REWARD_TIMEOUT_SECONDS="$reward_timeout_seconds"
+
+cabal test devnet-tests -O0 \
+  --test-show-details=direct \
+  --test-option=--match \
+  --test-option=node

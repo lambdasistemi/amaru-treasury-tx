@@ -1,8 +1,10 @@
 # amaru-treasury-tx-issue70 Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-05-09
+Auto-generated from all feature plans. Last updated: 2026-05-11
 
 ## Active Technologies
+- Haskell (GHC 9.12.3 via haskell.nix; constitution supports GHC 9.6+) + `cardano-node-clients`, public sublibrary `cardano-node-clients:devnet`, `cardano-node` binary, `optparse-applicative`, `aeson`, `directory`, `time`, Hspec (080-local-devnet-smoke)
+- Filesystem run directories only: socket/log transcript, timing evidence, intent JSON, unsigned CBOR, report JSON/Markdown (080-local-devnet-smoke)
 
 - Haskell, GHC 9.6+ (070-quote-derived-swap-params)
 - Cabal single-package CLI with haskell.nix flake checks
@@ -37,6 +39,7 @@ specs/
   fetching behind an injectable source.
 
 ## Recent Changes
+- 080-local-devnet-smoke: Added Haskell (GHC 9.12.3 via haskell.nix; constitution supports GHC 9.6+) + `cardano-node-clients`, public sublibrary `cardano-node-clients:devnet`, `cardano-node` binary, `optparse-applicative`, `aeson`, `directory`, `time`, Hspec
 
 - 070-quote-derived-swap-params: Planned the `swap-quote` path,
   audit artifact, quote source abstraction, and offline proof strategy.

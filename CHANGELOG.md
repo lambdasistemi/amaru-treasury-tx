@@ -6,6 +6,24 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## [0.2.3.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.2.0...v0.2.3.0) (2026-05-11)
 
+### Operator Notes
+
+* `disburse-wizard` now supports the unified disburse build flow for USDM.
+  USDM is the default disbursement unit; ADA remains available with
+  `--unit ada`.
+* USDM disbursements select treasury inputs for both the requested token
+  amount and the ADA deposit needed by beneficiary outputs while preserving
+  unrelated assets and leftover value.
+* The README and MkDocs operator pages now document the wizard-to-`tx-build`
+  flow, the USDM default, and the ADA override.
+* `tx-build` reports builder failures through the normalized CLI error path.
+* `swap-wizard` only requires wallet fee slack from wallet inputs.
+
+### Maintainer Notes
+
+* CLI dispatch was split into smaller command modules and option parsers.
+  Command names and documented user-facing options are preserved.
+
 ### Features
 
 * **disburse:** add USDM unified build support ([a99441a](https://github.com/lambdasistemi/amaru-treasury-tx/commit/a99441a2efacc1ab9b61803bc3bf5210b1877804))
@@ -140,4 +158,3 @@ All notable changes to `amaru-treasury-tx` are documented here.
 * **002:** permissionsRewardAccount + intent.json deployed_at labels ([9db3970](https://github.com/lambdasistemi/amaru-treasury-tx/commit/9db397013191a59346d4158c69a17aa4c3d57a9e))
 * **docs:** wire mermaid2 custom fence so diagrams render ([4d7e8bb](https://github.com/lambdasistemi/amaru-treasury-tx/commit/4d7e8bbb4e2c99ab89f9b516b8264edbe4880824))
 * **release:** preserve cabal version formatting (#36) ([ff795ba](https://github.com/lambdasistemi/amaru-treasury-tx/commit/ff795ba7eb5c6b55d339f3c53fb2f2c4bb6584b6))
-

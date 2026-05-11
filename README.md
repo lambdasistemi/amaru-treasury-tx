@@ -80,6 +80,11 @@ Run the opt-in local devnet node smoke with:
 nix develop --quiet -c just devnet-smoke node
 ```
 
+The DevNet release experiment is tracked in slices: governance action
+[#82](https://github.com/lambdasistemi/amaru-treasury-tx/issues/82),
+withdrawal [#83](https://github.com/lambdasistemi/amaru-treasury-tx/issues/83),
+and swap [#84](https://github.com/lambdasistemi/amaru-treasury-tx/issues/84).
+
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE).

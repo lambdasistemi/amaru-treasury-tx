@@ -1,9 +1,9 @@
-# Local Devnet Smoke
+# Local DevNet Smoke
 
-The local devnet smoke is an opt-in release check. It starts the
-`cardano-node-clients` devnet, verifies the node socket with network
-magic `42`, records the short-epoch timing evidence, and writes all
-artifacts under a fresh run directory.
+The local DevNet smoke is an opt-in release check. It starts the
+`cardano-node-clients` DevNet, verifies the node socket with network
+magic `42`, records short-epoch timing evidence, and writes artifacts
+under a fresh run directory.
 
 This check is not part of `just ci`: it starts a real local
 `cardano-node` and is meant as manual live evidence before a release.
@@ -18,9 +18,9 @@ nix develop --quiet
 
 The dev shell provides:
 
-- `cardano-node` from the Cardano node 10.7.0 flake input;
+- `cardano-node` from the Cardano node flake input;
 - `E2E_GENESIS_DIR`, pointing at the pinned
-  `cardano-node-clients` devnet genesis;
+  `cardano-node-clients` DevNet genesis;
 - the Cabal dependencies for `cardano-node-clients:devnet`.
 
 ## Node Boundary
@@ -56,39 +56,43 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
 - `epochDurationSeconds`: `50`
 - `networkMagic`: `42`
 
-## Current Scope
+## DevNet Experiment Order
 
-The implemented phase is `node`. It proves that the local devnet
-starts, the socket accepts magic `42`, and the epoch is short enough
-for the planned withdrawal smoke.
+The experiment is split into three tickets:
 
-The `withdraw`, `disburse`, and `all` phases are planned but not yet
-implemented. They require local reward-source and treasury/registry
-state preparation. Until those phases land, successful node smoke is
-only node-boundary evidence, not proof that a withdrawal or disburse
-transaction was built on the local chain.
+- [#82](https://github.com/lambdasistemi/amaru-treasury-tx/issues/82):
+  governance action slice. This prepares and submits the local Conway
+  treasury-withdrawal governance action that funds an Amaru script
+  reward account.
+- [#83](https://github.com/lambdasistemi/amaru-treasury-tx/issues/83):
+  withdrawal slice. This consumes the funded reward account with
+  `withdraw-wizard` and `tx-build`.
+- [#84](https://github.com/lambdasistemi/amaru-treasury-tx/issues/84):
+  swap slice. This brings the current swap path up to live DevNet
+  evidence.
 
-## Funding Model
+The implemented phase today is `node`. A successful node smoke proves
+only the local node boundary, network magic, and timing. It is not yet
+proof that governance, withdrawal, or swap transactions have been built
+or observed on DevNet.
 
-The local smoke has to keep two funding paths separate:
+## Governance Funding Model
 
-- `withdraw` consumes a reward balance from the treasury script's
-  reward account and pays it back to the treasury script address. On a
-  local Conway devnet, that reward balance must come from protocol
-  treasury state, for example by running short epochs with non-zero
-  reserves and enacting a treasury-withdrawal governance action to the
-  treasury script stake credential. A delegated key reward account is
-  useful for proving epoch reward mechanics, but it is not an Amaru
-  treasury-reward proof.
-- `disburse` consumes ordinary UTxOs locked at the per-scope treasury
-  script address. Those UTxOs can be provided by a deterministic setup
-  transaction from the devnet genesis wallet, or by a copied genesis
-  that starts with funds at the treasury script address.
+The withdrawal path needs funds in the treasury script reward account.
+On a local Conway DevNet, that means the setup must use protocol
+treasury state and a treasury-withdrawal governance action targeting
+the Amaru script stake credential.
 
-The pinned `cardano-node-clients` genesis currently allocates all ADA
-as initial wallet funds, so the protocol reserve/treasury path needs a
-copied-genesis override before a real `withdraw` smoke can observe a
-positive treasury script reward balance.
+A delegated key reward account is not accepted as Amaru withdrawal
+evidence because the production withdrawal transaction uses the script
+credential as the `Rewarding` witness. The governance setup must also
+match the original Amaru registration shape: registration plus
+always-abstain vote delegation.
+
+Required upstream library support is tracked in:
+
+- [cardano-node-clients#130](https://github.com/lambdasistemi/cardano-node-clients/issues/130)
+- [cardano-node-clients#131](https://github.com/lambdasistemi/cardano-node-clients/issues/131)
 
 ## Failure Shape
 
@@ -98,9 +102,9 @@ The node phase fails before any treasury action if:
 - `E2E_GENESIS_DIR` does not point at a
   `cardano-node-clients` genesis directory;
 - the run directory already contains artifacts;
-- the socket does not accept devnet magic `42`;
-- the effective epoch duration is not short enough for manual reward
-  testing.
+- the socket does not accept DevNet magic `42`;
+- the effective epoch duration is not short enough for manual
+  governance/reward testing.
 
 Use the run directory's `node.log`, `summary.log`, and `timing.json`
 when recording release evidence or diagnosing failure.

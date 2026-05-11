@@ -1,8 +1,8 @@
-# Contract: Local Devnet Smoke
+# Contract: DevNet Governance Smoke
 
 ## Entrypoints
 
-The feature exposes a manual smoke command:
+Manual smoke command:
 
 ```bash
 just devnet-smoke PHASE
@@ -11,32 +11,30 @@ just devnet-smoke PHASE
 Direct script form:
 
 ```bash
-scripts/smoke/devnet-local \
-  --phase PHASE \
-  --run-dir PATH \
-  --reward-timeout-seconds N
+scripts/smoke/devnet-local --phase PHASE --run-dir PATH
 ```
 
 `PHASE` is one of:
 
-- `node`: start the devnet, verify socket/magic/timing, then exit.
-- `withdraw`: run `node`, prepare or require reward state, wait for
-  positive rewards, and emit a withdrawal intent.
-- `disburse`: run `node`, prepare or require local treasury state, run
-  disburse wizard/build, and emit build artifacts.
-- `all`: run all available phases in order.
+- `node`: start the DevNet, verify socket/magic/timing, then exit.
+- `governance`: run the node boundary, prepare governance setup state,
+  submit the treasury-withdrawal governance action, and record evidence.
+- `all`: run all phases implemented by this slice.
+
+`withdraw` and `swap` are not part of this contract; they are tracked
+by #83 and #84.
 
 ## Environment
 
 - Must run from the repository root.
-- Must run inside `nix develop` after implementation, so the
-  `cardano-node` binary and Cabal dependencies are available.
+- Must run inside `nix develop` after implementation.
 - `CARDANO_NODE_SOCKET_PATH` is managed by the smoke and must not be
   required from the caller.
+- Any local setup signing/submission remains harness-internal.
 
 ## Output
 
-Every run prints a short summary to stdout:
+Every run prints a short summary:
 
 ```text
 devnet-smoke: run-dir PATH
@@ -46,21 +44,14 @@ devnet-smoke: socket PATH
 devnet-smoke: phase PHASE STATUS
 ```
 
-Successful withdrawal output also includes:
+Successful governance output also includes:
 
 ```text
-devnet-smoke: rewards-lovelace N
+devnet-smoke: governance-tx-id TXID
+devnet-smoke: governance-action-id ACTION_ID
 devnet-smoke: reward-account ACCOUNT
-devnet-smoke: withdraw-intent PATH
-```
-
-Successful disburse/build output also includes:
-
-```text
-devnet-smoke: disburse-intent PATH
-devnet-smoke: build-log PATH
-devnet-smoke: unsigned-cbor PATH
-devnet-smoke: report-json PATH
+devnet-smoke: governance-amount LOVELACE
+devnet-smoke: governance-summary PATH
 ```
 
 ## Artifact Layout
@@ -73,36 +64,28 @@ runs/devnet/20260511T120000Z/
 |-- summary.log
 |-- node.log
 |-- timing.json
-|-- withdraw/
-|   |-- intent.json
-|   `-- rewards.json
-`-- disburse/
-    |-- intent.json
-    |-- build.log
-    |-- unsigned.cbor
-    |-- report.json
-    `-- report.md
+`-- governance/
+    |-- certificates.json
+    |-- action.json
+    `-- summary.json
 ```
 
 ## Failure Contract
 
 The command exits non-zero and prints a typed failure prefix:
 
-- `NODE_NOT_READY`: socket or LSQ readiness failed.
+- `NODE_NOT_READY`: socket or readiness failed.
 - `NETWORK_MISMATCH`: observed network magic is not `42`.
-- `REWARDS_TIMEOUT`: rewards stayed zero through the wait budget.
-- `MISSING_TREASURY_STATE`: required wallet, treasury, registry, or
-  permissions UTxO was not available.
-- `BUILD_FAILED`: wizard or `tx-build` failed after prerequisites
-  were satisfied.
+- `MISSING_GOVERNANCE_FUNDS`: local protocol treasury/reserve setup is insufficient.
+- `MISSING_UPSTREAM_GOVERNANCE_SUPPORT`: required `cardano-node-clients` support is unavailable.
+- `GOVERNANCE_ACTION_NOT_OBSERVED`: submission completed but the action boundary was not observed within the wait budget.
 
-Failure summaries must include the run directory and the last
-available observation for the failed boundary.
+Failure summaries must include the run directory and the last available
+observation for the failed boundary.
 
 ## Non-Goals
 
 - The release-facing `amaru-treasury-tx` command does not sign or
   submit transactions.
 - The smoke is not part of default CI.
-- The smoke does not claim public-network compatibility for the
-  local-only `devnet` network name.
+- The smoke does not claim public-network governance compatibility.

@@ -105,10 +105,11 @@ nix develop --quiet -c just devnet-smoke node
 
 Record the generated `runs/devnet/<timestamp>/` directory in the
 release notes when this check is used. The current implemented phase
-proves the `cardano-node-clients` devnet node boundary, socket magic
-`42`, and 50-second epoch timing. Withdrawal and disburse phases remain
-planned until local reward-source and treasury/registry state
-preparation are implemented.
+proves the `cardano-node-clients` DevNet node boundary, socket magic
+`42`, and 50-second epoch timing. The DevNet experiment is split into
+governance action (#82), withdrawal (#83), and swap (#84) slices. Do
+not record withdrawal or swap as release evidence until those slices
+land and their phase-specific smoke commands pass.
 
 The release workflows run `scripts/release/check-version-consistency`
 before building. A tag is publishable only when:

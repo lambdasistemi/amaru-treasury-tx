@@ -95,8 +95,16 @@ library
     Amaru.Treasury.Build.Withdraw
     Amaru.Treasury.ChainContext
     Amaru.Treasury.ChainContext.Fixture
+    Amaru.Treasury.Cli
+    Amaru.Treasury.Cli.Common
+    Amaru.Treasury.Cli.DisburseWizard
+    Amaru.Treasury.Cli.ReportRender
+    Amaru.Treasury.Cli.SwapCommon
+    Amaru.Treasury.Cli.SwapOptions
     Amaru.Treasury.Cli.SwapQuote
+    Amaru.Treasury.Cli.SwapWizard
     Amaru.Treasury.Cli.TxBuild
+    Amaru.Treasury.Cli.WithdrawWizard
     Amaru.Treasury.Constants
     Amaru.Treasury.IntentJSON
     Amaru.Treasury.IntentJSON.Common
@@ -164,6 +172,7 @@ library
     , cardano-strict-containers
     , containers
     , contra-tracer
+    , directory
     , file-embed
     , filepath
     , http-client

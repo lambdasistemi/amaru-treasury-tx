@@ -48,12 +48,21 @@ module Amaru.Treasury.Tx.DisburseWizard
     , selectDisburseAda
     , selectDisburseUsdm
 
+      -- * Resolution
+    , ResolverInput (..)
+    , ResolverEnv (..)
+    , ResolverError (..)
+    , registryViewFromVerified
+    , resolveDisburseEnv
+
       -- * Pure translation
     , disburseToIntentJSON
     , disburseToTreasuryIntent
     ) where
 
+import Cardano.Ledger.BaseTypes (Network (..))
 import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Hashes (ScriptHash (..))
 import Cardano.Ledger.Mary.Value
     ( AssetName (..)
     , MaryValue (..)
@@ -76,7 +85,10 @@ import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Word (Word64, Word8)
 
-import Amaru.Treasury.Constants (Unit (..))
+import Amaru.Treasury.Constants
+    ( Unit (..)
+    , minUtxoDepositLovelace
+    )
 import Amaru.Treasury.IntentJSON
     ( Action (..)
     , DisburseInputs (..)
@@ -85,6 +97,11 @@ import Amaru.Treasury.IntentJSON
     , ScopeJSON (..)
     , TreasuryIntent (..)
     , WalletJSON (..)
+    )
+import Amaru.Treasury.IntentJSON.Common
+    ( decodeHexBytes
+    , decodeHexBytesAny
+    , mkHash28
     )
 import Amaru.Treasury.Registry.Derive (scriptHashToHex)
 import Amaru.Treasury.Scope
@@ -112,7 +129,13 @@ import Amaru.Treasury.Tx.SwapWizard
     , ScopeView (..)
     , TreasuryRefs (..)
     , WalletSelection (..)
+    , WalletSelectionError (..)
+    , addrNetwork
+    , networkConstants
+    , registryViewFromVerified
+    , selectWallet
     , txInToText
+    , walletFeeSlackLovelace
     )
 
 -- ----------------------------------------------------
@@ -415,10 +438,31 @@ selectDisburseUsdm
             usdmAsset
             beneficiaryLovelace
             amount
-            =<< selectByKey
+            =<< selectByKeyUntil
                 (assetQuantity usdmPolicy usdmAsset)
+                coversBeneficiary
                 inputs
-                amount
+      where
+        coversBeneficiary selected =
+            sum (assetQuantity usdmPolicy usdmAsset . snd <$> selected)
+                >= amount
+                && sum (lovelaceOf . snd <$> selected)
+                    >= beneficiaryLovelace
+
+selectByKeyUntil
+    :: (MaryValue -> Integer)
+    -> ([(TxIn, MaryValue)] -> Bool)
+    -> [(TxIn, MaryValue)]
+    -> Maybe [(TxIn, MaryValue)]
+selectByKeyUntil key covers inputs =
+    go [] sorted
+  where
+    sorted = L.sortOn (Down . key . snd) inputs
+    go picked rest
+        | covers picked = Just picked
+        | otherwise = case rest of
+            [] -> Nothing
+            x : xs -> go (picked <> [x]) xs
 
 selectByKey
     :: (MaryValue -> Integer)
@@ -512,6 +556,246 @@ policyIdToText (PolicyID scriptHash) = scriptHashToHex scriptHash
 assetNameToText :: AssetName -> Text
 assetNameToText (AssetName raw) =
     TE.decodeUtf8Lenient (B16.encode (SBS.fromShort raw))
+
+-- ----------------------------------------------------
+-- Resolution
+-- ----------------------------------------------------
+
+{- | Inputs the disburse resolver needs from the CLI and
+verified registry projection.
+-}
+data ResolverInput = ResolverInput
+    { riNetwork :: !Text
+    , riWalletAddrBech32 :: !Text
+    , riBeneficiaryAddrBech32 :: !Text
+    , riScope :: !ScopeId
+    , riUnit :: !Unit
+    , riAmount :: !Integer
+    , riRegistry :: !RegistryView
+    }
+    deriving stock (Eq, Show)
+
+{- | Effects the resolver pulls from the provider boundary.
+Wallet UTxOs use the shared pure-ADA summary required by
+'selectWallet'; treasury UTxOs carry full values because
+USDM disbursement selection and leftover preservation need
+native assets.
+-}
+data ResolverEnv m = ResolverEnv
+    { reEnvQueryWalletUtxos
+        :: !(Text -> m [(Text, Integer, Bool)])
+    , reEnvQueryTreasuryUtxos
+        :: !(Text -> m [(TxIn, MaryValue)])
+    , reEnvCurrentTip :: !(m Word64)
+    }
+
+data ResolverError
+    = ResolverNetworkUnsupported !Text
+    | ResolverWalletNetworkMismatch !Text !Text
+    | ResolverBeneficiaryNetworkMismatch !Text !Text
+    | ResolverAddressUnparseable !Text
+    | ResolverScopeUnsupported !ScopeId
+    | ResolverEmptyTreasuryUtxos
+    | ResolverEmptyWalletUtxos
+    | ResolverShortfall !Integer !Integer
+    | ResolverWalletShortfall !Integer !Integer
+    | ResolverUsdmConstantDecodeFailed !Text !String
+    deriving stock (Eq, Show)
+
+{- | Resolve chain-derived disburse inputs. Business
+arithmetic stays in the pure selection helpers; this
+function only validates address networks, queries the
+provider boundary, selects wallet/treasury inputs, reads
+the current tip, and projects the result into
+'DisburseEnv'.
+-}
+resolveDisburseEnv
+    :: (Monad m)
+    => ResolverEnv m
+    -> ResolverInput
+    -> m (Either ResolverError DisburseEnv)
+resolveDisburseEnv ResolverEnv{..} ri =
+    case networkConstants (riNetwork ri) of
+        Left _ ->
+            pure (Left (ResolverNetworkUnsupported (riNetwork ri)))
+        Right nc ->
+            case resolveConstants nc of
+                Left err -> pure (Left err)
+                Right (usdmPolicy, usdmAsset) ->
+                    case validateResolverAddresses ri of
+                        Left err -> pure (Left err)
+                        Right () ->
+                            resolveWith nc usdmPolicy usdmAsset
+  where
+    resolveWith nc usdmPolicy usdmAsset =
+        case Map.lookup (riScope ri) (rvTreasuryByScope (riRegistry ri)) of
+            Nothing ->
+                pure (Left (ResolverScopeUnsupported (riScope ri)))
+            Just refs -> do
+                walletUtxos <- reEnvQueryWalletUtxos (riWalletAddrBech32 ri)
+                if null walletUtxos
+                    then pure (Left ResolverEmptyWalletUtxos)
+                    else do
+                        treasuryUtxos <- reEnvQueryTreasuryUtxos (trAddress refs)
+                        if null treasuryUtxos
+                            then pure (Left ResolverEmptyTreasuryUtxos)
+                            else
+                                selectAndAssemble
+                                    nc
+                                    refs
+                                    usdmPolicy
+                                    usdmAsset
+                                    walletUtxos
+                                    treasuryUtxos
+
+    selectAndAssemble nc refs usdmPolicy usdmAsset walletUtxos treasuryUtxos =
+        case selectTreasuryForUnit usdmPolicy usdmAsset treasuryUtxos of
+            Nothing ->
+                pure
+                    ( Left
+                        (selectionShortfall usdmPolicy usdmAsset treasuryUtxos)
+                    )
+            Just treasurySelection ->
+                case selectWallet walletFeeSlackLovelace walletUtxos of
+                    Left WalletNoPureAda ->
+                        pure (Left ResolverEmptyWalletUtxos)
+                    Left (WalletShortfall available required) ->
+                        pure
+                            ( Left
+                                ( ResolverWalletShortfall
+                                    available
+                                    required
+                                )
+                            )
+                    Right ([], _) ->
+                        pure (Left ResolverEmptyWalletUtxos)
+                    Right (walletHead : walletTail, _) -> do
+                        tip <- reEnvCurrentTip
+                        pure $
+                            Right
+                                DisburseEnv
+                                    { deNetwork = riNetwork ri
+                                    , deCurrentTip = tip
+                                    , deNetworkConstants = nc
+                                    , deRegistry = riRegistry ri
+                                    , deScopeView =
+                                        ScopeView
+                                            { svScope = riScope ri
+                                            , svRefs = refs
+                                            , svDefaultSigners = []
+                                            }
+                                    , deTreasurySelection =
+                                        treasurySelection
+                                    , deWalletSelection =
+                                        WalletSelection
+                                            { wsTxIn = walletHead
+                                            , wsAddress =
+                                                riWalletAddrBech32 ri
+                                            , wsExtraTxIns = walletTail
+                                            }
+                                    , deBeneficiaryAddrBech32 =
+                                        riBeneficiaryAddrBech32 ri
+                                    }
+
+    selectTreasuryForUnit usdmPolicy usdmAsset treasuryUtxos =
+        case riUnit ri of
+            ADA ->
+                selectDisburseAda
+                    usdmPolicy
+                    usdmAsset
+                    treasuryUtxos
+                    (riAmount ri)
+            USDM ->
+                selectDisburseUsdm
+                    usdmPolicy
+                    usdmAsset
+                    minUtxoDepositLovelace
+                    treasuryUtxos
+                    (riAmount ri)
+
+    selectionShortfall usdmPolicy usdmAsset treasuryUtxos =
+        case riUnit ri of
+            ADA ->
+                ResolverShortfall
+                    (sum (lovelaceOf . snd <$> treasuryUtxos))
+                    (riAmount ri)
+            USDM ->
+                let availableUsdm =
+                        sum
+                            ( assetQuantity usdmPolicy usdmAsset
+                                . snd
+                                <$> treasuryUtxos
+                            )
+                    availableLovelace =
+                        sum (lovelaceOf . snd <$> treasuryUtxos)
+                in  if availableUsdm < riAmount ri
+                        then
+                            ResolverShortfall
+                                availableUsdm
+                                (riAmount ri)
+                        else
+                            ResolverShortfall
+                                availableLovelace
+                                minUtxoDepositLovelace
+
+validateResolverAddresses
+    :: ResolverInput -> Either ResolverError ()
+validateResolverAddresses ri = do
+    checkAddressNetwork
+        (riNetwork ri)
+        (riWalletAddrBech32 ri)
+        ResolverWalletNetworkMismatch
+    checkAddressNetwork
+        (riNetwork ri)
+        (riBeneficiaryAddrBech32 ri)
+        ResolverBeneficiaryNetworkMismatch
+
+checkAddressNetwork
+    :: Text
+    -> Text
+    -> (Text -> Text -> ResolverError)
+    -> Either ResolverError ()
+checkAddressNetwork requested address mismatch =
+    case (networkFamily requested, addrNetwork address) of
+        (Nothing, _) ->
+            Left (ResolverNetworkUnsupported requested)
+        (_, Nothing) ->
+            Left (ResolverAddressUnparseable address)
+        (Just want, Just observed)
+            | observed /= want ->
+                Left (mismatch requested (networkText observed))
+        _ -> Right ()
+
+networkFamily :: Text -> Maybe Network
+networkFamily n = case T.toLower n of
+    "mainnet" -> Just Mainnet
+    "preprod" -> Just Testnet
+    "preview" -> Just Testnet
+    _ -> Nothing
+
+networkText :: Network -> Text
+networkText = \case
+    Mainnet -> "mainnet"
+    Testnet -> "testnet"
+
+resolveConstants
+    :: NetworkConstants
+    -> Either ResolverError (PolicyID, AssetName)
+resolveConstants nc = do
+    policy <- parsePolicyId (ncUsdmPolicy nc)
+    asset <- parseAssetName (ncUsdmToken nc)
+    pure (policy, asset)
+
+parsePolicyId :: Text -> Either ResolverError PolicyID
+parsePolicyId text = case decodeHexBytes 28 text of
+    Left err -> Left (ResolverUsdmConstantDecodeFailed text err)
+    Right bytes ->
+        Right (PolicyID (ScriptHash (mkHash28 bytes)))
+
+parseAssetName :: Text -> Either ResolverError AssetName
+parseAssetName text = case decodeHexBytesAny text of
+    Left err -> Left (ResolverUsdmConstantDecodeFailed text err)
+    Right bytes -> Right (AssetName (SBS.toShort bytes))
 
 -- ----------------------------------------------------
 -- Signer resolution (mirrors SwapWizard)

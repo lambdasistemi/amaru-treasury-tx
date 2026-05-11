@@ -82,14 +82,22 @@ import Data.Aeson.Encode.Pretty
     , encodePretty'
     )
 import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Short qualified as SBS
 import Data.Kind (Type)
 import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word64)
 
 import Cardano.Ledger.Address (Addr)
 import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Hashes (ScriptHash (..))
+import Cardano.Ledger.Mary.Value
+    ( AssetName (..)
+    , MultiAsset (..)
+    , PolicyID (..)
+    )
 import Cardano.Ledger.Metadata (Metadatum)
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Slotting.Slot (SlotNo (..))
@@ -101,6 +109,7 @@ import Amaru.Treasury.AuxData
 import Amaru.Treasury.IntentJSON.Common
     ( decodeHexBytes
     , decodeHexBytesAny
+    , mkHash28
     , parseAddr
     , parseGuardKeyHash
     , parseRewardAccount
@@ -111,6 +120,7 @@ import Amaru.Treasury.Tx.Disburse
     ( DisburseAdaPayload (..)
     , DisburseIntent (..)
     , DisburseIntentFields (..)
+    , DisburseUsdmPayload (..)
     )
 import Amaru.Treasury.Tx.Reorganize (ReorganizeIntent)
 import Amaru.Treasury.Tx.Swap
@@ -947,8 +957,8 @@ translateDisburse ti = do
                                 )
                         }
         "usdm" ->
-            Left
-                "USDM disburse JSON parsed; pure builder lands in T038"
+            DisburseUsdmIntent fields
+                <$> translateDisburseUsdm scope disb
         other ->
             Left ("unknown disburse unit: " <> T.unpack other)
     let body =
@@ -968,6 +978,62 @@ translateDisburse ti = do
                     rationaleMetadatum body registryPolicy
                 }
     pure (shared, intent)
+
+translateDisburseUsdm
+    :: ScopeJSON
+    -> DisburseInputs
+    -> Either String DisburseUsdmPayload
+translateDisburseUsdm scope disb = do
+    usdmPolicy <- parsePolicyId (diUsdmPolicy disb)
+    usdmAsset <- parseAssetName (diUsdmToken disb)
+    otherAssets <-
+        parseMultiAsset
+            (sjTreasuryLeftoverOtherAssets scope)
+    pure
+        DisburseUsdmPayload
+            { dupUsdmPolicy = usdmPolicy
+            , dupUsdmAsset = usdmAsset
+            , dupAmountUsdm = diAmount disb
+            , dupLeftoverLovelace =
+                Coin (sjTreasuryLeftoverLovelace scope)
+            , dupLeftoverUsdm =
+                sjTreasuryLeftoverUsdm scope
+            , dupLeftoverOtherAssets = otherAssets
+            }
+
+parsePolicyId :: Text -> Either String PolicyID
+parsePolicyId text = do
+    bytes <- decodeHexBytes 28 text
+    pure (PolicyID (ScriptHash (mkHash28 bytes)))
+
+parseAssetName :: Text -> Either String AssetName
+parseAssetName text = do
+    bytes <- decodeHexBytesAny text
+    pure (AssetName (SBS.toShort bytes))
+
+parseMultiAsset
+    :: Map Text (Map Text Integer)
+    -> Either String MultiAsset
+parseMultiAsset assets =
+    MultiAsset . normalizeAssetMap . Map.fromList
+        <$> traverse parsePolicy (Map.toList assets)
+  where
+    parsePolicy (policyText, assetMap) = do
+        policy <- parsePolicyId policyText
+        parsedAssets <-
+            Map.fromList
+                <$> traverse parseAsset (Map.toList assetMap)
+        pure (policy, parsedAssets)
+    parseAsset (assetText, quantity) = do
+        asset <- parseAssetName assetText
+        pure (asset, quantity)
+
+normalizeAssetMap
+    :: Map PolicyID (Map AssetName Integer)
+    -> Map PolicyID (Map AssetName Integer)
+normalizeAssetMap =
+    Map.filter (not . Map.null)
+        . Map.map (Map.filter (/= 0))
 
 {- | Withdraw-action translator. Reads the unified
 'TreasuryIntent' withdraw payload and produces the typed

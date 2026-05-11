@@ -38,17 +38,29 @@ import Test.QuickCheck
     , property
     )
 
+import Amaru.Treasury.Constants (Unit (..))
 import Amaru.Treasury.IntentJSON
     ( SAction (..)
     , TreasuryIntent (..)
     )
+import Amaru.Treasury.Scope
+    ( ScopeId (CoreDevelopment)
+    )
 import Amaru.Treasury.Tx.DisburseWizard
-    ( DisburseTreasurySelection (..)
+    ( DisburseEnv (..)
+    , DisburseTreasurySelection (..)
+    , ResolverEnv (..)
+    , ResolverError (..)
+    , ResolverInput (..)
     , disburseToTreasuryIntent
+    , resolveDisburseEnv
     , selectDisburseAda
     , selectDisburseUsdm
     )
-import Amaru.Treasury.Tx.SwapWizard (txInToText)
+import Amaru.Treasury.Tx.SwapWizard
+    ( WalletSelection (..)
+    , txInToText
+    )
 
 spec :: Spec
 spec =
@@ -150,6 +162,26 @@ spec =
                 dtsLeftoverOtherAssets selection
                     `shouldBe` otherAssets 11
 
+            it "adds inputs until the beneficiary ADA deposit is covered" $ do
+                let inputs =
+                        [ (mkTxIn 1, mkValue 1_000_000 500 7)
+                        , (mkTxIn 2, mkValue 1_500_000 1 5)
+                        ]
+                selection <-
+                    expectJust
+                        "selectDisburseUsdm"
+                        ( selectDisburseUsdm
+                            usdmPolicy
+                            usdmAsset
+                            2_000_000
+                            inputs
+                            450
+                        )
+                dtsInputs selection
+                    `shouldBe` txInToText <$> [mkTxIn 1, mkTxIn 2]
+                dtsLeftoverLovelace selection `shouldBe` 500_000
+                dtsLeftoverUsdm selection `shouldBe` 51
+
             it "reports Nothing when selected USDM cannot cover the amount" $
                 selectDisburseUsdm
                     usdmPolicy
@@ -202,6 +234,39 @@ spec =
                                             == pickedUsdm - target
                                         && dtsLeftoverOtherAssets selection
                                             == otherAssets pickedOther
+
+        describe "resolveDisburseEnv" $
+            it "rejects a beneficiary address on the wrong network" $ do
+                env <-
+                    eitherDecodeStrict
+                        "test/fixtures/disburse-wizard/env.ada.json"
+                let stub =
+                        ResolverEnv
+                            { reEnvQueryWalletUtxos =
+                                \_ -> pure []
+                            , reEnvQueryTreasuryUtxos =
+                                \_ -> pure []
+                            , reEnvCurrentTip = pure 0
+                            }
+                    ri =
+                        ResolverInput
+                            { riNetwork = "mainnet"
+                            , riWalletAddrBech32 =
+                                wsAddress (deWalletSelection env)
+                            , riBeneficiaryAddrBech32 =
+                                "addr_test1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+                            , riScope = CoreDevelopment
+                            , riUnit = USDM
+                            , riAmount = 1
+                            , riRegistry = deRegistry env
+                            }
+                r <- resolveDisburseEnv stub ri
+                r
+                    `shouldBe` Left
+                        ( ResolverBeneficiaryNetworkMismatch
+                            "mainnet"
+                            "testnet"
+                        )
 
 eitherDecodeStrict :: (Aeson.FromJSON a) => FilePath -> IO a
 eitherDecodeStrict p = do

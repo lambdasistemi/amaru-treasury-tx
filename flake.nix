@@ -116,6 +116,7 @@
                 pkgs.curl
                 pkgs.cacert
                 pkgs.lmdb
+                cardano-node.packages.${system}.cardano-cli
                 cardano-node.packages.${system}.cardano-node
               ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
                 pkgs.liburing

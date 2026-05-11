@@ -167,6 +167,16 @@ spec = describe "Amaru.Treasury.IntentJSON" $ do
                 (wiTreasuryRewardAccount wi)
                 `shouldBe` Testnet
 
+        it "translates devnet reward accounts as Testnet" $ do
+            (_, wi) <-
+                expectRight $
+                    translateIntent
+                        SWithdraw
+                        (withdrawIntent "devnet")
+            rewardAccountNetwork
+                (wiTreasuryRewardAccount wi)
+                `shouldBe` Testnet
+
         it "rejects non-positive withdraw rewards" $
             expectLeftContaining
                 "rewardsLovelace must be positive"
@@ -186,7 +196,7 @@ spec = describe "Amaru.Treasury.IntentJSON" $ do
                 "unknown network for reward account"
                 ( translateIntent
                     SWithdraw
-                    (withdrawIntent "devnet")
+                    (withdrawIntent "localnet")
                 )
 
 -- ----------------------------------------------------
@@ -330,7 +340,7 @@ genValiditySlot :: Gen Word64
 genValiditySlot = toEnum <$> chooseInt (1, 200_000_000)
 
 genNetwork :: Gen Text
-genNetwork = elements ["mainnet", "preprod", "preview"]
+genNetwork = elements ["mainnet", "preprod", "preview", "devnet"]
 
 genSwapInputs :: Gen SwapInputs
 genSwapInputs =

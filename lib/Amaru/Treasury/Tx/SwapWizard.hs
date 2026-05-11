@@ -840,6 +840,7 @@ networkFamily = \case
     "mainnet" -> Just Mainnet
     "preprod" -> Just Testnet
     "preview" -> Just Testnet
+    "devnet" -> Just Testnet
     _ -> Nothing
 
 {- | Largest-first deterministic treasury selection over a

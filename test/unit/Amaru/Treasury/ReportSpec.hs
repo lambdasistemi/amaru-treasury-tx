@@ -388,6 +388,15 @@ spec = describe "Amaru.Treasury.Report" $ do
                         }
                 }
 
+    it "treats devnet magic 42 as a matching report network" $ do
+        report <-
+            buildSwapFixtureReportWith
+                emptyReportContext
+                    { rcNetwork = "devnet"
+                    , rcSocketNetworkMagic = 42
+                    }
+        vfNetworkMatches (trValidation report) `shouldBe` True
+
     it "reports selected reference inputs and metadata summary" $ do
         report <- buildSwapFixtureReport
         trReferenceInputs report `shouldBe` expectedSwapReferenceInputs

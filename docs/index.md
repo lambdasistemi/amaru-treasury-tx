@@ -15,6 +15,7 @@ Haskell port of the bash recipes in
 - [Swap recipe](swap.md) — building an existing swap intent with `tx-build`.
 - [Disburse](disburse.md) — resolving owned-scope ADA or USDM disbursements with `disburse-wizard`, emergency ADA top-ups from contingency with `emergency-top-up-wizard`, or building an existing disburse intent with `tx-build`.
 - [Withdraw](withdraw.md) — resolving treasury rewards with `withdraw-wizard` or building an existing withdraw intent.
+- [Local devnet smoke](local-devnet-smoke.md) — opt-in live `cardano-node-clients` devnet node check.
 - [ChainContext](chain-context.md)
 - [Freeze workflow](freeze-workflow.md) — pinning a `ChainContext` for offline parity tests.
 - [Parity report](parity.md)

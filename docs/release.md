@@ -95,6 +95,21 @@ The library and unit-test stanzas in `amaru-treasury-tx.cabal` already
 list `Paths_amaru_treasury_tx` under `autogen-modules` and
 `other-modules`; new stanzas that need the version should do the same.
 
+### Local DevNet release evidence
+
+For live local-node evidence, also run the opt-in devnet smoke:
+
+```bash
+nix develop --quiet -c just devnet-smoke node
+```
+
+Record the generated `runs/devnet/<timestamp>/` directory in the
+release notes when this check is used. The current implemented phase
+proves the `cardano-node-clients` devnet node boundary, socket magic
+`42`, and 50-second epoch timing. Withdrawal and disburse phases remain
+planned until local reward-source and treasury/registry state
+preparation are implemented.
+
 The release workflows run `scripts/release/check-version-consistency`
 before building. A tag is publishable only when:
 

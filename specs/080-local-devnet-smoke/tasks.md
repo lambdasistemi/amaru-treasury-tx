@@ -155,10 +155,10 @@ Documentation may be its own reviewed docs slice when it does not alter
 runtime behavior; docs for changed command contracts should travel with
 the behavior slice that introduces them.
 
-- [ ] T039 [P] Add operator documentation in `docs/local-devnet-smoke.md`
-- [ ] T040 [P] Add the local devnet smoke page to `mkdocs.yml`
-- [ ] T041 [P] Link the devnet smoke from `README.md`
-- [ ] T042 Update `docs/release.md` with a manual release-evidence checklist item for `just devnet-smoke node|withdraw|disburse`
+- [x] T039 [P] Add operator documentation in `docs/local-devnet-smoke.md`
+- [x] T040 [P] Add the local devnet smoke page to `mkdocs.yml`
+- [x] T041 [P] Link the devnet smoke from `README.md`
+- [x] T042 Update `docs/release.md` with a manual release-evidence checklist item for `just devnet-smoke node|withdraw|disburse`
 - [ ] T043 Run `just format` for Haskell/Cabal/Nix formatting
 - [ ] T044 Run `just unit`
 - [x] T045 Run `cabal test devnet-tests -O0 --test-show-details=direct --test-option=--match --test-option node`

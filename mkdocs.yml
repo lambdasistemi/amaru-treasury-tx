@@ -67,6 +67,7 @@ nav:
   - Disburse: disburse.md
   - Withdraw: withdraw.md
   - Inspect: inspect.md
+  - Local devnet smoke: local-devnet-smoke.md
   - ChainContext: chain-context.md
   - Freeze workflow: freeze-workflow.md
   - Parity report: parity.md

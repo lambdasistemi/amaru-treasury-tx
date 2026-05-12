@@ -58,7 +58,7 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
 
 ## DevNet Experiment Order
 
-The experiment is split into three tickets:
+The experiment is split into six tickets:
 
 - [#82](https://github.com/lambdasistemi/amaru-treasury-tx/issues/82):
   governance action slice. This prepares and submits the local Conway
@@ -67,14 +67,39 @@ The experiment is split into three tickets:
 - [#83](https://github.com/lambdasistemi/amaru-treasury-tx/issues/83):
   withdrawal slice. This consumes the funded reward account with
   `withdraw-wizard` and `tx-build`.
+- [#86](https://github.com/lambdasistemi/amaru-treasury-tx/issues/86):
+  disburse slice. This exercises `disburse-wizard` and `tx-build`
+  against live treasury UTxOs, with USDM as the common operator path
+  and ADA as an explicit covered variant.
 - [#84](https://github.com/lambdasistemi/amaru-treasury-tx/issues/84):
-  swap slice. This brings the current swap path up to live DevNet
-  evidence.
+  SundaeSwap V3 order build/funding slice. This brings the current
+  swap path up to live DevNet evidence against the open-source
+  SundaeSwap V3 order interface.
+- [#85](https://github.com/lambdasistemi/amaru-treasury-tx/issues/85):
+  SundaeSwap V3 order spend slice. This consumes the funded order
+  under the real V3 contract rules on local DevNet.
+- [#87](https://github.com/lambdasistemi/amaru-treasury-tx/issues/87):
+  reorganize slice. This consolidates live treasury UTxOs once the
+  release-facing reorganize builder from #46 exists.
 
-The implemented phase today is `node`. A successful node smoke proves
-only the local node boundary, network magic, and timing. It is not yet
-proof that governance, withdrawal, or swap transactions have been built
-or observed on DevNet.
+The implemented phases today are `node` and `governance`.
+
+`node` proves only the local node boundary, network magic, and timing.
+`governance` currently reaches the explicit upstream-support boundary
+and fails with `MISSING_UPSTREAM_GOVERNANCE_SUPPORT` until
+`cardano-node-clients` exposes the Conway certificate, proposal, and
+query capabilities tracked below. It is not yet proof that governance,
+withdrawal, disburse, SundaeSwap order-build, SundaeSwap order-spend,
+or reorganize transactions have been built or observed on DevNet.
+
+SundaeSwap V3 contract compatibility should use the public V3 Aiken
+contracts and SDK/reference material:
+
+- [SundaeSwap V3 contracts](https://github.com/SundaeSwap-finance/sundae-contracts)
+- [SundaeSwap SDK](https://github.com/SundaeSwap-finance/sundae-sdk)
+
+A local toy swap validator is acceptable only as an explicitly named
+fixture boundary. It is not SundaeSwap compatibility evidence.
 
 ## Governance Funding Model
 
@@ -106,5 +131,11 @@ The node phase fails before any treasury action if:
 - the effective epoch duration is not short enough for manual
   governance/reward testing.
 
-Use the run directory's `node.log`, `summary.log`, and `timing.json`
-when recording release evidence or diagnosing failure.
+The governance phase may fail with
+`MISSING_UPSTREAM_GOVERNANCE_SUPPORT` while upstream support is still
+open. That failure writes `governance/summary.json` and records the
+blocking `cardano-node-clients` issues in `summary.log`.
+
+Use the run directory's `node.log`, `summary.log`, `timing.json`, and
+`governance/summary.json` when recording release evidence or
+diagnosing failure.

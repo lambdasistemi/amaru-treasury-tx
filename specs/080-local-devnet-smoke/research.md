@@ -96,11 +96,14 @@ behavior.
 
 ## Decision 7: Split Follow-Up DevNet Work Into Separate Tickets
 
-**Decision**: Track the experiment as three DevNet slices:
+**Decision**: Track the experiment as six DevNet slices:
 
 - #82 governance action
 - #83 withdrawal
-- #84 swap
+- #86 disburse
+- #84 SundaeSwap V3 order build/funding
+- #85 SundaeSwap V3 order spend
+- #87 reorganize
 
 **Rationale**: Each slice has a distinct boundary and may require its
 own upstream support. Keeping them separate gives tomorrow a clear

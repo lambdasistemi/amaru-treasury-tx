@@ -4,7 +4,7 @@
 **Created**: 2026-05-11  
 **Status**: Draft  
 **GitHub Issue**: [#82](https://github.com/lambdasistemi/amaru-treasury-tx/issues/82)
-**Input**: User description: "Make the first DevNet experiment slice the governance action slice. Then split withdrawal and swap into their own DevNet tickets."
+**Input**: User description: "Make the first DevNet experiment slice the governance action slice. Split withdrawal, disburse, swap/order, and reorganize into their own DevNet tickets."
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -54,14 +54,17 @@ and chain context.
 
 ---
 
-### User Story 3 - Leave a Clean Handoff for Withdrawal and Swap (Priority: P2)
+### User Story 3 - Leave a Clean Handoff for Later DevNet Slices (Priority: P2)
 
 As a maintainer continuing the DevNet experiment, I need the governance
-slice to produce artifacts that the withdrawal and swap slices can
-consume without rediscovering setup assumptions.
+slice to produce artifacts that the withdrawal, disburse, SundaeSwap
+V3 order build/funding, SundaeSwap V3 order-spend, and reorganize
+slices can consume without rediscovering setup assumptions.
 
 **Why this priority**: Tomorrow's work should start from explicit
-state: governance action first, withdrawal second, swap third.
+state: governance action first, withdrawal second, disburse third,
+SundaeSwap V3 order build/funding fourth, SundaeSwap V3 order spend
+fifth, and reorganize sixth.
 
 **Independent Test**: Inspect the governance run directory and issue
 links; the next slice can identify the funded reward account and the
@@ -71,7 +74,7 @@ exact upstream capabilities still required.
 
 1. **Given** the governance phase succeeds, **When** the withdrawal slice starts, **Then** it can locate the funded reward account and chain context from the governance summary.
 2. **Given** the governance phase is blocked by upstream library support, **When** the issue is reviewed, **Then** the blocking upstream issue or PR is linked from the summary.
-3. **Given** the DevNet experiment backlog is reviewed, **When** maintainers inspect the tickets, **Then** governance, withdrawal, and swap are separate issues with explicit dependencies.
+3. **Given** the DevNet experiment backlog is reviewed, **When** maintainers inspect the tickets, **Then** governance, withdrawal, disburse, SundaeSwap V3 order build/funding, SundaeSwap V3 order spend, and reorganize are separate issues with explicit dependencies.
 
 ### Edge Cases
 
@@ -94,9 +97,12 @@ exact upstream capabilities still required.
 - **FR-005**: The governance summary MUST record tx id, governance action id, reward account, amount, epoch/tip context, and run directory.
 - **FR-006**: Missing upstream library capabilities MUST be reported as typed blockers with links to the upstream issue or PR.
 - **FR-007**: Any signing/submission required for DevNet setup MUST remain inside the smoke harness and MUST NOT become release-facing `amaru-treasury-tx` CLI behavior.
-- **FR-008**: The documentation MUST present governance action as slice 1, withdrawal as slice 2, and swap as slice 3.
+- **FR-008**: The documentation MUST present governance action as slice 1, withdrawal as slice 2, disburse as slice 3, SundaeSwap V3 order build/funding as slice 4, SundaeSwap V3 order spend as slice 5, and reorganize as slice 6.
 - **FR-009**: Withdrawal transaction building MUST remain out of scope for this slice and tracked by #83.
-- **FR-010**: Swap DevNet evidence MUST remain out of scope for this slice and tracked by #84.
+- **FR-010**: Disburse evidence MUST remain out of scope for this slice and tracked by #86.
+- **FR-011**: SundaeSwap V3 order build/funding evidence MUST remain out of scope for this slice and tracked by #84.
+- **FR-012**: SundaeSwap V3 order spend evidence MUST remain out of scope for this slice and tracked by #85.
+- **FR-013**: Reorganize evidence MUST remain out of scope for this slice and tracked by #87.
 
 ### Key Entities
 
@@ -113,7 +119,7 @@ exact upstream capabilities still required.
 - **SC-002**: The governance phase either submits the treasury-withdrawal governance action or fails with a typed upstream/local-state blocker.
 - **SC-003**: Successful governance output includes tx id, governance action id, reward account, amount, epoch/tip context, and run directory.
 - **SC-004**: The governance run directory contains enough evidence for #83 to start withdrawal testing without rediscovering governance setup.
-- **SC-005**: README and release docs identify the implemented DevNet evidence and do not claim withdrawal or swap proof before #83/#84 land.
+- **SC-005**: README and release docs identify the implemented DevNet evidence and do not claim withdrawal, disburse, SundaeSwap order-build, order-spend, or reorganize proof before #83/#86/#84/#85/#87 land.
 
 ## Assumptions
 

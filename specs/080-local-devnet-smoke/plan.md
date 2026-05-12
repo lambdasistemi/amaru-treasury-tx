@@ -24,10 +24,13 @@ Deliver the first DevNet experiment slice: start the pinned
 and submit the Conway treasury-withdrawal governance action that funds
 an Amaru treasury script reward account.
 
-Withdrawal and swap are deliberately split out:
+Follow-up DevNet slices are deliberately split out:
 
 - [#83](https://github.com/lambdasistemi/amaru-treasury-tx/issues/83): consume funded reward-account state with `withdraw-wizard` and `tx-build`.
-- [#84](https://github.com/lambdasistemi/amaru-treasury-tx/issues/84): bring the current swap path up to live DevNet evidence.
+- [#86](https://github.com/lambdasistemi/amaru-treasury-tx/issues/86): run `disburse-wizard` and `tx-build` against live treasury UTxOs, with USDM as the common operator path.
+- [#84](https://github.com/lambdasistemi/amaru-treasury-tx/issues/84): build/fund a SundaeSwap V3-compatible order on local DevNet using the public V3 contract interface.
+- [#85](https://github.com/lambdasistemi/amaru-treasury-tx/issues/85): spend/execute that SundaeSwap V3 order on local DevNet.
+- [#87](https://github.com/lambdasistemi/amaru-treasury-tx/issues/87): consolidate live treasury UTxOs through the future reorganize builder.
 
 ## Technical Context
 
@@ -40,7 +43,8 @@ manual and opt-in.
 **Target Platform**: Local Linux Nix development shell first.
 **Constraints**: Do not add signing/submission to release-facing CLI
 commands; keep DevNet setup harness code separate from pure builders;
-do not claim withdrawal or swap proof in this slice.
+do not claim withdrawal, disburse, swap-order, swap-spend, or
+reorganize proof in this slice.
 
 ## Constitution Check
 
@@ -67,8 +71,9 @@ exports, docs, formatting, and Cabal updates.
 
 ## Review Slices
 
-1. **Spec scope slice**: update #82, #83, #84 and Spec Kit artifacts so
-   governance is slice 1 and withdrawal/swap are follow-ups.
+1. **Spec scope slice**: update #82, #83, #86, #84, #85, #87 and Spec
+   Kit artifacts so governance is slice 1 and the rest of the DevNet
+   roadmap is tracked as follow-up work.
 2. **Node boundary slice**: keep the already-implemented `node` phase
    green and documented.
 3. **Upstream TxBuild slice**: add the required Conway certificate and
@@ -81,8 +86,9 @@ exports, docs, formatting, and Cabal updates.
    DevNet smoke, wire it to the upstream capabilities, and record the
    action evidence.
 6. **Docs/release slice**: update README, docs, and release notes to
-   distinguish node evidence, governance evidence, and later withdrawal
-   or swap proof.
+   distinguish node evidence, governance evidence, later withdrawal
+   proof, disburse evidence, SundaeSwap V3 order-build evidence,
+   order-spend proof, and reorganize evidence.
 
 ## Project Structure
 

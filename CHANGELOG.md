@@ -4,6 +4,18 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.4.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.3.0...v0.2.4.0) (2026-05-12)
+
+### Features
+
+* **088:** swap-wizard validity follows chain horizon ([14a9ccf](https://github.com/lambdasistemi/amaru-treasury-tx/commit/14a9ccf138474fd6ff5a3ed5e53927c7e460e6ce))
+* **088:** disburse-wizard validity follows chain horizon ([0c99c1d](https://github.com/lambdasistemi/amaru-treasury-tx/commit/0c99c1defbf2fb20ed60f7a1e60ad4911cb6fdec))
+* **088:** withdraw-wizard validity follows chain horizon ([b01c7e2](https://github.com/lambdasistemi/amaru-treasury-tx/commit/b01c7e217fb71df333c986987ccc2682fc5357af))
+
+### Bug Fixes
+
+* **091:** distribute swap-order remainder; no dust outputs ([cafd3a7](https://github.com/lambdasistemi/amaru-treasury-tx/commit/cafd3a71f5a28d66924d86c07e52947ee744dac4))
+
 ## [0.2.3.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.2.0...v0.2.3.0) (2026-05-11)
 
 ### Operator Notes

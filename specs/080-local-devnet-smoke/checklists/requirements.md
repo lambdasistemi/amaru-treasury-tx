@@ -16,7 +16,7 @@
 - [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
-- [x] Governance, withdrawal, and swap boundaries are separated
+- [x] Governance, withdrawal, disburse, swap, and reorganize boundaries are separated
 - [x] Upstream dependencies are identified
 - [x] Edge cases are identified
 
@@ -31,4 +31,7 @@
 
 - The first DevNet ticket is #82, governance action.
 - Withdrawal is #83.
-- Swap is #84.
+- Disburse is #86.
+- SundaeSwap V3 order build/funding is #84.
+- SundaeSwap V3 order spend is #85.
+- Reorganize is #87.

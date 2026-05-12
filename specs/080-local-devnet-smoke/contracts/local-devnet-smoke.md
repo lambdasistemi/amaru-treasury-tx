@@ -21,8 +21,9 @@ scripts/smoke/devnet-local --phase PHASE --run-dir PATH
   submit the treasury-withdrawal governance action, and record evidence.
 - `all`: run all phases implemented by this slice.
 
-`withdraw` and `swap` are not part of this contract; they are tracked
-by #83 and #84.
+`withdraw`, `disburse`, `swap`, `swap-spend`, and `reorganize` are not
+part of this contract; they are tracked by #83, #86, #84, #85, and
+#87.
 
 ## Environment
 

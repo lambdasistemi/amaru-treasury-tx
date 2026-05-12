@@ -27,7 +27,14 @@ Expected result within 2 minutes:
 just devnet-smoke governance
 ```
 
-Expected successful artifacts after implementation:
+Current expected result while upstream support is missing:
+
+- non-zero exit
+- `MISSING_UPSTREAM_GOVERNANCE_SUPPORT`
+- `governance/summary.json`
+- links to `cardano-node-clients` #130 and #131
+
+Expected successful artifacts after upstream support lands:
 
 - `governance/certificates.json`
 - `governance/action.json`
@@ -40,6 +47,8 @@ issue or PR.
 
 ## Follow-Up Slices
 
-Withdrawal is tracked by #83. Swap is tracked by #84. Do not treat a
-successful governance run as proof that either follow-up transaction
-has been built.
+Withdrawal is tracked by #83. Disburse is tracked by #86. SundaeSwap
+V3 order build/funding is tracked by #84. SundaeSwap V3 order spend is
+tracked by #85. Reorganize is tracked by #87. Do not treat a
+successful governance run as proof that any follow-up transaction has
+been built.

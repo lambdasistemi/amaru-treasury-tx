@@ -80,10 +80,26 @@ Run the opt-in local devnet node smoke with:
 nix develop --quiet -c just devnet-smoke node
 ```
 
+Run the governance slice boundary check with:
+
+```bash
+nix develop --quiet -c just devnet-smoke governance
+```
+
+Until upstream `cardano-node-clients` governance support lands, that
+phase exits with `MISSING_UPSTREAM_GOVERNANCE_SUPPORT` and writes the
+blocking issue links to the run directory.
+
 The DevNet release experiment is tracked in slices: governance action
 [#82](https://github.com/lambdasistemi/amaru-treasury-tx/issues/82),
 withdrawal [#83](https://github.com/lambdasistemi/amaru-treasury-tx/issues/83),
-and swap [#84](https://github.com/lambdasistemi/amaru-treasury-tx/issues/84).
+disburse [#86](https://github.com/lambdasistemi/amaru-treasury-tx/issues/86),
+SundaeSwap V3 order build/funding
+[#84](https://github.com/lambdasistemi/amaru-treasury-tx/issues/84),
+and SundaeSwap V3 order spend
+[#85](https://github.com/lambdasistemi/amaru-treasury-tx/issues/85),
+then reorganize
+[#87](https://github.com/lambdasistemi/amaru-treasury-tx/issues/87).
 
 ## License
 

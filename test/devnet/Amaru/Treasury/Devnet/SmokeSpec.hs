@@ -23,6 +23,7 @@ import Data.Aeson
     , (.=)
     )
 import Data.ByteString.Lazy qualified as BSL
+import Data.List (intercalate)
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import System.Directory
@@ -77,17 +78,93 @@ instance FromJSON ShelleyGenesisTiming where
 
 spec :: Spec
 spec =
-    describe "local devnet node smoke" $
+    describe "local devnet smoke" $ do
         it
-            "starts cardano-node-clients devnet and records short-epoch timing evidence"
-            nodeSmoke
+            "node: starts cardano-node-clients devnet and records short-epoch timing evidence"
+            (runForPhases ["node", "all"] nodeSmoke)
+        it
+            "governance: fails with a typed upstream-support blocker"
+            (runForPhases ["governance", "all"] governanceSmoke)
+
+runForPhases :: [String] -> IO () -> IO ()
+runForPhases accepted action = do
+    phase <- maybe "node" id <$> lookupEnv "DEVNET_SMOKE_PHASE"
+    when (phase `elem` accepted) action
+
+governanceSmoke :: IO ()
+governanceSmoke = do
+    runDir <- resolveRunDir
+    prepareRunDir runDir
+    createDirectoryIfMissing True (runDir </> "governance")
+
+    let blocker =
+            object
+                [ "phase" .= ("governance" :: String)
+                , "status" .= ("blocked" :: String)
+                , "failureCode"
+                    .= ( "MISSING_UPSTREAM_GOVERNANCE_SUPPORT"
+                            :: String
+                       )
+                , "runDirectory" .= runDir
+                , "upstream"
+                    .= [ object
+                            [ "repository"
+                                .= ( "lambdasistemi/cardano-node-clients"
+                                        :: String
+                                   )
+                            , "issue" .= (130 :: Int)
+                            , "url"
+                                .= ( "https://github.com/lambdasistemi/cardano-node-clients/issues/130"
+                                        :: String
+                                   )
+                            , "capability"
+                                .= ( "Conway stake certificates and treasury-withdrawal proposal support"
+                                        :: String
+                                   )
+                            ]
+                       , object
+                            [ "repository"
+                                .= ( "lambdasistemi/cardano-node-clients"
+                                        :: String
+                                   )
+                            , "issue" .= (131 :: Int)
+                            , "url"
+                                .= ( "https://github.com/lambdasistemi/cardano-node-clients/issues/131"
+                                        :: String
+                                   )
+                            , "capability"
+                                .= ( "Governance action and reward-account state queries"
+                                        :: String
+                                   )
+                            ]
+                       ]
+                ]
+
+    BSL.writeFile
+        (runDir </> "governance" </> "summary.json")
+        (encode blocker)
+    writeFile
+        (runDir </> "summary.log")
+        ( unlines
+            [ "devnet-smoke: run-dir " <> runDir
+            , "devnet-smoke: phase governance blocked"
+            , "devnet-smoke: failure MISSING_UPSTREAM_GOVERNANCE_SUPPORT"
+            , "devnet-smoke: upstream lambdasistemi/cardano-node-clients#130"
+            , "devnet-smoke: upstream lambdasistemi/cardano-node-clients#131"
+            ]
+        )
+    expectationFailure
+        ( intercalate
+            "\n"
+            [ "MISSING_UPSTREAM_GOVERNANCE_SUPPORT: cardano-node-clients lacks the required governance setup capabilities"
+            , "run directory: " <> runDir
+            , "blocked by lambdasistemi/cardano-node-clients#130"
+            , "blocked by lambdasistemi/cardano-node-clients#131"
+            ]
+        )
 
 nodeSmoke :: IO ()
 nodeSmoke = do
-    phase <- lookupEnv "DEVNET_SMOKE_PHASE"
-    when (maybe False (/= "node") phase) $
-        expectationFailure "devnet smoke MVP only supports phase=node"
-
     runDir <- resolveRunDir
     prepareRunDir runDir
 
@@ -130,8 +207,6 @@ prepareRunDir runDir = do
                 <> runDir
             )
     createDirectoryIfMissing True runDir
-    createDirectoryIfMissing True (runDir </> "withdraw")
-    createDirectoryIfMissing True (runDir </> "disburse")
 
 assertGenesisDir :: FilePath -> IO ()
 assertGenesisDir gDir = do

@@ -133,7 +133,7 @@ resolverCase = do
                 , wreQueryRewardsLovelace = \account -> do
                     account `shouldBe` expectedAccount
                     pure expectedRewards
-                , wreCurrentTip = pure (weCurrentTip fixtureEnv)
+                , wreComputeUpperBound = \_ -> pure (Right (weUpperBoundSlot fixtureEnv))
                 }
         input =
             WithdrawResolverInput
@@ -141,6 +141,7 @@ resolverCase = do
                 , wriWalletAddrBech32 = wsAddress wallet
                 , wriScope = waScope answers
                 , wriRegistry = weRegistry fixtureEnv
+                , wriValidityHours = Nothing
                 }
     resolved <- resolveWithdrawEnv stub input
     env <- expectRight resolved

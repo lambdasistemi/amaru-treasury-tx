@@ -246,7 +246,7 @@ spec =
                                 \_ -> pure []
                             , reEnvQueryTreasuryUtxos =
                                 \_ -> pure []
-                            , reEnvCurrentTip = pure 0
+                            , reEnvComputeUpperBound = \_ -> pure (Right 0)
                             }
                     ri =
                         ResolverInput
@@ -259,6 +259,7 @@ spec =
                             , riUnit = USDM
                             , riAmount = 1
                             , riRegistry = deRegistry env
+                            , riValidityHours = Nothing
                             }
                 r <- resolveDisburseEnv stub ri
                 r

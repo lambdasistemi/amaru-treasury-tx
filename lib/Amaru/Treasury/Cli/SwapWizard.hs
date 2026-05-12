@@ -21,7 +21,7 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import Data.Word (Word8)
+import Data.Word (Word16)
 import Options.Applicative
     ( Parser
     , ReadM
@@ -124,7 +124,7 @@ data WizardOpts = WizardOpts
     -- ^ how to split the amount into chunks
     , wOptsRate :: !WizardRate
     -- ^ minimum acceptable USDM per ADA, either explicit or quote-derived
-    , wOptsValidityHours :: !Word8
+    , wOptsValidityHours :: !(Maybe Word16)
     , wOptsDescription :: !Text
     , wOptsJustification :: !Text
     , wOptsDestinationLabel :: !Text
@@ -195,11 +195,15 @@ wizardOptsP =
                         )
             )
         <*> wizardRateP
-        <*> option
-            auto
-            ( long "validity-hours"
-                <> metavar "HOURS"
-                <> help "Validity window from tip; 1..48"
+        <*> optional
+            ( option
+                auto
+                ( long "validity-hours"
+                    <> metavar "HOURS"
+                    <> help
+                        "Optional. Omit to use the chain's \
+                        \current horizon (longest safe slot)."
+                )
             )
         <*> strOption
             ( long "description"
@@ -363,7 +367,8 @@ runWizard g WizardOpts{..} = do
                     , wqChunkSizeLovelace = chunkSize
                     , wqRateNumerator = wspRateNumerator params
                     , wqRateDenominator = wspRateDenominator params
-                    , wqValidityHours = wOptsValidityHours
+                    , wqValidityHours =
+                        wOptsValidityHours
                     , wqRationale =
                         RationaleAnswers
                             { raDescription = wOptsDescription
@@ -404,6 +409,8 @@ runWizard g WizardOpts{..} = do
                             , riAmountLovelace = amountLov
                             , riChunkSizeLovelace = chunkSize
                             , riRegistry = rv
+                            , riValidityHours =
+                                wOptsValidityHours
                             }
                 let renv =
                         traceResolverEnv tr $
@@ -432,8 +439,7 @@ runWizard g WizardOpts{..} = do
                     full = total `div` cs
                     rem' = total `mod` cs
                 traceWith tr $
-                    WeValidityComputed
-                        (weCurrentTip env)
+                    WeUpperBoundResolved
                         (tiValidityUpperBoundSlot intent)
                 traceWith tr $
                     WeChunksComputed total cs (fromInteger full) rem'

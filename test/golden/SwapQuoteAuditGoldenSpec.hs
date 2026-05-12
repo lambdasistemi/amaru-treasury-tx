@@ -121,6 +121,6 @@ sampleRequest =
         , sqarScope = "network_compliance"
         , sqarRequestedUsdm = 100_000
         , sqarChunk = SplitInto 33
-        , sqarValidityHours = 28
+        , sqarValidityHours = Just 28
         , sqarExtraSigners = ["core_development"]
         }

@@ -308,14 +308,33 @@ spec = describe "SwapWizard" $ do
             leftIs
                 WizardAmountNotPositive
                 answers{wqAmountLovelace = 0}
-        it "rejects validity hours = 0" $ do
+        it "rejects validity hours = Just 0" $ do
             leftIs
-                (WizardValidityHoursOutOfRange 0)
-                answers{wqValidityHours = 0}
-        it "rejects validity hours > 48" $ do
-            leftIs
-                (WizardValidityHoursOutOfRange 49)
-                answers{wqValidityHours = 49}
+                WizardValidityHoursZero
+                answers{wqValidityHours = Just 0}
+        it "accepts validity hours = Nothing (AutoLongest)" $ do
+            case wizardToTreasuryIntent
+                env
+                answers{wqValidityHours = Nothing} of
+                Right _ -> pure ()
+                Left e ->
+                    expectationFailure'
+                        ( "expected Right for Nothing, got Left "
+                            <> show e
+                        )
+        it "accepts arbitrarily large validity hours" $ do
+            -- The wizard no longer enforces a static cap.
+            -- The chain horizon does — and is enforced by the
+            -- resolver, not the pure translator.
+            case wizardToTreasuryIntent
+                env
+                answers{wqValidityHours = Just 999} of
+                Right _ -> pure ()
+                Left e ->
+                    expectationFailure'
+                        ( "expected Right for Just 999, got Left "
+                            <> show e
+                        )
         it "rejects rate denominator = 0" $ do
             leftIs
                 WizardRateDenominatorZero
@@ -448,7 +467,7 @@ spec = describe "SwapWizard" $ do
                                     , False
                                     )
                                 ]
-                        , reEnvCurrentTip = pure 186342942
+                        , reEnvComputeUpperBound = \_ -> pure (Right 186364542)
                         }
                 ri =
                     ResolverInput
@@ -459,6 +478,7 @@ spec = describe "SwapWizard" $ do
                         , riAmountLovelace = 408163265306
                         , riChunkSizeLovelace = 12500000000
                         , riRegistry = weRegistry env
+                        , riValidityHours = Nothing
                         }
             r <- resolveWizardEnv stub ri
             case r of
@@ -513,7 +533,7 @@ spec = describe "SwapWizard" $ do
                             \_ -> pure []
                         , reEnvQueryTreasuryUtxos =
                             \_ -> pure []
-                        , reEnvCurrentTip = pure 0
+                        , reEnvComputeUpperBound = \_ -> pure (Right 0)
                         }
                 ri =
                     ResolverInput
@@ -525,6 +545,7 @@ spec = describe "SwapWizard" $ do
                         , riAmountLovelace = 1
                         , riChunkSizeLovelace = 1
                         , riRegistry = weRegistry env
+                        , riValidityHours = Nothing
                         }
             r <- resolveWizardEnv stub ri
             r
@@ -551,7 +572,7 @@ spec = describe "SwapWizard" $ do
                                         , False
                                         )
                                     ]
-                            , reEnvCurrentTip = pure 186342942
+                            , reEnvComputeUpperBound = \_ -> pure (Right 186364542)
                             }
                     ri =
                         ResolverInput
@@ -562,6 +583,7 @@ spec = describe "SwapWizard" $ do
                             , riAmountLovelace = 408163265306
                             , riChunkSizeLovelace = 12500000000
                             , riRegistry = weRegistry env
+                            , riValidityHours = Nothing
                             }
                 r <- resolveWizardEnv stub ri
                 case r of
@@ -591,7 +613,7 @@ spec = describe "SwapWizard" $ do
                                         , False
                                         )
                                     ]
-                            , reEnvCurrentTip = pure 186342942
+                            , reEnvComputeUpperBound = \_ -> pure (Right 186364542)
                             }
                     ri =
                         ResolverInput
@@ -602,6 +624,7 @@ spec = describe "SwapWizard" $ do
                             , riAmountLovelace = 408163265306
                             , riChunkSizeLovelace = 12500000000
                             , riRegistry = weRegistry env
+                            , riValidityHours = Nothing
                             }
                 r <- resolveWizardEnv stub ri
                 case r of
@@ -636,7 +659,7 @@ spec = describe "SwapWizard" $ do
                                     , False
                                     )
                                 ]
-                        , reEnvCurrentTip = pure 186342942
+                        , reEnvComputeUpperBound = \_ -> pure (Right 186364542)
                         }
                 ri =
                     ResolverInput
@@ -647,6 +670,7 @@ spec = describe "SwapWizard" $ do
                         , riAmountLovelace = 408163265306
                         , riChunkSizeLovelace = 0
                         , riRegistry = weRegistry env
+                        , riValidityHours = Nothing
                         }
             r <- resolveWizardEnv stub ri
             r
@@ -665,6 +689,7 @@ spec = describe "SwapWizard" $ do
                     , riAmountLovelace = 408163265306
                     , riChunkSizeLovelace = 12500000000
                     , riRegistry = weRegistry env
+                    , riValidityHours = Nothing
                     }
           in  renderWalletShortfall ri 1_000_000 2_000_000
                 `shouldBe` "wallet shortfall at addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu: available=1000000 required=2000000 (feeSlack=2000000)"

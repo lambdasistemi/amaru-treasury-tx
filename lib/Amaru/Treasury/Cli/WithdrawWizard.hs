@@ -21,7 +21,10 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import Data.Word (Word8)
+import Data.Word (Word16)
+
+import Cardano.Node.Client.Provider (queryUpperBoundSlot)
+import Cardano.Slotting.Slot (SlotNo (..))
 import Options.Applicative
     ( Parser
     , ReadM
@@ -46,7 +49,6 @@ import Amaru.Treasury.Backend.N2C
     )
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
-    , nowTip
     , queryFlat
     , resolveNetworkName
     , withLogHandle
@@ -79,7 +81,7 @@ data WithdrawOpts = WithdrawOpts
     , wdOptsLog :: !(Maybe FilePath)
     -- ^ where to send 'WithdrawWizardEvent' lines. 'Nothing' = stderr.
     , wdOptsScope :: !ScopeId
-    , wdOptsValidityHours :: !Word8
+    , wdOptsValidityHours :: !(Maybe Word16)
     , wdOptsDescription :: !(Maybe Text)
     , wdOptsJustification :: !(Maybe Text)
     , wdOptsDestinationLabel :: !(Maybe Text)
@@ -125,11 +127,15 @@ withdrawOptsP =
                 <> help
                     "core_development|ops_and_use_cases|network_compliance|middleware"
             )
-        <*> option
-            auto
-            ( long "validity-hours"
-                <> metavar "HOURS"
-                <> help "Validity window from tip; 1..48"
+        <*> optional
+            ( option
+                auto
+                ( long "validity-hours"
+                    <> metavar "HOURS"
+                    <> help
+                        "Optional. Omit to use the chain's \
+                        \current horizon (longest safe slot)."
+                )
             )
         <*> optional
             ( strOption
@@ -238,6 +244,8 @@ runWithdrawWizard g WithdrawOpts{..} = do
                                 wdOptsWalletAddr
                             , Withdraw.wriScope = wdOptsScope
                             , Withdraw.wriRegistry = rv
+                            , Withdraw.wriValidityHours =
+                                wdOptsValidityHours
                             }
                     renv =
                         traceWithdrawResolverEnv tr $
@@ -274,8 +282,7 @@ runWithdrawWizard g WithdrawOpts{..} = do
                         traceWith tr (WithdrawTrace.WweNoRewards account)
                     Withdraw.WithdrawIntentReady intent -> do
                         traceWith tr $
-                            WithdrawTrace.WweValidityComputed
-                                (Withdraw.weCurrentTip env)
+                            WithdrawTrace.WweUpperBoundResolved
                                 (tiValidityUpperBoundSlot intent)
                         traceWith tr (WithdrawTrace.WweIntentReady wdOptsOut)
                         let bytes =
@@ -310,10 +317,13 @@ traceWithdrawResolverEnv tr renv =
                 tr
                 (WithdrawTrace.WweRewardsQueried account rewards)
             pure rewards
-        , Withdraw.wreCurrentTip = do
-            t <- Withdraw.wreCurrentTip renv
-            traceWith tr (WithdrawTrace.WweTipRead t)
-            pure t
+        , Withdraw.wreComputeUpperBound = \choice -> do
+            result <- Withdraw.wreComputeUpperBound renv choice
+            case result of
+                Right slot ->
+                    traceWith tr (WithdrawTrace.WweUpperBoundResolved slot)
+                Left _ -> pure ()
+            pure result
         }
 
 traceWithdrawRegistryView
@@ -384,5 +394,9 @@ providerToWithdrawResolverEnv tr networkName magic socket p =
                     abortWithdraw
                         tr
                         "resolve: stake rewards query: node is not in Conway era"
-        , Withdraw.wreCurrentTip = nowTip p
+        , Withdraw.wreComputeUpperBound = \choice -> do
+            r <- queryUpperBoundSlot p choice
+            pure (fmap unwrapSlot r)
         }
+  where
+    unwrapSlot (SlotNo s) = s

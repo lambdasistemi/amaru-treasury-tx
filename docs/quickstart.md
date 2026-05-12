@@ -106,7 +106,7 @@ What the flags mean:
 | `--ada-usd`    | Explicit ADA/USD quote override for deterministic offline operation. |
 | `--ada-usdm`   | Explicit ADA/USDM quote override. Named live ADA/USDM sources are deferred. |
 | `--slippage-bps` | Required slippage policy in basis points. There is no hidden default. |
-| `--validity-hours` | Validity window from current tip; 1..48. |
+| `--validity-hours` | Optional. Omit to use the chain's current horizon (longest plutus-translatable slot). When present, must be inside the horizon — overshoot returns a typed wizard error before `tx-build` runs. |
 | `--description` / `--justification` / `--destination-label` | Free-form rationale fields, pinned into the on-chain audit trail. |
 | `--extra-signer SCOPE\|HEX` | Repeated for each witness owner beyond the selected scope owner. Scope names and 28-byte key hashes are accepted; `--signer` remains as an alias. |
 | `tx-build --report -` | Emits `{ intent, result }` on stdout. Successful `result` contains both `tx-cbor` and the mechanical report; expected build failures contain `result.failure.code` and `result.failure.message`. |
@@ -269,7 +269,7 @@ synthetic golden evidence.
 |------|--------|
 | 1 (tx-build) | The build aborted before producing CBOR. Expected builder failures print a normalized `tx-build: ... failed ...` diagnostic; report output, when requested, carries the same stable failure code/message. |
 | 3 (swap-quote / swap-wizard / disburse-wizard / tx-build) | Setup or economic error. The trace's `ABORT …` line names the offending step: quote source failure, registry mismatch, empty wallet UTxO set, treasury affordability shortfall, beneficiary network mismatch, missing UTxOs in chain context, and similar fail-closed cases. |
-| 4 (swap-wizard) | Translation error in the expert manual path. Re-check `--min-rate`, `--chunk-usdm`/`--split`, and `--validity-hours` in `[1, 48]`. |
+| 4 (swap-wizard) | Translation error in the expert manual path. Re-check `--min-rate`, `--chunk-usdm`/`--split`. `--validity-hours`, when present, must be inside the current chain horizon — the wizard returns a typed `WizardValidityOvershoot` if not. |
 | 6 (tx-build) | The N2C handshake reports a network magic that disagrees with the intent's `network` field. The trace's `tx-build: NETWORK MISMATCH …` line names both networks; point `--node-socket` at the right node. |
 
 Both subcommands are fail-closed — neither writes a partial

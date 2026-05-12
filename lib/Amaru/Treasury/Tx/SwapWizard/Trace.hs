@@ -62,10 +62,8 @@ data WizardEvent
       WeTreasuryUtxosQueried !Int !Integer
     | -- | Treasury UTxOs picked + leftover lovelace.
       WeTreasuryUtxosSelected ![Text] !Integer
-    | -- | Current chain tip slot.
-      WeTipRead !Word64
-    | -- | Validity computed: tip + hours -> upper-bound slot.
-      WeValidityComputed !Word64 !Word64
+    | -- | Chain horizon helper resolved an upper-bound slot.
+      WeUpperBoundResolved !Word64
     | -- | Chunks computed: total, chunkSize, fullChunks, remainder.
       WeChunksComputed !Integer !Integer !Int !Integer
     | -- | The wizard finished building intent.json and is about
@@ -138,16 +136,10 @@ renderEvent =
                 <> T.intercalate "," picks
                 <> " leftover="
                 <> tshow leftover
-        WeTipRead slot ->
-            "tip slot " <> tshow slot
-        WeValidityComputed tip ub ->
-            "validity tip="
-                <> tshow tip
-                <> " upperBound="
+        WeUpperBoundResolved ub ->
+            "upperBound slot "
                 <> tshow ub
-                <> " (+"
-                <> tshow (ub - tip)
-                <> " slots)"
+                <> " (from chain horizon helper)"
         WeChunksComputed total cs full rem' ->
             "chunks total="
                 <> tshow total

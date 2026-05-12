@@ -256,6 +256,19 @@ executable swap-probe
 
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
 
+executable horizon-probe
+  import:           warnings
+  hs-source-dirs:   app/horizon-probe
+  main-is:          Main.hs
+  default-language: GHC2021
+  build-depends:
+    , amaru-treasury-tx
+    , base                   <5
+    , cardano-node-clients
+    , ouroboros-network:api
+
+  ghc-options:      -threaded -rtsopts -with-rtsopts=-N
+
 executable amaru-treasury-intent-schema
   import:           warnings
   hs-source-dirs:   app/amaru-treasury-intent-schema

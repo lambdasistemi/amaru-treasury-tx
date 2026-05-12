@@ -72,11 +72,8 @@ data DisburseWizardEvent
         -- ^ leftover lovelace
         !Integer
         -- ^ leftover USDM (smallest unit)
-    | -- | Current chain tip slot.
-      DweTipRead !Word64
-    | -- | Validity computed: tip + hours -> upper-bound
-      --   slot.
-      DweValidityComputed !Word64 !Word64
+    | -- | Chain horizon helper resolved an upper-bound slot.
+      DweUpperBoundResolved !Word64
     | -- | The wizard finished building intent.json and
       --   is about to write it
       --   ('Nothing' = stdout, 'Just' = file path).
@@ -147,16 +144,10 @@ renderDisburseWizardEvent =
                 <> tshow lov
                 <> " leftoverUsdm="
                 <> tshow usdm
-        DweTipRead slot ->
-            "tip slot " <> tshow slot
-        DweValidityComputed tip ub ->
-            "validity tip="
-                <> tshow tip
-                <> " upperBound="
+        DweUpperBoundResolved ub ->
+            "upperBound slot "
                 <> tshow ub
-                <> " (+"
-                <> tshow (ub - tip)
-                <> " slots)"
+                <> " (from chain horizon helper)"
         DweIntentReady Nothing ->
             "intent.json -> stdout"
         DweIntentReady (Just p) ->

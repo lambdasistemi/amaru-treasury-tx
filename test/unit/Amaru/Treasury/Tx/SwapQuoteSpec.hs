@@ -331,7 +331,7 @@ spec = describe "SwapQuote" $ do
                     , wqChunkSizeLovelace = 3_768_204_052
                     , wqRateNumerator = 804_177
                     , wqRateDenominator = 1_000_000
-                    , wqValidityHours = 28
+                    , wqValidityHours = Just 28
                     , wqRationale =
                         RationaleAnswers
                             { raDescription = "Treasury swap"
@@ -454,7 +454,7 @@ sampleSwapQuoteOpts quote =
         , sqoChunk = SplitInto 33
         , sqoQuote = quote
         , sqoSlippageBps = SlippageBps 100
-        , sqoValidityHours = 28
+        , sqoValidityHours = Just 28
         , sqoDescription = "Treasury swap"
         , sqoJustification = "Quote-derived execution"
         , sqoDestinationLabel = "USDM reserve"

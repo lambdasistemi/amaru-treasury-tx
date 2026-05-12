@@ -27,7 +27,10 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import Data.Word (Word8)
+import Data.Word (Word16)
+
+import Cardano.Node.Client.Provider (queryUpperBoundSlot)
+import Cardano.Slotting.Slot (SlotNo (..))
 import Options.Applicative
     ( Parser
     , ReadM
@@ -52,7 +55,6 @@ import Amaru.Treasury.Backend (Provider)
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
-    , nowTip
     , queryFlat
     , queryValues
     , resolveNetworkName
@@ -89,7 +91,7 @@ data DisburseWizardOpts = DisburseWizardOpts
     , dwOptsAmount :: !Integer
     -- ^ lovelace for ADA, smallest USDM unit for USDM.
     , dwOptsBeneficiaryAddr :: !Text
-    , dwOptsValidityHours :: !Word8
+    , dwOptsValidityHours :: !(Maybe Word16)
     , dwOptsDescription :: !Text
     , dwOptsJustification :: !Text
     , dwOptsDestinationLabel :: !Text
@@ -161,11 +163,15 @@ disburseWizardOptsP =
                 <> metavar "BECH32"
                 <> help "Beneficiary address"
             )
-        <*> option
-            auto
-            ( long "validity-hours"
-                <> metavar "HOURS"
-                <> help "Validity window from tip; 1..48"
+        <*> optional
+            ( option
+                auto
+                ( long "validity-hours"
+                    <> metavar "HOURS"
+                    <> help
+                        "Optional. Omit to use the chain's \
+                        \current horizon (longest safe slot)."
+                )
             )
         <*> strOption
             ( long "description"
@@ -296,6 +302,8 @@ runDisburseWizard g DisburseWizardOpts{..} =
                             , Disburse.riUnit = dwOptsUnit
                             , Disburse.riAmount = dwOptsAmount
                             , Disburse.riRegistry = rv
+                            , Disburse.riValidityHours =
+                                dwOptsValidityHours
                             }
                     renv =
                         traceDisburseResolverEnv tr $
@@ -323,8 +331,7 @@ runDisburseWizard g DisburseWizardOpts{..} =
                                 )
                         Right i -> pure i
                 traceWith tr $
-                    DisburseTrace.DweValidityComputed
-                        (Disburse.deCurrentTip env)
+                    DisburseTrace.DweUpperBoundResolved
                         (tiValidityUpperBoundSlot intent)
                 traceWith tr (DisburseTrace.DweIntentReady dwOptsOut)
                 let bytes =
@@ -361,10 +368,13 @@ traceDisburseResolverEnv tr renv =
                     (sum (lovelaceOfValue . snd <$> us))
                 )
             pure us
-        , Disburse.reEnvCurrentTip = do
-            t <- Disburse.reEnvCurrentTip renv
-            traceWith tr (DisburseTrace.DweTipRead t)
-            pure t
+        , Disburse.reEnvComputeUpperBound = \choice -> do
+            result <- Disburse.reEnvComputeUpperBound renv choice
+            case result of
+                Right slot ->
+                    traceWith tr (DisburseTrace.DweUpperBoundResolved slot)
+                Left _ -> pure ()
+            pure result
         }
 
 traceDisburseRegistryView
@@ -421,8 +431,12 @@ providerToDisburseResolverEnv p =
     Disburse.ResolverEnv
         { Disburse.reEnvQueryWalletUtxos = queryFlat p
         , Disburse.reEnvQueryTreasuryUtxos = queryValues p
-        , Disburse.reEnvCurrentTip = nowTip p
+        , Disburse.reEnvComputeUpperBound = \choice -> do
+            r <- queryUpperBoundSlot p choice
+            pure (fmap unwrapSlot r)
         }
+  where
+    unwrapSlot (SlotNo s) = s
 
 lovelaceOfValue :: MaryValue -> Integer
 lovelaceOfValue (MaryValue (Coin lovelace) _) = lovelace

@@ -30,10 +30,11 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import Data.Word (Word8)
+import Data.Word (Word16, Word8)
 import Options.Applicative
     ( Parser
     , ReadM
+    , auto
     , eitherReader
     , help
     , long
@@ -134,7 +135,7 @@ data SwapQuoteOpts = SwapQuoteOpts
     , sqoChunk :: !SwapQuoteRequestChunk
     , sqoQuote :: !SwapQuoteQuoteArg
     , sqoSlippageBps :: !SlippageBps
-    , sqoValidityHours :: !Word8
+    , sqoValidityHours :: !(Maybe Word16)
     , sqoDescription :: !Text
     , sqoJustification :: !Text
     , sqoDestinationLabel :: !Text
@@ -220,11 +221,15 @@ swapQuoteOptsP =
                 <> metavar "INT"
                 <> help "Explicit slippage policy in basis points; 0 <= INT < 10000"
             )
-        <*> option
-            autoWord8
-            ( long "validity-hours"
-                <> metavar "HOURS"
-                <> help "Validity window from tip; 1..48"
+        <*> optional
+            ( option
+                auto
+                ( long "validity-hours"
+                    <> metavar "HOURS"
+                    <> help
+                        "Optional. Omit to use the chain's \
+                        \current horizon (longest safe slot)."
+                )
             )
         <*> strOption
             ( long "description"
@@ -395,6 +400,7 @@ deriveSwapQuotePlan network opts observation = do
                         , riScope = sqoScope opts
                         , riAmountLovelace = dspAmountLovelace derived
                         , riChunkSizeLovelace = dspChunkSizeLovelace derived
+                        , riValidityHours = sqoValidityHours opts
                         }
             , sqpAuditRequest =
                 SwapQuoteAuditRequest
@@ -402,7 +408,8 @@ deriveSwapQuotePlan network opts observation = do
                     , sqarScope = scopeText (sqoScope opts)
                     , sqarRequestedUsdm = requestedUsdm
                     , sqarChunk = sqoChunk opts
-                    , sqarValidityHours = toInteger (sqoValidityHours opts)
+                    , sqarValidityHours =
+                        fmap toInteger (sqoValidityHours opts)
                     , sqarExtraSigners = sqoSigners opts
                     }
             , sqpOutputs = outputs
@@ -509,6 +516,7 @@ runSwapQuote g quoteOpts@SwapQuoteOpts{..} = do
                                 , riChunkSizeLovelace =
                                     dspChunkSizeLovelace (sqpDerived plan)
                                 , riRegistry = rv
+                                , riValidityHours = sqoValidityHours
                                 }
                     renv =
                         traceResolverEnv tr $
@@ -566,8 +574,7 @@ runSwapQuote g quoteOpts@SwapQuoteOpts{..} = do
                             audit
                     SwapQuoteRunAllowed _summary audit -> do
                         traceWith tr $
-                            WeValidityComputed
-                                (weCurrentTip env)
+                            WeUpperBoundResolved
                                 (tiValidityUpperBoundSlot intent)
                         traceWith tr $
                             WeChunksComputed total cs (fromInteger full) rem'

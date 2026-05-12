@@ -44,7 +44,9 @@ import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Word (Word64, Word8)
+import Data.Word (Word16, Word64)
+
+import Cardano.Node.Client.Validity qualified as Validity
 
 import Amaru.Treasury.IntentJSON
     ( Action (..)
@@ -76,7 +78,10 @@ absent: they come from the resolver, not from CLI input.
 -}
 data WithdrawAnswers = WithdrawAnswers
     { waScope :: !ScopeId
-    , waValidityHours :: !Word8
+    , waValidityHours :: !(Maybe Word16)
+    -- ^ Optional signing window. 'Nothing' = use the chain
+    --   horizon ('Validity.AutoLongest'); 'Just 0' is rejected;
+    --   'Just n' (n > 0) is fed in as 'Validity.ExactlyHours'.
     , waDescription :: !(Maybe Text)
     , waJustification :: !(Maybe Text)
     , waDestinationLabel :: !(Maybe Text)
@@ -89,7 +94,7 @@ instance FromJSON WithdrawAnswers where
     parseJSON = withObject "WithdrawAnswers" $ \o ->
         WithdrawAnswers
             <$> o .: "scope"
-            <*> o .: "validityHours"
+            <*> o .:? "validityHours"
             <*> o .:? "description"
             <*> o .:? "justification"
             <*> o .:? "destinationLabel"
@@ -122,8 +127,9 @@ plus 'WithdrawAnswers'; it never performs IO.
 data WithdrawEnv = WithdrawEnv
     { weNetwork :: !Text
     -- ^ @"mainnet"@ / @"preprod"@ / @"preview"@
-    , weCurrentTip :: !Word64
-    -- ^ chain tip slot at the time of resolution
+    , weUpperBoundSlot :: !Word64
+    -- ^ Resolver-supplied @invalid-hereafter@ slot. Already
+    --   horizon-validated; the pure translator just stamps it.
     , weNetworkConstants :: !WithdrawNetworkConstants
     -- ^ slot conversion constants
     , weRegistry :: !RegistryView
@@ -140,7 +146,7 @@ instance FromJSON WithdrawEnv where
     parseJSON = withObject "WithdrawEnv" $ \o ->
         WithdrawEnv
             <$> o .: "network"
-            <*> o .: "currentTip"
+            <*> o .: "upperBoundSlot"
             <*> o .: "networkConstants"
             <*> o .: "registry"
             <*> o .: "scopeView"
@@ -154,7 +160,11 @@ instance FromJSON WithdrawEnv where
 
 data WithdrawError
     = WithdrawRewardsNotPositive
-    | WithdrawValidityHoursOutOfRange !Word8
+    | -- | @--validity-hours = Just 0@.
+      WithdrawValidityHoursZero
+    | -- | @--validity-hours = Just n@ overshoots the chain
+      --   horizon. Payload from 'Validity.HorizonError'.
+      WithdrawValidityOvershoot !Validity.HorizonError
     | WithdrawScopeMismatch !ScopeId !ScopeId
     | WithdrawNetworkUnsupported !Text
     | WithdrawNetworkMismatch !Text !Text
@@ -207,11 +217,7 @@ mkIntent env ans =
         , tiWallet = mkWallet (weWalletSelection env)
         , tiScope = mkScope env ans
         , tiSigners = []
-        , tiValidityUpperBoundSlot =
-            weCurrentTip env
-                + wncSlotsPerHour
-                    (weNetworkConstants env)
-                    * fromIntegral (waValidityHours ans)
+        , tiValidityUpperBoundSlot = weUpperBoundSlot env
         , tiRationale = mkRationale ans
         , tiPayload =
             WithdrawInputs
@@ -224,10 +230,9 @@ mkIntent env ans =
 validateAnswersAndScope
     :: WithdrawEnv -> WithdrawAnswers -> Either WithdrawError ()
 validateAnswersAndScope env ans = do
-    let h = waValidityHours ans
-    when
-        (h == 0 || h > 48)
-        (Left (WithdrawValidityHoursOutOfRange h))
+    case waValidityHours ans of
+        Just 0 -> Left WithdrawValidityHoursZero
+        _ -> pure ()
     let resolvedScope = svScope (weScopeView env)
     when
         (waScope ans /= resolvedScope)
@@ -325,6 +330,9 @@ data WithdrawResolverInput = WithdrawResolverInput
     , wriWalletAddrBech32 :: !Text
     , wriScope :: !ScopeId
     , wriRegistry :: !RegistryView
+    , wriValidityHours :: !(Maybe Word16)
+    -- ^ Operator-supplied @--validity-hours@; 'Nothing' = use
+    --   chain horizon.
     }
     deriving stock (Eq, Show)
 
@@ -338,7 +346,11 @@ data WithdrawResolverEnv m = WithdrawResolverEnv
     -- ^ @(txInRef, lovelace, hasNativeAssets)@ for the wallet.
     , wreQueryRewardsLovelace :: !(Text -> m Integer)
     -- ^ Rewards for a 28-byte treasury reward account hash.
-    , wreCurrentTip :: !(m Word64)
+    , wreComputeUpperBound
+        :: !( Validity.ValidityChoice
+              -> m (Either Validity.HorizonError Word64)
+            )
+    -- ^ Horizon helper.
     }
 
 data WithdrawResolverError
@@ -346,7 +358,31 @@ data WithdrawResolverError
     | WithdrawResolverNetworkMismatch !Text !Text
     | WithdrawResolverScopeUnsupported !ScopeId
     | WithdrawResolverEmptyWalletUtxos
+    | -- | @--validity-hours = Just 0@.
+      WithdrawResolverValidityHoursZero
+    | -- | @--validity-hours = Just n@ overshoots horizon.
+      WithdrawResolverValidityOvershoot !Validity.HorizonError
     deriving stock (Eq, Show)
+
+{- | Drive the resolver's @wreComputeUpperBound@ effect with
+the operator's optional @--validity-hours@. Same logic as the
+swap/disburse wizards' 'resolveUpperBound'.
+-}
+resolveUpperBound
+    :: (Monad m)
+    => (Validity.ValidityChoice -> m (Either Validity.HorizonError Word64))
+    -> Maybe Word16
+    -> m (Either WithdrawResolverError Word64)
+resolveUpperBound askUpperBound hours = case hours of
+    Just 0 -> pure (Left WithdrawResolverValidityHoursZero)
+    other -> do
+        let choice =
+                maybe Validity.AutoLongest Validity.ExactlyHours other
+        result <- askUpperBound choice
+        pure $ case result of
+            Left horizonErr ->
+                Left (WithdrawResolverValidityOvershoot horizonErr)
+            Right slot -> Right slot
 
 {- | Resolve chain-derived withdraw inputs. The selected
 treasury reward account is the selected scope's treasury
@@ -409,32 +445,38 @@ resolveWithScope renv input =
                     let rewardAccount = trScriptHash refs
                     rewards <-
                         wreQueryRewardsLovelace renv rewardAccount
-                    tip <- wreCurrentTip renv
-                    pure $
-                        Right
-                            WithdrawEnv
-                                { weNetwork = wriNetwork input
-                                , weCurrentTip = tip
-                                , weNetworkConstants =
-                                    withdrawNetworkConstants
-                                , weRegistry = wriRegistry input
-                                , weScopeView =
-                                    ScopeView
-                                        { svScope = wriScope input
-                                        , svRefs = refs
-                                        , svDefaultSigners = []
+                    upper <-
+                        resolveUpperBound
+                            (wreComputeUpperBound renv)
+                            (wriValidityHours input)
+                    case upper of
+                        Left e -> pure (Left e)
+                        Right upperBound ->
+                            pure $
+                                Right
+                                    WithdrawEnv
+                                        { weNetwork = wriNetwork input
+                                        , weUpperBoundSlot = upperBound
+                                        , weNetworkConstants =
+                                            withdrawNetworkConstants
+                                        , weRegistry = wriRegistry input
+                                        , weScopeView =
+                                            ScopeView
+                                                { svScope = wriScope input
+                                                , svRefs = refs
+                                                , svDefaultSigners = []
+                                                }
+                                        , weWalletSelection =
+                                            WalletSelection
+                                                { wsTxIn = walletRef
+                                                , wsAddress =
+                                                    wriWalletAddrBech32 input
+                                                , wsExtraTxIns = []
+                                                }
+                                        , weTreasuryRewardAccount =
+                                            rewardAccount
+                                        , weRewardsLovelace = rewards
                                         }
-                                , weWalletSelection =
-                                    WalletSelection
-                                        { wsTxIn = walletRef
-                                        , wsAddress =
-                                            wriWalletAddrBech32 input
-                                        , wsExtraTxIns = []
-                                        }
-                                , weTreasuryRewardAccount =
-                                    rewardAccount
-                                , weRewardsLovelace = rewards
-                                }
 
 withdrawNetworkConstants :: WithdrawNetworkConstants
 withdrawNetworkConstants =

@@ -40,8 +40,7 @@ data WithdrawWizardEvent
     | WweRewardAccountResolved !Text
     | WweRewardsQueried !Text !Integer
     | WweNoRewards !Text
-    | WweTipRead !Word64
-    | WweValidityComputed !Word64 !Word64
+    | WweUpperBoundResolved !Word64
     | WweIntentReady !(Maybe FilePath)
     | WweAborted !Text
     deriving stock (Eq, Show)
@@ -83,16 +82,10 @@ renderWithdrawWizardEvent =
             "zero rewards: nothing to withdraw account="
                 <> account
                 <> " lovelace=0"
-        WweTipRead slot ->
-            "tip slot " <> tshow slot
-        WweValidityComputed tip ub ->
-            "validity tip="
-                <> tshow tip
-                <> " upperBound="
+        WweUpperBoundResolved ub ->
+            "upperBound slot "
                 <> tshow ub
-                <> " (+"
-                <> tshow (ub - tip)
-                <> " slots)"
+                <> " (from chain horizon helper)"
         WweIntentReady Nothing ->
             "intent.json -> stdout"
         WweIntentReady (Just p) ->

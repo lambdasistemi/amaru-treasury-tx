@@ -24,10 +24,12 @@ import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import System.Exit (ExitCode (..), exitWith)
 
+import Cardano.Node.Client.Provider (queryUpperBoundSlot)
+import Cardano.Slotting.Slot (SlotNo (..))
+
 import Amaru.Treasury.Backend (Provider)
 import Amaru.Treasury.Cli.Common
-    ( nowTip
-    , queryFlat
+    ( queryFlat
     )
 import Amaru.Treasury.Cli.SwapOptions
     ( SwapQuoteQuoteArg (..)
@@ -101,10 +103,12 @@ traceResolverEnv tr renv =
                     (sum (map (\(_, l, _) -> l) us))
                 )
             pure us
-        , reEnvCurrentTip = do
-            t <- reEnvCurrentTip renv
-            traceWith tr (WeTipRead t)
-            pure t
+        , reEnvComputeUpperBound = \choice -> do
+            result <- reEnvComputeUpperBound renv choice
+            case result of
+                Right slot -> traceWith tr (WeUpperBoundResolved slot)
+                Left _ -> pure ()
+            pure result
         }
 
 traceRegistryView
@@ -164,5 +168,9 @@ providerToResolverEnv p =
     ResolverEnv
         { reEnvQueryWalletUtxos = queryFlat p
         , reEnvQueryTreasuryUtxos = queryFlat p
-        , reEnvCurrentTip = nowTip p
+        , reEnvComputeUpperBound = \choice -> do
+            r <- queryUpperBoundSlot p choice
+            pure (fmap unwrapSlot r)
         }
+  where
+    unwrapSlot (SlotNo s) = s

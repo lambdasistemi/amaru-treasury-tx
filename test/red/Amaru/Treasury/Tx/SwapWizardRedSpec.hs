@@ -211,7 +211,7 @@ spec = describe "SwapWizard red-step (T002 + T003 + T004 + T005)" $ do
                                 , False
                                 )
                             ]
-                    , reEnvCurrentTip = pure 186342942
+                    , reEnvComputeUpperBound = \_ -> pure (Right 186364542)
                     }
 
             resolveAndTranslate
@@ -231,6 +231,7 @@ spec = describe "SwapWizard red-step (T002 + T003 + T004 + T005)" $ do
                             , riAmountLovelace = amount
                             , riChunkSizeLovelace = chunkSize
                             , riRegistry = weRegistry env
+                            , riValidityHours = Nothing
                             }
                 resolved <- resolveWizardEnv stubResolver ri
                 env' <- case resolved of
@@ -368,7 +369,7 @@ spec = describe "SwapWizard red-step (T002 + T003 + T004 + T005)" $ do
                                 , False
                                 )
                             ]
-                    , reEnvCurrentTip = pure 186342942
+                    , reEnvComputeUpperBound = \_ -> pure (Right 186364542)
                     }
 
             -- \| Run the full builder pipeline against a treasury UTxO
@@ -390,6 +391,7 @@ spec = describe "SwapWizard red-step (T002 + T003 + T004 + T005)" $ do
                             , riAmountLovelace = amount
                             , riChunkSizeLovelace = chunkSize
                             , riRegistry = weRegistry env
+                            , riValidityHours = Nothing
                             }
                 resolved <- resolveWizardEnv stub ri
                 case resolved of
@@ -538,7 +540,7 @@ spec = describe "SwapWizard red-step (T002 + T003 + T004 + T005)" $ do
                                 , False
                                 )
                             ]
-                    , reEnvCurrentTip = pure 186342942
+                    , reEnvComputeUpperBound = \_ -> pure (Right 186364542)
                     }
 
         let runIssuePipeline :: IO SwapIntent
@@ -552,6 +554,7 @@ spec = describe "SwapWizard red-step (T002 + T003 + T004 + T005)" $ do
                             , riAmountLovelace = issueAmount
                             , riChunkSizeLovelace = issueChunkSize
                             , riRegistry = weRegistry env
+                            , riValidityHours = Nothing
                             }
                 resolved <- resolveWizardEnv stubResolver ri
                 env' <- case resolved of

@@ -346,6 +346,8 @@ liveProvider metadata = do
                 , evaluateTx = \_ -> fail "unused evaluateTx"
                 , posixMsToSlot = \_ -> fail "unused posixMsToSlot"
                 , posixMsCeilSlot = \_ -> fail "unused posixMsCeilSlot"
+                , queryUpperBoundSlot = \_ ->
+                    fail "unused queryUpperBoundSlot"
                 }
     pure provider
 

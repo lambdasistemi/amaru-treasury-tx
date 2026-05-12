@@ -96,7 +96,9 @@ import Data.Maybe (fromMaybe, maybeToList)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
-import Data.Word (Word64, Word8)
+import Data.Word (Word16, Word64)
+
+import Cardano.Node.Client.Validity qualified as Validity
 
 import Amaru.Treasury.IntentJSON qualified as TI
 import Amaru.Treasury.Registry.Derive (scriptHashToHex)
@@ -151,8 +153,12 @@ data SwapWizardQ = SwapWizardQ
     , wqChunkSizeLovelace :: !Integer
     , wqRateNumerator :: !Integer
     , wqRateDenominator :: !Integer
-    , wqValidityHours :: !Word8
-    -- ^ Range [1, 48]; enforced by 'wizardToTreasuryIntent'.
+    , wqValidityHours :: !(Maybe Word16)
+    -- ^ Optional signing window in hours. 'Nothing' = the
+    --   resolver asks the chain horizon helper for
+    --   'AutoLongest'. 'Just 0' is rejected; any positive
+    --   'Just n' is fed in as 'ExactlyHours n' and overshoot
+    --   surfaces as a typed resolver error.
     , wqRationale :: !RationaleAnswers
     , wqExtraSigners :: ![Text]
     -- ^ Extra signer tokens. Each token is either a
@@ -271,7 +277,9 @@ The pure translation reads only this record (plus the
 data WizardEnv = WizardEnv
     { weNetwork :: !Text
     -- ^ @"mainnet"@ / @"preprod"@; informational
-    , weCurrentTip :: !Word64
+    , weUpperBoundSlot :: !Word64
+    -- ^ Resolver-supplied @invalid-hereafter@ slot. Already
+    --   horizon-validated; the pure translator just stamps it.
     , weNetworkConstants :: !NetworkConstants
     , weRegistry :: !RegistryView
     , weScopeView :: !ScopeView
@@ -308,7 +316,7 @@ instance FromJSON SwapWizardQ where
             <*> o .: "chunkSizeLovelace"
             <*> o .: "rateNumerator"
             <*> o .: "rateDenominator"
-            <*> o .: "validityHours"
+            <*> o .:? "validityHours"
             <*> o .: "rationale"
             <*> pure (extraSigners <> legacySigners)
 
@@ -390,7 +398,7 @@ instance FromJSON WizardEnv where
     parseJSON = withObject "WizardEnv" $ \o ->
         WizardEnv
             <$> o .: "network"
-            <*> o .: "currentTip"
+            <*> o .: "upperBoundSlot"
             <*> o .: "networkConstants"
             <*> o .: "registry"
             <*> o .: "scopeView"
@@ -406,7 +414,12 @@ data WizardError
     = WizardChunkSizeNotPositive
     | WizardChunkSizeExceedsAmount
     | WizardAmountNotPositive
-    | WizardValidityHoursOutOfRange !Word8
+    | -- | @--validity-hours@ was set to 0; positive or omit.
+      WizardValidityHoursZero
+    | -- | @--validity-hours N@ overshoots the current chain
+      --   horizon; the wizard refuses before invoking the
+      --   builder. Payload from 'Validity.HorizonError'.
+      WizardValidityOvershoot !Validity.HorizonError
     | WizardRateDenominatorZero
     | WizardSignerNotScopeOrHex28 !Text
     | -- | wizard accepts only Core/Ops/NetworkCompliance/
@@ -434,10 +447,9 @@ validate q = do
     when
         (wqScope q == Contingency)
         (Left (WizardScopeUnsupported Contingency))
-    let h = wqValidityHours q
-    when
-        (h == 0 || h > 48)
-        (Left (WizardValidityHoursOutOfRange h))
+    case wqValidityHours q of
+        Just 0 -> Left WizardValidityHoursZero
+        _ -> pure ()
 
 {- | Required signers always start with the selected scope
 owner. User-supplied signer tokens add witnesses; each
@@ -550,10 +562,7 @@ wizardToTreasuryIntent we q = do
                         rvRegistryPolicyId r
                     }
             , TI.tiSigners = signers
-            , TI.tiValidityUpperBoundSlot =
-                weCurrentTip we
-                    + ncSlotsPerHour nc
-                        * fromIntegral (wqValidityHours q)
+            , TI.tiValidityUpperBoundSlot = weUpperBoundSlot we
             , TI.tiRationale =
                 TI.RationaleJSON
                     { TI.rjEvent =
@@ -621,6 +630,9 @@ data ResolverInput = ResolverInput
     --   funds the per-chunk swap-order overhead.
     , riRegistry :: !RegistryView
     -- ^ verified projection; see 'registryViewFromVerified'
+    , riValidityHours :: !(Maybe Word16)
+    -- ^ Operator-supplied @--validity-hours@; 'Nothing' means
+    --   "use the chain horizon" ('AutoLongest').
     }
     deriving (Eq, Show)
 
@@ -645,6 +657,13 @@ data ResolverError
     | ResolverVerifiedScopeMissing !ScopeId
     | ResolverOwnerMissing !ScopeId
     | ResolverAddressEncodingFailed !Text
+    | -- | @riValidityHours = Just 0@ — rejected without
+      --   touching the chain.
+      ResolverValidityHoursZero
+    | -- | @riValidityHours = Just n@ overshoots the chain
+      --   horizon. Carries the typed 'Validity.HorizonError'
+      --   so the CLI can render a one-line diagnostic.
+      ResolverValidityOvershoot !Validity.HorizonError
     deriving (Eq, Show)
 
 {- | Project a verified registry walk into the compact view
@@ -1038,53 +1057,87 @@ resolveWizardEnv ResolverEnv{..} ri =
                                                             ResolverEmptyWalletUtxos
                                                         )
                                                 Right (walletHead : walletTail, _) -> do
-                                                    tip <- reEnvCurrentTip
-                                                    let owners =
-                                                            rvOwners
-                                                                (riRegistry ri)
-                                                        env =
-                                                            WizardEnv
-                                                                { weNetwork =
-                                                                    riNetwork ri
-                                                                , weCurrentTip =
-                                                                    tip
-                                                                , weNetworkConstants =
-                                                                    nc
-                                                                , weRegistry =
-                                                                    riRegistry ri
-                                                                , weScopeView =
-                                                                    ScopeView
-                                                                        { svScope =
-                                                                            riScope
-                                                                                ri
-                                                                        , svRefs =
-                                                                            refs
-                                                                        , svDefaultSigners =
-                                                                            maybeToList
-                                                                                ( scopeOwnerText
-                                                                                    owners
-                                                                                    (riScope ri)
-                                                                                )
+                                                    upper <-
+                                                        resolveUpperBound
+                                                            reEnvComputeUpperBound
+                                                            (riValidityHours ri)
+                                                    case upper of
+                                                        Left e ->
+                                                            pure (Left e)
+                                                        Right upperBound ->
+                                                            let owners =
+                                                                    rvOwners
+                                                                        (riRegistry ri)
+                                                                env =
+                                                                    WizardEnv
+                                                                        { weNetwork =
+                                                                            riNetwork ri
+                                                                        , weUpperBoundSlot =
+                                                                            upperBound
+                                                                        , weNetworkConstants =
+                                                                            nc
+                                                                        , weRegistry =
+                                                                            riRegistry ri
+                                                                        , weScopeView =
+                                                                            ScopeView
+                                                                                { svScope =
+                                                                                    riScope
+                                                                                        ri
+                                                                                , svRefs =
+                                                                                    refs
+                                                                                , svDefaultSigners =
+                                                                                    maybeToList
+                                                                                        ( scopeOwnerText
+                                                                                            owners
+                                                                                            (riScope ri)
+                                                                                        )
+                                                                                }
+                                                                        , weTreasurySelection =
+                                                                            TreasurySelection
+                                                                                { tsInputs =
+                                                                                    picked
+                                                                                , tsLeftoverLovelace =
+                                                                                    leftover
+                                                                                }
+                                                                        , weWalletSelection =
+                                                                            WalletSelection
+                                                                                { wsTxIn =
+                                                                                    walletHead
+                                                                                , wsAddress =
+                                                                                    riWalletAddrBech32
+                                                                                        ri
+                                                                                , wsExtraTxIns =
+                                                                                    walletTail
+                                                                                }
                                                                         }
-                                                                , weTreasurySelection =
-                                                                    TreasurySelection
-                                                                        { tsInputs =
-                                                                            picked
-                                                                        , tsLeftoverLovelace =
-                                                                            leftover
-                                                                        }
-                                                                , weWalletSelection =
-                                                                    WalletSelection
-                                                                        { wsTxIn =
-                                                                            walletHead
-                                                                        , wsAddress =
-                                                                            riWalletAddrBech32
-                                                                                ri
-                                                                        , wsExtraTxIns =
-                                                                            walletTail
-                                                                        }
-                                                                }
-                                                    pure (Right env)
+                                                            in  pure (Right env)
+
+{- | Drive the resolver's @reEnvComputeUpperBound@ effect with
+the operator's optional @--validity-hours@.
+
+* 'Nothing' → 'AutoLongest' (the longest currently-translatable
+  slot).
+* 'Just 0' → 'ResolverValidityHoursZero' without touching the
+  chain (nonsense input).
+* 'Just n', n > 0 → 'ExactlyHours n'; an overshoot maps to
+  'ResolverValidityOvershoot' carrying the typed
+  'Validity.HorizonError'.
+-}
+resolveUpperBound
+    :: (Monad m)
+    => (Validity.ValidityChoice -> m (Either Validity.HorizonError Word64))
+    -> Maybe Word16
+    -> m (Either ResolverError Word64)
+resolveUpperBound askUpperBound hours = case hours of
+    Just 0 -> pure (Left ResolverValidityHoursZero)
+    other -> do
+        let choice =
+                maybe Validity.AutoLongest Validity.ExactlyHours other
+        result <- askUpperBound choice
+        pure $ case result of
+            Left horizonErr ->
+                Left (ResolverValidityOvershoot horizonErr)
+            Right slot -> Right slot
 
 {- | Effects the resolver pulls from a 'Provider'. Kept as
 its own record so tests can stub IO without depending on
@@ -1100,8 +1153,13 @@ data ResolverEnv m = ResolverEnv
         :: Text
         -> m [(Text, Integer, Bool)]
     -- ^ same, for the treasury address
-    , reEnvCurrentTip :: m Word64
-    -- ^ current chain tip in slots
+    , reEnvComputeUpperBound
+        :: Validity.ValidityChoice
+        -> m (Either Validity.HorizonError Word64)
+    -- ^ Ask the node-side horizon helper for an
+    --   @invalid-hereafter@ slot under the given
+    --   'Validity.ValidityChoice'. 'Left' surfaces
+    --   chain-horizon overshoot. Tests stub this directly.
     }
 
 {- | Single-line operator-facing rendering of a wallet

@@ -127,7 +127,9 @@ data SwapQuoteAuditRequest = SwapQuoteAuditRequest
     , sqarScope :: !Text
     , sqarRequestedUsdm :: !Rational
     , sqarChunk :: !SwapQuoteRequestChunk
-    , sqarValidityHours :: !Integer
+    , sqarValidityHours :: !(Maybe Integer)
+    -- ^ 'Nothing' = operator omitted @--validity-hours@;
+    --   wizard resolved the slot from the chain horizon.
     , sqarExtraSigners :: ![Text]
     }
     deriving (Eq, Show)

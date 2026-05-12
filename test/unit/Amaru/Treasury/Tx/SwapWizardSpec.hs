@@ -77,6 +77,7 @@ import Amaru.Treasury.Tx.SwapWizard
     , WizardEnv (..)
     , WizardError (..)
     , addrNetwork
+    , chunkLovelaces
     , networkConstants
     , registryViewFromVerified
     , renderWalletShortfall
@@ -88,6 +89,7 @@ import Amaru.Treasury.Tx.SwapWizard
 import Test.QuickCheck
     ( Positive (..)
     , property
+    , (===)
     )
 
 spec :: Spec
@@ -343,6 +345,27 @@ spec = describe "SwapWizard" $ do
             leftIs
                 (WizardSignerNotScopeOrHex28 "zz")
                 answers{wqExtraSigners = ["zz"]}
+
+    describe "chunkLovelaces" $ do
+        it "dust-fold split-33" $
+            chunkLovelaces 408_163_265_306 12_368_583_797
+                `shouldBe` replicate 5 12_368_583_798
+                    <> replicate 28 12_368_583_797
+        it "clean divide" $
+            chunkLovelaces 100 25 `shouldBe` [25, 25, 25, 25]
+        it "tiny rem distributes" $
+            chunkLovelaces 7 2 `shouldBe` [3, 2, 2]
+        it "chunk-usdm large rem stays separate" $
+            chunkLovelaces 408_163_265_306 12_500_000_000
+                `shouldBe` replicate 32 12_500_000_000
+                    <> [8_163_265_306]
+        it "amount < chunkSize" $
+            chunkLovelaces 7 100 `shouldBe` [7]
+        it "non-positive chunkSize" $
+            chunkLovelaces 100 0 `shouldBe` []
+        it "sum invariant" $
+            property $ \(Positive a) (Positive c) ->
+                sum (chunkLovelaces a c) === a
 
     describe "networkConstants" $ do
         it "returns a row for mainnet" $

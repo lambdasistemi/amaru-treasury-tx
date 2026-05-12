@@ -46,6 +46,7 @@ module Amaru.Treasury.Tx.SwapWizard
     , registryViewFromVerified
     , networkConstants
     , chunkCountFor
+    , chunkLovelaces
     , selectTreasury
     , selectWallet
     , WalletSelectionError (..)
@@ -862,19 +863,25 @@ selectTreasury inputs target
         | otherwise =
             go (acc + l) (ref : picked) rest
 
-{- | Number of swap-order chunks @mkChunks@ produces for
-@(amount, chunkSize)@: @amount \`div\` chunkSize@ full
-chunks plus one remainder chunk if @amount \`mod\`
-chunkSize > 0@. Total chunks is the multiplier on
-'NetworkConstants.ncExtraPerChunkLovelace' that the
-treasury must fund (FR-001/FR-006).
+{- | Re-export of the chunk shape from
+'Amaru.Treasury.IntentJSON.chunkLovelaces'. Kept here so the
+swap-wizard's public surface still owns the chunk vocabulary.
+-}
+chunkLovelaces :: Integer -> Integer -> [Integer]
+chunkLovelaces = TI.chunkLovelaces
+
+{- | Number of swap-order chunks 'mkChunks' produces for
+@(amount, chunkSize)@. Equals @length . chunkLovelaces@.
+
+Treasury-side accounting depends on this count: the wizard's
+funding target is @amount + chunkCount * extraPerChunkLovelace@
+and the leftover output shrinks by the same amount, so this and
+'chunkLovelaces' must stay in lock-step. They do because the
+former calls the latter (see #91).
 -}
 chunkCountFor :: Integer -> Integer -> Integer
-chunkCountFor amount chunkSize
-    | chunkSize <= 0 = 0
-    | otherwise =
-        let (full, rem') = amount `divMod` chunkSize
-        in  full + if rem' > 0 then 1 else 0
+chunkCountFor amount chunkSize =
+    toInteger (length (chunkLovelaces amount chunkSize))
 
 {- | Wallet-side fee/change slack. The treasury funds the
 swap amount and per-chunk order overhead; the operator

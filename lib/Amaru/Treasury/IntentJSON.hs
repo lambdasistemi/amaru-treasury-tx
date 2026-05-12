@@ -58,6 +58,10 @@ module Amaru.Treasury.IntentJSON
       -- * Translation
     , TranslatedShared (..)
     , translateIntent
+
+      -- * Chunk shape
+    , chunkLovelaces
+    , mkChunks
     ) where
 
 import Control.Monad (unless)
@@ -1092,9 +1096,40 @@ translateWithdraw ti = do
                 }
     pure (shared, intent)
 
-{- | Per-chunk swap-order builder. Lifted verbatim from
-'Tx.SwapIntentJSON.mkChunks'; that copy is deleted in
-T028 alongside the rest of the per-action JSON module.
+{- | Per-chunk lovelace values for a swap order. See #91.
+
+* @c <= 0@         → empty (validator rejects upstream)
+* @full == 0@      → one chunk of @amount@
+* @rem == 0@       → @full@ chunks of @chunkSize@
+* @0 < rem < full@ → @rem@ chunks of @chunkSize + 1@ followed by
+                     @full - rem@ chunks of @chunkSize@.
+                     This fires for @--split N@: by floor-division
+                     @rem < N@, so the remainder is folded across
+                     the first @rem@ chunks instead of becoming a
+                     dust output.
+* @rem >= full@    → @full@ chunks of @chunkSize@ followed by one
+                     chunk of @rem@. This is the @--chunk-usdm X@
+                     shape when the operator's chunk size leaves a
+                     substantial remainder.
+
+Invariant: @sum (chunkLovelaces a c) == a@ for @a, c > 0@.
+-}
+chunkLovelaces :: Integer -> Integer -> [Integer]
+chunkLovelaces amount chunkSize
+    | chunkSize <= 0 = []
+    | full == 0 = [rem']
+    | rem' == 0 = replicate (fromInteger full) chunkSize
+    | rem' < full =
+        replicate (fromInteger rem') (chunkSize + 1)
+            <> replicate (fromInteger (full - rem')) chunkSize
+    | otherwise =
+        replicate (fromInteger full) chunkSize <> [rem']
+  where
+    (full, rem') = amount `divMod` chunkSize
+
+{- | Per-chunk swap-order builder. Maps each value from
+'chunkLovelaces' to a 'SwapOrderOut' with the corresponding
+USDM datum amount (scaled by the per-chunk lovelace).
 -}
 mkChunks
     :: Integer
@@ -1106,16 +1141,8 @@ mkChunks
     -> SwapOrderDatumParams
     -> [SwapOrderOut]
 mkChunks chunkSize totalAmount (rNum, rDen) dp =
-    let full = totalAmount `div` chunkSize
-        rem' = totalAmount `mod` chunkSize
-        usdm n = (n * rNum + rDen - 1) `div` rDen
-        fullChunk =
-            SwapOrderOut
-                (Coin chunkSize)
-                (swapOrderDatum dp chunkSize (usdm chunkSize))
-        remChunk =
-            SwapOrderOut
-                (Coin rem')
-                (swapOrderDatum dp rem' (usdm rem'))
-        fulls = replicate (fromInteger full) fullChunk
-    in  if rem' > 0 then fulls ++ [remChunk] else fulls
+    [ SwapOrderOut (Coin n) (swapOrderDatum dp n (usdm n))
+    | n <- chunkLovelaces totalAmount chunkSize
+    ]
+  where
+    usdm n = (n * rNum + rDen - 1) `div` rDen

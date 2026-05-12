@@ -351,16 +351,21 @@ spec = describe "SwapQuote" $ do
                         (sampleSwapQuoteOpts sampleAdaUsdOverride)
                         sampleAdaUsdObservation
                     )
-            case decideSwapQuoteRun plan 3_280_000 124_462_253_731 of
+            -- Under issue #91 the wizard distributes a small
+            -- remainder across the chunks instead of emitting a
+            -- dust output, so chunkCount drops by 1 here (34 → 33)
+            -- and the required-funding total shrinks by one
+            -- 'extraPerChunkLovelace'.
+            case decideSwapQuoteRun plan 3_280_000 124_458_973_731 of
                 SwapQuoteRunBlocked failure audit -> do
                     failure
                         `shouldBe` Unaffordable
                             AffordabilitySummary
                                 { asDerived = sqpDerived plan
-                                , asChunkCount = 34
+                                , asChunkCount = 33
                                 , asExtraPerChunkLovelace = 3_280_000
-                                , asRequiredLovelace = 124_462_253_732
-                                , asAvailableLovelace = 124_462_253_731
+                                , asRequiredLovelace = 124_458_973_732
+                                , asAvailableLovelace = 124_458_973_731
                                 , asShortfallLovelace = 1
                                 }
                     sqaStatus audit `shouldBe` SwapQuoteAffordabilityFailed

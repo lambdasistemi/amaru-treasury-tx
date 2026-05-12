@@ -83,7 +83,9 @@ import Data.Ord (Down (..))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
-import Data.Word (Word64, Word8)
+import Data.Word (Word16, Word64)
+
+import Cardano.Node.Client.Validity qualified as Validity
 
 import Amaru.Treasury.Constants
     ( Unit (..)
@@ -160,8 +162,10 @@ data DisburseAnswers = DisburseAnswers
     -- ^ Validated bech32 @addr…@ string. Parsed once
     --   by the resolver; carried verbatim into
     --   the JSON intent.
-    , daValidityHours :: !Word8
-    -- ^ Range [1, 48]; enforced by the translation.
+    , daValidityHours :: !(Maybe Word16)
+    -- ^ Optional signing window in hours. 'Nothing' = the
+    --   resolver asks the chain horizon helper for
+    --   'Validity.AutoLongest'. 'Just 0' is rejected.
     , daRationale :: !RationaleAnswers
     , daExtraSigners :: ![Text]
     -- ^ Each token is either a scope name (lowercased,
@@ -208,8 +212,9 @@ Pure 'disburseToIntentJSON' reads only this record + a
 data DisburseEnv = DisburseEnv
     { deNetwork :: !Text
     -- ^ @"mainnet"@ / @"preprod"@ / @"preview"@
-    , deCurrentTip :: !Word64
-    -- ^ chain tip slot at the time of resolution
+    , deUpperBoundSlot :: !Word64
+    -- ^ Resolver-supplied @invalid-hereafter@ slot. Already
+    --   horizon-validated; the pure translator just stamps it.
     , deNetworkConstants :: !NetworkConstants
     -- ^ shared with the swap wizard; the disburse
     --   path reads only the USDM rows
@@ -240,8 +245,13 @@ reach this enum.
 data DisburseError
     = -- | @daAmount@ is 0 or negative.
       DisburseAmountNotPositive
-    | -- | @daValidityHours@ outside [1, 48].
-      DisburseValidityHoursOutOfRange !Word8
+    | -- | @daValidityHours = Just 0@.
+      DisburseValidityHoursZero
+    | -- | @daValidityHours = Just n@ overshoots the chain
+      --   horizon. Carries the typed
+      --   'Validity.HorizonError' so the CLI can render a
+      --   one-line diagnostic.
+      DisburseValidityOvershoot !Validity.HorizonError
     | -- | An entry of @daExtraSigners@ is neither a
       -- known scope name nor a 28-byte hex keyhash.
       DisburseSignerNotScopeOrHex28 !Text
@@ -267,7 +277,7 @@ instance FromJSON DisburseAnswers where
             <$> o .: "unit"
             <*> o .: "amount"
             <*> o .: "beneficiaryAddrBech32"
-            <*> o .: "validityHours"
+            <*> o .:? "validityHours"
             <*> o .: "rationale"
             <*> (fromMaybe [] <$> o .:? "extraSigners")
 
@@ -284,7 +294,7 @@ instance FromJSON DisburseEnv where
     parseJSON = withObject "DisburseEnv" $ \o ->
         DisburseEnv
             <$> o .: "network"
-            <*> o .: "currentTip"
+            <*> o .: "upperBoundSlot"
             <*> o .: "networkConstants"
             <*> o .: "registry"
             <*> o .: "scopeView"
@@ -321,11 +331,7 @@ disburseToIntentJSON env ans = do
             , dijScope = mkScope env ans
             , dijDisburse = mkDisburse env ans
             , dijSigners = signers
-            , dijValidityUpperBoundSlot =
-                deCurrentTip env
-                    + ncSlotsPerHour
-                        (deNetworkConstants env)
-                        * fromIntegral (daValidityHours ans)
+            , dijValidityUpperBoundSlot = deUpperBoundSlot env
             , dijRationale = mkRationale ans
             }
 
@@ -350,11 +356,7 @@ disburseToTreasuryIntent env ans = do
                 mkTreasuryWallet (deWalletSelection env)
             , tiScope = mkTreasuryScope env ans
             , tiSigners = signers
-            , tiValidityUpperBoundSlot =
-                deCurrentTip env
-                    + ncSlotsPerHour
-                        (deNetworkConstants env)
-                        * fromIntegral (daValidityHours ans)
+            , tiValidityUpperBoundSlot = deUpperBoundSlot env
             , tiRationale = mkTreasuryRationale ans
             , tiPayload = mkTreasuryDisburse env ans
             }
@@ -369,10 +371,9 @@ validate env ans = do
     when
         (daAmount ans <= 0)
         (Left DisburseAmountNotPositive)
-    let h = daValidityHours ans
-    when
-        (h == 0 || h > 48)
-        (Left (DisburseValidityHoursOutOfRange h))
+    case daValidityHours ans of
+        Just 0 -> Left DisburseValidityHoursZero
+        _ -> pure ()
     let sel = deTreasurySelection env
     case daUnit ans of
         ADA ->
@@ -572,6 +573,9 @@ data ResolverInput = ResolverInput
     , riUnit :: !Unit
     , riAmount :: !Integer
     , riRegistry :: !RegistryView
+    , riValidityHours :: !(Maybe Word16)
+    -- ^ Operator-supplied @--validity-hours@; 'Nothing' = use
+    --   the chain horizon ('Validity.AutoLongest').
     }
     deriving stock (Eq, Show)
 
@@ -586,7 +590,11 @@ data ResolverEnv m = ResolverEnv
         :: !(Text -> m [(Text, Integer, Bool)])
     , reEnvQueryTreasuryUtxos
         :: !(Text -> m [(TxIn, MaryValue)])
-    , reEnvCurrentTip :: !(m Word64)
+    , reEnvComputeUpperBound
+        :: !( Validity.ValidityChoice
+              -> m (Either Validity.HorizonError Word64)
+            )
+    -- ^ Horizon helper. 'Left' surfaces chain-horizon overshoot.
     }
 
 data ResolverError
@@ -600,7 +608,35 @@ data ResolverError
     | ResolverShortfall !Integer !Integer
     | ResolverWalletShortfall !Integer !Integer
     | ResolverUsdmConstantDecodeFailed !Text !String
+    | -- | @riValidityHours = Just 0@.
+      ResolverValidityHoursZero
+    | -- | @riValidityHours = Just n@ overshoots chain horizon.
+      ResolverValidityOvershoot !Validity.HorizonError
     deriving stock (Eq, Show)
+
+{- | Drive the resolver's @reEnvComputeUpperBound@ effect with
+the operator's optional @--validity-hours@.
+
+* 'Nothing' → 'Validity.AutoLongest'.
+* 'Just 0' → 'ResolverValidityHoursZero'.
+* 'Just n', n > 0 → 'Validity.ExactlyHours n'; overshoot maps
+  to 'ResolverValidityOvershoot'.
+-}
+resolveUpperBound
+    :: (Monad m)
+    => (Validity.ValidityChoice -> m (Either Validity.HorizonError Word64))
+    -> Maybe Word16
+    -> m (Either ResolverError Word64)
+resolveUpperBound askUpperBound hours = case hours of
+    Just 0 -> pure (Left ResolverValidityHoursZero)
+    other -> do
+        let choice =
+                maybe Validity.AutoLongest Validity.ExactlyHours other
+        result <- askUpperBound choice
+        pure $ case result of
+            Left horizonErr ->
+                Left (ResolverValidityOvershoot horizonErr)
+            Right slot -> Right slot
 
 {- | Resolve chain-derived disburse inputs. Business
 arithmetic stays in the pure selection helpers; this
@@ -670,32 +706,38 @@ resolveDisburseEnv ResolverEnv{..} ri =
                     Right ([], _) ->
                         pure (Left ResolverEmptyWalletUtxos)
                     Right (walletHead : walletTail, _) -> do
-                        tip <- reEnvCurrentTip
-                        pure $
-                            Right
-                                DisburseEnv
-                                    { deNetwork = riNetwork ri
-                                    , deCurrentTip = tip
-                                    , deNetworkConstants = nc
-                                    , deRegistry = riRegistry ri
-                                    , deScopeView =
-                                        ScopeView
-                                            { svScope = riScope ri
-                                            , svRefs = refs
-                                            , svDefaultSigners = []
+                        upper <-
+                            resolveUpperBound
+                                reEnvComputeUpperBound
+                                (riValidityHours ri)
+                        case upper of
+                            Left e -> pure (Left e)
+                            Right upperBound ->
+                                pure $
+                                    Right
+                                        DisburseEnv
+                                            { deNetwork = riNetwork ri
+                                            , deUpperBoundSlot = upperBound
+                                            , deNetworkConstants = nc
+                                            , deRegistry = riRegistry ri
+                                            , deScopeView =
+                                                ScopeView
+                                                    { svScope = riScope ri
+                                                    , svRefs = refs
+                                                    , svDefaultSigners = []
+                                                    }
+                                            , deTreasurySelection =
+                                                treasurySelection
+                                            , deWalletSelection =
+                                                WalletSelection
+                                                    { wsTxIn = walletHead
+                                                    , wsAddress =
+                                                        riWalletAddrBech32 ri
+                                                    , wsExtraTxIns = walletTail
+                                                    }
+                                            , deBeneficiaryAddrBech32 =
+                                                riBeneficiaryAddrBech32 ri
                                             }
-                                    , deTreasurySelection =
-                                        treasurySelection
-                                    , deWalletSelection =
-                                        WalletSelection
-                                            { wsTxIn = walletHead
-                                            , wsAddress =
-                                                riWalletAddrBech32 ri
-                                            , wsExtraTxIns = walletTail
-                                            }
-                                    , deBeneficiaryAddrBech32 =
-                                        riBeneficiaryAddrBech32 ri
-                                    }
 
     selectTreasuryForUnit usdmPolicy usdmAsset treasuryUtxos =
         case riUnit ri of

@@ -16,13 +16,10 @@ This is the only impure module in
 -}
 module Amaru.Treasury.Backend.N2C
     ( withLocalNodeBackend
-    , StakeRewardsError (..)
     , probeNetworkMagic
     , probeResultAccepted
     , findSocketMagic
     , knownNetworkMagics
-    , queryStakeRewardsLovelace
-    , stakeRewardLovelaceFromRewards
     ) where
 
 import Control.Concurrent.Async
@@ -30,18 +27,11 @@ import Control.Concurrent.Async
     )
 import Control.Exception (SomeException, throwIO, try)
 import Control.Monad (void)
-import Data.Map.Strict qualified as Map
-import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Word (Word32)
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.Timeout (timeout)
 
-import Cardano.Ledger.Address
-    ( AccountAddress (..)
-    , AccountId (..)
-    )
-import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Node.Client.N2C.Connection
     ( newLSQChannel
     , newLTxSChannel
@@ -49,22 +39,11 @@ import Cardano.Node.Client.N2C.Connection
     )
 import Cardano.Node.Client.N2C.LocalStateQuery (queryLSQ)
 import Cardano.Node.Client.N2C.Provider (mkN2CProvider)
-import Ouroboros.Consensus.Cardano.Block
-    ( pattern QueryIfCurrentConway
-    )
 import Ouroboros.Consensus.Ledger.Query
-    ( Query (BlockQuery, GetChainPoint)
-    )
-import Ouroboros.Consensus.Shelley.Ledger.Query
-    ( pattern GetFilteredDelegationsAndRewardAccounts
+    ( Query (GetChainPoint)
     )
 
 import Amaru.Treasury.Backend (Backend)
-
--- | Failures returned by the live stake reward query.
-data StakeRewardsError
-    = StakeRewardsEraMismatch
-    deriving stock (Eq, Show)
 
 {- | Run an 'IO' action with a local-node-backed
 'Backend'. Spawns a background thread that drives the
@@ -94,61 +73,6 @@ withLocalNodeBackend magic socketPath action = do
                 Right () -> pure ()
                 Left e -> throwIO e
     withAsync connect $ \_ -> action backend
-
-{- | Query the current reward balance for one stake account via the
-Conway local-state query used by @cardano-cli query stake-address-info@.
-
-Missing rows are treated as zero rewards, matching the CLI no-output
-contract for unregistered or empty reward accounts.
--}
-queryStakeRewardsLovelace
-    :: NetworkMagic
-    -- ^ network magic (mainnet, preprod, preview)
-    -> FilePath
-    -- ^ path to the cardano-node socket
-    -> AccountAddress
-    -- ^ stake reward account
-    -> IO (Either StakeRewardsError Integer)
-queryStakeRewardsLovelace magic socketPath account = do
-    lsq <- newLSQChannel 4
-    ltxs <- newLTxSChannel 1
-    let connect = do
-            r <- runNodeClient magic socketPath lsq ltxs
-            case r of
-                Right () -> pure ()
-                Left e -> throwIO e
-    withAsync connect $ \_ -> do
-        result <-
-            queryLSQ lsq $
-                BlockQuery $
-                    QueryIfCurrentConway $
-                        GetFilteredDelegationsAndRewardAccounts
-                            (Set.singleton credential)
-        case result of
-            Right (_delegations, rewards) ->
-                pure $
-                    Right $
-                        stakeRewardLovelaceFromRewards
-                            credential
-                            rewards
-            Left _mismatch ->
-                pure (Left StakeRewardsEraMismatch)
-  where
-    AccountAddress _network (AccountId credential) = account
-
--- | Return the queried credential's rewards from a Conway reward map.
-stakeRewardLovelaceFromRewards
-    :: (Ord credential)
-    => credential
-    -> Map.Map credential Coin
-    -> Integer
-stakeRewardLovelaceFromRewards credential rewards =
-    let Coin lovelace =
-            Map.findWithDefault
-                (Coin 0)
-                credential
-                rewards
-    in  lovelace
 
 {- | Probe whether a Unix socket accepts the given
 'NetworkMagic' on the N2C handshake. Returns 'True' if

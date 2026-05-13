@@ -20,6 +20,7 @@ implementation in MVP is @Amaru.Treasury.Backend.N2C@
 module Amaru.Treasury.Backend
     ( -- * Alias
       Backend
+    , rewardAccountLovelace
 
       -- * Re-exports from cardano-node-clients
     , Provider (..)
@@ -31,6 +32,11 @@ module Amaru.Treasury.Backend
     , SlotNo (..)
     ) where
 
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
+
+import Cardano.Ledger.Address (AccountAddress)
+import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Node.Client.Provider
     ( EvaluateTxResult
     , Provider (..)
@@ -43,3 +49,28 @@ import Cardano.Node.Client.Provider
 
 -- | The CLI's effect-y boundary: a 'Provider' running in 'IO'.
 type Backend = Provider IO
+
+{- | Query one reward account through a 'Provider'.
+
+Missing rows are treated as zero rewards, matching the
+@cardano-cli query stake-address-info@ no-output contract for
+unregistered or empty reward accounts.
+-}
+rewardAccountLovelace
+    :: (Functor m)
+    => Provider m
+    -> AccountAddress
+    -> m Integer
+rewardAccountLovelace provider account =
+    toLovelace
+        <$> queryRewardAccounts
+            provider
+            (Set.singleton account)
+  where
+    toLovelace rewards =
+        let Coin lovelace =
+                Map.findWithDefault
+                    (Coin 0)
+                    account
+                    rewards
+        in  lovelace

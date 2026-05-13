@@ -4,6 +4,19 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+### Maintainer Notes
+
+* Local DevNet governance evidence now proves the first treasury setup
+  slice: `just devnet-smoke governance` submits and votes through a
+  treasury-withdrawal governance action, then observes the Amaru
+  treasury script reward account funded through Provider reward
+  queries. Latest branch evidence: `runs/devnet/20260513T084753Z`,
+  `cardano-node-clients` #137
+  `c46b95a86c9155db414f519fcd6c75e5b310b23e`, reward account
+  `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34`
+  `0 -> 2000000` lovelace. Withdrawal, disburse, SundaeSwap order, and
+  reorganize proofs remain follow-up DevNet slices.
+
 ## [0.2.8.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.7.1...v0.2.8.0) (2026-05-14)
 
 ### Features

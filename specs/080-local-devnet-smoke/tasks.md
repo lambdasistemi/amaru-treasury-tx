@@ -26,8 +26,8 @@
 - [x] T010 Keep local-only `devnet` network identity support.
 - [x] T011 Keep `test/devnet` and `scripts/smoke/devnet-local` out of default `just ci`.
 - [x] T012 Keep `just devnet-smoke node` as the node-readiness proof.
-- [ ] T013 Re-run `nix develop --quiet -c cabal test devnet-tests -O0 --test-show-details=direct --test-option=--match --test-option node`.
-- [ ] T014 Re-run `nix develop --quiet -c just devnet-smoke node`.
+- [x] T013 Re-run `nix develop --quiet -c cabal test devnet-tests -O0 --test-show-details=direct --test-option=--match --test-option node`.
+- [x] T014 Re-run `nix develop --quiet -c just devnet-smoke node`.
 
 ## Phase 3: Process Gate And Upstream Stack
 
@@ -35,7 +35,7 @@
 - [x] T016 Write the local gate script in `llm/reviews/local-080-local-devnet-smoke/gate.sh`.
 - [x] T017 Review `specs/080-local-devnet-smoke/spec.md`, `plan.md`, and `tasks.md` for cross-artifact consistency before implementation resumes.
 - [x] T018 Verify current `cardano-node-clients` #137 head, base, draft state, and PR body through `gh pr view 137 --repo lambdasistemi/cardano-node-clients`.
-- [ ] T019 Record in #82/PR metadata that Amaru may prove direction against #135 + #137 draft heads, but release readiness depends on the upstream stack being accepted or explicitly pinned.
+- [x] T019 Record in #82/PR metadata that Amaru may prove direction against #135 + #137 draft heads, but release readiness depends on the upstream stack being accepted or explicitly pinned.
 
 ## Phase 4: Vertical Slice 1 - Upstream Pin And Provider API
 
@@ -67,16 +67,16 @@
 Evidence:
 
 - RED: `nix develop --quiet -c just devnet-smoke governance` failed on the old typed blocker `MISSING_UPSTREAM_GOVERNANCE_SUPPORT`.
-- GREEN: `nix develop --quiet -c just devnet-smoke governance` passed with #137 head `c46b95a86c9155db414f519fcd6c75e5b310b23e`, run directory `runs/devnet/20260513T083455Z`, governance tx `d5bf03b2517ff8c2a7d3259e60b33c4d69b84a6ffb97e9dd6eee00beb685554e`, action index `0`, treasury script reward account `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34`, and reward balance `0 -> 2000000` lovelace across epochs `2 -> 4`.
+- GREEN: `./llm/reviews/local-080-local-devnet-smoke/gate.sh` passed with #137 head `c46b95a86c9155db414f519fcd6c75e5b310b23e`, run directory `runs/devnet/20260513T084753Z`, governance tx `d5bf03b2517ff8c2a7d3259e60b33c4d69b84a6ffb97e9dd6eee00beb685554e`, action index `0`, treasury script reward account `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34`, and reward balance `0 -> 2000000` lovelace across epochs `2 -> 4`.
 
 ## Phase 7: Vertical Slice 4 - Documentation And Release Notes
 
-- [ ] T038 [US3] Update `docs/local-devnet-smoke.md` after the governance proof lands.
-- [ ] T039 [US3] Update `README.md` after the governance proof lands.
-- [ ] T040 [US3] Update `docs/release.md` with release-note wording that distinguishes governance proof from withdrawal, disburse, swap-order, swap-spend, and reorganize evidence.
-- [ ] T041 [US3] Update PR/issue metadata for #82 with the verified command outputs and upstream stack SHAs.
-- [ ] T042 [US3] Verify slice 4 with `nix develop --quiet -c just ci`.
-- [ ] T043 [US3] Commit slice 4 as `docs(devnet): record governance proof`.
+- [x] T038 [US3] Update `docs/local-devnet-smoke.md` after the governance proof lands.
+- [x] T039 [US3] Update `README.md` after the governance proof lands.
+- [x] T040 [US3] Update `docs/release.md` with release-note wording that distinguishes governance proof from withdrawal, disburse, swap-order, swap-spend, and reorganize evidence.
+- [x] T041 [US3] Update PR/issue metadata for #82 with the verified command outputs and upstream stack SHAs.
+- [x] T042 [US3] Verify slice 4 with `nix develop --quiet -c just ci`.
+- [x] T043 [US3] Commit slice 4 as `docs(devnet): record governance proof`.
 
 ## Dependencies
 

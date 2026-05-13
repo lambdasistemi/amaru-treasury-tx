@@ -4,6 +4,12 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.5.1](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.5.0...v0.2.5.1) (2026-05-13)
+
+### Bug Fixes
+
+* **102:** accept bare WitVKey alongside [0, WitVKey] envelope ([cc1ef53](https://github.com/lambdasistemi/amaru-treasury-tx/commit/cc1ef53599ec24a0de6646697dcc99d408fb7802))
+
 ## [0.2.5.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.4.0...v0.2.5.0) (2026-05-13)
 
 ### Features

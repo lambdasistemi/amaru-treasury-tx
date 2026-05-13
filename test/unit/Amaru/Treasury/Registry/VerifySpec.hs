@@ -343,6 +343,16 @@ liveProvider metadata = do
                 , queryUTxOByTxIn =
                     pure . Map.restrictKeys byTxIn
                 , queryProtocolParams = fail "unused queryProtocolParams"
+                , queryLedgerSnapshot = fail "unused queryLedgerSnapshot"
+                , queryStakeRewards = \_ ->
+                    fail "unused queryStakeRewards"
+                , queryRewardAccounts = \_ ->
+                    fail "unused queryRewardAccounts"
+                , queryVoteDelegatees = \_ ->
+                    fail "unused queryVoteDelegatees"
+                , queryTreasury = fail "unused queryTreasury"
+                , queryGovernanceState =
+                    fail "unused queryGovernanceState"
                 , evaluateTx = \_ -> fail "unused evaluateTx"
                 , posixMsToSlot = \_ -> fail "unused posixMsToSlot"
                 , posixMsCeilSlot = \_ -> fail "unused posixMsCeilSlot"

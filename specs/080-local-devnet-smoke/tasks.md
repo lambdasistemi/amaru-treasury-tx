@@ -39,9 +39,9 @@
 
 ## Phase 4: Vertical Slice 1 - Upstream Pin And Provider API
 
-- [ ] T020 [US2] RED: pin only `cabal.project`/`flake.nix` to the current #137 head and run `nix develop --quiet -c cabal test unit-tests -O0 --test-show-details=direct --test-option=--match --test-option /Registry.Verify/`, expecting the expanded `Provider` record to expose missing local stubs.
-- [ ] T021 [US2] GREEN: update local `Provider` stubs in `test/unit/Amaru/Treasury/Registry/VerifySpec.hs` for #137 fields without changing resolver behavior.
-- [ ] T022 [US2] Verify slice 1 with `nix develop --quiet -c cabal test unit-tests -O0 --test-show-details=direct --test-option=--match --test-option /Registry.Verify/`.
+- [x] T020 [US2] RED: pin only `cabal.project`/`flake.nix` to the current #137 head and run `nix develop --quiet -c cabal test unit-tests -O0 --test-show-details=direct --test-option=--match --test-option /Registry.Verify/`, expecting the expanded `Provider` record to expose missing local stubs.
+- [x] T021 [US2] GREEN: update local `Provider` stubs in `test/unit/Amaru/Treasury/Registry/VerifySpec.hs` for #137 fields without changing resolver behavior.
+- [x] T022 [US2] Verify slice 1 with `nix develop --quiet -c cabal test unit-tests -O0 --test-show-details=direct --test-option=--match --test-option "Amaru.Treasury.Registry.Verify"`.
 - [ ] T023 [US2] Commit slice 1 as `build(devnet): pin governance provider stack`.
 
 ## Phase 5: Vertical Slice 2 - Reward Query Boundary

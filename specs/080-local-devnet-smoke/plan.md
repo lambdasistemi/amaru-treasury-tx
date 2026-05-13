@@ -7,17 +7,23 @@
 
 **Completed**: Spec Kit artifacts exist; local-only `devnet` network
 identity support and the node phase have been implemented in prior
-commits; node docs are present.
+commits; node docs are present; the upstream #137 provider stack is
+pinned; withdraw reward lookup now uses provider reward-account
+queries; the governance smoke submits and votes through a treasury
+withdrawal on short-epoch DevNet and observes the Amaru treasury
+script reward account funded.
 
-**Current**: Scope is narrowed to the governance action slice. The
-remaining work must land as vertical TDD commits: each behavior-changing
-commit carries its own failing proof, implementation, focused
-verification, and task/doc status update.
+**Current**: Slice 3 is ready for review/commit after final formatting
+and focused governance-smoke verification. The next slice is
+documentation and release notes, including README and #82 metadata.
 
 **Blockers**: The downstream branch may consume the current
 `cardano-node-clients` #137 draft head to prove direction locally, but
 release/merge readiness still depends on the upstream PR stack being
-accepted or explicitly pinned for the release.
+accepted or explicitly pinned for the release. Latest local evidence:
+`just devnet-smoke governance` passed in `runs/devnet/20260513T082323Z`
+with reward account `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34`
+funded from `0` to `2000000` lovelace.
 
 ## Summary
 

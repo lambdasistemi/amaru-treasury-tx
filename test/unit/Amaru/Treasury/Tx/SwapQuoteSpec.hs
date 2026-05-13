@@ -7,9 +7,11 @@ License     : Apache-2.0
 -}
 module Amaru.Treasury.Tx.SwapQuoteSpec (spec) where
 
+import Data.ByteString.Char8 qualified as BS
 import Data.Either (isLeft, isRight)
 import Data.Ratio ((%))
 import Data.Text qualified as T
+import Data.Version (showVersion)
 import Network.HTTP.Client (requestHeaders)
 import Options.Applicative
     ( ParserResult (..)
@@ -17,6 +19,7 @@ import Options.Applicative
     , execParserPure
     , info
     )
+import Paths_amaru_treasury_tx qualified as P
 import Test.Hspec
     ( Expectation
     , Spec
@@ -263,11 +266,17 @@ spec = describe "SwapQuote" $ do
         it "recognises coingecko-ada-usd as the named ADA/USD source" $
             quoteSourceName CoinGeckoAdaUsd `shouldBe` "coingecko-ada-usd"
 
-        it "sends CoinGecko a descriptive User-Agent" $ do
-            request <- coinGeckoRequest
-            lookup "User-Agent" (requestHeaders request)
-                `shouldBe` Just
-                    "amaru-treasury-tx/0.2.1.1 (https://github.com/lambdasistemi/amaru-treasury-tx)"
+        it
+            "sends CoinGecko a descriptive User-Agent tracking the cabal version"
+            $ do
+                request <- coinGeckoRequest
+                let expected =
+                        BS.pack $
+                            "amaru-treasury-tx/"
+                                <> showVersion P.version
+                                <> " (https://github.com/lambdasistemi/amaru-treasury-tx)"
+                lookup "User-Agent" (requestHeaders request)
+                    `shouldBe` Just expected
 
     describe "swap-quote CLI parser" $ do
         it "accepts an explicit ADA/USD override quote input" $

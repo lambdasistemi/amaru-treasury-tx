@@ -32,6 +32,7 @@ import Data.Aeson
     )
 import Data.Aeson.Types (Parser, parseEither)
 import Data.ByteString (ByteString)
+import Data.ByteString.Char8 qualified as BS
 import Data.ByteString.Lazy qualified as BSL
 import Data.Maybe (fromMaybe)
 import Data.Scientific (Scientific)
@@ -39,6 +40,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Text.Encoding.Error (lenientDecode)
+import Data.Version (showVersion)
 import Network.HTTP.Client
     ( Request (responseTimeout)
     , requestHeaders
@@ -50,6 +52,7 @@ import Network.HTTP.Simple
     , httpLBS
     , parseRequest
     )
+import Paths_amaru_treasury_tx qualified as P
 import System.Environment (lookupEnv)
 import System.IO (hPutStrLn, stderr)
 
@@ -181,9 +184,18 @@ coinGeckoRequest = do
                 ("User-Agent", coinGeckoUserAgent) : requestHeaders request0
             }
 
+{- | User-Agent advertised to outbound quote providers.
+
+The version segment is derived from @Paths_amaru_treasury_tx@
+so it tracks @amaru-treasury-tx.cabal@ across releases without a
+manual bump.
+-}
 coinGeckoUserAgent :: ByteString
 coinGeckoUserAgent =
-    "amaru-treasury-tx/0.2.1.1 (https://github.com/lambdasistemi/amaru-treasury-tx)"
+    BS.pack $
+        "amaru-treasury-tx/"
+            <> showVersion P.version
+            <> " (https://github.com/lambdasistemi/amaru-treasury-tx)"
 
 {- | Describe the TLS trust anchor that the next outbound
 HTTPS request will use, by reading @SSL_CERT_FILE@ and

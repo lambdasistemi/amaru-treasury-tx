@@ -74,6 +74,8 @@ library
   import:           warnings
   hs-source-dirs:   lib
   default-language: GHC2021
+  autogen-modules:  Paths_amaru_treasury_tx
+  other-modules:    Paths_amaru_treasury_tx
   exposed-modules:
     Amaru.Treasury
     Amaru.Treasury.AuxData
@@ -295,6 +297,7 @@ test-suite unit-tests
   hs-source-dirs:     test/unit
   main-is:            Spec.hs
   default-language:   GHC2021
+  autogen-modules:    Paths_amaru_treasury_tx
   other-modules:
     Amaru.Treasury.AuxDataSpec
     Amaru.Treasury.BuildSpec
@@ -324,6 +327,7 @@ test-suite unit-tests
     Amaru.Treasury.Tx.WithdrawSpec
     Amaru.Treasury.Tx.WithdrawWizardSpec
     Amaru.Treasury.UtxoSelectSpec
+    Paths_amaru_treasury_tx
     PlaceholderSpec
 
   build-depends:

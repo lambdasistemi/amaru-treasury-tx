@@ -41,11 +41,12 @@ import Options.Applicative
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.Exit (ExitCode (..), exitWith)
 
-import Amaru.Treasury.Backend (Provider)
+import Amaru.Treasury.Backend
+    ( Provider
+    , rewardAccountLovelace
+    )
 import Amaru.Treasury.Backend.N2C
-    ( StakeRewardsError (..)
-    , queryStakeRewardsLovelace
-    , withLocalNodeBackend
+    ( withLocalNodeBackend
     )
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
@@ -252,8 +253,6 @@ runWithdrawWizard g WithdrawOpts{..} = do
                             providerToWithdrawResolverEnv
                                 tr
                                 networkName
-                                (goNetworkMagic g)
-                                socket
                                 backend
                 er <- Withdraw.resolveWithdrawEnv renv ri
                 env <- case er of
@@ -365,11 +364,9 @@ traceWithdrawEnv tr env = do
 providerToWithdrawResolverEnv
     :: Tracer IO WithdrawTrace.WithdrawWizardEvent
     -> Text
-    -> NetworkMagic
-    -> FilePath
     -> Provider IO
     -> Withdraw.WithdrawResolverEnv IO
-providerToWithdrawResolverEnv tr networkName magic socket p =
+providerToWithdrawResolverEnv tr networkName p =
     Withdraw.WithdrawResolverEnv
         { Withdraw.wreQueryWalletUtxos = queryFlat p
         , Withdraw.wreQueryRewardsLovelace = \account -> do
@@ -383,17 +380,7 @@ providerToWithdrawResolverEnv tr networkName magic socket p =
                         ( "resolve: reward account: "
                             <> T.pack e
                         )
-            result <-
-                queryStakeRewardsLovelace
-                    magic
-                    socket
-                    rewardAccount
-            case result of
-                Right rewards -> pure rewards
-                Left StakeRewardsEraMismatch ->
-                    abortWithdraw
-                        tr
-                        "resolve: stake rewards query: node is not in Conway era"
+            rewardAccountLovelace p rewardAccount
         , Withdraw.wreComputeUpperBound = \choice -> do
             r <- queryUpperBoundSlot p choice
             pure (fmap unwrapSlot r)

@@ -46,9 +46,9 @@
 
 ## Phase 5: Vertical Slice 2 - Reward Query Boundary
 
-- [ ] T024 [US2] RED: add a focused unit regression proving reward-account lookup treats absent rows as zero through a `Provider` reward-account query path.
-- [ ] T025 [US2] GREEN: remove the direct `queryLSQ` reward helper from `lib/Amaru/Treasury/Backend/N2C.hs` and route withdraw reward resolution through #137 `Provider.queryRewardAccounts`.
-- [ ] T026 [US2] Verify slice 2 with `nix develop --quiet -c cabal test unit-tests -O0 --test-show-details=direct --test-option=--match --test-option /WithdrawWizard/`.
+- [x] T024 [US2] RED: add a focused unit regression proving reward-account lookup treats absent rows as zero through a `Provider` reward-account query path.
+- [x] T025 [US2] GREEN: remove the direct `queryLSQ` reward helper from `lib/Amaru/Treasury/Backend/N2C.hs` and route withdraw reward resolution through #137 `Provider.queryRewardAccounts`.
+- [x] T026 [US2] Verify slice 2 with `nix develop --quiet -c cabal test unit-tests -O0 --test-show-details=direct --test-option=--match --test-option "Amaru.Treasury.Tx.WithdrawWizard"`.
 - [ ] T027 [US2] Commit slice 2 as `feat(withdraw): use provider reward queries`.
 
 ## Phase 6: Vertical Slice 3 - Governance DevNet Smoke

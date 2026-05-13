@@ -42,6 +42,7 @@ import Test.Hspec
     , it
     , shouldBe
     , shouldContain
+    , shouldReturn
     , shouldSatisfy
     , shouldThrow
     )
@@ -95,11 +96,15 @@ import Options.Applicative
     )
 import Ouroboros.Network.Magic (NetworkMagic (..))
 
+import Amaru.Treasury.Backend
+    ( Provider (..)
+    , rewardAccountLovelace
+    , singleShotWithAcquired
+    )
 import Amaru.Treasury.Backend.N2C
     ( findSocketMagic
     , knownNetworkMagics
     , probeResultAccepted
-    , stakeRewardLovelaceFromRewards
     )
 import Amaru.Treasury.Cli
     ( Cmd (..)
@@ -113,8 +118,7 @@ import Amaru.Treasury.IntentJSON.Common
     ( parseRewardAccountForNetwork
     )
 import Cardano.Ledger.Address
-    ( AccountAddress (..)
-    , AccountId (..)
+    ( AccountAddress
     )
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Node.Client.Balance
@@ -124,26 +128,22 @@ import Cardano.Node.Client.TxBuild qualified as TxBuild
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Build" $ do
-    describe "stakeRewardLovelaceFromRewards" $ do
-        it "returns the selected account reward balance" $ do
-            let AccountAddress _ (AccountId credential) =
-                    fixtureRewardAccount
-                rewards =
+    describe "rewardAccountLovelace" $ do
+        it "returns the selected account reward balance through Provider" $ do
+            let rewards =
                     Map.singleton
-                        credential
+                        fixtureRewardAccount
                         (Coin 12_345_678)
-            stakeRewardLovelaceFromRewards
-                credential
-                rewards
-                `shouldBe` 12_345_678
+            rewardAccountLovelace
+                (rewardProvider rewards)
+                fixtureRewardAccount
+                `shouldReturn` 12_345_678
 
-        it "treats a missing reward row as zero" $ do
-            let AccountAddress _ (AccountId credential) =
-                    fixtureRewardAccount
-            stakeRewardLovelaceFromRewards
-                credential
-                Map.empty
-                `shouldBe` 0
+        it "treats a missing Provider reward row as zero" $ do
+            rewardAccountLovelace
+                (rewardProvider Map.empty)
+                fixtureRewardAccount
+                `shouldReturn` 0
 
     describe "findSocketMagic" $ do
         it "returns the actual magic when the socket is on the wrong network" $ do
@@ -492,6 +492,32 @@ fixtureRewardAccount =
         parseRewardAccountForNetwork
             "mainnet"
             "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d"
+
+rewardProvider :: Map.Map AccountAddress Coin -> Provider IO
+rewardProvider rewardAccounts =
+    provider
+  where
+    provider =
+        Provider
+            { withAcquired = singleShotWithAcquired provider
+            , queryUTxOs = \_ -> pure []
+            , queryUTxOByTxIn = \_ -> pure Map.empty
+            , queryProtocolParams = fail "unused queryProtocolParams"
+            , queryLedgerSnapshot = fail "unused queryLedgerSnapshot"
+            , queryStakeRewards = \_ -> fail "unused queryStakeRewards"
+            , queryRewardAccounts =
+                pure . Map.restrictKeys rewardAccounts
+            , queryVoteDelegatees = \_ ->
+                fail "unused queryVoteDelegatees"
+            , queryTreasury = fail "unused queryTreasury"
+            , queryGovernanceState =
+                fail "unused queryGovernanceState"
+            , evaluateTx = \_ -> fail "unused evaluateTx"
+            , posixMsToSlot = \_ -> fail "unused posixMsToSlot"
+            , posixMsCeilSlot = \_ -> fail "unused posixMsCeilSlot"
+            , queryUpperBoundSlot = \_ ->
+                fail "unused queryUpperBoundSlot"
+            }
 
 missingWithdrawUtxos :: SomeException -> Bool
 missingWithdrawUtxos =

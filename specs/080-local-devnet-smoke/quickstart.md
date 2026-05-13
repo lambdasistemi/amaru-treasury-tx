@@ -27,8 +27,8 @@ Expected result within 2 minutes:
 just devnet-smoke governance
 ```
 
-Current expected result with the pinned `cardano-node-clients` #137
-head:
+Current expected result with the pinned `cardano-node-clients` merged
+governance stack head:
 
 - `governance/certificates.json`
 - `governance/action.json`

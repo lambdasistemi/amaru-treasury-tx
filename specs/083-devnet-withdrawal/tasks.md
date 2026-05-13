@@ -19,10 +19,10 @@
 
 ## Phase 3: Withdrawal Phase Contract
 
-- [ ] T008 [US1] RED: add `withdraw` to the DevNet smoke contract and prove the phase fails before artifacts exist.
-- [ ] T009 [US1] Add `withdraw` phase parsing to `scripts/smoke/devnet-local` and `just devnet-smoke`.
-- [ ] T010 [US1] Add `withdraw` selector in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`.
-- [ ] T011 [US1] Define typed failure records for missing/stale governance prerequisite evidence.
+- [x] T008 [US1] RED: add `withdraw` to the DevNet smoke contract and prove the phase fails before artifacts exist.
+- [x] T009 [US1] Add `withdraw` phase parsing to `scripts/smoke/devnet-local` and `just devnet-smoke`.
+- [x] T010 [US1] Add `withdraw` selector in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`.
+- [x] T011 [US1] Define typed failure records for missing/stale governance prerequisite evidence.
 
 ## Phase 4: Live Reward To Intent
 
@@ -70,6 +70,8 @@
 - PIN RED/GREEN: current docs/pin referenced the temporary stack SHA; Cabal/Nix now pin `cardano-node-clients` main `d6773e4cd8a2421617568c8dac0972b0f312a509`.
 - PIN GREEN: `./llm/reviews/local-080-local-devnet-smoke/gate.sh` passed after the pin with run directory `runs/devnet/20260513T143827Z`, governance tx `d5bf03b2517ff8c2a7d3259e60b33c4d69b84a6ffb97e9dd6eee00beb685554e`, action index `0`, and reward balance `0 -> 2000000` lovelace.
 - PR GATE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed after the pin.
+- WITHDRAW CONTRACT RED: before the slice, `nix develop --quiet -c just devnet-smoke withdraw` failed with `devnet-smoke: unknown phase: withdraw`.
+- WITHDRAW CONTRACT GREEN: after the slice, `scripts/smoke/devnet-local --phase withdraw --run-dir <tmp>` fails with typed code `missing-governance-prerequisite`, writes `<tmp>/withdraw/failure.json` and `<tmp>/withdraw/summary.json`, and writes no `withdraw/intent.json` or `withdraw/tx-body.cbor.hex`.
 
 ## Parallel Notes
 

@@ -10,8 +10,9 @@ rebase-merged into `main` at `d6773e4cd8a2421617568c8dac0972b0f312a509`;
 the current branch is stacked on the #82 governance proof branch; Amaru
 now pins that upstream main commit in Cabal and Nix.
 
-**Current**: The next implementation slice is the failing
-`just devnet-smoke withdraw` contract.
+**Current**: The withdrawal phase contract is in place. The next
+implementation slice is live reward-to-intent on top of governance
+prerequisite evidence.
 
 **Blockers**: #82/PR #93 should remain the source of governance setup
 and funded reward-account evidence.
@@ -85,7 +86,7 @@ hlint, Cabal checks, and the existing CI gate.
 3. **Withdrawal phase contract slice**: add `withdraw` to
    `scripts/smoke/devnet-local`, `just devnet-smoke`, and the DevNet
    Hspec selector with a failing contract for required artifacts and
-   typed no-evidence diagnostics.
+   typed no-evidence diagnostics. Status: complete on this branch.
 4. **Live reward-to-intent slice**: factor the #82 governance setup
    helper enough for the withdraw phase to observe funded reward state,
    then run the withdraw resolver against the live provider. RED:

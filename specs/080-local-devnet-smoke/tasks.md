@@ -67,7 +67,7 @@
 Evidence:
 
 - RED: `nix develop --quiet -c just devnet-smoke governance` failed on the old typed blocker `MISSING_UPSTREAM_GOVERNANCE_SUPPORT`.
-- GREEN: `nix develop --quiet -c just devnet-smoke governance` passed with run directory `runs/devnet/20260513T082323Z`, governance tx `d1a04e79083046aa3083a3966357a38e25fabf1a853bb287e9aaf8f5988febd9`, action index `0`, treasury script reward account `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34`, and reward balance `0 -> 2000000` lovelace across epochs `2 -> 4`.
+- GREEN: `nix develop --quiet -c just devnet-smoke governance` passed with #137 head `c46b95a86c9155db414f519fcd6c75e5b310b23e`, run directory `runs/devnet/20260513T083455Z`, governance tx `d5bf03b2517ff8c2a7d3259e60b33c4d69b84a6ffb97e9dd6eee00beb685554e`, action index `0`, treasury script reward account `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34`, and reward balance `0 -> 2000000` lovelace across epochs `2 -> 4`.
 
 ## Phase 7: Vertical Slice 4 - Documentation And Release Notes
 

@@ -12,10 +12,10 @@
 
 ## Phase 2: Merged Upstream Dependency
 
-- [ ] T004 Update `cabal.project` and `flake.nix` from the temporary `cardano-node-clients` stack SHA to upstream `main` commit `d6773e4cd8a2421617568c8dac0972b0f312a509`.
-- [ ] T005 Update governance docs/state that currently describe upstream readiness as stack-only.
-- [ ] T006 Verify dependency refresh with `./llm/reviews/local-080-local-devnet-smoke/gate.sh`.
-- [ ] T007 Commit dependency refresh as `build(devnet): pin merged node clients main`.
+- [x] T004 Update `cabal.project` and `flake.nix` from the temporary `cardano-node-clients` stack SHA to upstream `main` commit `d6773e4cd8a2421617568c8dac0972b0f312a509`.
+- [x] T005 Update governance docs/state that currently describe upstream readiness as stack-only.
+- [x] T006 Verify dependency refresh with `./llm/reviews/local-080-local-devnet-smoke/gate.sh`.
+- [x] T007 Commit dependency refresh as `build(devnet): pin merged node clients main`.
 
 ## Phase 3: Withdrawal Phase Contract
 
@@ -67,6 +67,9 @@
 ## Evidence
 
 - PLAN/TASK GATE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed on 2026-05-13.
+- PIN RED/GREEN: current docs/pin referenced the temporary stack SHA; Cabal/Nix now pin `cardano-node-clients` main `d6773e4cd8a2421617568c8dac0972b0f312a509`.
+- PIN GREEN: `./llm/reviews/local-080-local-devnet-smoke/gate.sh` passed after the pin with run directory `runs/devnet/20260513T143827Z`, governance tx `d5bf03b2517ff8c2a7d3259e60b33c4d69b84a6ffb97e9dd6eee00beb685554e`, action index `0`, and reward balance `0 -> 2000000` lovelace.
+- PR GATE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed after the pin.
 
 ## Parallel Notes
 

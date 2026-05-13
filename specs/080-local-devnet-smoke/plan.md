@@ -7,22 +7,20 @@
 
 **Completed**: Spec Kit artifacts exist; local-only `devnet` network
 identity support and the node phase have been implemented in prior
-commits; node docs are present; the upstream #137 provider stack is
-pinned; withdraw reward lookup now uses provider reward-account
+commits; node docs are present; upstream `cardano-node-clients` main
+is pinned; withdraw reward lookup now uses provider reward-account
 queries; the governance smoke submits and votes through a treasury
 withdrawal on short-epoch DevNet and observes the Amaru treasury
 script reward account funded.
 
-**Current**: Slice 3 is ready for review/commit after final formatting
-and focused governance-smoke verification. The next slice is
-documentation and release notes, including README and #82 metadata.
+**Current**: The governance slice is documented and ready for external
+review. The follow-up withdrawal slice is tracked by #83.
 
-**Blockers**: The downstream branch may consume the current
-`cardano-node-clients` merged stack head `9cfc3aa2efec9224ae3feaefeb981edb1281c6ff`
-to prove direction locally, but
-release/merge readiness still depends on the upstream PR stack being
-accepted or explicitly pinned for the release. Latest local evidence:
-`just devnet-smoke governance` passed in `runs/devnet/20260513T113326Z`
+**Blockers**: No upstream governance/query support blocker remains for
+the governance proof; `cardano-node-clients` #132 is merged and Amaru
+is pinned to upstream main
+`d6773e4cd8a2421617568c8dac0972b0f312a509`. Latest local evidence:
+`just devnet-smoke governance` passed in `runs/devnet/20260513T143827Z`
 with reward account `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34`
 funded from `0` to `2000000` lovelace.
 

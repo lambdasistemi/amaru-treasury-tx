@@ -470,10 +470,18 @@ test-suite devnet-tests
   build-depends:
     , aeson
     , amaru-treasury-tx
+    , async
     , base                         <5
     , bytestring
+    , cardano-crypto-class
+    , cardano-ledger-alonzo
+    , cardano-ledger-api
+    , cardano-ledger-conway
+    , cardano-ledger-core
     , cardano-node-clients
     , cardano-node-clients:devnet
+    , cardano-slotting
+    , containers
     , directory
     , filepath
     , hspec
@@ -481,5 +489,6 @@ test-suite devnet-tests
     , ouroboros-network:api
     , text
     , time
+    , unix
 
   build-tool-depends: hspec-discover:hspec-discover

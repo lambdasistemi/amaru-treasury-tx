@@ -42,27 +42,32 @@
 - [x] T020 [US2] RED: pin only `cabal.project`/`flake.nix` to the current #137 head and run `nix develop --quiet -c cabal test unit-tests -O0 --test-show-details=direct --test-option=--match --test-option /Registry.Verify/`, expecting the expanded `Provider` record to expose missing local stubs.
 - [x] T021 [US2] GREEN: update local `Provider` stubs in `test/unit/Amaru/Treasury/Registry/VerifySpec.hs` for #137 fields without changing resolver behavior.
 - [x] T022 [US2] Verify slice 1 with `nix develop --quiet -c cabal test unit-tests -O0 --test-show-details=direct --test-option=--match --test-option "Amaru.Treasury.Registry.Verify"`.
-- [ ] T023 [US2] Commit slice 1 as `build(devnet): pin governance provider stack`.
+- [x] T023 [US2] Commit slice 1 as `build(devnet): pin governance provider stack`.
 
 ## Phase 5: Vertical Slice 2 - Reward Query Boundary
 
 - [x] T024 [US2] RED: add a focused unit regression proving reward-account lookup treats absent rows as zero through a `Provider` reward-account query path.
 - [x] T025 [US2] GREEN: remove the direct `queryLSQ` reward helper from `lib/Amaru/Treasury/Backend/N2C.hs` and route withdraw reward resolution through #137 `Provider.queryRewardAccounts`.
 - [x] T026 [US2] Verify slice 2 with `nix develop --quiet -c cabal test unit-tests -O0 --test-show-details=direct --test-option=--match --test-option "Amaru.Treasury.Tx.WithdrawWizard"`.
-- [ ] T027 [US2] Commit slice 2 as `feat(withdraw): use provider reward queries`.
+- [x] T027 [US2] Commit slice 2 as `feat(withdraw): use provider reward queries`.
 
 ## Phase 6: Vertical Slice 3 - Governance DevNet Smoke
 
 - [x] T028 Add a failing `governance` phase contract test in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`.
 - [x] T029 Add `governance` to `scripts/smoke/devnet-local` and the `just devnet-smoke` phase contract.
-- [ ] T030 [US2] RED: run `nix develop --quiet -c just devnet-smoke governance` and capture the current blocker or missing success-artifact failure.
-- [ ] T031 [US2] Prepare deterministic short-epoch DevNet protocol treasury/reserve state for a treasury-withdrawal governance action in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`.
-- [ ] T032 [US2] Register the Amaru treasury script stake credential with registration plus always-abstain vote delegation in the DevNet smoke harness.
-- [ ] T033 [US2] Build, sign inside the harness, and submit the treasury-withdrawal governance action through `cardano-node-clients` #135/#137 support.
-- [ ] T034 [US2] Observe the governance action boundary and funded reward-account state through supported `Provider` queries.
-- [ ] T035 [US2] Write `governance/action.json`, `governance/certificates.json`, and summary evidence in the run directory.
-- [ ] T036 [US2] GREEN: run `nix develop --quiet -c just devnet-smoke governance` and capture tx id, action id, reward account, amount, and epoch/tip context.
-- [ ] T037 [US2] Commit slice 3 as `test(devnet): prove governance reward funding`.
+- [x] T030 [US2] RED: run `nix develop --quiet -c just devnet-smoke governance` and capture the current blocker or missing success-artifact failure.
+- [x] T031 [US2] Prepare deterministic short-epoch DevNet protocol treasury/reserve state for a treasury-withdrawal governance action in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`.
+- [x] T032 [US2] Register the Amaru treasury script stake credential with registration plus always-abstain vote delegation in the DevNet smoke harness.
+- [x] T033 [US2] Build, sign inside the harness, and submit the treasury-withdrawal governance action through `cardano-node-clients` #135/#137 support.
+- [x] T034 [US2] Observe the governance action boundary and funded reward-account state through supported `Provider` queries.
+- [x] T035 [US2] Write `governance/action.json`, `governance/certificates.json`, and summary evidence in the run directory.
+- [x] T036 [US2] GREEN: run `nix develop --quiet -c just devnet-smoke governance` and capture tx id, action id, reward account, amount, and epoch/tip context.
+- [x] T037 [US2] Commit slice 3 as `test(devnet): prove governance reward funding`.
+
+Evidence:
+
+- RED: `nix develop --quiet -c just devnet-smoke governance` failed on the old typed blocker `MISSING_UPSTREAM_GOVERNANCE_SUPPORT`.
+- GREEN: `nix develop --quiet -c just devnet-smoke governance` passed with run directory `runs/devnet/20260513T082323Z`, governance tx `d1a04e79083046aa3083a3966357a38e25fabf1a853bb287e9aaf8f5988febd9`, action index `0`, treasury script reward account `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34`, and reward balance `0 -> 2000000` lovelace across epochs `2 -> 4`.
 
 ## Phase 7: Vertical Slice 4 - Documentation And Release Notes
 

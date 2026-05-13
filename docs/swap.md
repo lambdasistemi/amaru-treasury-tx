@@ -146,6 +146,53 @@ amaru-treasury-tx attach-witness \
 amaru-treasury-tx --network mainnet submit --tx signed.cbor.hex
 ```
 
+### cardano-cli compatibility
+
+For operators arriving with files produced by `cardano-cli` — typed
+JSON envelopes of shape
+`{"type":"...","description":"...","cborHex":"..."}` — `attach-witness`
+and `submit` read those files directly. Inline hex still works; the
+reader auto-detects the format.
+
+Flag aliases mirror the cardano-cli flags so the muscle memory
+transfers:
+
+| amaru-treasury-tx | cardano-cli equivalent |
+|---|---|
+| `--tx-body-file PATH` (on `attach-witness`) | `--tx-body-file PATH` |
+| `--witness-file PATH` (repeatable, on `attach-witness`) | `--witness-file PATH` (repeatable) |
+| `--out-file PATH` (on `attach-witness`) | `--out-file PATH` |
+| `--tx-file PATH` (on `submit`) | `--tx-file PATH` |
+
+Example operator flow when everything is on disk in the cardano-cli
+shape:
+
+```bash
+amaru-treasury-tx tx-build --out swap.cbor.hex --report swap.report.json < intent.json
+
+# Hand swap.cbor.hex (or a derived "Unwitnessed Tx ConwayEra" envelope)
+# to each scope-owner signer; they hand back *.witness.json envelopes
+# produced by `cardano-cli conway transaction witness`.
+
+amaru-treasury-tx attach-witness \
+  --tx-body-file swap.tx.body.json \
+  --witness-file scope-owner-1.witness.json \
+  --witness-file scope-owner-2.witness.json \
+  --out-file swap.tx.signed.json
+
+amaru-treasury-tx --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
+  submit --tx-file swap.tx.signed.json
+```
+
+The `--out-file` path emits a `{"type":"Signed Tx ConwayEra", ...}`
+envelope `cardano-cli conway transaction submit` accepts verbatim;
+this is the seam if you want to keep cardano-cli in the submission
+loop instead of using our `submit` subcommand.
+
+Era validation: only `ConwayEra` envelopes are accepted. A
+`Shelley` / `Allegra` / `Mary` / `Alonzo` / `Babbage` envelope is
+rejected with a typed error naming the file path and the era found.
+
 ## Expert/manual override
 
 Direct `swap-wizard --min-rate` remains available for expert use with

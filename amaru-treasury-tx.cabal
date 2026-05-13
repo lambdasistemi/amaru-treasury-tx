@@ -142,6 +142,7 @@ library
     Amaru.Treasury.Tx.DisburseIntentJSON
     Amaru.Treasury.Tx.DisburseWizard
     Amaru.Treasury.Tx.DisburseWizard.Trace
+    Amaru.Treasury.Tx.Envelope
     Amaru.Treasury.Tx.Reorganize
     Amaru.Treasury.Tx.Submit
     Amaru.Treasury.Tx.Swap
@@ -326,6 +327,7 @@ test-suite unit-tests
     Amaru.Treasury.Tx.DisburseBuildSpec
     Amaru.Treasury.Tx.DisburseSpec
     Amaru.Treasury.Tx.DisburseWizardSpec
+    Amaru.Treasury.Tx.EnvelopeSpec
     Amaru.Treasury.Tx.SwapQuoteSpec
     Amaru.Treasury.Tx.SwapSpec
     Amaru.Treasury.Tx.SwapWizardSpec
@@ -364,6 +366,7 @@ test-suite unit-tests
     , plutus-core
     , QuickCheck
     , serialise
+    , temporary
     , text
 
   build-tool-depends: hspec-discover:hspec-discover

@@ -19,6 +19,13 @@ amaru-treasury-tx tx-build --out - --report - \\
   | amaru-treasury-tx attach-witness --witness HEX --witness HEX \\
   | amaru-treasury-tx submit
 @
+
+For operators arriving with @cardano-cli@ files on disk, the same
+command also reads cardano-cli envelope JSON for the tx body
+(@--tx-body-file@) and each detached witness (@--witness-file@), and
+optionally writes the assembled result as a cardano-cli
+@Signed Tx ConwayEra@ envelope (@--out-file@) so it can be fed
+verbatim into @cardano-cli conway transaction submit@.
 -}
 module Amaru.Treasury.Cli.AttachWitness
     ( AttachWitnessOpts (..)
@@ -26,9 +33,12 @@ module Amaru.Treasury.Cli.AttachWitness
     , runAttachWitness
     ) where
 
+import Control.Applicative ((<|>))
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
+import Data.Maybe (fromMaybe)
 import Data.Set qualified as Set
+import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Options.Applicative
@@ -55,18 +65,57 @@ import Amaru.Treasury.Tx.AttachWitness
     , encodeSignedTxHex
     , renderAttachError
     )
+import Amaru.Treasury.Tx.Envelope
+    ( EnvelopeKind (..)
+    , readEnvelopeOrHex
+    , renderEnvelopeError
+    , writeEnvelopeFile
+    )
 
-{- | Flags for the @attach-witness@ subcommand.
+{- | Source of the unsigned transaction body. Operators
+either supply it inline (hex on stdin or a hex/envelope
+file via @--tx@) or via the cardano-cli alias
+@--tx-body-file@.
+-}
+data TxBodySource
+    = TxBodyStdin
+    | -- | Path accepted by both @--tx@ and
+      -- @--tx-body-file@. The reader auto-detects
+      -- envelope JSON vs raw hex.
+      TxBodyFromPath !FilePath
+    deriving stock (Eq, Show)
 
-@awoTxPath@ is the path to the unsigned tx CBOR hex (defaults to
-stdin); @awoOutPath@ is where to write the signed CBOR hex (defaults
-to stdout); @awoWitnesses@ is the ordered list of detached vkey
-witness hex strings to merge.
+{- | One witness contribution: either inline hex from
+@--witness HEX@ or a path to a cardano-cli envelope file
+from @--witness-file PATH@. Order is preserved across
+the flag types so error messages can reliably name "the
+3rd witness".
+-}
+data WitnessSource
+    = WitnessHex !ByteString
+    | WitnessFromPath !FilePath
+    deriving stock (Eq, Show)
+
+{- | Destination for the signed transaction. Either a
+raw-hex file (@--out PATH@), a cardano-cli
+@Signed Tx ConwayEra@ envelope (@--out-file PATH@), or
+stdout when neither is set (the pipe-friendly default).
+-}
+data SignedTxSink
+    = SinkStdout
+    | SinkHexPath !FilePath
+    | SinkEnvelopePath !FilePath
+    deriving stock (Eq, Show)
+
+{- | Flags for the @attach-witness@ subcommand. The
+record carries both the pipe-friendly form and the
+cardano-cli-compatible @--tx-body-file@/@--witness-file@/
+@--out-file@ form; the runner reconciles them.
 -}
 data AttachWitnessOpts = AttachWitnessOpts
-    { awoTxPath :: !(Maybe FilePath)
-    , awoOutPath :: !(Maybe FilePath)
-    , awoWitnesses :: ![ByteString]
+    { awoTxBody :: !TxBodySource
+    , awoWitnesses :: ![WitnessSource]
+    , awoSink :: !SignedTxSink
     }
     deriving stock (Eq, Show)
 
@@ -74,65 +123,114 @@ data AttachWitnessOpts = AttachWitnessOpts
 attachWitnessOptsP :: Parser AttachWitnessOpts
 attachWitnessOptsP =
     AttachWitnessOpts
+        <$> txBodyP
+        <*> witnessesP
+        <*> sinkP
+
+txBodyP :: Parser TxBodySource
+txBodyP =
+    maybe TxBodyStdin TxBodyFromPath
         <$> optional
             ( strOption
                 ( long "tx"
+                    <> long "tx-body-file"
                     <> metavar "PATH"
                     <> help
-                        "Path to unsigned tx CBOR hex (defaults to stdin)"
+                        "Unsigned tx CBOR hex or cardano-cli envelope JSON (defaults to stdin)"
                 )
             )
-        <*> optional
-            ( strOption
-                ( long "out"
-                    <> short 'o'
-                    <> metavar "PATH"
+
+witnessesP :: Parser [WitnessSource]
+witnessesP =
+    many $
+        WitnessHex
+            . TE.encodeUtf8
+            . T.pack
+            <$> strOption
+                ( long "witness"
+                    <> metavar "HEX"
                     <> help
-                        "Path to write signed tx CBOR hex (defaults to stdout)"
+                        "Detached vkey witness CBOR hex; repeat per signer"
                 )
-            )
-        <*> many
-            ( TE.encodeUtf8 . T.pack
+            <|> WitnessFromPath
                 <$> strOption
-                    ( long "witness"
-                        <> metavar "HEX"
+                    ( long "witness-file"
+                        <> metavar "PATH"
                         <> help
-                            "Detached vkey witness CBOR hex; repeat per signer"
+                            "Path to cardano-cli TxWitness ConwayEra envelope JSON; repeat per signer"
                     )
+
+sinkP :: Parser SignedTxSink
+sinkP =
+    fromMaybe SinkStdout
+        <$> optional
+            ( SinkHexPath
+                <$> strOption
+                    ( long "out"
+                        <> short 'o'
+                        <> metavar "PATH"
+                        <> help
+                            "Write signed tx CBOR hex to PATH (defaults to stdout)"
+                    )
+                <|> SinkEnvelopePath
+                    <$> strOption
+                        ( long "out-file"
+                            <> metavar "PATH"
+                            <> help
+                                "Write a cardano-cli Signed Tx ConwayEra envelope JSON to PATH"
+                        )
             )
 
 {- | Run the @attach-witness@ subcommand: read the unsigned
-transaction, decode each @--witness@ hex, merge them into the
-transaction's witness set, and write the signed CBOR hex.
+transaction (envelope or raw hex), decode each witness
+(envelope or inline hex), merge them into the
+transaction's witness set, and write the signed result.
 
 Exit codes:
 
 * @0@ on success.
-* @1@ on any decode error (invalid hex, malformed transaction, or
-  malformed witness). The typed error is printed to stderr.
+* @1@ on any decode error. The typed error names the
+  failing path or witness index.
 -}
 runAttachWitness :: AttachWitnessOpts -> IO ()
 runAttachWitness AttachWitnessOpts{..} = do
-    txHex <- maybe BS.getContents BS.readFile awoTxPath
-
+    txHex <- readTxBody awoTxBody
     tx <- case decodeUnsignedTxHex txHex of
         Right t -> pure t
         Left err -> die (renderAttachError err)
 
-    wits <- traverseIndexed decodeWitness awoWitnesses
+    wits <- traverseIndexed readWitness awoWitnesses
 
     let signed = encodeSignedTxHex (attachWitnesses (Set.fromList wits) tx)
-    case awoOutPath of
-        Nothing -> BS.hPut stdout signed >> BS.hPut stdout "\n"
-        Just path -> BS.writeFile path signed
+    writeSink awoSink signed
   where
-    decodeWitness ix hex =
+    readTxBody TxBodyStdin = BS.getContents
+    readTxBody (TxBodyFromPath path) =
+        readEnvelopeOrHex TxEnvelope path >>= \case
+            Right bs -> pure bs
+            Left err -> die (renderEnvelopeError err)
+
+    readWitness ix source = do
+        hex <- case source of
+            WitnessHex h -> pure h
+            WitnessFromPath path ->
+                readEnvelopeOrHex WitnessEnvelope path >>= \case
+                    Right bs -> pure bs
+                    Left err -> die (renderEnvelopeError err)
         case decodeVKeyWitnessHex ix hex of
             Right wit -> pure wit
             Left err -> die (renderAttachError err)
 
+    writeSink SinkStdout bs = BS.hPut stdout bs >> BS.hPut stdout "\n"
+    writeSink (SinkHexPath path) bs = BS.writeFile path bs
+    writeSink (SinkEnvelopePath path) bs =
+        writeEnvelopeFile SignedTxEnvelope path bs >>= \case
+            Right () -> pure ()
+            Left err -> die (renderEnvelopeError err)
+
     traverseIndexed f xs = traverse (uncurry f) (zip [1 ..] xs)
 
+    die :: Text -> IO a
     die msg = do
         hPutStrLn stderr ("attach-witness: " <> T.unpack msg)
         exitFailure

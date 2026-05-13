@@ -25,6 +25,10 @@ import Options.Applicative
     , (<**>)
     )
 
+import Amaru.Treasury.Cli.AttachWitness
+    ( AttachWitnessOpts
+    , attachWitnessOptsP
+    )
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts
     , globalOptsP
@@ -32,6 +36,10 @@ import Amaru.Treasury.Cli.Common
 import Amaru.Treasury.Cli.DisburseWizard
     ( DisburseWizardOpts
     , disburseWizardOptsP
+    )
+import Amaru.Treasury.Cli.Submit
+    ( SubmitOpts
+    , submitOptsP
     )
 import Amaru.Treasury.Cli.SwapQuote
     ( SwapQuoteOpts
@@ -61,6 +69,8 @@ data Cmd
     | CmdWithdrawWizard WithdrawOpts
     | CmdTxBuild TxBuildOpts
     | CmdReportRender ReportRenderOpts
+    | CmdAttachWitness AttachWitnessOpts
+    | CmdSubmit SubmitOpts
 
 cmdP :: Parser Cmd
 cmdP =
@@ -111,6 +121,22 @@ cmdP =
                     (CmdWithdrawWizard <$> withdrawOptsP)
                     ( progDesc
                         "Produce a withdraw intent.json from registry and reward state"
+                    )
+                )
+            <> command
+                "attach-witness"
+                ( info
+                    (CmdAttachWitness <$> attachWitnessOptsP)
+                    ( progDesc
+                        "Merge detached vkey witnesses into an unsigned Conway tx CBOR hex"
+                    )
+                )
+            <> command
+                "submit"
+                ( info
+                    (CmdSubmit <$> submitOptsP)
+                    ( progDesc
+                        "Submit a signed Conway tx CBOR hex via the local node socket"
                     )
                 )
         )

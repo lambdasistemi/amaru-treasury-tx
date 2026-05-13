@@ -60,6 +60,47 @@ pkgs.writeShellApplication {
     workdir="$(mktemp -d)"
     trap 'rm -rf "$workdir"' EXIT
 
+    # Assert the wrapper around `amaru-treasury-tx` carries a CA store
+    # so live quote sources work on hosts whose `/etc/ssl/certs` shape
+    # the bundled Haskell `tls` library can't read (e.g. NixOS).
+    # Verifies four things end-to-end:
+    #   1. the artifact ships a shell wrapper (not just the raw ELF),
+    #   2. the wrapper sets `SSL_CERT_FILE` if it's unset in the env,
+    #   3. the same goes for `SYSTEM_CERTIFICATE_PATH`,
+    #   4. the wrapper's CA-bundle path exists inside the artifact's
+    #      closure, and
+    #   5. running the wrapper with both env vars explicitly unset
+    #      still produces `--help` output — proving the wrapper
+    #      override path is wired correctly.
+    assert_ca_wrapper() {
+      bin="$1"
+      artifact_root="$2"
+
+      head -1 "$bin" | grep -F '#! /nix/store' | grep -F 'bash' >/dev/null \
+        || { echo "linux-artifact-smoke: $bin is not a /nix/store bash wrapper" >&2; exit 1; }
+
+      grep -F "SSL_CERT_FILE=\''${SSL_CERT_FILE-" "$bin" >/dev/null \
+        || { echo "linux-artifact-smoke: wrapper missing SSL_CERT_FILE default" >&2; exit 1; }
+
+      grep -F "SYSTEM_CERTIFICATE_PATH=\''${SYSTEM_CERTIFICATE_PATH-" "$bin" >/dev/null \
+        || { echo "linux-artifact-smoke: wrapper missing SYSTEM_CERTIFICATE_PATH default" >&2; exit 1; }
+
+      ca_bundle_in_wrapper="$(
+        grep -F "SSL_CERT_FILE=\''${SSL_CERT_FILE-" "$bin" \
+          | sed -E "s/.*'(\\/nix\\/store[^']*)'.*/\\1/" \
+          | head -1
+      )"
+      test -n "$ca_bundle_in_wrapper"
+
+      ca_bundle_under_root="$artifact_root$ca_bundle_in_wrapper"
+      test -f "$ca_bundle_under_root" \
+        || { echo "linux-artifact-smoke: CA bundle missing in closure: $ca_bundle_under_root" >&2; exit 1; }
+
+      env -u SSL_CERT_FILE -u SYSTEM_CERTIFICATE_PATH "$bin" --help \
+        >/dev/null \
+        || { echo "linux-artifact-smoke: wrapper failed --help with env vars unset" >&2; exit 1; }
+    }
+
     smoke_cli() {
       bin="$1"
       test -x "$bin"
@@ -112,7 +153,15 @@ pkgs.writeShellApplication {
         cd "$appimage_dir"
         "$appimage_copy" --appimage-extract >/dev/null
       )
-      bin="$(find "$appimage_dir" -name amaru-treasury-tx -type f -executable | head -1)"
+      # In an extracted AppImage the wrapper sits in the
+      # `*-with-ca` derivation, while the bundler also keeps the
+      # unwrapped exe path on disk. Pick the wrapper (a shell script,
+      # not an ELF), then drive both checks against it.
+      bin="$(find "$appimage_dir" -path '*-with-ca*/bin/amaru-treasury-tx' \
+        -type f -executable | head -1)"
+      test -n "$bin" \
+        || { echo "linux-artifact-smoke: AppImage wrapper not found" >&2; exit 1; }
+      assert_ca_wrapper "$bin" "$appimage_dir/squashfs-root"
       smoke_cli "$bin"
     }
 
@@ -122,7 +171,11 @@ pkgs.writeShellApplication {
       deb_dir="$workdir/deb"
       mkdir -p "$deb_dir"
       dpkg-deb -x "$deb" "$deb_dir"
-      bin="$(find "$deb_dir" -name amaru-treasury-tx -type f -executable | head -1)"
+      bin="$(find "$deb_dir" -path '*-with-ca*/bin/amaru-treasury-tx' \
+        -type f -executable | head -1)"
+      test -n "$bin" \
+        || { echo "linux-artifact-smoke: DEB wrapper not found" >&2; exit 1; }
+      assert_ca_wrapper "$bin" "$deb_dir"
       smoke_cli "$bin"
     }
 
@@ -135,7 +188,11 @@ pkgs.writeShellApplication {
         cd "$rpm_dir"
         rpm2cpio "$rpm" | cpio -idm >/dev/null
       )
-      bin="$(find "$rpm_dir" -name amaru-treasury-tx -type f -executable | head -1)"
+      bin="$(find "$rpm_dir" -path '*-with-ca*/bin/amaru-treasury-tx' \
+        -type f -executable | head -1)"
+      test -n "$bin" \
+        || { echo "linux-artifact-smoke: RPM wrapper not found" >&2; exit 1; }
+      assert_ca_wrapper "$bin" "$rpm_dir"
       smoke_cli "$bin"
     }
 

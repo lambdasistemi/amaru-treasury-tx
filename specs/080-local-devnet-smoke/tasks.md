@@ -29,39 +29,60 @@
 - [ ] T013 Re-run `nix develop --quiet -c cabal test devnet-tests -O0 --test-show-details=direct --test-option=--match --test-option node`.
 - [ ] T014 Re-run `nix develop --quiet -c just devnet-smoke node`.
 
-## Phase 3: Upstream Support
+## Phase 3: Process Gate And Upstream Stack
 
-- [ ] T015 In `cardano-node-clients` issue #130, add support for Conway stake certificates needed by the treasury script credential, including registration plus always-abstain vote delegation.
-- [ ] T016 In `cardano-node-clients` issue #130, add support for Conway treasury-withdrawal proposal procedures/governance actions.
-- [ ] T017 In `cardano-node-clients` issue #130, cover script certificate/proposal redeemers with RED/GREEN tests.
-- [ ] T018 In `cardano-node-clients` issue #131, expose the node queries required to observe governance action state and reward-account state.
-- [ ] T019 Link the merged upstream PRs or open blockers from #82.
+- [x] T015 Write the local solo PR state file in `llm/reviews/local-080-local-devnet-smoke/state.md`.
+- [x] T016 Write the local gate script in `llm/reviews/local-080-local-devnet-smoke/gate.sh`.
+- [x] T017 Review `specs/080-local-devnet-smoke/spec.md`, `plan.md`, and `tasks.md` for cross-artifact consistency before implementation resumes.
+- [x] T018 Verify current `cardano-node-clients` #137 head, base, draft state, and PR body through `gh pr view 137 --repo lambdasistemi/cardano-node-clients`.
+- [ ] T019 Record in #82/PR metadata that Amaru may prove direction against #135 + #137 draft heads, but release readiness depends on the upstream stack being accepted or explicitly pinned.
 
-## Phase 4: Governance DevNet Smoke
+## Phase 4: Vertical Slice 1 - Upstream Pin And Provider API
 
-- [x] T020 Add a failing `governance` phase contract test in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`.
-- [x] T021 Add `governance` to `scripts/smoke/devnet-local` and the `just devnet-smoke` phase contract.
-- [ ] T022 Prepare deterministic DevNet protocol treasury/reserve state for a treasury-withdrawal governance action.
-- [ ] T023 Register the Amaru treasury script stake credential with registration plus always-abstain vote delegation.
-- [ ] T024 Build and submit the treasury-withdrawal governance action through `cardano-node-clients` support.
-- [ ] T025 Observe the governance action boundary and funded reward-account state through supported queries.
-- [ ] T026 Write `governance/action.json`, `governance/certificates.json`, and summary evidence in the run directory.
-- [x] T027 Make missing upstream support fail with `MISSING_UPSTREAM_GOVERNANCE_SUPPORT`.
-- [x] T028 Run `nix develop --quiet -c just devnet-smoke governance` and capture the result.
+- [ ] T020 [US2] RED: pin only `cabal.project`/`flake.nix` to the current #137 head and run `nix develop --quiet -c cabal test unit-tests -O0 --test-show-details=direct --test-option=--match --test-option /Registry.Verify/`, expecting the expanded `Provider` record to expose missing local stubs.
+- [ ] T021 [US2] GREEN: update local `Provider` stubs in `test/unit/Amaru/Treasury/Registry/VerifySpec.hs` for #137 fields without changing resolver behavior.
+- [ ] T022 [US2] Verify slice 1 with `nix develop --quiet -c cabal test unit-tests -O0 --test-show-details=direct --test-option=--match --test-option /Registry.Verify/`.
+- [ ] T023 [US2] Commit slice 1 as `build(devnet): pin governance provider stack`.
 
-## Phase 5: Documentation And Release Notes
+## Phase 5: Vertical Slice 2 - Reward Query Boundary
 
-- [x] T029 Update `docs/local-devnet-smoke.md` after the governance phase lands.
-- [x] T030 Update `README.md` after the governance phase lands.
-- [x] T031 Update `docs/release.md` after the governance phase lands.
-- [x] T032 Document release-note wording that distinguishes node, governance, withdrawal, disburse, swap-order, swap-spend, and reorganize evidence.
+- [ ] T024 [US2] RED: add a focused unit regression proving reward-account lookup treats absent rows as zero through a `Provider` reward-account query path.
+- [ ] T025 [US2] GREEN: remove the direct `queryLSQ` reward helper from `lib/Amaru/Treasury/Backend/N2C.hs` and route withdraw reward resolution through #137 `Provider.queryRewardAccounts`.
+- [ ] T026 [US2] Verify slice 2 with `nix develop --quiet -c cabal test unit-tests -O0 --test-show-details=direct --test-option=--match --test-option /WithdrawWizard/`.
+- [ ] T027 [US2] Commit slice 2 as `feat(withdraw): use provider reward queries`.
+
+## Phase 6: Vertical Slice 3 - Governance DevNet Smoke
+
+- [x] T028 Add a failing `governance` phase contract test in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`.
+- [x] T029 Add `governance` to `scripts/smoke/devnet-local` and the `just devnet-smoke` phase contract.
+- [ ] T030 [US2] RED: run `nix develop --quiet -c just devnet-smoke governance` and capture the current blocker or missing success-artifact failure.
+- [ ] T031 [US2] Prepare deterministic short-epoch DevNet protocol treasury/reserve state for a treasury-withdrawal governance action in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`.
+- [ ] T032 [US2] Register the Amaru treasury script stake credential with registration plus always-abstain vote delegation in the DevNet smoke harness.
+- [ ] T033 [US2] Build, sign inside the harness, and submit the treasury-withdrawal governance action through `cardano-node-clients` #135/#137 support.
+- [ ] T034 [US2] Observe the governance action boundary and funded reward-account state through supported `Provider` queries.
+- [ ] T035 [US2] Write `governance/action.json`, `governance/certificates.json`, and summary evidence in the run directory.
+- [ ] T036 [US2] GREEN: run `nix develop --quiet -c just devnet-smoke governance` and capture tx id, action id, reward account, amount, and epoch/tip context.
+- [ ] T037 [US2] Commit slice 3 as `test(devnet): prove governance reward funding`.
+
+## Phase 7: Vertical Slice 4 - Documentation And Release Notes
+
+- [ ] T038 [US3] Update `docs/local-devnet-smoke.md` after the governance proof lands.
+- [ ] T039 [US3] Update `README.md` after the governance proof lands.
+- [ ] T040 [US3] Update `docs/release.md` with release-note wording that distinguishes governance proof from withdrawal, disburse, swap-order, swap-spend, and reorganize evidence.
+- [ ] T041 [US3] Update PR/issue metadata for #82 with the verified command outputs and upstream stack SHAs.
+- [ ] T042 [US3] Verify slice 4 with `nix develop --quiet -c just ci`.
+- [ ] T043 [US3] Commit slice 4 as `docs(devnet): record governance proof`.
 
 ## Dependencies
 
 - Phase 2 is already mostly complete and remains the baseline for all
   later work.
-- Phase 3 blocks a clean Phase 4 unless a temporary CLI boundary is
-  explicitly accepted and documented as temporary.
+- Phase 3 is the process gate and must complete before more code
+  changes are committed.
+- Phase 4 must be committed before Phase 5 because Phase 5 depends on
+  the #137 `Provider` API compiling locally.
+- Phase 5 must be committed before Phase 6 because the governance smoke
+  observes rewards through the same provider boundary used by withdraw.
 - #83 starts after #82 produces funded reward-account evidence or an
   accepted mock/fixture substitute for local-only development.
 - #86 starts after the DevNet harness and treasury funding assumptions

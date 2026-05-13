@@ -50,7 +50,7 @@ and chain context.
 
 1. **Given** a running short-epoch DevNet with deterministic setup funds, **When** the governance phase starts, **Then** it prepares the Amaru treasury script stake credential and vote-delegation state.
 2. **Given** the script stake credential is prepared, **When** the governance action is built and submitted, **Then** the smoke records the treasury-withdrawal action id, transaction id, reward account, and amount.
-3. **Given** required upstream support is missing, **When** the governance phase reaches that boundary, **Then** it fails with a typed missing-upstream diagnostic instead of replacing the library path with permanent shell code.
+3. **Given** the required upstream PR stack is unavailable or incompatible, **When** the governance phase reaches that boundary, **Then** it fails with a typed missing-upstream diagnostic instead of replacing the library path with permanent shell code.
 
 ---
 
@@ -83,7 +83,7 @@ exact upstream capabilities still required.
 - The copied or patched genesis leaves no protocol treasury/reserve funds for a treasury-withdrawal action.
 - The treasury script stake credential is registered with the wrong certificate shape.
 - Governance action submission succeeds, but the action cannot be observed before the wait budget expires.
-- Required support in `cardano-node-clients` is missing for certificates, proposal procedures, or node queries.
+- Required support in the pinned `cardano-node-clients` PR stack is missing or incompatible for certificates, proposal procedures, voting, submission, or node queries.
 - A previous run directory contains stale governance artifacts.
 
 ## Requirements *(mandatory)*
@@ -95,7 +95,7 @@ exact upstream capabilities still required.
 - **FR-003**: The governance phase MUST prepare the treasury script stake credential using the original Amaru certificate intent: registration plus always-abstain vote delegation.
 - **FR-004**: The governance phase MUST create and submit a Conway treasury-withdrawal governance action that targets the Amaru script reward account.
 - **FR-005**: The governance summary MUST record tx id, governance action id, reward account, amount, epoch/tip context, and run directory.
-- **FR-006**: Missing upstream library capabilities MUST be reported as typed blockers with links to the upstream issue or PR.
+- **FR-006**: Missing or incompatible upstream library capabilities MUST be reported as typed blockers with links to the upstream issue or PR.
 - **FR-007**: Any signing/submission required for DevNet setup MUST remain inside the smoke harness and MUST NOT become release-facing `amaru-treasury-tx` CLI behavior.
 - **FR-008**: The documentation MUST present governance action as slice 1, withdrawal as slice 2, disburse as slice 3, SundaeSwap V3 order build/funding as slice 4, SundaeSwap V3 order spend as slice 5, and reorganize as slice 6.
 - **FR-009**: Withdrawal transaction building MUST remain out of scope for this slice and tracked by #83.
@@ -125,8 +125,10 @@ exact upstream capabilities still required.
 
 - The approved local network source remains the pinned
   `cardano-node-clients` DevNet.
-- The first DevNet implementation slice may require upstream
-  `cardano-node-clients` changes, especially issues #130 and #131.
+- The first DevNet implementation slice is allowed to prove direction
+  against draft `cardano-node-clients` PRs #135 and #137, but release
+  readiness depends on that upstream stack being accepted or explicitly
+  pinned for the release.
 - Temporary `cardano-cli` calls may appear only as explicit blockers or
   migration aids inside the DevNet harness; the desired state is
   library support.

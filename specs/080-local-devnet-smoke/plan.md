@@ -10,12 +10,14 @@ identity support and the node phase have been implemented in prior
 commits; node docs are present.
 
 **Current**: Scope is narrowed to the governance action slice. The
-dirty withdrawal experiment is not part of this slice and should not be
-folded into the next reviewed commit.
+remaining work must land as vertical TDD commits: each behavior-changing
+commit carries its own failing proof, implementation, focused
+verification, and task/doc status update.
 
-**Blockers**: `cardano-node-clients` needs first-class support for the
-Conway governance/certificate/query boundaries tracked by
-lambdasistemi/cardano-node-clients#130 and #131.
+**Blockers**: The downstream branch may consume the current
+`cardano-node-clients` #137 draft head to prove direction locally, but
+release/merge readiness still depends on the upstream PR stack being
+accepted or explicitly pinned for the release.
 
 ## Summary
 
@@ -69,26 +71,30 @@ The live governance smoke is manual boundary evidence.
 **VI. Hackage-ready Haskell**: PASS. Any new public modules need normal
 exports, docs, formatting, and Cabal updates.
 
-## Review Slices
+## Vertical Review Slices
 
-1. **Spec scope slice**: update #82, #83, #86, #84, #85, #87 and Spec
-   Kit artifacts so governance is slice 1 and the rest of the DevNet
-   roadmap is tracked as follow-up work.
-2. **Node boundary slice**: keep the already-implemented `node` phase
-   green and documented.
-3. **Upstream TxBuild slice**: add the required Conway certificate and
-   treasury-withdrawal proposal support to `cardano-node-clients`
-   (#130), with tests.
-4. **Upstream query slice**: add the node queries needed to observe
-   governance/reward state without permanent `cardano-cli` calls
-   (#131), with tests.
-5. **Governance smoke slice**: add `governance` phase to the Amaru
-   DevNet smoke, wire it to the upstream capabilities, and record the
-   action evidence.
-6. **Docs/release slice**: update README, docs, and release notes to
-   distinguish node evidence, governance evidence, later withdrawal
-   proof, disburse evidence, SundaeSwap V3 order-build evidence,
-   order-spend proof, and reorganize evidence.
+1. **Spec/process slice**: update Spec Kit artifacts and local PR review
+   state. No production code. Gate: checklist and cross-artifact review.
+2. **Upstream pin/API slice**: pin `cardano-node-clients` to the current
+   #137 head and adapt Amaru test/provider stubs to the expanded
+   `Provider` interface. RED: the pinned dependency exposes missing
+   fields in local `Provider` construction. GREEN: focused unit/build
+   gate passes.
+3. **Reward-query boundary slice**: replace Amaru's direct LSQ reward
+   helper with the #137 `Provider` reward-account query. RED: a unit
+   regression proves missing reward rows are zero and the resolver uses
+   provider reward accounts. GREEN: withdraw resolver tests pass without
+   the bespoke LSQ path.
+4. **Governance smoke slice**: replace the typed upstream blocker with a
+   real local DevNet governance proof: patch short-epoch genesis, submit
+   the treasury-withdrawal governance action, vote as required, wait for
+   epoch advancement, and observe the target reward account through
+   provider queries. RED: the governance phase fails on the old blocker
+   or missing artifact contract. GREEN: `just devnet-smoke governance`
+   records the expected action/reward evidence.
+5. **Docs/release slice**: update README, docs, release notes, and issue
+   metadata to distinguish proven governance evidence from later
+   withdrawal, disburse, swap-order, swap-spend, and reorganize proofs.
 
 ## Project Structure
 
@@ -114,5 +120,6 @@ scripts/smoke/
 ## Complexity Tracking
 
 No constitution violations. The risky boundary is governance
-submission/observation, and that risk is deliberately isolated in #82
-plus the upstream issues instead of being hidden inside withdrawal.
+submission/observation, and that risk is deliberately isolated in #82.
+Release-facing commands still build unsigned transactions only; signing
+and submission remain inside the opt-in DevNet smoke harness.

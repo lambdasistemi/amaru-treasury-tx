@@ -1,29 +1,15 @@
-# Plan Review: Local Devnet Smoke
+# Plan Review
 
-## Verdict
+Verdict: Pass with constraints.
 
-Approved for implementation in solo PR mode.
+- The plan is scoped to #82 governance action evidence and keeps
+  withdrawal, disburse, swap-order, swap-spend, and reorganize in their
+  follow-up tickets.
+- The plan now requires vertical review slices. Each behavior-changing
+  slice has an explicit RED proof, implementation step, focused GREEN
+  verification, and commit boundary.
+- The DevNet signing/submission exception remains harness-only and does
+  not weaken the release-facing "build, never sign or submit" contract.
 
-## Evidence
-
-- The plan connects directly to the accepted Spec Kit requirement:
-  local live verification using the pinned `cardano-node-clients`
-  devnet with a short epoch.
-- It preserves the constitutional boundary that release-facing Amaru
-  commands build unsigned transactions only.
-- It names the main design choices: reuse
-  `cardano-node-clients:devnet`, add a local-only `devnet` network
-  alias, keep the smoke opt-in, and split node/withdraw/disburse
-  phases.
-- It identifies the risky boundary: any chain seeding must remain
-  smoke harness setup, not CLI behavior.
-- It now defines review slices so behavior changes can be committed
-  with their RED/regression proof and GREEN implementation together.
-
-## Conditions
-
-- The first implementation slice should be the `devnet` network
-  identity slice or the node smoke slice; do not start withdrawal or
-  disburse/build until the node boundary is proven.
-- Live smoke commands are manual evidence and must not be added to
-  default `just ci`.
+Constraint: do not commit the current mixed WIP diff as-is. Split it
+according to `tasks.md` phases 4-7.

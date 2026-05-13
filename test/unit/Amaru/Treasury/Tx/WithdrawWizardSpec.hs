@@ -186,7 +186,7 @@ resolverDevnetNetworkCase = do
                     addr `shouldBe` testnetWallet
                     pure []
                 , wreQueryRewardsLovelace = \_ -> pure 0
-                , wreCurrentTip = pure 0
+                , wreComputeUpperBound = \_ -> pure (Right 0)
                 }
         input =
             WithdrawResolverInput
@@ -194,6 +194,7 @@ resolverDevnetNetworkCase = do
                 , wriWalletAddrBech32 = testnetWallet
                 , wriScope = waScope answers
                 , wriRegistry = weRegistry fixtureEnv
+                , wriValidityHours = Nothing
                 }
     result <- resolveWithdrawEnv stub input
     result `shouldBe` Left WithdrawResolverEmptyWalletUtxos

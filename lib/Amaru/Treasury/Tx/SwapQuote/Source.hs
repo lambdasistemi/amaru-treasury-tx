@@ -20,6 +20,7 @@ module Amaru.Treasury.Tx.SwapQuote.Source
     , fetchQuoteSource
     , coingeckoAdaUsdProvider
     , renderQuoteSourceError
+    , describeTlsTrustAnchor
     ) where
 
 import Control.Exception (SomeException, displayException, try)
@@ -32,6 +33,7 @@ import Data.Aeson
 import Data.Aeson.Types (Parser, parseEither)
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as BSL
+import Data.Maybe (fromMaybe)
 import Data.Scientific (Scientific)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -48,6 +50,8 @@ import Network.HTTP.Simple
     , httpLBS
     , parseRequest
     )
+import System.Environment (lookupEnv)
+import System.IO (hPutStrLn, stderr)
 
 import Amaru.Treasury.Tx.SwapQuote
     ( QuoteObservation (..)
@@ -145,6 +149,7 @@ coingeckoAdaUsdProvider =
 fetchCoinGecko
     :: Text -> IO (Either QuoteSourceError QuoteObservation)
 fetchCoinGecko fetchedAt = do
+    describeTlsTrustAnchor >>= hPutStrLn stderr
     request <- coinGeckoRequest
     result <-
         try (httpLBS request)
@@ -179,6 +184,34 @@ coinGeckoRequest = do
 coinGeckoUserAgent :: ByteString
 coinGeckoUserAgent =
     "amaru-treasury-tx/0.2.1.1 (https://github.com/lambdasistemi/amaru-treasury-tx)"
+
+{- | Describe the TLS trust anchor that the next outbound
+HTTPS request will use, by reading @SSL_CERT_FILE@ and
+@SYSTEM_CERTIFICATE_PATH@ from the environment.
+
+The release wrapper @--set-default@s these to a
+@nixpkgs.cacert@ bundle baked into the AppImage / DEB /
+RPM closure, so on a clean operator host the announced
+path resolves to a known-Mozilla CA bundle. An operator
+that exports either env beforehand sees their own value
+echoed, making it auditable that their override took
+effect.
+
+This is emitted to stderr once per live quote fetch so
+the trust anchor is recorded in every transcript that
+contains a quote source response.
+-}
+describeTlsTrustAnchor :: IO String
+describeTlsTrustAnchor = do
+    sslCertFile <- fromMaybe "<unset>" <$> lookupEnv "SSL_CERT_FILE"
+    systemPath <-
+        fromMaybe "<unset>" <$> lookupEnv "SYSTEM_CERTIFICATE_PATH"
+    pure $
+        "swap-quote: TLS trust anchor"
+            <> " SSL_CERT_FILE="
+            <> sslCertFile
+            <> " SYSTEM_CERTIFICATE_PATH="
+            <> systemPath
 
 decodeUtf8Lenient :: BSL.ByteString -> Text
 decodeUtf8Lenient =

@@ -68,6 +68,36 @@ per-chunk overhead, the wizard exits before emitting an intent. The
 operator wallet is only preflighted for fee/change slack; it does not
 fund the order min-UTxO or Sundae per-order fee.
 
+### TLS trust anchor
+
+Live quote sources (`--price-source coingecko-ada-usd`) make an outbound
+HTTPS request. The released AppImage, DEB, and RPM artifacts wrap the
+executable with a `makeWrapper` shim that `--set-default`s
+`SSL_CERT_FILE` and `SYSTEM_CERTIFICATE_PATH` to a Mozilla NSS CA bundle
+that lives inside the artifact's Nix closure. This makes live quotes
+work on hosts whose `/etc/ssl/certs` layout the bundled Haskell
+`tls`/`x509-system` cannot read directly — most notably NixOS, but also
+minimal Docker images that have no CA bundle of their own installed.
+
+Each live quote fetch logs the active trust anchor to stderr before
+opening the TLS handshake:
+
+```text
+swap-quote: TLS trust anchor SSL_CERT_FILE=... SYSTEM_CERTIFICATE_PATH=...
+```
+
+If the operator wants the binary to use the host's own CA store, export
+either env before invoking `swap-wizard`:
+
+```bash
+export SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt
+```
+
+The wrapper uses `--set-default`, so any operator-exported value wins
+and the stderr line shows that override took effect. The bundled
+fallback is frozen at release time; operators who need a fresher trust
+store should either override the env or upgrade to a newer release.
+
 ## Expert/manual override
 
 Direct `swap-wizard --min-rate` remains available for expert use with

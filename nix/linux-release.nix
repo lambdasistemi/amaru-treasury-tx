@@ -6,17 +6,49 @@
 , bundlers
 }:
 
+# Wrap the executable so it carries a CA store inside its own closure.
+#
+# The Haskell `tls`/`x509-system` reads the host's `/etc/ssl/certs`
+# directly. On NixOS that directory only contains `ca-bundle.crt`
+# (no per-CA `.pem` files), so an AppImage run there sees an empty
+# trust store and `swap-wizard --price-source` fails with
+# `UnknownCa`. Exporting `SSL_CERT_FILE` / `SYSTEM_CERTIFICATE_PATH`
+# from the dev shell already fixes the source build; the wrapper
+# brings the same defaults to every release artifact.
+#
+# `--set-default` means an operator who already has a working
+# `SSL_CERT_FILE` exported keeps it; the wrapper only fills in the
+# fallback when the env is unset.
 let
-  appImage = bundlers.bundlers.${system}.toAppImage package;
-  deb = bundlers.bundlers.${system}.toDEB package;
-  rpm = bundlers.bundlers.${system}.toRPM package;
+  packageWithCa = pkgs.symlinkJoin {
+    name = "amaru-treasury-tx-${packageVersion}-with-ca";
+    paths = [ package ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      for prog in $out/bin/*; do
+        if [ -L "$prog" ]; then
+          target=$(readlink -f "$prog")
+          rm "$prog"
+          makeWrapper "$target" "$prog" \
+            --set-default SSL_CERT_FILE \
+              ${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt \
+            --set-default SYSTEM_CERTIFICATE_PATH \
+              ${pkgs.cacert}/etc/ssl/certs
+        fi
+      done
+    '';
+  };
+
+  appImage = bundlers.bundlers.${system}.toAppImage packageWithCa;
+  deb = bundlers.bundlers.${system}.toDEB packageWithCa;
+  rpm = bundlers.bundlers.${system}.toRPM packageWithCa;
 in
 pkgs.runCommand
   "amaru-treasury-tx-${artifactVersion}-${system}-artifacts"
   {
     nativeBuildInputs = [ pkgs.coreutils pkgs.findutils ];
     passthru = {
-      inherit appImage deb rpm;
+      inherit appImage deb rpm packageWithCa;
     };
   } ''
   mkdir -p "$out"

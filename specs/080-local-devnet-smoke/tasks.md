@@ -19,7 +19,7 @@
 - [x] T006 Create the reorganize DevNet follow-up issue #87.
 - [x] T007 Add #82, #83, #86, #84, #85, and #87 to the Work backlog.
 - [x] T008 Narrow `specs/080-local-devnet-smoke/` to the governance action slice.
-- [ ] T009 Update PR metadata once a PR exists for branch `080-local-devnet-smoke`.
+- [x] T009 Update PR metadata once a PR exists for branch `080-local-devnet-smoke`.
 
 ## Phase 2: Preserve The Node Boundary
 

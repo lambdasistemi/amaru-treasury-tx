@@ -90,7 +90,7 @@ With the current pinned `cardano-node-clients` #137 head
 `c46b95a86c9155db414f519fcd6c75e5b310b23e`, that phase submits the
 local treasury-withdrawal governance action, votes it through, and
 observes the Amaru treasury script reward account funded. The latest
-local evidence for this branch is `runs/devnet/20260513T084753Z`:
+local evidence for this branch is `runs/devnet/20260513T090626Z`:
 reward account `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34`
 changed from `0` to `2000000` lovelace. Re-run the smoke before a
 release and record the new run directory.

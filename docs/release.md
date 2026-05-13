@@ -111,7 +111,7 @@ release notes when this check is used. The node phase proves the
 short-epoch genesis, submits the treasury-withdrawal governance action
 through the pinned `cardano-node-clients` #135/#137 stack, votes it
 through, and observes the Amaru treasury script reward account funded.
-The latest branch evidence is `runs/devnet/20260513T084753Z` on #137
+The latest branch evidence is `runs/devnet/20260513T090626Z` on #137
 head `c46b95a86c9155db414f519fcd6c75e5b310b23e`, with reward account
 `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34` moving
 from `0` to `2000000` lovelace.
@@ -131,7 +131,7 @@ Local DevNet governance evidence now proves the first treasury setup
 slice: the smoke submits and votes through a treasury-withdrawal
 governance action, then observes the Amaru treasury script reward
 account funded through Provider reward queries. Evidence:
-runs/devnet/20260513T084753Z, cardano-node-clients#137
+runs/devnet/20260513T090626Z, cardano-node-clients#137
 c46b95a86c9155db414f519fcd6c75e5b310b23e, reward
 5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34
 0 -> 2000000 lovelace. This is not yet withdrawal, disburse,

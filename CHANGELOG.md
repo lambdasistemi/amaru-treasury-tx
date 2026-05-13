@@ -4,6 +4,17 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.5.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.4.0...v0.2.5.0) (2026-05-13)
+
+### Features
+
+* **095:** add attach-witness and submit CLI commands ([962795f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/962795f5c315da3b3ed23e9b13f21558c953fd5e))
+
+### Bug Fixes
+
+* **097:** bundle CA store in Linux release artifacts ([b3da20e](https://github.com/lambdasistemi/amaru-treasury-tx/commit/b3da20ed155c088ad8fc106f77b7792f837cbcc6))
+* **094:** derive CoinGecko User-Agent from cabal version ([377713f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/377713f635300636f2fb62cfd3ef08488b1defe2))
+
 ## [0.2.4.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.3.0...v0.2.4.0) (2026-05-12)
 
 ### Features

@@ -87,7 +87,7 @@ next epoch, and observes the script reward account through
 `Provider.queryRewardAccounts`.
 
 The latest local evidence for this branch is
-`runs/devnet/20260513T084753Z`, using `cardano-node-clients` #137 head
+`runs/devnet/20260513T090626Z`, using `cardano-node-clients` #137 head
 `c46b95a86c9155db414f519fcd6c75e5b310b23e`. It funded the script
 reward account from `0` to `2000000` lovelace across epochs `2 -> 4`.
 

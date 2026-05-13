@@ -87,8 +87,8 @@ next epoch, and observes the script reward account through
 `Provider.queryRewardAccounts`.
 
 The latest local evidence for this branch is
-`runs/devnet/20260513T090626Z`, using `cardano-node-clients` #137 head
-`c46b95a86c9155db414f519fcd6c75e5b310b23e`. It funded the script
+`runs/devnet/20260513T113326Z`, using `cardano-node-clients` merged
+governance stack head `9cfc3aa2efec9224ae3feaefeb981edb1281c6ff`. It funded the script
 reward account from `0` to `2000000` lovelace across epochs `2 -> 4`.
 
 The governance phase writes:
@@ -171,9 +171,10 @@ The downstream proof currently consumes the draft PR stack:
 
 - [cardano-node-clients#135](https://github.com/lambdasistemi/cardano-node-clients/pull/135)
 - [cardano-node-clients#137](https://github.com/lambdasistemi/cardano-node-clients/pull/137)
+- [cardano-node-clients#132](https://github.com/lambdasistemi/cardano-node-clients/pull/132)
 
 Release readiness depends on that stack being accepted upstream or on
-the release explicitly pinning the verified `#137` head.
+the release explicitly pinning the verified merged stack head.
 
 ## Failure Shape
 

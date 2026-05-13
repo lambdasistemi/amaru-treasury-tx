@@ -10,9 +10,9 @@ All notable changes to `amaru-treasury-tx` are documented here.
   slice: `just devnet-smoke governance` submits and votes through a
   treasury-withdrawal governance action, then observes the Amaru
   treasury script reward account funded through Provider reward
-  queries. Latest branch evidence: `runs/devnet/20260513T090626Z`,
-  `cardano-node-clients` #137
-  `c46b95a86c9155db414f519fcd6c75e5b310b23e`, reward account
+  queries. Latest branch evidence: `runs/devnet/20260513T113326Z`,
+  `cardano-node-clients` merged stack
+  `9cfc3aa2efec9224ae3feaefeb981edb1281c6ff`, reward account
   `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34`
   `0 -> 2000000` lovelace. Withdrawal, disburse, SundaeSwap order, and
   reorganize proofs remain follow-up DevNet slices.

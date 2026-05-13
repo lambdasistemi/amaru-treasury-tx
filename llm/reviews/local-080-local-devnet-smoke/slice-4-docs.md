@@ -15,8 +15,8 @@ Scope reviewed:
 Evidence:
 
 - Gate: `./llm/reviews/local-080-local-devnet-smoke/gate.sh` exited 0.
-- DevNet run from the rebased gate: `runs/devnet/20260513T090626Z`.
-- Upstream stack documented: `cardano-node-clients#135` at `a0099153bbf9b7318bb186ce352c34610f83db29`; `cardano-node-clients#137` at `c46b95a86c9155db414f519fcd6c75e5b310b23e`.
+- DevNet run from the rebased gate: `runs/devnet/20260513T113326Z`.
+- Upstream stack documented: `cardano-node-clients#135` at `a0099153bbf9b7318bb186ce352c34610f83db29`; `cardano-node-clients#137` merged into stack head `9cfc3aa2efec9224ae3feaefeb981edb1281c6ff`.
 - Issue metadata updated: <https://github.com/lambdasistemi/amaru-treasury-tx/issues/82#issuecomment-4439089508>.
 - Whitespace: `git diff --check` exited 0 after the docs evidence update.
 

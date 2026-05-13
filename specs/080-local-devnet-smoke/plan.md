@@ -18,11 +18,11 @@ and focused governance-smoke verification. The next slice is
 documentation and release notes, including README and #82 metadata.
 
 **Blockers**: The downstream branch may consume the current
-`cardano-node-clients` #137 draft head `c46b95a86c9155db414f519fcd6c75e5b310b23e`
+`cardano-node-clients` merged stack head `9cfc3aa2efec9224ae3feaefeb981edb1281c6ff`
 to prove direction locally, but
 release/merge readiness still depends on the upstream PR stack being
 accepted or explicitly pinned for the release. Latest local evidence:
-`just devnet-smoke governance` passed in `runs/devnet/20260513T090626Z`
+`just devnet-smoke governance` passed in `runs/devnet/20260513T113326Z`
 with reward account `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34`
 funded from `0` to `2000000` lovelace.
 

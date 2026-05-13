@@ -121,18 +121,32 @@ decodeVKeyWitnessHex
     :: Int -> ByteString -> Either AttachError (WitVKey Witness)
 decodeVKeyWitnessHex ix hex = do
     raw <- decodeHexBlob (witnessLabel ix) hex
-    case decodeFullAnnotator
-        (eraProtVerLow @ConwayEra)
-        "KeyWitness"
-        keyWitnessDecoder
-        (BSL.fromStrict raw) of
+    let bsl = BSL.fromStrict raw
+        tryWrapped =
+            decodeFullAnnotator
+                (eraProtVerLow @ConwayEra)
+                "KeyWitness"
+                keyWitnessDecoder
+                bsl
+        tryBare =
+            decodeFullAnnotator
+                (eraProtVerLow @ConwayEra)
+                "WitVKey"
+                decCBOR
+                bsl
+    case tryBare of
         Right wit -> Right wit
-        Left err ->
-            Left
-                ( AttachDecodeWitnessFailed
-                    ix
-                    (renderDecoderError err)
-                )
+        Left bareErr -> case tryWrapped of
+            Right wit -> Right wit
+            Left wrappedErr ->
+                Left
+                    ( AttachDecodeWitnessFailed ix $
+                        "neither bare WitVKey ("
+                            <> renderDecoderError bareErr
+                            <> ") nor [tag, WitVKey] envelope ("
+                            <> renderDecoderError wrappedErr
+                            <> ")"
+                    )
 
 {- | Decoder that recognises both the raw 'WitVKey' shape
 and the @[tag, WitVKey]@ envelope used by

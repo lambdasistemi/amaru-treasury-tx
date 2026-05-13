@@ -87,8 +87,8 @@ next epoch, and observes the script reward account through
 `Provider.queryRewardAccounts`.
 
 The latest local evidence for this branch is
-`runs/devnet/20260513T113326Z`, using `cardano-node-clients` merged
-governance stack head `9cfc3aa2efec9224ae3feaefeb981edb1281c6ff`. It funded the script
+`runs/devnet/20260513T143827Z`, using `cardano-node-clients` main
+commit `d6773e4cd8a2421617568c8dac0972b0f312a509`. It funded the script
 reward account from `0` to `2000000` lovelace across epochs `2 -> 4`.
 
 The governance phase writes:
@@ -167,14 +167,15 @@ Required upstream library support was originally tracked in:
 - [cardano-node-clients#130](https://github.com/lambdasistemi/cardano-node-clients/issues/130)
 - [cardano-node-clients#131](https://github.com/lambdasistemi/cardano-node-clients/issues/131)
 
-The downstream proof currently consumes the draft PR stack:
+The downstream proof now consumes `cardano-node-clients` main after the
+upstream PR stack merged:
 
 - [cardano-node-clients#135](https://github.com/lambdasistemi/cardano-node-clients/pull/135)
 - [cardano-node-clients#137](https://github.com/lambdasistemi/cardano-node-clients/pull/137)
 - [cardano-node-clients#132](https://github.com/lambdasistemi/cardano-node-clients/pull/132)
 
-Release readiness depends on that stack being accepted upstream or on
-the release explicitly pinning the verified merged stack head.
+The pinned upstream commit is
+`d6773e4cd8a2421617568c8dac0972b0f312a509`.
 
 ## Failure Shape
 
@@ -189,7 +190,7 @@ The node phase fails before any treasury action if:
   governance/reward testing.
 
 The governance phase may still fail with a typed upstream or local
-boundary if the pinned `cardano-node-clients` draft stack moves, the
+boundary if the pinned `cardano-node-clients` main commit moves, the
 genesis patch no longer applies, funds are insufficient, the action is
 not observed, or the reward account is not funded before the wait
 budget expires.

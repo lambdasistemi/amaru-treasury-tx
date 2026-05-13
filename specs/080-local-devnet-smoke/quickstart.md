@@ -27,19 +27,14 @@ Expected result within 2 minutes:
 just devnet-smoke governance
 ```
 
-Current expected result while upstream support is missing:
-
-- non-zero exit
-- `MISSING_UPSTREAM_GOVERNANCE_SUPPORT`
-- `governance/summary.json`
-- links to `cardano-node-clients` #130 and #131
-
-Expected successful artifacts after upstream support lands:
+Current expected result with the pinned `cardano-node-clients` #137
+head:
 
 - `governance/certificates.json`
 - `governance/action.json`
 - `governance/summary.json`
 - tx id(s), governance action id, reward account(s), amount(s), and epoch/tip context in the top-level summary
+- reward balance evidence for the Amaru treasury script reward account
 
 If required upstream support is missing, the command must fail with
 `MISSING_UPSTREAM_GOVERNANCE_SUPPORT` and link the blocking upstream

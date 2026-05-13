@@ -2,8 +2,9 @@
 
 The local DevNet smoke is an opt-in release check. It starts the
 `cardano-node-clients` DevNet, verifies the node socket with network
-magic `42`, records short-epoch timing evidence, and writes artifacts
-under a fresh run directory.
+magic `42`, can run the governance funding setup on a patched
+short-epoch genesis, records timing/action/reward evidence, and writes
+artifacts under a fresh run directory.
 
 This check is not part of `just ci`: it starts a real local
 `cardano-node` and is meant as manual live evidence before a release.
@@ -56,6 +57,55 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
 - `epochDurationSeconds`: `50`
 - `networkMagic`: `42`
 
+## Governance Boundary
+
+```bash
+just devnet-smoke governance
+```
+
+Expected output:
+
+```text
+devnet-smoke: run-dir runs/devnet/YYYYMMDDTHHMMSSZ
+devnet-smoke: network devnet magic 42
+devnet-smoke: epoch-duration 5.0
+devnet-smoke: socket /tmp/.../cardano-e2e/node.sock
+devnet-smoke: phase governance passed
+devnet-smoke: governance-tx-id TxId {...}
+devnet-smoke: governance-action-id GovActionId {...}
+devnet-smoke: reward-account 5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34
+devnet-smoke: governance-amount 2000000
+devnet-smoke: governance-summary runs/devnet/YYYYMMDDTHHMMSSZ/governance/summary.json
+```
+
+The governance smoke copies the pinned DevNet genesis into the run
+directory, patches it to a 5-second epoch for manual reward testing,
+registers the Amaru treasury script stake credential with the
+registration-plus-always-abstain certificate shape, submits a Conway
+treasury-withdrawal governance action, votes it through, waits for the
+next epoch, and observes the script reward account through
+`Provider.queryRewardAccounts`.
+
+The latest local evidence for this branch is
+`runs/devnet/20260513T084753Z`, using `cardano-node-clients` #137 head
+`c46b95a86c9155db414f519fcd6c75e5b310b23e`. It funded the script
+reward account from `0` to `2000000` lovelace across epochs `2 -> 4`.
+
+The governance phase writes:
+
+```text
+runs/devnet/YYYYMMDDTHHMMSSZ/
+|-- node.log
+|-- summary.json
+|-- summary.log
+|-- timing.json
+`-- governance/
+    |-- action.json
+    |-- certificates.json
+    |-- genesis/
+    `-- summary.json
+```
+
 ## DevNet Experiment Order
 
 The experiment is split into six tickets:
@@ -85,12 +135,10 @@ The experiment is split into six tickets:
 The implemented phases today are `node` and `governance`.
 
 `node` proves only the local node boundary, network magic, and timing.
-`governance` currently reaches the explicit upstream-support boundary
-and fails with `MISSING_UPSTREAM_GOVERNANCE_SUPPORT` until
-`cardano-node-clients` exposes the Conway certificate, proposal, and
-query capabilities tracked below. It is not yet proof that governance,
-withdrawal, disburse, SundaeSwap order-build, SundaeSwap order-spend,
-or reorganize transactions have been built or observed on DevNet.
+`governance` proves the local setup path that funds the Amaru treasury
+script reward account. It is not proof that withdrawal, disburse,
+SundaeSwap order-build, SundaeSwap order-spend, or reorganize
+transactions have been built or observed on DevNet.
 
 SundaeSwap V3 contract compatibility should use the public V3 Aiken
 contracts and SDK/reference material:
@@ -114,10 +162,18 @@ credential as the `Rewarding` witness. The governance setup must also
 match the original Amaru registration shape: registration plus
 always-abstain vote delegation.
 
-Required upstream library support is tracked in:
+Required upstream library support was originally tracked in:
 
 - [cardano-node-clients#130](https://github.com/lambdasistemi/cardano-node-clients/issues/130)
 - [cardano-node-clients#131](https://github.com/lambdasistemi/cardano-node-clients/issues/131)
+
+The downstream proof currently consumes the draft PR stack:
+
+- [cardano-node-clients#135](https://github.com/lambdasistemi/cardano-node-clients/pull/135)
+- [cardano-node-clients#137](https://github.com/lambdasistemi/cardano-node-clients/pull/137)
+
+Release readiness depends on that stack being accepted upstream or on
+the release explicitly pinning the verified `#137` head.
 
 ## Failure Shape
 
@@ -131,10 +187,11 @@ The node phase fails before any treasury action if:
 - the effective epoch duration is not short enough for manual
   governance/reward testing.
 
-The governance phase may fail with
-`MISSING_UPSTREAM_GOVERNANCE_SUPPORT` while upstream support is still
-open. That failure writes `governance/summary.json` and records the
-blocking `cardano-node-clients` issues in `summary.log`.
+The governance phase may still fail with a typed upstream or local
+boundary if the pinned `cardano-node-clients` draft stack moves, the
+genesis patch no longer applies, funds are insufficient, the action is
+not observed, or the reward account is not funded before the wait
+budget expires.
 
 Use the run directory's `node.log`, `summary.log`, `timing.json`, and
 `governance/summary.json` when recording release evidence or

@@ -107,16 +107,36 @@ nix develop --quiet -c just devnet-smoke governance
 Record the generated `runs/devnet/<timestamp>/` directory in the
 release notes when this check is used. The node phase proves the
 `cardano-node-clients` DevNet node boundary, socket magic `42`, and
-50-second epoch timing. The governance phase currently records a typed
-`MISSING_UPSTREAM_GOVERNANCE_SUPPORT` blocker until the upstream
-Conway certificate, proposal, and query support lands. The DevNet
-experiment is split into governance action (#82), withdrawal (#83),
-disburse (#86), SundaeSwap V3 order build/funding (#84),
-SundaeSwap V3 order spend (#85), and reorganize (#87) slices. Do not
-record withdrawal, disburse, swap-order, swap-spend, or reorganize
-evidence until those slices land and their phase-specific smoke
-commands pass. SundaeSwap compatibility claims must be based on the
-public V3 contracts/SDK, not on an Amaru-only toy validator.
+50-second epoch timing. The governance phase copies and patches a
+short-epoch genesis, submits the treasury-withdrawal governance action
+through the pinned `cardano-node-clients` #135/#137 stack, votes it
+through, and observes the Amaru treasury script reward account funded.
+The latest branch evidence is `runs/devnet/20260513T084753Z` on #137
+head `c46b95a86c9155db414f519fcd6c75e5b310b23e`, with reward account
+`5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34` moving
+from `0` to `2000000` lovelace.
+
+The DevNet experiment is split into governance action (#82),
+withdrawal (#83), disburse (#86), SundaeSwap V3 order build/funding
+(#84), SundaeSwap V3 order spend (#85), and reorganize (#87) slices.
+Do not record withdrawal, disburse, swap-order, swap-spend, or
+reorganize evidence until those slices land and their phase-specific
+smoke commands pass. SundaeSwap compatibility claims must be based on
+the public V3 contracts/SDK, not on an Amaru-only toy validator.
+
+Release note wording for this slice:
+
+```text
+Local DevNet governance evidence now proves the first treasury setup
+slice: the smoke submits and votes through a treasury-withdrawal
+governance action, then observes the Amaru treasury script reward
+account funded through Provider reward queries. Evidence:
+runs/devnet/20260513T084753Z, cardano-node-clients#137
+c46b95a86c9155db414f519fcd6c75e5b310b23e, reward
+5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34
+0 -> 2000000 lovelace. This is not yet withdrawal, disburse,
+SundaeSwap order, or reorganize proof.
+```
 
 The release workflows run `scripts/release/check-version-consistency`
 before building. A tag is publishable only when:

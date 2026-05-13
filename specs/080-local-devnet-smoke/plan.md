@@ -22,7 +22,7 @@ documentation and release notes, including README and #82 metadata.
 to prove direction locally, but
 release/merge readiness still depends on the upstream PR stack being
 accepted or explicitly pinned for the release. Latest local evidence:
-`just devnet-smoke governance` passed in `runs/devnet/20260513T083455Z`
+`just devnet-smoke governance` passed in `runs/devnet/20260513T084753Z`
 with reward account `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34`
 funded from `0` to `2000000` lovelace.
 

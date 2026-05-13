@@ -210,8 +210,11 @@ spec =
             "node: starts cardano-node-clients devnet and records short-epoch timing evidence"
             (runForPhases ["node", "all"] nodeSmoke)
         it
-            "governance: submits treasury withdrawal and records reward evidence"
+            "governance: funds the treasury script reward account"
             (runForPhases ["governance", "all"] governanceSmoke)
+        it
+            "withdraw: refuses without governance prerequisite evidence"
+            (runForPhases ["withdraw"] withdrawSmoke)
 
 runForPhases :: [String] -> IO () -> IO ()
 runForPhases accepted action = do
@@ -270,6 +273,31 @@ nodeSmoke = do
         writeTiming runDir startMs socket timing
         writeSummary runDir socket timing "passed"
         putSummaryLines runDir socket timing "passed"
+
+withdrawSmoke :: IO ()
+withdrawSmoke = do
+    runDir <- resolveRunDir
+    let govSummaryPath =
+            runDir </> "governance" </> "summary.json"
+    createDirectoryIfMissing True (runDir </> "withdraw")
+    hasGovernance <- doesFileExist govSummaryPath
+    unless hasGovernance $ do
+        message <-
+            writeWithdrawalFailure
+                runDir
+                (MissingGovernancePrerequisite govSummaryPath)
+        intentExists <-
+            doesFileExist (withdrawIntentPath runDir)
+        txBodyExists <-
+            doesFileExist (withdrawTxBodyPath runDir)
+        intentExists `shouldBe` False
+        txBodyExists `shouldBe` False
+        expectationFailure message
+
+data GovernancePrerequisiteFailure
+    = MissingGovernancePrerequisite !FilePath
+    | StaleGovernancePrerequisite !FilePath !String
+    deriving stock (Eq, Show)
 
 data NoCtx a
 
@@ -937,6 +965,89 @@ governanceSummaryLines runDir socket timing evidence =
     , "devnet-smoke: governance-summary "
         <> (runDir </> "governance" </> "summary.json")
     ]
+
+writeWithdrawalFailure
+    :: FilePath
+    -> GovernancePrerequisiteFailure
+    -> IO String
+writeWithdrawalFailure runDir failure = do
+    let withdrawDir = runDir </> "withdraw"
+        message = governancePrerequisiteFailureMessage failure
+        value = withdrawalFailureValue runDir failure
+        linesOut = withdrawalFailureLines runDir message
+    createDirectoryIfMissing True withdrawDir
+    BSL.writeFile (withdrawDir </> "failure.json") (encode value)
+    BSL.writeFile (withdrawDir </> "summary.json") (encode value)
+    BSL.writeFile (runDir </> "summary.json") (encode value)
+    writeFile (runDir </> "summary.log") (unlines linesOut)
+    mapM_ putStrLn linesOut
+    pure message
+
+withdrawalFailureValue
+    :: FilePath
+    -> GovernancePrerequisiteFailure
+    -> Value
+withdrawalFailureValue runDir failure =
+    object
+        [ "phase" .= ("withdraw" :: String)
+        , "status" .= ("failed" :: String)
+        , "code" .= governancePrerequisiteFailureCode failure
+        , "message" .= governancePrerequisiteFailureMessage failure
+        , "runDirectory" .= runDir
+        , "governanceSummaryPath"
+            .= governancePrerequisiteFailurePath failure
+        , "intentPath" .= withdrawIntentPath runDir
+        , "txBodyPath" .= withdrawTxBodyPath runDir
+        , "reportJsonPath" .= (runDir </> "withdraw" </> "report.json")
+        , "reportMarkdownPath" .= (runDir </> "withdraw" </> "report.md")
+        , "withdrawSummaryPath"
+            .= (runDir </> "withdraw" </> "summary.json")
+        , "lastObservedRewardLovelace" .= (Nothing :: Maybe Integer)
+        , "epoch" .= (Nothing :: Maybe Word64)
+        , "tipSlot" .= (Nothing :: Maybe Word64)
+        ]
+
+withdrawalFailureLines :: FilePath -> String -> [String]
+withdrawalFailureLines runDir message =
+    [ "devnet-smoke: run-dir " <> runDir
+    , "devnet-smoke: phase withdraw failed"
+    , "devnet-smoke: " <> message
+    , "devnet-smoke: failure "
+        <> (runDir </> "withdraw" </> "failure.json")
+    ]
+
+governancePrerequisiteFailureCode
+    :: GovernancePrerequisiteFailure -> String
+governancePrerequisiteFailureCode = \case
+    MissingGovernancePrerequisite{} ->
+        "missing-governance-prerequisite"
+    StaleGovernancePrerequisite{} ->
+        "stale-governance-prerequisite"
+
+governancePrerequisiteFailureMessage
+    :: GovernancePrerequisiteFailure -> String
+governancePrerequisiteFailureMessage = \case
+    MissingGovernancePrerequisite path ->
+        "missing governance prerequisite evidence: " <> path
+    StaleGovernancePrerequisite path reason ->
+        "stale governance prerequisite evidence: "
+            <> path
+            <> ": "
+            <> reason
+
+governancePrerequisiteFailurePath
+    :: GovernancePrerequisiteFailure -> FilePath
+governancePrerequisiteFailurePath = \case
+    MissingGovernancePrerequisite path -> path
+    StaleGovernancePrerequisite path _ -> path
+
+withdrawIntentPath :: FilePath -> FilePath
+withdrawIntentPath runDir =
+    runDir </> "withdraw" </> "intent.json"
+
+withdrawTxBodyPath :: FilePath -> FilePath
+withdrawTxBodyPath runDir =
+    runDir </> "withdraw" </> "tx-body.cbor.hex"
 
 placeholderEvidence :: String -> Coin -> GovernanceEvidence
 placeholderEvidence treasuryHash rewardBefore =

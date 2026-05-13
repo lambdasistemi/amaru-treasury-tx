@@ -98,9 +98,11 @@ library
     Amaru.Treasury.ChainContext
     Amaru.Treasury.ChainContext.Fixture
     Amaru.Treasury.Cli
+    Amaru.Treasury.Cli.AttachWitness
     Amaru.Treasury.Cli.Common
     Amaru.Treasury.Cli.DisburseWizard
     Amaru.Treasury.Cli.ReportRender
+    Amaru.Treasury.Cli.Submit
     Amaru.Treasury.Cli.SwapCommon
     Amaru.Treasury.Cli.SwapOptions
     Amaru.Treasury.Cli.SwapQuote
@@ -133,6 +135,7 @@ library
     Amaru.Treasury.Report.Schema
     Amaru.Treasury.Scope
     Amaru.Treasury.Summary
+    Amaru.Treasury.Tx.AttachWitness
     Amaru.Treasury.Tx.Disburse
     Amaru.Treasury.Tx.Disburse.Trace
     Amaru.Treasury.Tx.DisburseBuild
@@ -140,6 +143,7 @@ library
     Amaru.Treasury.Tx.DisburseWizard
     Amaru.Treasury.Tx.DisburseWizard.Trace
     Amaru.Treasury.Tx.Reorganize
+    Amaru.Treasury.Tx.Submit
     Amaru.Treasury.Tx.Swap
     Amaru.Treasury.Tx.SwapQuote
     Amaru.Treasury.Tx.SwapQuote.Source
@@ -318,6 +322,7 @@ test-suite unit-tests
     Amaru.Treasury.ReportSpec
     Amaru.Treasury.ScopeSpec
     Amaru.Treasury.SummarySpec
+    Amaru.Treasury.Tx.AttachWitnessSpec
     Amaru.Treasury.Tx.DisburseBuildSpec
     Amaru.Treasury.Tx.DisburseSpec
     Amaru.Treasury.Tx.DisburseWizardSpec

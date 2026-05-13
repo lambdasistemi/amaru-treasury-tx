@@ -17,6 +17,9 @@ import Amaru.Treasury.Cli
     ( Cmd (..)
     , opts
     )
+import Amaru.Treasury.Cli.AttachWitness
+    ( runAttachWitness
+    )
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , withSocket
@@ -26,6 +29,9 @@ import Amaru.Treasury.Cli.DisburseWizard
     )
 import Amaru.Treasury.Cli.ReportRender
     ( runReportRender
+    )
+import Amaru.Treasury.Cli.Submit
+    ( runSubmit
     )
 import Amaru.Treasury.Cli.SwapQuote
     ( runSwapQuote
@@ -61,3 +67,8 @@ main = do
         CmdTxBuild to ->
             withSocket g $ \socket ->
                 runTxBuild socket to
+        CmdAttachWitness ao ->
+            runAttachWitness ao
+        CmdSubmit so ->
+            withSocket g $ \socket ->
+                runSubmit (goNetworkMagic g) socket so

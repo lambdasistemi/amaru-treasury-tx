@@ -98,6 +98,54 @@ and the stderr line shows that override took effect. The bundled
 fallback is frozen at release time; operators who need a fresher trust
 store should either override the env or upgrade to a newer release.
 
+## Sign and submit
+
+Once `tx-build` has emitted the unsigned CBOR hex, attach detached
+vkey witnesses with `attach-witness` and push the result to chain
+with `submit`. Both commands read raw CBOR hex from stdin (or a
+`--tx PATH`) and emit raw CBOR hex to stdout (or `--out PATH`), so
+the full pipeline is one pipe per stage with no JSON envelopes and
+no `cardano-cli` dependency:
+
+```bash
+amaru-treasury-tx \
+  --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
+  swap-wizard ... \
+| amaru-treasury-tx \
+  --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
+  tx-build --out - --report swap.report.json \
+| amaru-treasury-tx attach-witness \
+    --witness 8200825820...5840... \
+    --witness 8200825820...5840... \
+| amaru-treasury-tx \
+  --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
+  submit
+```
+
+The two `--witness` arguments are the detached vkey witnesses your
+external signer (HSM, hardware wallet, key-only ceremony) hands back
+— each is a CBOR-hex `WitVKey 'Witness` payload of the form
+`8200825820<vkey32>5840<sig64>`. Repeat the flag once per signer. The
+swap is gated by the scope-owner approval rule on chain, so attach at
+least one owner witness plus any extra signers the wizard required.
+
+On success, `submit` prints the accepted tx hash to stdout and a
+`submit: accepted <txId>` line to stderr. On rejection, it prints the
+rejection reason from the node to stderr and exits non-zero.
+
+You can save the intermediate signed CBOR if you want to inspect it
+before submission:
+
+```bash
+amaru-treasury-tx tx-build --out unsigned.cbor.hex --report swap.report.json < intent.json
+amaru-treasury-tx attach-witness \
+  --tx unsigned.cbor.hex \
+  --witness 8200825820...5840... \
+  --witness 8200825820...5840... \
+  --out signed.cbor.hex
+amaru-treasury-tx --network mainnet submit --tx signed.cbor.hex
+```
+
 ## Expert/manual override
 
 Direct `swap-wizard --min-rate` remains available for expert use with

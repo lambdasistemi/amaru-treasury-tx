@@ -113,6 +113,8 @@ library
     Amaru.Treasury.Cli.TxBuild
     Amaru.Treasury.Cli.WithdrawWizard
     Amaru.Treasury.Constants
+    Amaru.Treasury.Inspect.SwapOrderDatum
+    Amaru.Treasury.Inspect.Types
     Amaru.Treasury.IntentJSON
     Amaru.Treasury.IntentJSON.Common
     Amaru.Treasury.IntentJSON.Schema
@@ -310,6 +312,7 @@ test-suite unit-tests
     Amaru.Treasury.AuxDataSpec
     Amaru.Treasury.BuildSpec
     Amaru.Treasury.Cli.EnvelopeSpec
+    Amaru.Treasury.Inspect.SwapOrderDatumSpec
     Amaru.Treasury.IntentJSONSchemaSpec
     Amaru.Treasury.IntentJSONSpec
     Amaru.Treasury.LedgerParseSpec

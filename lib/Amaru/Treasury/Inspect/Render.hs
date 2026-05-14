@@ -84,7 +84,7 @@ renderHuman r =
 
 renderBlockHash :: Maybe Text -> Text
 renderBlockHash Nothing = ""
-renderBlockHash (Just h) = "  block " <> short12 h <> "…"
+renderBlockHash (Just h) = "  block " <> short12 h <> "..."
 
 renderScope :: ScopeSection -> [Text]
 renderScope s =
@@ -164,14 +164,14 @@ renderPending p =
     renderOutref (psoOutref p)
         <> "   "
         <> renderAda (psoLovelaceIn p)
-        <> " ADA   ≥ "
+        <> " ADA   >= "
         <> renderUsdm (psoMinUsdmOut p)
         <> " USDM  fee "
         <> renderAda (psoSundaeFeeLovelace p)
         <> " ADA"
 
 renderOutref :: Outref -> Text
-renderOutref o = short12 (orTxId o) <> "…#" <> T.pack (show (orIx o))
+renderOutref o = short12 (orTxId o) <> "...#" <> T.pack (show (orIx o))
 
 short12 :: Text -> Text
 short12 = T.take 12

@@ -155,9 +155,11 @@ different scope-owners-NFT outref each time.
   contingency scope is rejected by the swap wizard, so its pending
   list is always empty). An empty list MUST render as an explicit
   "no pending orders" line rather than being omitted.
-- **FR-010**: The report MUST include a bookkeeping section naming the
-  current chain tip (slot and block hash) and the scope-owners-NFT
-  UTxO outref pinned in the metadata as the deployment anchor.
+- **FR-010**: The report MUST include a bookkeeping section naming
+  the current chain tip slot (with the block hash when the Backend
+  can supply it; the field is permitted to be absent otherwise) and
+  the scope-owners-NFT UTxO outref pinned in the metadata as the
+  deployment anchor.
 - **FR-011**: System MUST be read-only: no transaction is signed,
   submitted, or written to the chain. No private key material is
   consulted.

@@ -170,7 +170,8 @@ chainTip =
     ChainTip
         { ctSlot = 142_300_412
         , ctBlockHash =
-            "9f1c2eaa3d4b5670891a2b3c4d5e6f7081a2b3c4d5e6f7081a2b3c4d5e6f7081"
+            Just
+                "9f1c2eaa3d4b5670891a2b3c4d5e6f7081a2b3c4d5e6f7081a2b3c4d5e6f7081"
         }
 
 deployment :: DeploymentAnchor

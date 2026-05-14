@@ -4,7 +4,15 @@
             "additionalProperties": false,
             "properties": {
                 "blockHash": {
-                    "$ref": "#/$defs/Hex32"
+                    "description": "32-byte block hash; null when the Backend cannot supply it (see specs/109-treasury-inspect/research.md §R5).",
+                    "oneOf": [
+                        {
+                            "type": "null"
+                        },
+                        {
+                            "$ref": "#/$defs/Hex32"
+                        }
+                    ]
                 },
                 "slot": {
                     "minimum": 0,
@@ -12,8 +20,7 @@
                 }
             },
             "required": [
-                "slot",
-                "blockHash"
+                "slot"
             ],
             "type": "object"
         },

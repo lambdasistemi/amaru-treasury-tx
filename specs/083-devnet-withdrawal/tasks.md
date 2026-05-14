@@ -26,15 +26,15 @@
 
 ## Phase 4: Live Reward To Intent
 
-- [ ] T012 [US1] Factor the #82 governance setup helper so the withdraw phase can create fresh prerequisite evidence without duplicating governance logic.
-- [ ] T013 [US2] RED: assert that `withdraw/intent.json` is missing until the live reward resolver succeeds.
-- [ ] T014 [US2] Run `withdraw-wizard` against the live DevNet provider and write `withdraw/intent.json`.
-- [ ] T015 [US2] Assert the intent reward account matches governance prerequisite evidence.
-- [ ] T016 [US2] Assert `rewardsLovelace > 0` and equals the observed provider reward.
+- [x] T012 [US1] Factor the #82 governance setup helper so the withdraw phase can create fresh prerequisite evidence without duplicating governance logic.
+- [x] T013 [US2] RED: assert that `withdraw/intent.json` is missing until the live reward resolver succeeds.
+- [x] T014 [US2] Run `withdraw-wizard` against the live DevNet provider and write `withdraw/intent.json`.
+- [x] T015 [US2] Assert the intent reward account matches governance prerequisite evidence.
+- [x] T016 [US2] Assert `rewardsLovelace > 0` and equals the observed provider reward.
 
 ## Phase 5: Intent To Unsigned Build
 
-- [ ] T017 [US3] RED: assert unsigned CBOR/report artifacts are required after intent creation.
+- [x] T017 [US3] RED: assert unsigned CBOR/report artifacts are required after intent creation.
 - [ ] T018 [US3] Run `tx-build` against the live withdraw intent.
 - [ ] T019 [US3] Write `withdraw/tx-body.cbor.hex`, `withdraw/report.json`, and `withdraw/report.md`.
 - [ ] T020 [US3] Record tx id/body hash, fee, validity bound, report paths, and upstream dependency SHA in `withdraw/summary.json`.
@@ -60,8 +60,10 @@
 - Phase 2 must complete before implementation so Amaru consumes the
   merged upstream library state.
 - Phase 3 must land before Phase 4 so artifact contracts fail first.
-- Phase 4 must complete before Phase 5 because `tx-build` consumes the
-  live intent.
+- Phase 4 is complete: the smoke creates live governance prerequisite
+  evidence, observes positive rewards, and writes the withdraw intent.
+- Phase 5 has its RED boundary in place; `tx-build` implementation
+  now consumes the live intent.
 - Phase 7 starts only after a successful withdrawal run exists.
 
 ## Evidence
@@ -72,6 +74,11 @@
 - PR GATE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed after the pin.
 - WITHDRAW CONTRACT RED: before the slice, `nix develop --quiet -c just devnet-smoke withdraw` failed with `devnet-smoke: unknown phase: withdraw`.
 - WITHDRAW CONTRACT GREEN: after the slice, `scripts/smoke/devnet-local --phase withdraw --run-dir <tmp>` fails with typed code `missing-governance-prerequisite`, writes `<tmp>/withdraw/failure.json` and `<tmp>/withdraw/summary.json`, and writes no `withdraw/intent.json` or `withdraw/tx-body.cbor.hex`.
+- WITHDRAW INTENT RED: before the live reward-to-intent slice, `scripts/smoke/devnet-local --phase withdraw --run-dir <tmp>` stopped at `missing-governance-prerequisite` and wrote no `withdraw/intent.json`.
+- WITHDRAW INTENT GREEN / BUILD RED: `scripts/smoke/devnet-local --phase withdraw --run-dir /tmp/tmp.ceKml45iYu/withdraw` exits 1 at the expected `missing-withdrawal-build-artifacts` boundary after writing `withdraw/intent.json`; the intent records reward account `ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af`, `rewardsLovelace = 2000000`, and live local registry anchors for scopes, permissions, treasury, and registry reference UTxOs.
+- WITHDRAW BUILD BOUNDARY: the same run writes `withdraw/failure.json` with `intentPath`, `governanceSummaryPath`, `txBodyPath`, report paths, and `lastObservedRewardLovelace = 2000000`; no unsigned tx body exists yet.
+- GOVERNANCE REGRESSION: `scripts/smoke/devnet-local --phase governance --run-dir /tmp/tmp.KwjKGXJyC7/governance` exits 0; it funds the pinned governance reward account `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34` from `0` to `2000000` lovelace across epochs `2 -> 4`.
+- PR GATE AFTER INTENT SLICE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed on 2026-05-14 after the live reward-to-intent code, docs, and review-state updates.
 
 ## Parallel Notes
 

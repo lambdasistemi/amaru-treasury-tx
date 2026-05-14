@@ -8,14 +8,18 @@
 **Completed**: #83 is scoped; upstream `cardano-node-clients` #132 was
 rebase-merged into `main` at `d6773e4cd8a2421617568c8dac0972b0f312a509`;
 the current branch is stacked on the #82 governance proof branch; Amaru
-now pins that upstream main commit in Cabal and Nix.
+now pins that upstream main commit in Cabal and Nix; the withdrawal
+phase contract and live reward-to-intent slice are implemented.
 
-**Current**: The withdrawal phase contract is in place. The next
-implementation slice is live reward-to-intent on top of governance
-prerequisite evidence.
+**Current**: The next implementation slice is intent-to-build. The
+withdraw smoke now creates local DevNet registry anchors, funds the
+local treasury script reward account through governance, resolves live
+rewards with `withdraw-wizard`, writes `withdraw/intent.json`, and
+then stops at the expected missing-build-artifacts boundary.
 
-**Blockers**: #82/PR #93 should remain the source of governance setup
-and funded reward-account evidence.
+**Blockers**: #82/PR #93 should remain the source of standalone
+governance proof. #83 still needs unsigned withdrawal transaction build
+artifacts before release docs can claim a complete withdrawal proof.
 
 ## Summary
 
@@ -47,6 +51,9 @@ reward wait budget on the short-epoch DevNet.
 **Constraints**: DevNet setup may submit setup/governance transactions
 inside the smoke harness; release-facing Amaru commands still build
 unsigned transactions only.
+The withdraw phase uses local seed-derived registry policy scripts and
+reference-script UTxOs so the live DevNet registry view contains real
+local anchors, not placeholder references.
 **Scale/Scope**: One new DevNet phase, run artifacts, focused tests,
 and release documentation.
 
@@ -91,12 +98,14 @@ hlint, Cabal checks, and the existing CI gate.
    helper enough for the withdraw phase to observe funded reward state,
    then run the withdraw resolver against the live provider. RED:
    intent artifact is missing or rewards are zero. GREEN:
-   `withdraw/intent.json` contains the funded account and positive
-   reward amount.
+   `withdraw/intent.json` contains the funded account, positive reward
+   amount, and local registry anchors for scopes, permissions,
+   treasury, and registry scripts. Status: complete on this branch.
 5. **Intent-to-build slice**: run `tx-build` on the live intent and
    record unsigned CBOR, report JSON/markdown, body hash, fee, and
-   validity evidence. RED: artifact contract fails. GREEN: local
-   `just devnet-smoke withdraw` records build evidence.
+   validity evidence. RED: artifact contract fails after intent
+   creation. GREEN: local `just devnet-smoke withdraw` records build
+   evidence. Status: current next slice.
 6. **Diagnostics slice**: cover zero reward, timeout/stale evidence,
    and network mismatch as typed diagnostics that do not write success
    artifacts.

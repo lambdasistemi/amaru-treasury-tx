@@ -174,6 +174,7 @@ import Data.Maybe (fromJust, fromMaybe)
 import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
+import Data.Text.IO qualified as TIO
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import Data.Void (Void)
@@ -213,6 +214,7 @@ import Test.Hspec
 import Amaru.Treasury.Backend.N2C
     ( probeNetworkMagic
     )
+import Amaru.Treasury.Cli.TxBuild qualified as TxBuild
 import Amaru.Treasury.IntentJSON
     ( SAction (..)
     , SomeTreasuryIntent (..)
@@ -243,6 +245,8 @@ import Amaru.Treasury.Registry.Derive
     , scriptHashOfBlob
     , scriptHashToHex
     )
+import Amaru.Treasury.Report qualified as Report
+import Amaru.Treasury.Report.Render qualified as ReportRender
 import Amaru.Treasury.Scope
     ( ScopeId (CoreDevelopment)
     )
@@ -277,7 +281,7 @@ spec =
             "governance: funds the treasury script reward account"
             (runForPhases ["governance", "all"] governanceSmoke)
         it
-            "withdraw: writes a live reward intent before build artifacts"
+            "withdraw: builds unsigned artifacts from live rewards"
             (runForPhases ["withdraw"] withdrawSmoke)
 
 runForPhases :: [String] -> IO () -> IO ()
@@ -328,20 +332,12 @@ withdrawSmoke = do
                     provider
                     registry
                     evidence
-            message <-
-                writeWithdrawalFailure
-                    runDir
-                    ( MissingWithdrawalBuildArtifacts
-                        (withdrawTxBodyPath runDir)
-                        (coinLovelace rewards)
-                    )
-            expectationFailure message
-
-data GovernancePrerequisiteFailure
-    = MissingGovernancePrerequisite !FilePath
-    | StaleGovernancePrerequisite !FilePath !String
-    | MissingWithdrawalBuildArtifacts !FilePath !Integer
-    deriving stock (Eq, Show)
+            writeWithdrawalBuildArtifacts
+                runDir
+                socket
+                timing
+                evidence
+                rewards
 
 withFundedGovernanceReward
     :: FilePath
@@ -463,6 +459,10 @@ devnetNftCoin = Coin 5_000_000
 
 devnetReferenceScriptCoin :: Coin
 devnetReferenceScriptCoin = Coin 100_000_000
+
+upstreamCardanoNodeClientsMain :: String
+upstreamCardanoNodeClientsMain =
+    "d6773e4cd8a2421617568c8dac0972b0f312a509"
 
 preparePinnedTreasuryTarget
     :: Provider IO
@@ -1632,7 +1632,7 @@ writeWithdrawalIntentArtifacts runDir socket timing provider registry evidence =
                     pure $
                         Right $
                             slotNumber $
-                                addSlots 1_000 (ledgerTipSlot snapshot)
+                                addSlots 20 (ledgerTipSlot snapshot)
                 }
         input =
             Withdraw.WithdrawResolverInput
@@ -1693,6 +1693,57 @@ writeWithdrawalIntentArtifacts runDir socket timing provider registry evidence =
         (coinLovelace observedRewards)
     putWithdrawalIntentLines runDir evidence observedRewards
     pure observedRewards
+
+writeWithdrawalBuildArtifacts
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> GovernanceEvidence
+    -> Coin
+    -> IO ()
+writeWithdrawalBuildArtifacts runDir socket timing evidence rewards = do
+    createDirectoryIfMissing True (runDir </> "withdraw")
+    TxBuild.runTxBuild
+        socket
+        TxBuild.TxBuildOpts
+            { TxBuild.tboIntentPath = Just (withdrawIntentPath runDir)
+            , TxBuild.tboOutPath = Just (withdrawTxBodyPath runDir)
+            , TxBuild.tboLog = Just (withdrawTxBuildLogPath runDir)
+            , TxBuild.tboReportPath = Just (withdrawReportJsonPath runDir)
+            }
+    buildOutput <-
+        expectEither
+            "decode withdrawal tx-build report"
+            =<< eitherDecodeFileStrict
+                @Report.TxBuildOutput
+                (withdrawReportJsonPath runDir)
+    success <- case Report.txoResult buildOutput of
+        Report.TxBuildOutputSuccess ok -> pure ok
+        Report.TxBuildOutputFailure failure ->
+            expectationFailure
+                ( "withdrawal tx-build report is failure: "
+                    <> show failure
+                )
+                *> error "unreachable"
+    txBodyHex <- TE.decodeUtf8 <$> BS.readFile (withdrawTxBodyPath runDir)
+    txBodyHex `shouldBe` Report.unTxCborHex (Report.tbsTxCbor success)
+    render <- case ReportRender.renderBuildOutput buildOutput of
+        Right ok -> pure ok
+        Left err ->
+            expectationFailure
+                ("render withdrawal report: " <> show err)
+                *> error "unreachable"
+    TIO.writeFile
+        (withdrawReportMarkdownPath runDir)
+        (ReportRender.unRenderOutput render)
+    writeWithdrawalBuildSummary
+        runDir
+        socket
+        timing
+        evidence
+        rewards
+        success
+    putWithdrawalBuildLines runDir evidence rewards success
 
 writeWithdrawalRegistryArtifacts
     :: FilePath
@@ -1846,8 +1897,8 @@ withdrawalIntentSummaryValue runDir socket timing evidence observedRewards =
             .= (runDir </> "withdraw" </> "governance-prerequisite.json")
         , "intentPath" .= withdrawIntentPath runDir
         , "txBodyPath" .= withdrawTxBodyPath runDir
-        , "reportJsonPath" .= (runDir </> "withdraw" </> "report.json")
-        , "reportMarkdownPath" .= (runDir </> "withdraw" </> "report.md")
+        , "reportJsonPath" .= withdrawReportJsonPath runDir
+        , "reportMarkdownPath" .= withdrawReportMarkdownPath runDir
         ]
 
 putWithdrawalIntentLines
@@ -1873,102 +1924,117 @@ withdrawalIntentLines runDir evidence rewards =
         <> withdrawIntentPath runDir
     ]
 
-writeWithdrawalFailure
+writeWithdrawalBuildSummary
     :: FilePath
-    -> GovernancePrerequisiteFailure
-    -> IO String
-writeWithdrawalFailure runDir failure = do
-    let withdrawDir = runDir </> "withdraw"
-        message = governancePrerequisiteFailureMessage failure
-        value = withdrawalFailureValue runDir failure
-        linesOut = withdrawalFailureLines runDir message
-    createDirectoryIfMissing True withdrawDir
-    BSL.writeFile (withdrawDir </> "failure.json") (encode value)
-    BSL.writeFile (withdrawDir </> "summary.json") (encode value)
-    BSL.writeFile (runDir </> "summary.json") (encode value)
-    writeFile (runDir </> "summary.log") (unlines linesOut)
-    mapM_ putStrLn linesOut
-    pure message
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> GovernanceEvidence
+    -> Coin
+    -> Report.TxBuildSuccess
+    -> IO ()
+writeWithdrawalBuildSummary
+    runDir
+    socket
+    timing
+    evidence
+    rewards
+    success = do
+        let summary =
+                withdrawalBuildSummaryValue
+                    runDir
+                    socket
+                    timing
+                    evidence
+                    rewards
+                    success
+        BSL.writeFile
+            (runDir </> "withdraw" </> "summary.json")
+            (encode summary)
+        BSL.writeFile (runDir </> "summary.json") (encode summary)
+        writeFile
+            (runDir </> "summary.log")
+            ( unlines $
+                withdrawalBuildLines runDir evidence rewards success
+            )
 
-withdrawalFailureValue
+withdrawalBuildSummaryValue
     :: FilePath
-    -> GovernancePrerequisiteFailure
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> GovernanceEvidence
+    -> Coin
+    -> Report.TxBuildSuccess
     -> Value
-withdrawalFailureValue runDir failure =
+withdrawalBuildSummaryValue runDir socket timing evidence rewards success =
     object
         [ "phase" .= ("withdraw" :: String)
-        , "status" .= ("failed" :: String)
-        , "code" .= governancePrerequisiteFailureCode failure
-        , "message" .= governancePrerequisiteFailureMessage failure
+        , "status" .= ("passed" :: String)
         , "runDirectory" .= runDir
-        , "governanceSummaryPath"
-            .= governancePrerequisiteEvidencePath runDir failure
+        , "socket" .= socket
+        , "network" .= ("devnet" :: String)
+        , "networkMagic" .= sgtNetworkMagic timing
+        , "epochDurationSeconds" .= epochDurationSeconds timing
+        , "rewardAccount" .= geRewardAccount evidence
+        , "rewardBeforeLovelace" .= geRewardBefore evidence
+        , "rewardAfterGovernanceLovelace" .= geRewardAfter evidence
+        , "withdrawRewardsLovelace" .= coinLovelace rewards
+        , "governancePrerequisitePath"
+            .= (runDir </> "withdraw" </> "governance-prerequisite.json")
         , "intentPath" .= withdrawIntentPath runDir
         , "txBodyPath" .= withdrawTxBodyPath runDir
-        , "reportJsonPath" .= (runDir </> "withdraw" </> "report.json")
-        , "reportMarkdownPath" .= (runDir </> "withdraw" </> "report.md")
-        , "withdrawSummaryPath"
-            .= (runDir </> "withdraw" </> "summary.json")
-        , "lastObservedRewardLovelace"
-            .= governancePrerequisiteFailureReward failure
-        , "epoch" .= (Nothing :: Maybe Word64)
-        , "tipSlot" .= (Nothing :: Maybe Word64)
+        , "reportJsonPath" .= withdrawReportJsonPath runDir
+        , "reportMarkdownPath" .= withdrawReportMarkdownPath runDir
+        , "txBuildLogPath" .= withdrawTxBuildLogPath runDir
+        , "upstreamCardanoNodeClientsMain"
+            .= upstreamCardanoNodeClientsMain
+        , "txId" .= Report.tiTxId identity
+        , "bodySizeBytes" .= Report.tiBodySizeBytes identity
+        , "feeLovelace" .= Report.tiFeeLovelace identity
+        , "totalCollateralLovelace"
+            .= Report.tiTotalCollateralLovelace identity
+        , "validityInterval" .= Report.tiValidityInterval identity
+        , "txCborHexLength"
+            .= T.length (Report.unTxCborHex (Report.tbsTxCbor success))
         ]
+  where
+    identity =
+        Report.trIdentity (Report.tbsReport success)
 
-withdrawalFailureLines :: FilePath -> String -> [String]
-withdrawalFailureLines runDir message =
-    [ "devnet-smoke: run-dir " <> runDir
-    , "devnet-smoke: phase withdraw failed"
-    , "devnet-smoke: " <> message
-    , "devnet-smoke: failure "
-        <> (runDir </> "withdraw" </> "failure.json")
-    ]
-
-governancePrerequisiteFailureCode
-    :: GovernancePrerequisiteFailure -> String
-governancePrerequisiteFailureCode = \case
-    MissingGovernancePrerequisite{} ->
-        "missing-governance-prerequisite"
-    StaleGovernancePrerequisite{} ->
-        "stale-governance-prerequisite"
-    MissingWithdrawalBuildArtifacts{} ->
-        "missing-withdrawal-build-artifacts"
-
-governancePrerequisiteFailureMessage
-    :: GovernancePrerequisiteFailure -> String
-governancePrerequisiteFailureMessage = \case
-    MissingGovernancePrerequisite path ->
-        "missing governance prerequisite evidence: " <> path
-    StaleGovernancePrerequisite path reason ->
-        "stale governance prerequisite evidence: "
-            <> path
-            <> ": "
-            <> reason
-    MissingWithdrawalBuildArtifacts path _ ->
-        "missing withdrawal build artifacts: " <> path
-
-governancePrerequisiteFailurePath
-    :: GovernancePrerequisiteFailure -> FilePath
-governancePrerequisiteFailurePath = \case
-    MissingGovernancePrerequisite path -> path
-    StaleGovernancePrerequisite path _ -> path
-    MissingWithdrawalBuildArtifacts path _ -> path
-
-governancePrerequisiteEvidencePath
+putWithdrawalBuildLines
     :: FilePath
-    -> GovernancePrerequisiteFailure
-    -> FilePath
-governancePrerequisiteEvidencePath runDir = \case
-    MissingWithdrawalBuildArtifacts{} ->
-        runDir </> "withdraw" </> "governance-prerequisite.json"
-    other -> governancePrerequisiteFailurePath other
+    -> GovernanceEvidence
+    -> Coin
+    -> Report.TxBuildSuccess
+    -> IO ()
+putWithdrawalBuildLines runDir evidence rewards success =
+    mapM_ putStrLn (withdrawalBuildLines runDir evidence rewards success)
 
-governancePrerequisiteFailureReward
-    :: GovernancePrerequisiteFailure -> Maybe Integer
-governancePrerequisiteFailureReward = \case
-    MissingGovernancePrerequisite{} -> Nothing
-    StaleGovernancePrerequisite{} -> Nothing
-    MissingWithdrawalBuildArtifacts _ rewards -> Just rewards
+withdrawalBuildLines
+    :: FilePath
+    -> GovernanceEvidence
+    -> Coin
+    -> Report.TxBuildSuccess
+    -> [String]
+withdrawalBuildLines runDir evidence rewards success =
+    [ "devnet-smoke: run-dir " <> runDir
+    , "devnet-smoke: phase withdraw passed"
+    , "devnet-smoke: reward-account " <> geRewardAccount evidence
+    , "devnet-smoke: withdraw-rewards "
+        <> show (coinLovelace rewards)
+    , "devnet-smoke: withdraw-tx-id "
+        <> T.unpack (Report.tiTxId identity)
+    , "devnet-smoke: withdraw-fee "
+        <> show (Report.tiFeeLovelace identity)
+    , "devnet-smoke: withdraw-tx-body "
+        <> withdrawTxBodyPath runDir
+    , "devnet-smoke: withdraw-report-json "
+        <> withdrawReportJsonPath runDir
+    , "devnet-smoke: withdraw-report-md "
+        <> withdrawReportMarkdownPath runDir
+    ]
+  where
+    identity =
+        Report.trIdentity (Report.tbsReport success)
 
 withdrawIntentPath :: FilePath -> FilePath
 withdrawIntentPath runDir =
@@ -1977,6 +2043,18 @@ withdrawIntentPath runDir =
 withdrawTxBodyPath :: FilePath -> FilePath
 withdrawTxBodyPath runDir =
     runDir </> "withdraw" </> "tx-body.cbor.hex"
+
+withdrawReportJsonPath :: FilePath -> FilePath
+withdrawReportJsonPath runDir =
+    runDir </> "withdraw" </> "report.json"
+
+withdrawReportMarkdownPath :: FilePath -> FilePath
+withdrawReportMarkdownPath runDir =
+    runDir </> "withdraw" </> "report.md"
+
+withdrawTxBuildLogPath :: FilePath -> FilePath
+withdrawTxBuildLogPath runDir =
+    runDir </> "withdraw" </> "tx-build.log"
 
 placeholderEvidence :: String -> Coin -> GovernanceEvidence
 placeholderEvidence treasuryHash rewardBefore =

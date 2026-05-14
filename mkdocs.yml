@@ -66,6 +66,7 @@ nav:
   - Swap recipe: swap.md
   - Disburse: disburse.md
   - Withdraw: withdraw.md
+  - Inspect: inspect.md
   - ChainContext: chain-context.md
   - Freeze workflow: freeze-workflow.md
   - Parity report: parity.md

@@ -4,21 +4,19 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
-### ⚠ Breaking changes
+## [0.2.6.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.5.1...v0.2.6.0) (2026-05-14)
 
-* **110:** retire silent ADA/USD-as-USDM/ADA paths.
-  * `swap-quote --price-source coingecko-ada-usd` is replaced with
-    `swap-quote --price-source coingecko-ada-usdm`, derived from two
-    CoinGecko `simple/price` calls (`ids=cardano` and `ids=usdm-2`).
-    The audit JSON records both upstream observations under
-    `quote.provenance.kind = "derived"`.
-  * `swap-quote --ada-usd DECIMAL` is removed; use `--ada-usdm DECIMAL`.
-  * `swap-wizard` no longer performs outbound quote retrieval. The
-    `--price-source` and `--ada-usd` flags are removed. The wizard
-    accepts only `--min-rate R` (expert path) or
-    `--ada-usdm Q --slippage-bps S` (operator-supplied quote with the
-    wizard applying slippage). For a live quote, use the `swap-quote`
-    command and pipe its `intent.json` into `tx-build`.
+### Features
+
+* **110:** derived quote provenance type and audit encoder ([26eff15](https://github.com/lambdasistemi/amaru-treasury-tx/commit/26eff159edb46c45002a39fa927d55d97e855b52))
+* **110:** remove live quote retrieval from swap-wizard ([a7bd8a5](https://github.com/lambdasistemi/amaru-treasury-tx/commit/a7bd8a57ae602b0f5052478d0db48d1a522c7053))
+* **110:** replace coingecko-ada-usd with derived coingecko-ada-usdm in swap-quote ([0b7a816](https://github.com/lambdasistemi/amaru-treasury-tx/commit/0b7a816bb6d94c048bfa23261902bd916322ff59))
+* **106:** envelope-* wrap commands ([f1fb4c4](https://github.com/lambdasistemi/amaru-treasury-tx/commit/f1fb4c4398096f99ab4d688a8f779dce05d78721))
+* **106:** de-envelope unwrap command ([bf95e59](https://github.com/lambdasistemi/amaru-treasury-tx/commit/bf95e59f63d44f02be5aefd65c9c28a40ac6d6c7))
+
+### Bug Fixes
+
+* **108:** bare hex txid on submit stdout and stderr ([d05b829](https://github.com/lambdasistemi/amaru-treasury-tx/commit/d05b829df9936286af89a6a31ab9a7203270669c))
 
 ## [0.2.5.1](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.5.0...v0.2.5.1) (2026-05-13)
 

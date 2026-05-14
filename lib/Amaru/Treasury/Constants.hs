@@ -21,6 +21,7 @@ module Amaru.Treasury.Constants
       -- * Sundae swap-order pool
     , sundaeUsdmPoolHex
     , sundaeProtocolFeeLovelace
+    , sundaeOrderAddressMainnet
 
       -- * Min-UTxO deposit on swap-order outputs
     , minUtxoDepositLovelace
@@ -75,6 +76,15 @@ sundaeUsdmPoolHex = "64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef"
 -- | Sundae protocol fee on each swap order (lovelace).
 sundaeProtocolFeeLovelace :: Integer
 sundaeProtocolFeeLovelace = 1_280_000
+
+{- | SundaeSwap V3 order script address on mainnet. Used by
+@treasury-inspect@ to enumerate pending swap-order UTxOs.
+Operators on preprod/preview must override this via the
+@--swap-order-address@ flag.
+-}
+sundaeOrderAddressMainnet :: Text
+sundaeOrderAddressMainnet =
+    "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n"
 
 -- | Minimum lovelace deposit on swap-order outputs.
 minUtxoDepositLovelace :: Integer

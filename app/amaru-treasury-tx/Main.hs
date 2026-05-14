@@ -43,6 +43,9 @@ import Amaru.Treasury.Cli.SwapQuote
 import Amaru.Treasury.Cli.SwapWizard
     ( runWizard
     )
+import Amaru.Treasury.Cli.TreasuryInspect
+    ( runTreasuryInspect
+    )
 import Amaru.Treasury.Cli.TxBuild
     ( runTxBuild
     )
@@ -74,6 +77,9 @@ main = do
         CmdTxBuild to ->
             withSocket g $ \socket ->
                 runTxBuild socket to
+        CmdTreasuryInspect io ->
+            withSocket g $ \socket ->
+                runTreasuryInspect g{goSocketPath = Just socket} io
         CmdAttachWitness ao ->
             runAttachWitness ao
         CmdSubmit so ->

@@ -119,7 +119,7 @@ outrefSchema =
 chainTipSchema :: Value
 chainTipSchema =
     objectSchema
-        ["slot", "blockHash"]
+        ["slot"]
         [
             ( "slot"
             , object
@@ -127,7 +127,21 @@ chainTipSchema =
                 , "minimum" .= (0 :: Int)
                 ]
             )
-        , ("blockHash", ref "Hex32")
+        ,
+            ( "blockHash"
+            , object
+                [ "oneOf"
+                    .= [ object ["type" .= ("null" :: Text)]
+                       , ref "Hex32"
+                       ]
+                , "description"
+                    .= ( "32-byte block hash; null when the \
+                         \Backend cannot supply it (see \
+                         \specs/109-treasury-inspect/research.md §R5)."
+                            :: Text
+                       )
+                ]
+            )
         ]
 
 deploymentSchema :: Value

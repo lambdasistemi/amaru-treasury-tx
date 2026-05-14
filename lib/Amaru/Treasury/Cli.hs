@@ -49,6 +49,10 @@ import Amaru.Treasury.Cli.SwapWizard
     ( WizardOpts
     , wizardOptsP
     )
+import Amaru.Treasury.Cli.TreasuryInspect
+    ( InspectOpts
+    , inspectOptsP
+    )
 import Amaru.Treasury.Cli.TxBuild
     ( TxBuildOpts
     , txBuildOptsP
@@ -69,6 +73,7 @@ data Cmd
     | CmdWithdrawWizard WithdrawOpts
     | CmdTxBuild TxBuildOpts
     | CmdReportRender ReportRenderOpts
+    | CmdTreasuryInspect InspectOpts
     | CmdAttachWitness AttachWitnessOpts
     | CmdSubmit SubmitOpts
     | CmdEnvelopeTx
@@ -125,6 +130,14 @@ cmdP =
                     (CmdWithdrawWizard <$> withdrawOptsP)
                     ( progDesc
                         "Produce a withdraw intent.json from registry and reward state"
+                    )
+                )
+            <> command
+                "treasury-inspect"
+                ( info
+                    (CmdTreasuryInspect <$> inspectOptsP)
+                    ( progDesc
+                        "Read-only report: treasury balances + pending SundaeSwap orders per scope"
                     )
                 )
             <> command

@@ -29,6 +29,7 @@ extra-source-files:
   scripts/smoke/swap-quote-docs
   scripts/smoke/swap-quote-override
   scripts/smoke/swap-wizard-signers
+  scripts/smoke/treasury-inspect
   scripts/smoke/tx-build-pipe
   test/fixtures/106-cardano-cli-oracle/*
   test/fixtures/disburse/**/*.cbor
@@ -111,6 +112,7 @@ library
     Amaru.Treasury.Cli.SwapOptions
     Amaru.Treasury.Cli.SwapQuote
     Amaru.Treasury.Cli.SwapWizard
+    Amaru.Treasury.Cli.TreasuryInspect
     Amaru.Treasury.Cli.TxBuild
     Amaru.Treasury.Cli.WithdrawWizard
     Amaru.Treasury.Constants

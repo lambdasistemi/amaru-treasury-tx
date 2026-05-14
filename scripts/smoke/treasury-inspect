@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+#
+# Smoke for `treasury-inspect`. No live cardano-node required:
+# every assertion short-circuits before any LSQ traffic.
+#
+# - help-flag            : exit 0, lists --metadata/--scope/--format/--out
+# - bad-metadata path    : exit 2, stderr starts with "metadata:"
+# - bad-metadata content : exit 2, stderr starts with "metadata:"
+#
+# (Unknown-scope is rejected by optparse → exit 1; that is the
+# Haskell default, not the spec's exit 2 for "bad invocation".
+# Documented in cli-surface.md.)
+set -uo pipefail
+
+bin=$(cabal list-bin -v0 -O0 exe:amaru-treasury-tx)
+
+fail() {
+    echo "smoke: $*" >&2
+    exit 1
+}
+
+# help
+out=$("$bin" treasury-inspect --help)
+for flag in --metadata --scope --format --out; do
+    grep -q -- "$flag" <<<"$out" \
+        || fail "treasury-inspect --help missing $flag"
+done
+
+err_log=$(mktemp)
+cleanup() {
+    rm -f "$err_log" /tmp/bad-metadata.txt
+}
+trap cleanup EXIT
+
+# bad-metadata path
+"$bin" treasury-inspect \
+    --metadata /nonexistent.json \
+    --node-socket /dev/null \
+    --network mainnet \
+    >/dev/null 2>"$err_log"
+rc=$?
+[ "$rc" -eq 2 ] \
+    || fail "bad-metadata-path: expected exit 2, got $rc"
+grep -q '^metadata:' "$err_log" \
+    || fail "bad-metadata-path: stderr did not start with 'metadata:'"
+
+# bad-metadata content (not a JSON file)
+echo "this is not json" > /tmp/bad-metadata.txt
+"$bin" treasury-inspect \
+    --metadata /tmp/bad-metadata.txt \
+    --node-socket /dev/null \
+    --network mainnet \
+    >/dev/null 2>"$err_log"
+rc=$?
+[ "$rc" -eq 2 ] \
+    || fail "bad-metadata-content: expected exit 2, got $rc"
+grep -q '^metadata:' "$err_log" \
+    || fail "bad-metadata-content: stderr did not start with 'metadata:'"
+
+echo "smoke: treasury-inspect: OK (--help, bad-metadata-path, bad-metadata-content)"

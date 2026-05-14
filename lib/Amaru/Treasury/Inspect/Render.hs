@@ -74,15 +74,17 @@ renderHuman r =
     T.unlines $
         [ "Chain tip:        slot "
             <> T.pack (show (ctSlot (irChainTip r)))
-            <> "  block "
-            <> short12 (ctBlockHash (irChainTip r))
-            <> "…"
+            <> renderBlockHash (ctBlockHash (irChainTip r))
         , "Deployment anchor: scope-owners "
             <> renderOutref
                 (unDeploymentAnchor (irDeployment r))
         , ""
         ]
             <> concatMap renderScope (irScopes r)
+
+renderBlockHash :: Maybe Text -> Text
+renderBlockHash Nothing = ""
+renderBlockHash (Just h) = "  block " <> short12 h <> "…"
 
 renderScope :: ScopeSection -> [Text]
 renderScope s =

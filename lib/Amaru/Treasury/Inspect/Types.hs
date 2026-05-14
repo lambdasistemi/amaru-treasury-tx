@@ -49,8 +49,11 @@ data InspectReport = InspectReport
 -- | Current chain tip at the moment the report was assembled.
 data ChainTip = ChainTip
     { ctSlot :: !Word64
-    , ctBlockHash :: !Text
-    -- ^ 32-byte hex.
+    , ctBlockHash :: !(Maybe Text)
+    -- ^ 32-byte hex when the Backend can supply it; 'Nothing'
+    --   when the Backend only exposes a slot estimate (see
+    --   @specs/109-treasury-inspect/research.md@ §R5 for the
+    --   Backend-additivity decision).
     }
     deriving (Eq, Show)
 

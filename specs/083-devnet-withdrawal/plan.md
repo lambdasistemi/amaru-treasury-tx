@@ -13,8 +13,8 @@ phase contract, live reward-to-intent slice, and intent-to-unsigned-build
 slice are implemented. The focused diagnostics slice is also
 implemented.
 
-**Current**: The next implementation slice is release documentation.
-The withdraw smoke now creates local DevNet
+**Current**: Release documentation is being finalized. The withdraw
+smoke now creates local DevNet
 registry anchors, funds the local treasury script reward account
 through governance, resolves live rewards with `withdraw-wizard`,
 writes `withdraw/intent.json`, then runs `tx-build` and writes
@@ -23,8 +23,8 @@ write typed diagnostics for reward timeout, zero rewards, network
 mismatch, and tx-build failure.
 
 **Blockers**: #82/PR #93 should remain the source of standalone
-governance proof. #83 still needs final docs/release notes and
-metadata updates before undrafting.
+governance proof. #83 still needs the final gate and PR/issue metadata
+refresh before undrafting.
 
 ## Summary
 

@@ -141,11 +141,11 @@ horizon so script evaluation stays inside the hard-fork forecast
 window.
 
 The verified 2026-05-14 slice used run directory
-`/tmp/tmp.gE9yQunNvS/withdraw-build`. It wrote `withdraw/intent.json`
+`/tmp/tmp.4b2zbAg5Z7/withdraw-diagnostics`. It wrote `withdraw/intent.json`
 with reward account
-`5da22eab0370edee0d4591f54bba0d79a89d973598f15eb609d968c4` and
+`ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af` and
 `rewardsLovelace = 2000000`, then built unsigned tx id
-`5fd2aa15f7269474fa5709e9b804b26f3df60ff4b3c38b3f225797cfef165d43`
+`b7f1decd1453ee955e7dfe75aac7d9e10b0a6ed3c6c59bb4704c08d8c5132600`
 with fee `469749` lovelace and validity upper bound slot `222`.
 
 The withdrawal phase writes:

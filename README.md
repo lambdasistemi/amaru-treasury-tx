@@ -95,6 +95,25 @@ reward account `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34`
 changed from `0` to `2000000` lovelace. Re-run the smoke before a
 release and record the new run directory.
 
+Run the withdrawal slice boundary check with:
+
+```bash
+nix develop --quiet -c just devnet-smoke withdraw
+```
+
+The withdrawal phase creates fresh local governance prerequisite
+evidence, resolves the funded treasury script reward account through
+`withdraw-wizard`, then builds unsigned withdrawal CBOR and
+JSON/Markdown reports through the release-facing `tx-build` path. The
+latest local evidence for this branch is
+`/tmp/tmp.4b2zbAg5Z7/withdraw-diagnostics`: reward account
+`ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af`, reward
+`2000000` lovelace, tx id
+`b7f1decd1453ee955e7dfe75aac7d9e10b0a6ed3c6c59bb4704c08d8c5132600`,
+fee `469749` lovelace, and validity upper bound slot `222`. This is
+unsigned build evidence only; it does not sign or submit the final
+withdrawal transaction.
+
 The DevNet release experiment is tracked in slices: governance action
 [#82](https://github.com/lambdasistemi/amaru-treasury-tx/issues/82),
 withdrawal [#83](https://github.com/lambdasistemi/amaru-treasury-tx/issues/83),

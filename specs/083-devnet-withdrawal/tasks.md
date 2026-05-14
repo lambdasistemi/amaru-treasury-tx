@@ -50,10 +50,10 @@
 ## Phase 7: Documentation And Release Notes
 
 - [x] T026 [US4] Update `docs/local-devnet-smoke.md` with withdrawal phase usage and artifacts.
-- [ ] T027 [US4] Update `README.md` with withdrawal evidence wording.
-- [ ] T028 [US4] Update `docs/release.md` and `CHANGELOG.md` with release-note text that distinguishes governance from withdrawal evidence.
-- [ ] T029 [US4] Update #83 issue metadata and PR metadata with the verified run directory.
-- [ ] T030 [US4] Run the local PR gate and commit docs as `docs(devnet): record withdrawal proof`.
+- [x] T027 [US4] Update `README.md` with withdrawal evidence wording.
+- [x] T028 [US4] Update `docs/release.md` and `CHANGELOG.md` with release-note text that distinguishes governance from withdrawal evidence.
+- [x] T029 [US4] Update #83 issue metadata and PR metadata with the verified run directory.
+- [x] T030 [US4] Run the local PR gate and commit docs as `docs(devnet): record withdrawal proof`.
 
 ## Dependencies
 
@@ -89,6 +89,8 @@
 - DIAGNOSTICS GREEN: `nix develop --quiet -c cabal test devnet-tests -O0 --test-show-details=direct --test-option=--match --test-option='withdraw diagnostics'` passes 4 examples, 0 failures. It covers reward timeout fields, network mismatch classification before intent writing, zero-rewards stale-artifact removal, and tx-build failure intent preservation with tx-body cleanup.
 - WITHDRAW REGRESSION AFTER DIAGNOSTICS: `scripts/smoke/devnet-local --phase withdraw --run-dir /tmp/tmp.4b2zbAg5Z7/withdraw-diagnostics` exits 0; it writes live build artifacts with reward account `ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af`, tx id `b7f1decd1453ee955e7dfe75aac7d9e10b0a6ed3c6c59bb4704c08d8c5132600`, fee `469749`, reward `2000000`, and validity upper bound slot `222`.
 - PR GATE AFTER DIAGNOSTICS SLICE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed on 2026-05-14 after the typed diagnostics code, Spec Kit, and review-state updates.
+- DOCS READY: README, local DevNet docs, release notes, and CHANGELOG distinguish governance funding from unsigned withdrawal build evidence and record `/tmp/tmp.4b2zbAg5Z7/withdraw-diagnostics` as the latest #83 run.
+- PR GATE AFTER DOCS SLICE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed on 2026-05-14 after the README, release notes, CHANGELOG, and Spec Kit updates.
 
 ## Parallel Notes
 

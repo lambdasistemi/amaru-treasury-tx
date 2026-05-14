@@ -13,7 +13,7 @@ The full report produced by one invocation of `treasury-inspect`.
 ```haskell
 data InspectReport = InspectReport
   { irChainTip :: !ChainTip
-  , irDeployment :: !DeploymentIdentifier
+  , irDeployment :: !DeploymentAnchor
   , irScopes :: ![ScopeSection]
     -- ^ Stable order: as enumerated by `Scope.allScopes`
     --   (CoreDevelopment, OpsAndUseCases, NetworkCompliance,
@@ -30,24 +30,20 @@ data ChainTip = ChainTip
   } deriving (Eq, Show)
 ```
 
-## DeploymentIdentifier
+## DeploymentAnchor
 
-The instance-NFT policy id pinned in metadata. Lives at
-`TreasuryMetadata.tmScopeOwners` shape today (the UTxO holding the
-scope-owners NFT). The "deployment identifier" surfaced to operators is
-the policy id of that NFT — derivable from the metadata without a chain
-round-trip.
+The `scope_owners` outref pinned in `TreasuryMetadata.tmScopeOwners`.
+This is the project's existing deployment-identity anchor — see
+`Report.Identity:152` which labels it "scope owners registry". Read
+directly from metadata; no chain round-trip. Different deployments
+(mainnet vs preprod vs preview) have different outrefs, which is the
+property US3 needs.
 
 ```haskell
-newtype DeploymentIdentifier = DeploymentIdentifier
-  { unDeploymentIdentifier :: Text  -- bech32 or 28-byte hex policy id
+newtype DeploymentAnchor = DeploymentAnchor
+  { unDeploymentAnchor :: Outref  -- parsed from tmScopeOwners ("txid#ix")
   } deriving (Eq, Show)
 ```
-
-*Open implementation note*: confirm in implement phase which exact field
-in the existing metadata.json carries the instance NFT policy id and use
-that. The plan assumes the value is already in metadata; if it is not,
-the implement-phase task adds the derivation step.
 
 ## ScopeSection
 

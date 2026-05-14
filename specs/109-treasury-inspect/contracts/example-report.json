@@ -4,7 +4,10 @@
     "blockHash": "9f1c2eaa3d4b5670891a2b3c4d5e6f7081a2b3c4d5e6f7081a2b3c4d5e6f7081"
   },
   "deployment": {
-    "instanceNftPolicyId": "11112222333344445555666677778888aaaabbbbccccddddeeeeffff"
+    "scopeOwnersOutref": {
+      "txId": "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54",
+      "ix": 0
+    }
   },
   "scopes": [
     {

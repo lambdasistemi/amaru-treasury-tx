@@ -62,7 +62,7 @@ as `(no pending orders)`. Lengths/values are placeholders.
 
 ```
 Chain tip:        slot 142_300_412  block <hash16>…
-Deployment NFT:   policy <policy28>…
+Deployment anchor: scope-owners <txid12>…#0
 
 [network_compliance] addr1q…7xv
   Treasury UTxOs (2):

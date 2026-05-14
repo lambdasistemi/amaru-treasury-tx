@@ -19,13 +19,13 @@ The shape mirrors
 [`pragma-org/amaru-treasury/journal/2026/bin/swap.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/bin/swap.sh)
 exactly — same redeemers, same datums, same output ordering.
 
-## Recommended quote-derived workflow
+## Operator-supplied rate workflow
 
-Use `swap-wizard` for operator swap preparation. It owns the
-chain-anchored resolver and emits the unified intent to stdout. For a
-quote-derived run, pass a quote source or explicit quote plus
-`--slippage-bps`; then pipe the intent into `tx-build --report -` and
-pipe the build-output envelope into `report-render`:
+`swap-wizard` is the "I have a rate, build the intent" command. It
+does no outbound HTTP. Pass either a pre-validated `--min-rate` or an
+`--ada-usdm` quote with an explicit `--slippage-bps`; then pipe the
+intent into `tx-build --report -` and the envelope into
+`report-render`:
 
 ```bash
 amaru-treasury-tx \
@@ -36,10 +36,10 @@ amaru-treasury-tx \
     --scope network_compliance \
     --usdm 100000 \
     --split 33 \
-    --price-source coingecko-ada-usd \
+    --ada-usdm 0.270 \
     --slippage-bps 100 \
     --validity-hours 28 \
-    --description "Swapping ADA for $100k using a fresh ADA/USD quote" \
+    --description "Swapping ADA for \$100k against an operator-supplied ADA/USDM" \
     --justification "Required to pay Antithesis as vendor" \
     --destination-label "Network Compliance's treasury" \
     --extra-signer core_development \
@@ -57,11 +57,10 @@ On an expected build failure, `result.failure.code` and
 `result.failure.message` carry the normalized tx-build diagnostic and
 no `tx-cbor` or nested report is present.
 
-Use `--ada-usd DECIMAL` for an explicit ADA/USD override when the
-operator has already captured a fresh quote. Use `--ada-usdm DECIMAL`
-for an explicit ADA/USDM override. Named live ADA/USDM sources are
-deferred until a provider contract is approved; use explicit
-`--ada-usdm` in the meantime.
+Use `--min-rate DECIMAL` (already post-slippage) for the expert path
+that bypasses slippage application entirely. Live ADA/USDM quote
+retrieval is owned by the separate `swap-quote` command — see its
+section below.
 
 If the selected treasury cannot fund the derived ADA amount plus
 per-chunk overhead, the wizard exits before emitting an intent. The
@@ -70,9 +69,9 @@ fund the order min-UTxO or Sundae per-order fee.
 
 ### TLS trust anchor
 
-Live quote sources (`--price-source coingecko-ada-usd`) make an outbound
-HTTPS request. The released AppImage, DEB, and RPM artifacts wrap the
-executable with a `makeWrapper` shim that `--set-default`s
+Live quote sources used by the separate `swap-quote` command make
+outbound HTTPS requests. The released AppImage, DEB, and RPM artifacts
+wrap the executable with a `makeWrapper` shim that `--set-default`s
 `SSL_CERT_FILE` and `SYSTEM_CERTIFICATE_PATH` to a Mozilla NSS CA bundle
 that lives inside the artifact's Nix closure. This makes live quotes
 work on hosts whose `/etc/ssl/certs` layout the bundled Haskell

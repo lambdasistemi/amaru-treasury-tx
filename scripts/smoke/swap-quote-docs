@@ -20,17 +20,18 @@ reject() {
 }
 
 require docs/quickstart.md "swap-wizard"
-require docs/quickstart.md "--price-source coingecko-ada-usd"
+require docs/quickstart.md "--ada-usdm"
 require docs/quickstart.md "--slippage-bps"
 require docs/quickstart.md "tx-build --out /dev/null --report -"
 reject docs/quickstart.md "--min-rate 0.245"
+reject docs/quickstart.md "--price-source coingecko-ada-usd "
+reject docs/quickstart.md "--ada-usd 0"
 
-require docs/swap.md "quote-derived"
+require docs/swap.md "Operator-supplied rate"
 require docs/swap.md "Expert/manual override"
 require docs/swap.md "--ada-usdm"
-require docs/swap.md "Named live ADA/USDM sources are"
-require docs/swap.md "deferred until a provider contract is approved"
 require docs/swap.md "tx-build --out /dev/null --report -"
 reject docs/swap.md "--min-rate 0.245"
+reject docs/swap.md "--ada-usd 0"
 
 printf 'swap-quote-docs: OK\n'

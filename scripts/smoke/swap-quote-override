@@ -26,9 +26,8 @@ do
 done
 
 for needle in \
-  "--ada-usd DECIMAL" \
-  "--ada-usdm DECIMAL" \
-  "--price-source SOURCE" \
+  "--min-rate USDM_PER_ADA" \
+  "--ada-usdm USDM_PER_ADA" \
   "--slippage-bps INT" \
   "--out PATH"
 do
@@ -36,6 +35,14 @@ do
     printf 'swap-wizard help missing: %s\n' "$needle" >&2
     exit 1
   }
+done
+
+for retired in "--ada-usd DECIMAL" "--price-source SOURCE"
+do
+  if grep -F -- "$retired" <<<"$wizard_help" >/dev/null; then
+    printf 'swap-wizard still advertises retired flag: %s\n' "$retired" >&2
+    exit 1
+  fi
 done
 
 cabal test unit-tests -O0 \

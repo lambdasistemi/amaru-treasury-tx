@@ -23,6 +23,7 @@ extra-source-files:
   assets/plutus/treasury.cbor
   assets/plutus/treasury_registry.cbor
   docs/assets/intent-schema.json
+  docs/assets/treasury-inspect-schema.json
   docs/assets/tx-report-schema.json
   scripts/smoke/cardano-cli-envelope-oracle
   scripts/smoke/swap-quote-docs
@@ -115,6 +116,7 @@ library
     Amaru.Treasury.Constants
     Amaru.Treasury.Inspect
     Amaru.Treasury.Inspect.Render
+    Amaru.Treasury.Inspect.Schema
     Amaru.Treasury.Inspect.SwapOrderDatum
     Amaru.Treasury.Inspect.Types
     Amaru.Treasury.IntentJSON
@@ -283,6 +285,16 @@ executable horizon-probe
 
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
 
+executable amaru-treasury-inspect-schema
+  import:           warnings
+  hs-source-dirs:   app/amaru-treasury-inspect-schema
+  main-is:          Main.hs
+  default-language: GHC2021
+  build-depends:
+    , amaru-treasury-tx
+    , base               <5
+    , bytestring
+
 executable amaru-treasury-intent-schema
   import:           warnings
   hs-source-dirs:   app/amaru-treasury-intent-schema
@@ -314,6 +326,7 @@ test-suite unit-tests
     Amaru.Treasury.AuxDataSpec
     Amaru.Treasury.BuildSpec
     Amaru.Treasury.Cli.EnvelopeSpec
+    Amaru.Treasury.Inspect.SchemaSpec
     Amaru.Treasury.Inspect.SwapOrderDatumSpec
     Amaru.Treasury.IntentJSONSchemaSpec
     Amaru.Treasury.IntentJSONSpec

@@ -166,11 +166,21 @@ and the project conventions; this feature adds no new technology.
   ([commit `4989e74`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/4989e74)).
   Golden test 2/2 passing.
 - ✅ **Slice C landed** — JSON Schema + schema-dumper exe + extended
-  `just schema-check` ([commit `fa14267`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/fa14267)).
-  Schema-consistency tests 2/2 passing; flake `unit`/`golden`/`lint`/`schema`/`smoke`
-  all green. Unit count: 325.
-- ⏳ **Slice D in flight** — CLI parser + N2C glue + smoke
-- ☐ Slice E — operator docs
+  `just schema-check`. Schema-consistency tests 2/2 passing.
+- ✅ **Slice D landed** — CLI parser + N2C glue + smoke
+  ([commit `fa68ba2`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/fa68ba2)).
+  `amaru-treasury-tx treasury-inspect …` exists on the binary;
+  no-node smoke covers `--help` + two FR-012 exit-2 branches;
+  flake checks all green.
+- ✅ **Slice E landed** — `docs/inspect.md` operator walkthrough
+  ([commit `c2d6509`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/c2d6509)).
+  Linked from mkdocs nav; `mkdocs build --strict` green.
+- ✅ **Live-boundary smoke run**: `treasury-inspect` against the
+  live mainnet node returned the actual treasury state per scope
+  (chain tip slot 187,191,998; 5 pending swap orders in
+  `network_compliance`; ~9M ADA + ~116k USDM across all five
+  scopes). SC-003 satisfied; full output to be attached to the
+  PR thread.
 
 (Branch rebased onto `cd6a761` after #106 merged; earlier slice
 SHAs above reflect the post-rebase chain.)

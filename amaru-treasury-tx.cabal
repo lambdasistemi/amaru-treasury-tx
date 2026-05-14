@@ -113,6 +113,8 @@ library
     Amaru.Treasury.Cli.TxBuild
     Amaru.Treasury.Cli.WithdrawWizard
     Amaru.Treasury.Constants
+    Amaru.Treasury.Inspect
+    Amaru.Treasury.Inspect.Render
     Amaru.Treasury.Inspect.SwapOrderDatum
     Amaru.Treasury.Inspect.Types
     Amaru.Treasury.IntentJSON
@@ -393,6 +395,7 @@ test-suite golden-tests
     ReportRenderSwapGoldenSpec
     SwapGoldenSpec
     SwapQuoteAuditGoldenSpec
+    TreasuryInspectGoldenSpec
     UsdmDisburseGoldenSpec
     WithdrawGoldenSpec
 

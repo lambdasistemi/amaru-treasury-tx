@@ -14,6 +14,7 @@ already identified.
 module Amaru.Treasury.Cli.SwapCancel
     ( SwapCancelOpts (..)
     , swapCancelOptsP
+    , resolveOrderScriptRefText
     , runSwapCancel
     ) where
 
@@ -112,6 +113,9 @@ import Amaru.Treasury.Cli.Common
     , resolveNetworkName
     , withLogHandle
     )
+import Amaru.Treasury.Constants
+    ( sundaeOrderScriptRefMainnet
+    )
 import Amaru.Treasury.IntentJSON.Common (parseTxIn)
 import Amaru.Treasury.Registry.Verify
     ( VerifiedRegistry (..)
@@ -140,7 +144,7 @@ data SwapCancelOpts = SwapCancelOpts
     , scoScope :: !ScopeId
     , scoWalletTxIn :: !Text
     , scoOrderTxIn :: !Text
-    , scoOrderScriptRef :: !Text
+    , scoOrderScriptRef :: !(Maybe Text)
     , scoValidityHours :: !(Maybe Word16)
     , scoOutPath :: !(Maybe FilePath)
     , scoReportPath :: !(Maybe FilePath)
@@ -173,10 +177,13 @@ swapCancelOptsP =
                 <> metavar "TXHASH#IX"
                 <> help "Pending SundaeSwap order UTxO to cancel"
             )
-        <*> strOption
-            ( long "order-script-ref"
-                <> metavar "TXHASH#IX"
-                <> help "Reference input carrying the SundaeSwap order script"
+        <*> optional
+            ( strOption
+                ( long "order-script-ref"
+                    <> metavar "TXHASH#IX"
+                    <> help
+                        "Reference input carrying the SundaeSwap order script; defaults on mainnet"
+                )
             )
         <*> optional
             ( option
@@ -215,6 +222,16 @@ scopeReader =
     eitherReader $
         scopeFromText . T.pack . map toLower
 
+-- | Resolve the order validator reference UTxO from CLI input.
+resolveOrderScriptRefText :: Text -> Maybe Text -> Either Text Text
+resolveOrderScriptRefText networkName = \case
+    Just ref -> Right ref
+    Nothing
+        | T.toLower networkName == "mainnet" ->
+            Right sundaeOrderScriptRefMainnet
+        | otherwise ->
+            Left "--order-script-ref is required outside mainnet"
+
 -- | Run @swap-cancel@ against a local-node backend.
 runSwapCancel :: GlobalOpts -> SwapCancelOpts -> IO ()
 runSwapCancel g opts@SwapCancelOpts{..} = do
@@ -232,12 +249,18 @@ runSwapCancel g opts@SwapCancelOpts{..} = do
             parseCliTxIn logH opts "wallet-txin" scoWalletTxIn
         orderTxIn <-
             parseCliTxIn logH opts "order-txin" scoOrderTxIn
+        orderScriptRefText <- case resolveOrderScriptRefText
+            networkName
+            scoOrderScriptRef of
+            Right ref -> pure ref
+            Left err ->
+                abortWith logH opts "bad-cli-input" err
         orderScriptRef <-
             parseCliTxIn
                 logH
                 opts
                 "order-script-ref"
-                scoOrderScriptRef
+                orderScriptRefText
         withLocalNodeBackend (goNetworkMagic g) socket $
             \backend -> do
                 verified <-

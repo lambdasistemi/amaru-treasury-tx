@@ -21,7 +21,11 @@ import Test.Hspec
 
 import Amaru.Treasury.Cli.SwapCancel
     ( SwapCancelOpts (..)
+    , resolveOrderScriptRefText
     , swapCancelOptsP
+    )
+import Amaru.Treasury.Constants
+    ( sundaeOrderScriptRefMainnet
     )
 import Amaru.Treasury.Scope (ScopeId (..))
 
@@ -54,7 +58,7 @@ spec = describe "Amaru.Treasury.Cli.SwapCancel" $ do
                     , scoScope = NetworkCompliance
                     , scoWalletTxIn = T.pack txIn1
                     , scoOrderTxIn = T.pack txIn2
-                    , scoOrderScriptRef = T.pack txIn3
+                    , scoOrderScriptRef = Just (T.pack txIn3)
                     , scoValidityHours = Just 28
                     , scoOutPath = Just "cancel.cbor.hex"
                     , scoReportPath = Just "cancel.report.json"
@@ -80,12 +84,49 @@ spec = describe "Amaru.Treasury.Cli.SwapCancel" $ do
                     , scoScope = Middleware
                     , scoWalletTxIn = T.pack txIn1
                     , scoOrderTxIn = T.pack txIn2
-                    , scoOrderScriptRef = T.pack txIn3
+                    , scoOrderScriptRef = Just (T.pack txIn3)
                     , scoValidityHours = Nothing
                     , scoOutPath = Nothing
                     , scoReportPath = Nothing
                     , scoLog = Nothing
                     }
+
+    it "parses omitted order script ref for the mainnet default path" $
+        parseSwapCancelOpts
+            [ "--metadata"
+            , "metadata-mainnet.json"
+            , "--scope"
+            , "middleware"
+            , "--wallet-txin"
+            , txIn1
+            , "--order-txin"
+            , txIn2
+            ]
+            `shouldBe` Right
+                SwapCancelOpts
+                    { scoMetadataPath = "metadata-mainnet.json"
+                    , scoScope = Middleware
+                    , scoWalletTxIn = T.pack txIn1
+                    , scoOrderTxIn = T.pack txIn2
+                    , scoOrderScriptRef = Nothing
+                    , scoValidityHours = Nothing
+                    , scoOutPath = Nothing
+                    , scoReportPath = Nothing
+                    , scoLog = Nothing
+                    }
+
+    it "defaults omitted order script ref on mainnet" $
+        resolveOrderScriptRefText "mainnet" Nothing
+            `shouldBe` Right sundaeOrderScriptRefMainnet
+
+    it "keeps explicit order script ref overrides" $
+        resolveOrderScriptRefText "mainnet" (Just (T.pack txIn3))
+            `shouldBe` Right (T.pack txIn3)
+
+    it "requires explicit order script ref outside mainnet" $
+        resolveOrderScriptRefText "preprod" Nothing
+            `shouldBe` Left
+                "--order-script-ref is required outside mainnet"
 
 parseSwapCancelOpts :: [String] -> Either String SwapCancelOpts
 parseSwapCancelOpts args =

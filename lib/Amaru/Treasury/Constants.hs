@@ -23,6 +23,7 @@ module Amaru.Treasury.Constants
     , sundaeProtocolFeeLovelace
     , sundaeOrderAddressMainnet
     , sundaeOrderScriptHashMainnet
+    , sundaeOrderScriptRefMainnet
 
       -- * Min-UTxO deposit on swap-order outputs
     , minUtxoDepositLovelace
@@ -94,6 +95,15 @@ This is the payment credential of 'sundaeOrderAddressMainnet'.
 sundaeOrderScriptHashMainnet :: Text
 sundaeOrderScriptHashMainnet =
     "fa6a58bbe2d0ff05534431c8e2f0ef2cbdc1602a8456e4b13c8f3077"
+
+{- | SundaeSwap V3 mainnet order validator reference-script UTxO.
+
+This is the reference input used to spend the order validator when
+building mainnet cancellation transactions.
+-}
+sundaeOrderScriptRefMainnet :: Text
+sundaeOrderScriptRefMainnet =
+    "f5f1bdfad3eb4d67d2fc36f36f47fc2938cf6f001689184ab320735a28642cf2#0"
 
 -- | Minimum lovelace deposit on swap-order outputs.
 minUtxoDepositLovelace :: Integer

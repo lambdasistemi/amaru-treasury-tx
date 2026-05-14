@@ -191,7 +191,7 @@ leadingLines intent success =
     [ bullet ("Transaction id: " <> tiTxId identity)
     , bullet ("Transaction type: " <> actionTextFromIntent intent)
     , bullet ("Scope: " <> scopeTextFromIntent intent)
-    , bullet ("Explorer: " <> explorerUrl report)
+    , bullet ("Explorer: " <> explorerText report)
     , bullet ("CBOR fingerprint: " <> cborFingerprint (tbsTxCbor success))
     , bullet
         ( "Validity: "
@@ -249,14 +249,22 @@ metadataLine metadata =
             then "CIP-1694 label present"
             else "CIP-1694 label absent"
 
-explorerUrl :: TransactionReport -> Text
+explorerText :: TransactionReport -> Text
+explorerText report =
+    case explorerUrl report of
+        Just url -> url
+        Nothing -> "no public explorer for " <> trNetwork report
+
+explorerUrl :: TransactionReport -> Maybe Text
 explorerUrl report =
-    base <> tiTxId (trIdentity report)
+    (<> tiTxId (trIdentity report)) <$> base
   where
     base =
         case trNetwork report of
-            "preprod" -> "https://preprod.cardanoscan.io/transaction/"
-            _ -> "https://cardanoscan.io/transaction/"
+            "mainnet" -> Just "https://cardanoscan.io/transaction/"
+            "preprod" -> Just "https://preprod.cardanoscan.io/transaction/"
+            "preview" -> Just "https://preview.cardanoscan.io/transaction/"
+            _ -> Nothing
 
 cborFingerprint :: TxCborHex -> Text
 cborFingerprint (TxCborHex hex) =

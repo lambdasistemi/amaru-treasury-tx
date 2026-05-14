@@ -5,12 +5,17 @@
 **Rationale**: SundaeSwap V3 separates destination from signing
 permissions. The destination says where execution proceeds go; the
 owner policy controls cancel/update authority. Our current order datum
-sets owner to an `AllOf` list of the four scope owner signatures.
+sets owner to an `AtLeast 2` list of all four treasury owner
+signatures: `core_development`, `ops_and_use_cases`,
+`network_compliance`, and `middleware`.
 
 **Alternatives considered**:
 
-- Use selected scope owner only. Rejected: current Amaru order datum
-  does not encode a single-scope owner for cancel authority.
+- Use selected scope owner only. Rejected: a single owner could
+  unilaterally cancel and redirect a Sundae order, because the Sundae
+  cancel path does not constrain outputs.
+- Use `AllOf` all four owners. Rejected: operationally brittle when one
+  signer is unavailable.
 - Let operator pass arbitrary signers. Rejected: unsafe; the datum is
   source of truth.
 
@@ -18,9 +23,10 @@ sets owner to an `AllOf` list of the four scope owner signatures.
 
 **Rationale**: SundaeSwap `MultisigScript` supports richer policies
 than the current Amaru datum uses. For #116, safe cancellation means
-supporting the known treasury-generated `AllOf Signature...` shape and
-rejecting `AnyOf`, `AtLeast`, time conditions, or script owners until
-they have explicit semantics in this tool.
+supporting the known treasury-generated shapes: legacy `AllOf` over all
+treasury owners and current `AtLeast 2` over all treasury owners.
+`AnyOf`, other thresholds, time conditions, and script owners remain
+rejected until they have explicit semantics in this tool.
 
 **Alternatives considered**:
 
@@ -54,4 +60,3 @@ contract should be completed once #109's JSON shape exists.
   blocked.
 - Invent a parallel discovery format here. Rejected: would duplicate
   #109 and create merge risk.
-

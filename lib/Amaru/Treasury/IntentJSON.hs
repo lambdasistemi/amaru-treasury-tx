@@ -326,8 +326,8 @@ instance ToJSON RationaleJSON where
 -- ----------------------------------------------------
 
 {- | Swap-action payload — the per-chunk SundaeSwap V3
-order parameters plus the four scope owner key hashes
-that authorise the swap redeemer.
+order parameters plus the scope owner key hashes available to the
+order-datum builder.
 -}
 data SwapInputs = SwapInputs
     { swiSwapOrderAddress :: !Text

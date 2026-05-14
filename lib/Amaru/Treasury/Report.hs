@@ -851,9 +851,9 @@ sampleSwapReport =
             TransactionIdentity
                 { tiTxId =
                     "0000000000000000000000000000000000000000000000000000000000000000"
-                , tiBodySizeBytes = 14954
-                , tiFeeLovelace = 1039703
-                , tiTotalCollateralLovelace = 1559555
+                , tiBodySizeBytes = 14987
+                , tiFeeLovelace = 1041155
+                , tiTotalCollateralLovelace = 1561733
                 , tiValidityInterval = sampleValidityInterval
                 }
         , trWalletAccounting =
@@ -862,8 +862,8 @@ sampleSwapReport =
                 , waCollateralInput = Just sampleUtxo
                 , waChangeOutput = Nothing
                 , waCollateralReturn = Nothing
-                , waFeeLovelace = 1039703
-                , waNetSpendLovelace = 1039703
+                , waFeeLovelace = 1041155
+                , waNetSpendLovelace = 1041155
                 }
         , trTreasuryAccounting =
             TreasuryAccounting
@@ -896,8 +896,8 @@ sampleSwapReport =
                 { vfIntentNetwork = "mainnet"
                 , vfSocketNetworkMagic = 764824073
                 , vfNetworkMatches = True
-                , vfFeeLovelace = 1039703
-                , vfBodySizeBytes = 14954
+                , vfFeeLovelace = 1041155
+                , vfBodySizeBytes = 14987
                 , vfRedeemerCount = 2
                 , vfRedeemerFailures = 0
                 , vfValidationStatus = "ok"

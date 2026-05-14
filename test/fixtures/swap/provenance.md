@@ -3,7 +3,7 @@
 This fixture pins the swap-wizard byte-identity gate for the
 `network_compliance` treasury scope.
 
-## Current state (post-T006, pre-T008)
+## Current state (post-T006, post-#116, pre-T008)
 
 After issue [#68](https://github.com/lambdasistemi/amaru-treasury-tx/issues/68)
 shipped (T006), the disburse redeemer amount and treasury
@@ -25,6 +25,12 @@ The two checked-in fixture files in this directory:
   `bash.oracle.tx.json` to avoid implying it is an independent
   bash capture; it is **Haskell-self-generated** until T008
   regenerates the bash recipe to produce these bytes.
+
+Current Haskell target metrics:
+
+- CBOR bytes: `14987`
+- fee: `1041155 Lovelace`
+- total collateral: `1561733 Lovelace`
 
 The intent fields that changed:
 

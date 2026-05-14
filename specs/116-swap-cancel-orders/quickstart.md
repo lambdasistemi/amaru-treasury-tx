@@ -26,7 +26,9 @@ Review `cancel.report.json`:
 - the order UTxO is the one intended for cancellation;
 - the returned value matches the pending order value;
 - the treasury destination matches the selected scope;
-- all four treasury owner signers are listed.
+- at least two of the four owner signers are listed. If no
+  `--cancel-signer` flags were supplied, all four candidate owner
+  signers are listed.
 
 Then use the existing witness/submission workflow outside this command.
 

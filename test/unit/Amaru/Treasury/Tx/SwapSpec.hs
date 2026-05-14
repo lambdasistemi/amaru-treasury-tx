@@ -255,6 +255,9 @@ spec = describe "Amaru.Treasury.Tx.Swap" $ do
                     Constr 0 fs -> length fs
                     _ -> 0
         in  depth `shouldBe` 6
+    it "swap-order datum uses AtLeast 2 of all owners" $
+        ownerPolicy (swapOrderDatum datumParams 1_000 200)
+            `shouldBe` Just (2, ["core", "ops", "netc", "midw"])
     it
         "spends the head wallet UTxO + extras + treasury UTxO"
         $ let withExtras =
@@ -290,3 +293,20 @@ hasInlineDatum o =
     case o ^. datumTxOutL of
         Datum _ -> True
         _ -> False
+
+ownerPolicy :: Data -> Maybe (Integer, [BS.ByteString])
+ownerPolicy = \case
+    Constr
+        0
+        [ _pool
+            , Constr 3 [I required, List signers]
+            , _fee
+            , _dest
+            , _details
+            , _extra
+            ] ->
+            Just
+                ( required
+                , [bs | Constr 0 [B bs] <- signers]
+                )
+    _ -> Nothing

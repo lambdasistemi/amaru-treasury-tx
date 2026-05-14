@@ -1,10 +1,10 @@
-# Parity report — Haskell vs `swap.sh`
+# Parity report — swap golden provenance
 
-Reproducing a real on-chain swap, to the byte.
+Reproducing a real on-chain swap against a frozen chain context.
 
 ## Setup
 
-- **Reference**: an unsigned swap CBOR built from the
+- **Historical reference**: an unsigned swap CBOR built from the
   `journal/2026/bin/swap.sh` bash recipe at upstream commit
   `99600d8`, using the same fixed output ordering as the original
   parity artifact: 33 swap orders, then 1 treasury leftover, then 1
@@ -12,44 +12,44 @@ Reproducing a real on-chain swap, to the byte.
   leftover before the chunk loop; the golden provenance records the
   one-line ordering shim used to preserve the intended swap-order
   layout.
-- **Ours**: the Haskell stack on this PR — `Tx.Swap.swapProgram`
+- **Current target**: the Haskell stack on this PR — `Tx.Swap.swapProgram`
   feeding the unified `Build.runSwap` path against a frozen
   `ChainContext` captured from the local mainnet node socket
   (`/code/cardano-mainnet/ipc/node.socket`).
 
 ## Result
 
-Same 14954 bytes. **Byte-for-byte identical.**
+The current Haskell fixture is 14987 bytes with fee 1041155 lovelace.
+It intentionally no longer matches the historical `swap.sh` oracle
+because the order datum owner policy changed to `AtLeast 2` over all
+four treasury owners.
 
 ```
-capture: expected.cbor 14954 bytes  fee=1039703  exUnits captured: 2
+capture: expected.cbor 14987 bytes  fee=1041155  exUnits captured: 2
 swap_capture_byte_parity=ok
 fixture_matches_capture=ok
-oracle_body_match=ok
+haskell_target_match=ok
 ```
 
 The checked-in golden asserts both:
 
 1. `test/fixtures/swap/expected.cbor` equals
-   `test/fixtures/swap/bash.oracle.tx.json.cborHex`.
+   `test/fixtures/swap/target.tx.json.cborHex`.
 2. Rebuilding with `runFromIntent` against the frozen fixture produces
-   that exact oracle CBOR.
+   that exact target CBOR.
 
-| Field | Haskell | bash | Match |
-|---|---|---|---|
-| inputs (2) | identical | identical | ✓ |
-| reference inputs (4) | identical | identical | ✓ |
-| outputs (35) | identical | identical | ✓ |
-| inline datums (33) | identical | identical | ✓ |
-| withdrawals (1) | identical | identical | ✓ |
-| required signers (2) | identical | identical | ✓ |
-| validity upper bound | identical | identical | ✓ |
-| `script_data_hash` | identical | identical | ✓ |
-| `aux_data_hash` | identical | identical | ✓ |
+| Field | Haskell fixture |
+|---|---|
+| inputs | 2 |
+| reference inputs | 4 |
+| outputs | 35 |
+| withdrawals | 1 |
+| required signers | 2 |
+| validity upper bound | 186796799 |
 
-`script_data_hash` matching means the redeemer values **and** the
-committed `ExUnits` are byte-equal. `aux_data_hash` matching means
-the rationale metadatum at label 1694 is byte-equal.
+The historical bash capture remains documented in
+`test/fixtures/swap/provenance.md`; it should be regenerated once the
+bash workflow adopts the same owner datum.
 
 ## Fee Alignment
 
@@ -67,7 +67,7 @@ After the build, the golden path re-runs the evaluator against the
 settled tx:
 
 ```
-capture: expected.cbor 14954 bytes  fee=1039703  exUnits captured: 2
+capture: expected.cbor 14987 bytes  fee=1041155  exUnits captured: 2
 ```
 
 The two redeemers are the treasury spend (Sundae `Disburse`,
@@ -86,14 +86,10 @@ nix develop -c cabal run -O0 exe:capture-swap-context -- \
   --network-magic 764824073
 
 cmp -s \
-  /tmp/amaru-swap-fixed-bash-provenance/bash.fixed.cbor \
-  /tmp/amaru-swap-capture/expected.cbor
-
-cmp -s \
   test/fixtures/swap/expected.cbor \
   /tmp/amaru-swap-capture/expected.cbor
 
-jq -r .cborHex test/fixtures/swap/bash.oracle.tx.json \
+jq -r .cborHex test/fixtures/swap/target.tx.json \
   | tr -d '\n' \
   | cmp -s - test/fixtures/swap/expected.cbor
 ```

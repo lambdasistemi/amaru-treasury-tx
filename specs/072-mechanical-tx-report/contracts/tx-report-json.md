@@ -40,9 +40,9 @@ timestamps or host-local paths.
   "network": "mainnet",
   "identity": {
     "txId": "<64 hex chars>",
-    "bodySizeBytes": 14954,
-    "feeLovelace": 1039703,
-    "totalCollateralLovelace": 1559555,
+    "bodySizeBytes": 14987,
+    "feeLovelace": 1041155,
+    "totalCollateralLovelace": 1561733,
     "validityInterval": {
       "invalidBefore": null,
       "invalidHereafter": 186796799
@@ -53,8 +53,8 @@ timestamps or host-local paths.
     "collateralInput": {},
     "changeOutput": {},
     "collateralReturn": {},
-    "feeLovelace": 1039703,
-    "netSpendLovelace": 1039703
+    "feeLovelace": 1041155,
+    "netSpendLovelace": 1041155
   },
   "treasuryAccounting": {
     "inputs": [],
@@ -70,8 +70,8 @@ timestamps or host-local paths.
     "intentNetwork": "mainnet",
     "socketNetworkMagic": 764824073,
     "networkMatches": true,
-    "feeLovelace": 1039703,
-    "bodySizeBytes": 14954,
+    "feeLovelace": 1041155,
+    "bodySizeBytes": 14987,
     "redeemerCount": 2,
     "redeemerFailures": 0,
     "validationStatus": "ok",
@@ -145,4 +145,3 @@ docs/assets/tx-report-schema.json
 The implementation must provide an executable drift/validation check
 that keeps this asset aligned with the Haskell data model and validates
 the swap golden report fixture.
-

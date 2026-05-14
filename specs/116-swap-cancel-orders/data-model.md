@@ -30,12 +30,14 @@ Subset of SundaeSwap V3 order datum needed by this command.
 
 Supported owner policy for the initial Amaru implementation.
 
-- `AllOfSignatures`: non-empty list of key hashes, all required.
+- `AllOfSignatures`: legacy all-owner list, all required.
+- `AtLeastSignatures`: current all-owner list with threshold 2.
 
 Unsupported forms are rejected until explicitly modeled:
 
 - `AnyOf`
-- `AtLeast`
+- `AtLeast` with any threshold other than 2, or any owner set other
+  than the four verified treasury owners
 - `Before`
 - `After`
 - `Script`
@@ -63,4 +65,3 @@ Operator report for review before signing.
 - `collateralInput`
 - `referenceInputs`
 - `nextSteps`
-

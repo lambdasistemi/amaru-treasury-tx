@@ -207,9 +207,8 @@ lovelaceValue :: Coin -> MaryValue
 lovelaceValue c = MaryValue c (MultiAsset Map.empty)
 
 {- | Static parameters shared by every swap-order datum
-in a single swap tx. The scope-owner key hashes are
-embedded in the order's authorised-signers list per
-[`swap_order.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/lib/swap_order.sh).
+in a single swap tx. The four treasury owner key hashes are embedded in
+the order's @AtLeast 2@ cancel-owner policy.
 -}
 data SwapOrderDatumParams = SwapOrderDatumParams
     { sodPoolId :: !ByteString
@@ -223,9 +222,10 @@ data SwapOrderDatumParams = SwapOrderDatumParams
     , sodUsdmToken :: !ByteString
     }
 
-{- | The inline 'Data' value for one swap-order chunk
-mirroring the JSON literal in
-[`swap_order.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/lib/swap_order.sh).
+{- | The inline 'Data' value for one swap-order chunk.
+
+This keeps the legacy Sundae order structure, with the current Amaru
+cancel-owner policy encoded in field 1.
 -}
 swapOrderDatum
     :: SwapOrderDatumParams
@@ -239,9 +239,12 @@ swapOrderDatum p chunkLovelace chunkUsdm =
         0
         [ Constr 0 [B (sodPoolId p)]
         , Constr
-            1
-            [ List
-                [ Constr 0 [B (sodCoreOwner p)]
+            3
+            [ I 2
+            , List
+                [ Constr
+                    0
+                    [B (sodCoreOwner p)]
                 , Constr 0 [B (sodOpsOwner p)]
                 , Constr
                     0

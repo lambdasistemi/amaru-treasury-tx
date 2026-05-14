@@ -24,7 +24,7 @@ The encoder needs an `EnvelopeKind` because it's manufacturing the `type` string
 
 `decodeEnvelope` validates that the `type` string contains the substring `"ConwayEra"`. Any other era tag (`ShelleyEra`, `AllegraEra`, `MaryEra`, `AlonzoEra`, `BabbageEra`, or even a misspelling) is rejected with `WrongEra` carrying the offending `type` value.
 
-We deliberately do **not** parse the era out of the `type` field (e.g. `"Unwitnessed Tx ConwayEra"` → `("Unwitnessed Tx", ConwayEra)`). The check is "this envelope is Conway-era"; we don't need a structured era ADT.
+We deliberately do **not** parse the era out of the `type` field (e.g. `"TxWitness ConwayEra"` → `("TxWitness", ConwayEra)`). The check is "this envelope is Conway-era"; we don't need a structured era ADT.
 
 ### D4. Output format pinned to cardano-cli's wire shape
 
@@ -40,11 +40,17 @@ Canonical `description` per kind:
 - `Witness` → `"Key Witness ShelleyEra"` (cardano-cli quirk: the witness format is labelled Shelley even in Conway era).
 - `SignedTx` → `"Ledger Cddl Format"`
 
+Canonical `type` per kind:
+
+- `Tx` → `"Tx ConwayEra"`
+- `Witness` → `"TxWitness ConwayEra"`
+- `SignedTx` → `"Tx ConwayEra"`
+
 The cardano-cli oracle fixture (S4) pins these strings against a real cardano-cli artefact.
 
 ### D5. Stdin trimming, stdout newline
 
-`envelope-*` reads stdin, strips a single trailing `\n` if present (the common shell-pipe artefact), and puts the result into `cborHex` verbatim. No other whitespace handling — internal whitespace would be a semantic problem the wrapper has no business fixing.
+`envelope-*` reads stdin, strips trailing ASCII whitespace (the common shell-pipe artefact), and puts the result into `cborHex` verbatim. No other whitespace handling — internal whitespace would be a semantic problem the wrapper has no business fixing.
 
 `de-envelope` writes the extracted `cborHex` followed by a single `\n` so the output composes cleanly into downstream commands (which already accept a trailing newline on their stdin, per the `attach-witness` and `submit` decoders).
 
@@ -74,12 +80,12 @@ Each commit GPG-signed, force-pushed to `feat/106-cardano-cli-envelopes`.
 
 | Risk | Mitigation |
 |---|---|
-| `cardano-cli`'s emitted byte shape might not match `aeson`'s pretty-printer for edge cases (Unicode in `description`, very long `cborHex`). | Pin `confIndent = Spaces 4`, `confTrailingNewline = False` (we add our own `"\n"`), `confCompare = keyOrder ["type","description","cborHex"]`. Confirm byte-identity against the **real** cardano-cli oracle fixture, not just a synthetic envelope. If `aeson`'s pretty-printer diverges, implement the JSON emitter by hand (it's three concatenations — `"{\n    \"type\": "` etc.). |
+| `cardano-cli`'s emitted byte shape might not match `aeson`'s pretty-printer for edge cases (Unicode in `description`, very long `cborHex`). | Pin `confIndent = Spaces 4`, `confTrailingNewline = True`, `confCompare = keyOrder ["type","description","cborHex"]`. Confirm byte-identity against the **real** cardano-cli oracle fixture, not just a synthetic envelope. If `aeson`'s pretty-printer diverges, implement the JSON emitter by hand (it's three concatenations — `"{\n    \"type\": "` etc.). |
 | `description` for `TxWitness ConwayEra` is `"Key Witness ShelleyEra"` (cardano-cli quirk). If someone reads the spec and assumes the description is era-significant, they may be misled. | Documented in spec.md edge cases and in the Haddock for `encodeEnvelope`. The decoder ignores `description`. |
-| Auto-detected env-kind in `de-envelope` means we accept all three Conway tx tags (`Unwitnessed`, `Witnessed`, `Signed`) under `de-envelope`. An operator who pipes a `Signed Tx` envelope into `attach-witness` won't get an error from `de-envelope` even though `attach-witness` expects an unsigned body. | Acceptable: this is layered. `de-envelope` does shape validation; `attach-witness` does semantic validation. Combining them re-creates the strict path. If we wanted stricter, we'd add a `--expect tx-body` flag, which is out-of-scope for this PR. |
+| Auto-detected env-kind in `de-envelope` means we accept both Conway tx tags under `de-envelope` (`Tx` and `TxWitness`). An operator who pipes a signed `Tx ConwayEra` envelope into `attach-witness` won't get an error from `de-envelope` even though `attach-witness` expects an unsigned body. | Acceptable: this is layered. `de-envelope` does shape validation; `attach-witness` does semantic validation. Combining them re-creates the strict path. If we wanted stricter, we'd add a `--expect tx-body` flag, which is out-of-scope for this PR. |
 | The library exports both `encodeEnvelope` and `decodeEnvelope`. If they're added in two separate commits (S2 then S3) the module is incomplete in S2. | Acceptable: S2's commit only exports `encodeEnvelope`; S3 adds `decodeEnvelope`. Bisect-safe — both compile. The four `envelope-*` commands don't need the decoder. |
 | `attach-witness` and `submit` decoders strip leading/trailing whitespace from their stdin hex. `de-envelope` emits hex followed by a single `\n`. Round-trip through the pipe `cardano-cli-output | de-envelope | attach-witness` must work; confirm with a fixture-driven test. | Covered by S4 oracle fixture: pipe a real cardano-cli `tx.body.json` through `de-envelope`, hand to `attach-witness` programmatically (in-process), assert success. |
-| `envelope-*` commands trim a single trailing newline before encoding. If the operator pipes the literal output of `tx-build` (which emits a trailing newline) we get the right thing. If they `cat` a file produced by `printf` without a final newline, we still get the right thing. If they `cat` a file with two trailing newlines, we leave the second one in `cborHex` — which is wrong. | Trim *all* trailing whitespace from stdin, not just one newline. Document this in the spec and Haddock. (Update spec.md FR-1..FR-3 in this plan iteration: trim all trailing whitespace.) |
+| `envelope-*` commands must avoid encoding shell pipe artefacts into `cborHex`. If the operator pipes the literal output of `tx-build` (which emits a trailing newline) we get the right thing. If they `cat` a file produced by `printf` without a final newline, we still get the right thing. If they `cat` a file with multiple trailing whitespace bytes, those must not become part of `cborHex`. | Trim *all* trailing ASCII whitespace from stdin. Document this in the spec and Haddock. |
 
 ## Live re-verification before push
 

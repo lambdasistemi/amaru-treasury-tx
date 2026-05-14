@@ -27,6 +27,9 @@ import Amaru.Treasury.Cli.Common
 import Amaru.Treasury.Cli.DisburseWizard
     ( runDisburseWizard
     )
+import Amaru.Treasury.Cli.Envelope
+    ( runEnvelope
+    )
 import Amaru.Treasury.Cli.ReportRender
     ( runReportRender
     )
@@ -44,6 +47,9 @@ import Amaru.Treasury.Cli.TxBuild
     )
 import Amaru.Treasury.Cli.WithdrawWizard
     ( runWithdrawWizard
+    )
+import Amaru.Treasury.Tx.Envelope
+    ( EnvelopeKind (..)
     )
 
 main :: IO ()
@@ -72,3 +78,9 @@ main = do
         CmdSubmit so ->
             withSocket g $ \socket ->
                 runSubmit (goNetworkMagic g) socket so
+        CmdEnvelopeTx ->
+            runEnvelope Tx
+        CmdEnvelopeWitness ->
+            runEnvelope Witness
+        CmdEnvelopeSignedTx ->
+            runEnvelope SignedTx

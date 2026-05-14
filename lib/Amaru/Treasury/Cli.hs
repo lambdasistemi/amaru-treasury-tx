@@ -71,6 +71,9 @@ data Cmd
     | CmdReportRender ReportRenderOpts
     | CmdAttachWitness AttachWitnessOpts
     | CmdSubmit SubmitOpts
+    | CmdEnvelopeTx
+    | CmdEnvelopeWitness
+    | CmdEnvelopeSignedTx
 
 cmdP :: Parser Cmd
 cmdP =
@@ -137,6 +140,30 @@ cmdP =
                     (CmdSubmit <$> submitOptsP)
                     ( progDesc
                         "Submit a signed Conway tx CBOR hex via the local node socket"
+                    )
+                )
+            <> command
+                "envelope-tx"
+                ( info
+                    (pure CmdEnvelopeTx)
+                    ( progDesc
+                        "Wrap raw tx CBOR hex as a cardano-cli Conway tx envelope"
+                    )
+                )
+            <> command
+                "envelope-witness"
+                ( info
+                    (pure CmdEnvelopeWitness)
+                    ( progDesc
+                        "Wrap raw witness CBOR hex as a cardano-cli Conway witness envelope"
+                    )
+                )
+            <> command
+                "envelope-signed-tx"
+                ( info
+                    (pure CmdEnvelopeSignedTx)
+                    ( progDesc
+                        "Wrap raw signed tx CBOR hex as a cardano-cli Conway tx envelope"
                     )
                 )
         )

@@ -28,6 +28,7 @@ extra-source-files:
   scripts/smoke/swap-quote-override
   scripts/smoke/swap-wizard-signers
   scripts/smoke/tx-build-pipe
+  test/fixtures/106-cardano-cli-oracle/*
   test/fixtures/disburse/**/*.cbor
   test/fixtures/disburse/**/*.json
   test/fixtures/disburse/**/*.md
@@ -101,6 +102,7 @@ library
     Amaru.Treasury.Cli.AttachWitness
     Amaru.Treasury.Cli.Common
     Amaru.Treasury.Cli.DisburseWizard
+    Amaru.Treasury.Cli.Envelope
     Amaru.Treasury.Cli.ReportRender
     Amaru.Treasury.Cli.Submit
     Amaru.Treasury.Cli.SwapCommon
@@ -142,6 +144,7 @@ library
     Amaru.Treasury.Tx.DisburseIntentJSON
     Amaru.Treasury.Tx.DisburseWizard
     Amaru.Treasury.Tx.DisburseWizard.Trace
+    Amaru.Treasury.Tx.Envelope
     Amaru.Treasury.Tx.Reorganize
     Amaru.Treasury.Tx.Submit
     Amaru.Treasury.Tx.Swap
@@ -305,6 +308,7 @@ test-suite unit-tests
   other-modules:
     Amaru.Treasury.AuxDataSpec
     Amaru.Treasury.BuildSpec
+    Amaru.Treasury.Cli.EnvelopeSpec
     Amaru.Treasury.IntentJSONSchemaSpec
     Amaru.Treasury.IntentJSONSpec
     Amaru.Treasury.LedgerParseSpec
@@ -326,6 +330,7 @@ test-suite unit-tests
     Amaru.Treasury.Tx.DisburseBuildSpec
     Amaru.Treasury.Tx.DisburseSpec
     Amaru.Treasury.Tx.DisburseWizardSpec
+    Amaru.Treasury.Tx.EnvelopeSpec
     Amaru.Treasury.Tx.SubmitSpec
     Amaru.Treasury.Tx.SwapQuoteSpec
     Amaru.Treasury.Tx.SwapSpec
@@ -377,6 +382,7 @@ test-suite golden-tests
   default-language:   GHC2021
   other-modules:
     AdaDisburseGoldenSpec
+    EnvelopeOracleSpec
     PlaceholderSpec
     RegistryWalkGoldenSpec
     ReportRenderActionGoldenSpec

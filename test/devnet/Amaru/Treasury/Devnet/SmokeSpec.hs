@@ -4,6 +4,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 {- |
 Module      : Amaru.Treasury.Devnet.SmokeSpec
@@ -26,46 +27,70 @@ import Cardano.Crypto.Hash
     , HashAlgorithm
     , hashFromBytes
     )
+import Cardano.Crypto.Hash.Class (hashToBytes)
 import Cardano.Ledger.Address
     ( AccountAddress (..)
     , AccountId (..)
     , Addr (..)
+    , getNetwork
+    , serialiseAddr
     )
 import Cardano.Ledger.Alonzo.Scripts
-    ( fromPlutusScript
+    ( AsIx
+    , fromPlutusScript
     , mkPlutusScript
     )
 import Cardano.Ledger.Api.Tx (txIdTx)
-import Cardano.Ledger.Api.Tx.Out (TxOut)
+import Cardano.Ledger.Api.Tx.Out
+    ( TxOut
+    , datumTxOutL
+    , mkBasicTxOut
+    , referenceScriptTxOutL
+    , valueTxOutL
+    )
 import Cardano.Ledger.BaseTypes
     ( Inject (..)
     , Network (..)
-    , StrictMaybe (SNothing)
+    , StrictMaybe (SJust, SNothing)
+    , mkTxIxPartial
     , textToUrl
+    , txIxToInt
     )
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Conway.Governance (Anchor (..))
+import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
 import Cardano.Ledger.Core (PParams, Script)
 import Cardano.Ledger.Credential
     ( Credential (..)
     , StakeReference (..)
     )
 import Cardano.Ledger.Hashes
-    ( unsafeMakeSafeHash
+    ( KeyHash (..)
+    , ScriptHash (..)
+    , extractHash
+    , unsafeMakeSafeHash
     )
 import Cardano.Ledger.Keys
-    ( KeyHash
-    , KeyRole (DRepRole, Payment, Staking)
+    ( KeyRole (DRepRole, Payment, Staking)
     , VKey (..)
     , hashKey
     )
+import Cardano.Ledger.Mary.Value
+    ( AssetName (..)
+    , MaryValue (..)
+    , MultiAsset (..)
+    , PolicyID (..)
+    , multiAssetFromList
+    )
+import Cardano.Ledger.Plutus.Data (mkInlineDatum)
+import Cardano.Ledger.Plutus.ExUnits (ExUnits)
 import Cardano.Ledger.Plutus.Language
     ( Language (PlutusV3)
     , Plutus (..)
     , PlutusBinary (..)
     )
-import Cardano.Ledger.TxIn (TxId, TxIn (..))
+import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Node.Client.E2E.Devnet
     ( withCardanoNode
     )
@@ -77,6 +102,7 @@ import Cardano.Node.Client.E2E.Setup
     , genesisSignKey
     , mkSignKey
     )
+import Cardano.Node.Client.Ledger (ConwayTx)
 import Cardano.Node.Client.N2C.Connection
     ( newLSQChannel
     , newLTxSChannel
@@ -110,7 +136,10 @@ import Cardano.Node.Client.TxBuild
     , attachScript
     , build
     , certify
+    , checkMinUtxo
     , collateral
+    , mint
+    , output
     , payTo
     , proposeTreasuryWithdrawal
     , registerAndVoteAbstain
@@ -119,6 +148,7 @@ import Cardano.Node.Client.TxBuild
     , vote
     )
 import Cardano.Slotting.Slot (SlotNo (..))
+import Codec.Binary.Bech32 qualified as Bech32
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (poll, withAsync)
 import Control.Monad (unless, when)
@@ -133,18 +163,26 @@ import Data.Aeson
     , (.=)
     )
 import Data.ByteString qualified as BS
+import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Char8 qualified as BS8
 import Data.ByteString.Lazy qualified as BSL
 import Data.ByteString.Short qualified as SBS
 import Data.Foldable (traverse_)
+import Data.Function ((&))
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Set qualified as Set
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import Data.Void (Void)
 import Data.Word (Word64, Word8)
+import Lens.Micro
+    ( (.~)
+    , (^.)
+    )
+import PlutusCore.Data (Data (..))
 import System.Directory
     ( copyFile
     , createDirectoryIfMissing
@@ -175,18 +213,44 @@ import Test.Hspec
 import Amaru.Treasury.Backend.N2C
     ( probeNetworkMagic
     )
+import Amaru.Treasury.IntentJSON
+    ( SAction (..)
+    , SomeTreasuryIntent (..)
+    , TreasuryIntent (..)
+    , WithdrawInputs (..)
+    , decodeTreasuryIntentFile
+    , encodeSomeTreasuryIntent
+    )
 import Amaru.Treasury.Redeemer
     ( RawPlutusData (..)
     , emptyListRedeemer
     )
+import Amaru.Treasury.Registry.Constants
+    ( payoutUpperbound
+    , permissionsValidatorBlob
+    , registryTokenName
+    , scopesTokenName
+    , scopesValidatorBlob
+    , treasuryExpirationMs
+    , treasuryRegistryValidatorBlob
+    , treasuryValidatorBlob
+    )
 import Amaru.Treasury.Registry.Derive
-    ( derivedTreasuryScriptBlob
-    , derivedTreasuryScriptHash
+    ( ScriptParam (..)
+    , applyParams
+    , applyScriptParams
+    , derivedTreasuryScriptBlob
+    , scriptHashOfBlob
     , scriptHashToHex
     )
 import Amaru.Treasury.Scope
     ( ScopeId (CoreDevelopment)
     )
+import Amaru.Treasury.Tx.SwapWizard
+    ( ScopeOwners (..)
+    , txInToText
+    )
+import Amaru.Treasury.Tx.WithdrawWizard qualified as Withdraw
 
 data ShelleyGenesisTiming = ShelleyGenesisTiming
     { sgtEpochLength :: !Int
@@ -213,7 +277,7 @@ spec =
             "governance: funds the treasury script reward account"
             (runForPhases ["governance", "all"] governanceSmoke)
         it
-            "withdraw: refuses without governance prerequisite evidence"
+            "withdraw: writes a live reward intent before build artifacts"
             (runForPhases ["withdraw"] withdrawSmoke)
 
 runForPhases :: [String] -> IO () -> IO ()
@@ -224,32 +288,8 @@ runForPhases accepted action = do
 governanceSmoke :: IO ()
 governanceSmoke = do
     runDir <- resolveRunDir
-    prepareRunDir runDir
-    createDirectoryIfMissing True (runDir </> "governance")
-
-    sourceGenesis <- genesisDir
-    assertGenesisDir sourceGenesis
-    let smokeGenesis = runDir </> "governance" </> "genesis"
-    copyGovernanceGenesis sourceGenesis smokeGenesis
-    patchGovernanceGenesis smokeGenesis
-    timing <- readShelleyTiming smokeGenesis
-    let epochDuration = epochDurationSeconds timing
-    sgtNetworkMagic timing `shouldBe` 42
-    epochDuration `shouldSatisfy` (<= 10)
-
-    withCardanoNode smokeGenesis $ \socket startMs -> do
-        copyNodeLog socket runDir
-        writeTiming runDir startMs socket timing
-        withGovernanceNode socket $ \provider submitter -> do
-            _ <- waitForTreasury provider withdrawalAmount 120
-            pp <- queryProtocolParams provider
-            utxos <- queryUTxOs provider genesisAddr
-            evidence <-
-                submitTreasuryWithdrawal
-                    provider
-                    submitter
-                    pp
-                    utxos
+    withFundedGovernanceReward runDir preparePinnedTreasuryTarget $
+        \socket timing _provider () evidence -> do
             writeGovernanceArtifacts runDir socket timing evidence
             putGovernanceSummaryLines runDir socket timing evidence
 
@@ -277,29 +317,110 @@ nodeSmoke = do
 withdrawSmoke :: IO ()
 withdrawSmoke = do
     runDir <- resolveRunDir
-    let govSummaryPath =
-            runDir </> "governance" </> "summary.json"
-    createDirectoryIfMissing True (runDir </> "withdraw")
-    hasGovernance <- doesFileExist govSummaryPath
-    unless hasGovernance $ do
-        message <-
-            writeWithdrawalFailure
-                runDir
-                (MissingGovernancePrerequisite govSummaryPath)
-        intentExists <-
-            doesFileExist (withdrawIntentPath runDir)
-        txBodyExists <-
-            doesFileExist (withdrawTxBodyPath runDir)
-        intentExists `shouldBe` False
-        txBodyExists `shouldBe` False
-        expectationFailure message
+    withFundedGovernanceReward runDir prepareDevnetWithdrawalRegistry $
+        \socket timing provider registry evidence -> do
+            writeGovernanceArtifacts runDir socket timing evidence
+            rewards <-
+                writeWithdrawalIntentArtifacts
+                    runDir
+                    socket
+                    timing
+                    provider
+                    registry
+                    evidence
+            message <-
+                writeWithdrawalFailure
+                    runDir
+                    ( MissingWithdrawalBuildArtifacts
+                        (withdrawTxBodyPath runDir)
+                        (coinLovelace rewards)
+                    )
+            expectationFailure message
 
 data GovernancePrerequisiteFailure
     = MissingGovernancePrerequisite !FilePath
     | StaleGovernancePrerequisite !FilePath !String
+    | MissingWithdrawalBuildArtifacts !FilePath !Integer
     deriving stock (Eq, Show)
 
+withFundedGovernanceReward
+    :: FilePath
+    -> ( Provider IO
+         -> Submitter IO
+         -> PParams ConwayEra
+         -> [(TxIn, TxOut ConwayEra)]
+         -> IO (TreasuryTarget, extra)
+       )
+    -> ( FilePath
+         -> ShelleyGenesisTiming
+         -> Provider IO
+         -> extra
+         -> GovernanceEvidence
+         -> IO a
+       )
+    -> IO a
+withFundedGovernanceReward runDir prepareTarget action = do
+    prepareRunDir runDir
+    createDirectoryIfMissing True (runDir </> "governance")
+
+    sourceGenesis <- genesisDir
+    assertGenesisDir sourceGenesis
+    let smokeGenesis = runDir </> "governance" </> "genesis"
+    copyGovernanceGenesis sourceGenesis smokeGenesis
+    patchGovernanceGenesis smokeGenesis
+    timing <- readShelleyTiming smokeGenesis
+    let epochDuration = epochDurationSeconds timing
+    sgtNetworkMagic timing `shouldBe` 42
+    epochDuration `shouldSatisfy` (<= 10)
+
+    withCardanoNode smokeGenesis $ \socket startMs -> do
+        copyNodeLog socket runDir
+        writeTiming runDir startMs socket timing
+        withGovernanceNode socket $ \provider submitter -> do
+            _ <- waitForTreasury provider withdrawalAmount 120
+            pp <- queryProtocolParams provider
+            utxos <- queryUTxOs provider genesisAddr
+            (target, extra) <-
+                prepareTarget provider submitter pp utxos
+            fundingUtxos <- queryUTxOs provider genesisAddr
+            evidence <-
+                submitTreasuryWithdrawal
+                    target
+                    provider
+                    submitter
+                    pp
+                    fundingUtxos
+            action socket timing provider extra evidence
+
 data NoCtx a
+
+data TreasuryTarget = TreasuryTarget
+    { ttScript :: !(Script ConwayEra)
+    , ttScriptHash :: !ScriptHash
+    , ttScriptHashText :: !T.Text
+    , ttAddress :: !Addr
+    }
+
+data DevnetScriptSet = DevnetScriptSet
+    { dssScopesScript :: !(Script ConwayEra)
+    , dssScopesHash :: !ScriptHash
+    , dssRegistryScript :: !(Script ConwayEra)
+    , dssRegistryHash :: !ScriptHash
+    , dssPermissionsScript :: !(Script ConwayEra)
+    , dssPermissionsHash :: !ScriptHash
+    , dssTreasuryTarget :: !TreasuryTarget
+    }
+
+data DevnetRegistryAnchors = DevnetRegistryAnchors
+    { draScopesRef :: !TxIn
+    , draPermissionsRef :: !TxIn
+    , draTreasuryRef :: !TxIn
+    , draRegistryRef :: !TxIn
+    , draRegistryPolicyId :: !T.Text
+    , draPermissionsHash :: !ScriptHash
+    , draOwnerKeyHash :: !T.Text
+    , draTreasuryTarget :: !TreasuryTarget
+    }
 
 data GovernanceEvidence = GovernanceEvidence
     { geTxId :: !String
@@ -334,33 +455,305 @@ voterSignKey :: SignKeyDSIGN Ed25519DSIGN
 voterSignKey =
     mkSignKey "amaru-governance-voter-key-00001"
 
-submitTreasuryWithdrawal
+devnetSeedCoin :: Coin
+devnetSeedCoin = Coin 100_000_000
+
+devnetNftCoin :: Coin
+devnetNftCoin = Coin 5_000_000
+
+devnetReferenceScriptCoin :: Coin
+devnetReferenceScriptCoin = Coin 100_000_000
+
+preparePinnedTreasuryTarget
     :: Provider IO
     -> Submitter IO
     -> PParams ConwayEra
     -> [(TxIn, TxOut ConwayEra)]
-    -> IO GovernanceEvidence
-submitTreasuryWithdrawal provider submitter pp utxos = do
-    seed@(seedIn, _) <- case utxos of
-        u : _ -> pure u
-        [] -> fail "no genesis UTxOs"
-
-    treasuryScript <-
-        scriptFromBlob
+    -> IO (TreasuryTarget, ())
+preparePinnedTreasuryTarget _provider _submitter _pp _utxos = do
+    target <-
+        treasuryTargetFromBlob
             =<< expectEither
-                "derive treasury script"
+                "derive pinned treasury script"
                 (derivedTreasuryScriptBlob CoreDevelopment)
-    treasuryHash <-
-        expectEither
-            "derive treasury script hash"
-            (derivedTreasuryScriptHash CoreDevelopment)
+    pure (target, ())
+
+prepareDevnetWithdrawalRegistry
+    :: Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> [(TxIn, TxOut ConwayEra)]
+    -> IO (TreasuryTarget, DevnetRegistryAnchors)
+prepareDevnetWithdrawalRegistry provider submitter pp utxos = do
+    registry <-
+        deployDevnetWithdrawalRegistry provider submitter pp utxos
+    pure (draTreasuryTarget registry, registry)
+
+deployDevnetWithdrawalRegistry
+    :: Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> [(TxIn, TxOut ConwayEra)]
+    -> IO DevnetRegistryAnchors
+deployDevnetWithdrawalRegistry provider submitter pp utxos = do
+    seed <- selectLargestAdaUtxo "registry deployment" utxos
+    (scopesSeedRef, registrySeedRef) <-
+        submitSeedSplit provider submitter pp seed
+    seedOuts <-
+        waitForTxIns provider [scopesSeedRef, registrySeedRef] 60
+    scripts <-
+        deriveDevnetScripts scopesSeedRef registrySeedRef
+    (scopesRef, registryRef) <-
+        submitRegistryNfts
+            provider
+            submitter
+            pp
+            scripts
+            seedOuts
+    publishUtxos <- queryUTxOs provider genesisAddr
+    publishSeed <-
+        selectLargestAdaUtxo "reference script publishing" publishUtxos
+    (permissionsRef, treasuryRef) <-
+        submitReferenceScripts
+            provider
+            submitter
+            pp
+            scripts
+            publishSeed
+    let ownerHash =
+            keyHashToText $
+                paymentKeyHashFromSignKey genesisSignKey
+        treasuryTarget =
+            dssTreasuryTarget scripts
+    pure
+        DevnetRegistryAnchors
+            { draScopesRef = scopesRef
+            , draPermissionsRef = permissionsRef
+            , draTreasuryRef = treasuryRef
+            , draRegistryRef = registryRef
+            , draRegistryPolicyId =
+                scriptHashToHex (dssRegistryHash scripts)
+            , draPermissionsHash =
+                dssPermissionsHash scripts
+            , draOwnerKeyHash = ownerHash
+            , draTreasuryTarget = treasuryTarget
+            }
+
+submitSeedSplit
+    :: Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> (TxIn, TxOut ConwayEra)
+    -> IO (TxIn, TxIn)
+submitSeedSplit provider submitter pp seed@(seedIn, _) = do
+    snapshot <- queryLedgerSnapshot provider
+    let interpret :: InterpretIO NoCtx
+        interpret =
+            InterpretIO $ \case {}
+        eval tx =
+            fmap
+                (Map.map (either (Left . show) Right))
+                (evaluateTx provider tx)
+        upperSlot =
+            addSlots 20 (ledgerTipSlot snapshot)
+        prog :: TxBuild NoCtx Void ()
+        prog = do
+            _ <- spend seedIn
+            _ <- payTo genesisAddr (inject devnetSeedCoin)
+            _ <- payTo genesisAddr (inject devnetSeedCoin)
+            validTo upperSlot
+    txId <-
+        buildSubmitAndWait
+            "split registry seed"
+            provider
+            submitter
+            pp
+            interpret
+            eval
+            [seed]
+            []
+            genesisAddr
+            prog
+    pure (txOutRef txId 0, txOutRef txId 1)
+
+submitRegistryNfts
+    :: Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> DevnetScriptSet
+    -> [(TxIn, TxOut ConwayEra)]
+    -> IO (TxIn, TxIn)
+submitRegistryNfts provider submitter pp scripts seedOuts = do
+    (scopesSeed@(scopesSeedRef, _), registrySeed@(registrySeedRef, _)) <-
+        case seedOuts of
+            [scopesSeed, registrySeed] ->
+                pure (scopesSeed, registrySeed)
+            _ ->
+                fail "expected exactly two registry seed UTxOs"
+    let
+        scopesOut =
+            nftTxOut
+                (scriptAddr Testnet (dssScopesHash scripts))
+                (dssScopesHash scripts)
+                scopesTokenName
+                (ownersDatum (paymentKeyHashFromSignKey genesisSignKey))
+        registryOut =
+            nftTxOut
+                (scriptAddr Testnet (dssRegistryHash scripts))
+                (dssRegistryHash scripts)
+                registryTokenName
+                (registryDatum (ttScriptHash (dssTreasuryTarget scripts)))
+    snapshot <- queryLedgerSnapshot provider
+    let interpret :: InterpretIO NoCtx
+        interpret =
+            InterpretIO $ \case {}
+        eval tx =
+            fmap
+                (Map.map (either (Left . show) Right))
+                (evaluateTx provider tx)
+        upperSlot =
+            addSlots 20 (ledgerTipSlot snapshot)
+        prog :: TxBuild NoCtx Void ()
+        prog = do
+            _ <- spend scopesSeedRef
+            _ <- spend registrySeedRef
+            collateral scopesSeedRef
+            attachScript (dssScopesScript scripts)
+            attachScript (dssRegistryScript scripts)
+            mint
+                (PolicyID (dssScopesHash scripts))
+                (Map.singleton (assetName scopesTokenName) 1)
+                (RawPlutusData emptyListRedeemer)
+            mint
+                (PolicyID (dssRegistryHash scripts))
+                (Map.singleton (assetName registryTokenName) 1)
+                (RawPlutusData emptyListRedeemer)
+            scopesIx <- output scopesOut
+            registryIx <- output registryOut
+            checkMinUtxo pp scopesIx
+            checkMinUtxo pp registryIx
+            validTo upperSlot
+    txId <-
+        buildSubmitAndWait
+            "mint registry NFTs"
+            provider
+            submitter
+            pp
+            interpret
+            eval
+            [scopesSeed, registrySeed]
+            []
+            genesisAddr
+            prog
+    pure (txOutRef txId 0, txOutRef txId 1)
+
+submitReferenceScripts
+    :: Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> DevnetScriptSet
+    -> (TxIn, TxOut ConwayEra)
+    -> IO (TxIn, TxIn)
+submitReferenceScripts provider submitter pp scripts seed@(seedIn, _) = do
+    snapshot <- queryLedgerSnapshot provider
+    let refAddr =
+            ttAddress (dssTreasuryTarget scripts)
+        permissionsOut =
+            refScriptTxOut refAddr (dssPermissionsScript scripts)
+        treasuryOut =
+            refScriptTxOut refAddr (ttScript (dssTreasuryTarget scripts))
+        interpret :: InterpretIO NoCtx
+        interpret =
+            InterpretIO $ \case {}
+        eval tx =
+            fmap
+                (Map.map (either (Left . show) Right))
+                (evaluateTx provider tx)
+        upperSlot =
+            addSlots 20 (ledgerTipSlot snapshot)
+        prog :: TxBuild NoCtx Void ()
+        prog = do
+            _ <- spend seedIn
+            permissionsIx <- output permissionsOut
+            treasuryIx <- output treasuryOut
+            checkMinUtxo pp permissionsIx
+            checkMinUtxo pp treasuryIx
+            validTo upperSlot
+    txId <-
+        buildSubmitAndWait
+            "publish reference scripts"
+            provider
+            submitter
+            pp
+            interpret
+            eval
+            [seed]
+            []
+            genesisAddr
+            prog
+    pure (txOutRef txId 0, txOutRef txId 1)
+
+buildSubmitAndWait
+    :: String
+    -> Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> InterpretIO NoCtx
+    -> ( ConwayTx
+         -> IO
+                ( Map.Map
+                    (ConwayPlutusPurpose AsIx ConwayEra)
+                    (Either String ExUnits)
+                )
+       )
+    -> [(TxIn, TxOut ConwayEra)]
+    -> [(TxIn, TxOut ConwayEra)]
+    -> Addr
+    -> TxBuild NoCtx Void ()
+    -> IO TxId
+buildSubmitAndWait
+    label
+    provider
+    submitter
+    pp
+    interpret
+    eval
+    inputs
+    refs
+    changeAddr
+    prog =
+        build pp interpret eval inputs refs changeAddr prog >>= \case
+            Left err ->
+                expectationFailure (label <> ": " <> show err)
+                    *> error "unreachable"
+            Right tx -> do
+                let signed = addKeyWitness genesisSignKey tx
+                    txId = txIdTx signed
+                submitTx submitter signed >>= \case
+                    Submitted _ -> pure ()
+                    Rejected reason ->
+                        expectationFailure $
+                            label <> " rejected: " <> show reason
+                waitForTxChange provider txId genesisAddr 60
+                pure txId
+
+submitTreasuryWithdrawal
+    :: TreasuryTarget
+    -> Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> [(TxIn, TxOut ConwayEra)]
+    -> IO GovernanceEvidence
+submitTreasuryWithdrawal target provider submitter pp utxos = do
+    seed@(seedIn, _) <- selectLargestAdaUtxo "governance funding" utxos
+
     buildSnapshot <- queryLedgerSnapshot provider
     let treasuryHashText =
-            scriptHashToHex treasuryHash
+            ttScriptHashText target
         upperSlot =
             addSlots 20 (ledgerTipSlot buildSnapshot)
         treasuryCredential =
-            ScriptHashObj treasuryHash
+            ScriptHashObj (ttScriptHash target)
         treasuryAccount =
             AccountAddress Testnet (AccountId treasuryCredential)
         returnAccount =
@@ -396,7 +789,7 @@ submitTreasuryWithdrawal provider submitter pp utxos = do
                     treasuryCredential
                     stakeDeposit
                     (ScriptCert (RawPlutusData emptyListRedeemer))
-            attachScript treasuryScript
+            attachScript (ttScript target)
             _ <-
                 certify
                     ( ConwayTxCertGov $
@@ -669,6 +1062,27 @@ rewardBalance provider account =
     Map.findWithDefault (Coin 0) account
         <$> queryRewardAccounts provider (Set.singleton account)
 
+selectLargestAdaUtxo
+    :: String
+    -> [(TxIn, TxOut ConwayEra)]
+    -> IO (TxIn, TxOut ConwayEra)
+selectLargestAdaUtxo label utxos =
+    case foldr choose Nothing utxos of
+        Just (_, selected) -> pure selected
+        Nothing -> fail ("no pure-ADA UTxO for " <> label)
+  where
+    choose utxo@(_, txOut) best =
+        let MaryValue (Coin lovelace) (MultiAsset assets) =
+                txOut ^. valueTxOutL
+        in  if Map.null assets
+                then case best of
+                    Nothing -> Just (lovelace, utxo)
+                    Just (bestLovelace, _)
+                        | lovelace > bestLovelace ->
+                            Just (lovelace, utxo)
+                    _ -> best
+                else best
+
 waitForTreasury :: Provider IO -> Coin -> Int -> IO Coin
 waitForTreasury _ minimumCoin attempts
     | attempts <= 0 =
@@ -867,6 +1281,224 @@ scriptFromBlob blob =
     plutus =
         Plutus @PlutusV3 (PlutusBinary (SBS.toShort blob))
 
+deriveDevnetScripts :: TxIn -> TxIn -> IO DevnetScriptSet
+deriveDevnetScripts scopesSeed registrySeed = do
+    scopesBlob <-
+        expectEither
+            "derive devnet scopes NFT policy"
+            (applyParams scopesValidatorBlob [outputReferenceData scopesSeed])
+    scopesHash <-
+        expectEither
+            "hash devnet scopes NFT policy"
+            (scriptHashOfBlob scopesBlob)
+    scopesScript <- scriptFromBlob scopesBlob
+    registryBlob <-
+        expectEither
+            "derive devnet registry NFT policy"
+            ( applyParams
+                treasuryRegistryValidatorBlob
+                [ outputReferenceData registrySeed
+                , scopeData CoreDevelopment
+                ]
+            )
+    registryHash <-
+        expectEither
+            "hash devnet registry NFT policy"
+            (scriptHashOfBlob registryBlob)
+    registryScript <- scriptFromBlob registryBlob
+    permissionsBlob <-
+        expectEither
+            "derive devnet permissions script"
+            ( applyScriptParams
+                permissionsValidatorBlob
+                [ ParamData (B (scriptHashBytes scopesHash))
+                , ParamData (scopeData CoreDevelopment)
+                ]
+            )
+    permissionsHash <-
+        expectEither
+            "hash devnet permissions script"
+            (scriptHashOfBlob permissionsBlob)
+    permissionsScript <- scriptFromBlob permissionsBlob
+    treasuryTarget <-
+        treasuryTargetFromBlob
+            =<< expectEither
+                "derive devnet treasury script"
+                ( applyParams
+                    treasuryValidatorBlob
+                    [ treasuryConfigurationData
+                        (scriptHashBytes registryHash)
+                        (scriptHashBytes permissionsHash)
+                    ]
+                )
+    pure
+        DevnetScriptSet
+            { dssScopesScript = scopesScript
+            , dssScopesHash = scopesHash
+            , dssRegistryScript = registryScript
+            , dssRegistryHash = registryHash
+            , dssPermissionsScript = permissionsScript
+            , dssPermissionsHash = permissionsHash
+            , dssTreasuryTarget = treasuryTarget
+            }
+
+treasuryTargetFromBlob :: BS.ByteString -> IO TreasuryTarget
+treasuryTargetFromBlob blob = do
+    script <- scriptFromBlob blob
+    scriptHash <-
+        expectEither
+            "hash treasury script"
+            (scriptHashOfBlob blob)
+    pure
+        TreasuryTarget
+            { ttScript = script
+            , ttScriptHash = scriptHash
+            , ttScriptHashText = scriptHashToHex scriptHash
+            , ttAddress = scriptAddr Testnet scriptHash
+            }
+
+outputReferenceData :: TxIn -> Data
+outputReferenceData (TxIn (TxId txIdHash) ix) =
+    Constr
+        0
+        [ B (hashToBytes (extractHash txIdHash))
+        , I (toInteger (txIxToInt ix))
+        ]
+
+scopeData :: ScopeId -> Data
+scopeData = \case
+    CoreDevelopment -> Constr 0 []
+    _ -> error "devnet smoke only derives core_development scripts"
+
+treasuryConfigurationData :: BS.ByteString -> BS.ByteString -> Data
+treasuryConfigurationData registryPolicy permissionsHash =
+    Constr
+        0
+        [ B registryPolicy
+        , treasuryPermissionsData permissionsHash
+        , I treasuryExpirationMs
+        , I payoutUpperbound
+        ]
+
+treasuryPermissionsData :: BS.ByteString -> Data
+treasuryPermissionsData permissionsHash =
+    Constr
+        0
+        [ multisigScriptPermission permissionsHash
+        , multisigScriptPermission permissionsHash
+        , Constr 2 [List []]
+        , multisigScriptPermission permissionsHash
+        ]
+
+multisigScriptPermission :: BS.ByteString -> Data
+multisigScriptPermission scriptHash =
+    Constr 6 [B scriptHash]
+
+ownersDatum :: KeyHash Payment -> Data
+ownersDatum owner =
+    Constr
+        0
+        [ ownerSignature
+        , ownerSignature
+        , ownerSignature
+        , ownerSignature
+        ]
+  where
+    ownerSignature =
+        Constr 0 [B (keyHashBytes owner)]
+
+registryDatum :: ScriptHash -> Data
+registryDatum treasuryHash =
+    Constr
+        0
+        [ scriptCredential treasuryHash
+        , Constr 1 [B (BS.replicate 28 0)]
+        ]
+
+scriptCredential :: ScriptHash -> Data
+scriptCredential =
+    Constr 1 . pure . B . scriptHashBytes
+
+nftTxOut
+    :: Addr
+    -> ScriptHash
+    -> BS.ByteString
+    -> Data
+    -> TxOut ConwayEra
+nftTxOut addr policy tokenName datum =
+    mkBasicTxOut
+        addr
+        ( MaryValue
+            devnetNftCoin
+            ( multiAssetFromList
+                [
+                    ( PolicyID policy
+                    , assetName tokenName
+                    , 1
+                    )
+                ]
+            )
+        )
+        & datumTxOutL .~ mkInlineDatum @ConwayEra datum
+
+refScriptTxOut :: Addr -> Script ConwayEra -> TxOut ConwayEra
+refScriptTxOut addr script =
+    mkBasicTxOut
+        addr
+        (MaryValue devnetReferenceScriptCoin (MultiAsset Map.empty))
+        & referenceScriptTxOutL .~ SJust script
+
+scriptAddr :: Network -> ScriptHash -> Addr
+scriptAddr network scriptHash =
+    Addr
+        network
+        (ScriptHashObj scriptHash)
+        (StakeRefBase (ScriptHashObj scriptHash))
+
+assetName :: BS.ByteString -> AssetName
+assetName =
+    AssetName . SBS.toShort
+
+scriptHashBytes :: ScriptHash -> BS.ByteString
+scriptHashBytes (ScriptHash h) =
+    hashToBytes h
+
+keyHashBytes :: KeyHash kr -> BS.ByteString
+keyHashBytes (KeyHash h) =
+    hashToBytes h
+
+keyHashToText :: KeyHash kr -> T.Text
+keyHashToText =
+    TE.decodeUtf8Lenient . B16.encode . keyHashBytes
+
+txOutRef :: TxId -> Integer -> TxIn
+txOutRef txId ix =
+    TxIn txId (mkTxIxPartial ix)
+
+waitForTxIns
+    :: Provider IO
+    -> [TxIn]
+    -> Int
+    -> IO [(TxIn, TxOut ConwayEra)]
+waitForTxIns _ refs attempts
+    | attempts <= 0 =
+        expectationFailure
+            ( "timed out waiting for UTxOs: "
+                <> show (txInToText <$> refs)
+            )
+            >> pure []
+waitForTxIns provider refs attempts = do
+    found <- queryUTxOByTxIn provider (Set.fromList refs)
+    if all (`Map.member` found) refs
+        then
+            pure
+                [ (ref, found Map.! ref)
+                | ref <- refs
+                ]
+        else do
+            threadDelay 500_000
+            waitForTxIns provider refs (attempts - 1)
+
 writeGovernanceArtifacts
     :: FilePath
     -> FilePath
@@ -966,6 +1598,281 @@ governanceSummaryLines runDir socket timing evidence =
         <> (runDir </> "governance" </> "summary.json")
     ]
 
+writeWithdrawalIntentArtifacts
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> Provider IO
+    -> DevnetRegistryAnchors
+    -> GovernanceEvidence
+    -> IO Coin
+writeWithdrawalIntentArtifacts runDir socket timing provider registry evidence = do
+    createDirectoryIfMissing True (runDir </> "withdraw")
+    writeWithdrawalRegistryArtifacts runDir registry
+    let treasuryHash =
+            ttScriptHash (draTreasuryTarget registry)
+    ttScriptHashText (draTreasuryTarget registry)
+        `shouldBe` T.pack (geTreasuryScriptHash evidence)
+    let treasuryAccount =
+            AccountAddress Testnet (AccountId (ScriptHashObj treasuryHash))
+    observedRewards <- rewardBalance provider treasuryAccount
+    observedRewards `shouldBe` Coin (geRewardAfter evidence)
+    let registryView =
+            devnetRegistryView registry
+    let walletAddress = renderAddr genesisAddr
+        resolver =
+            Withdraw.WithdrawResolverEnv
+                { Withdraw.wreQueryWalletUtxos =
+                    queryWalletUtxosForWithdraw provider walletAddress
+                , Withdraw.wreQueryRewardsLovelace = \account -> do
+                    account `shouldBe` T.pack (geRewardAccount evidence)
+                    coinLovelace <$> rewardBalance provider treasuryAccount
+                , Withdraw.wreComputeUpperBound = \_ -> do
+                    snapshot <- queryLedgerSnapshot provider
+                    pure $
+                        Right $
+                            slotNumber $
+                                addSlots 1_000 (ledgerTipSlot snapshot)
+                }
+        input =
+            Withdraw.WithdrawResolverInput
+                { Withdraw.wriNetwork = "devnet"
+                , Withdraw.wriWalletAddrBech32 = walletAddress
+                , Withdraw.wriScope = CoreDevelopment
+                , Withdraw.wriRegistry = registryView
+                , Withdraw.wriValidityHours = Nothing
+                }
+    resolved <- Withdraw.resolveWithdrawEnv resolver input
+    env <- expectRightShow "resolve withdraw env" resolved
+    Withdraw.weTreasuryRewardAccount env
+        `shouldBe` T.pack (geRewardAccount evidence)
+    Withdraw.weRewardsLovelace env
+        `shouldBe` coinLovelace observedRewards
+    let answers =
+            Withdraw.WithdrawAnswers
+                { Withdraw.waScope = CoreDevelopment
+                , Withdraw.waValidityHours = Nothing
+                , Withdraw.waDescription = Nothing
+                , Withdraw.waJustification = Nothing
+                , Withdraw.waDestinationLabel = Nothing
+                , Withdraw.waEvent = Nothing
+                , Withdraw.waLabel = Nothing
+                }
+    intent <- case Withdraw.withdrawToTreasuryResult env answers of
+        Left err ->
+            expectationFailure
+                ("withdraw intent translation failed: " <> show err)
+                *> error "unreachable"
+        Right (Withdraw.WithdrawNoRewards account) ->
+            expectationFailure
+                ( "expected positive withdrawal rewards for "
+                    <> T.unpack account
+                )
+                *> error "unreachable"
+        Right (Withdraw.WithdrawIntentReady ready) -> pure ready
+    BSL.writeFile
+        (withdrawIntentPath runDir)
+        (encodeSomeTreasuryIntent (SomeTreasuryIntent SWithdraw intent))
+    decoded <- decodeTreasuryIntentFile (withdrawIntentPath runDir)
+    case decoded of
+        Right (SomeTreasuryIntent SWithdraw parsed) -> do
+            wdiTreasuryRewardAccount (tiPayload parsed)
+                `shouldBe` T.pack (geRewardAccount evidence)
+            wdiRewardsLovelace (tiPayload parsed)
+                `shouldBe` coinLovelace observedRewards
+        Right _ ->
+            expectationFailure "withdraw smoke wrote non-withdraw intent"
+        Left err ->
+            expectationFailure ("decode withdraw intent: " <> err)
+    writeWithdrawalGovernancePrerequisite runDir evidence
+    writeWithdrawalIntentSummary
+        runDir
+        socket
+        timing
+        evidence
+        (coinLovelace observedRewards)
+    putWithdrawalIntentLines runDir evidence observedRewards
+    pure observedRewards
+
+writeWithdrawalRegistryArtifacts
+    :: FilePath
+    -> DevnetRegistryAnchors
+    -> IO ()
+writeWithdrawalRegistryArtifacts runDir registry =
+    BSL.writeFile
+        (runDir </> "withdraw" </> "registry.json")
+        ( encode $
+            object
+                [ "scopesDeployedAt"
+                    .= txInToText (draScopesRef registry)
+                , "permissionsDeployedAt"
+                    .= txInToText (draPermissionsRef registry)
+                , "permissionsScriptHash"
+                    .= scriptHashToHex (draPermissionsHash registry)
+                , "treasuryDeployedAt"
+                    .= txInToText (draTreasuryRef registry)
+                , "registryDeployedAt"
+                    .= txInToText (draRegistryRef registry)
+                , "registryPolicyId"
+                    .= draRegistryPolicyId registry
+                , "treasuryScriptHash"
+                    .= ttScriptHashText (draTreasuryTarget registry)
+                , "treasuryAddress"
+                    .= renderAddr (ttAddress (draTreasuryTarget registry))
+                ]
+        )
+
+devnetRegistryView
+    :: DevnetRegistryAnchors
+    -> Withdraw.RegistryView
+devnetRegistryView registry =
+    let treasuryHashText =
+            ttScriptHashText (draTreasuryTarget registry)
+        treasuryAddress =
+            renderAddr (ttAddress (draTreasuryTarget registry))
+        refs =
+            Withdraw.TreasuryRefs
+                { Withdraw.trAddress = treasuryAddress
+                , Withdraw.trScriptHash = treasuryHashText
+                , Withdraw.trPermissionsRewardAccount =
+                    scriptHashToHex (draPermissionsHash registry)
+                }
+        owners =
+            ScopeOwners
+                { soCore = draOwnerKeyHash registry
+                , soOps = draOwnerKeyHash registry
+                , soNetworkCompliance = draOwnerKeyHash registry
+                , soMiddleware = draOwnerKeyHash registry
+                }
+    in  Withdraw.RegistryView
+            { Withdraw.rvScopesDeployedAt =
+                txInToText (draScopesRef registry)
+            , Withdraw.rvPermissionsDeployedAt =
+                txInToText (draPermissionsRef registry)
+            , Withdraw.rvTreasuryDeployedAt =
+                txInToText (draTreasuryRef registry)
+            , Withdraw.rvRegistryDeployedAt =
+                txInToText (draRegistryRef registry)
+            , Withdraw.rvRegistryPolicyId =
+                draRegistryPolicyId registry
+            , Withdraw.rvOwners = owners
+            , Withdraw.rvTreasuryByScope =
+                Map.singleton CoreDevelopment refs
+            }
+
+queryWalletUtxosForWithdraw
+    :: Provider IO
+    -> T.Text
+    -> T.Text
+    -> IO [(T.Text, Integer, Bool)]
+queryWalletUtxosForWithdraw provider expectedWallet requestedWallet = do
+    requestedWallet `shouldBe` expectedWallet
+    utxos <- queryUTxOs provider genesisAddr
+    pure
+        [ (txInToText txIn, lovelace, not (Map.null assets))
+        | (txIn, txOut) <- utxos
+        , let MaryValue (Coin lovelace) (MultiAsset assets) =
+                txOut ^. valueTxOutL
+        ]
+
+writeWithdrawalGovernancePrerequisite
+    :: FilePath
+    -> GovernanceEvidence
+    -> IO ()
+writeWithdrawalGovernancePrerequisite runDir evidence =
+    BSL.writeFile
+        (runDir </> "withdraw" </> "governance-prerequisite.json")
+        ( encode $
+            object
+                [ "governanceSummaryPath"
+                    .= (runDir </> "governance" </> "summary.json")
+                , "rewardAccount" .= geRewardAccount evidence
+                , "rewardBeforeLovelace" .= geRewardBefore evidence
+                , "rewardAfterGovernanceLovelace"
+                    .= geRewardAfter evidence
+                , "governanceActionId" .= geActionId evidence
+                ]
+        )
+
+writeWithdrawalIntentSummary
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> GovernanceEvidence
+    -> Integer
+    -> IO ()
+writeWithdrawalIntentSummary runDir socket timing evidence observedRewards = do
+    let summary =
+            withdrawalIntentSummaryValue
+                runDir
+                socket
+                timing
+                evidence
+                observedRewards
+    BSL.writeFile
+        (runDir </> "withdraw" </> "summary.json")
+        (encode summary)
+    BSL.writeFile (runDir </> "summary.json") (encode summary)
+    writeFile
+        (runDir </> "summary.log")
+        ( unlines $
+            withdrawalIntentLines
+                runDir
+                evidence
+                (Coin observedRewards)
+        )
+
+withdrawalIntentSummaryValue
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> GovernanceEvidence
+    -> Integer
+    -> Value
+withdrawalIntentSummaryValue runDir socket timing evidence observedRewards =
+    object
+        [ "phase" .= ("withdraw" :: String)
+        , "status" .= ("intent-ready" :: String)
+        , "runDirectory" .= runDir
+        , "socket" .= socket
+        , "network" .= ("devnet" :: String)
+        , "networkMagic" .= sgtNetworkMagic timing
+        , "epochDurationSeconds" .= epochDurationSeconds timing
+        , "rewardAccount" .= geRewardAccount evidence
+        , "rewardBeforeLovelace" .= geRewardBefore evidence
+        , "rewardAfterGovernanceLovelace" .= geRewardAfter evidence
+        , "withdrawRewardsLovelace" .= observedRewards
+        , "governancePrerequisitePath"
+            .= (runDir </> "withdraw" </> "governance-prerequisite.json")
+        , "intentPath" .= withdrawIntentPath runDir
+        , "txBodyPath" .= withdrawTxBodyPath runDir
+        , "reportJsonPath" .= (runDir </> "withdraw" </> "report.json")
+        , "reportMarkdownPath" .= (runDir </> "withdraw" </> "report.md")
+        ]
+
+putWithdrawalIntentLines
+    :: FilePath
+    -> GovernanceEvidence
+    -> Coin
+    -> IO ()
+putWithdrawalIntentLines runDir evidence rewards =
+    mapM_ putStrLn (withdrawalIntentLines runDir evidence rewards)
+
+withdrawalIntentLines
+    :: FilePath
+    -> GovernanceEvidence
+    -> Coin
+    -> [String]
+withdrawalIntentLines runDir evidence rewards =
+    [ "devnet-smoke: run-dir " <> runDir
+    , "devnet-smoke: phase withdraw intent-ready"
+    , "devnet-smoke: reward-account " <> geRewardAccount evidence
+    , "devnet-smoke: withdraw-rewards "
+        <> show (coinLovelace rewards)
+    , "devnet-smoke: withdraw-intent "
+        <> withdrawIntentPath runDir
+    ]
+
 writeWithdrawalFailure
     :: FilePath
     -> GovernancePrerequisiteFailure
@@ -995,14 +1902,15 @@ withdrawalFailureValue runDir failure =
         , "message" .= governancePrerequisiteFailureMessage failure
         , "runDirectory" .= runDir
         , "governanceSummaryPath"
-            .= governancePrerequisiteFailurePath failure
+            .= governancePrerequisiteEvidencePath runDir failure
         , "intentPath" .= withdrawIntentPath runDir
         , "txBodyPath" .= withdrawTxBodyPath runDir
         , "reportJsonPath" .= (runDir </> "withdraw" </> "report.json")
         , "reportMarkdownPath" .= (runDir </> "withdraw" </> "report.md")
         , "withdrawSummaryPath"
             .= (runDir </> "withdraw" </> "summary.json")
-        , "lastObservedRewardLovelace" .= (Nothing :: Maybe Integer)
+        , "lastObservedRewardLovelace"
+            .= governancePrerequisiteFailureReward failure
         , "epoch" .= (Nothing :: Maybe Word64)
         , "tipSlot" .= (Nothing :: Maybe Word64)
         ]
@@ -1023,6 +1931,8 @@ governancePrerequisiteFailureCode = \case
         "missing-governance-prerequisite"
     StaleGovernancePrerequisite{} ->
         "stale-governance-prerequisite"
+    MissingWithdrawalBuildArtifacts{} ->
+        "missing-withdrawal-build-artifacts"
 
 governancePrerequisiteFailureMessage
     :: GovernancePrerequisiteFailure -> String
@@ -1034,12 +1944,31 @@ governancePrerequisiteFailureMessage = \case
             <> path
             <> ": "
             <> reason
+    MissingWithdrawalBuildArtifacts path _ ->
+        "missing withdrawal build artifacts: " <> path
 
 governancePrerequisiteFailurePath
     :: GovernancePrerequisiteFailure -> FilePath
 governancePrerequisiteFailurePath = \case
     MissingGovernancePrerequisite path -> path
     StaleGovernancePrerequisite path _ -> path
+    MissingWithdrawalBuildArtifacts path _ -> path
+
+governancePrerequisiteEvidencePath
+    :: FilePath
+    -> GovernancePrerequisiteFailure
+    -> FilePath
+governancePrerequisiteEvidencePath runDir = \case
+    MissingWithdrawalBuildArtifacts{} ->
+        runDir </> "withdraw" </> "governance-prerequisite.json"
+    other -> governancePrerequisiteFailurePath other
+
+governancePrerequisiteFailureReward
+    :: GovernancePrerequisiteFailure -> Maybe Integer
+governancePrerequisiteFailureReward = \case
+    MissingGovernancePrerequisite{} -> Nothing
+    StaleGovernancePrerequisite{} -> Nothing
+    MissingWithdrawalBuildArtifacts _ rewards -> Just rewards
 
 withdrawIntentPath :: FilePath -> FilePath
 withdrawIntentPath runDir =
@@ -1076,9 +2005,29 @@ addSlots :: Word64 -> SlotNo -> SlotNo
 addSlots delta (SlotNo slot) =
     SlotNo (slot + delta)
 
+slotNumber :: SlotNo -> Word64
+slotNumber (SlotNo slot) =
+    slot
+
 coinLovelace :: Coin -> Integer
 coinLovelace (Coin lovelace) =
     lovelace
+
+renderAddr :: Addr -> T.Text
+renderAddr addr =
+    Bech32.encodeLenient
+        hrp
+        (Bech32.dataPartFromBytes (serialiseAddr addr))
+  where
+    hrp =
+        either
+            (error . ("renderAddr: " <>) . show)
+            id
+            (Bech32.humanReadablePartFromText (addressHrp addr))
+    addressHrp target =
+        case getNetwork target of
+            Mainnet -> "addr"
+            Testnet -> "addr_test"
 
 epochNumber :: EpochNo -> Word64
 epochNumber (EpochNo epoch) =
@@ -1089,6 +2038,15 @@ expectEither label =
     either
         ( \err ->
             expectationFailure (label <> ": " <> err)
+                *> error "unreachable"
+        )
+        pure
+
+expectRightShow :: (Show e) => String -> Either e a -> IO a
+expectRightShow label =
+    either
+        ( \err ->
+            expectationFailure (label <> ": " <> show err)
                 *> error "unreachable"
         )
         pure

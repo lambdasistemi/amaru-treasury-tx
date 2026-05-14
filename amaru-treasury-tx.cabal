@@ -472,12 +472,15 @@ test-suite devnet-tests
     , amaru-treasury-tx
     , async
     , base                         <5
+    , base16-bytestring
+    , bech32
     , bytestring
     , cardano-crypto-class
     , cardano-ledger-alonzo
     , cardano-ledger-api
     , cardano-ledger-conway
     , cardano-ledger-core
+    , cardano-ledger-mary
     , cardano-node-clients
     , cardano-node-clients:devnet
     , cardano-slotting
@@ -486,7 +489,9 @@ test-suite devnet-tests
     , filepath
     , hspec
     , hspec-discover
+    , microlens
     , ouroboros-network:api
+    , plutus-core
     , text
     , time
     , unix

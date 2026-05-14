@@ -4,7 +4,9 @@ The local DevNet smoke is an opt-in release check. It starts the
 `cardano-node-clients` DevNet, verifies the node socket with network
 magic `42`, can run the governance funding setup on a patched
 short-epoch genesis, records timing/action/reward evidence, and writes
-artifacts under a fresh run directory.
+artifacts under a fresh run directory. The withdrawal phase currently
+proves the live reward-to-intent boundary and then stops before
+building the unsigned withdrawal transaction.
 
 This check is not part of `just ci`: it starts a real local
 `cardano-node` and is meant as manual live evidence before a release.
@@ -106,6 +108,58 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
     `-- summary.json
 ```
 
+## Withdrawal Intent Boundary
+
+```bash
+just devnet-smoke withdraw
+```
+
+Current boundary output:
+
+```text
+devnet-smoke: run-dir runs/devnet/YYYYMMDDTHHMMSSZ
+devnet-smoke: phase withdraw failed
+devnet-smoke: missing withdrawal build artifacts: runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/tx-body.cbor.hex
+devnet-smoke: failure runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/failure.json
+```
+
+This non-zero exit is intentional until the #83 intent-to-build slice
+lands. The smoke still does live work before that boundary: it copies
+and patches the DevNet genesis to a short epoch, deploys local
+seed-derived scopes and registry policy scripts, publishes local
+permissions and treasury reference scripts, funds the local treasury
+script reward account through a Conway treasury-withdrawal governance
+action, observes the reward through the provider, and writes the
+schema-v1 withdrawal intent.
+
+The verified 2026-05-14 slice wrote `withdraw/intent.json` with reward
+account
+`ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af` and
+`rewardsLovelace = 2000000`, then failed with
+`missing-withdrawal-build-artifacts` because
+`withdraw/tx-body.cbor.hex` does not exist yet.
+
+At this boundary the withdrawal phase writes:
+
+```text
+runs/devnet/YYYYMMDDTHHMMSSZ/
+|-- node.log
+|-- summary.json
+|-- summary.log
+|-- timing.json
+|-- governance/
+|   |-- action.json
+|   |-- certificates.json
+|   |-- genesis/
+|   `-- summary.json
+`-- withdraw/
+    |-- failure.json
+    |-- governance-prerequisite.json
+    |-- intent.json
+    |-- registry.json
+    `-- summary.json
+```
+
 ## DevNet Experiment Order
 
 The experiment is split into six tickets:
@@ -132,13 +186,16 @@ The experiment is split into six tickets:
   reorganize slice. This consolidates live treasury UTxOs once the
   release-facing reorganize builder from #46 exists.
 
-The implemented phases today are `node` and `governance`.
+The passing phases today are `node` and `governance`. The `withdraw`
+phase currently proves live reward-to-intent and intentionally fails
+before unsigned build artifacts.
 
 `node` proves only the local node boundary, network magic, and timing.
 `governance` proves the local setup path that funds the Amaru treasury
-script reward account. It is not proof that withdrawal, disburse,
-SundaeSwap order-build, SundaeSwap order-spend, or reorganize
-transactions have been built or observed on DevNet.
+script reward account. `withdraw` proves that the funded script reward
+account can be resolved into a schema-v1 intent. It is not proof that
+withdrawal, disburse, SundaeSwap order-build, SundaeSwap order-spend,
+or reorganize transactions have been built or observed on DevNet.
 
 SundaeSwap V3 contract compatibility should use the public V3 Aiken
 contracts and SDK/reference material:
@@ -195,6 +252,13 @@ genesis patch no longer applies, funds are insufficient, the action is
 not observed, or the reward account is not funded before the wait
 budget expires.
 
+The withdrawal phase currently fails with a typed local boundary after
+intent creation if `withdraw/tx-body.cbor.hex`, `withdraw/report.json`,
+or `withdraw/report.md` is missing. This protects the release trail
+from treating intent evidence as unsigned transaction build evidence.
+
 Use the run directory's `node.log`, `summary.log`, `timing.json`, and
-`governance/summary.json` when recording release evidence or
-diagnosing failure.
+`governance/summary.json` when recording governance evidence. Use
+`withdraw/intent.json`, `withdraw/registry.json`, and
+`withdraw/failure.json` when diagnosing the current withdrawal
+intent-to-build boundary.

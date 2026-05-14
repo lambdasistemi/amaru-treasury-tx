@@ -122,11 +122,11 @@ The withdrawal phase creates fresh local governance prerequisite
 evidence, resolves the funded treasury script reward account through
 `withdraw-wizard`, and runs the release-facing `tx-build` path to
 write unsigned CBOR plus JSON/Markdown reports. Latest branch
-withdrawal evidence is `/tmp/tmp.4b2zbAg5Z7/withdraw-diagnostics`,
+withdrawal evidence is `/tmp/tmp.KP53a1HDRL/withdraw-render`,
 reward account
 `ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af`, reward
 `2000000` lovelace, tx id
-`b7f1decd1453ee955e7dfe75aac7d9e10b0a6ed3c6c59bb4704c08d8c5132600`,
+`fdedbf33e61132a9fdbb883eb6bff4b6d4517ded08e5ca64ee373c1e1db064d3`,
 fee `469749` lovelace, validity upper bound slot `222`, and report
 paths under `withdraw/report.json` and `withdraw/report.md`. This is
 unsigned build evidence only; it does not sign or submit the final
@@ -156,10 +156,10 @@ Local DevNet withdrawal evidence now proves the second treasury setup
 slice: the smoke observes a funded Amaru treasury script reward
 account, writes a schema-v1 withdraw intent, and builds unsigned
 withdrawal CBOR plus JSON/Markdown reports through tx-build. Evidence:
-/tmp/tmp.4b2zbAg5Z7/withdraw-diagnostics, reward account
+/tmp/tmp.KP53a1HDRL/withdraw-render, reward account
 ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af,
 reward 2000000 lovelace, tx id
-b7f1decd1453ee955e7dfe75aac7d9e10b0a6ed3c6c59bb4704c08d8c5132600,
+fdedbf33e61132a9fdbb883eb6bff4b6d4517ded08e5ca64ee373c1e1db064d3,
 fee 469749 lovelace, validity upper bound slot 222. This is unsigned
 build evidence only; it is not signing/submission, disburse,
 SundaeSwap order, or reorganize proof.

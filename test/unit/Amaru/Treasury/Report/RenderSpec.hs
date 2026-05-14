@@ -86,6 +86,12 @@ spec = describe "Amaru.Treasury.Report.Render" $ do
         rendered
             `shouldContainText` "- Validity: invalid before none; invalid hereafter slot 186796799"
 
+    it "does not render a public explorer link for devnet" $ do
+        rendered <- renderFixture fixtureReport{trNetwork = "devnet"}
+        rendered
+            `shouldContainText` "- Explorer: no public explorer for devnet"
+        rendered `shouldNotContainText` "cardanoscan.io"
+
     it "pairs lovelace values with ADA and computes conservation" $ do
         rendered <- renderFixture fixtureReport
         rendered
@@ -289,3 +295,7 @@ metadataWithTreasuryAddress address =
 shouldContainText :: Text -> Text -> IO ()
 shouldContainText haystack needle =
     haystack `shouldSatisfy` T.isInfixOf needle
+
+shouldNotContainText :: Text -> Text -> IO ()
+shouldNotContainText haystack needle =
+    haystack `shouldSatisfy` (not . T.isInfixOf needle)

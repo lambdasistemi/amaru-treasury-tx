@@ -4,9 +4,9 @@ The local DevNet smoke is an opt-in release check. It starts the
 `cardano-node-clients` DevNet, verifies the node socket with network
 magic `42`, can run the governance funding setup on a patched
 short-epoch genesis, records timing/action/reward evidence, and writes
-artifacts under a fresh run directory. The withdrawal phase currently
-proves the live reward-to-intent boundary and then stops before
-building the unsigned withdrawal transaction.
+artifacts under a fresh run directory. The withdrawal phase proves the
+live reward-to-unsigned-build boundary by writing a withdrawal intent,
+unsigned CBOR, and JSON/Markdown review reports.
 
 This check is not part of `just ci`: it starts a real local
 `cardano-node` and is meant as manual live evidence before a release.
@@ -108,38 +108,47 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
     `-- summary.json
 ```
 
-## Withdrawal Intent Boundary
+## Withdrawal Boundary
 
 ```bash
 just devnet-smoke withdraw
 ```
 
-Current boundary output:
+Expected output:
 
 ```text
 devnet-smoke: run-dir runs/devnet/YYYYMMDDTHHMMSSZ
-devnet-smoke: phase withdraw failed
-devnet-smoke: missing withdrawal build artifacts: runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/tx-body.cbor.hex
-devnet-smoke: failure runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/failure.json
+devnet-smoke: phase withdraw intent-ready
+devnet-smoke: reward-account 5da22e...
+devnet-smoke: withdraw-rewards 2000000
+devnet-smoke: withdraw-intent runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/intent.json
+devnet-smoke: phase withdraw passed
+devnet-smoke: withdraw-tx-id 5fd2...
+devnet-smoke: withdraw-fee 469749
+devnet-smoke: withdraw-tx-body runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/tx-body.cbor.hex
+devnet-smoke: withdraw-report-json runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/report.json
+devnet-smoke: withdraw-report-md runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/report.md
 ```
 
-This non-zero exit is intentional until the #83 intent-to-build slice
-lands. The smoke still does live work before that boundary: it copies
-and patches the DevNet genesis to a short epoch, deploys local
-seed-derived scopes and registry policy scripts, publishes local
+The smoke copies and patches the DevNet genesis to a short epoch,
+deploys local seed-derived scopes and registry policy scripts, publishes local
 permissions and treasury reference scripts, funds the local treasury
 script reward account through a Conway treasury-withdrawal governance
 action, observes the reward through the provider, and writes the
-schema-v1 withdrawal intent.
+schema-v1 withdrawal intent. It then runs the release-facing
+`tx-build` path against the live node, using a short DevNet validity
+horizon so script evaluation stays inside the hard-fork forecast
+window.
 
-The verified 2026-05-14 slice wrote `withdraw/intent.json` with reward
-account
-`ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af` and
-`rewardsLovelace = 2000000`, then failed with
-`missing-withdrawal-build-artifacts` because
-`withdraw/tx-body.cbor.hex` does not exist yet.
+The verified 2026-05-14 slice used run directory
+`/tmp/tmp.gE9yQunNvS/withdraw-build`. It wrote `withdraw/intent.json`
+with reward account
+`5da22eab0370edee0d4591f54bba0d79a89d973598f15eb609d968c4` and
+`rewardsLovelace = 2000000`, then built unsigned tx id
+`5fd2aa15f7269474fa5709e9b804b26f3df60ff4b3c38b3f225797cfef165d43`
+with fee `469749` lovelace and validity upper bound slot `222`.
 
-At this boundary the withdrawal phase writes:
+The withdrawal phase writes:
 
 ```text
 runs/devnet/YYYYMMDDTHHMMSSZ/
@@ -153,10 +162,13 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
 |   |-- genesis/
 |   `-- summary.json
 `-- withdraw/
-    |-- failure.json
     |-- governance-prerequisite.json
     |-- intent.json
     |-- registry.json
+    |-- report.json
+    |-- report.md
+    |-- tx-body.cbor.hex
+    |-- tx-build.log
     `-- summary.json
 ```
 
@@ -186,16 +198,16 @@ The experiment is split into six tickets:
   reorganize slice. This consolidates live treasury UTxOs once the
   release-facing reorganize builder from #46 exists.
 
-The passing phases today are `node` and `governance`. The `withdraw`
-phase currently proves live reward-to-intent and intentionally fails
-before unsigned build artifacts.
+The passing phases today are `node`, `governance`, and `withdraw`.
 
 `node` proves only the local node boundary, network magic, and timing.
 `governance` proves the local setup path that funds the Amaru treasury
 script reward account. `withdraw` proves that the funded script reward
-account can be resolved into a schema-v1 intent. It is not proof that
-withdrawal, disburse, SundaeSwap order-build, SundaeSwap order-spend,
-or reorganize transactions have been built or observed on DevNet.
+account can be resolved into a schema-v1 intent and built into unsigned
+CBOR plus review reports. It is not proof that the withdrawal
+transaction was signed or submitted, and it is not proof that disburse,
+SundaeSwap order-build, SundaeSwap order-spend, or reorganize
+transactions have been built or observed on DevNet.
 
 SundaeSwap V3 contract compatibility should use the public V3 Aiken
 contracts and SDK/reference material:
@@ -252,13 +264,12 @@ genesis patch no longer applies, funds are insufficient, the action is
 not observed, or the reward account is not funded before the wait
 budget expires.
 
-The withdrawal phase currently fails with a typed local boundary after
-intent creation if `withdraw/tx-body.cbor.hex`, `withdraw/report.json`,
-or `withdraw/report.md` is missing. This protects the release trail
-from treating intent evidence as unsigned transaction build evidence.
+The withdrawal phase may fail during setup, reward observation, intent
+resolution, or `tx-build`. When diagnosing `tx-build`, inspect
+`withdraw/tx-build.log`, `withdraw/report.json`, and the run
+directory's node log together.
 
 Use the run directory's `node.log`, `summary.log`, `timing.json`, and
 `governance/summary.json` when recording governance evidence. Use
 `withdraw/intent.json`, `withdraw/registry.json`, and
-`withdraw/failure.json` when diagnosing the current withdrawal
-intent-to-build boundary.
+`withdraw/report.json` when recording withdrawal build evidence.

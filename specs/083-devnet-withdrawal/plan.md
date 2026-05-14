@@ -9,17 +9,19 @@
 rebase-merged into `main` at `d6773e4cd8a2421617568c8dac0972b0f312a509`;
 the current branch is stacked on the #82 governance proof branch; Amaru
 now pins that upstream main commit in Cabal and Nix; the withdrawal
-phase contract and live reward-to-intent slice are implemented.
+phase contract, live reward-to-intent slice, and intent-to-unsigned-build
+slice are implemented.
 
-**Current**: The next implementation slice is intent-to-build. The
-withdraw smoke now creates local DevNet registry anchors, funds the
-local treasury script reward account through governance, resolves live
-rewards with `withdraw-wizard`, writes `withdraw/intent.json`, and
-then stops at the expected missing-build-artifacts boundary.
+**Current**: The next implementation slice is focused diagnostics and
+release documentation. The withdraw smoke now creates local DevNet
+registry anchors, funds the local treasury script reward account
+through governance, resolves live rewards with `withdraw-wizard`,
+writes `withdraw/intent.json`, then runs `tx-build` and writes
+unsigned CBOR plus JSON/Markdown review reports.
 
 **Blockers**: #82/PR #93 should remain the source of standalone
-governance proof. #83 still needs unsigned withdrawal transaction build
-artifacts before release docs can claim a complete withdrawal proof.
+governance proof. #83 still needs final docs/release notes and
+diagnostic coverage before undrafting.
 
 ## Summary
 
@@ -105,13 +107,14 @@ hlint, Cabal checks, and the existing CI gate.
    record unsigned CBOR, report JSON/markdown, body hash, fee, and
    validity evidence. RED: artifact contract fails after intent
    creation. GREEN: local `just devnet-smoke withdraw` records build
-   evidence. Status: current next slice.
+   evidence. Status: complete on this branch.
 6. **Diagnostics slice**: cover zero reward, timeout/stale evidence,
-   and network mismatch as typed diagnostics that do not write success
-   artifacts.
+   network mismatch, and build failure preservation as typed
+   diagnostics that do not write success artifacts. Status: current
+   next slice.
 7. **Docs/release slice**: update README, local DevNet docs, release
    notes, CHANGELOG, and #83 metadata with the verified run directory
-   and boundaries.
+   and boundaries. Status: current next slice.
 
 ## Project Structure
 

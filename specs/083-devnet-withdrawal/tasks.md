@@ -35,10 +35,10 @@
 ## Phase 5: Intent To Unsigned Build
 
 - [x] T017 [US3] RED: assert unsigned CBOR/report artifacts are required after intent creation.
-- [ ] T018 [US3] Run `tx-build` against the live withdraw intent.
-- [ ] T019 [US3] Write `withdraw/tx-body.cbor.hex`, `withdraw/report.json`, and `withdraw/report.md`.
-- [ ] T020 [US3] Record tx id/body hash, fee, validity bound, report paths, and upstream dependency SHA in `withdraw/summary.json`.
-- [ ] T021 [US3] GREEN: `nix develop --quiet -c just devnet-smoke withdraw` passes and records withdrawal evidence.
+- [x] T018 [US3] Run `tx-build` against the live withdraw intent.
+- [x] T019 [US3] Write `withdraw/tx-body.cbor.hex`, `withdraw/report.json`, and `withdraw/report.md`.
+- [x] T020 [US3] Record tx id/body hash, fee, validity bound, report paths, and upstream dependency SHA in `withdraw/summary.json`.
+- [x] T021 [US3] GREEN: `nix develop --quiet -c just devnet-smoke withdraw` passes and records withdrawal evidence.
 
 ## Phase 6: Failure Diagnostics
 
@@ -49,7 +49,7 @@
 
 ## Phase 7: Documentation And Release Notes
 
-- [ ] T026 [US4] Update `docs/local-devnet-smoke.md` with withdrawal phase usage and artifacts.
+- [x] T026 [US4] Update `docs/local-devnet-smoke.md` with withdrawal phase usage and artifacts.
 - [ ] T027 [US4] Update `README.md` with withdrawal evidence wording.
 - [ ] T028 [US4] Update `docs/release.md` and `CHANGELOG.md` with release-note text that distinguishes governance from withdrawal evidence.
 - [ ] T029 [US4] Update #83 issue metadata and PR metadata with the verified run directory.
@@ -62,8 +62,8 @@
 - Phase 3 must land before Phase 4 so artifact contracts fail first.
 - Phase 4 is complete: the smoke creates live governance prerequisite
   evidence, observes positive rewards, and writes the withdraw intent.
-- Phase 5 has its RED boundary in place; `tx-build` implementation
-  now consumes the live intent.
+- Phase 5 is complete: `tx-build` consumes the live intent and writes
+  unsigned CBOR plus JSON/Markdown reports.
 - Phase 7 starts only after a successful withdrawal run exists.
 
 ## Evidence
@@ -79,6 +79,10 @@
 - WITHDRAW BUILD BOUNDARY: the same run writes `withdraw/failure.json` with `intentPath`, `governanceSummaryPath`, `txBodyPath`, report paths, and `lastObservedRewardLovelace = 2000000`; no unsigned tx body exists yet.
 - GOVERNANCE REGRESSION: `scripts/smoke/devnet-local --phase governance --run-dir /tmp/tmp.KwjKGXJyC7/governance` exits 0; it funds the pinned governance reward account `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34` from `0` to `2000000` lovelace across epochs `2 -> 4`.
 - PR GATE AFTER INTENT SLICE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed on 2026-05-14 after the live reward-to-intent code, docs, and review-state updates.
+- STACK REBASE: PR #93 and #100 were rebased onto `origin/main` `cd6a7612cb2abfc566da366ace0199578e3aaa90` on 2026-05-14; `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed after the rebase.
+- WITHDRAW BUILD RED: `scripts/smoke/devnet-local --phase withdraw --run-dir /tmp/tmp.5VDwOK8evT/withdraw-build` reached `phase withdraw intent-ready` and then failed during `tx-build` with a short-epoch `TimeTranslationPastHorizon`, proving the live build path was executing and that the DevNet validity bound had to stay inside the forecast horizon.
+- WITHDRAW BUILD GREEN: `scripts/smoke/devnet-local --phase withdraw --run-dir /tmp/tmp.gE9yQunNvS/withdraw-build` exits 0; it writes `withdraw/tx-body.cbor.hex`, `withdraw/report.json`, `withdraw/report.md`, and `withdraw/tx-build.log`. Summary records reward account `5da22eab0370edee0d4591f54bba0d79a89d973598f15eb609d968c4`, tx id `5fd2aa15f7269474fa5709e9b804b26f3df60ff4b3c38b3f225797cfef165d43`, fee `469749`, reward `2000000`, and validity upper bound slot `222`.
+- PR GATE AFTER BUILD SLICE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed on 2026-05-14 after the intent-to-unsigned-build code, docs, and review-state updates.
 
 ## Parallel Notes
 

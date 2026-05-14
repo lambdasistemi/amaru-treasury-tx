@@ -8,10 +8,7 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ### Features
 
-* **109:** parse SundaeSwap order datum into ParsedSwapOrder ([12767e7](https://github.com/lambdasistemi/amaru-treasury-tx/commit/12767e72a33dfedd36d569b940b793c1e40c6fb4))
-* **109:** treasury-inspect report assembly + JSON/human render + golden ([774aefc](https://github.com/lambdasistemi/amaru-treasury-tx/commit/774aefca2f500b23fdd198eea979e20c58d11192))
-* **109:** treasury-inspect JSON Schema + schema-check gate ([79e4ca0](https://github.com/lambdasistemi/amaru-treasury-tx/commit/79e4ca0e06bb4cf3c7c600299c6308cee65bf7e1))
-* **109:** treasury-inspect CLI + N2C glue + smoke ([826dd36](https://github.com/lambdasistemi/amaru-treasury-tx/commit/826dd36fd962e4e79e4ad1d922e232d85b21dbf9))
+* **109:** add `treasury-inspect` subcommand — read-only report of treasury balances and pending SundaeSwap orders, per scope ([826dd36](https://github.com/lambdasistemi/amaru-treasury-tx/commit/826dd36fd962e4e79e4ad1d922e232d85b21dbf9))
 
 ## [0.2.6.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.5.1...v0.2.6.0) (2026-05-14)
 

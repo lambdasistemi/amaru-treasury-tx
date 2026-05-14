@@ -101,9 +101,13 @@ at the right deployment":
 - It does not look up the aux-data rationale (label 1694) on the
   transaction that placed a pending order.
 - It does not compare two metadata files (mainnet vs preprod).
+- It does not cancel a pending order. Cancellation is a separate
+  command tracked as [#116](https://github.com/lambdasistemi/amaru-treasury-tx/issues/116);
+  it consumes a `pendingOrders[].outref` from this report to drive
+  the cancel transaction.
 
-Those are tracked as follow-up issues and need a Cardano history index
-(e.g. Kupo) the project does not consume today.
+The first three are tracked as follow-up issues and need a Cardano
+history index (e.g. Kupo) the project does not consume today.
 
 ## Exit codes
 

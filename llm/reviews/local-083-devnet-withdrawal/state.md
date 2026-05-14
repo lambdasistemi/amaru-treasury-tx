@@ -1,4 +1,4 @@
-state: WaitingForCodeReview
+state: ReadyForExternalReview
 mode: solo
 role: all
 branch: 083-devnet-withdrawal
@@ -7,4 +7,4 @@ base_pr: 93
 upstream_cardano_node_clients_main: d6773e4cd8a2421617568c8dac0972b0f312a509
 feature_dir: specs/083-devnet-withdrawal
 updated_by: codex
-notes: "Docs slice ready for local review: README, local DevNet docs, release notes, and CHANGELOG now record the unsigned withdrawal build proof and boundaries. DevNet report Markdown also avoids public Cardanoscan links. Next step is final gate, PR/issue metadata refresh, and external review readiness decision."
+notes: "External review handoff ready: stack rebased onto origin/main c36139c/v0.2.7.0, full #83 gate passed after rebase, README/local DevNet docs/release notes/CHANGELOG record unsigned withdrawal build evidence and boundaries, and DevNet Markdown reports avoid public Cardanoscan links."

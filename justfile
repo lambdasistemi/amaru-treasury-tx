@@ -57,6 +57,7 @@ schema-check:
 
 # Smoke-test the shipped CLI surface
 smoke:
+    scripts/smoke/cardano-cli-envelope-oracle
     scripts/smoke/swap-wizard-signers
     scripts/smoke/swap-quote-override
     scripts/smoke/swap-quote-docs

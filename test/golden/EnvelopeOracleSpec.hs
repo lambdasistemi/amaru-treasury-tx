@@ -22,6 +22,11 @@ import Test.Hspec
     , shouldSatisfy
     )
 
+import Amaru.Treasury.Tx.AttachWitness
+    ( decodeUnsignedTxHex
+    , encodeSignedTxHex
+    , renderAttachError
+    )
 import Amaru.Treasury.Tx.Envelope
     ( EnvelopeKind (..)
     , decodeEnvelope
@@ -74,6 +79,27 @@ spec =
                 Right raw ->
                     expectationFailure
                         ("expected BabbageEra rejection, got " <> show raw)
+
+        it "feeds de-envelope tx body output into raw attach-witness decoding" $ do
+            envelope <- BS.readFile (fixtureDir <> "/tx.body.json")
+            raw <- BS.readFile (fixtureDir <> "/tx.body.cborHex")
+            case decodeEnvelope envelope of
+                Left err ->
+                    expectationFailure (show (renderEnvelopeError err))
+                Right deEnveloped ->
+                    case decodeUnsignedTxHex deEnveloped of
+                        Left err ->
+                            expectationFailure (show (renderAttachError err))
+                        Right tx ->
+                            encodeSignedTxHex tx `shouldBe` raw
+
+        it "keeps direct raw tx body decoding byte-identical" $ do
+            raw <- BS.readFile (fixtureDir <> "/tx.body.cborHex")
+            case decodeUnsignedTxHex raw of
+                Left err ->
+                    expectationFailure (show (renderAttachError err))
+                Right tx ->
+                    encodeSignedTxHex tx `shouldBe` raw
 
 shouldDeEnvelope :: FilePath -> FilePath -> IO ()
 shouldDeEnvelope envelopeFile rawFile = do

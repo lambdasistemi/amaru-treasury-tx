@@ -53,6 +53,15 @@ jq -r .cborHex tx.signed.json | tr -d '\n' > tx.signed.cborHex
 It is not a `cardano-cli` output from this run; it pins the
 operator-facing era rejection path.
 
+Executable replay is covered by:
+
+```bash
+scripts/smoke/cardano-cli-envelope-oracle
+```
+
+That smoke test runs the built `amaru-treasury-tx` executable against
+these fixtures and diffs every wrapper/unwrapper byte-for-byte.
+
 The test signing key is intentionally not checked in. Refresh this directory
 as a unit; refreshed witness and signed transaction bytes will differ if a new
 key pair is generated.

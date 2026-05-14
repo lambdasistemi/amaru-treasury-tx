@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Black-box replay of the issue #106 cardano-cli envelope oracle.
+# This intentionally exercises the built executable, not just the
+# library helpers used by the golden tests.
+
+cabal build exe:amaru-treasury-tx -O0 >/dev/null
+
+exe="$(
+  cabal list-bin exe:amaru-treasury-tx -O0
+)"
+
+fixture="test/fixtures/106-cardano-cli-oracle"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+expect_raw_stdout() {
+  local raw_file="$1"
+  local expected="$2"
+  cp "$fixture/$raw_file" "$expected"
+  printf '\n' >>"$expected"
+}
+
+assert_wrap() {
+  local command="$1"
+  local raw_file="$2"
+  local envelope_file="$3"
+  local actual="$tmp/$envelope_file"
+
+  "$exe" "$command" <"$fixture/$raw_file" >"$actual"
+  diff -u "$fixture/$envelope_file" "$actual"
+}
+
+assert_unwrap() {
+  local envelope_file="$1"
+  local raw_file="$2"
+  local expected="$tmp/$raw_file.expected"
+  local actual="$tmp/$raw_file.actual"
+
+  expect_raw_stdout "$raw_file" "$expected"
+  "$exe" de-envelope <"$fixture/$envelope_file" >"$actual"
+  diff -u "$expected" "$actual"
+}
+
+assert_wrap envelope-tx tx.body.cborHex tx.body.json
+assert_wrap envelope-witness tx.witness.cborHex tx.witness.json
+assert_wrap envelope-signed-tx tx.signed.cborHex tx.signed.json
+
+assert_unwrap tx.body.json tx.body.cborHex
+assert_unwrap tx.witness.json tx.witness.cborHex
+assert_unwrap tx.signed.json tx.signed.cborHex
+
+if "$exe" de-envelope <"$fixture/tx.babbage.json" >"$tmp/stale.out" 2>"$tmp/stale.err"; then
+  printf 'cardano-cli-envelope-oracle: stale Babbage envelope unexpectedly succeeded\n' >&2
+  exit 1
+fi
+
+if [[ -s "$tmp/stale.out" ]]; then
+  printf 'cardano-cli-envelope-oracle: stale Babbage envelope wrote stdout\n' >&2
+  exit 1
+fi
+
+grep -F 'BabbageEra' "$tmp/stale.err" >/dev/null
+
+expect_raw_stdout tx.body.cborHex "$tmp/tx.body.expected"
+"$exe" de-envelope <"$fixture/tx.body.json" \
+  | "$exe" attach-witness >"$tmp/tx.body.de-envelope-attach"
+diff -u "$tmp/tx.body.expected" "$tmp/tx.body.de-envelope-attach"
+
+"$exe" attach-witness <"$fixture/tx.body.cborHex" >"$tmp/tx.body.raw-attach"
+diff -u "$tmp/tx.body.expected" "$tmp/tx.body.raw-attach"
+
+printf 'cardano-cli-envelope-oracle: OK\n'

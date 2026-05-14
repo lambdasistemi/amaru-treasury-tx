@@ -161,8 +161,11 @@ and the project conventions; this feature adds no new technology.
 - ✅ `/speckit.analyze` consistency findings C1–C5 resolved
 - ✅ **Slice A landed** — SundaeSwap order datum parser
   ([commit `fd366bd`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/fd366bd)).
-  5/5 unit tests passing; full `just ci` green.
-- ⏳ **Slice B in flight** — pure assembly + JSON/human render + golden
-- ☐ Slice C — JSON Schema + schema-check gate
+  5/5 unit tests passing.
+- ✅ **Slice B landed** — pure assembly + JSON/human render + golden
+  ([commit `4e7e3ff`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/4e7e3ff)).
+  Golden test 2/2 passing; flake `unit`, `golden`, `lint`, `smoke`
+  checks all green.
+- ⏳ **Slice C in flight** — JSON Schema + schema-dumper exe + schema-check
 - ☐ Slice D — CLI parser + N2C glue + smoke
 - ☐ Slice E — operator docs

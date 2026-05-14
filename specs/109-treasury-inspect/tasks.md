@@ -69,15 +69,15 @@ its first user in a vertical slice.
 
 ### Slice B — Pure assembly + renderers + golden snapshot
 
-- [ ] T014 [US1] Extend `lib/Amaru/Treasury/Inspect/Types.hs` with the public report types: `InspectReport`, `ScopeSection`, `ScopeTotals`, `TreasuryUtxo`, `PendingSwapOrder`, `Outref`, `OtherAsset`, `ChainTip`, `DeploymentAnchor` (per [data-model.md](data-model.md)).
-- [ ] T015 [P] [US1] Add canned fixtures under `test/fixtures/treasury-inspect/`: `metadata.json`, `utxos-treasury.json`, `utxos-swap-orders.json`, and the expected `report.golden.json`. Network: pretend mainnet; one scope (`network_compliance`) with non-empty UTxOs + 2 pending orders; the other four scopes with empty lists. ADA + USDM values picked to make rendering edge cases observable.
-- [ ] T016 [P] [US1] Add `test/golden/TreasuryInspectGoldenSpec.hs` — load the fixtures, call `buildInspectReport` (Haskell only, no I/O), encode to JSON via `Inspect.Render.encodeReport`, diff against `report.golden.json`. The test must fail before T017–T018 are written. Wire into `test/Spec.hs`. Support `UPDATE_GOLDENS=1` to regenerate.
-- [ ] T017 [US1] Add `lib/Amaru/Treasury/Inspect.hs` exporting `buildInspectReport :: TreasuryMetadata -> ChainTip -> Map ScopeId [TreasuryUtxo] -> [(Outref, ParsedSwapOrder)] -> Maybe ScopeId -> InspectReport`. Pure. Implements the filter rules from [data-model.md](data-model.md) §Filtering.
-- [ ] T018 [US1] Add `lib/Amaru/Treasury/Inspect/Render.hs` with `ToJSON InspectReport` (and friends) producing the schema-conformant shape; plus `renderHuman :: InspectReport -> Text` producing the format sketched in [contracts/cli-surface.md](contracts/cli-surface.md) §"Human format". Provide `encodeReport :: InspectReport -> ByteString` using `aesonPrettyConfig` (mirrors `Report.hs:296+`).
-- [ ] T019 [US1] [US3] Confirm the `ChainTip` + `DeploymentAnchor` fields land in `InspectReport` in this slice (covers US3's bookkeeping requirements at the type and render level — population is in slice D; the deployment anchor is parsed straight from `tmScopeOwners` with no chain query).
-- [ ] T020 [US1] Run `nix develop --quiet -c just unit --match "TreasuryInspectGolden"`; ensure golden matches.
+- [X] T014 [US1] Extend `lib/Amaru/Treasury/Inspect/Types.hs` with the public report types: `InspectReport`, `ScopeSection`, `ScopeTotals`, `TreasuryUtxo`, `PendingSwapOrder`, `Outref`, `OtherAsset`, `ChainTip`, `DeploymentAnchor` (per [data-model.md](data-model.md)). ToJSON instances kept in the same module to avoid the `-Worphans` gate.
+- [X] T015 [P] [US1] Add canned fixture under `test/fixtures/treasury-inspect/report.golden.json`. Inputs are Haskell-constructed (chain tip, UTxOs, parsed swap orders) so the test exercises the metadata-reading path against the existing `test/fixtures/metadata.json` and the pure pipeline against synthetic on-chain facts. Network_compliance has one leftover UTxO at `b5716ae9…#2` and two pending orders at `#3`/`#4`; a third foreign order is correctly dropped; the other four scopes render empty but uniform.
+- [X] T016 [P] [US1] Add `test/golden/TreasuryInspectGoldenSpec.hs` — call `buildInspectReport`, encode via `Inspect.Render.encodeReport`, diff against `report.golden.json`. Plus a `--scope`-filter byte-length sanity test. `UPDATE_GOLDENS=1` regenerates.
+- [X] T017 [US1] Add `lib/Amaru/Treasury/Inspect.hs` exporting `buildInspectReport :: TreasuryMetadata -> ChainTip -> DeploymentAnchor -> Map ScopeId [TreasuryUtxo] -> [(Outref, ParsedSwapOrder)] -> Maybe ScopeId -> InspectReport`. Pure; total.
+- [X] T018 [US1] Add `lib/Amaru/Treasury/Inspect/Render.hs` with `encodeReport :: InspectReport -> ByteString` (4-space indent, alphabetical key order, trailing newline — mirrors `Report.hs:reportJsonConfig`) and `renderHuman :: InspectReport -> Text` (sketch from cli-surface.md §"Human format").
+- [X] T019 [US1] [US3] `ChainTip` + `DeploymentAnchor` ship in `InspectReport`; both encoded by Slice B's renderers. Population from N2C + metadata happens in Slice D.
+- [X] T020 [US1] `nix build .#checks.x86_64-linux.{unit,golden,lint,smoke}` all green: golden 15 examples (was 13, +2 from `TreasuryInspectGoldenSpec`).
 
-**Slice B commit**: `feat(109): treasury-inspect report assembly + JSON/human render + golden`. One commit; T014–T019 folded. T020 is the pre-commit check.
+**Slice B commit**: `feat(109): treasury-inspect report assembly + JSON/human render + golden` — landed as [`4e7e3ff`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/4e7e3ff). T014–T019 folded. T020 ran green pre-commit.
 
 ## Phase 4 — User Story 2 (P1) — Pipe the report into automation
 

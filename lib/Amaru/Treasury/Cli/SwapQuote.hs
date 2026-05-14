@@ -456,6 +456,8 @@ observationTime observation =
             fetchedAt
         OperatorOverride ->
             ""
+        DerivedQuoteProvenance{} ->
+            ""
 
 parsePositiveDecimalText :: String -> Text -> Either String Rational
 parsePositiveDecimalText label raw =

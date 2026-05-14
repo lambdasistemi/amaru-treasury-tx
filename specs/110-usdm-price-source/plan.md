@@ -1,224 +1,219 @@
-# Plan: USDM Price Source for swap-wizard
+# Plan: USDM Price Source — wizard de-fetching, swap-quote derivation
 
-**Spec**: [spec.md](spec.md) | **Contracts**: [contracts/](contracts/) | **Date**: 2026-05-14
+**Spec**: [spec.md](spec.md) | **Contracts**: [contracts/](contracts/) | **Date**: 2026-05-14 (v2)
 
 ## Outcome
 
-After this PR the only named live quote source is
-`coingecko-ada-usdm`, which derives ADA/USDM as `(ADA/USD) ÷ (USDM/USD)` from
-two CoinGecko `simple/price` calls (`ids=cardano` and `ids=usdm-2`). The
-audit JSON records both upstream observations under a new
-`provenance.kind = derived` shape. The old `--price-source
-coingecko-ada-usd` and `--ada-usd DECIMAL` paths are removed because
-they shared the silent USDM≈USD assumption.
+After this PR:
+
+- `swap-wizard` accepts only pre-validated rates (`--min-rate R` or
+  `--ada-usdm Q [--slippage-bps S]`). No outbound HTTP, no
+  `--price-source`, no `--ada-usd`.
+- `swap-quote` performs live quote retrieval against
+  `--price-source coingecko-ada-usdm`, which is derived from two
+  CoinGecko `simple/price` calls (`ids=cardano` and `ids=usdm-2`). The
+  audit JSON records both upstream observations under a new
+  `provenance.kind = derived` shape. `--ada-usd` is removed.
+- The retired flags fail parsing with a typed error pointing at their
+  replacement.
 
 ## Design decisions
 
-### D1 — Replace the `QuoteSource` ADT, don't extend
+### D1 — Decouple retrieval from the wizard
 
-`QuoteSource` currently has one constructor (`CoinGeckoAdaUsd`). The
-issue's recommended option (A) is to derive ADA/USDM from two
-upstream ADA/USD and USDM/USD calls. Since the resulting observation
-*is* a single ADA/USDM quote, the right modeling is:
+`swap-wizard` becomes "given a rate (and optionally a slippage policy
+to apply on top), build an intent". Live HTTP, source selection,
+slippage policy gating, audit JSON, and affordability checks belong to
+`swap-quote`. The wizard's quote-derived path goes away.
 
-```haskell
-data QuoteSource = CoinGeckoAdaUsdm
-```
+Trade-offs:
 
-A `QuoteSource → QuoteObservation{ qoPair = AdaUsdm, qoProvenance = DerivedQuoteProvenance … }` mapping. We do not multiplex over both
-old and new constructors — keeping `CoinGeckoAdaUsd` alongside would
-preserve the trap.
+- Pro: removes one of the two places the silent-USDM≈USD bug could
+  recur, halves the live-fetch surface.
+- Pro: wizard tests no longer need `IO`/network mocks.
+- Pro: the `WizardRate` ADT collapses from two- to two-clean
+  constructors (`WizardMinRate Double | WizardOverrideRate Double SlippageBps`).
+- Con: an operator who used to invoke just `swap-wizard --price-source ...`
+  must now run `swap-quote` (which already exists and does end-to-end).
+  CHANGELOG flags this.
 
-Trade-off: this is a breaking change for any operator script wired to
-`--price-source coingecko-ada-usd`. The CLI parser surfaces a
-purposeful error message pointing at the new name, and the
-release notes call it out.
+### D2 — Replace the `QuoteSource` ADT, don't extend
 
-### D2 — Derived provenance is structural, not a string
+`QuoteSource = CoinGeckoAdaUsdm` (single constructor). The old
+`CoinGeckoAdaUsd` is removed. `parseQuoteSourceName` rejects
+`coingecko-ada-usd` with a typed retirement error pointing at the
+new name (or `--ada-usdm`).
 
-Adding a third `QuoteProvenance` constructor (rather than encoding
-"derived" as a special-cased `QuoteSourceProvenance` name) lets the
-type system carry the invariant "a derived observation has ≥1
-component observations." The encoder uses pattern matching, so the
-golden test catches any regression in the shape.
+### D3 — Derived provenance is structural
 
-```haskell
-data QuoteProvenance
-    = OperatorOverride
-    | QuoteSourceProvenance     -- single-fetch source
-        { qspName, qspFetchedAt, qspRaw :: !Text }
-    | DerivedQuoteProvenance    -- composed source
-        { dqpName       :: !Text
-        , dqpComponents :: !(NonEmpty ComponentObservation)
-        }
+(Delivered in slice 1.) `QuoteProvenance` gains a
+`DerivedQuoteProvenance { name :: Text, components :: NonEmpty ComponentObservation }`
+constructor. `ComponentObservation { coName, coValue, coFetchedAt, coRaw }`
+is a new record. The encoder emits the `kind: "derived"` shape
+contracted in `contracts/swap-quote-audit-json.md`.
 
-data ComponentObservation = ComponentObservation
-    { coName, coFetchedAt, coRaw :: !Text
-    , coValue                    :: !Rational
-    }
-```
+### D4 — Drop `--ada-usd` and `AdaUsdOverride`
 
-`QuoteSourceProvenance` stays in the type for legacy provenance
-deserialization; no code path emits it after this PR.
+Both commands lose the `--ada-usd DECIMAL` flag. The `QuoteInput.AdaUsdOverride`
+constructor goes too. `QuotePair.AdaUsd` stays — it is the label for
+one of the two component observations inside a derived provenance.
 
-### D3 — `--ada-usd DECIMAL` is removed alongside the named source
+### D5 — Two upstream fetches, single execution timestamp
 
-The explicit override has the same silent-conversion bug as the
-retired source (operator passes an ADA/USD figure, wizard treats it
-as USDM/ADA). Removing both keeps the system honest: every quote
-path used by the wizard is ADA/USDM by construction (override or
-derived). `--ada-usdm DECIMAL` stays as the manual escape hatch.
+`swap-quote`'s `coingeckoAdaUsdmProvider` issues two sequential
+`httpLBS` calls, each preceded by the trust-anchor stderr line. The
+wizard's `observedAt` is computed once at run start; each component
+carries its own per-request `fetchedAt`.
 
-`QuoteInput`'s `AdaUsdOverride` is removed. `QuotePair`'s `AdaUsd`
-constructor stays — it is the label for one of the two component
-observations inside a derived provenance.
+### D6 — Live boundary smoke is an operator script
 
-### D4 — Two upstream fetches, single execution timestamp
-
-The wizard's `observedAt` is computed once at run start and recorded
-on the outer `QuoteObservation`. Each component carries its own
-`fetchedAt` (per-request ISO-8601 timestamp). This means the audit
-records both "when the wizard ran" and "when each upstream was hit",
-which matters when the two upstream responses are minutes apart at
-peak rate-limit pushback.
-
-The provider issues the two fetches sequentially. We do not
-parallelize: the trust-anchor stderr line must precede each call,
-and serial fetches keep the trace ordering deterministic.
-
-### D5 — Trust anchor line printed per upstream
-
-`describeTlsTrustAnchor` is called once before each
-`httpLBS`. The existing single-call wrapper becomes a two-call
-wrapper inside `coingeckoAdaUsdmProvider`.
-
-### D6 — Live boundary smoke deferred to operator follow-up
-
-The `just ci` gate stays unit + golden + lint, exercising captured
-fixtures only. A live CoinGecko fetch is not part of the gate
-because:
-
-- The public CoinGecko endpoint rate-limits aggressively (we hit 429
-  during research).
-- The acceptance criterion in #110 names a manual live run as the
-  operator-side check, not a CI step.
-
-We do, however, ship a runnable smoke script under
-`scripts/smoke/swap-quote-live-usdm.sh` that an operator can invoke
-to perform the live verification described in the issue. The script
-is documented in `docs/swap.md` and is not wired into `just ci`.
+`just ci` keeps unit + golden + lint + smoke (`tx-build-pipe`). A
+live CoinGecko fetch is not in the gate (rate-limited public API,
+operator-side acceptance check per #110). We ship
+`scripts/smoke/swap-quote-live-usdm.sh` as a manual operator
+verification and document it in `docs/swap.md`.
 
 ## Risks & edge cases
 
-- **R1** — `usdm-2.usd = 0` or missing field. Handled by reusing the
-  existing `QuoteSourceInvalidQuote`/`QuoteSourceMissingField`
-  errors, parameterized by component name so the operator sees which
-  upstream failed.
-- **R2** — Integer rounding drift. Derived `qoQuote = a/b` (exact
-  `Rational`). `deriveSwapParameters` does the existing
-  `floor(qoQuote × (1-bps/10000) × 10^6)`. The unit test asserts the
-  six-decimal-floored numerator against a worked example.
-- **R3** — Old fixture references. `test/fixtures/swap-quote/source.coingecko.json`
-  is renamed (or replaced) to mirror the two upstream calls. Any
-  hard-coded path in tests must be updated.
-- **R4** — `parseCoinGeckoAdaUsdResponse` is still callable for the
-  internal component path; we keep its name and signature but adjust
-  the provenance returned to a `ComponentObservation` builder.
-  Public API call sites: tests only — `SwapQuoteSpec.hs:251-264`.
-- **R5** — Migration messaging. `parseQuoteSourceName "coingecko-ada-usd"`
-  returns a typed error pointing at `coingecko-ada-usdm` / `--ada-usdm`,
-  not a generic "unknown source". CHANGELOG calls this out as a
-  breaking change.
-- **R6** — `quote.ada-usd.override.json` fixture and the unit test
-  case for `AdaUsdOverride` go away. The unit test then only covers
-  `AdaUsdmOverride`.
+- **R1** — `usdm-2.usd = 0` or missing. Reuse
+  `QuoteSourceInvalidQuote`/`QuoteSourceMissingField` parameterized by
+  component name.
+- **R2** — Wizard's existing intent goldens use the quote-derived
+  path with `--ada-usdm` + `--slippage-bps` (no live HTTP); these
+  goldens stay valid because the wizard's derivation math is
+  unchanged. We remove only the `--price-source` / `--ada-usd` parser
+  branches and their tests.
+- **R3** — `swap-quote` goldens for `params.built.expected.json` and
+  `params.affordability-failed.expected.json` currently use
+  `qoPair = AdaUsd + OperatorOverride`. After this PR the only
+  reachable override pair is ADA/USDM, so these goldens are
+  regenerated with `qoPair = AdaUsdm`. Numeric values stay identical
+  (the override decimal is the same).
+- **R4** — `parseCoinGeckoAdaUsdResponse` becomes a component-level
+  helper. The test that asserted the old top-level shape gets
+  updated to assert a `ComponentObservation` build instead.
+- **R5** — `fetchQuoteSource` signature (`QuoteSource → Text → m (Either …)`)
+  stays the same; only the implementation under the hood changes.
+  Tests that exercise the provider via `qpFetchQuote` keep their
+  shape.
+- **R6** — `WizardOpts` import surface shrinks (no quote provider,
+  no `SwapQuoteSource`, no `SwapQuoteQuoteArg`). Removed imports and
+  removed names from `Cli/SwapWizard.hs`, `Cli/SwapCommon.hs`, and
+  `Cli/SwapOptions.hs` must be cleaned up to satisfy
+  `-Wunused-imports`.
 
 ## Vertical slices
 
-Each slice is one bisect-safe commit. RED test and GREEN
-implementation land in the same commit per the project's TDD/DDD
-contract.
+### Slice 1 — Derived provenance type and audit encoder *(DONE)*
 
-### Slice 1 — Derived provenance type and audit encoder
+`DerivedQuoteProvenance` constructor + `ComponentObservation` record
+added to `QuoteProvenance` in `lib/Amaru/Treasury/Tx/SwapQuote.hs`.
+`quoteProvenanceValue` and `quoteValue` emit the contracted shape.
+Helper `formatRationalDecimalAt :: Int -> Rational -> Text` added so
+non-2/5 denominators (typical for derived ratios) format cleanly at a
+fixed scale. New golden test
+`test/golden/SwapQuoteAuditGoldenSpec.hs` + fixture
+`test/fixtures/swap-quote/params.built-derived.expected.json` cover
+the new shape. Production code paths still emit
+`OperatorOverride`/`QuoteSourceProvenance` at the end of this slice.
 
-**Scope**: extend `QuoteProvenance` with a `DerivedQuoteProvenance`
-constructor and the new `ComponentObservation` record. Teach
-`swapQuoteAuditValue` / `quoteProvenanceValue` to emit the
-`kind: "derived"` shape. Add a new golden fixture
-`test/fixtures/swap-quote/params.built-derived.expected.json` and an
-`it "matches the built-derived params.json golden"` case to
-`SwapQuoteAuditGoldenSpec.hs`.
+### Slice 2 — De-fetch the wizard
 
-**No CLI / parser / provider change.** The new constructor is
-unreachable from production code at the end of this slice — it is
-exercised only by the golden test.
+**Scope** (`lib/Amaru/Treasury/Cli/SwapWizard.hs` and friends):
 
-**Proof**: golden equality of the audit JSON for a sample audit
-whose `dspQuote.qoProvenance` is a hand-constructed
-`DerivedQuoteProvenance`. RED = new fixture is missing; GREEN =
-fixture committed and encoder branch implemented.
+- Drop `quoteP`-based parsing from `wizardRateP`. `WizardRate` becomes
+  `WizardMinRate Double | WizardOverrideRate Double SlippageBps`.
+- Remove imports of `SwapQuoteQuoteArg`, `quoteP`, `resolveSwapQuoteObservation`.
+- `resolveWizardSwapParameters` collapses to two arms — `WizardMinRate`
+  (existing math) and `WizardOverrideRate` (call `deriveSwapParameters`
+  with a hand-rolled `QuoteObservation { qoPair = AdaUsdm, qoQuote = Q, qoProvenance = OperatorOverride }`).
+- `Cli/SwapWizard.hs` no longer reads `currentIso8601` (no provenance
+  fetched-at), and no longer pulls `Cli/SwapCommon`'s quote helpers.
+- Unit / red tests for the wizard:
+  - update `SwapWizardSpec` / `SwapWizardRedSpec` parser cases that
+    referenced `--ada-usd`, `--ada-usdm`-without-slippage, or
+    `--price-source` to use the new surface.
+  - add a parser-rejection case for `--price-source` (no longer valid)
+    and `--ada-usd` (no longer valid) on the wizard.
 
-### Slice 2 — Replace the named source: types, parser, provider, CLI, fixtures
+**Proof**: parser tests for accept/reject, plus a derive-math test
+that `--ada-usdm 0.27 --slippage-bps 100` produces `minRate = 0.2673`
+(the existing math, exercised through the new wizard rate path).
 
-**Scope**:
+**Commit message**: `feat(110): remove live quote retrieval from swap-wizard`
+
+### Slice 3 — Replace the named source in swap-quote
+
+**Scope** (`lib/Amaru/Treasury/Tx/SwapQuote/Source.hs`,
+`lib/Amaru/Treasury/Cli/SwapOptions.hs`,
+`lib/Amaru/Treasury/Cli/SwapCommon.hs`,
+`lib/Amaru/Treasury/Cli/SwapQuote.hs`):
 
 - `QuoteSource`: replace `CoinGeckoAdaUsd` with `CoinGeckoAdaUsdm`.
-- `parseQuoteSourceName`: accept `coingecko-ada-usdm`; reject
-  `coingecko-ada-usd` with a typed error pointing at the new name.
+- `parseQuoteSourceName`: map `coingecko-ada-usdm` → `CoinGeckoAdaUsdm`;
+  map `coingecko-ada-usd` → typed retirement error
+  (`RetiredAdaUsdSource Text`, rendered as
+  `"coingecko-ada-usd retired: use coingecko-ada-usdm or --ada-usdm"`).
 - `quoteSourceName`, `renderQuoteSourceError`: matching cases.
-- `SwapQuote.Source`: add `coinGeckoUsdmRequest`,
-  `parseCoinGeckoUsdmUsdResponse`. Rename the existing parser to
-  match the component shape (`parseCoinGeckoAdaUsdComponent`?) or
-  introduce a small helper that produces a `ComponentObservation`
-  given (ids, USD JSON key, raw).
-- `coingeckoAdaUsdmProvider :: QuoteProvider IO` performs the two
-  fetches sequentially (trust-anchor line before each) and composes.
-  Replaces the exported `coingeckoAdaUsdProvider`.
-- `Cli/SwapOptions.hs`: drop `--ada-usd`; rename `quoteP` branches
-  accordingly (`adaUsdmP <|> priceSourceP`).
+- Add `coinGeckoUsdmRequest :: IO Request`,
+  `parseCoinGeckoUsdmUsdComponent`, and turn
+  `parseCoinGeckoAdaUsdResponse` into the analogous component
+  builder. Both build `ComponentObservation`.
+- `coingeckoAdaUsdmProvider :: QuoteProvider IO` performs two
+  sequential fetches (trust-anchor line before each) and composes
+  `qoQuote = adaUsd / usdmUsd`, `qoPair = AdaUsdm`, `qoProvenance = DerivedQuoteProvenance "coingecko-ada-usdm" (adaUsdComp :| [usdmUsdComp])`.
 - `QuoteInput`: drop `AdaUsdOverride`. `parseQuoteInput` only
-  handles `AdaUsdmOverride`. `QuotePair` keeps both variants
-  (component pair label).
-- `Cli/SwapCommon.hs`: use new provider name.
-- Test fixtures: rename `source.coingecko.json` →
-  `source.coingecko-ada-usd.json`; add `source.coingecko-usdm-usd.json`;
-  remove `quote.ada-usd.override.json`.
-- Test code: update `SwapQuoteSpec.hs` (parser, provider, CLI parser
-  cases) and any golden audit fixture references that mentioned the
-  retired pair. Add a parser test that confirms the new error
-  message for `coingecko-ada-usd`.
+  `AdaUsdmOverride`.
+- `Cli/SwapOptions.hs::quoteP` becomes `adaUsdmP <|> priceSourceP`;
+  help text updated to mention `coingecko-ada-usdm`.
+- `Cli/SwapCommon.hs`: `resolveSwapQuoteObservation` keeps its shape
+  but passes the new provider.
+- Test fixtures:
+  - rename `source.coingecko.json` → `source.coingecko-ada-usd.json`;
+  - add `source.coingecko-usdm-usd.json` containing
+    `{"usdm-2":{"usd":0.996629}}`;
+  - drop `quote.ada-usd.override.json`.
+- Tests (`SwapQuoteSpec`):
+  - parser tests: accept `--price-source coingecko-ada-usdm`; reject
+    `--price-source coingecko-ada-usd` and `--ada-usd …`; the
+    `quoteSourceName` test changes to the new constructor; remove the
+    `"recognises coingecko-ada-usd as the named ADA/USD source"` case;
+    remove `AdaUsdOverride` round-trip cases.
+  - provider test: drive `coingeckoAdaUsdmProvider` through a stub
+    `QuoteProvider` that returns the two captured fixtures; assert
+    the composed observation.
+- Goldens: regenerate `params.built.expected.json` and
+  `params.affordability-failed.expected.json` with
+  `qoPair = AdaUsdm + OperatorOverride` (numeric values unchanged).
 
-**Proof**:
+**Proof**: RED is the new parser-rejection test for
+`coingecko-ada-usd`, the new provider-composition test, and the
+regenerated goldens. GREEN folds in the ADT swap, parser change,
+provider impl, CLI flag removal, and fixture migration.
 
-- RED before: `parseSwapQuote ["--price-source", "coingecko-ada-usdm", …]` must succeed; current code rejects with `NamedAdaUsdmSourceUnavailable`.
-- RED before: `parseQuoteSourceName "coingecko-ada-usd"` should fail with the new helpful-error variant.
-- RED before: the new derived-provider golden (a recorded
-  component-pair → derived observation, using a stub `QuoteProvider`).
-- GREEN: ADT swap, parser change, provider implementation, CLI flag removal, fixture moves.
+**Commit message**: `feat(110): replace coingecko-ada-usd with derived coingecko-ada-usdm in swap-quote`
 
-### Slice 3 — Docs and smoke script
+### Slice 4 — Docs and operator-side live smoke
 
-**Scope**:
+- `docs/swap.md`: replace the "Recommended quote-derived workflow"
+  snippet with `swap-quote --price-source coingecko-ada-usdm`; add an
+  "Operator-supplied rate" subsection covering
+  `swap-wizard --ada-usdm Q --slippage-bps S` and
+  `swap-wizard --min-rate R`.
+- `scripts/smoke/swap-quote-live-usdm.sh` (mode 0755): one live
+  invocation, asserts `quote.value × usdmUsd ≈ adaUsd` within `1e-9`.
+- `CHANGELOG.md`: `[Unreleased]` entry calling
+  `--price-source coingecko-ada-usd` and `--ada-usd` removal a
+  Breaking change, and noting that `swap-wizard` no longer accepts
+  `--price-source`.
 
-- `docs/swap.md`: replace the `--price-source coingecko-ada-usd`
-  recommendation with `--price-source coingecko-ada-usdm`. Add a
-  paragraph documenting the two-upstream composition.
-- Add `scripts/smoke/swap-quote-live-usdm.sh` (mode 0755) that runs
-  the live wizard end-to-end and prints the derived rate; document
-  in `docs/swap.md` under the existing "TLS trust anchor" section.
-- CHANGELOG entry under `[Unreleased]` calling the removal of
-  `--price-source coingecko-ada-usd` and `--ada-usd` a breaking change.
+**Proof**: docs-only; no test changes. Gate runs `just ci` unchanged.
 
-**Proof**: docs/scripts only; no test changes. Gate runs `just ci`
-unchanged. The smoke script is invoked manually and is not part of
-`just smoke`.
+**Commit message**: `docs(110): document derived ADA/USDM source and wizard rate inputs`
 
 ## Gate
 
-The author-run gate stays `nix develop --quiet -c just ci`. No new
-recipes. The `just smoke` step continues to call
-`scripts/smoke/tx-build-pipe`; the new live-USDM script is documented
-but not wired into the gate (per D6).
+`nix develop --quiet -c just ci` for every slice. No new recipes.
 
 ## Out of scope (verbatim from spec)
 

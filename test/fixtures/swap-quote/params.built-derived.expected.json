@@ -1,0 +1,67 @@
+{
+    "affordability": {
+        "affordable": true,
+        "amountLovelace": 371515187541,
+        "availableLovelace": 1450000000000,
+        "chunkCount": 34,
+        "extraPerChunkLovelace": 3280000,
+        "requiredLovelace": 371626707541,
+        "selectedTreasuryLovelace": 1450000000000,
+        "shortfallLovelace": 0
+    },
+    "command": "swap-quote",
+    "derived": {
+        "amountLovelace": 371515187541,
+        "chunkSizeLovelace": 11258035986,
+        "minRate": "0.269168",
+        "rateDenominator": 1000000,
+        "rateNumerator": 269168
+    },
+    "outputs": {
+        "buildLog": "swap-run-2026-05-14/build.log",
+        "intentJson": "swap-run-2026-05-14/intent.json",
+        "unsignedCborHex": "swap-run-2026-05-14/swap.cbor.hex",
+        "wizardLog": "swap-run-2026-05-14/wizard.log"
+    },
+    "quote": {
+        "observedAt": "2026-05-14T10:00:00Z",
+        "pair": "ADA/USDM",
+        "provenance": {
+            "components": [
+                {
+                    "fetchedAt": "2026-05-14T09:59:58Z",
+                    "name": "coingecko-ada-usd",
+                    "raw": "{\"cardano\":{\"usd\":0.270971}}\n",
+                    "value": "0.270971"
+                },
+                {
+                    "fetchedAt": "2026-05-14T09:59:59Z",
+                    "name": "coingecko-usdm-usd",
+                    "raw": "{\"usdm-2\":{\"usd\":0.996629}}\n",
+                    "value": "0.996629"
+                }
+            ],
+            "kind": "derived",
+            "name": "coingecko-ada-usdm"
+        },
+        "value": "0.271887"
+    },
+    "request": {
+        "chunking": {
+            "count": 33,
+            "kind": "split"
+        },
+        "extraSigners": [
+            "core_development"
+        ],
+        "network": "mainnet",
+        "requestedUsdm": "100000",
+        "scope": "network_compliance",
+        "validityHours": 28
+    },
+    "schema": 1,
+    "slippage": {
+        "basisPoints": 100
+    },
+    "status": "built"
+}

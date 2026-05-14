@@ -6,11 +6,13 @@ License     : Apache-2.0
 module SwapQuoteAuditGoldenSpec (spec) where
 
 import Data.ByteString.Lazy qualified as BSL
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Ratio ((%))
 import Test.Hspec (Spec, describe, it, shouldBe)
 
 import Amaru.Treasury.Tx.SwapQuote
     ( AffordabilitySummary (..)
+    , ComponentObservation (..)
     , DerivedSwapParameters (..)
     , QuoteObservation (..)
     , QuotePair (..)
@@ -42,6 +44,14 @@ spec =
                 normalize
                     <$> BSL.readFile
                         "test/fixtures/swap-quote/params.affordability-failed.expected.json"
+            actual `shouldBe` expected
+
+        it "matches the built-derived params.json golden" $ do
+            let actual = normalize (encodeSwapQuoteAudit derivedAudit)
+            expected <-
+                normalize
+                    <$> BSL.readFile
+                        "test/fixtures/swap-quote/params.built-derived.expected.json"
             actual `shouldBe` expected
 
 normalize :: BSL.ByteString -> BSL.ByteString
@@ -123,4 +133,64 @@ sampleRequest =
         , sqarChunk = SplitInto 33
         , sqarValidityHours = Just 28
         , sqarExtraSigners = ["core_development"]
+        }
+
+derivedAudit :: SwapQuoteAudit
+derivedAudit =
+    SwapQuoteAudit
+        { sqaStatus = SwapQuoteBuilt
+        , sqaObservedAt = "2026-05-14T10:00:00Z"
+        , sqaDerived = derivedDsp
+        , sqaRequest = sampleRequest
+        , sqaAffordability =
+            AffordabilitySummary
+                { asDerived = derivedDsp
+                , asChunkCount = 34
+                , asExtraPerChunkLovelace = 3_280_000
+                , asRequiredLovelace = 371_626_707_541
+                , asAvailableLovelace = 1_450_000_000_000
+                , asShortfallLovelace = 0
+                }
+        , sqaOutputs =
+            SwapQuoteOutputs
+                { sqoIntentJson = "swap-run-2026-05-14/intent.json"
+                , sqoUnsignedCborHex = Just "swap-run-2026-05-14/swap.cbor.hex"
+                , sqoWizardLog = "swap-run-2026-05-14/wizard.log"
+                , sqoBuildLog = Just "swap-run-2026-05-14/build.log"
+                }
+        }
+
+derivedDsp :: DerivedSwapParameters
+derivedDsp =
+    DerivedSwapParameters
+        { dspQuote =
+            QuoteObservation
+                { qoPair = AdaUsdm
+                , qoQuote = 270_971 % 996_629
+                , qoProvenance =
+                    DerivedQuoteProvenance
+                        { dqpName = "coingecko-ada-usdm"
+                        , dqpComponents =
+                            ComponentObservation
+                                { coName = "coingecko-ada-usd"
+                                , coValue = 270_971 % 1_000_000
+                                , coFetchedAt = "2026-05-14T09:59:58Z"
+                                , coRaw =
+                                    "{\"cardano\":{\"usd\":0.270971}}\n"
+                                }
+                                :| [ ComponentObservation
+                                        { coName = "coingecko-usdm-usd"
+                                        , coValue = 996_629 % 1_000_000
+                                        , coFetchedAt = "2026-05-14T09:59:59Z"
+                                        , coRaw =
+                                            "{\"usdm-2\":{\"usd\":0.996629}}\n"
+                                        }
+                                   ]
+                        }
+                }
+        , dspSlippageBps = SlippageBps 100
+        , dspRateNumerator = 269_168
+        , dspRateDenominator = 1_000_000
+        , dspAmountLovelace = 371_515_187_541
+        , dspChunkSizeLovelace = 11_258_035_986
         }

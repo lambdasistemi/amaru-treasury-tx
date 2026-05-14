@@ -16,6 +16,17 @@ All notable changes to `amaru-treasury-tx` are documented here.
   `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34`
   `0 -> 2000000` lovelace. Withdrawal, disburse, SundaeSwap order, and
   reorganize proofs remain follow-up DevNet slices.
+* Local DevNet withdrawal evidence now proves the second treasury setup
+  slice: `just devnet-smoke withdraw` observes funded script rewards,
+  writes a schema-v1 withdraw intent, and builds unsigned withdrawal
+  CBOR plus JSON/Markdown reports through `tx-build`. Latest branch
+  evidence: `/tmp/tmp.4b2zbAg5Z7/withdraw-diagnostics`, reward account
+  `ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af`,
+  reward `2000000` lovelace, tx id
+  `b7f1decd1453ee955e7dfe75aac7d9e10b0a6ed3c6c59bb4704c08d8c5132600`,
+  fee `469749` lovelace, validity upper bound slot `222`. This is
+  unsigned build evidence only; signing/submission, disburse,
+  SundaeSwap order, and reorganize proofs remain follow-up slices.
 
 ## [0.2.8.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.7.1...v0.2.8.0) (2026-05-14)
 

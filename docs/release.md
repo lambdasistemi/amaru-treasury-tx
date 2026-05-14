@@ -102,6 +102,7 @@ For live local-node evidence, also run the opt-in devnet smoke:
 ```bash
 nix develop --quiet -c just devnet-smoke node
 nix develop --quiet -c just devnet-smoke governance
+nix develop --quiet -c just devnet-smoke withdraw
 ```
 
 Record the generated `runs/devnet/<timestamp>/` directory in the
@@ -117,13 +118,27 @@ The latest branch evidence is `runs/devnet/20260513T143827Z` on
 `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34` moving
 from `0` to `2000000` lovelace.
 
+The withdrawal phase creates fresh local governance prerequisite
+evidence, resolves the funded treasury script reward account through
+`withdraw-wizard`, and runs the release-facing `tx-build` path to
+write unsigned CBOR plus JSON/Markdown reports. Latest branch
+withdrawal evidence is `/tmp/tmp.4b2zbAg5Z7/withdraw-diagnostics`,
+reward account
+`ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af`, reward
+`2000000` lovelace, tx id
+`b7f1decd1453ee955e7dfe75aac7d9e10b0a6ed3c6c59bb4704c08d8c5132600`,
+fee `469749` lovelace, validity upper bound slot `222`, and report
+paths under `withdraw/report.json` and `withdraw/report.md`. This is
+unsigned build evidence only; it does not sign or submit the final
+withdrawal transaction.
+
 The DevNet experiment is split into governance action (#82),
 withdrawal (#83), disburse (#86), SundaeSwap V3 order build/funding
 (#84), SundaeSwap V3 order spend (#85), and reorganize (#87) slices.
-Do not record withdrawal, disburse, swap-order, swap-spend, or
-reorganize evidence until those slices land and their phase-specific
-smoke commands pass. SundaeSwap compatibility claims must be based on
-the public V3 contracts/SDK, not on an Amaru-only toy validator.
+Do not record disburse, swap-order, swap-spend, or reorganize evidence
+until those slices land and their phase-specific smoke commands pass.
+SundaeSwap compatibility claims must be based on the public V3
+contracts/SDK, not on an Amaru-only toy validator.
 
 Release note wording for this slice:
 
@@ -135,7 +150,18 @@ account funded through Provider reward queries. Evidence:
 runs/devnet/20260513T143827Z, cardano-node-clients main
 d6773e4cd8a2421617568c8dac0972b0f312a509, reward
 5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34
-0 -> 2000000 lovelace. This is not yet withdrawal, disburse,
+0 -> 2000000 lovelace.
+
+Local DevNet withdrawal evidence now proves the second treasury setup
+slice: the smoke observes a funded Amaru treasury script reward
+account, writes a schema-v1 withdraw intent, and builds unsigned
+withdrawal CBOR plus JSON/Markdown reports through tx-build. Evidence:
+/tmp/tmp.4b2zbAg5Z7/withdraw-diagnostics, reward account
+ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af,
+reward 2000000 lovelace, tx id
+b7f1decd1453ee955e7dfe75aac7d9e10b0a6ed3c6c59bb4704c08d8c5132600,
+fee 469749 lovelace, validity upper bound slot 222. This is unsigned
+build evidence only; it is not signing/submission, disburse,
 SundaeSwap order, or reorganize proof.
 ```
 

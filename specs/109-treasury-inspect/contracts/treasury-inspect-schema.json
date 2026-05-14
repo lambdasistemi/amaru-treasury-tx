@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lambdasistemi.io/schemas/amaru-treasury-tx/treasury-inspect-report.schema.json",
+  "title": "TreasuryInspectReport",
+  "description": "Output of `amaru-treasury-tx treasury-inspect`. Single-shot, read-only snapshot of treasury balances and pending SundaeSwap orders for each configured scope, at a given chain tip.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["chainTip", "deployment", "scopes"],
+  "properties": {
+    "chainTip": { "$ref": "#/$defs/ChainTip" },
+    "deployment": { "$ref": "#/$defs/Deployment" },
+    "scopes": {
+      "type": "array",
+      "description": "One entry per reported scope, in stable order (CoreDevelopment, OpsAndUseCases, NetworkCompliance, Middleware, Contingency), filtered by --scope when set.",
+      "items": { "$ref": "#/$defs/ScopeSection" }
+    }
+  },
+
+  "$defs": {
+    "Hex28": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{56}$",
+      "description": "28-byte value as 56 lowercase hex characters."
+    },
+    "Hex32": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "32-byte value as 64 lowercase hex characters."
+    },
+    "Outref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["txId", "ix"],
+      "properties": {
+        "txId": { "$ref": "#/$defs/Hex32" },
+        "ix": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        }
+      }
+    },
+    "ChainTip": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "blockHash"],
+      "properties": {
+        "slot": { "type": "integer", "minimum": 0 },
+        "blockHash": { "$ref": "#/$defs/Hex32" }
+      }
+    },
+    "Deployment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instanceNftPolicyId"],
+      "properties": {
+        "instanceNftPolicyId": { "$ref": "#/$defs/Hex28" }
+      }
+    },
+    "ScopeSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope",
+        "treasuryAddress",
+        "treasuryScriptHash",
+        "treasuryUtxos",
+        "totals",
+        "pendingOrders"
+      ],
+      "properties": {
+        "scope": {
+          "type": "string",
+          "enum": [
+            "core_development",
+            "ops_and_use_cases",
+            "network_compliance",
+            "middleware",
+            "contingency"
+          ]
+        },
+        "treasuryAddress": {
+          "type": "string",
+          "description": "Bech32-encoded scope contract address."
+        },
+        "treasuryScriptHash": { "$ref": "#/$defs/Hex28" },
+        "treasuryUtxos": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TreasuryUtxo" }
+        },
+        "totals": { "$ref": "#/$defs/ScopeTotals" },
+        "pendingOrders": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/PendingSwapOrder" }
+        }
+      }
+    },
+    "TreasuryUtxo": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outref", "lovelace", "usdm", "otherAssets"],
+      "properties": {
+        "outref": { "$ref": "#/$defs/Outref" },
+        "lovelace": { "type": "integer", "minimum": 0 },
+        "usdm": { "type": "integer", "minimum": 0 },
+        "otherAssets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/OtherAsset" }
+        },
+        "datumHash": {
+          "oneOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/Hex32" }
+          ]
+        }
+      }
+    },
+    "ScopeTotals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lovelace", "usdm", "otherAssetsCount"],
+      "properties": {
+        "lovelace": { "type": "integer", "minimum": 0 },
+        "usdm": { "type": "integer", "minimum": 0 },
+        "otherAssetsCount": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "OtherAsset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "assetName", "quantity"],
+      "properties": {
+        "policy": { "$ref": "#/$defs/Hex28" },
+        "assetName": {
+          "type": "string",
+          "pattern": "^[0-9a-f]*$",
+          "description": "Hex-encoded asset name bytes; empty string for the unnamed token."
+        },
+        "quantity": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "PendingSwapOrder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outref", "lovelaceIn", "minUsdmOut", "sundaeFeeLovelace"],
+      "properties": {
+        "outref": { "$ref": "#/$defs/Outref" },
+        "lovelaceIn": { "type": "integer", "minimum": 0 },
+        "minUsdmOut": { "type": "integer", "minimum": 0 },
+        "sundaeFeeLovelace": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}

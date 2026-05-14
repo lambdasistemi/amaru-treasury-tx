@@ -1,0 +1,112 @@
+{
+  "chainTip": {
+    "slot": 142300412,
+    "blockHash": "9f1c2eaa3d4b5670891a2b3c4d5e6f7081a2b3c4d5e6f7081a2b3c4d5e6f7081"
+  },
+  "deployment": {
+    "instanceNftPolicyId": "11112222333344445555666677778888aaaabbbbccccddddeeeeffff"
+  },
+  "scopes": [
+    {
+      "scope": "core_development",
+      "treasuryAddress": "addr1q9core...",
+      "treasuryScriptHash": "0000000000000000000000000000000000000000000000000000aaaa",
+      "treasuryUtxos": [
+        {
+          "outref": {
+            "txId": "0000000000000000000000000000000000000000000000000000000000000001",
+            "ix": 0
+          },
+          "lovelace": 500000000000,
+          "usdm": 0,
+          "otherAssets": [],
+          "datumHash": null
+        }
+      ],
+      "totals": {
+        "lovelace": 500000000000,
+        "usdm": 0,
+        "otherAssetsCount": 0
+      },
+      "pendingOrders": []
+    },
+    {
+      "scope": "ops_and_use_cases",
+      "treasuryAddress": "addr1q9ops...",
+      "treasuryScriptHash": "0000000000000000000000000000000000000000000000000000bbbb",
+      "treasuryUtxos": [],
+      "totals": {
+        "lovelace": 0,
+        "usdm": 0,
+        "otherAssetsCount": 0
+      },
+      "pendingOrders": []
+    },
+    {
+      "scope": "network_compliance",
+      "treasuryAddress": "addr1q9nc7xv...",
+      "treasuryScriptHash": "0000000000000000000000000000000000000000000000000000cccc",
+      "treasuryUtxos": [
+        {
+          "outref": {
+            "txId": "b5716ae98bb41b53c5fa2ebc6e8d5558879dc86d14fb998333e643095c6b233e",
+            "ix": 2
+          },
+          "lovelace": 120000000000,
+          "usdm": 0,
+          "otherAssets": [],
+          "datumHash": null
+        }
+      ],
+      "totals": {
+        "lovelace": 120000000000,
+        "usdm": 0,
+        "otherAssetsCount": 0
+      },
+      "pendingOrders": [
+        {
+          "outref": {
+            "txId": "b5716ae98bb41b53c5fa2ebc6e8d5558879dc86d14fb998333e643095c6b233e",
+            "ix": 3
+          },
+          "lovelaceIn": 60000000000,
+          "minUsdmOut": 1600000000,
+          "sundaeFeeLovelace": 350000
+        },
+        {
+          "outref": {
+            "txId": "b5716ae98bb41b53c5fa2ebc6e8d5558879dc86d14fb998333e643095c6b233e",
+            "ix": 4
+          },
+          "lovelaceIn": 60000000000,
+          "minUsdmOut": 1600000000,
+          "sundaeFeeLovelace": 350000
+        }
+      ]
+    },
+    {
+      "scope": "middleware",
+      "treasuryAddress": "addr1q9mw...",
+      "treasuryScriptHash": "0000000000000000000000000000000000000000000000000000dddd",
+      "treasuryUtxos": [],
+      "totals": {
+        "lovelace": 0,
+        "usdm": 0,
+        "otherAssetsCount": 0
+      },
+      "pendingOrders": []
+    },
+    {
+      "scope": "contingency",
+      "treasuryAddress": "addr1q9cn2pa...",
+      "treasuryScriptHash": "0000000000000000000000000000000000000000000000000000eeee",
+      "treasuryUtxos": [],
+      "totals": {
+        "lovelace": 0,
+        "usdm": 0,
+        "otherAssetsCount": 0
+      },
+      "pendingOrders": []
+    }
+  ]
+}

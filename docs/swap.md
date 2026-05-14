@@ -67,6 +67,46 @@ per-chunk overhead, the wizard exits before emitting an intent. The
 operator wallet is only preflighted for fee/change slack; it does not
 fund the order min-UTxO or Sundae per-order fee.
 
+## Recommended quote-derived workflow (swap-quote)
+
+`swap-quote` is the end-to-end command for a live, quote-derived swap
+run. It fetches the live ADA/USDM rate, runs affordability before
+emitting CBOR, and writes the full audit (`params.json`) to the
+output directory:
+
+```bash
+amaru-treasury-tx \
+  --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
+  swap-quote \
+    --wallet-addr addr1q... \
+    --metadata metadata-mainnet.json \
+    --scope network_compliance \
+    --usdm 100000 \
+    --split 33 \
+    --price-source coingecko-ada-usdm \
+    --slippage-bps 100 \
+    --validity-hours 28 \
+    --description "Swapping ADA for \$100k using a live ADA/USDM quote" \
+    --justification "Required to pay Antithesis as vendor" \
+    --destination-label "Network Compliance's treasury" \
+    --extra-signer core_development \
+    --out-dir swap-run-$(date -u +%Y-%m-%d)
+```
+
+The derived rate is computed as `(ADA/USD) / (USDM/USD)` from two
+CoinGecko `simple/price` calls (`ids=cardano` and `ids=usdm-2`). Both
+upstream observations are captured under
+`quote.provenance.components` in the run's `params.json`, so the
+audit trail reconstructs the derived value from raw inputs. Each
+fetch is preceded by the trust-anchor stderr line (see below).
+
+A live smoke script is shipped at
+`scripts/smoke/swap-quote-live-usdm.sh`. It runs `swap-quote` against
+the configured live node and Internet, then re-derives the rate from
+the recorded components to prove the composition. It is **not** part
+of `just ci` — the CoinGecko public API rate-limits aggressively, so
+the smoke is operator-invoked.
+
 ### TLS trust anchor
 
 Live quote sources used by the separate `swap-quote` command make

@@ -19,6 +19,7 @@ module Amaru.Treasury.Cli.Submit
 
 import Data.ByteString qualified as BS
 import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
 import Options.Applicative
     ( Parser
     , help
@@ -31,11 +32,10 @@ import Ouroboros.Network.Magic (NetworkMagic)
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
 
-import Cardano.Ledger.TxIn (TxId)
-
 import Amaru.Treasury.Tx.Submit
     ( SubmitOutcome (..)
     , renderSubmitOutcome
+    , renderTxId
     , submitSignedTx
     )
 
@@ -72,9 +72,6 @@ runSubmit magic socketPath SubmitOpts{..} = do
     outcome <- submitSignedTx magic socketPath txHex
     hPutStrLn stderr (T.unpack (renderSubmitOutcome outcome))
     case outcome of
-        SubmitAccepted txId -> printTxId txId
+        SubmitAccepted txId -> TIO.putStrLn (renderTxId txId)
         SubmitRejected _ -> exitFailure
         SubmitDecodeFailed _ -> exitFailure
-
-printTxId :: TxId -> IO ()
-printTxId = print

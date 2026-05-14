@@ -326,6 +326,7 @@ test-suite unit-tests
     Amaru.Treasury.Tx.DisburseBuildSpec
     Amaru.Treasury.Tx.DisburseSpec
     Amaru.Treasury.Tx.DisburseWizardSpec
+    Amaru.Treasury.Tx.SubmitSpec
     Amaru.Treasury.Tx.SwapQuoteSpec
     Amaru.Treasury.Tx.SwapSpec
     Amaru.Treasury.Tx.SwapWizardSpec

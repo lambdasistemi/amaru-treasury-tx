@@ -19,6 +19,47 @@ The shape mirrors
 [`pragma-org/amaru-treasury/journal/2026/bin/swap.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/bin/swap.sh)
 exactly — same redeemers, same datums, same output ordering.
 
+## Cancelling a pending order
+
+`swap-cancel` builds an unsigned cancellation transaction for one
+pending SundaeSwap V3 order that has already been identified. Until
+the pending-order discovery report from issue #109 is available, pass
+the order UTxO explicitly:
+
+```bash
+amaru-treasury-tx \
+  --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
+  swap-cancel \
+    --metadata metadata-mainnet.json \
+    --scope network_compliance \
+    --wallet-txin "$WALLET_TXIN" \
+    --order-txin "$ORDER_TXIN" \
+    --order-script-ref "$SUNDAE_ORDER_SCRIPT_REF" \
+    --validity-hours 28 \
+    --out cancel.cbor.hex \
+    --report cancel.report.json
+```
+
+The command verifies `metadata.json` against the chain, reads the
+order UTxO's inline datum, and fails before writing CBOR unless:
+
+- the order owner is the supported Amaru `AllOf` signatures policy,
+- the owner key hashes match the verified Amaru treasury owners, and
+- the order destination payment credential is the selected treasury
+  script hash.
+
+The cancellation spends wallet fuel for fees and collateral, spends
+the order with the SundaeSwap `Cancel` redeemer (`Constr 1 []`), and
+returns the full order value to the selected treasury address. The
+optional JSON report names the cancelled order, returned value,
+treasury destination, required signers, fee, and next steps.
+
+The required signatures come from the order datum, not from a CLI
+override. For the Amaru-generated orders built by this tool today,
+that means all four treasury owner keys encoded in the order owner
+policy: `core_development`, `ops_and_use_cases`,
+`network_compliance`, and `middleware`.
+
 ## Operator-supplied rate workflow
 
 `swap-wizard` is the "I have a rate, build the intent" command. It

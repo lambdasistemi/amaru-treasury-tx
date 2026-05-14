@@ -59,6 +59,7 @@ renderBuildError err =
 renderAction :: BuildAction -> Text
 renderAction = \case
     BuildActionSwap -> "swap"
+    BuildActionSwapCancel -> "swap-cancel"
     BuildActionDisburse -> "disburse"
     BuildActionWithdraw -> "withdraw"
     BuildActionReorganize -> "reorganize"

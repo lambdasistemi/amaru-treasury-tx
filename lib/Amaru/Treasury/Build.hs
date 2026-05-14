@@ -17,6 +17,7 @@ call.
 The action-specific IO runners live under this hierarchy:
 
 * "Amaru.Treasury.Build.Swap"
+* "Amaru.Treasury.Build.SwapCancel"
 * "Amaru.Treasury.Build.Disburse"
 * "Amaru.Treasury.Build.Withdraw"
 
@@ -35,6 +36,7 @@ module Amaru.Treasury.Build
     , runFromIntentEither
     , runDisburse
     , runSwap
+    , runSwapCancel
     , runWithdraw
     ) where
 
@@ -58,6 +60,9 @@ import Amaru.Treasury.Build.Result
 import Amaru.Treasury.Build.Swap
     ( runSwap
     , runSwapAction
+    )
+import Amaru.Treasury.Build.SwapCancel
+    ( runSwapCancel
     )
 import Amaru.Treasury.Build.Withdraw
     ( runWithdraw

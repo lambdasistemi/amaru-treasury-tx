@@ -14,13 +14,16 @@ and intent writing.
 -}
 module Amaru.Treasury.Cli.DisburseWizard
     ( DisburseWizardOpts (..)
+    , EmergencyTopUpOpts (..)
     , disburseWizardOptsP
+    , emergencyTopUpOptsP
     , runDisburseWizard
+    , runEmergencyTopUp
     ) where
 
 import Control.Tracer (Tracer (..), traceWith)
 import Data.ByteString.Lazy qualified as BSL
-import Data.Char (toLower)
+import Data.Char (isDigit, toLower)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Set qualified as Set
@@ -67,10 +70,14 @@ import Amaru.Treasury.IntentJSON
     , encodeSomeTreasuryIntent
     , tiValidityUpperBoundSlot
     )
-import Amaru.Treasury.Registry.Verify (verifyRegistry)
+import Amaru.Treasury.Registry.Verify
+    ( VerifiedRegistry (..)
+    , verifyRegistry
+    )
 import Amaru.Treasury.Scope
-    ( ScopeId
+    ( ScopeId (..)
     , scopeFromText
+    , scopeText
     )
 import Amaru.Treasury.Tx.DisburseWizard qualified as Disburse
 import Amaru.Treasury.Tx.DisburseWizard.Trace qualified as DisburseTrace
@@ -100,6 +107,25 @@ data DisburseWizardOpts = DisburseWizardOpts
     , dwOptsSigners :: ![Text]
     -- ^ accumulated extra-signer flags; empty = selected
     --   scope owner only.
+    }
+    deriving stock (Eq, Show)
+
+{- | Flags for the @emergency-top-up@ subcommand.
+The command is intentionally narrower than @disburse-wizard@:
+source scope is always @contingency@, the unit is always ADA,
+and the destination is another treasury scope resolved from
+verified metadata.
+-}
+data EmergencyTopUpOpts = EmergencyTopUpOpts
+    { etuOptsWalletAddr :: !Text
+    , etuOptsMetadataPath :: !FilePath
+    , etuOptsOut :: !(Maybe FilePath)
+    , etuOptsLog :: !(Maybe FilePath)
+    , etuOptsDestinationScope :: !ScopeId
+    , etuOptsAdaLovelace :: !Integer
+    , etuOptsValidityHours :: !(Maybe Word16)
+    , etuOptsDescription :: !Text
+    , etuOptsJustification :: !Text
     }
     deriving stock (Eq, Show)
 
@@ -134,7 +160,7 @@ disburseWizardOptsP =
                 )
             )
         <*> option
-            scopeReader
+            ownedScopeReader
             ( long "scope"
                 <> metavar "NAME"
                 <> help
@@ -213,10 +239,81 @@ disburseWizardOptsP =
                 )
             )
 
-scopeReader :: ReadM ScopeId
-scopeReader =
-    eitherReader $
-        scopeFromText . T.pack . map toLower
+emergencyTopUpOptsP :: Parser EmergencyTopUpOpts
+emergencyTopUpOptsP =
+    EmergencyTopUpOpts
+        <$> strOption
+            ( long "wallet-addr"
+                <> metavar "BECH32"
+                <> help "Wallet address (fuel + collateral)"
+            )
+        <*> strOption
+            ( long "metadata"
+                <> metavar "PATH"
+                <> help "Path to local journal/2026 metadata.json"
+            )
+        <*> optional
+            ( strOption
+                ( long "out"
+                    <> short 'o'
+                    <> metavar "PATH"
+                    <> help
+                        "Where to write intent.json (defaults to stdout)"
+                )
+            )
+        <*> optional
+            ( strOption
+                ( long "log"
+                    <> metavar "PATH"
+                    <> help
+                        "Where to write step-by-step trace lines (defaults to stderr)"
+                )
+            )
+        <*> option
+            ownedScopeReader
+            ( long "destination-scope"
+                <> long "to-scope"
+                <> metavar "NAME"
+                <> help
+                    "Destination treasury scope: core_development|ops_and_use_cases|network_compliance|middleware"
+            )
+        <*> option
+            adaReader
+            ( long "ada"
+                <> metavar "ADA"
+                <> help
+                    "ADA amount to move from contingency; decimals up to 6 places are accepted"
+            )
+        <*> optional
+            ( option
+                auto
+                ( long "validity-hours"
+                    <> metavar "HOURS"
+                    <> help
+                        "Optional. Omit to use the chain's \
+                        \current horizon (longest safe slot)."
+                )
+            )
+        <*> strOption
+            ( long "description"
+                <> metavar "TEXT"
+                <> help "Rationale: description"
+            )
+        <*> strOption
+            ( long "justification"
+                <> metavar "TEXT"
+                <> help "Rationale: justification"
+            )
+
+ownedScopeReader :: ReadM ScopeId
+ownedScopeReader =
+    eitherReader $ \raw -> do
+        scope <- scopeFromText (T.pack (map toLower raw))
+        case scope of
+            Contingency ->
+                Left
+                    "contingency is the emergency source; choose one of core_development|ops_and_use_cases|network_compliance|middleware"
+            _ -> Right scope
 
 unitReader :: ReadM Unit
 unitReader =
@@ -225,14 +322,173 @@ unitReader =
         "usdm" -> Right USDM
         _ -> Left "expected ada or usdm"
 
+adaReader :: ReadM Integer
+adaReader =
+    eitherReader (parseAdaToLovelace . T.pack)
+
+parseAdaToLovelace :: Text -> Either String Integer
+parseAdaToLovelace raw =
+    case T.splitOn "." raw of
+        [whole]
+            | digits whole ->
+                positive (decimalDigitsToInteger whole * 1_000_000)
+        [whole, fractional]
+            | (not (T.null whole) || not (T.null fractional))
+                && digits whole
+                && digits fractional
+                && T.length fractional <= 6 ->
+                let padded = fractional <> T.replicate (6 - T.length fractional) "0"
+                    lovelace =
+                        decimalDigitsToInteger whole * 1_000_000
+                            + decimalDigitsToInteger padded
+                in  positive lovelace
+            | T.length fractional > 6 ->
+                Left "ADA amount cannot have more than 6 decimal places"
+        _ -> Left "expected a positive ADA decimal"
+  where
+    digits = T.all isDigit
+    positive lovelace
+        | lovelace > 0 = Right lovelace
+        | otherwise = Left "ADA amount must be positive"
+
+decimalDigitsToInteger :: Text -> Integer
+decimalDigitsToInteger =
+    T.foldl'
+        (\acc c -> acc * 10 + toInteger (fromEnum c - fromEnum '0'))
+        0
+
 runDisburseWizard
     :: GlobalOpts
     -> DisburseWizardOpts
     -> IO ()
 runDisburseWizard g DisburseWizardOpts{..} =
-    withLogHandle dwOptsLog $ \logH -> do
+    runDisburseCommand
+        "disburse-wizard"
+        g
+        dwOptsLog
+        dwOptsMetadataPath
+        dwOptsOut
+        (Set.singleton dwOptsScope)
+        dwOptsScope
+        $ \networkName rv _verified ->
+            let answers =
+                    Disburse.DisburseAnswers
+                        { Disburse.daScope = dwOptsScope
+                        , Disburse.daUnit = dwOptsUnit
+                        , Disburse.daAmount = dwOptsAmount
+                        , Disburse.daBeneficiaryAddrBech32 =
+                            dwOptsBeneficiaryAddr
+                        , Disburse.daValidityHours =
+                            dwOptsValidityHours
+                        , Disburse.daRationale =
+                            Disburse.RationaleAnswers
+                                { Disburse.raDescription =
+                                    dwOptsDescription
+                                , Disburse.raJustification =
+                                    dwOptsJustification
+                                , Disburse.raDestinationLabel =
+                                    dwOptsDestinationLabel
+                                , Disburse.raEvent = dwOptsEvent
+                                , Disburse.raLabel = dwOptsLabel
+                                }
+                        , Disburse.daExtraSigners = dwOptsSigners
+                        }
+                ri =
+                    Disburse.ResolverInput
+                        { Disburse.riNetwork = networkName
+                        , Disburse.riWalletAddrBech32 =
+                            dwOptsWalletAddr
+                        , Disburse.riBeneficiaryAddrBech32 =
+                            dwOptsBeneficiaryAddr
+                        , Disburse.riScope = dwOptsScope
+                        , Disburse.riUnit = dwOptsUnit
+                        , Disburse.riAmount = dwOptsAmount
+                        , Disburse.riRegistry = rv
+                        , Disburse.riValidityHours =
+                            dwOptsValidityHours
+                        }
+            in  Right (answers, ri)
+
+runEmergencyTopUp
+    :: GlobalOpts
+    -> EmergencyTopUpOpts
+    -> IO ()
+runEmergencyTopUp g EmergencyTopUpOpts{..} =
+    runDisburseCommand
+        "emergency-top-up"
+        g
+        etuOptsLog
+        etuOptsMetadataPath
+        etuOptsOut
+        (Set.fromList [Contingency, etuOptsDestinationScope])
+        Contingency
+        $ \networkName rv verified -> do
+            destinationAddr <-
+                destinationScopeAddress
+                    etuOptsDestinationScope
+                    verified
+            let answers =
+                    Disburse.DisburseAnswers
+                        { Disburse.daScope = Contingency
+                        , Disburse.daUnit = ADA
+                        , Disburse.daAmount = etuOptsAdaLovelace
+                        , Disburse.daBeneficiaryAddrBech32 =
+                            destinationAddr
+                        , Disburse.daValidityHours =
+                            etuOptsValidityHours
+                        , Disburse.daRationale =
+                            Disburse.RationaleAnswers
+                                { Disburse.raDescription =
+                                    etuOptsDescription
+                                , Disburse.raJustification =
+                                    etuOptsJustification
+                                , Disburse.raDestinationLabel =
+                                    destinationScopeLabel
+                                        etuOptsDestinationScope
+                                , Disburse.raEvent =
+                                    Just "emergency_top_up"
+                                , Disburse.raLabel =
+                                    Just "Emergency top-up"
+                                }
+                        , Disburse.daExtraSigners = []
+                        }
+                ri =
+                    Disburse.ResolverInput
+                        { Disburse.riNetwork = networkName
+                        , Disburse.riWalletAddrBech32 =
+                            etuOptsWalletAddr
+                        , Disburse.riBeneficiaryAddrBech32 =
+                            destinationAddr
+                        , Disburse.riScope = Contingency
+                        , Disburse.riUnit = ADA
+                        , Disburse.riAmount = etuOptsAdaLovelace
+                        , Disburse.riRegistry = rv
+                        , Disburse.riValidityHours =
+                            etuOptsValidityHours
+                        }
+            Right (answers, ri)
+
+runDisburseCommand
+    :: Text
+    -> GlobalOpts
+    -> Maybe FilePath
+    -> FilePath
+    -> Maybe FilePath
+    -> Set.Set ScopeId
+    -> ScopeId
+    -> ( Text
+         -> Disburse.RegistryView
+         -> VerifiedRegistry
+         -> Either Text (Disburse.DisburseAnswers, Disburse.ResolverInput)
+       )
+    -> IO ()
+runDisburseCommand commandName g logPath metadataPath outPath verifyScopes sourceScope buildRun =
+    withLogHandle logPath $ \logH -> do
         let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
-            tr = DisburseTrace.disburseWizardEventTracer textTracer
+            tr =
+                DisburseTrace.disburseEventTracerWithPrefix
+                    commandName
+                    textTracer
         networkName <- case resolveNetworkName g of
             Right t -> pure t
             Left e -> abortDisburse tr (T.pack e)
@@ -244,68 +500,35 @@ runDisburseWizard g DisburseWizardOpts{..} =
                 networkName
                 (fromIntegral magic)
             )
-        traceWith tr (DisburseTrace.DweMetadata dwOptsMetadataPath)
-
-        let answers =
-                Disburse.DisburseAnswers
-                    { Disburse.daScope = dwOptsScope
-                    , Disburse.daUnit = dwOptsUnit
-                    , Disburse.daAmount = dwOptsAmount
-                    , Disburse.daBeneficiaryAddrBech32 =
-                        dwOptsBeneficiaryAddr
-                    , Disburse.daValidityHours =
-                        dwOptsValidityHours
-                    , Disburse.daRationale =
-                        Disburse.RationaleAnswers
-                            { Disburse.raDescription =
-                                dwOptsDescription
-                            , Disburse.raJustification =
-                                dwOptsJustification
-                            , Disburse.raDestinationLabel =
-                                dwOptsDestinationLabel
-                            , Disburse.raEvent = dwOptsEvent
-                            , Disburse.raLabel = dwOptsLabel
-                            }
-                    , Disburse.daExtraSigners = dwOptsSigners
-                    }
+        traceWith tr (DisburseTrace.DweMetadata metadataPath)
 
         withLocalNodeBackend (goNetworkMagic g) socket $
             \backend -> do
                 verified <-
                     verifyRegistry
                         backend
-                        dwOptsMetadataPath
-                        (Set.singleton dwOptsScope)
-                rv <- case verified of
+                        metadataPath
+                        verifyScopes
+                (rv, registry) <- case verified of
                     Left e ->
                         abortDisburse
                             tr
                             ("verify: " <> T.pack (show e))
                     Right registry ->
                         case Disburse.registryViewFromVerified
-                            dwOptsScope
+                            sourceScope
                             registry of
                             Left e ->
                                 abortDisburse
                                     tr
                                     ("project: " <> T.pack (show e))
-                            Right view -> pure view
-                traceDisburseRegistryView tr dwOptsScope rv
-                let ri =
-                        Disburse.ResolverInput
-                            { Disburse.riNetwork = networkName
-                            , Disburse.riWalletAddrBech32 =
-                                dwOptsWalletAddr
-                            , Disburse.riBeneficiaryAddrBech32 =
-                                dwOptsBeneficiaryAddr
-                            , Disburse.riScope = dwOptsScope
-                            , Disburse.riUnit = dwOptsUnit
-                            , Disburse.riAmount = dwOptsAmount
-                            , Disburse.riRegistry = rv
-                            , Disburse.riValidityHours =
-                                dwOptsValidityHours
-                            }
-                    renv =
+                            Right view -> pure (view, registry)
+                traceDisburseRegistryView tr sourceScope rv
+                (answers, ri) <- case buildRun networkName rv registry of
+                    Left e ->
+                        abortDisburse tr ("prepare: " <> e)
+                    Right run -> pure run
+                let renv =
                         traceDisburseResolverEnv tr $
                             providerToDisburseResolverEnv backend
                 er <- Disburse.resolveDisburseEnv renv ri
@@ -333,13 +556,41 @@ runDisburseWizard g DisburseWizardOpts{..} =
                 traceWith tr $
                     DisburseTrace.DweUpperBoundResolved
                         (tiValidityUpperBoundSlot intent)
-                traceWith tr (DisburseTrace.DweIntentReady dwOptsOut)
+                traceWith tr (DisburseTrace.DweIntentReady outPath)
                 let bytes =
                         encodeSomeTreasuryIntent
                             (SomeTreasuryIntent SDisburse intent)
-                case dwOptsOut of
+                case outPath of
                     Nothing -> BSL.putStr bytes
                     Just fp -> BSL.writeFile fp bytes
+
+destinationScopeAddress
+    :: ScopeId -> VerifiedRegistry -> Either Text Text
+destinationScopeAddress scope registry =
+    case Disburse.registryViewFromVerified scope registry of
+        Left e ->
+            Left ("project destination: " <> T.pack (show e))
+        Right rv ->
+            case Map.lookup scope (Disburse.rvTreasuryByScope rv) of
+                Nothing ->
+                    Left
+                        ( "verified destination scope missing: "
+                            <> scopeText scope
+                        )
+                Just refs ->
+                    Right (Disburse.trAddress refs)
+
+destinationScopeLabel :: ScopeId -> Text
+destinationScopeLabel scope =
+    scopeDisplayName scope <> " treasury"
+
+scopeDisplayName :: ScopeId -> Text
+scopeDisplayName = \case
+    CoreDevelopment -> "Core Development"
+    OpsAndUseCases -> "Ops and Use Cases"
+    NetworkCompliance -> "Network Compliance"
+    Middleware -> "Middleware"
+    Contingency -> "Contingency"
 
 abortDisburse
     :: Tracer IO DisburseTrace.DisburseWizardEvent -> Text -> IO a

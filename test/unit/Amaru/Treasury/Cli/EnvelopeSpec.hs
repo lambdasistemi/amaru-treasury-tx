@@ -26,10 +26,16 @@ import Amaru.Treasury.Cli
     ( Cmd (..)
     , opts
     )
+import Amaru.Treasury.Cli.DisburseWizard
+    ( EmergencyTopUpOpts (..)
+    )
 import Amaru.Treasury.Cli.Envelope
     ( DeEnvelopeFilterResult (..)
     , runDeEnvelopeFilter
     , runEnvelopeFilter
+    )
+import Amaru.Treasury.Scope
+    ( ScopeId (NetworkCompliance)
     )
 import Amaru.Treasury.Tx.Envelope
     ( EnvelopeKind (..)
@@ -63,6 +69,35 @@ spec =
         it "leaves tx-build on its existing option shape" $
             parseCmd ["tx-build", "--out", "-"]
                 `shouldBe` Right "tx-build"
+
+        it "parses generic disburse-wizard for owned scopes only" $
+            parseCmd disburseWizardArgs `shouldBe` Right "disburse-wizard"
+
+        it "rejects contingency on generic disburse-wizard" $
+            parseCmd
+                ( replaceArg
+                    "network_compliance"
+                    "contingency"
+                    disburseWizardArgs
+                )
+                `shouldBe` Left "parse failure"
+
+        it "parses emergency-top-up as a contingency ADA top-up" $
+            parseCmd emergencyTopUpArgs
+                `shouldBe` Right "emergency-top-up"
+
+        it "parses emergency-top-up ADA into lovelace" $
+            parseEmergencyTopUp emergencyTopUpArgs
+                `shouldBe` Right (NetworkCompliance, 200000500000)
+
+        it "rejects contingency as an emergency-top-up destination" $
+            parseCmd
+                ( replaceArg
+                    "network_compliance"
+                    "contingency"
+                    emergencyTopUpArgs
+                )
+                `shouldBe` Left "parse failure"
 
         it "filters stdin bytes into an envelope" $
             runEnvelopeFilter Tx "deadbeef\n"
@@ -100,6 +135,18 @@ parseCmd args =
         Failure{} -> Left "parse failure"
         CompletionInvoked{} -> Left "completion invoked"
 
+parseEmergencyTopUp :: [String] -> Either String (ScopeId, Integer)
+parseEmergencyTopUp args =
+    case execParserPure defaultPrefs opts args of
+        Success (_, CmdEmergencyTopUp etu) ->
+            Right
+                ( etuOptsDestinationScope etu
+                , etuOptsAdaLovelace etu
+                )
+        Success{} -> Left "wrong command"
+        Failure{} -> Left "parse failure"
+        CompletionInvoked{} -> Left "completion invoked"
+
 cmdTag :: Cmd -> String
 cmdTag = \case
     CmdEnvelopeTx -> "envelope-tx"
@@ -112,5 +159,49 @@ cmdTag = \case
     CmdSwapWizard{} -> "swap-wizard"
     CmdSwapQuote{} -> "swap-quote"
     CmdDisburseWizard{} -> "disburse-wizard"
+    CmdEmergencyTopUp{} -> "emergency-top-up"
     CmdWithdrawWizard{} -> "withdraw-wizard"
     CmdReportRender{} -> "report-render"
+    CmdTreasuryInspect{} -> "treasury-inspect"
+
+emergencyTopUpArgs :: [String]
+emergencyTopUpArgs =
+    [ "emergency-top-up"
+    , "--wallet-addr"
+    , "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz"
+    , "--metadata"
+    , "metadata-mainnet.json"
+    , "--destination-scope"
+    , "network_compliance"
+    , "--ada"
+    , "200000.5"
+    , "--description"
+    , "Top up Network Compliance"
+    , "--justification"
+    , "Emergency reallocation"
+    ]
+
+disburseWizardArgs :: [String]
+disburseWizardArgs =
+    [ "disburse-wizard"
+    , "--wallet-addr"
+    , "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz"
+    , "--metadata"
+    , "metadata-mainnet.json"
+    , "--scope"
+    , "network_compliance"
+    , "--amount"
+    , "1"
+    , "--beneficiary-addr"
+    , "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz"
+    , "--description"
+    , "Vendor payment"
+    , "--justification"
+    , "Approved invoice"
+    , "--destination-label"
+    , "Vendor"
+    ]
+
+replaceArg :: String -> String -> [String] -> [String]
+replaceArg old new =
+    fmap (\arg -> if arg == old then new else arg)

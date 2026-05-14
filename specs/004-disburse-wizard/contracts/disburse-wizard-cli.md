@@ -3,9 +3,10 @@
 **Plan**: [../plan.md](../plan.md) · **Spec**: [../spec.md](../spec.md)
 **Date**: 2026-05-06
 
-This file fixes the user-visible CLI surface for `disburse-wizard`:
-options, defaults, exit codes, and stdout shape. Mirrors the structure
-of [`swap-wizard-cli.md`](../../002-swap-wizard/contracts/swap-wizard-cli.md).
+This file fixes the user-visible CLI surface for `disburse-wizard` and
+the contingency-specific `emergency-top-up` wrapper: options, defaults,
+exit codes, and stdout shape. Mirrors the structure of
+[`swap-wizard-cli.md`](../../002-swap-wizard/contracts/swap-wizard-cli.md).
 
 ## 1. Subcommand and options
 
@@ -15,7 +16,7 @@ amaru-treasury-tx [--node-socket PATH]
     disburse-wizard
     --wallet-addr ADDR
     --metadata PATH
-    --scope core_development|ops_and_use_cases|network_compliance|middleware|contingency
+    --scope core_development|ops_and_use_cases|network_compliance|middleware
     --beneficiary-addr ADDR
     --unit ada|usdm
     --amount INTEGER
@@ -45,10 +46,12 @@ Notes:
     `100000000` = 100 USDM).
 - `--scope` takes the canonical name from
   [`Amaru.Treasury.Scope`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Scope.hs).
-- The selected `--scope` implies its owner key as the first required
-  signer. `--extra-signer` is repeated for each witness beyond that
-  owner and accepts either a scope name (lowercased) or a raw 28-byte
-  hex keyhash. `--signer` is kept as a compatibility alias.
+- `disburse-wizard` is for owned scopes only. `contingency` is reserved
+  for `emergency-top-up`.
+- For owned scopes, the selected `--scope` implies its owner key as the
+  first required signer. `--extra-signer` is repeated for each witness
+  beyond that owner and accepts either a scope name (lowercased) or a
+  raw 28-byte hex keyhash. `--signer` is kept as a compatibility alias.
 - `--metadata` is a local
   [`journal/2026/metadata.json`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/metadata.json)-shaped
   file. The wizard verifies consumed registry anchors against the
@@ -57,6 +60,38 @@ Notes:
   `disburse-wizard ... | tx-build` works without an intermediate
   file.
 - `--log` defaults to stderr.
+
+## 1.1 Emergency top-up subcommand
+
+```text
+amaru-treasury-tx [--node-socket PATH]
+                  (--network mainnet|preprod|preview | --network-magic N)
+    emergency-top-up
+    --wallet-addr ADDR
+    --metadata PATH
+    --destination-scope core_development|ops_and_use_cases|network_compliance|middleware
+    --ada ADA_DECIMAL
+    --validity-hours INT
+    --description TEXT
+    --justification TEXT
+    [--out PATH]                   (defaults to stdout)
+    [--log PATH]                   (defaults to stderr)
+```
+
+Notes:
+
+- The source scope is always `contingency`.
+- The unit is always ADA. `--ada` accepts a positive decimal with at
+  most six fractional digits and is encoded as lovelace in the emitted
+  intent.
+- The destination is selected by scope. The command verifies both
+  `contingency` and the destination scope against the chain, then uses
+  the verified destination treasury address as the beneficiary address.
+- The emitted intent is still a unified `disburse` intent so the
+  shipped `tx-build` path can build it, but the command surface enforces
+  the emergency top-up policy.
+- Because `contingency` has no owner key of its own, the emitted intent
+  requires all four owned scope owner key hashes as signers.
 
 ## 2. Stdout / stderr shape
 
@@ -67,7 +102,7 @@ Notes:
 - A successful run writes nothing else to stdout when `--out` is
   given; stderr is silent on success when `--log` is given.
 - Errors go to stderr as a single line with `disburse-wizard: <message>`
-  prefix.
+  or `emergency-top-up: <message>` prefix.
 
 ## 3. Exit codes
 

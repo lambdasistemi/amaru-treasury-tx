@@ -171,8 +171,9 @@ data DisburseAnswers = DisburseAnswers
     -- ^ Each token is either a scope name (lowercased,
     --   e.g. @"ops_and_use_cases"@) resolved through
     --   the registry owners, or a raw 28-byte hex
-    --   keyhash. The selected scope's owner is always
-    --   inferred and prepended.
+    --   keyhash. Owned scopes infer and prepend the
+    --   selected scope owner. 'Contingency' has no owner
+    --   key, so it infers all four owned scope owners.
     }
     deriving stock (Eq, Show)
 
@@ -724,7 +725,14 @@ resolveDisburseEnv ResolverEnv{..} ri =
                                                 ScopeView
                                                     { svScope = riScope ri
                                                     , svRefs = refs
-                                                    , svDefaultSigners = []
+                                                    , svDefaultSigners =
+                                                        defaultSignersForScope
+                                                            ( rvOwners
+                                                                ( riRegistry
+                                                                    ri
+                                                                )
+                                                            )
+                                                            (riScope ri)
                                                     }
                                             , deTreasurySelection =
                                                 treasurySelection
@@ -855,12 +863,34 @@ resolveSigners
     -> Either DisburseError [Text]
 resolveSigners env ans = do
     let owners = rvOwners (deRegistry env)
-    selectedOwner <- ownerForScope owners (daScope ans)
+    selectedOwners <-
+        requiredSignersForScope owners (daScope ans)
     extraOwners <-
         traverse
             (resolveExtraSigner owners)
             (daExtraSigners ans)
-    pure (L.nub (selectedOwner : extraOwners))
+    pure (L.nub (selectedOwners <> extraOwners))
+
+requiredSignersForScope
+    :: ScopeOwners -> ScopeId -> Either DisburseError [Text]
+requiredSignersForScope owners scope =
+    case scope of
+        Contingency -> Right (allOwnedScopeSigners owners)
+        _ -> (: []) <$> ownerForScope owners scope
+
+defaultSignersForScope :: ScopeOwners -> ScopeId -> [Text]
+defaultSignersForScope owners scope =
+    case requiredSignersForScope owners scope of
+        Right signers -> signers
+        Left _ -> []
+
+allOwnedScopeSigners :: ScopeOwners -> [Text]
+allOwnedScopeSigners ScopeOwners{..} =
+    [ soCore
+    , soOps
+    , soNetworkCompliance
+    , soMiddleware
+    ]
 
 resolveExtraSigner
     :: ScopeOwners -> Text -> Either DisburseError Text
@@ -879,8 +909,10 @@ ownerForScope ScopeOwners{..} = \case
     NetworkCompliance -> Right soNetworkCompliance
     Middleware -> Right soMiddleware
     Contingency ->
-        -- Contingency has no on-chain owner key; the scope
-        -- exists but cannot sign disbursements directly.
+        -- Contingency has no on-chain owner key. When it is
+        -- the selected disburse scope, 'requiredSignersForScope'
+        -- expands it to all owned scope signers; as an explicit
+        -- extra signer token, "contingency" remains invalid.
         Left
             ( DisburseSignerNotScopeOrHex28
                 "contingency"

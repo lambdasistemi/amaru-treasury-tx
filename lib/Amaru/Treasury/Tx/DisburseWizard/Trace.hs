@@ -14,7 +14,9 @@ value of the produced @intent.json@ is a constructor of
 module Amaru.Treasury.Tx.DisburseWizard.Trace
     ( DisburseWizardEvent (..)
     , renderDisburseWizardEvent
+    , renderDisburseWizardEventWithPrefix
     , disburseWizardEventTracer
+    , disburseEventTracerWithPrefix
     ) where
 
 import Control.Tracer (Tracer (..), contramap)
@@ -86,7 +88,12 @@ data DisburseWizardEvent
 -- | Single-line, prefix-tagged rendering for log output.
 renderDisburseWizardEvent :: DisburseWizardEvent -> Text
 renderDisburseWizardEvent =
-    ("disburse-wizard: " <>) . body
+    renderDisburseWizardEventWithPrefix "disburse-wizard"
+
+renderDisburseWizardEventWithPrefix
+    :: Text -> DisburseWizardEvent -> Text
+renderDisburseWizardEventWithPrefix prefix =
+    ((prefix <> ": ") <>) . body
   where
     body = \case
         DweNetwork name magic ->
@@ -162,6 +169,11 @@ disburseWizardEventTracer
     :: Tracer m Text -> Tracer m DisburseWizardEvent
 disburseWizardEventTracer =
     contramap renderDisburseWizardEvent
+
+disburseEventTracerWithPrefix
+    :: Text -> Tracer m Text -> Tracer m DisburseWizardEvent
+disburseEventTracerWithPrefix prefix =
+    contramap (renderDisburseWizardEventWithPrefix prefix)
 
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show

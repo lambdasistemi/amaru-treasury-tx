@@ -44,14 +44,18 @@ import Amaru.Treasury.IntentJSON
     , TreasuryIntent (..)
     )
 import Amaru.Treasury.Scope
-    ( ScopeId (CoreDevelopment)
+    ( ScopeId (Contingency, CoreDevelopment)
     )
 import Amaru.Treasury.Tx.DisburseWizard
-    ( DisburseEnv (..)
+    ( DisburseAnswers (..)
+    , DisburseEnv (..)
     , DisburseTreasurySelection (..)
+    , RegistryView (..)
     , ResolverEnv (..)
     , ResolverError (..)
     , ResolverInput (..)
+    , ScopeOwners (..)
+    , ScopeView (..)
     , disburseToTreasuryIntent
     , resolveDisburseEnv
     , selectDisburseAda
@@ -78,6 +82,41 @@ spec =
             tiSAction intent `shouldBe` SDisburse
             tiSchema intent `shouldBe` 1
             tiNetwork intent `shouldBe` "mainnet"
+
+        it
+            "defaults contingency disburse signers to all four scope owners"
+            $ do
+                env <-
+                    eitherDecodeStrict
+                        "test/fixtures/disburse-wizard/env.ada.json"
+                answers <-
+                    eitherDecodeStrict
+                        "test/fixtures/disburse-wizard/answers.ada.json"
+                let owners = rvOwners (deRegistry env)
+                    contingencyEnv =
+                        env
+                            { deScopeView =
+                                (deScopeView env)
+                                    { svScope = Contingency
+                                    , svDefaultSigners = []
+                                    }
+                            }
+                    contingencyAnswers =
+                        answers
+                            { daScope = Contingency
+                            , daExtraSigners = []
+                            }
+                intent <-
+                    expectRight $
+                        disburseToTreasuryIntent
+                            contingencyEnv
+                            contingencyAnswers
+                tiSigners intent
+                    `shouldBe` [ soCore owners
+                               , soOps owners
+                               , soNetworkCompliance owners
+                               , soMiddleware owners
+                               ]
 
         describe "selectDisburseAda" $ do
             it "selects largest-first by lovelace" $ do

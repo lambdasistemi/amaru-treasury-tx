@@ -34,19 +34,23 @@ amaru-treasury-tx \
     --scope network_compliance \
     --wallet-txin "$WALLET_TXIN" \
     --order-txin "$ORDER_TXIN" \
-    --order-script-ref "$SUNDAE_ORDER_SCRIPT_REF" \
     --validity-hours 28 \
     --out cancel.cbor.hex \
     --report cancel.report.json
 ```
 
 The command verifies `metadata.json` against the chain, reads the
-order UTxO's inline datum, and fails before writing CBOR unless:
+order UTxO's inline datum, uses the built-in mainnet Sundae order
+reference script unless `--order-script-ref` is explicitly supplied,
+and fails before writing CBOR unless:
 
 - the order owner is the supported Amaru `AllOf` signatures policy,
 - the owner key hashes match the verified Amaru treasury owners, and
 - the order destination payment credential is the selected treasury
   script hash.
+
+On non-mainnet networks, pass `--order-script-ref TXHASH#IX`
+explicitly because the mainnet deployment constant does not apply.
 
 The cancellation spends wallet fuel for fees and collateral, spends
 the order with the SundaeSwap `Cancel` redeemer (`Constr 1 []`), and

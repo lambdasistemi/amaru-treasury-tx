@@ -9,7 +9,7 @@ amaru-treasury-tx --node-socket PATH --network NAME \
     --scope NAME \
     --wallet-txin TXHASH#IX \
     --order-txin TXHASH#IX \
-    --order-script-ref TXHASH#IX \
+    [--order-script-ref TXHASH#IX] \
     --validity-hours HOURS \
     --out tx.raw \
     [--report PATH]
@@ -22,8 +22,9 @@ amaru-treasury-tx --node-socket PATH --network NAME \
 - `--scope NAME`: selected treasury scope.
 - `--wallet-txin TXHASH#IX`: wallet fuel/collateral input.
 - `--order-txin TXHASH#IX`: pending SundaeSwap order UTxO.
-- `--order-script-ref TXHASH#IX`: reference input containing the
-  SundaeSwap order spending script.
+- `--order-script-ref TXHASH#IX`: optional on mainnet, where the
+  reference input containing the SundaeSwap order spending script is
+  built in; required outside mainnet.
 - `--validity-hours HOURS`: validity horizon, same policy as swap
   builders.
 - `--out PATH`: unsigned transaction CBOR hex output path.
@@ -69,4 +70,3 @@ The command exits non-zero and emits no unsigned CBOR when:
 - the destination does not match the selected treasury;
 - wallet fuel cannot pay fees/collateral;
 - script evaluation or final validation fails.
-

@@ -13,11 +13,13 @@ amaru-treasury-tx \
     --scope network_compliance \
     --wallet-txin "$WALLET_TXIN" \
     --order-txin "$ORDER_TXIN" \
-    --order-script-ref "$SUNDAE_ORDER_SCRIPT_REF" \
     --validity-hours 2 \
     --out cancel.tx \
     --report cancel.report.json
 ```
+
+On mainnet, the Sundae order reference-script UTxO is built in. On
+non-mainnet networks, pass `--order-script-ref TXHASH#IX` explicitly.
 
 Review `cancel.report.json`:
 
@@ -50,4 +52,3 @@ amaru-treasury-tx swap-cancel \
 
 The exact inspect input option may change once #109 finalizes its JSON
 contract.
-

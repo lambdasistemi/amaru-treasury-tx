@@ -79,10 +79,10 @@ amaru-treasury-tx \
         --scope network_compliance \
         --usdm 100000 \
         --split 33 \
-        --price-source coingecko-ada-usd \
+        --ada-usdm 0.270 \
         --slippage-bps 100 \
         --validity-hours 28 \
-        --description "Swapping ADA for \$100k using a fresh ADA/USD quote" \
+        --description "Swapping ADA for \$100k against an operator-supplied ADA/USDM quote" \
         --justification "Required to pay Antithesis as vendor" \
         --destination-label "Network Compliance's treasury" \
         --extra-signer core_development \
@@ -102,10 +102,9 @@ What the flags mean:
 | `--scope`      | One of `core_development`, `ops_and_use_cases`, `network_compliance`, `middleware`. |
 | `--usdm`       | Total USDM the swap should buy. ADA spend is derived from the quote and slippage policy. |
 | `--split N`    | Slice the order into N equal chunks. Use `--chunk-usdm X` instead to pin per-chunk size. |
-| `--price-source` | Named quote source. `coingecko-ada-usd` is the approved live ADA/USD source. |
-| `--ada-usd`    | Explicit ADA/USD quote override for deterministic offline operation. |
-| `--ada-usdm`   | Explicit ADA/USDM quote override. Named live ADA/USDM sources are deferred. |
+| `--ada-usdm`   | Operator-supplied ADA/USDM quote (USDM per ADA). The wizard applies slippage on top. For live retrieval, use the separate `swap-quote` command. |
 | `--slippage-bps` | Required slippage policy in basis points. There is no hidden default. |
+| `--min-rate`   | Expert path: pre-validated minimum USDM per ADA. Bypasses slippage. |
 | `--validity-hours` | Optional. Omit to use the chain's current horizon (longest plutus-translatable slot). When present, must be inside the horizon — overshoot returns a typed wizard error before `tx-build` runs. |
 | `--description` / `--justification` / `--destination-label` | Free-form rationale fields, pinned into the on-chain audit trail. |
 | `--extra-signer SCOPE\|HEX` | Repeated for each witness owner beyond the selected scope owner. Scope names and 28-byte key hashes are accepted; `--signer` remains as an alias. |
@@ -189,19 +188,17 @@ amaru-treasury-tx \
         --scope network_compliance \
         --usdm 100000 \
         --split 33 \
-        --ada-usd 0.8123 \
+        --ada-usdm 0.270 \
         --slippage-bps 100 \
         --validity-hours 28 \
-        --description "Swapping ADA for \$100k using an operator ADA/USD quote" \
+        --description "Swapping ADA for \$100k against an operator-supplied ADA/USDM quote" \
         --justification "Required to pay Antithesis as vendor" \
         --destination-label "Network Compliance's treasury" \
         --extra-signer core_development
 ```
 
-Use `--ada-usdm` instead when the approved operator input is already
-an ADA/USDM quote. Named live ADA/USDM sources are not selected in
-this issue; use explicit `--ada-usdm` until a provider contract is
-approved.
+For a live ADA/USDM quote, use the `swap-quote` command (it owns the
+outbound HTTP). The wizard itself does no outbound HTTP after #110.
 
 ## 9. Disburse USDM or ADA
 

@@ -26,7 +26,7 @@ module Amaru.Treasury.Tx.SwapWizardSpec (spec) where
 import Data.Aeson (FromJSON, eitherDecodeFileStrict)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Char (isDigit)
-import Data.Either (isRight)
+import Data.Either (isLeft, isRight)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -90,6 +90,17 @@ import Test.QuickCheck
     ( Positive (..)
     , property
     , (===)
+    )
+
+import Options.Applicative
+    ( ParserResult (..)
+    , defaultPrefs
+    , execParserPure
+    , info
+    )
+
+import Amaru.Treasury.Cli.SwapWizard
+    ( wizardOptsP
     )
 
 spec :: Spec
@@ -700,6 +711,40 @@ spec = describe "SwapWizard" $ do
                 `shouldBe` Left
                     (ResolverInvalidChunkSize 0)
 
+    describe "swap-wizard CLI parser" $ do
+        it "accepts --min-rate alone (expert path)" $
+            parseWizardOpts (baseWizardArgs <> ["--min-rate", "0.245"])
+                `shouldSatisfy` isRight
+
+        it "accepts --ada-usdm paired with --slippage-bps" $
+            parseWizardOpts
+                ( baseWizardArgs
+                    <> ["--ada-usdm", "0.270", "--slippage-bps", "100"]
+                )
+                `shouldSatisfy` isRight
+
+        it "rejects --ada-usdm without --slippage-bps" $
+            parseWizardOpts (baseWizardArgs <> ["--ada-usdm", "0.270"])
+                `shouldSatisfy` isLeft
+
+        it "rejects --price-source (retired from the wizard)" $
+            parseWizardOpts
+                ( baseWizardArgs
+                    <> [ "--price-source"
+                       , "coingecko-ada-usdm"
+                       , "--slippage-bps"
+                       , "100"
+                       ]
+                )
+                `shouldSatisfy` isLeft
+
+        it "rejects --ada-usd (silent USDM~USD conversion, retired)" $
+            parseWizardOpts
+                ( baseWizardArgs
+                    <> ["--ada-usd", "0.27", "--slippage-bps", "100"]
+                )
+                `shouldSatisfy` isLeft
+
     describe "renderWalletShortfall"
         $ it
             "produces the operator-facing single-line shape"
@@ -719,6 +764,33 @@ spec = describe "SwapWizard" $ do
 
 tShow :: (Show a) => a -> Text
 tShow = T.pack . show
+
+parseWizardOpts :: [String] -> Either String ()
+parseWizardOpts args =
+    case execParserPure defaultPrefs (info wizardOptsP mempty) args of
+        Success _ -> Right ()
+        Failure _ -> Left "parse failure"
+        CompletionInvoked _ -> Left "completion invoked"
+
+baseWizardArgs :: [String]
+baseWizardArgs =
+    [ "--wallet-addr"
+    , "addr1test"
+    , "--metadata"
+    , "metadata.json"
+    , "--scope"
+    , "network_compliance"
+    , "--usdm"
+    , "100000"
+    , "--split"
+    , "33"
+    , "--description"
+    , "Treasury swap"
+    , "--justification"
+    , "Quote-derived execution"
+    , "--destination-label"
+    , "USDM reserve"
+    ]
 
 loadFixture :: forall a. (FromJSON a) => FilePath -> IO a
 loadFixture path = do

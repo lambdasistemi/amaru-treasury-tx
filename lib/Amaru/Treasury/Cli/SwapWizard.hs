@@ -46,17 +46,13 @@ import Amaru.Treasury.Cli.Common
     )
 import Amaru.Treasury.Cli.SwapCommon
     ( abortTr
-    , currentIso8601
     , providerToResolverEnv
-    , resolveSwapQuoteObservation
     , traceEnv
     , traceRegistryView
     , traceResolverEnv
     )
 import Amaru.Treasury.Cli.SwapOptions
-    ( SwapQuoteQuoteArg (..)
-    , quoteP
-    , slippageReader
+    ( slippageReader
     )
 import Amaru.Treasury.IntentJSON
     ( SAction (..)
@@ -80,7 +76,6 @@ import Amaru.Treasury.Tx.SwapWizard
     , ResolverError (..)
     , ResolverInput (..)
     , SwapWizardQ (..)
-    , WizardEnv (..)
     , WizardError
     , registryViewFromVerified
     , renderWalletShortfall
@@ -98,7 +93,10 @@ data ChunkSpec
 
 data WizardRate
     = WizardMinRate !Double
-    | WizardQuoteRate !SwapQuoteQuoteArg !SlippageBps
+    | -- | Operator-supplied ADA/USDM quote with an explicit slippage policy.
+      --   The wizard derives @minRate = quote × (1 - bps/10000)@ before
+      --   building the intent; no outbound HTTP.
+      WizardOverrideRate !Double !SlippageBps
 
 data WizardSwapParameters = WizardSwapParameters
     { wspAmountLovelace :: !Integer
@@ -258,7 +256,7 @@ positiveSplit = eitherReader $ \s -> case reads s of
 
 wizardRateP :: Parser WizardRate
 wizardRateP =
-    explicitMinRateP <|> quoteDerivedRateP
+    explicitMinRateP <|> overrideRateP
   where
     explicitMinRateP =
         WizardMinRate
@@ -266,17 +264,25 @@ wizardRateP =
                 auto
                 ( long "min-rate"
                     <> metavar "USDM_PER_ADA"
-                    <> help "Min acceptable rate, e.g. 0.245"
+                    <> help "Min acceptable rate, e.g. 0.245 (no slippage applied)"
                 )
-    quoteDerivedRateP =
-        WizardQuoteRate
-            <$> quoteP
+    overrideRateP =
+        WizardOverrideRate
+            <$> option
+                auto
+                ( long "ada-usdm"
+                    <> metavar "USDM_PER_ADA"
+                    <> help
+                        "Operator-supplied ADA/USDM quote, e.g. 0.270. Paired with \
+                        \--slippage-bps to derive min-rate. For a live quote, run \
+                        \swap-quote instead and pipe its intent into tx-build."
+                )
             <*> option
                 slippageReader
                 ( long "slippage-bps"
                     <> metavar "INT"
                     <> help
-                        "Derive min-rate from quote after explicit slippage policy in basis points; 0 <= INT < 10000"
+                        "Derive min-rate from --ada-usdm with explicit slippage in basis points; 0 <= INT < 10000"
                 )
 
 usdmToLovelace :: Double -> Double -> Integer
@@ -289,12 +295,11 @@ rateToFraction r =
 
 resolveWizardSwapParameters
     :: Tracer IO WizardEvent
-    -> Text
     -> Double
     -> ChunkSpec
     -> WizardRate
     -> IO WizardSwapParameters
-resolveWizardSwapParameters tr observedAt usdm chunkSpec = \case
+resolveWizardSwapParameters tr usdm chunkSpec = \case
     WizardMinRate minRate ->
         let amountLov = usdmToLovelace usdm minRate
             chunkSize = case chunkSpec of
@@ -308,8 +313,13 @@ resolveWizardSwapParameters tr observedAt usdm chunkSpec = \case
                     , wspRateNumerator = rateNum
                     , wspRateDenominator = rateDen
                     }
-    WizardQuoteRate quoteArg slippage -> do
-        observation <- resolveSwapQuoteObservation tr observedAt quoteArg
+    WizardOverrideRate adaUsdm slippage -> do
+        let observation =
+                SQ.QuoteObservation
+                    { SQ.qoPair = SQ.AdaUsdm
+                    , SQ.qoQuote = toRational adaUsdm
+                    , SQ.qoProvenance = SQ.OperatorOverride
+                    }
         derived <-
             case SQ.deriveSwapParameters
                 observation
@@ -350,11 +360,9 @@ runWizard g WizardOpts{..} = do
         traceWith tr (WeNetwork networkName (fromIntegral magic))
         traceWith tr (WeMetadata wOptsMetadataPath)
 
-        observedAt <- currentIso8601
         params <-
             resolveWizardSwapParameters
                 tr
-                observedAt
                 wOptsUsdm
                 wOptsChunkSpec
                 wOptsRate

@@ -92,8 +92,9 @@ The header has two extra fields operators rely on for "did I point this
 at the right deployment":
 
 - `Chain tip` — slot and block hash at the moment the command ran.
-- `Deployment NFT` — the policy id of the scope-owners NFT pinned in
-  metadata. Different deployment, different policy id.
+- `Deployment anchor` — the scope-owners-NFT UTxO outref pinned in
+  metadata (the `scope_owners` field). Different deployment, different
+  outref.
 
 ## What it does *not* do (v1)
 

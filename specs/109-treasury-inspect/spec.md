@@ -25,8 +25,8 @@ network_compliance` against the live `cardano-mainnet` socket immediately
 after the swap submitted as
 [`b5716ae9…`](https://cardanoscan.io/transaction/b5716ae98bb41b53c5fa2ebc6e8d5558879dc86d14fb998333e643095c6b233e).
 The output names the treasury leftover UTxO at `b5716ae9…#2` and lists the
-two pending swap-order outputs sitting at the SundaeSwap order address with
-the `network_compliance` payment hash as owner.
+two pending swap-order outputs sitting at the SundaeSwap order address that
+name the `network_compliance` treasury as the swap-payout destination.
 
 **Acceptance Scenarios**:
 
@@ -34,7 +34,8 @@ the `network_compliance` payment hash as owner.
    running cardano-node socket, **When** the operator runs the command for
    one scope, **Then** the output names every treasury-script UTxO for that
    scope, the ADA total, the USDM total (if any), and every pending
-   swap-order UTxO whose datum names that scope as owner.
+   swap-order UTxO whose datum names that scope's treasury as the
+   swap-payout destination.
 2. **Given** the same inputs but no `--scope`, **When** the operator runs
    the command, **Then** the output covers every scope listed in the
    metadata in a stable order.
@@ -58,8 +59,8 @@ default output, where the format auto-selects JSON because stdout is not a
 TTY) and validate the output against `docs/assets/treasury-inspect-schema.json`
 with the project's existing schema-check pattern. The JSON contains the same
 facts as the human output — treasury UTxOs, totals, and pending swap orders
-per scope — plus the chain tip and the deployment identifier (instance NFT
-policy id) the metadata pins.
+per scope — plus the chain tip and the deployment anchor (the
+scope-owners-NFT UTxO outref pinned in metadata).
 
 **Acceptance Scenarios**:
 
@@ -83,19 +84,19 @@ laptop. They want a quick safety net: a one-line line of evidence that the
 metadata.json they passed in matches the deployment they expected to inspect.
 
 **Why this priority**: Mis-pointing inspect at the wrong metadata is silent
-today. Surfacing the instance NFT policy id (which the metadata pins) is a
-cheap belt-and-braces check; it is not the headline feature but it removes
-a real foot-gun.
+today. Surfacing the scope-owners-NFT UTxO outref (which the metadata
+pins as the deployment anchor) is a cheap belt-and-braces check; it is
+not the headline feature but it removes a real foot-gun.
 
 **Independent Test**: Run the command twice — once with `mainnet.json` and
 once with `preprod.json` — and confirm the bookkeeping section shows a
-different instance NFT policy id each time.
+different scope-owners-NFT outref each time.
 
 **Acceptance Scenarios**:
 
 1. **Given** any metadata.json, **When** the command runs, **Then** the
-   bookkeeping section names the instance NFT policy id pinned in the
-   metadata and the current chain tip (slot and block).
+   bookkeeping section names the scope-owners-NFT UTxO outref pinned in
+   the metadata and the current chain tip (slot and block).
 
 ### Edge Cases
 
@@ -155,8 +156,8 @@ different instance NFT policy id each time.
   list is always empty). An empty list MUST render as an explicit
   "no pending orders" line rather than being omitted.
 - **FR-010**: The report MUST include a bookkeeping section naming the
-  current chain tip (slot and block hash) and the instance NFT policy id
-  pinned in the metadata.
+  current chain tip (slot and block hash) and the scope-owners-NFT
+  UTxO outref pinned in the metadata as the deployment anchor.
 - **FR-011**: System MUST be read-only: no transaction is signed,
   submitted, or written to the chain. No private key material is
   consulted.
@@ -178,17 +179,20 @@ different instance NFT policy id each time.
 - **InspectReport**: The full report for one invocation. Names the chain
   tip, the deployment identifier, and a collection of per-scope sections.
 - **ScopeSection**: The report for a single scope. Names the scope, its
-  treasury script address, its owner payment hash (or its absence), the
-  list of treasury UTxOs, the totals, and the list of pending orders.
+  treasury script address, its treasury script hash (used to attribute
+  pending orders), the list of treasury UTxOs, the totals, and the list
+  of pending orders.
 - **TreasuryUtxo**: A UTxO at the treasury script address. Names the
   outref, the lovelace, the USDM amount, and any other assets.
 - **PendingSwapOrder**: A UTxO at the SundaeSwap order address whose
   inline datum names the scope's treasury script hash as the
   swap-payout destination. Names the outref, the ADA in, the minimum
   USDM out, and the embedded SundaeSwap fee.
-- **DeploymentIdentifier**: The instance NFT policy id pinned in the
-  metadata.json; surfaces in the bookkeeping section so operators can
-  confirm they inspected the deployment they intended.
+- **DeploymentAnchor**: The scope-owners-NFT UTxO outref pinned in the
+  metadata.json (the `scope_owners` field — already the project-level
+  deployment identity, used by `Report.Identity:152`). Surfaces in the
+  bookkeeping section so operators can confirm they inspected the
+  deployment they intended.
 
 ## Success Criteria *(mandatory)*
 
@@ -207,7 +211,7 @@ different instance NFT policy id each time.
   — produces an output that names two pending swap-order outputs and
   the treasury leftover UTxO at the expected outref.
 - **SC-004**: An operator who points the command at a different
-  metadata.json sees a different deployment identifier in the
+  metadata.json sees a different scope-owners-NFT outref in the
   bookkeeping section, so misdirected runs against the wrong deployment
   are detectable in seconds.
 
@@ -247,8 +251,12 @@ different instance NFT policy id each time.
 - The command runs as a single-shot query against a node the operator
   is already running locally. No persistent state, daemon, or
   background watcher is introduced.
-- The instance NFT policy id is already pinned in the metadata.json
-  and can be surfaced without a node round-trip.
+- The deployment anchor surfaced in the bookkeeping section is the
+  `scope_owners` outref already pinned in metadata.json — read directly
+  from the file, no node round-trip needed. (An earlier draft of this
+  spec said "instance NFT policy id"; that field is not in metadata —
+  recovering it would have cost a chain query. The outref serves the
+  same operator purpose: it is unique per deployment.)
 
 ## Out of Scope (v1)
 

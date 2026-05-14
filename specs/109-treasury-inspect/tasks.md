@@ -69,12 +69,12 @@ its first user in a vertical slice.
 
 ### Slice B — Pure assembly + renderers + golden snapshot
 
-- [ ] T014 [US1] Extend `lib/Amaru/Treasury/Inspect/Types.hs` with the public report types: `InspectReport`, `ScopeSection`, `ScopeTotals`, `TreasuryUtxo`, `PendingSwapOrder`, `Outref`, `OtherAsset`, `ChainTip`, `DeploymentIdentifier` (per [data-model.md](data-model.md)).
+- [ ] T014 [US1] Extend `lib/Amaru/Treasury/Inspect/Types.hs` with the public report types: `InspectReport`, `ScopeSection`, `ScopeTotals`, `TreasuryUtxo`, `PendingSwapOrder`, `Outref`, `OtherAsset`, `ChainTip`, `DeploymentAnchor` (per [data-model.md](data-model.md)).
 - [ ] T015 [P] [US1] Add canned fixtures under `test/fixtures/treasury-inspect/`: `metadata.json`, `utxos-treasury.json`, `utxos-swap-orders.json`, and the expected `report.golden.json`. Network: pretend mainnet; one scope (`network_compliance`) with non-empty UTxOs + 2 pending orders; the other four scopes with empty lists. ADA + USDM values picked to make rendering edge cases observable.
 - [ ] T016 [P] [US1] Add `test/golden/TreasuryInspectGoldenSpec.hs` — load the fixtures, call `buildInspectReport` (Haskell only, no I/O), encode to JSON via `Inspect.Render.encodeReport`, diff against `report.golden.json`. The test must fail before T017–T018 are written. Wire into `test/Spec.hs`. Support `UPDATE_GOLDENS=1` to regenerate.
 - [ ] T017 [US1] Add `lib/Amaru/Treasury/Inspect.hs` exporting `buildInspectReport :: TreasuryMetadata -> ChainTip -> Map ScopeId [TreasuryUtxo] -> [(Outref, ParsedSwapOrder)] -> Maybe ScopeId -> InspectReport`. Pure. Implements the filter rules from [data-model.md](data-model.md) §Filtering.
 - [ ] T018 [US1] Add `lib/Amaru/Treasury/Inspect/Render.hs` with `ToJSON InspectReport` (and friends) producing the schema-conformant shape; plus `renderHuman :: InspectReport -> Text` producing the format sketched in [contracts/cli-surface.md](contracts/cli-surface.md) §"Human format". Provide `encodeReport :: InspectReport -> ByteString` using `aesonPrettyConfig` (mirrors `Report.hs:296+`).
-- [ ] T019 [US1] [US3] Confirm the `ChainTip` + `DeploymentIdentifier` fields land in `InspectReport` in this slice (covers US3's bookkeeping requirements at the type and render level — population is in slice D).
+- [ ] T019 [US1] [US3] Confirm the `ChainTip` + `DeploymentAnchor` fields land in `InspectReport` in this slice (covers US3's bookkeeping requirements at the type and render level — population is in slice D; the deployment anchor is parsed straight from `tmScopeOwners` with no chain query).
 - [ ] T020 [US1] Run `nix develop --quiet -c just unit --match "TreasuryInspectGolden"`; ensure golden matches.
 
 **Slice B commit**: `feat(109): treasury-inspect report assembly + JSON/human render + golden`. One commit; T014–T019 folded. T020 is the pre-commit check.
@@ -107,7 +107,10 @@ its first user in a vertical slice.
 - [ ] T027 [US1] [US2] [US3] Add `lib/Amaru/Treasury/Cli/TreasuryInspect.hs` with: an `InspectOpts` record; an optparse-applicative parser matching [contracts/cli-surface.md](contracts/cli-surface.md); `runTreasuryInspect :: Backend -> InspectOpts -> IO ExitCode`. Steps 1–6 in cli-surface.md §"Argument validation order" implemented one-for-one. The IO glue calls `queryUTxOsAtH` twice (treasury address per scope, SundaeSwap order address once), `queryChainTip` once, then `buildInspectReport`, then writes per the format/`--out` matrix.
 - [ ] T028 [US1] Update `lib/Amaru/Treasury/Cli.hs`: extend `Cmd` with `CmdTreasuryInspect InspectOpts`; extend `cmdP` with the `command "treasury-inspect" …` entry.
 - [ ] T029 [US1] Update `app/amaru-treasury-tx/Main.hs`: add the dispatch case `CmdTreasuryInspect opts -> exitWith =<< runTreasuryInspect backend opts`.
-- [ ] T030 [P] [US2] Add a `treasury-inspect` clause to the existing `just smoke` recipe: `cabal run … exe:amaru-treasury-tx -- treasury-inspect --help`; assert it exits 0 and the output mentions `--metadata`, `--scope`, `--format`, `--out`.
+- [ ] T030 [P] [US2] Add a `treasury-inspect` clause to the existing `just smoke` recipe with three no-node assertions:
+  1. `treasury-inspect --help` exits 0 and the output mentions `--metadata`, `--scope`, `--format`, `--out`.
+  2. `treasury-inspect --metadata /nonexistent.json --node-socket /dev/null --network cardano-mainnet` exits 2 and stderr starts with `metadata:` (FR-012 bad-metadata branch).
+  3. `treasury-inspect --metadata test/fixtures/treasury-inspect/metadata.json --scope no_such_scope --node-socket /dev/null --network cardano-mainnet` exits 2 and stderr names the available scopes (FR-012 wrong-scope branch). Both error cases short-circuit before any node contact, so `--node-socket /dev/null` is safe.
 - [ ] T031 [US1] [US2] [US3] Run `nix develop --quiet -c just ci` end-to-end: build, unit, golden, schema-check, smoke, hlint, format-check. All green.
 - [ ] T032 [US1] Sanity-cabal-check: `nix develop --quiet -c just cabal-check`; the new exe + modules pass the Hackage gate.
 
@@ -117,7 +120,7 @@ its first user in a vertical slice.
 
 ### Slice E — Operator documentation
 
-- [ ] T033 Copy [specs/109-treasury-inspect/quickstart.md](quickstart.md) to `docs/inspect.md`, trim the speckit-internal references, link it from the mkdocs nav. Keep the Acceptance-smoke section verbatim.
+- [ ] T033 Copy [specs/109-treasury-inspect/quickstart.md](quickstart.md) to `docs/inspect.md`, trim the speckit-internal references, link it from the docs index (mkdocs nav, per FR-014). Keep the Acceptance-smoke section verbatim.
 - [ ] T034 Run `nix develop --quiet -c just build-docs`; ensure the docs site renders without warnings.
 
 **Slice E commit**: `docs(109): operator walkthrough for treasury-inspect`. One commit.

@@ -9,8 +9,9 @@ A new read-only top-level subcommand `treasury-inspect` that reads the same
 metadata.json the wizards already consume, queries the live cardano-node, and
 reports two things per scope: the treasury script-address balance (with ADA
 and USDM totals + per-UTxO breakdown) and the list of pending SundaeSwap
-order UTxOs whose inline-datum owner matches the scope's payment hash. Plus a
-bookkeeping section pinning chain tip + deployment identifier.
+order UTxOs whose inline datum names that scope's treasury as the
+swap-payout destination. Plus a bookkeeping section pinning the current
+chain tip + the deployment anchor (scope-owners-NFT outref from metadata).
 
 Approach: keep the inspect logic pure (a function from sampled facts —
 metadata + chain tip + UTxOs at two addresses — to a `Report` value) and put
@@ -25,7 +26,7 @@ JSON Schema both live next to the report types, mirroring the existing
 - **Primary dependencies**: `optparse-applicative` (existing CLI), the
   `Provider` interface from `cardano-node-clients` (existing), `aeson`,
   `aeson-pretty`, `text`, `plutus-tx` (for parsing the SundaeSwap order
-  datum's owner field), `bytestring`.
+  datum's destination-credential field), `bytestring`.
 - **Storage**: stateless — single-shot LSQ query per invocation; no
   persistent state, no cache.
 - **Testing**: `hspec` for unit + golden tests, snapshot golden JSON file
@@ -91,7 +92,7 @@ lib/Amaru/Treasury/
 │   ├── Types.hs                                # InspectReport, ScopeSection, TreasuryUtxo, PendingOrder
 │   ├── Render.hs                               # ToJSON + human renderer
 │   ├── Schema.hs                               # treasuryInspectSchema :: Value; encoder
-│   └── SwapOrderDatum.hs                       # owner-hash extraction from inline datum
+│   └── SwapOrderDatum.hs                       # destination-credential extraction from inline datum
 ├── Cli/
 │   └── TreasuryInspect.hs                      # optparse-applicative parser + IO glue
 ├── Cli.hs                                      # add CmdTreasuryInspect variant
@@ -126,11 +127,12 @@ justfile reuse the same regenerate-and-diff recipe shape that today validates
 
 ## Phase 0 — Research (artifact: [research.md](research.md))
 
-Resolves: the SundaeSwap order address source, the owner-field extraction from
-the inline datum, the USDM asset identification, the `--out` and `--format`
-semantics in edge cases, and the rationale for the Backend additive change (or
-lack thereof). Each decision is recorded with rationale + considered
-alternatives.
+Resolves: the SundaeSwap order address source, the destination-credential
+extraction from the inline datum (the actual scope-attribution field, not
+the four-owner authorised-signers list), the USDM asset identification,
+the `--out` and `--format` semantics in edge cases, and the rationale for
+the Backend additive change (or lack thereof). Each decision is recorded
+with rationale + considered alternatives.
 
 ## Phase 1 — Design & Contracts
 

@@ -52,9 +52,12 @@
     "Deployment": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["instanceNftPolicyId"],
+      "required": ["scopeOwnersOutref"],
       "properties": {
-        "instanceNftPolicyId": { "$ref": "#/$defs/Hex28" }
+        "scopeOwnersOutref": {
+          "$ref": "#/$defs/Outref",
+          "description": "The outref pinned in metadata.json's `scope_owners` field — the project's deployment-identity anchor. Different deployments have different values; surfacing this lets operators detect when they pointed inspect at the wrong metadata."
+        }
       }
     },
     "ScopeSection": {

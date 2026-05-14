@@ -60,12 +60,12 @@ its first user in a vertical slice.
 
 ### Slice A — SundaeSwap order datum parser
 
-- [ ] T010 [US1] Add `Inspect/Types.hs` with the minimal record `ParsedSwapOrder` (`posDestinationTreasuryHash`, `posLovelaceIn`, `posMinUsdmOut`, `posSundaeFeeLovelace`); wire into `amaru-treasury-tx.cabal` `exposed-modules` under library `amaru-treasury-tx`.
-- [ ] T011 [P] [US1] Add `test/Spec/Treasury/Inspect/SwapOrderDatumSpec.hs` with hspec cases: happy-path (datum from `swapOrderDatum p chunkLovelace chunkUsdm` parses back to `ParsedSwapOrder` with matching fields); wrong outer constructor; missing destination credential; missing pool params. Tests fail before implementation. Wire into `test/Spec.hs`.
-- [ ] T012 [US1] Add `lib/Amaru/Treasury/Inspect/SwapOrderDatum.hs` exporting `parseSwapOrderDatum :: Data -> Maybe ParsedSwapOrder` implementing the destination-credential extraction described in [research.md R1](research.md). Pure function; total; no I/O.
-- [ ] T013 [US1] Run `nix develop --quiet -c just unit --match "SwapOrderDatum"`; ensure all cases pass.
+- [X] T010 [US1] Add `Inspect/Types.hs` with the minimal record `ParsedSwapOrder` (`posDestinationTreasuryHash`, `posLovelaceIn`, `posMinUsdmOut`, `posSundaeFeeLovelace`); wire into `amaru-treasury-tx.cabal` `exposed-modules` under library `amaru-treasury-tx`.
+- [X] T011 [P] [US1] Add `test/unit/Amaru/Treasury/Inspect/SwapOrderDatumSpec.hs` with hspec cases: happy-path (datum from `swapOrderDatum p chunkLovelace chunkUsdm` parses back to `ParsedSwapOrder` with matching fields); wrong outer constructor; missing destination credential; missing pool params. Tests fail before implementation. Auto-discovered by `hspec-discover` once listed in the test-suite `other-modules`.
+- [X] T012 [US1] Add `lib/Amaru/Treasury/Inspect/SwapOrderDatum.hs` exporting `parseSwapOrderDatum :: Data -> Maybe ParsedSwapOrder` implementing the destination-credential extraction described in [research.md R1](research.md). Pure function; total; no I/O.
+- [X] T013 [US1] Run `nix develop --quiet -c just unit --match "SwapOrderDatum"`; ensure all cases pass.
 
-**Slice A commit**: `feat(109): parse SundaeSwap order datum into ParsedSwapOrder` — single commit containing T010 + T011 + T012, RED→GREEN folded. T013 is the local-CI check before commit.
+**Slice A commit**: `feat(109): parse SundaeSwap order datum into ParsedSwapOrder` — landed as [`fd366bd`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/fd366bd). Single commit containing T010 + T011 + T012, RED→GREEN folded. T013 ran green pre-commit.
 
 ### Slice B — Pure assembly + renderers + golden snapshot
 

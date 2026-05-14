@@ -41,6 +41,10 @@ import Amaru.Treasury.Cli.Submit
     ( SubmitOpts
     , submitOptsP
     )
+import Amaru.Treasury.Cli.SwapCancel
+    ( SwapCancelOpts
+    , swapCancelOptsP
+    )
 import Amaru.Treasury.Cli.SwapQuote
     ( SwapQuoteOpts
     , swapQuoteOptsP
@@ -69,6 +73,7 @@ import Amaru.Treasury.Report.Cli
 data Cmd
     = CmdSwapWizard WizardOpts
     | CmdSwapQuote SwapQuoteOpts
+    | CmdSwapCancel SwapCancelOpts
     | CmdDisburseWizard DisburseWizardOpts
     | CmdWithdrawWizard WithdrawOpts
     | CmdTxBuild TxBuildOpts
@@ -114,6 +119,14 @@ cmdP =
                     (CmdSwapQuote <$> swapQuoteOptsP)
                     ( progDesc
                         "Prepare a quote-derived swap run"
+                    )
+                )
+            <> command
+                "swap-cancel"
+                ( info
+                    (CmdSwapCancel <$> swapCancelOptsP)
+                    ( progDesc
+                        "Build an unsigned transaction that cancels one pending SundaeSwap order"
                     )
                 )
             <> command

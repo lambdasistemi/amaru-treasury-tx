@@ -20,12 +20,18 @@ recipes byte-for-byte:
   for the Amaru permissions withdraw-zero entry on every
   @disburse@/@reorganize@ tx, and for the treasury
   withdrawal in @withdraw@.
+
+* @sundaeCancelRedeemer@ — SundaeSwap V3 order @Cancel@,
+  constructor 1, empty fields.
 -}
 module Amaru.Treasury.Redeemer
     ( -- * Sundae treasury-spend redeemers
       disburseAdaRedeemer
     , disburseRedeemer
     , reorganizeRedeemer
+
+      -- * SundaeSwap order redeemers
+    , sundaeCancelRedeemer
 
       -- * Permissions / withdraw redeemer
     , emptyListRedeemer
@@ -75,6 +81,13 @@ index 0.
 -}
 reorganizeRedeemer :: Data
 reorganizeRedeemer = Constr 0 []
+
+{- | @Constr 1 []@ — SundaeSwap V3 @OrderRedeemer.Cancel@.
+
+The SDK encodes this value as CBOR hex @d87a80@.
+-}
+sundaeCancelRedeemer :: Data
+sundaeCancelRedeemer = Constr 1 []
 
 {- | @List []@ — empty redeemer.
 

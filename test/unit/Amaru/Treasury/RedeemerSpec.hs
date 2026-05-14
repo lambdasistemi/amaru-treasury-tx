@@ -25,6 +25,7 @@ import Amaru.Treasury.Redeemer
     , disburseRedeemer
     , emptyListRedeemer
     , reorganizeRedeemer
+    , sundaeCancelRedeemer
     )
 
 hex :: Data -> BS.ByteString
@@ -42,6 +43,9 @@ spec = describe "Amaru.Treasury.Redeemer" $ do
 
     it "encodes the empty-list redeemer as []" $ do
         hex emptyListRedeemer `shouldBe` "80"
+
+    it "encodes the SundaeSwap V3 Cancel redeemer as Constr 1 []" $ do
+        hex sundaeCancelRedeemer `shouldBe` "d87a80"
 
     it "encodes a 1 ADA disburse with empty policy/asset" $ do
         hex (disburseAdaRedeemer 1_000_000)
@@ -64,5 +68,6 @@ spec = describe "Amaru.Treasury.Redeemer" $ do
     it "round-trips every redeemer through CBOR" $ do
         roundTrip reorganizeRedeemer `shouldBe` reorganizeRedeemer
         roundTrip emptyListRedeemer `shouldBe` emptyListRedeemer
+        roundTrip sundaeCancelRedeemer `shouldBe` sundaeCancelRedeemer
         roundTrip (disburseAdaRedeemer 42)
             `shouldBe` disburseAdaRedeemer 42

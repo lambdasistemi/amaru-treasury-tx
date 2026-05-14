@@ -97,6 +97,7 @@ library
     Amaru.Treasury.Build.ReportWriter
     Amaru.Treasury.Build.Result
     Amaru.Treasury.Build.Swap
+    Amaru.Treasury.Build.SwapCancel
     Amaru.Treasury.Build.Trace
     Amaru.Treasury.Build.Withdraw
     Amaru.Treasury.ChainContext
@@ -108,6 +109,7 @@ library
     Amaru.Treasury.Cli.Envelope
     Amaru.Treasury.Cli.ReportRender
     Amaru.Treasury.Cli.Submit
+    Amaru.Treasury.Cli.SwapCancel
     Amaru.Treasury.Cli.SwapCommon
     Amaru.Treasury.Cli.SwapOptions
     Amaru.Treasury.Cli.SwapQuote
@@ -157,6 +159,8 @@ library
     Amaru.Treasury.Tx.Reorganize
     Amaru.Treasury.Tx.Submit
     Amaru.Treasury.Tx.Swap
+    Amaru.Treasury.Tx.SwapCancel
+    Amaru.Treasury.Tx.SwapCancel.Datum
     Amaru.Treasury.Tx.SwapQuote
     Amaru.Treasury.Tx.SwapQuote.Source
     Amaru.Treasury.Tx.SwapWizard
@@ -329,6 +333,7 @@ test-suite unit-tests
     Amaru.Treasury.AuxDataSpec
     Amaru.Treasury.BuildSpec
     Amaru.Treasury.Cli.EnvelopeSpec
+    Amaru.Treasury.Cli.SwapCancelSpec
     Amaru.Treasury.Inspect.SchemaSpec
     Amaru.Treasury.Inspect.SwapOrderDatumSpec
     Amaru.Treasury.IntentJSONSchemaSpec
@@ -354,6 +359,7 @@ test-suite unit-tests
     Amaru.Treasury.Tx.DisburseWizardSpec
     Amaru.Treasury.Tx.EnvelopeSpec
     Amaru.Treasury.Tx.SubmitSpec
+    Amaru.Treasury.Tx.SwapCancelSpec
     Amaru.Treasury.Tx.SwapQuoteSpec
     Amaru.Treasury.Tx.SwapSpec
     Amaru.Treasury.Tx.SwapWizardSpec

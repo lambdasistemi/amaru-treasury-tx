@@ -23,6 +23,7 @@ import Cardano.Ledger.Coin (Coin)
 -- | Treasury action whose build path produced a diagnostic.
 data BuildAction
     = BuildActionSwap
+    | BuildActionSwapCancel
     | BuildActionDisburse
     | BuildActionWithdraw
     | BuildActionReorganize

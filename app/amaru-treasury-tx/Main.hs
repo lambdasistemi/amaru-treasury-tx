@@ -38,6 +38,9 @@ import Amaru.Treasury.Cli.ReportRender
 import Amaru.Treasury.Cli.Submit
     ( runSubmit
     )
+import Amaru.Treasury.Cli.SwapCancel
+    ( runSwapCancel
+    )
 import Amaru.Treasury.Cli.SwapQuote
     ( runSwapQuote
     )
@@ -69,6 +72,9 @@ main = withUtf8 $ do
         CmdSwapQuote qo ->
             withSocket g $ \socket ->
                 runSwapQuote g{goSocketPath = Just socket} qo
+        CmdSwapCancel co ->
+            withSocket g $ \socket ->
+                runSwapCancel g{goSocketPath = Just socket} co
         CmdDisburseWizard dwo ->
             withSocket g $ \socket ->
                 runDisburseWizard g{goSocketPath = Just socket} dwo

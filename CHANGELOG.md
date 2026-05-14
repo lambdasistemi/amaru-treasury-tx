@@ -4,6 +4,12 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.7.1](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.7.0...v0.2.7.1) (2026-05-14)
+
+### Bug Fixes
+
+* **109:** UTF-8-safe treasury-inspect output under any locale ([a3b3004](https://github.com/lambdasistemi/amaru-treasury-tx/commit/a3b3004af12d508a7a92bc0c5ad45ac23a6e61e4))
+
 ## [0.2.7.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.6.0...v0.2.7.0) (2026-05-14)
 
 ### Features

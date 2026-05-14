@@ -154,9 +154,15 @@ and the project conventions; this feature adds no new technology.
 
 ## Status
 
-- ✅ Spec accepted
-- ⏳ Plan drafted (this file) — pending self-review against the pr-skill
-  plan-review gate
-- ☐ `/speckit.tasks` — bisect-safe vertical slices, each tagged with the
-  RED/regression proof per the pr-skill tasks-review gate
-- ☐ `/speckit.implement`
+- ✅ Spec accepted (amended during planning per research.md R1)
+- ✅ Plan + research + data-model + contracts + quickstart approved
+  by self-review against the `pr` skill plan-review gate
+- ✅ Tasks approved (`tasks.md`, five vertical slices A–E)
+- ✅ `/speckit.analyze` consistency findings C1–C5 resolved
+- ✅ **Slice A landed** — SundaeSwap order datum parser
+  ([commit `fd366bd`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/fd366bd)).
+  5/5 unit tests passing; full `just ci` green.
+- ⏳ **Slice B in flight** — pure assembly + JSON/human render + golden
+- ☐ Slice C — JSON Schema + schema-check gate
+- ☐ Slice D — CLI parser + N2C glue + smoke
+- ☐ Slice E — operator docs

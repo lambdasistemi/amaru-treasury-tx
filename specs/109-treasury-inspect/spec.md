@@ -103,10 +103,10 @@ different instance NFT policy id each time.
   with explicit "no UTxOs" wording and the totals MUST be zero, not absent.
 - A scope has zero pending swap orders: the section MUST render with
   explicit "no pending orders" wording rather than omitting the section.
-- The `contingency` scope has no owner payment hash (per metadata). For
-  that scope the pending-orders subsection MUST be skipped with a note
-  that filtering by owner is not applicable, while the treasury-balance
-  subsection MUST still render.
+- The `contingency` scope cannot fund swaps (the swap wizard rejects
+  it). Its pending-orders subsection therefore always renders as
+  "no pending orders". The treasury-balance subsection MUST still
+  render normally.
 - A treasury UTxO holds an unexpected asset (neither ADA nor USDM): the
   output MUST still show ADA and USDM totals and MUST also report the
   unexpected assets so the operator notices.
@@ -142,14 +142,18 @@ different instance NFT policy id each time.
   assets held.
 - **FR-007**: For each selected scope, the report MUST compute total ADA
   and total USDM across the scope's treasury UTxOs.
-- **FR-008**: For each selected scope that has an owner payment hash, the
-  report MUST list every UTxO at the SundaeSwap order address whose
-  inline datum names that scope's payment hash as owner, with: tx-id and
-  output index, ADA in, declared minimum USDM out, and SundaeSwap fee
-  embedded in the datum.
-- **FR-009**: For scopes without an owner payment hash (e.g.
-  `contingency`), the report MUST omit the pending-orders subsection
-  with an explicit note explaining why.
+- **FR-008**: For each selected scope, the report MUST list every UTxO
+  at the SundaeSwap order address whose inline datum identifies that
+  scope's treasury as the swap-payout destination (the destination
+  credential embedded in the order datum is the scope's 28-byte
+  treasury script hash). For each pending order, the report MUST show:
+  tx-id and output index, ADA in, declared minimum USDM out, and the
+  SundaeSwap fee embedded in the datum.
+- **FR-009**: The pending-orders subsection MUST render uniformly for
+  every scope, including ones that cannot fund swaps today (the
+  contingency scope is rejected by the swap wizard, so its pending
+  list is always empty). An empty list MUST render as an explicit
+  "no pending orders" line rather than being omitted.
 - **FR-010**: The report MUST include a bookkeeping section naming the
   current chain tip (slot and block hash) and the instance NFT policy id
   pinned in the metadata.
@@ -179,8 +183,9 @@ different instance NFT policy id each time.
 - **TreasuryUtxo**: A UTxO at the treasury script address. Names the
   outref, the lovelace, the USDM amount, and any other assets.
 - **PendingSwapOrder**: A UTxO at the SundaeSwap order address whose
-  datum names the scope as owner. Names the outref, the ADA in, the
-  minimum USDM out, and the embedded SundaeSwap fee.
+  inline datum names the scope's treasury script hash as the
+  swap-payout destination. Names the outref, the ADA in, the minimum
+  USDM out, and the embedded SundaeSwap fee.
 - **DeploymentIdentifier**: The instance NFT policy id pinned in the
   metadata.json; surfaces in the bookkeeping section so operators can
   confirm they inspected the deployment they intended.
@@ -210,9 +215,14 @@ different instance NFT policy id each time.
 
 - The metadata.json shape consumed by the existing wizards already
   enumerates every scope the inspect command needs to report on, names
-  the treasury script address for each scope, and names the owner
-  payment hash for each scope (with `contingency` having no owner).
-  No new metadata fields are introduced by this feature.
+  the treasury script address for each scope, and names the
+  per-scope treasury script hash that the inspector uses to attribute
+  pending swap orders. No new metadata fields are introduced by this
+  feature.
+- Pending-order attribution uses the destination credential embedded
+  in the order's inline datum (the funding scope's treasury script
+  hash), not the four-scope authorised-signers list (which is shared
+  across every order built by the existing swap wizard).
 - The set of scopes the metadata exposes today (CoreDevelopment,
   OpsAndUseCases, NetworkCompliance, Middleware, Contingency) is the
   set the report covers. The "four" in the issue was an over-count; the

@@ -1,108 +1,160 @@
-# Feature Specification: USDM Price Source for swap-wizard
+# Feature Specification: USDM Price Source for swap-quote, wizard rate hardening
 
 **Feature Branch**: `110-usdm-price-source`
 **Created**: 2026-05-14
-**Status**: Draft
+**Status**: Draft v2
 **Input**: [Issue #110](https://github.com/lambdasistemi/amaru-treasury-tx/issues/110) — add a USDM price-source so operators don't need an out-of-band ADA/USDM rate.
 
 ## Background
 
-The named-source surface today is `--price-source coingecko-ada-usd`. It
-fetches one live ADA/USD quote and feeds it into `deriveSwapParameters`
-([`lib/Amaru/Treasury/Tx/SwapQuote.hs:191-222`](../../lib/Amaru/Treasury/Tx/SwapQuote.hs))
-where the value is multiplied by `(10000 - bps) / 10000` and emitted as
-`minRate`. The Sundae order interprets `minRate` as
-**minimum USDM per ADA**.
+Two commands today reach for a live ADA quote:
 
-That arithmetic only makes sense if `USDM ≈ USD`. Under depeg or
-settlement-lag, the operator silently builds a swap with the wrong
-acceptable rate; the audit `quote.pair` still says `ADA/USD` while the
-math reuses the same number as USDM/ADA. The current named-source path
-is therefore a latent operational hazard, not a feature gap.
+- `swap-wizard --price-source coingecko-ada-usd ... --slippage-bps N`
+- `swap-quote  --price-source coingecko-ada-usd ... --slippage-bps N`
 
-The explicit `--ada-usdm DECIMAL` override works, but pushes the
-fetch-and-validate burden onto the operator, who in practice is back
-to copying a number out of band.
+Both fetch ADA/USD from CoinGecko and feed the value into
+`deriveSwapParameters`
+([`lib/Amaru/Treasury/Tx/SwapQuote.hs:191-222`](../../lib/Amaru/Treasury/Tx/SwapQuote.hs)),
+which multiplies by `(10000 − bps) / 10000` and emits `minRate`. The
+Sundae order interprets `minRate` as **minimum USDM per ADA**. The
+arithmetic only holds if `USDM ≈ USD`; under depeg or settlement lag
+the operator silently builds a swap with the wrong limit price. The
+audit even labels the pair `ADA/USD` while the math reuses the same
+number as USDM/ADA.
+
+`--ada-usd DECIMAL` (explicit override) has the same failure mode: the
+operator hands in an ADA/USD figure, the wizard / swap-quote runner
+treats it as USDM/ADA.
 
 ## Goal
 
-Make the only named live source a **correct ADA/USDM quote** derived
-from two upstream CoinGecko calls — ADA/USD ÷ USDM/USD — preserving
-the full provenance of both upstream observations in the audit
-artifact.
+Two orthogonal changes:
 
-Retire the standalone `--price-source coingecko-ada-usd` path because
-its operational meaning is wrong: ADA/USD alone is not a valid input
-to a USDM swap. The operator either uses the new derived source or an
-explicit override.
+1. **Decouple quote retrieval from the wizard.** `swap-wizard` is the
+   "I have a pre-validated rate" command. Live quote fetching moves
+   entirely into the separate `swap-quote` command, which already
+   handles the live-fetch + affordability + intent + tx-build pipeline
+   end-to-end. The wizard accepts `--min-rate` (expert path) or
+   `--ada-usdm DECIMAL` (with optional `--slippage-bps` applied on top
+   of the override). No `--price-source` and no `--ada-usd` on the
+   wizard.
+2. **Fix the broken source in `swap-quote`.** Replace
+   `--price-source coingecko-ada-usd` with `--price-source coingecko-ada-usdm`,
+   a **derived** ADA/USDM observation computed as `(ADA/USD) ÷ (USDM/USD)`
+   from two CoinGecko `simple/price` calls (`ids=cardano` and
+   `ids=usdm-2`). Drop `--ada-usd` from `swap-quote`'s override set.
+
+Both changes close the silent-conversion bug: every quote that flows
+through `deriveSwapParameters` is now ADA/USDM by construction.
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 — Operator runs a swap with a live ADA/USDM quote (P1)
+### User Story 1 — Wizard with a pre-validated rate (P1)
 
-A treasury operator wants to build a USDM swap intent against a live
-ADA/USDM quote without copying numbers out of band.
+A treasury operator already has the rate (from `swap-quote`, an
+oracle, or a manual calculation) and wants to build an intent
+directly with `swap-wizard`.
 
-**Independent Test**: Provide a `QuoteProvider IO` whose responses are
-captured ADA/USD and USDM/USD fixtures. Run swap-wizard / swap-quote
-through that provider. The derived `minRate` equals
-`(ada-usd ÷ usdm-usd) × (10000 - bps) / 10000`, rounded with the
-existing six-decimal floor.
+**Independent Test**: Run the wizard with `--ada-usdm Q --slippage-bps S`
+through the existing pure planner. The derived `minRate` equals
+`floor(Q × (10000 − S) × 10^6 / 10000) / 10^6`.
 
 **Acceptance Scenarios**:
 
-1. **Given** an operator runs `swap-wizard ... --price-source coingecko-ada-usdm --slippage-bps N`, **When** both upstream fetches return positive prices, **Then** the wizard derives `minRate = (ada-usd / usdm-usd) × (1 - N/10000)`, six-decimal-floored, and uses that value through the existing swap intent generation path.
-2. **Given** either upstream fetch fails or returns a non-positive price, **When** the wizard runs, **Then** it aborts before emitting an intent and the trace identifies which component failed.
-3. **Given** the operator passes `--price-source coingecko-ada-usd` (the old, retired path), **When** the CLI parses arguments, **Then** parsing fails with a message pointing at `coingecko-ada-usdm` or `--ada-usdm`.
+1. **Given** `swap-wizard ... --ada-usdm Q --slippage-bps N`, **When** the wizard runs, **Then** it computes `minRate = Q × (1 − N/10000)`, six-decimal-floored, and uses that value through the existing swap intent generation path. No outbound HTTP.
+2. **Given** `swap-wizard ... --min-rate R`, **When** the wizard runs, **Then** `minRate = R` is used as-is (expert path, no slippage applied), exactly as today.
+3. **Given** `swap-wizard ... --price-source ANY` or `--ada-usd ANY`, **When** argv is parsed, **Then** parsing fails because the flags no longer exist.
 
-### User Story 2 — Quote provenance survives into the audit (P1)
+### User Story 2 — Live derived rate via swap-quote (P1)
 
-The intent audit must record both upstream quotes so a reviewer can
-reconstruct the derived value from raw inputs.
+An operator wants `swap-quote` to fetch a live ADA/USDM quote (no
+hand-validation) and run the affordability + build pipeline end-to-end.
 
-**Independent Test**: Encode a `SwapQuoteAudit` whose quote provenance
-is the new derived shape. Compare to a golden JSON containing the
-`derived` block with both component entries (name, value, fetchedAt,
-raw).
+**Independent Test**: Provide a `QuoteProvider IO` that returns
+captured ADA/USD and USDM/USD fixtures. Run `swap-quote --price-source coingecko-ada-usdm --slippage-bps N` through that provider. The
+derived `minRate` equals `(adaUsd ÷ usdmUsd) × (1 − N/10000)`,
+six-decimal-floored.
+
+**Acceptance Scenarios**:
+
+1. **Given** `swap-quote ... --price-source coingecko-ada-usdm --slippage-bps N`, **When** both upstream fetches return positive prices, **Then** the params.json audit records the derived value and both component observations (name, value, fetchedAt, raw).
+2. **Given** either upstream fetch fails or returns a non-positive price, **When** the run executes, **Then** the run aborts before emitting `intent.json` and the error names which component failed.
+3. **Given** `swap-quote ... --price-source coingecko-ada-usd` (the retired path), **When** argv is parsed, **Then** parsing fails with a typed error pointing at `coingecko-ada-usdm` / `--ada-usdm`.
+4. **Given** `swap-quote ... --ada-usd ANY`, **When** argv is parsed, **Then** parsing fails (flag no longer exists).
+
+### User Story 3 — Audit records derived provenance (P1)
+
+The `swap-quote` `params.json` records both upstream observations so a
+reviewer can reconstruct the derived value from raw inputs.
+
+**Independent Test**: Encode a `SwapQuoteAudit` whose
+`dspQuote.qoProvenance` is `DerivedQuoteProvenance`. Compare to a
+golden JSON containing the `derived` block with both component
+entries.
 
 **Acceptance Scenarios**:
 
 1. **Given** a derived ADA/USDM observation, **When** the audit JSON is encoded, **Then** the `quote.provenance` object is `{ "kind": "derived", "name": "coingecko-ada-usdm", "components": [ {ada-usd…}, {usdm-usd…} ] }` and `quote.pair` is `ADA/USDM`.
-2. **Given** the same observation in the wizard log, **When** the trace line announces the resolved quote, **Then** the line names both components and the derived value.
 
-### User Story 3 — TLS trust anchor remains audible (P2)
+### User Story 4 — TLS trust anchor remains audible (P2)
 
 The release wrapper sets `SSL_CERT_FILE` and `SYSTEM_CERTIFICATE_PATH`
-to a Mozilla NSS bundle; live quote fetches print a `swap-quote: TLS trust anchor …` stderr line before the request. The derived source must keep this contract for both upstream fetches.
+to a Mozilla NSS bundle. `swap-quote` live fetches print a
+`swap-quote: TLS trust anchor …` stderr line before each request.
 
 **Acceptance Scenarios**:
 
-1. **Given** the derived source runs both fetches, **When** each request goes out, **Then** the trust-anchor stderr line is emitted before each upstream call.
+1. **Given** `swap-quote --price-source coingecko-ada-usdm`, **When** each upstream request goes out, **Then** the trust-anchor stderr line is emitted before each of the two upstream calls.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The CLI accepts `--price-source coingecko-ada-usdm` and
-  rejects `--price-source coingecko-ada-usd` with a parse error.
-- **FR-002**: The derived source name is `coingecko-ada-usdm`.
-- **FR-003**: The derived observation has `qoPair = AdaUsdm` and
-  `qoQuote = adaUsd / usdmUsd` exactly (as `Rational`).
-- **FR-004**: The derived source uses two upstream CoinGecko `simple/price` calls: `ids=cardano&vs_currencies=usd` and `ids=usdm-2&vs_currencies=usd`.
-- **FR-005**: A non-positive `usdmUsd` value aborts the derivation with a typed error that names the failing component.
-- **FR-006**: The `QuoteSource` ADT replaces `CoinGeckoAdaUsd` with `CoinGeckoAdaUsdm` (the old constructor is removed; no deprecated alias).
-- **FR-007**: The `QuoteProvenance` type gains a `DerivedQuoteProvenance` constructor carrying `name :: Text` and an ordered list of component observations (`name`, `value`, `fetchedAt`, `raw`).
-- **FR-008**: The audit JSON `quote.provenance` for derived observations matches the contract in `contracts/swap-quote-audit-json.md`.
-- **FR-009**: The trust-anchor stderr line (`describeTlsTrustAnchor`) is emitted before each of the two upstream HTTP requests, not once for the pair.
-- **FR-010**: Unit tests exercise the derived computation with captured fixtures only — no live HTTP.
-- **FR-011**: `docs/swap.md`'s recommended quote-derived workflow uses `--price-source coingecko-ada-usdm`.
+- **FR-001**: `swap-wizard` removes the `--price-source`, `--ada-usd`
+  options and the `coingecko-ada-usd` named source. It retains
+  `--min-rate N`, `--ada-usdm DECIMAL`, and `--slippage-bps INT` (the
+  last paired with `--ada-usdm`).
+- **FR-002**: `swap-wizard` does **not** perform any outbound HTTP.
+  No CoinGecko import in its module graph after this PR.
+- **FR-003**: `swap-quote` accepts `--price-source coingecko-ada-usdm`
+  and rejects `--price-source coingecko-ada-usd` with a typed error
+  pointing at the new name.
+- **FR-004**: `swap-quote` removes the `--ada-usd DECIMAL` override.
+  `--ada-usdm DECIMAL` remains the only explicit override.
+- **FR-005**: The derived source is computed as
+  `(ada-usd ÷ usdm-usd)` from two CoinGecko `simple/price` calls
+  (`ids=cardano` and `ids=usdm-2`); the result is a `QuoteObservation`
+  with `qoPair = AdaUsdm` and `qoProvenance = DerivedQuoteProvenance`.
+- **FR-006**: A non-positive or missing field at either component is
+  a typed error naming the failing component; the run aborts before
+  `intent.json` or unsigned CBOR is written.
+- **FR-007**: `QuoteSource` exposes a single constructor
+  `CoinGeckoAdaUsdm` (the old `CoinGeckoAdaUsd` is removed).
+- **FR-008**: `QuoteProvenance` gains `DerivedQuoteProvenance { name :: Text, components :: NonEmpty ComponentObservation }`
+  (delivered in slice 1).
+- **FR-009**: The audit JSON `quote.provenance` for derived
+  observations matches the contract in
+  `contracts/swap-quote-audit-json.md`.
+- **FR-010**: The trust-anchor stderr line (`describeTlsTrustAnchor`)
+  is emitted before each upstream HTTP request in `swap-quote`'s
+  derived provider.
+- **FR-011**: Unit tests exercise the derived computation with
+  captured fixtures only — no live HTTP in `just ci`.
+- **FR-012**: `docs/swap.md` updates its recommended workflow:
+  - the "Recommended quote-derived workflow" section uses
+    `swap-quote --price-source coingecko-ada-usdm`.
+  - a new "Operator-supplied rate" section shows
+    `swap-wizard --ada-usdm Q --slippage-bps S` and
+    `swap-wizard --min-rate R` as the rate-already-on-hand paths.
 
 ### Out of Scope
 
 - On-chain oracle integration (issue #110 Option B).
-- Cross-source consistency checks (e.g. CoinGecko vs SundaeSwap pool quote).
-- Authenticated CoinGecko Pro tier; the public API path stays.
-- New retry/back-off policy; same `responseTimeout = 5_000_000 µs` as today.
+- Cross-source consistency checks.
+- Authenticated CoinGecko Pro tier.
+- New retry / back-off policy.
+- Any change to `swap-wizard`'s registry / treasury / signer
+  resolution.
 
 ## Constraints & Decisions
 
@@ -111,30 +163,45 @@ to a Mozilla NSS bundle; live quote fetches print a `swap-quote: TLS trust ancho
 CoinGecko id `usdm-2` returns the Cardano-native Mehen USDM
 (policy `c48cbb3d…0014df10`), matching
 `Amaru.Treasury.Constants.usdmPolicyHex`. The `mehen-usdm` id cited in
-the issue text returns `{}` and is **not** the canonical id — the spec
-uses `usdm-2`.
+the issue text returns `{}` and is **not** the canonical id.
 
-### Why retire `coingecko-ada-usd`
+### Why retire the wizard's live fetch entirely
 
-The standalone ADA/USD path silently treats ADA/USD as USDM/ADA, which
-the issue explicitly flags as wrong by orders of magnitude under
-depeg. Keeping it alongside the new source would preserve the trap
-under a friendlier name. We remove the named source; explicit
-`--ada-usd DECIMAL` override is also removed because it has the same
-silent-conversion failure mode. Explicit `--ada-usdm DECIMAL` remains
-the manual escape hatch.
+`swap-wizard` and `swap-quote` previously had overlapping live-fetch
+surfaces. The wizard is the lower-level "build me an intent from these
+parameters" tool; live retrieval is policy (which source, which
+slippage), not part of intent construction. Pushing all retrieval into
+`swap-quote` reduces the wizard's blast radius and removes one of the
+two places the silent-USDM≈USD bug can recur.
+
+### Why retire `--ada-usd` everywhere
+
+The explicit override shares the silent-conversion failure mode of
+the retired source: operator passes an ADA/USD figure, wizard /
+swap-quote treats it as USDM/ADA. Both commands keep `--ada-usdm`
+as the manual escape hatch.
 
 ### Derived-rate ceiling rule
 
-The existing six-decimal floor (`rateNumerator = floor(quote × (10000 - bps) / 10000 × 1_000_000)`) applies to the **derived** ADA/USDM quote. The intermediate `Rational` division is exact; rounding happens once, at the floor.
+The existing six-decimal floor
+(`rateNumerator = floor(quote × (10000 − bps) / 10000 × 1_000_000)`)
+applies to the **derived** ADA/USDM quote. The intermediate
+`Rational` division is exact; rounding happens once, at the floor.
 
-## Acceptance Criteria (from #110)
+## Acceptance Criteria (refined from #110)
 
-- `swap-wizard --price-source coingecko-ada-usdm --slippage-bps N ...` against a live node + Internet produces an intent.json whose derived `minRate` matches `(ada-usd ÷ usdm-usd) × (1 - bps/10000)` to six decimals.
-- The trust-anchor stderr line continues to print before the outbound calls.
-- Unit-test coverage for the derived computation against captured response fixtures (no live HTTP).
-- `docs/swap.md` updates the quote-derived workflow snippet to use the new source.
-
-## Open Questions
-
-None — `usdm-2` confirmed live; provenance shape pinned in contract.
+- `swap-quote --price-source coingecko-ada-usdm --slippage-bps N ...`
+  against a live node + Internet produces a `params.json` whose
+  derived `minRate` matches `(ada-usd ÷ usdm-usd) × (1 − bps/10000)`
+  to six decimals, and whose `quote.provenance.components` records
+  both upstream observations.
+- `swap-wizard ... --ada-usdm Q --slippage-bps S ...` produces the
+  same `minRate` as `swap-quote ... --ada-usdm Q --slippage-bps S ...`,
+  i.e. the two commands share the deriving math.
+- `swap-wizard` and `swap-quote` both reject the retired flags
+  (`--price-source coingecko-ada-usd`, `--ada-usd`).
+- The trust-anchor stderr line continues to print before each of the
+  two outbound calls (`swap-quote` only).
+- Unit-test coverage for the derived computation against captured
+  response fixtures (no live HTTP).
+- `docs/swap.md` updated.

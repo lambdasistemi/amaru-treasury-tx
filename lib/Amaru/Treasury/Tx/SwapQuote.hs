@@ -11,6 +11,7 @@ wire quote sources, affordability checks, audit JSON, or CLI execution.
 module Amaru.Treasury.Tx.SwapQuote
     ( QuotePair (..)
     , QuoteProvenance (..)
+    , ComponentObservation (..)
     , QuoteObservation (..)
     , SlippageBps (..)
     , QuoteInput (..)
@@ -44,6 +45,8 @@ import Data.Aeson.Encode.Pretty
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Char (digitToInt, isDigit)
+import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NE
 import Data.Ratio (denominator, numerator, (%))
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -62,6 +65,24 @@ data QuoteProvenance
         , qspFetchedAt :: !Text
         , qspRaw :: !Text
         }
+    | DerivedQuoteProvenance
+        { dqpName :: !Text
+        , dqpComponents :: !(NonEmpty ComponentObservation)
+        }
+    deriving (Eq, Show)
+
+{- | One upstream observation that contributed to a derived quote.
+
+The @coValue@ is the upstream's exact rate as a 'Rational'; @coRaw@ is the
+HTTP response body verbatim (for transcript replay); @coFetchedAt@ is the
+per-request ISO-8601 stamp.
+-}
+data ComponentObservation = ComponentObservation
+    { coName :: !Text
+    , coValue :: !Rational
+    , coFetchedAt :: !Text
+    , coRaw :: !Text
+    }
     deriving (Eq, Show)
 
 data QuoteObservation = QuoteObservation
@@ -343,6 +364,16 @@ quoteValue observedAt derived =
                 , "fetchedAt" .= qspFetchedAt source
                 , "raw" .= qspRaw source
                 ]
+        derivedProv@DerivedQuoteProvenance{} ->
+            -- A composed quote's denominator is usually not 2/5-friendly,
+            -- so we truncate at six decimals to keep the audit readable;
+            -- the exact ratio survives in the components' raw fields.
+            object
+                [ "pair" .= quotePairText observation
+                , "value" .= formatRationalDecimalAt 6 (qoQuote observation)
+                , "provenance" .= quoteProvenanceValue derivedProv
+                , "observedAt" .= observedAt
+                ]
   where
     observation = dspQuote derived
 
@@ -361,6 +392,21 @@ quoteProvenanceValue = \case
             [ "kind" .= ("source" :: Text)
             , "name" .= name
             ]
+    DerivedQuoteProvenance name components ->
+        object
+            [ "kind" .= ("derived" :: Text)
+            , "name" .= name
+            , "components" .= map componentObservationValue (NE.toList components)
+            ]
+
+componentObservationValue :: ComponentObservation -> Value
+componentObservationValue component =
+    object
+        [ "name" .= coName component
+        , "value" .= formatRationalDecimal (coValue component)
+        , "fetchedAt" .= coFetchedAt component
+        , "raw" .= coRaw component
+        ]
 
 slippageValue :: DerivedSwapParameters -> Value
 slippageValue derived =
@@ -490,6 +536,18 @@ formatQuote observation =
 formatSlippage :: SlippageBps -> Text
 formatSlippage (SlippageBps bps) =
     tshow bps <> " bps"
+
+{- | Format a 'Rational' truncated (floored) at @scale@ decimal places.
+
+Used for derived quotes whose exact denominator is rarely 2/5-friendly. The
+floor matches the rate-emission rounding used elsewhere in this module.
+-}
+formatRationalDecimalAt :: Int -> Rational -> Text
+formatRationalDecimalAt scale value =
+    let truncated =
+            (numerator value * (10 ^ scale) `div` denominator value)
+                % (10 ^ scale)
+    in  formatRationalDecimal truncated
 
 formatRationalDecimal :: Rational -> Text
 formatRationalDecimal value =

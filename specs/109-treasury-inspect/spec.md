@@ -261,5 +261,6 @@ different instance NFT policy id each time.
 ## References
 
 - Issue: [lambdasistemi/amaru-treasury-tx#109](https://github.com/lambdasistemi/amaru-treasury-tx/issues/109)
+- Downstream consumer: [#116 — swap-cancel command](https://github.com/lambdasistemi/amaru-treasury-tx/issues/116) (blocked-by #109; consumes `pendingOrders[].outref` from this report to drive cancellation tx-build).
 - Acceptance smoke tx: [`b5716ae9…`](https://cardanoscan.io/transaction/b5716ae98bb41b53c5fa2ebc6e8d5558879dc86d14fb998333e643095c6b233e)
 - Project constitution: `.specify/memory/constitution.md`

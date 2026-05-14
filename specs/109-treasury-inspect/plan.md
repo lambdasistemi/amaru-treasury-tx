@@ -160,12 +160,17 @@ and the project conventions; this feature adds no new technology.
 - ✅ Tasks approved (`tasks.md`, five vertical slices A–E)
 - ✅ `/speckit.analyze` consistency findings C1–C5 resolved
 - ✅ **Slice A landed** — SundaeSwap order datum parser
-  ([commit `fd366bd`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/fd366bd)).
+  ([commit `d725316`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/d725316)).
   5/5 unit tests passing.
 - ✅ **Slice B landed** — pure assembly + JSON/human render + golden
-  ([commit `4e7e3ff`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/4e7e3ff)).
-  Golden test 2/2 passing; flake `unit`, `golden`, `lint`, `smoke`
-  checks all green.
-- ⏳ **Slice C in flight** — JSON Schema + schema-dumper exe + schema-check
-- ☐ Slice D — CLI parser + N2C glue + smoke
+  ([commit `4989e74`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/4989e74)).
+  Golden test 2/2 passing.
+- ✅ **Slice C landed** — JSON Schema + schema-dumper exe + extended
+  `just schema-check` ([commit `fa14267`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/fa14267)).
+  Schema-consistency tests 2/2 passing; flake `unit`/`golden`/`lint`/`schema`/`smoke`
+  all green. Unit count: 325.
+- ⏳ **Slice D in flight** — CLI parser + N2C glue + smoke
 - ☐ Slice E — operator docs
+
+(Branch rebased onto `cd6a761` after #106 merged; earlier slice
+SHAs above reflect the post-rebase chain.)

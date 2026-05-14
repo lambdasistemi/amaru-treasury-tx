@@ -20,19 +20,22 @@ module Amaru.Treasury.Tx.Submit
     ( SubmitOutcome (..)
     , submitSignedTx
     , renderSubmitOutcome
+    , renderTxId
     ) where
 
 import Control.Concurrent.Async (withAsync)
 import Control.Exception (SomeException, throwIO)
 import Data.ByteString (ByteString)
+import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Char8 qualified as B8
 import Data.Text (Text)
-import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Ouroboros.Network.Magic (NetworkMagic)
 
+import Cardano.Crypto.Hash.Class (hashToBytes)
 import Cardano.Ledger.Api.Tx (txIdTx)
-import Cardano.Ledger.TxIn (TxId)
+import Cardano.Ledger.Hashes (extractHash)
+import Cardano.Ledger.TxIn (TxId (..))
 import Cardano.Node.Client.N2C.Connection
     ( newLSQChannel
     , newLTxSChannel
@@ -112,7 +115,14 @@ renderSubmitOutcome = \case
     SubmitRejected reason ->
         "submit: node rejected transaction: " <> reason
     SubmitAccepted txId ->
-        "submit: accepted " <> T.pack (show txId)
+        "submit: accepted " <> renderTxId txId
+
+{- | Render a 'TxId' as a bare lowercase base16 hex string (64 chars).
+Pipe-friendly: no surrounding @TxId {…}@ or @SafeHash …@ noise.
+-}
+renderTxId :: TxId -> Text
+renderTxId (TxId h) =
+    TE.decodeUtf8 (B16.encode (hashToBytes (extractHash h)))
 
 decodeUtf8Lenient :: B8.ByteString -> Text
 decodeUtf8Lenient =

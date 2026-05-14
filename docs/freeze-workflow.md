@@ -24,9 +24,9 @@ test/fixtures/swap/
 ├── pparams.json     # Conway pparams snapshot (already exists)
 ├── utxos.json       # 6 UTxOs (TxIn → TxOut with value + ref script)
 ├── exunits.json     # per-redeemer-purpose ExUnits map
-├── bash.oracle.tx.json
+├── target.tx.json
 ├── provenance.md
-└── expected.cbor    # the 14954-byte hex CBOR the build must produce
+└── expected.cbor    # the 14987-byte hex CBOR the build must produce
 ```
 
 The ADA disburse fixture follows the same shape under
@@ -66,8 +66,8 @@ nix run .#capture-swap-context -- \
   --node-socket "$CARDANO_NODE_SOCKET_PATH" \
   --network-magic 764824073
 
-# 3. Compare the capture with the bash oracle
-jq -r .cborHex test/fixtures/swap/bash.oracle.tx.json \
+# 3. Compare the capture with the checked-in Haskell target
+jq -r .cborHex test/fixtures/swap/target.tx.json \
   | tr -d '\n' \
   | cmp -s - /tmp/amaru-swap-capture/expected.cbor
 

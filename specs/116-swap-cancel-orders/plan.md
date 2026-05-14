@@ -109,8 +109,8 @@ See:
 
 Add the SundaeSwap cancel redeemer (`Constr 1 []`) and a parser for the
 Amaru-generated V3 order datum owner/destination. The parser supports
-the current treasury shape (`AllOf` signatures) and rejects unsupported
-authority forms.
+legacy `AllOf` all-owner signatures and current `AtLeast 2` all-owner
+signatures, and rejects unsupported authority forms.
 
 ### Slice 2 - Pure cancel transaction program
 

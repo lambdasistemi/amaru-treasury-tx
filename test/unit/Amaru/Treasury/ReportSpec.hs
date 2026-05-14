@@ -376,8 +376,8 @@ spec = describe "Amaru.Treasury.Report" $ do
                 { vfIntentNetwork = "mainnet"
                 , vfSocketNetworkMagic = 764_824_073
                 , vfNetworkMatches = True
-                , vfFeeLovelace = 1_039_703
-                , vfBodySizeBytes = 14_954
+                , vfFeeLovelace = 1_041_155
+                , vfBodySizeBytes = 14_987
                 , vfRedeemerCount = 2
                 , vfRedeemerFailures = 0
                 , vfValidationStatus = "ok"
@@ -579,9 +579,9 @@ sampleIdentity :: TransactionIdentity
 sampleIdentity =
     TransactionIdentity
         { tiTxId = sampleTxId
-        , tiBodySizeBytes = 14954
-        , tiFeeLovelace = 1039703
-        , tiTotalCollateralLovelace = 1559555
+        , tiBodySizeBytes = 14987
+        , tiFeeLovelace = 1041155
+        , tiTotalCollateralLovelace = 1561733
         , tiValidityInterval = sampleValidityInterval
         }
 
@@ -592,8 +592,8 @@ sampleWalletAccounting =
         , waCollateralInput = Just sampleUtxo
         , waChangeOutput = Nothing
         , waCollateralReturn = Nothing
-        , waFeeLovelace = 1039703
-        , waNetSpendLovelace = 1039703
+        , waFeeLovelace = 1041155
+        , waNetSpendLovelace = 1041155
         }
 
 sampleTreasuryAccounting :: TreasuryAccounting
@@ -613,8 +613,8 @@ sampleValidationFacts =
         { vfIntentNetwork = "mainnet"
         , vfSocketNetworkMagic = 764824073
         , vfNetworkMatches = True
-        , vfFeeLovelace = 1039703
-        , vfBodySizeBytes = 14954
+        , vfFeeLovelace = 1041155
+        , vfBodySizeBytes = 14987
         , vfRedeemerCount = 2
         , vfRedeemerFailures = 0
         , vfValidationStatus = "ok"
@@ -662,9 +662,9 @@ expectedIdentity :: Value
 expectedIdentity =
     object
         [ "txId" .= sampleTxId
-        , "bodySizeBytes" .= (14954 :: Int)
-        , "feeLovelace" .= (1039703 :: Int)
-        , "totalCollateralLovelace" .= (1559555 :: Int)
+        , "bodySizeBytes" .= (14987 :: Int)
+        , "feeLovelace" .= (1041155 :: Int)
+        , "totalCollateralLovelace" .= (1561733 :: Int)
         , "validityInterval" .= expectedValidityInterval
         ]
 
@@ -675,8 +675,8 @@ expectedWalletAccounting =
         , "collateralInput" .= Just expectedUtxo
         , "changeOutput" .= (Nothing :: Maybe Value)
         , "collateralReturn" .= (Nothing :: Maybe Value)
-        , "feeLovelace" .= (1039703 :: Int)
-        , "netSpendLovelace" .= (1039703 :: Int)
+        , "feeLovelace" .= (1041155 :: Int)
+        , "netSpendLovelace" .= (1041155 :: Int)
         ]
 
 expectedTreasuryAccounting :: Value
@@ -714,8 +714,8 @@ expectedValidation =
         [ "intentNetwork" .= ("mainnet" :: String)
         , "socketNetworkMagic" .= (764824073 :: Int)
         , "networkMatches" .= True
-        , "feeLovelace" .= (1039703 :: Int)
-        , "bodySizeBytes" .= (14954 :: Int)
+        , "feeLovelace" .= (1041155 :: Int)
+        , "bodySizeBytes" .= (14987 :: Int)
         , "redeemerCount" .= (2 :: Int)
         , "redeemerFailures" .= (0 :: Int)
         , "validationStatus" .= ("ok" :: String)

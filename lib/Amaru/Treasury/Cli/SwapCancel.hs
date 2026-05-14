@@ -49,6 +49,7 @@ import Cardano.Node.Client.Provider
 import Cardano.Node.Client.Validity qualified as Validity
 import Cardano.Slotting.Slot (SlotNo)
 import Codec.Binary.Bech32 qualified as Bech32
+import Control.Applicative (many)
 import Control.Monad (unless)
 import Control.Monad.Trans.Except (runExceptT)
 import Data.Aeson
@@ -66,6 +67,7 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
 import Data.Char (toLower)
+import Data.List qualified as List
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Set qualified as Set
@@ -116,7 +118,10 @@ import Amaru.Treasury.Cli.Common
 import Amaru.Treasury.Constants
     ( sundaeOrderScriptRefMainnet
     )
-import Amaru.Treasury.IntentJSON.Common (parseTxIn)
+import Amaru.Treasury.IntentJSON.Common
+    ( parseGuardKeyHash
+    , parseTxIn
+    )
 import Amaru.Treasury.Registry.Verify
     ( VerifiedRegistry (..)
     , VerifiedScope (..)
@@ -133,10 +138,16 @@ import Amaru.Treasury.Tx.SwapCancel
     )
 import Amaru.Treasury.Tx.SwapCancel.Datum
     ( ParsedSwapOrderDatum (..)
+    , ownerPolicyCandidateSigners
+    , ownerPolicyRequiredCount
     , renderSwapOrderDatumError
     , validateSwapOrderDatum
     )
 import Amaru.Treasury.Tx.SwapWizard (txInToText)
+import Amaru.Treasury.Wizard.Common
+    ( isHex28
+    , signerScopeFromText
+    )
 
 -- | Flags for the @swap-cancel@ subcommand.
 data SwapCancelOpts = SwapCancelOpts
@@ -145,6 +156,7 @@ data SwapCancelOpts = SwapCancelOpts
     , scoWalletTxIn :: !Text
     , scoOrderTxIn :: !Text
     , scoOrderScriptRef :: !(Maybe Text)
+    , scoCancelSigners :: ![Text]
     , scoValidityHours :: !(Maybe Word16)
     , scoOutPath :: !(Maybe FilePath)
     , scoReportPath :: !(Maybe FilePath)
@@ -183,6 +195,14 @@ swapCancelOptsP =
                     <> metavar "TXHASH#IX"
                     <> help
                         "Reference input carrying the SundaeSwap order script; defaults on mainnet"
+                )
+            )
+        <*> many
+            ( strOption
+                ( long "cancel-signer"
+                    <> metavar "SCOPE|KEYHASH"
+                    <> help
+                        "Signer allowed by the order owner policy; repeat for AtLeast policies. Omit to require every candidate owner."
                 )
             )
         <*> optional
@@ -336,6 +356,18 @@ runSwapCancel g opts@SwapCancelOpts{..} = do
                             "order-datum-invalid"
                             (renderSwapOrderDatumError err)
                     Right ok -> pure ok
+                requiredSigners <-
+                    case selectCancelSigners
+                        registry
+                        parsed
+                        scoCancelSigners of
+                        Left err ->
+                            abortWith
+                                logH
+                                opts
+                                "bad-cli-input"
+                                err
+                        Right signers -> pure signers
                 let intent =
                         SwapCancelIntent
                             { sciWalletTxIn = walletTxIn
@@ -344,8 +376,7 @@ runSwapCancel g opts@SwapCancelOpts{..} = do
                                 orderOut ^. valueTxOutL
                             , sciOrderScriptRef = orderScriptRef
                             , sciTreasuryAddress = vsAddress selected
-                            , sciRequiredSigners =
-                                parsedOrderRequiredSigners parsed
+                            , sciRequiredSigners = requiredSigners
                             , sciUpperBound = upperBound
                             }
                 buildResult <-
@@ -452,15 +483,7 @@ inlineOrderDatum txOut =
 expectedCancelOwners
     :: VerifiedRegistry -> Either Text [KeyHash Guard]
 expectedCancelOwners registry =
-    traverse ownerAsGuard cancelOwnerScopes
-  where
-    ownerAsGuard scope =
-        case Map.lookup scope (vrOwners registry) of
-            Just key -> Right (guardKeyHash key)
-            Nothing ->
-                Left $
-                    "verified metadata is missing owner for "
-                        <> scopeText scope
+    traverse (ownerAsGuard registry) cancelOwnerScopes
 
 cancelOwnerScopes :: [ScopeId]
 cancelOwnerScopes =
@@ -469,6 +492,67 @@ cancelOwnerScopes =
     , NetworkCompliance
     , Middleware
     ]
+
+selectCancelSigners
+    :: VerifiedRegistry
+    -> ParsedSwapOrderDatum
+    -> [Text]
+    -> Either Text [KeyHash Guard]
+selectCancelSigners registry parsed requested = do
+    selected <-
+        case requested of
+            [] ->
+                Right candidates
+            tokens ->
+                List.nub <$> traverse (resolveCancelSigner registry) tokens
+    let candidateSet = Set.fromList candidates
+        invalid =
+            filter
+                (`Set.notMember` candidateSet)
+                selected
+    unless (null invalid) $
+        Left $
+            "cancel signer not allowed by order owner policy: "
+                <> renderGuardKeyHashList invalid
+    unless (length selected >= threshold) $
+        Left $
+            "order owner policy requires at least "
+                <> T.pack (show threshold)
+                <> " signer(s); selected "
+                <> T.pack (show (length selected))
+    Right selected
+  where
+    policy = parsedOrderOwnerPolicy parsed
+    candidates = ownerPolicyCandidateSigners policy
+    threshold = ownerPolicyRequiredCount policy
+
+resolveCancelSigner
+    :: VerifiedRegistry -> Text -> Either Text (KeyHash Guard)
+resolveCancelSigner registry raw
+    | isHex28 raw =
+        case parseGuardKeyHash raw of
+            Right key -> Right key
+            Left err ->
+                Left $
+                    "invalid cancel signer key hash: "
+                        <> T.pack err
+    | Just scope <- signerScopeFromText raw =
+        ownerAsGuard registry scope
+    | otherwise =
+        Left $
+            "unknown cancel signer "
+                <> raw
+                <> "; use a scope name or 28-byte key hash"
+
+ownerAsGuard
+    :: VerifiedRegistry -> ScopeId -> Either Text (KeyHash Guard)
+ownerAsGuard registry scope =
+    case Map.lookup scope (vrOwners registry) of
+        Just key -> Right (guardKeyHash key)
+        Nothing ->
+            Left $
+                "verified metadata is missing owner for "
+                    <> scopeText scope
 
 guardKeyHash :: KeyHash Witness -> KeyHash Guard
 guardKeyHash (KeyHash h) = KeyHash h
@@ -584,3 +668,7 @@ addrPrefix addr = case getNetwork addr of
 renderGuardKeyHash :: KeyHash Guard -> Text
 renderGuardKeyHash (KeyHash h) =
     TE.decodeUtf8 (B16.encode (hashToBytes h))
+
+renderGuardKeyHashList :: [KeyHash Guard] -> Text
+renderGuardKeyHashList keys =
+    "[" <> T.intercalate "," (renderGuardKeyHash <$> keys) <> "]"

@@ -158,7 +158,7 @@ tx-build: parsed action=Swap network=mainnet
 tx-build: connecting to /path/to/cardano-node.socket
 tx-build: required utxos: 6
 tx-build: handshake ok (magic 764824073 matches intent network=mainnet)
-tx-build: built 14954 bytes  fee=1039703  total_collateral=1559555
+tx-build: built 14987 bytes  fee=1041155  total_collateral=1561733
 tx-build: re-evaluated 2 redeemers, 0 failed
 tx-build: cbor -> /dev/null
 tx-build: VALIDATION OK

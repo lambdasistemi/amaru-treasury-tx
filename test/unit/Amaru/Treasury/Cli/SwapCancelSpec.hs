@@ -43,6 +43,10 @@ spec = describe "Amaru.Treasury.Cli.SwapCancel" $ do
             , txIn2
             , "--order-script-ref"
             , txIn3
+            , "--cancel-signer"
+            , "network_compliance"
+            , "--cancel-signer"
+            , "ops_and_use_cases"
             , "--validity-hours"
             , "28"
             , "--out"
@@ -59,6 +63,11 @@ spec = describe "Amaru.Treasury.Cli.SwapCancel" $ do
                     , scoWalletTxIn = T.pack txIn1
                     , scoOrderTxIn = T.pack txIn2
                     , scoOrderScriptRef = Just (T.pack txIn3)
+                    , scoCancelSigners =
+                        T.pack
+                            <$> [ "network_compliance"
+                                , "ops_and_use_cases"
+                                ]
                     , scoValidityHours = Just 28
                     , scoOutPath = Just "cancel.cbor.hex"
                     , scoReportPath = Just "cancel.report.json"
@@ -85,6 +94,7 @@ spec = describe "Amaru.Treasury.Cli.SwapCancel" $ do
                     , scoWalletTxIn = T.pack txIn1
                     , scoOrderTxIn = T.pack txIn2
                     , scoOrderScriptRef = Just (T.pack txIn3)
+                    , scoCancelSigners = []
                     , scoValidityHours = Nothing
                     , scoOutPath = Nothing
                     , scoReportPath = Nothing
@@ -109,6 +119,7 @@ spec = describe "Amaru.Treasury.Cli.SwapCancel" $ do
                     , scoWalletTxIn = T.pack txIn1
                     , scoOrderTxIn = T.pack txIn2
                     , scoOrderScriptRef = Nothing
+                    , scoCancelSigners = []
                     , scoValidityHours = Nothing
                     , scoOutPath = Nothing
                     , scoReportPath = Nothing

@@ -15,9 +15,11 @@ A swap tx spends N treasury UTxOs and emits:
 It also withdraws zero from the Amaru permissions reward account,
 which is how the contract enforces M-of-N scope-owner approval.
 
-The shape mirrors
+The transaction shape follows
 [`pragma-org/amaru-treasury/journal/2026/bin/swap.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/bin/swap.sh)
-exactly — same redeemers, same datums, same output ordering.
+for redeemers and output ordering. New Haskell-built order datums use
+the current Amaru cancel-owner policy: `AtLeast 2
+[core_development, ops_and_use_cases, network_compliance, middleware]`.
 
 ## Cancelling a pending order
 
@@ -44,7 +46,8 @@ order UTxO's inline datum, uses the built-in mainnet Sundae order
 reference script unless `--order-script-ref` is explicitly supplied,
 and fails before writing CBOR unless:
 
-- the order owner is the supported Amaru `AllOf` signatures policy,
+- the order owner is a supported Amaru policy: legacy `AllOf` all four
+  owners or current `AtLeast 2` all four owners,
 - the owner key hashes match the verified Amaru treasury owners, and
 - the order destination payment credential is the selected treasury
   script hash.
@@ -60,9 +63,13 @@ treasury destination, required signers, fee, and next steps.
 
 The required signatures come from the order datum, not from a CLI
 override. For the Amaru-generated orders built by this tool today,
-that means all four treasury owner keys encoded in the order owner
-policy: `core_development`, `ops_and_use_cases`,
+that means at least two of the four treasury owner keys encoded in the
+order owner policy: `core_development`, `ops_and_use_cases`,
 `network_compliance`, and `middleware`.
+
+Pass `--cancel-signer` more than once to choose the witness set for an
+`AtLeast` order. If omitted, `swap-cancel` conservatively lists every
+candidate owner from the order datum as a required signer.
 
 ## Operator-supplied rate workflow
 
@@ -539,23 +546,21 @@ This is the strongest validation possible without signatures.
 
 ## Parity status
 
-The Haskell stack reproduces a bash/cardano-cli mainnet swap
-oracle byte-for-byte:
+The checked-in swap fixture pins the current Haskell-built transaction
+body, including the `AtLeast 2` cancel-owner datum policy:
 
-| Field | Haskell | bash via cardano-cli | Δ |
-|---|---|---|---|
-| total bytes | 14954 | 14954 | 0 |
-| fee | 1,039,703 | 1,039,703 | 0 |
-| total_collateral | 1,559,555 | 1,559,555 | 0 |
-| collateral_return | identical | identical | 0 |
-| change | identical | identical | 0 |
-| script_data_hash | identical | identical | 0 |
-| aux_data_hash | identical | identical | 0 |
+| Field | Haskell fixture |
+|---|---|
+| total bytes | 14987 |
+| fee | 1,041,155 |
+| total_collateral | 1,561,733 |
 
-The test checks two things: `test/fixtures/swap/expected.cbor`
-must equal `test/fixtures/swap/bash.oracle.tx.json.cborHex`, and
-`runFromIntent` against the frozen `ChainContext` must rebuild
-that same hex. See [Parity report](parity.md) for the provenance.
+The test checks two things: `test/fixtures/swap/expected.cbor` must
+equal `test/fixtures/swap/target.tx.json.cborHex`, and `runFromIntent`
+against the frozen `ChainContext` must rebuild that same hex. The
+historical bash oracle is no longer byte-identical until the bash
+recipe adopts the same cancel-owner datum policy. See
+[Parity report](parity.md) for the provenance.
 
 ## See also
 

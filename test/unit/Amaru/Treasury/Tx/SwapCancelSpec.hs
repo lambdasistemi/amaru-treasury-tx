@@ -5,7 +5,8 @@ Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
 Pins the safe subset used by Amaru-generated SundaeSwap V3 orders:
-the order owner is an @AllOf@ list of signature key hashes and the
+the order owner is an @AtLeast 2@ list of all treasury owner signature
+key hashes, legacy @AllOf@ all-owner datums remain accepted, and the
 destination is the treasury script address.
 -}
 module Amaru.Treasury.Tx.SwapCancelSpec (spec) where
@@ -78,7 +79,8 @@ import Amaru.Treasury.Tx.SwapCancel
     , swapCancelProgram
     )
 import Amaru.Treasury.Tx.SwapCancel.Datum
-    ( ParsedSwapOrderDatum (..)
+    ( ParsedOwnerPolicy (..)
+    , ParsedSwapOrderDatum (..)
     , SwapOrderDatumError (..)
     , parseSwapOrderDatum
     , renderSwapOrderDatumError
@@ -129,6 +131,20 @@ wrongTreasuryScriptHash = ScriptHash (mkHash28 98)
 
 orderDatum :: Data
 orderDatum =
+    orderDatumWithOwner $
+        Constr
+            3
+            [ I 2
+            , List
+                [ Constr 0 [B (hash28Bytes 20)]
+                , Constr 0 [B (hash28Bytes 21)]
+                , Constr 0 [B (hash28Bytes 22)]
+                , Constr 0 [B (hash28Bytes 23)]
+                ]
+            ]
+
+legacyAllOfOrderDatum :: Data
+legacyAllOfOrderDatum =
     orderDatumWithOwner $
         Constr
             1
@@ -192,9 +208,9 @@ cancelIntent =
 spec :: Spec
 spec = describe "Amaru.Treasury.Tx.SwapCancel" $ do
     describe "order datum parsing" $ do
-        it "extracts all required owner signers from the Amaru AllOf policy" $ do
-            parsedOrderRequiredSigners <$> parseSwapOrderDatum orderDatum
-                `shouldBe` Right ownerKeys
+        it "extracts the AtLeast owner policy from current Amaru orders" $ do
+            parsedOrderOwnerPolicy <$> parseSwapOrderDatum orderDatum
+                `shouldBe` Right (OwnerAtLeast 2 ownerKeys)
 
         it "extracts the treasury destination payment script hash" $ do
             parsedOrderDestinationScript <$> parseSwapOrderDatum orderDatum
@@ -207,10 +223,41 @@ spec = describe "Amaru.Treasury.Tx.SwapCancel" $ do
                 orderDatum
                 `shouldBe` Right
                     ParsedSwapOrderDatum
-                        { parsedOrderRequiredSigners = ownerKeys
+                        { parsedOrderOwnerPolicy = OwnerAtLeast 2 ownerKeys
                         , parsedOrderDestinationScript =
                             treasuryScriptHash
                         }
+
+        it "validates legacy AllOf orders over all owners" $ do
+            validateSwapOrderDatum
+                ownerKeys
+                treasuryScriptHash
+                legacyAllOfOrderDatum
+                `shouldBe` Right
+                    ParsedSwapOrderDatum
+                        { parsedOrderOwnerPolicy = OwnerAllOf ownerKeys
+                        , parsedOrderDestinationScript =
+                            treasuryScriptHash
+                        }
+
+        it "rejects AtLeast policies with the wrong threshold" $ do
+            let unsupported =
+                    orderDatumWithOwner $
+                        Constr
+                            3
+                            [ I 1
+                            , List
+                                [ Constr 0 [B (hash28Bytes 20)]
+                                , Constr 0 [B (hash28Bytes 21)]
+                                , Constr 0 [B (hash28Bytes 22)]
+                                , Constr 0 [B (hash28Bytes 23)]
+                                ]
+                            ]
+            validateSwapOrderDatum
+                ownerKeys
+                treasuryScriptHash
+                unsupported
+                `shouldBe` Left UnsupportedOwnerPolicy
 
         it "rejects owner policies outside the safe Amaru subset" $ do
             let unsupported =
@@ -245,7 +292,7 @@ spec = describe "Amaru.Treasury.Tx.SwapCancel" $ do
 
         it "renders stable validation diagnostics" $ do
             renderSwapOrderDatumError UnsupportedOwnerPolicy
-                `shouldBe` "unsupported owner policy; expected Amaru AllOf signatures"
+                `shouldBe` "unsupported owner policy; expected Amaru AllOf signatures or AtLeast 2 of all owner signatures"
             renderSwapOrderDatumError
                 ( OrderOwnerMismatch
                     [KeyHash (mkHash28 20)]

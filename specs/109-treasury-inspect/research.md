@@ -11,18 +11,19 @@ inline datum (`Constr 0` at index 3 → `Constr 0` → `Constr 1 [B
 treasuryScriptHash]`, mirroring `lib/Amaru/Treasury/Tx/Swap.hs:259`).
 
 **Rationale**: The order datum produced by `swapOrderDatum`
-(`Tx/Swap.hs:230–282`) always embeds **all four** scope owner key hashes in
-the authorised-signers list (index 1), regardless of which scope is funding
-the swap. So the owner-list field cannot disambiguate scopes. The destination
-credential, by contrast, is the script hash of the **funding** scope's
-treasury — it is the address USDM is returned to once SundaeSwap fills the
-order. That field uniquely identifies which scope funded the order.
+(`Tx/Swap.hs:230–282`) embeds the same cancel-owner policy for every
+scope (`AtLeast 2 [core_development, ops_and_use_cases,
+network_compliance, middleware]`). So the owner-list field cannot
+disambiguate scopes. The destination credential, by contrast, is the
+script hash of the **funding** scope's treasury — it is the address USDM
+is returned to once SundaeSwap fills the order. That field uniquely
+identifies which scope funded the order.
 
 **Alternatives considered**:
 
 - **Match by owner key hash**: rejected — every order datum already contains
-  every scope's owner key hash; matching one of them would mean "this order
-  was built by the Amaru treasury system", not "this order belongs to scope
+  the same cancel-owner key hashes; matching one of them would mean "this
+  order was built by the Amaru treasury system", not "this order belongs to scope
   X".
 - **Match by funding tx ID**: would work but requires history (the producing
   tx of a pending UTxO is not in the current LSQ snapshot). Same gap as

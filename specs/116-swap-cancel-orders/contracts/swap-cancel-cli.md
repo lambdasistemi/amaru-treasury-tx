@@ -10,8 +10,9 @@ amaru-treasury-tx --node-socket PATH --network NAME \
     --wallet-txin TXHASH#IX \
     --order-txin TXHASH#IX \
     [--order-script-ref TXHASH#IX] \
-    --validity-hours HOURS \
-    --out tx.raw \
+    [--cancel-signer SCOPE|KEYHASH]... \
+    [--validity-hours HOURS] \
+    [--out tx.raw] \
     [--report PATH]
 ```
 
@@ -25,6 +26,9 @@ amaru-treasury-tx --node-socket PATH --network NAME \
 - `--order-script-ref TXHASH#IX`: optional on mainnet, where the
   reference input containing the SundaeSwap order spending script is
   built in; required outside mainnet.
+- `--cancel-signer SCOPE|KEYHASH`: selected owner signer for policies
+  such as `AtLeast 2`; repeat for multiple signers. If omitted, all
+  candidate owners encoded in the order datum are required.
 - `--validity-hours HOURS`: validity horizon, same policy as swap
   builders.
 - `--out PATH`: unsigned transaction CBOR hex output path.
@@ -65,8 +69,10 @@ The command exits non-zero and emits no unsigned CBOR when:
 
 - the order UTxO is missing or already spent;
 - the order datum is missing or malformed;
-- the owner policy is not the supported Amaru all-signatures policy;
+- the owner policy is not a supported Amaru policy: legacy `AllOf` all
+  four owners or current `AtLeast 2` all four owners;
 - the owner policy does not match metadata owners;
+- supplied `--cancel-signer` values do not satisfy the order policy;
 - the destination does not match the selected treasury;
 - wallet fuel cannot pay fees/collateral;
 - script evaluation or final validation fails.

@@ -4,6 +4,20 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.8.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.7.1...v0.2.8.0) (2026-05-14)
+
+### Features
+
+* **116:** add explicit sundaeswap order cancel command ([ae215aa](https://github.com/lambdasistemi/amaru-treasury-tx/commit/ae215aa4de4dd483d90eccc8be444acbd3f9eed9))
+* **116:** require at least two owners for swap cancels ([38a4789](https://github.com/lambdasistemi/amaru-treasury-tx/commit/38a478900ccf046beaae945d41201566e03baeff))
+* **117:** add emergency top-up command ([27bcfbd](https://github.com/lambdasistemi/amaru-treasury-tx/commit/27bcfbddeb85f67a5194571b60d7f3d38b80e2d1))
+
+### Bug Fixes
+
+* **116:** centralize sundaeswap order constants ([feb7e82](https://github.com/lambdasistemi/amaru-treasury-tx/commit/feb7e82b9479b71f4430372ab7e4b9a0baafa56d))
+* **116:** default sundaeswap order script ref on mainnet ([1cf92b2](https://github.com/lambdasistemi/amaru-treasury-tx/commit/1cf92b2bf82bc5bbf4664971e93c963933e84cc9))
+* **117:** finalize emergency top-up wizard fee target ([48f6c82](https://github.com/lambdasistemi/amaru-treasury-tx/commit/48f6c827225ef13cda922a41d8c140f06525cc90))
+
 ## [0.2.7.1](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.7.0...v0.2.7.1) (2026-05-14)
 
 ### Bug Fixes

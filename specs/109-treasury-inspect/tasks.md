@@ -87,14 +87,14 @@ its first user in a vertical slice.
 
 ### Slice C — JSON Schema + schema-consistency check
 
-- [ ] T021 [US2] Add `lib/Amaru/Treasury/Inspect/Schema.hs` exporting `treasuryInspectSchema :: Value` (the same JSON Schema document as [contracts/treasury-inspect-schema.json](contracts/treasury-inspect-schema.json)) and `encodeTreasuryInspectSchema :: ByteString` (pretty-encoded). Mirror `lib/Amaru/Treasury/IntentJSON/Schema.hs:75`.
-- [ ] T022 [P] [US2] Add `test/Spec/Treasury/Inspect/SchemaSpec.hs` — read `docs/assets/treasury-inspect-schema.json` from disk, compare with `encodeTreasuryInspectSchema`. Test must fail before T023 + T024 are present. Wire into `test/Spec.hs`.
-- [ ] T023 [US2] Add `docs/assets/treasury-inspect-schema.json` — bytes equal to the dumper's output. Initial source: copy [contracts/treasury-inspect-schema.json](contracts/treasury-inspect-schema.json).
-- [ ] T024 [US2] Add `app/amaru-treasury-inspect-schema/Main.hs` — calls `BSL.putStr encodeTreasuryInspectSchema`. Wire as a new executable in `amaru-treasury-tx.cabal` (mirrors `amaru-treasury-intent-schema/`).
-- [ ] T025 [US2] Extend `justfile`: add `update-schema-inspect` recipe (`cabal run … exe:amaru-treasury-inspect-schema > docs/assets/treasury-inspect-schema.json`); extend `schema-check` to also diff the inspect schema.
-- [ ] T026 [US2] Run `nix develop --quiet -c just schema-check` and `nix develop --quiet -c just unit --match "Schema"`; both green.
+- [X] T021 [US2] Add `lib/Amaru/Treasury/Inspect/Schema.hs` — `treasuryInspectSchema :: Value` + `encodeTreasuryInspectSchema :: ByteString`. Mirrors `IntentJSON/Schema.hs`. Pretty-print config: 4-space indent, alphabetical keys, trailing newline.
+- [X] T022 [P] [US2] Add `test/unit/Amaru/Treasury/Inspect/SchemaSpec.hs` — two assertions: (1) `docs/assets/treasury-inspect-schema.json` bytes match the Haskell source of truth; (2) the Slice B golden inspect report validates against the schema (`validateJSONSchema`).
+- [X] T023 [US2] `docs/assets/treasury-inspect-schema.json` checked in; bytes equal the dumper's output.
+- [X] T024 [US2] `app/amaru-treasury-inspect-schema/Main.hs` — wired as a new executable in the cabal file.
+- [X] T025 [US2] Extended `justfile`: `update-schema` and `schema-check` both extended to handle the inspect schema alongside intent + tx-report.
+- [X] T026 [US2] Flake checks `unit`/`golden`/`lint`/`schema`/`smoke` all green; unit count 325 (+2 from `SchemaSpec`).
 
-**Slice C commit**: `feat(109): treasury-inspect JSON Schema + schema-check gate`. One commit; T021–T025 folded; T026 is the gate.
+**Slice C commit**: `feat(109): treasury-inspect JSON Schema + schema-check gate` — landed as [`fa14267`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/fa14267). T021–T025 folded. T026 ran green pre-commit.
 
 ## Phase 5 — User Story 1 + 2 + 3 — CLI + IO glue
 

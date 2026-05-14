@@ -4,6 +4,22 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+### ⚠ Breaking changes
+
+* **110:** retire silent ADA/USD-as-USDM/ADA paths.
+  * `swap-quote --price-source coingecko-ada-usd` is replaced with
+    `swap-quote --price-source coingecko-ada-usdm`, derived from two
+    CoinGecko `simple/price` calls (`ids=cardano` and `ids=usdm-2`).
+    The audit JSON records both upstream observations under
+    `quote.provenance.kind = "derived"`.
+  * `swap-quote --ada-usd DECIMAL` is removed; use `--ada-usdm DECIMAL`.
+  * `swap-wizard` no longer performs outbound quote retrieval. The
+    `--price-source` and `--ada-usd` flags are removed. The wizard
+    accepts only `--min-rate R` (expert path) or
+    `--ada-usdm Q --slippage-bps S` (operator-supplied quote with the
+    wizard applying slippage). For a live quote, use the `swap-quote`
+    command and pipe its `intent.json` into `tx-build`.
+
 ## [0.2.5.1](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.5.0...v0.2.5.1) (2026-05-13)
 
 ### Bug Fixes

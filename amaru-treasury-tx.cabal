@@ -235,6 +235,7 @@ executable amaru-treasury-tx
     , ouroboros-network:api
     , text
     , time
+    , with-utf8
 
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
 

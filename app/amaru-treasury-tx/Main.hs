@@ -11,6 +11,7 @@ only dispatches.
 -}
 module Main (main) where
 
+import Main.Utf8 (withUtf8)
 import Options.Applicative (execParser)
 
 import Amaru.Treasury.Cli
@@ -57,7 +58,7 @@ import Amaru.Treasury.Tx.Envelope
     )
 
 main :: IO ()
-main = do
+main = withUtf8 $ do
     (g, c) <- execParser opts
     case c of
         CmdReportRender ro ->

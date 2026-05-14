@@ -185,6 +185,111 @@ amaru-treasury-tx attach-witness \
 amaru-treasury-tx --network mainnet submit --tx signed.cbor.hex
 ```
 
+## Composing with cardano-cli
+
+`tx-build`, `attach-witness`, and `submit` remain raw-CBOR-hex
+commands. Use the envelope filters only at the boundary where a
+`cardano-cli` JSON text envelope is needed:
+
+| Filter | Direction |
+|---|---|
+| `envelope-tx` | raw unsigned transaction hex -> `Tx ConwayEra` JSON |
+| `envelope-witness` | raw witness hex -> `TxWitness ConwayEra` JSON |
+| `envelope-signed-tx` | raw signed transaction hex -> `Tx ConwayEra` JSON |
+| `de-envelope` | any Conway envelope JSON -> raw `cborHex` |
+
+To hand an Amaru-built transaction body to `cardano-cli` for signing,
+wrap the raw `tx-build` output:
+
+```bash
+amaru-treasury-tx tx-build --out - --report swap.report.json < intent.json \
+| amaru-treasury-tx envelope-tx \
+> swap.tx.body.json
+
+cardano-cli conway transaction witness \
+  --tx-body-file swap.tx.body.json \
+  --signing-key-file owner.skey \
+  --mainnet \
+  --out-file owner.witness.json
+```
+
+To bring a `cardano-cli` witness back into the Amaru raw-hex pipeline,
+extract its `cborHex` and pass that value to `attach-witness`:
+
+```bash
+owner_witness_hex="$(
+  amaru-treasury-tx de-envelope < owner.witness.json | tr -d '\n'
+)"
+
+amaru-treasury-tx attach-witness \
+  --tx unsigned.cbor.hex \
+  --witness "$owner_witness_hex" \
+  --out signed.cbor.hex
+```
+
+A full Amaru-to-`cardano-cli` round trip keeps the shape changes at the
+pipeline ends:
+
+```bash
+amaru-treasury-tx tx-build --out - --report swap.report.json < intent.json \
+| amaru-treasury-tx envelope-tx \
+> swap.tx.body.json
+
+cardano-cli conway transaction witness \
+  --tx-body-file swap.tx.body.json \
+  --signing-key-file owner.skey \
+  --mainnet \
+  --out-file owner.witness.json
+
+owner_witness_hex="$(
+  amaru-treasury-tx de-envelope < owner.witness.json | tr -d '\n'
+)"
+
+amaru-treasury-tx de-envelope < swap.tx.body.json \
+| amaru-treasury-tx attach-witness --witness "$owner_witness_hex" \
+| amaru-treasury-tx envelope-signed-tx \
+> swap.signed.tx.json
+
+cardano-cli conway transaction submit \
+  --tx-file swap.signed.tx.json \
+  --mainnet
+```
+
+A `cardano-cli`-to-Amaru-to-`cardano-cli` path is symmetric: unwrap the
+incoming `cardano-cli` transaction body, use the raw `attach-witness`
+contract, then wrap the signed result again:
+
+```bash
+owner_witness_hex="$(
+  amaru-treasury-tx de-envelope < owner.witness.json | tr -d '\n'
+)"
+
+amaru-treasury-tx de-envelope < cli.tx.body.json \
+| amaru-treasury-tx attach-witness --witness "$owner_witness_hex" \
+| amaru-treasury-tx envelope-signed-tx \
+> cli-compatible.signed.tx.json
+```
+
+`de-envelope` rejects non-Conway envelopes before they reach the raw
+commands. A stale Babbage body fails with the offending era in stderr:
+
+```text
+de-envelope: unsupported cardano-cli envelope era in type `Tx BabbageEra`; expected ConwayEra
+```
+
+Raw hex is not an envelope. Piping raw hex into `de-envelope` fails
+without writing stdout:
+
+```text
+de-envelope: expected a cardano-cli JSON envelope object starting with `{`; first non-whitespace byte was 0x64
+```
+
+The `envelope-*` commands are deliberately dumb wrappers: they trim
+trailing ASCII whitespace from stdin and place the remaining bytes in
+`cborHex`. They do not validate whether the bytes are valid CBOR; the
+consumer (`cardano-cli`, `attach-witness`, or `submit`) remains
+responsible for semantic transaction validation.
+
 ## Expert/manual override
 
 Direct `swap-wizard --min-rate` remains available for expert use with

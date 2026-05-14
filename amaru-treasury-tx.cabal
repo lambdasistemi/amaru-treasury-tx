@@ -333,6 +333,7 @@ test-suite unit-tests
     Amaru.Treasury.BuildSpec
     Amaru.Treasury.Cli.EnvelopeSpec
     Amaru.Treasury.Cli.SwapCancelSpec
+    Amaru.Treasury.ConstantsSpec
     Amaru.Treasury.Inspect.SchemaSpec
     Amaru.Treasury.Inspect.SwapOrderDatumSpec
     Amaru.Treasury.IntentJSONSchemaSpec

@@ -101,6 +101,14 @@ import Data.Word (Word16, Word64)
 
 import Cardano.Node.Client.Validity qualified as Validity
 
+import Amaru.Treasury.Constants
+    ( minUtxoDepositLovelace
+    , sundaeOrderAddressMainnet
+    , sundaeProtocolFeeLovelace
+    , sundaeUsdmPoolHex
+    , usdmAssetHex
+    , usdmPolicyHex
+    )
 import Amaru.Treasury.IntentJSON qualified as TI
 import Amaru.Treasury.Registry.Derive (scriptHashToHex)
 import Amaru.Treasury.Registry.Verify
@@ -771,10 +779,9 @@ txInToText (TxIn (TxId h) ix) =
 
 Sources for each value live in the comment block above
 this function and must be kept in lock-step with upstream
-Sundae V3 deployments + USDM constants. The MVP table
-covers preprod (the documented manual E2E target); the
-mainnet row is left as a placeholder until the values are
-audited by an operator on-chain.
+Sundae V3 deployments + USDM constants. Mainnet values
+are sourced from 'Amaru.Treasury.Constants'; testnet rows
+stay disabled until operator audit.
 
 Sources:
 
@@ -793,16 +800,16 @@ networkConstants n = case T.toLower n of
     "mainnet" ->
         Right
             NetworkConstants
-                { ncSwapOrderAddress =
-                    "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n"
-                , ncUsdmPolicy =
-                    "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad"
-                , ncUsdmToken = "0014df105553444d"
-                , ncSundaeProtocolFeeLovelace = 1280000
-                , ncExtraPerChunkLovelace = 3280000
+                { ncSwapOrderAddress = sundaeOrderAddressMainnet
+                , ncUsdmPolicy = usdmPolicyHex
+                , ncUsdmToken = usdmAssetHex
+                , ncSundaeProtocolFeeLovelace =
+                    sundaeProtocolFeeLovelace
+                , ncExtraPerChunkLovelace =
+                    sundaeProtocolFeeLovelace
+                        + minUtxoDepositLovelace
                 , ncSlotsPerHour = 3600
-                , ncDefaultPoolId =
-                    "64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef"
+                , ncDefaultPoolId = sundaeUsdmPoolHex
                 }
     "preprod" ->
         Left

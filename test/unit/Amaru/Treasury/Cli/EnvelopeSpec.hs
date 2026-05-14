@@ -82,15 +82,15 @@ spec =
                 )
                 `shouldBe` Left "parse failure"
 
-        it "parses emergency-top-up as a contingency ADA top-up" $
+        it "parses emergency-top-up-wizard as a contingency ADA top-up" $
             parseCmd emergencyTopUpArgs
-                `shouldBe` Right "emergency-top-up"
+                `shouldBe` Right "emergency-top-up-wizard"
 
-        it "parses emergency-top-up ADA into lovelace" $
+        it "parses emergency-top-up-wizard ADA into lovelace" $
             parseEmergencyTopUp emergencyTopUpArgs
                 `shouldBe` Right (NetworkCompliance, 200000500000)
 
-        it "rejects contingency as an emergency-top-up destination" $
+        it "rejects contingency as an emergency-top-up-wizard destination" $
             parseCmd
                 ( replaceArg
                     "network_compliance"
@@ -159,14 +159,14 @@ cmdTag = \case
     CmdSwapWizard{} -> "swap-wizard"
     CmdSwapQuote{} -> "swap-quote"
     CmdDisburseWizard{} -> "disburse-wizard"
-    CmdEmergencyTopUp{} -> "emergency-top-up"
+    CmdEmergencyTopUp{} -> "emergency-top-up-wizard"
     CmdWithdrawWizard{} -> "withdraw-wizard"
     CmdReportRender{} -> "report-render"
     CmdTreasuryInspect{} -> "treasury-inspect"
 
 emergencyTopUpArgs :: [String]
 emergencyTopUpArgs =
-    [ "emergency-top-up"
+    [ "emergency-top-up-wizard"
     , "--wallet-addr"
     , "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz"
     , "--metadata"

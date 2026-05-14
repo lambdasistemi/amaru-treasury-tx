@@ -231,8 +231,8 @@ summary JSON against the existing
   hex keyhash). For owned scopes, the selected scope's owner is always
   required and must not need to be passed explicitly. The public
   `disburse-wizard` CLI MUST reject `contingency`; contingency reserve
-  movements are handled by `emergency-top-up`.
-- **FR-006a**: `emergency-top-up` MUST source funds from
+  movements are handled by `emergency-top-up-wizard`.
+- **FR-006a**: `emergency-top-up-wizard` MUST source funds from
   `contingency`, MUST move ADA only, MUST accept a destination scope
   limited to `core_development`, `ops_and_use_cases`,
   `network_compliance`, or `middleware`, MUST resolve the destination

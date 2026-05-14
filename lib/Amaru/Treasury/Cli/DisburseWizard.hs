@@ -110,7 +110,7 @@ data DisburseWizardOpts = DisburseWizardOpts
     }
     deriving stock (Eq, Show)
 
-{- | Flags for the @emergency-top-up@ subcommand.
+{- | Flags for the @emergency-top-up-wizard@ subcommand.
 The command is intentionally narrower than @disburse-wizard@:
 source scope is always @contingency@, the unit is always ADA,
 and the destination is another treasury scope resolved from
@@ -415,7 +415,7 @@ runEmergencyTopUp
     -> IO ()
 runEmergencyTopUp g EmergencyTopUpOpts{..} =
     runDisburseCommand
-        "emergency-top-up"
+        "emergency-top-up-wizard"
         g
         etuOptsLog
         etuOptsMetadataPath

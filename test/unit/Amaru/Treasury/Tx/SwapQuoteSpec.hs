@@ -9,10 +9,11 @@ module Amaru.Treasury.Tx.SwapQuoteSpec (spec) where
 
 import Data.ByteString.Char8 qualified as BS
 import Data.Either (isLeft, isRight)
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Ratio ((%))
 import Data.Text qualified as T
 import Data.Version (showVersion)
-import Network.HTTP.Client (requestHeaders)
+import Network.HTTP.Client (Request, requestHeaders)
 import Options.Applicative
     ( ParserResult (..)
     , defaultPrefs
@@ -46,6 +47,7 @@ import Amaru.Treasury.Scope (ScopeId (..))
 import Amaru.Treasury.Tx.SwapQuote
     ( AffordabilityFailure (..)
     , AffordabilitySummary (..)
+    , ComponentObservation (..)
     , DerivedSwapParameters (..)
     , QuoteInput (..)
     , QuoteObservation (..)
@@ -65,10 +67,15 @@ import Amaru.Treasury.Tx.SwapQuote
     , renderAffordabilityFailure
     )
 import Amaru.Treasury.Tx.SwapQuote.Source
-    ( QuoteSource (..)
+    ( QuoteProvider (..)
+    , QuoteSource (..)
     , QuoteSourceError (..)
     , coinGeckoRequest
-    , parseCoinGeckoAdaUsdResponse
+    , coinGeckoUsdmRequest
+    , composeAdaUsdmFromComponents
+    , fetchQuoteSource
+    , parseCoinGeckoAdaUsdComponent
+    , parseCoinGeckoUsdmUsdComponent
     , parseQuoteSourceName
     , quoteSourceName
     )
@@ -207,7 +214,7 @@ spec = describe "SwapQuote" $ do
                             `shouldContain` "required=503.280000 ADA (503280000 lovelace)"
                         rendered
                             `shouldContain` "available=503.279999 ADA (503279999 lovelace)"
-                        rendered `shouldContain` "quote=0.8123 ADA/USD"
+                        rendered `shouldContain` "quote=0.8123 ADA/USDM"
                         rendered `shouldContain` "slippage=100 bps"
                         rendered
                             `shouldContain` "shortfall=0.000001 ADA (1 lovelace)"
@@ -223,21 +230,14 @@ spec = describe "SwapQuote" $ do
 
     describe "parseQuoteInput" $ do
         it "rejects invalid, zero, and negative quote overrides" $ do
-            parseQuoteInput (AdaUsdOverride "current")
+            parseQuoteInput (AdaUsdmOverride "current")
                 `shouldSatisfy` isLeft
-            parseQuoteInput (AdaUsdOverride "0")
+            parseQuoteInput (AdaUsdmOverride "0")
                 `shouldSatisfy` isLeft
-            parseQuoteInput (AdaUsdOverride "-0.1")
+            parseQuoteInput (AdaUsdmOverride "-0.1")
                 `shouldSatisfy` isLeft
 
-        it "preserves explicit ADA/USD and ADA/USDM override observations" $ do
-            parseQuoteInput (AdaUsdOverride "0.8123")
-                `shouldBe` Right
-                    QuoteObservation
-                        { qoPair = AdaUsd
-                        , qoQuote = 8123 % 10_000
-                        , qoProvenance = OperatorOverride
-                        }
+        it "preserves explicit ADA/USDM override observations" $
             parseQuoteInput (AdaUsdmOverride "0.804177")
                 `shouldBe` Right
                     QuoteObservation
@@ -246,52 +246,111 @@ spec = describe "SwapQuote" $ do
                         , qoProvenance = OperatorOverride
                         }
 
-    describe "source provider parsing" $ do
-        it "parses a captured coingecko-ada-usd response with provenance" $ do
+    describe "source component parsing" $ do
+        it "parses a captured coingecko ADA/USD response into a component" $ do
             bytes <-
-                readFileStrict "test/fixtures/swap-quote/source.coingecko.json"
-            parseCoinGeckoAdaUsdResponse "2026-05-09T10:00:00Z" bytes
+                readFileStrict
+                    "test/fixtures/swap-quote/source.coingecko-ada-usd.json"
+            parseCoinGeckoAdaUsdComponent "2026-05-09T10:00:00Z" bytes
                 `shouldBe` Right
-                    QuoteObservation
-                        { qoPair = AdaUsd
-                        , qoQuote = 8123 % 10_000
-                        , qoProvenance =
-                            QuoteSourceProvenance
-                                { qspName = "coingecko-ada-usd"
-                                , qspFetchedAt = "2026-05-09T10:00:00Z"
-                                , qspRaw = "{\"cardano\":{\"usd\":0.8123}}\n"
-                                }
+                    ComponentObservation
+                        { coName = "coingecko-ada-usd"
+                        , coValue = 8123 % 10_000
+                        , coFetchedAt = "2026-05-09T10:00:00Z"
+                        , coRaw = "{\"cardano\":{\"usd\":0.8123}}\n"
                         }
 
-        it "recognises coingecko-ada-usd as the named ADA/USD source" $
-            quoteSourceName CoinGeckoAdaUsd `shouldBe` "coingecko-ada-usd"
+        it "parses a captured coingecko USDM/USD response into a component" $ do
+            bytes <-
+                readFileStrict
+                    "test/fixtures/swap-quote/source.coingecko-usdm-usd.json"
+            parseCoinGeckoUsdmUsdComponent "2026-05-09T10:00:00Z" bytes
+                `shouldBe` Right
+                    ComponentObservation
+                        { coName = "coingecko-usdm-usd"
+                        , coValue = 996_629 % 1_000_000
+                        , coFetchedAt = "2026-05-09T10:00:00Z"
+                        , coRaw = "{\"usdm-2\":{\"usd\":0.996629}}\n"
+                        }
+
+        it "recognises coingecko-ada-usdm as the named ADA/USDM source" $
+            quoteSourceName CoinGeckoAdaUsdm `shouldBe` "coingecko-ada-usdm"
 
         it
-            "sends CoinGecko a descriptive User-Agent tracking the cabal version"
+            "sends CoinGecko ADA/USD a descriptive User-Agent tracking the cabal version"
             $ do
                 request <- coinGeckoRequest
-                let expected =
-                        BS.pack $
-                            "amaru-treasury-tx/"
-                                <> showVersion P.version
-                                <> " (https://github.com/lambdasistemi/amaru-treasury-tx)"
-                lookup "User-Agent" (requestHeaders request)
-                    `shouldBe` Just expected
+                expectedAdvertisedUserAgent request
+
+        it
+            "sends CoinGecko USDM/USD a descriptive User-Agent tracking the cabal version"
+            $ do
+                request <- coinGeckoUsdmRequest
+                expectedAdvertisedUserAgent request
+
+    describe "derived coingecko-ada-usdm composition" $ do
+        it
+            "composes ADA/USDM as adaUsd / usdmUsd with both components captured"
+            $ do
+                let adaUsdComp =
+                        ComponentObservation
+                            { coName = "coingecko-ada-usd"
+                            , coValue = 270_971 % 1_000_000
+                            , coFetchedAt = "2026-05-14T09:59:58Z"
+                            , coRaw = "{\"cardano\":{\"usd\":0.270971}}\n"
+                            }
+                    usdmUsdComp =
+                        ComponentObservation
+                            { coName = "coingecko-usdm-usd"
+                            , coValue = 996_629 % 1_000_000
+                            , coFetchedAt = "2026-05-14T09:59:59Z"
+                            , coRaw = "{\"usdm-2\":{\"usd\":0.996629}}\n"
+                            }
+                    observation =
+                        composeAdaUsdmFromComponents adaUsdComp usdmUsdComp
+                qoPair observation `shouldBe` AdaUsdm
+                qoQuote observation `shouldBe` 270_971 % 996_629
+                qoProvenance observation
+                    `shouldBe` DerivedQuoteProvenance
+                        { dqpName = "coingecko-ada-usdm"
+                        , dqpComponents = adaUsdComp :| [usdmUsdComp]
+                        }
+
+        it "fetches the derived observation through a stubbed QuoteProvider" $ do
+            let adaUsdComp =
+                    ComponentObservation
+                        { coName = "coingecko-ada-usd"
+                        , coValue = 270_971 % 1_000_000
+                        , coFetchedAt = "2026-05-14T09:59:58Z"
+                        , coRaw = "{\"cardano\":{\"usd\":0.270971}}\n"
+                        }
+                usdmUsdComp =
+                    ComponentObservation
+                        { coName = "coingecko-usdm-usd"
+                        , coValue = 996_629 % 1_000_000
+                        , coFetchedAt = "2026-05-14T09:59:59Z"
+                        , coRaw = "{\"usdm-2\":{\"usd\":0.996629}}\n"
+                        }
+                stubProvider :: QuoteProvider IO
+                stubProvider =
+                    QuoteProvider $ \_source fetchedAt ->
+                        pure
+                            ( Right
+                                ( composeAdaUsdmFromComponents
+                                    adaUsdComp
+                                    usdmUsdComp{coFetchedAt = fetchedAt}
+                                )
+                            )
+            result <-
+                fetchQuoteSource stubProvider CoinGeckoAdaUsdm "2026-05-14T10:00:00Z"
+            case result of
+                Right obs -> do
+                    qoPair obs `shouldBe` AdaUsdm
+                    qoQuote obs `shouldBe` 270_971 % 996_629
+                Left err ->
+                    expectationFailure ("unexpected provider error: " <> show err)
 
     describe "swap-quote CLI parser" $ do
-        it "accepts an explicit ADA/USD override quote input" $
-            parseSwapQuote (baseSwapQuoteArgs <> ["--ada-usd", "0.8123"])
-                `shouldBe` Right
-                    ( sampleSwapQuoteOpts
-                        ( SwapQuoteOverride
-                            QuoteObservation
-                                { qoPair = AdaUsd
-                                , qoQuote = 8123 % 10_000
-                                , qoProvenance = OperatorOverride
-                                }
-                        )
-                    )
-
         it "accepts an explicit ADA/USDM override quote input" $
             parseSwapQuote (baseSwapQuoteArgs <> ["--ada-usdm", "0.804177"])
                 `shouldBe` Right
@@ -305,24 +364,30 @@ spec = describe "SwapQuote" $ do
                         )
                     )
 
-        it "accepts coingecko-ada-usd as the only named source" $
+        it "accepts coingecko-ada-usdm as the only named source" $
             parseSwapQuote
-                (baseSwapQuoteArgs <> ["--price-source", "coingecko-ada-usd"])
+                (baseSwapQuoteArgs <> ["--price-source", "coingecko-ada-usdm"])
                 `shouldBe` Right
-                    (sampleSwapQuoteOpts (SwapQuoteSource CoinGeckoAdaUsd))
+                    (sampleSwapQuoteOpts (SwapQuoteSource CoinGeckoAdaUsdm))
+
+        it "rejects the retired --ada-usd override" $
+            parseSwapQuote (baseSwapQuoteArgs <> ["--ada-usd", "0.8123"])
+                `shouldSatisfy` isLeft
+
+        it "rejects coingecko-ada-usd with a retirement error" $
+            parseQuoteSourceName "coingecko-ada-usd"
+                `shouldSatisfy` \case
+                    Left (RetiredQuoteSource name _) ->
+                        name == "coingecko-ada-usd"
+                    _ -> False
 
         it "requires exactly one quote input" $ do
             parseSwapQuote baseSwapQuoteArgs `shouldSatisfy` isLeft
             parseSwapQuote
                 ( baseSwapQuoteArgs
-                    <> ["--ada-usd", "0.8123", "--ada-usdm", "0.804177"]
+                    <> ["--ada-usdm", "0.804177", "--price-source", "coingecko-ada-usdm"]
                 )
                 `shouldSatisfy` isLeft
-
-        it "rejects named ADA/USDM live sources with a future-work error" $
-            parseQuoteSourceName "coingecko-ada-usdm"
-                `shouldBe` Left
-                    (NamedAdaUsdmSourceUnavailable "coingecko-ada-usdm")
 
     describe "swap-quote runner planning" $ do
         it "derives the same SwapWizardQ values as the manual min-rate path" $ do
@@ -330,8 +395,8 @@ spec = describe "SwapQuote" $ do
                 expectRight
                     ( deriveSwapQuotePlan
                         "mainnet"
-                        (sampleSwapQuoteOpts sampleAdaUsdOverride)
-                        sampleAdaUsdObservation
+                        (sampleSwapQuoteOpts sampleAdaUsdmOverride)
+                        sampleAdaUsdmObservation
                     )
             sqpAnswers plan
                 `shouldBe` SwapWizardQ
@@ -357,8 +422,8 @@ spec = describe "SwapQuote" $ do
                 expectRight
                     ( deriveSwapQuotePlan
                         "mainnet"
-                        (sampleSwapQuoteOpts sampleAdaUsdOverride)
-                        sampleAdaUsdObservation
+                        (sampleSwapQuoteOpts sampleAdaUsdmOverride)
+                        sampleAdaUsdmObservation
                     )
             -- Under issue #91 the wizard distributes a small
             -- remainder across the chunks instead of emitting a
@@ -409,7 +474,7 @@ sampleDerivedParameters =
     DerivedSwapParameters
         { dspQuote =
             QuoteObservation
-                { qoPair = AdaUsd
+                { qoPair = AdaUsdm
                 , qoQuote = 8123 % 10_000
                 , qoProvenance = OperatorOverride
                 }
@@ -423,6 +488,16 @@ sampleDerivedParameters =
 readFileStrict :: FilePath -> IO T.Text
 readFileStrict path =
     T.pack <$> readFile path
+
+expectedAdvertisedUserAgent :: Request -> Expectation
+expectedAdvertisedUserAgent request = do
+    let expected =
+            BS.pack $
+                "amaru-treasury-tx/"
+                    <> showVersion P.version
+                    <> " (https://github.com/lambdasistemi/amaru-treasury-tx)"
+    lookup "User-Agent" (requestHeaders request)
+        `shouldBe` Just expected
 
 parseSwapQuote :: [String] -> Either String SwapQuoteOpts
 parseSwapQuote args =
@@ -477,14 +552,14 @@ sampleSwapQuoteOpts quote =
         , sqoSigners = []
         }
 
-sampleAdaUsdOverride :: SwapQuoteQuoteArg
-sampleAdaUsdOverride =
-    SwapQuoteOverride sampleAdaUsdObservation
+sampleAdaUsdmOverride :: SwapQuoteQuoteArg
+sampleAdaUsdmOverride =
+    SwapQuoteOverride sampleAdaUsdmObservation
 
-sampleAdaUsdObservation :: QuoteObservation
-sampleAdaUsdObservation =
+sampleAdaUsdmObservation :: QuoteObservation
+sampleAdaUsdmObservation =
     QuoteObservation
-        { qoPair = AdaUsd
+        { qoPair = AdaUsdm
         , qoQuote = 8123 % 10_000
         , qoProvenance = OperatorOverride
         }

@@ -13,7 +13,6 @@ grep -F -- "swap-quote" <<<"$root_help" >/dev/null || {
 }
 
 for needle in \
-  "--ada-usd DECIMAL" \
   "--ada-usdm DECIMAL" \
   "--price-source SOURCE" \
   "--slippage-bps INT" \
@@ -23,6 +22,14 @@ do
     printf 'swap-quote help missing: %s\n' "$needle" >&2
     exit 1
   }
+done
+
+for retired in "--ada-usd DECIMAL"
+do
+  if grep -F -- "$retired" <<<"$quote_help" >/dev/null; then
+    printf 'swap-quote still advertises retired flag: %s\n' "$retired" >&2
+    exit 1
+  fi
 done
 
 for needle in \

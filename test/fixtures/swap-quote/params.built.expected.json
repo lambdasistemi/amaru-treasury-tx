@@ -25,7 +25,7 @@
     },
     "quote": {
         "observedAt": "2026-05-09T10:00:00Z",
-        "pair": "ADA/USD",
+        "pair": "ADA/USDM",
         "provenance": {
             "kind": "override"
         },

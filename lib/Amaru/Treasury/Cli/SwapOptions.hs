@@ -43,16 +43,8 @@ data SwapQuoteQuoteArg
 
 quoteP :: Parser SwapQuoteQuoteArg
 quoteP =
-    adaUsdP <|> adaUsdmP <|> priceSourceP
+    adaUsdmP <|> priceSourceP
   where
-    adaUsdP =
-        SwapQuoteOverride
-            <$> option
-                (quoteOverrideReader AdaUsdOverride)
-                ( long "ada-usd"
-                    <> metavar "DECIMAL"
-                    <> help "Explicit ADA/USD quote override"
-                )
     adaUsdmP =
         SwapQuoteOverride
             <$> option
@@ -67,7 +59,9 @@ quoteP =
                 priceSourceReader
                 ( long "price-source"
                     <> metavar "SOURCE"
-                    <> help "Named quote source, currently coingecko-ada-usd"
+                    <> help
+                        "Named live quote source, currently coingecko-ada-usdm \
+                        \(derived from CoinGecko ADA/USD and USDM/USD)"
                 )
 
 quoteOverrideReader :: (Text -> QuoteInput) -> ReadM QuoteObservation

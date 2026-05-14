@@ -15,10 +15,13 @@ module Amaru.Treasury.Tx.SwapQuote.Source
     , QuoteProvider (..)
     , quoteSourceName
     , parseQuoteSourceName
-    , parseCoinGeckoAdaUsdResponse
+    , parseCoinGeckoAdaUsdComponent
+    , parseCoinGeckoUsdmUsdComponent
+    , composeAdaUsdmFromComponents
     , coinGeckoRequest
+    , coinGeckoUsdmRequest
     , fetchQuoteSource
-    , coingeckoAdaUsdProvider
+    , coingeckoAdaUsdmProvider
     , renderQuoteSourceError
     , describeTlsTrustAnchor
     ) where
@@ -30,6 +33,7 @@ import Data.Aeson
     , withObject
     , (.:)
     )
+import Data.Aeson.Key qualified as AesonKey
 import Data.Aeson.Types (Parser, parseEither)
 import Data.ByteString (ByteString)
 import Data.ByteString.Char8 qualified as BS
@@ -56,19 +60,26 @@ import Paths_amaru_treasury_tx qualified as P
 import System.Environment (lookupEnv)
 import System.IO (hPutStrLn, stderr)
 
+import Data.List.NonEmpty (NonEmpty (..))
+
 import Amaru.Treasury.Tx.SwapQuote
-    ( QuoteObservation (..)
+    ( ComponentObservation (..)
+    , QuoteObservation (..)
     , QuotePair (..)
     , QuoteProvenance (..)
     )
 
 data QuoteSource
-    = CoinGeckoAdaUsd
+    = CoinGeckoAdaUsdm
     deriving (Eq, Show)
 
 data QuoteSourceError
     = UnknownQuoteSource !Text
-    | NamedAdaUsdmSourceUnavailable !Text
+    | -- | Operator passed a retired source name (e.g. @coingecko-ada-usd@).
+      RetiredQuoteSource
+        !Text
+        !Text
+        -- ^ retired name, then the replacement guidance.
     | QuoteSourceDecodeError !Text
     | QuoteSourceMissingField !Text
     | QuoteSourceInvalidQuote !Text
@@ -84,23 +95,54 @@ newtype QuoteProvider m = QuoteProvider
 
 quoteSourceName :: QuoteSource -> Text
 quoteSourceName = \case
-    CoinGeckoAdaUsd ->
-        "coingecko-ada-usd"
+    CoinGeckoAdaUsdm ->
+        "coingecko-ada-usdm"
 
 parseQuoteSourceName :: Text -> Either QuoteSourceError QuoteSource
 parseQuoteSourceName raw =
     case T.toLower raw of
+        "coingecko-ada-usdm" ->
+            Right CoinGeckoAdaUsdm
         "coingecko-ada-usd" ->
-            Right CoinGeckoAdaUsd
-        name
-            | "usdm" `T.isInfixOf` name ->
-                Left (NamedAdaUsdmSourceUnavailable raw)
+            Left
+                ( RetiredQuoteSource
+                    raw
+                    "use coingecko-ada-usdm (derived ADA/USD ÷ USDM/USD) \
+                    \or pass --ada-usdm for an explicit override"
+                )
         _ ->
             Left (UnknownQuoteSource raw)
 
-parseCoinGeckoAdaUsdResponse
-    :: Text -> Text -> Either QuoteSourceError QuoteObservation
-parseCoinGeckoAdaUsdResponse fetchedAt raw = do
+{- | Parse a captured CoinGecko ADA/USD @simple/price@ response into a
+component observation under the derived ADA/USDM source.
+-}
+parseCoinGeckoAdaUsdComponent
+    :: Text -> Text -> Either QuoteSourceError ComponentObservation
+parseCoinGeckoAdaUsdComponent =
+    parseSimplePriceComponent "coingecko-ada-usd" "cardano" "cardano.usd"
+
+{- | Parse a captured CoinGecko USDM/USD @simple/price@ response (id
+@usdm-2@) into a component observation under the derived ADA/USDM
+source.
+-}
+parseCoinGeckoUsdmUsdComponent
+    :: Text -> Text -> Either QuoteSourceError ComponentObservation
+parseCoinGeckoUsdmUsdComponent =
+    parseSimplePriceComponent "coingecko-usdm-usd" "usdm-2" "usdm-2.usd"
+
+parseSimplePriceComponent
+    :: Text
+    -- ^ component name (e.g. @coingecko-ada-usd@)
+    -> Text
+    -- ^ CoinGecko id (e.g. @cardano@ / @usdm-2@)
+    -> Text
+    -- ^ field path used in error messages
+    -> Text
+    -- ^ fetchedAt (ISO-8601)
+    -> Text
+    -- ^ raw response body
+    -> Either QuoteSourceError ComponentObservation
+parseSimplePriceComponent componentName cgId errorPath fetchedAt raw = do
     value <-
         case eitherDecodeStrict' (TE.encodeUtf8 raw) of
             Left err ->
@@ -108,31 +150,49 @@ parseCoinGeckoAdaUsdResponse fetchedAt raw = do
             Right parsed ->
                 Right parsed
     quote <-
-        case parseEither coingeckoUsd value of
+        case parseEither (simplePriceParser cgId) value of
             Left err ->
                 Left (QuoteSourceMissingField (T.pack err))
             Right usd
                 | usd > 0 ->
                     Right (toRational usd)
                 | otherwise ->
-                    Left (QuoteSourceInvalidQuote "cardano.usd")
+                    Left (QuoteSourceInvalidQuote errorPath)
     pure
-        QuoteObservation
-            { qoPair = AdaUsd
-            , qoQuote = quote
-            , qoProvenance =
-                QuoteSourceProvenance
-                    { qspName = quoteSourceName CoinGeckoAdaUsd
-                    , qspFetchedAt = fetchedAt
-                    , qspRaw = raw
-                    }
+        ComponentObservation
+            { coName = componentName
+            , coValue = quote
+            , coFetchedAt = fetchedAt
+            , coRaw = raw
             }
   where
-    coingeckoUsd :: Value -> Parser Scientific
-    coingeckoUsd =
+    simplePriceParser :: Text -> Value -> Parser Scientific
+    simplePriceParser cgId' =
         withObject "CoinGecko simple price" $ \root -> do
-            cardano <- root .: "cardano"
-            withObject "cardano" (.: "usd") cardano
+            inner <- root .: AesonKey.fromText cgId'
+            withObject (T.unpack cgId') (.: "usd") inner
+
+{- | Compose two component observations (ADA/USD and USDM/USD) into a
+derived ADA/USDM 'QuoteObservation'. The @qoQuote@ is the exact
+'Rational' ratio @adaUsd / usdmUsd@; the provenance captures both
+components in order.
+-}
+composeAdaUsdmFromComponents
+    :: ComponentObservation
+    -- ^ ADA/USD component
+    -> ComponentObservation
+    -- ^ USDM/USD component
+    -> QuoteObservation
+composeAdaUsdmFromComponents adaUsd usdmUsd =
+    QuoteObservation
+        { qoPair = AdaUsdm
+        , qoQuote = coValue adaUsd / coValue usdmUsd
+        , qoProvenance =
+            DerivedQuoteProvenance
+                { dqpName = quoteSourceName CoinGeckoAdaUsdm
+                , dqpComponents = adaUsd :| [usdmUsd]
+                }
+        }
 
 fetchQuoteSource
     :: QuoteProvider IO
@@ -142,18 +202,46 @@ fetchQuoteSource
 fetchQuoteSource =
     qpFetchQuote
 
-coingeckoAdaUsdProvider :: QuoteProvider IO
-coingeckoAdaUsdProvider =
+coingeckoAdaUsdmProvider :: QuoteProvider IO
+coingeckoAdaUsdmProvider =
     QuoteProvider $ \source fetchedAt ->
         case source of
-            CoinGeckoAdaUsd ->
-                fetchCoinGecko fetchedAt
+            CoinGeckoAdaUsdm ->
+                fetchDerivedAdaUsdm fetchedAt
 
-fetchCoinGecko
+fetchDerivedAdaUsdm
     :: Text -> IO (Either QuoteSourceError QuoteObservation)
-fetchCoinGecko fetchedAt = do
+fetchDerivedAdaUsdm fetchedAt = do
+    adaUsdRes <-
+        fetchComponent
+            fetchedAt
+            coinGeckoRequest
+            parseCoinGeckoAdaUsdComponent
+    case adaUsdRes of
+        Left err -> pure (Left err)
+        Right adaUsdComp -> do
+            usdmUsdRes <-
+                fetchComponent
+                    fetchedAt
+                    coinGeckoUsdmRequest
+                    parseCoinGeckoUsdmUsdComponent
+            case usdmUsdRes of
+                Left err -> pure (Left err)
+                Right usdmUsdComp ->
+                    pure
+                        (Right (composeAdaUsdmFromComponents adaUsdComp usdmUsdComp))
+
+fetchComponent
+    :: Text
+    -- ^ fetchedAt timestamp
+    -> IO Request
+    -- ^ request builder for this component
+    -> (Text -> Text -> Either QuoteSourceError ComponentObservation)
+    -- ^ component-specific parser
+    -> IO (Either QuoteSourceError ComponentObservation)
+fetchComponent fetchedAt mkRequest parseBody = do
     describeTlsTrustAnchor >>= hPutStrLn stderr
-    request <- coinGeckoRequest
+    request <- mkRequest
     result <-
         try (httpLBS request)
             :: IO (Either SomeException (Response BSL.ByteString))
@@ -162,11 +250,11 @@ fetchCoinGecko fetchedAt = do
             Left err ->
                 Left
                     ( QuoteSourceFetchFailed
-                        (quoteSourceName CoinGeckoAdaUsd)
+                        (quoteSourceName CoinGeckoAdaUsdm)
                         (T.pack (displayException err))
                     )
             Right response ->
-                parseCoinGeckoAdaUsdResponse
+                parseBody
                     fetchedAt
                     (decodeUtf8Lenient (getResponseBody response))
 
@@ -174,9 +262,21 @@ coinGeckoUrl :: String
 coinGeckoUrl =
     "https://api.coingecko.com/api/v3/simple/price?ids=cardano&vs_currencies=usd"
 
+coinGeckoUsdmUrl :: String
+coinGeckoUsdmUrl =
+    "https://api.coingecko.com/api/v3/simple/price?ids=usdm-2&vs_currencies=usd"
+
 coinGeckoRequest :: IO Request
-coinGeckoRequest = do
-    request0 <- parseRequest coinGeckoUrl
+coinGeckoRequest =
+    mkCoinGeckoRequest coinGeckoUrl
+
+coinGeckoUsdmRequest :: IO Request
+coinGeckoUsdmRequest =
+    mkCoinGeckoRequest coinGeckoUsdmUrl
+
+mkCoinGeckoRequest :: String -> IO Request
+mkCoinGeckoRequest url = do
+    request0 <- parseRequest url
     pure
         request0
             { responseTimeout = responseTimeoutMicro 5_000_000
@@ -233,10 +333,8 @@ renderQuoteSourceError :: QuoteSourceError -> Text
 renderQuoteSourceError = \case
     UnknownQuoteSource name ->
         "unknown quote source: " <> name
-    NamedAdaUsdmSourceUnavailable name ->
-        "named ADA/USDM quote source is future work: "
-            <> name
-            <> "; use --ada-usdm for explicit overrides"
+    RetiredQuoteSource name guidance ->
+        "quote source " <> name <> " retired: " <> guidance
     QuoteSourceDecodeError err ->
         "quote source decode failed: " <> err
     QuoteSourceMissingField field ->

@@ -228,8 +228,16 @@ summary JSON against the existing
   recipe.
 - **FR-006**: `disburse-wizard` MUST accept zero or more `--extra-signer`
   flags identifying co-approving scope owners (by scope name or 28-byte
-  hex keyhash). The selected scope's owner is always required and must
-  not need to be passed explicitly.
+  hex keyhash). For owned scopes, the selected scope's owner is always
+  required and must not need to be passed explicitly. The public
+  `disburse-wizard` CLI MUST reject `contingency`; contingency reserve
+  movements are handled by `emergency-top-up`.
+- **FR-006a**: `emergency-top-up` MUST source funds from
+  `contingency`, MUST move ADA only, MUST accept a destination scope
+  limited to `core_development`, `ops_and_use_cases`,
+  `network_compliance`, or `middleware`, MUST resolve the destination
+  treasury address from verified metadata/registry state, and MUST infer
+  all four owned scope owners as required signers.
 - **FR-007**: `disburse-wizard` output JSON MUST validate against
   `docs/assets/intent-schema.json` and round-trip through
   `decodeTreasuryIntent` + `translateIntent SDisburse` without loss.

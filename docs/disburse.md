@@ -45,7 +45,7 @@ amaru-treasury-tx ... disburse-wizard \
 The wizard verifies the local `metadata.json` hint against the
 on-chain registry, then resolves:
 
-- the selected scope's treasury address, script hash, owner keyhash,
+- the selected scope's treasury address, script hash, owner keyhashes,
   deployed scripts, and permissions reward account;
 - wallet UTxOs for fuel and collateral;
 - treasury UTxOs for the selected unit;
@@ -58,6 +58,50 @@ are covered. The beneficiary output receives the requested USDM plus
 the required lovelace. The treasury leftover output receives leftover
 lovelace, leftover USDM, and any other non-USDM assets preserved from
 the selected treasury inputs.
+
+## Emergency top-ups
+
+Use `emergency-top-up` when ADA must move from the `contingency`
+treasury to another scope treasury. This is intentionally narrower
+than `disburse-wizard`:
+
+- the source is always `contingency`;
+- the unit is always ADA;
+- the destination is selected by scope, not by manually pasting an
+  address;
+- the destination scope must be one of:
+  `core_development`, `ops_and_use_cases`, `network_compliance`, or
+  `middleware`.
+
+The `contingency` treasury has no owner key of its own. The command
+therefore emits all four owned scope owners as required signers:
+
+- `core_development`
+- `ops_and_use_cases`
+- `network_compliance`
+- `middleware`
+
+For example, to top up Network Compliance with 200,000 ADA:
+
+```bash
+amaru-treasury-tx \
+    --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
+    emergency-top-up \
+        --wallet-addr addr1q... \
+        --metadata metadata-mainnet.json \
+        --destination-scope network_compliance \
+        --ada 200000 \
+        --description "Emergency top-up for Network Compliance" \
+        --justification "Treasury reallocation approved by scope owners" \
+  | amaru-treasury-tx \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
+        tx-build
+```
+
+`--ada` accepts an ADA decimal and converts it to lovelace in the
+emitted intent. The command still emits the unified `disburse` intent
+shape consumed by `tx-build`, but the public CLI surface enforces the
+emergency top-up policy above.
 
 ## Existing intent
 

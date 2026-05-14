@@ -120,10 +120,10 @@ its first user in a vertical slice.
 
 ### Slice E — Operator documentation
 
-- [ ] T033 Copy [specs/109-treasury-inspect/quickstart.md](quickstart.md) to `docs/inspect.md`, trim the speckit-internal references, link it from the docs index (mkdocs nav, per FR-014). Keep the Acceptance-smoke section verbatim.
-- [ ] T034 Run `nix develop --quiet -c just build-docs`; ensure the docs site renders without warnings.
+- [X] T033 `docs/inspect.md` checked in, derived from [quickstart.md](quickstart.md), trimmed of speckit-internal references, linked in `mkdocs.yml` nav between Withdraw and ChainContext.
+- [X] T034 `nix develop github:paolino/dev-assets?dir=mkdocs -c mkdocs build --strict` is green.
 
-**Slice E commit**: `docs(109): operator walkthrough for treasury-inspect`. One commit.
+**Slice E commit**: `docs(109): operator walkthrough for treasury-inspect` — landed as [`c2d6509`](https://github.com/lambdasistemi/amaru-treasury-tx/commit/c2d6509).
 
 ## Dependencies & Execution Order
 

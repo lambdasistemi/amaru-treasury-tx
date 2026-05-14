@@ -151,6 +151,7 @@ import Cardano.Slotting.Slot (SlotNo (..))
 import Codec.Binary.Bech32 qualified as Bech32
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (poll, withAsync)
+import Control.Exception (SomeException, try)
 import Control.Monad (unless, when)
 import Data.Aeson
     ( FromJSON (..)
@@ -190,10 +191,14 @@ import System.Directory
     , doesDirectoryExist
     , doesFileExist
     , getCurrentDirectory
+    , getTemporaryDirectory
     , listDirectory
     , makeAbsolute
+    , removeFile
+    , removePathForcibly
     )
 import System.Environment (lookupEnv)
+import System.Exit (ExitCode (..))
 import System.FilePath
     ( takeDirectory
     , (</>)
@@ -274,6 +279,129 @@ instance FromJSON ShelleyGenesisTiming where
 spec :: Spec
 spec =
     describe "local devnet smoke" $ do
+        describe "withdraw diagnostics" $ do
+            it "records reward timeout with last reward and epoch/tip context" $ do
+                let failure =
+                        WithdrawalRewardTimeout
+                            sampleRewardAccount
+                            (Coin 0)
+                            (Just 3)
+                            (Just 44)
+                withdrawalFailureValue
+                    sampleRunDir
+                    sampleSocket
+                    sampleTiming
+                    (Just sampleEvidence)
+                    failure
+                    `shouldBe` object
+                        [ "phase" .= ("withdraw" :: String)
+                        , "status" .= ("failed" :: String)
+                        , "code" .= ("reward-timeout" :: String)
+                        , "message"
+                            .= ( "timed out waiting for reward account "
+                                    <> sampleRewardAccount
+                                    <> " to become positive"
+                               )
+                        , "runDirectory" .= sampleRunDir
+                        , "socket" .= sampleSocket
+                        , "network" .= ("devnet" :: String)
+                        , "networkMagic" .= sgtNetworkMagic sampleTiming
+                        , "epochDurationSeconds"
+                            .= epochDurationSeconds sampleTiming
+                        , "rewardAccount" .= Just sampleRewardAccount
+                        , "rewardBeforeLovelace"
+                            .= Just (0 :: Integer)
+                        , "rewardAfterGovernanceLovelace"
+                            .= Just (2_000_000 :: Integer)
+                        , "lastObservedRewardLovelace"
+                            .= Just (0 :: Integer)
+                        , "epoch" .= Just (3 :: Word64)
+                        , "tipSlot" .= Just (44 :: Word64)
+                        , "governancePrerequisitePath"
+                            .= ( sampleRunDir
+                                    </> "withdraw"
+                                    </> "governance-prerequisite.json"
+                               )
+                        , "intentPath" .= withdrawIntentPath sampleRunDir
+                        , "txBodyPath" .= withdrawTxBodyPath sampleRunDir
+                        , "reportJsonPath"
+                            .= withdrawReportJsonPath sampleRunDir
+                        , "reportMarkdownPath"
+                            .= withdrawReportMarkdownPath sampleRunDir
+                        , "txBuildLogPath"
+                            .= withdrawTxBuildLogPath sampleRunDir
+                        , "upstreamCardanoNodeClientsMain"
+                            .= upstreamCardanoNodeClientsMain
+                        , "txBuildExitCode" .= (Nothing :: Maybe Int)
+                        , "txBuildFailureCode" .= (Nothing :: Maybe T.Text)
+                        , "txBuildFailureMessage"
+                            .= (Nothing :: Maybe T.Text)
+                        ]
+            it "classifies network mismatch before writing an intent" $ do
+                let failure =
+                        withdrawalResolverFailure
+                            ( Withdraw.WithdrawResolverNetworkMismatch
+                                "mainnet"
+                                "testnet"
+                            )
+                            (Coin 2_000_000)
+                            (Just 3)
+                            (Just 44)
+                withdrawalFailureCode failure `shouldBe` "network-mismatch"
+                withdrawalFailureMessage failure
+                    `shouldBe` "withdraw intent network mainnet does not match observed testnet"
+                withdrawalFailureRemovesIntent failure `shouldBe` True
+            it "removes stale success artifacts before a zero-rewards diagnostic" $
+                withTempRunDir "amaru-withdraw-zero-diagnostic" $ \runDir -> do
+                    createDirectoryIfMissing True (runDir </> "withdraw")
+                    writeFile (withdrawIntentPath runDir) "stale intent"
+                    writeFile (withdrawTxBodyPath runDir) "stale cbor"
+                    _ <-
+                        writeWithdrawalFailure
+                            runDir
+                            sampleSocket
+                            sampleTiming
+                            (Just sampleEvidence)
+                            ( WithdrawalZeroRewards
+                                sampleRewardAccount
+                                (Coin 0)
+                                (Just 3)
+                                (Just 44)
+                            )
+                    doesFileExist (withdrawIntentPath runDir)
+                        >>= (`shouldBe` False)
+                    doesFileExist (withdrawTxBodyPath runDir)
+                        >>= (`shouldBe` False)
+                    doesFileExist (runDir </> "withdraw" </> "failure.json")
+                        >>= (`shouldBe` True)
+            it "preserves intent but removes tx body when tx-build fails" $
+                withTempRunDir "amaru-withdraw-tx-build-diagnostic" $ \runDir -> do
+                    createDirectoryIfMissing True (runDir </> "withdraw")
+                    writeFile (withdrawIntentPath runDir) "intent"
+                    writeFile (withdrawTxBodyPath runDir) "stale cbor"
+                    _ <-
+                        writeWithdrawalFailure
+                            runDir
+                            sampleSocket
+                            sampleTiming
+                            (Just sampleEvidence)
+                            ( WithdrawalTxBuildFailed
+                                (ExitFailure 6)
+                                ( Just
+                                    Report.BuildFailure
+                                        { Report.bfCode =
+                                            "network-mismatch"
+                                        , Report.bfMessage =
+                                            "socket is on the wrong network"
+                                        }
+                                )
+                            )
+                    doesFileExist (withdrawIntentPath runDir)
+                        >>= (`shouldBe` True)
+                    doesFileExist (withdrawTxBodyPath runDir)
+                        >>= (`shouldBe` False)
+                    doesFileExist (runDir </> "withdraw" </> "failure.json")
+                        >>= (`shouldBe` True)
         it
             "node: starts cardano-node-clients devnet and records short-epoch timing evidence"
             (runForPhases ["node", "all"] nodeSmoke)
@@ -432,6 +560,28 @@ data GovernanceEvidence = GovernanceEvidence
     }
     deriving stock (Eq, Show)
 
+data WithdrawalFailure
+    = WithdrawalRewardTimeout !String !Coin !(Maybe Word64) !(Maybe Word64)
+    | WithdrawalZeroRewards !String !Coin !(Maybe Word64) !(Maybe Word64)
+    | WithdrawalNetworkMismatch
+        !T.Text
+        !T.Text
+        !Coin
+        !(Maybe Word64)
+        !(Maybe Word64)
+    | WithdrawalResolverFailed
+        !Withdraw.WithdrawResolverError
+        !Coin
+        !(Maybe Word64)
+        !(Maybe Word64)
+    | WithdrawalIntentFailed
+        !Withdraw.WithdrawError
+        !Coin
+        !(Maybe Word64)
+        !(Maybe Word64)
+    | WithdrawalTxBuildFailed !ExitCode !(Maybe Report.BuildFailure)
+    deriving stock (Eq, Show)
+
 withdrawalAmount :: Coin
 withdrawalAmount = Coin 2_000_000
 
@@ -463,6 +613,40 @@ devnetReferenceScriptCoin = Coin 100_000_000
 upstreamCardanoNodeClientsMain :: String
 upstreamCardanoNodeClientsMain =
     "d6773e4cd8a2421617568c8dac0972b0f312a509"
+
+sampleRunDir :: FilePath
+sampleRunDir =
+    "runs/devnet/sample"
+
+sampleSocket :: FilePath
+sampleSocket =
+    "runs/devnet/sample/node.socket"
+
+sampleTiming :: ShelleyGenesisTiming
+sampleTiming =
+    ShelleyGenesisTiming
+        { sgtEpochLength = 5
+        , sgtNetworkMagic = 42
+        , sgtSlotLength = 1
+        }
+
+sampleRewardAccount :: String
+sampleRewardAccount =
+    "5da22eab0370edee0d4591f54bba0d79a89d973598f15eb609d968c4"
+
+sampleEvidence :: GovernanceEvidence
+sampleEvidence =
+    (placeholderEvidence sampleRewardAccount (Coin 0))
+        { geTxId =
+            "5fd2aa15f7269474fa5709e9b804b26f3df60ff4b3c38b3f225797cfef165d43"
+        , geActionId =
+            "5fd2aa15f7269474fa5709e9b804b26f3df60ff4b3c38b3f225797cfef165d43#0"
+        , geAmountLovelace = 2_000_000
+        , geRewardAfter = 2_000_000
+        , geSetupEpoch = 2
+        , geVoteEpoch = 3
+        , geFinalEpoch = 4
+        }
 
 preparePinnedTreasuryTarget
     :: Provider IO
@@ -1642,8 +1826,35 @@ writeWithdrawalIntentArtifacts runDir socket timing provider registry evidence =
                 , Withdraw.wriRegistry = registryView
                 , Withdraw.wriValidityHours = Nothing
                 }
+    when (observedRewards <= Coin 0) $ do
+        (epoch, tipSlot) <- withdrawalEpochTip provider
+        message <-
+            writeWithdrawalFailure
+                runDir
+                socket
+                timing
+                (Just evidence)
+                ( WithdrawalZeroRewards
+                    (geRewardAccount evidence)
+                    observedRewards
+                    epoch
+                    tipSlot
+                )
+        expectationFailure message
     resolved <- Withdraw.resolveWithdrawEnv resolver input
-    env <- expectRightShow "resolve withdraw env" resolved
+    env <- case resolved of
+        Right ok -> pure ok
+        Left err -> do
+            (epoch, tipSlot) <- withdrawalEpochTip provider
+            let failure = withdrawalResolverFailure err observedRewards epoch tipSlot
+            message <-
+                writeWithdrawalFailure
+                    runDir
+                    socket
+                    timing
+                    (Just evidence)
+                    failure
+            expectationFailure message *> error "unreachable"
     Withdraw.weTreasuryRewardAccount env
         `shouldBe` T.pack (geRewardAccount evidence)
     Withdraw.weRewardsLovelace env
@@ -1659,16 +1870,33 @@ writeWithdrawalIntentArtifacts runDir socket timing provider registry evidence =
                 , Withdraw.waLabel = Nothing
                 }
     intent <- case Withdraw.withdrawToTreasuryResult env answers of
-        Left err ->
-            expectationFailure
-                ("withdraw intent translation failed: " <> show err)
-                *> error "unreachable"
-        Right (Withdraw.WithdrawNoRewards account) ->
-            expectationFailure
-                ( "expected positive withdrawal rewards for "
-                    <> T.unpack account
-                )
-                *> error "unreachable"
+        Left err -> do
+            (epoch, tipSlot) <- withdrawalEpochTip provider
+            let failure =
+                    withdrawalIntentFailure err observedRewards epoch tipSlot
+            message <-
+                writeWithdrawalFailure
+                    runDir
+                    socket
+                    timing
+                    (Just evidence)
+                    failure
+            expectationFailure message *> error "unreachable"
+        Right (Withdraw.WithdrawNoRewards account) -> do
+            (epoch, tipSlot) <- withdrawalEpochTip provider
+            message <-
+                writeWithdrawalFailure
+                    runDir
+                    socket
+                    timing
+                    (Just evidence)
+                    ( WithdrawalZeroRewards
+                        (T.unpack account)
+                        observedRewards
+                        epoch
+                        tipSlot
+                    )
+            expectationFailure message *> error "unreachable"
         Right (Withdraw.WithdrawIntentReady ready) -> pure ready
     BSL.writeFile
         (withdrawIntentPath runDir)
@@ -1694,6 +1922,40 @@ writeWithdrawalIntentArtifacts runDir socket timing provider registry evidence =
     putWithdrawalIntentLines runDir evidence observedRewards
     pure observedRewards
 
+withdrawalEpochTip :: Provider IO -> IO (Maybe Word64, Maybe Word64)
+withdrawalEpochTip provider = do
+    snapshot <- queryLedgerSnapshot provider
+    pure
+        ( Just (epochNumber (ledgerEpoch snapshot))
+        , Just (slotNumber (ledgerTipSlot snapshot))
+        )
+
+withdrawalResolverFailure
+    :: Withdraw.WithdrawResolverError
+    -> Coin
+    -> Maybe Word64
+    -> Maybe Word64
+    -> WithdrawalFailure
+withdrawalResolverFailure err rewards epoch tipSlot =
+    case err of
+        Withdraw.WithdrawResolverNetworkMismatch expected observed ->
+            WithdrawalNetworkMismatch expected observed rewards epoch tipSlot
+        _ ->
+            WithdrawalResolverFailed err rewards epoch tipSlot
+
+withdrawalIntentFailure
+    :: Withdraw.WithdrawError
+    -> Coin
+    -> Maybe Word64
+    -> Maybe Word64
+    -> WithdrawalFailure
+withdrawalIntentFailure err rewards epoch tipSlot =
+    case err of
+        Withdraw.WithdrawNetworkMismatch expected observed ->
+            WithdrawalNetworkMismatch expected observed rewards epoch tipSlot
+        _ ->
+            WithdrawalIntentFailed err rewards epoch tipSlot
+
 writeWithdrawalBuildArtifacts
     :: FilePath
     -> FilePath
@@ -1703,14 +1965,34 @@ writeWithdrawalBuildArtifacts
     -> IO ()
 writeWithdrawalBuildArtifacts runDir socket timing evidence rewards = do
     createDirectoryIfMissing True (runDir </> "withdraw")
-    TxBuild.runTxBuild
-        socket
-        TxBuild.TxBuildOpts
-            { TxBuild.tboIntentPath = Just (withdrawIntentPath runDir)
-            , TxBuild.tboOutPath = Just (withdrawTxBodyPath runDir)
-            , TxBuild.tboLog = Just (withdrawTxBuildLogPath runDir)
-            , TxBuild.tboReportPath = Just (withdrawReportJsonPath runDir)
-            }
+    removeIfExists (withdrawTxBodyPath runDir)
+    removeIfExists (withdrawReportJsonPath runDir)
+    removeIfExists (withdrawReportMarkdownPath runDir)
+    removeIfExists (withdrawTxBuildLogPath runDir)
+    buildExit <-
+        try @ExitCode $
+            TxBuild.runTxBuild
+                socket
+                TxBuild.TxBuildOpts
+                    { TxBuild.tboIntentPath =
+                        Just (withdrawIntentPath runDir)
+                    , TxBuild.tboOutPath = Just (withdrawTxBodyPath runDir)
+                    , TxBuild.tboLog = Just (withdrawTxBuildLogPath runDir)
+                    , TxBuild.tboReportPath =
+                        Just (withdrawReportJsonPath runDir)
+                    }
+    case buildExit of
+        Right () -> pure ()
+        Left exitCode -> do
+            failure <- readWithdrawalTxBuildFailure runDir
+            message <-
+                writeWithdrawalFailure
+                    runDir
+                    socket
+                    timing
+                    (Just evidence)
+                    (WithdrawalTxBuildFailed exitCode failure)
+            expectationFailure message
     buildOutput <-
         expectEither
             "decode withdrawal tx-build report"
@@ -1744,6 +2026,23 @@ writeWithdrawalBuildArtifacts runDir socket timing evidence rewards = do
         rewards
         success
     putWithdrawalBuildLines runDir evidence rewards success
+
+readWithdrawalTxBuildFailure
+    :: FilePath -> IO (Maybe Report.BuildFailure)
+readWithdrawalTxBuildFailure runDir = do
+    let path = withdrawReportJsonPath runDir
+    exists <- doesFileExist path
+    if not exists
+        then pure Nothing
+        else
+            eitherDecodeFileStrict @Report.TxBuildOutput path >>= \case
+                Right buildOutput ->
+                    case Report.txoResult buildOutput of
+                        Report.TxBuildOutputFailure failure ->
+                            pure (Just failure)
+                        Report.TxBuildOutputSuccess{} ->
+                            pure Nothing
+                Left{} -> pure Nothing
 
 writeWithdrawalRegistryArtifacts
     :: FilePath
@@ -1923,6 +2222,201 @@ withdrawalIntentLines runDir evidence rewards =
     , "devnet-smoke: withdraw-intent "
         <> withdrawIntentPath runDir
     ]
+
+writeWithdrawalFailure
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> Maybe GovernanceEvidence
+    -> WithdrawalFailure
+    -> IO String
+writeWithdrawalFailure runDir socket timing evidence failure = do
+    let withdrawDir = runDir </> "withdraw"
+        value =
+            withdrawalFailureValue
+                runDir
+                socket
+                timing
+                evidence
+                failure
+        message = withdrawalFailureMessage failure
+        linesOut = withdrawalFailureLines runDir failure
+    createDirectoryIfMissing True withdrawDir
+    when (withdrawalFailureRemovesIntent failure) $
+        removeIfExists (withdrawIntentPath runDir)
+    removeIfExists (withdrawTxBodyPath runDir)
+    removeIfExists (withdrawReportMarkdownPath runDir)
+    unless (withdrawalFailurePreservesTxBuildArtifacts failure) $ do
+        removeIfExists (withdrawReportJsonPath runDir)
+        removeIfExists (withdrawTxBuildLogPath runDir)
+    BSL.writeFile (withdrawDir </> "failure.json") (encode value)
+    BSL.writeFile (withdrawDir </> "summary.json") (encode value)
+    BSL.writeFile (runDir </> "summary.json") (encode value)
+    writeFile (runDir </> "summary.log") (unlines linesOut)
+    mapM_ putStrLn linesOut
+    pure message
+
+withdrawalFailureValue
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> Maybe GovernanceEvidence
+    -> WithdrawalFailure
+    -> Value
+withdrawalFailureValue runDir socket timing evidence failure =
+    object
+        [ "phase" .= ("withdraw" :: String)
+        , "status" .= ("failed" :: String)
+        , "code" .= withdrawalFailureCode failure
+        , "message" .= withdrawalFailureMessage failure
+        , "runDirectory" .= runDir
+        , "socket" .= socket
+        , "network" .= ("devnet" :: String)
+        , "networkMagic" .= sgtNetworkMagic timing
+        , "epochDurationSeconds" .= epochDurationSeconds timing
+        , "rewardAccount" .= withdrawalFailureRewardAccount evidence failure
+        , "rewardBeforeLovelace" .= fmap geRewardBefore evidence
+        , "rewardAfterGovernanceLovelace" .= fmap geRewardAfter evidence
+        , "lastObservedRewardLovelace"
+            .= withdrawalFailureLastObservedReward failure
+        , "epoch" .= withdrawalFailureEpoch failure
+        , "tipSlot" .= withdrawalFailureTipSlot failure
+        , "governancePrerequisitePath"
+            .= (runDir </> "withdraw" </> "governance-prerequisite.json")
+        , "intentPath" .= withdrawIntentPath runDir
+        , "txBodyPath" .= withdrawTxBodyPath runDir
+        , "reportJsonPath" .= withdrawReportJsonPath runDir
+        , "reportMarkdownPath" .= withdrawReportMarkdownPath runDir
+        , "txBuildLogPath" .= withdrawTxBuildLogPath runDir
+        , "upstreamCardanoNodeClientsMain"
+            .= upstreamCardanoNodeClientsMain
+        , "txBuildExitCode" .= withdrawalFailureTxBuildExitCode failure
+        , "txBuildFailureCode" .= withdrawalFailureTxBuildCode failure
+        , "txBuildFailureMessage" .= withdrawalFailureTxBuildMessage failure
+        ]
+
+withdrawalFailureLines :: FilePath -> WithdrawalFailure -> [String]
+withdrawalFailureLines runDir failure =
+    [ "devnet-smoke: run-dir " <> runDir
+    , "devnet-smoke: phase withdraw failed"
+    , "devnet-smoke: "
+        <> withdrawalFailureCode failure
+        <> ": "
+        <> withdrawalFailureMessage failure
+    , "devnet-smoke: failure "
+        <> (runDir </> "withdraw" </> "failure.json")
+    ]
+
+withdrawalFailureCode :: WithdrawalFailure -> String
+withdrawalFailureCode = \case
+    WithdrawalRewardTimeout{} -> "reward-timeout"
+    WithdrawalZeroRewards{} -> "zero-rewards"
+    WithdrawalNetworkMismatch{} -> "network-mismatch"
+    WithdrawalResolverFailed{} -> "resolver-failed"
+    WithdrawalIntentFailed{} -> "intent-failed"
+    WithdrawalTxBuildFailed{} -> "tx-build-failed"
+
+withdrawalFailureMessage :: WithdrawalFailure -> String
+withdrawalFailureMessage = \case
+    WithdrawalRewardTimeout account _ _ _ ->
+        "timed out waiting for reward account "
+            <> account
+            <> " to become positive"
+    WithdrawalZeroRewards account _ _ _ ->
+        "reward account " <> account <> " has zero rewards"
+    WithdrawalNetworkMismatch expected observed _ _ _ ->
+        "withdraw intent network "
+            <> T.unpack expected
+            <> " does not match observed "
+            <> T.unpack observed
+    WithdrawalResolverFailed err _ _ _ ->
+        "withdraw resolver failed: " <> show err
+    WithdrawalIntentFailed err _ _ _ ->
+        "withdraw intent translation failed: " <> show err
+    WithdrawalTxBuildFailed exitCode maybeFailure ->
+        "tx-build exited with "
+            <> show exitCode
+            <> maybe
+                ""
+                ( \failure ->
+                    ": "
+                        <> T.unpack (Report.bfCode failure)
+                        <> ": "
+                        <> T.unpack (Report.bfMessage failure)
+                )
+                maybeFailure
+
+withdrawalFailureRewardAccount
+    :: Maybe GovernanceEvidence -> WithdrawalFailure -> Maybe String
+withdrawalFailureRewardAccount evidence = \case
+    WithdrawalRewardTimeout account _ _ _ -> Just account
+    WithdrawalZeroRewards account _ _ _ -> Just account
+    WithdrawalNetworkMismatch{} -> geRewardAccount <$> evidence
+    WithdrawalResolverFailed{} -> geRewardAccount <$> evidence
+    WithdrawalIntentFailed{} -> geRewardAccount <$> evidence
+    WithdrawalTxBuildFailed{} -> geRewardAccount <$> evidence
+
+withdrawalFailureLastObservedReward
+    :: WithdrawalFailure -> Maybe Integer
+withdrawalFailureLastObservedReward = \case
+    WithdrawalRewardTimeout _ reward _ _ -> Just (coinLovelace reward)
+    WithdrawalZeroRewards _ reward _ _ -> Just (coinLovelace reward)
+    WithdrawalNetworkMismatch _ _ reward _ _ -> Just (coinLovelace reward)
+    WithdrawalResolverFailed _ reward _ _ -> Just (coinLovelace reward)
+    WithdrawalIntentFailed _ reward _ _ -> Just (coinLovelace reward)
+    WithdrawalTxBuildFailed{} -> Nothing
+
+withdrawalFailureEpoch :: WithdrawalFailure -> Maybe Word64
+withdrawalFailureEpoch = \case
+    WithdrawalRewardTimeout _ _ epoch _ -> epoch
+    WithdrawalZeroRewards _ _ epoch _ -> epoch
+    WithdrawalNetworkMismatch _ _ _ epoch _ -> epoch
+    WithdrawalResolverFailed _ _ epoch _ -> epoch
+    WithdrawalIntentFailed _ _ epoch _ -> epoch
+    WithdrawalTxBuildFailed{} -> Nothing
+
+withdrawalFailureTipSlot :: WithdrawalFailure -> Maybe Word64
+withdrawalFailureTipSlot = \case
+    WithdrawalRewardTimeout _ _ _ tipSlot -> tipSlot
+    WithdrawalZeroRewards _ _ _ tipSlot -> tipSlot
+    WithdrawalNetworkMismatch _ _ _ _ tipSlot -> tipSlot
+    WithdrawalResolverFailed _ _ _ tipSlot -> tipSlot
+    WithdrawalIntentFailed _ _ _ tipSlot -> tipSlot
+    WithdrawalTxBuildFailed{} -> Nothing
+
+withdrawalFailureTxBuildExitCode :: WithdrawalFailure -> Maybe Int
+withdrawalFailureTxBuildExitCode = \case
+    WithdrawalTxBuildFailed ExitSuccess _ -> Just 0
+    WithdrawalTxBuildFailed (ExitFailure n) _ -> Just n
+    _ -> Nothing
+
+withdrawalFailureTxBuildCode :: WithdrawalFailure -> Maybe T.Text
+withdrawalFailureTxBuildCode = \case
+    WithdrawalTxBuildFailed _ (Just failure) ->
+        Just (Report.bfCode failure)
+    _ -> Nothing
+
+withdrawalFailureTxBuildMessage :: WithdrawalFailure -> Maybe T.Text
+withdrawalFailureTxBuildMessage = \case
+    WithdrawalTxBuildFailed _ (Just failure) ->
+        Just (Report.bfMessage failure)
+    _ -> Nothing
+
+withdrawalFailureRemovesIntent :: WithdrawalFailure -> Bool
+withdrawalFailureRemovesIntent = \case
+    WithdrawalTxBuildFailed{} -> False
+    _ -> True
+
+withdrawalFailurePreservesTxBuildArtifacts
+    :: WithdrawalFailure -> Bool
+withdrawalFailurePreservesTxBuildArtifacts = \case
+    WithdrawalTxBuildFailed{} -> True
+    _ -> False
+
+removeIfExists :: FilePath -> IO ()
+removeIfExists path = do
+    exists <- doesFileExist path
+    when exists (removeFile path)
 
 writeWithdrawalBuildSummary
     :: FilePath
@@ -2120,14 +2614,15 @@ expectEither label =
         )
         pure
 
-expectRightShow :: (Show e) => String -> Either e a -> IO a
-expectRightShow label =
-    either
-        ( \err ->
-            expectationFailure (label <> ": " <> show err)
-                *> error "unreachable"
-        )
-        pure
+withTempRunDir :: String -> (FilePath -> IO a) -> IO a
+withTempRunDir label action = do
+    base <- getTemporaryDirectory
+    let path = base </> label
+    _ <- try @SomeException (removePathForcibly path)
+    createDirectoryIfMissing True path
+    result <- action path
+    _ <- try @SomeException (removePathForcibly path)
+    pure result
 
 mkHash32 :: (HashAlgorithm h) => Word8 -> Hash h a
 mkHash32 n =

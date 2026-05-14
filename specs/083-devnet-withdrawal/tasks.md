@@ -42,10 +42,10 @@
 
 ## Phase 6: Failure Diagnostics
 
-- [ ] T022 [US1] Cover reward timeout with last observed reward and epoch/tip context.
-- [ ] T023 [US2] Cover zero rewards as no-intent/no-success-artifact behavior.
-- [ ] T024 [US2] Cover network mismatch before intent writing.
-- [ ] T025 [US3] Cover tx-build failure preserving the intent and chain context.
+- [x] T022 [US1] Cover reward timeout with last observed reward and epoch/tip context.
+- [x] T023 [US2] Cover zero rewards as no-intent/no-success-artifact behavior.
+- [x] T024 [US2] Cover network mismatch before intent writing.
+- [x] T025 [US3] Cover tx-build failure preserving the intent and chain context.
 
 ## Phase 7: Documentation And Release Notes
 
@@ -64,6 +64,8 @@
   evidence, observes positive rewards, and writes the withdraw intent.
 - Phase 5 is complete: `tx-build` consumes the live intent and writes
   unsigned CBOR plus JSON/Markdown reports.
+- Phase 6 is complete: typed diagnostics cover reward timeout, zero
+  rewards, network mismatch, and tx-build failure artifact handling.
 - Phase 7 starts only after a successful withdrawal run exists.
 
 ## Evidence
@@ -83,6 +85,10 @@
 - WITHDRAW BUILD RED: `scripts/smoke/devnet-local --phase withdraw --run-dir /tmp/tmp.5VDwOK8evT/withdraw-build` reached `phase withdraw intent-ready` and then failed during `tx-build` with a short-epoch `TimeTranslationPastHorizon`, proving the live build path was executing and that the DevNet validity bound had to stay inside the forecast horizon.
 - WITHDRAW BUILD GREEN: `scripts/smoke/devnet-local --phase withdraw --run-dir /tmp/tmp.gE9yQunNvS/withdraw-build` exits 0; it writes `withdraw/tx-body.cbor.hex`, `withdraw/report.json`, `withdraw/report.md`, and `withdraw/tx-build.log`. Summary records reward account `5da22eab0370edee0d4591f54bba0d79a89d973598f15eb609d968c4`, tx id `5fd2aa15f7269474fa5709e9b804b26f3df60ff4b3c38b3f225797cfef165d43`, fee `469749`, reward `2000000`, and validity upper bound slot `222`.
 - PR GATE AFTER BUILD SLICE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed on 2026-05-14 after the intent-to-unsigned-build code, docs, and review-state updates.
+- DIAGNOSTICS RED: the first focused `devnet-tests --match 'withdraw diagnostics'` run failed to compile because `WithdrawalRewardTimeout`, `WithdrawalZeroRewards`, `WithdrawalTxBuildFailed`, `withdrawalFailureValue`, `writeWithdrawalFailure`, and the diagnostic fixtures did not exist yet.
+- DIAGNOSTICS GREEN: `nix develop --quiet -c cabal test devnet-tests -O0 --test-show-details=direct --test-option=--match --test-option='withdraw diagnostics'` passes 4 examples, 0 failures. It covers reward timeout fields, network mismatch classification before intent writing, zero-rewards stale-artifact removal, and tx-build failure intent preservation with tx-body cleanup.
+- WITHDRAW REGRESSION AFTER DIAGNOSTICS: `scripts/smoke/devnet-local --phase withdraw --run-dir /tmp/tmp.4b2zbAg5Z7/withdraw-diagnostics` exits 0; it writes live build artifacts with reward account `ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af`, tx id `b7f1decd1453ee955e7dfe75aac7d9e10b0a6ed3c6c59bb4704c08d8c5132600`, fee `469749`, reward `2000000`, and validity upper bound slot `222`.
+- PR GATE AFTER DIAGNOSTICS SLICE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed on 2026-05-14 after the typed diagnostics code, Spec Kit, and review-state updates.
 
 ## Parallel Notes
 

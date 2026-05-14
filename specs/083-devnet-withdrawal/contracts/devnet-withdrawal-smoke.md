@@ -28,6 +28,7 @@ runs/devnet/<timestamp>/
     |-- tx-body.cbor.hex
     |-- report.json
     |-- report.md
+    |-- tx-build.log
     `-- summary.json
 ```
 
@@ -45,15 +46,21 @@ runs/devnet/<timestamp>/
 - `txBodyPath`
 - `reportJsonPath`
 - `reportMarkdownPath`
+- `txBuildLogPath`
 - `txId`
-- `upstreamCardanoNodeClientsRev`
+- `upstreamCardanoNodeClientsMain`
 
 ## Failure Contract
 
-Failures write no success `intent.json` or `tx-body.cbor.hex`.
+Pre-intent failures write no success `intent.json` or
+`tx-body.cbor.hex`. `tx-build` failures preserve the already-written
+intent and fresh build report/log when available, but remove the tx
+body so stale unsigned CBOR cannot be mistaken for success.
+
 Diagnostics must include:
 
 - failing phase,
+- stable failure code,
 - single-line message,
 - last observed reward value when available,
 - epoch/tip context when available,

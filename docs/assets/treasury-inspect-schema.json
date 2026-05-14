@@ -1,0 +1,246 @@
+{
+    "$defs": {
+        "ChainTip": {
+            "additionalProperties": false,
+            "properties": {
+                "blockHash": {
+                    "$ref": "#/$defs/Hex32"
+                },
+                "slot": {
+                    "minimum": 0,
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "slot",
+                "blockHash"
+            ],
+            "type": "object"
+        },
+        "Deployment": {
+            "additionalProperties": false,
+            "properties": {
+                "scopeOwnersOutref": {
+                    "$ref": "#/$defs/Outref",
+                    "description": "The outref pinned in metadata.json's `scope_owners` field — the project's deployment-identity anchor. Different deployments have different values; surfacing this lets operators detect when they pointed inspect at the wrong metadata."
+                }
+            },
+            "required": [
+                "scopeOwnersOutref"
+            ],
+            "type": "object"
+        },
+        "Hex28": {
+            "description": "28-byte value as 56 lowercase hex characters.",
+            "pattern": "^[0-9a-f]{56}$",
+            "type": "string"
+        },
+        "Hex32": {
+            "description": "32-byte value as 64 lowercase hex characters.",
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+        },
+        "OtherAsset": {
+            "additionalProperties": false,
+            "properties": {
+                "assetName": {
+                    "description": "Hex-encoded asset name bytes; empty string for the unnamed token.",
+                    "pattern": "^[0-9a-f]*$",
+                    "type": "string"
+                },
+                "policy": {
+                    "$ref": "#/$defs/Hex28"
+                },
+                "quantity": {
+                    "minimum": 1,
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "policy",
+                "assetName",
+                "quantity"
+            ],
+            "type": "object"
+        },
+        "Outref": {
+            "additionalProperties": false,
+            "properties": {
+                "ix": {
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "txId": {
+                    "$ref": "#/$defs/Hex32"
+                }
+            },
+            "required": [
+                "txId",
+                "ix"
+            ],
+            "type": "object"
+        },
+        "PendingSwapOrder": {
+            "additionalProperties": false,
+            "properties": {
+                "lovelaceIn": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "minUsdmOut": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "outref": {
+                    "$ref": "#/$defs/Outref"
+                },
+                "sundaeFeeLovelace": {
+                    "minimum": 0,
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "outref",
+                "lovelaceIn",
+                "minUsdmOut",
+                "sundaeFeeLovelace"
+            ],
+            "type": "object"
+        },
+        "ScopeSection": {
+            "additionalProperties": false,
+            "properties": {
+                "pendingOrders": {
+                    "items": {
+                        "$ref": "#/$defs/PendingSwapOrder"
+                    },
+                    "type": "array"
+                },
+                "scope": {
+                    "enum": [
+                        "core_development",
+                        "ops_and_use_cases",
+                        "network_compliance",
+                        "middleware",
+                        "contingency"
+                    ],
+                    "type": "string"
+                },
+                "totals": {
+                    "$ref": "#/$defs/ScopeTotals"
+                },
+                "treasuryAddress": {
+                    "description": "Bech32-encoded scope contract address.",
+                    "type": "string"
+                },
+                "treasuryScriptHash": {
+                    "$ref": "#/$defs/Hex28"
+                },
+                "treasuryUtxos": {
+                    "items": {
+                        "$ref": "#/$defs/TreasuryUtxo"
+                    },
+                    "type": "array"
+                }
+            },
+            "required": [
+                "scope",
+                "treasuryAddress",
+                "treasuryScriptHash",
+                "treasuryUtxos",
+                "totals",
+                "pendingOrders"
+            ],
+            "type": "object"
+        },
+        "ScopeTotals": {
+            "additionalProperties": false,
+            "properties": {
+                "lovelace": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "otherAssetsCount": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "usdm": {
+                    "minimum": 0,
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "lovelace",
+                "usdm",
+                "otherAssetsCount"
+            ],
+            "type": "object"
+        },
+        "TreasuryUtxo": {
+            "additionalProperties": false,
+            "properties": {
+                "datumHash": {
+                    "oneOf": [
+                        {
+                            "type": "null"
+                        },
+                        {
+                            "$ref": "#/$defs/Hex32"
+                        }
+                    ]
+                },
+                "lovelace": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "otherAssets": {
+                    "items": {
+                        "$ref": "#/$defs/OtherAsset"
+                    },
+                    "type": "array"
+                },
+                "outref": {
+                    "$ref": "#/$defs/Outref"
+                },
+                "usdm": {
+                    "minimum": 0,
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "outref",
+                "lovelace",
+                "usdm",
+                "otherAssets"
+            ],
+            "type": "object"
+        }
+    },
+    "$id": "https://lambdasistemi.io/schemas/amaru-treasury-tx/treasury-inspect-report.schema.json",
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Output of `amaru-treasury-tx treasury-inspect`. Single-shot, read-only snapshot of treasury balances and pending SundaeSwap orders for each configured scope, at a given chain tip.",
+    "properties": {
+        "chainTip": {
+            "$ref": "#/$defs/ChainTip"
+        },
+        "deployment": {
+            "$ref": "#/$defs/Deployment"
+        },
+        "scopes": {
+            "description": "One entry per reported scope, in stable order (CoreDevelopment, OpsAndUseCases, NetworkCompliance, Middleware, Contingency), filtered by --scope when set.",
+            "items": {
+                "$ref": "#/$defs/ScopeSection"
+            },
+            "type": "array"
+        }
+    },
+    "required": [
+        "chainTip",
+        "deployment",
+        "scopes"
+    ],
+    "title": "TreasuryInspectReport",
+    "type": "object"
+}

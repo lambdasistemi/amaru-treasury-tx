@@ -36,24 +36,29 @@ hlint:
 release-check:
     scripts/release/check-version-consistency
 
-# Regenerate the TreasuryIntent JSON Schema asset
+# Regenerate the JSON Schema assets
 update-schema:
     cabal run -v0 -O0 exe:amaru-treasury-intent-schema \
         > docs/assets/intent-schema.json
     cabal run -v0 -O0 exe:amaru-treasury-report-schema \
         > docs/assets/tx-report-schema.json
+    cabal run -v0 -O0 exe:amaru-treasury-inspect-schema \
+        > docs/assets/treasury-inspect-schema.json
 
-# Check that the committed TreasuryIntent JSON Schema is current
+# Check that the committed JSON Schemas are current
 schema-check:
     #!/usr/bin/env bash
     set -euo pipefail
     intent_tmp="$(mktemp)"
     report_tmp="$(mktemp)"
-    trap 'rm -f "$intent_tmp" "$report_tmp"' EXIT
+    inspect_tmp="$(mktemp)"
+    trap 'rm -f "$intent_tmp" "$report_tmp" "$inspect_tmp"' EXIT
     cabal run -v0 -O0 exe:amaru-treasury-intent-schema > "$intent_tmp"
     diff -u docs/assets/intent-schema.json "$intent_tmp"
     cabal run -v0 -O0 exe:amaru-treasury-report-schema > "$report_tmp"
     diff -u docs/assets/tx-report-schema.json "$report_tmp"
+    cabal run -v0 -O0 exe:amaru-treasury-inspect-schema > "$inspect_tmp"
+    diff -u docs/assets/treasury-inspect-schema.json "$inspect_tmp"
 
 # Smoke-test the shipped CLI surface
 smoke:

@@ -141,7 +141,7 @@ cmdP =
                     )
                 )
             <> command
-                "emergency-top-up"
+                "emergency-top-up-wizard"
                 ( info
                     (CmdEmergencyTopUp <$> emergencyTopUpOptsP)
                     ( progDesc

@@ -20,7 +20,6 @@ import Cardano.Crypto.Hash.Class (hashToBytes)
 import Data.ByteString.Base16 qualified as B16
 import Data.Foldable (toList)
 import Data.List (find)
-import Data.Map.Strict qualified as Map
 import Data.Maybe (listToMaybe)
 import Data.Sequence.Strict qualified as StrictSeq
 import Data.Set qualified as Set
@@ -30,16 +29,13 @@ import Data.Text.Encoding qualified as Text
 import Cardano.Ledger.Alonzo.PParams (ppCollateralPercentageL)
 import Cardano.Ledger.Api.Tx (estimateMinFeeTx, txIdTx)
 import Cardano.Ledger.Api.Tx.Body
-    ( Withdrawals (..)
-    , collateralInputsTxBodyL
+    ( collateralInputsTxBodyL
     , collateralReturnTxBodyL
     , feeTxBodyL
-    , inputsTxBodyL
     , outputsTxBodyL
     , referenceInputsTxBodyL
     , reqSignerHashesTxBodyL
     , totalCollateralTxBodyL
-    , withdrawalsTxBodyL
     )
 import Cardano.Ledger.Api.Tx.Out (TxOut, coinTxOutL)
 import Cardano.Ledger.BaseTypes (StrictMaybe (..))
@@ -94,19 +90,22 @@ strictMaybe = \case
     SNothing -> Nothing
     SJust value -> Just value
 
-{- | Match @cardano-cli transaction build@'s conservative
-key-witness fee estimate for bash-derived golden oracles.
+{- | Align the builder fee with the expected signed tx size.
 
-The upstream bash recipes do not pass
-@--witness-override@, so @cardano-cli@ prices the unsigned
-body with its default key-witness estimate. For the
-current swap/disburse oracles this is seven witnesses,
-not the single dummy witness used by
-@cardano-node-clients@' generic balancer. Without this
-adjustment the body shape and ex-units match the bash
-artifact, but the fee, collateral total, collateral
-return, and change output are all under the
-cardano-cli output.
+The fee lives in the transaction body, but the ledger
+minimum fee is calculated over the whole signed
+transaction, including vkey witnesses that are attached
+later. The generic balancer only prices a single dummy
+witness, so treasury builds bump the fee to reserve for
+the witnesses operators are expected to attach.
+
+This intentionally differs from @cardano-cli transaction
+build@'s default conservative witness estimate. The CLI
+counts script-authenticated inputs, collateral inputs, and
+withdrawals as extra key witnesses when no explicit
+@--witness-override@ is supplied. Treasury transactions
+instead need one wallet payment witness plus the required
+treasury signer witnesses already present in the body.
 -}
 alignCardanoCliBuildFee
     :: PParams ConwayEra
@@ -123,19 +122,14 @@ alignCardanoCliBuildFee pp refUtxos changeIx =
         Left "fee did not converge"
     go n tx =
         let body = tx ^. bodyTxL
-            Withdrawals withdrawals =
-                body ^. withdrawalsTxBodyL
             refBytes =
                 refScriptsSize
                     (body ^. referenceInputsTxBodyL)
                     refUtxos
             witnessCount =
                 1
-                    + Set.size (body ^. inputsTxBodyL)
-                    + Set.size (body ^. collateralInputsTxBodyL)
                     + Set.size
                         (body ^. reqSignerHashesTxBodyL)
-                    + Map.size withdrawals
             target =
                 estimateMinFeeTx pp tx witnessCount 0 refBytes
             current = body ^. feeTxBodyL

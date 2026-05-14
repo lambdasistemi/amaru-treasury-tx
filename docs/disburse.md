@@ -61,7 +61,7 @@ the selected treasury inputs.
 
 ## Emergency top-ups
 
-Use `emergency-top-up` when ADA must move from the `contingency`
+Use `emergency-top-up-wizard` when ADA must move from the `contingency`
 treasury to another scope treasury. This is intentionally narrower
 than `disburse-wizard`:
 
@@ -86,7 +86,7 @@ For example, to top up Network Compliance with 200,000 ADA:
 ```bash
 amaru-treasury-tx \
     --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
-    emergency-top-up \
+    emergency-top-up-wizard \
         --wallet-addr addr1q... \
         --metadata metadata-mainnet.json \
         --destination-scope network_compliance \

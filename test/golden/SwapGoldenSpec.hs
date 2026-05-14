@@ -23,6 +23,11 @@ side). The "Haskell ≡ live bash recipe" invariant is
 restored once T008 regenerates the bash output to
 this same target.
 
+The local target also intentionally diverges from
+cardano-cli's default conservative witness-count fee. It
+prices the expected signed tx witnesses: one wallet
+payment witness plus required treasury signer witnesses.
+
 Set @UPDATE_GOLDENS=1@ to regenerate both files from
 the current Haskell builder output.
 -}
@@ -109,11 +114,11 @@ spec =
             case update of
                 Just "1" -> do
                     -- Capture the current Haskell builder
-                    -- output as the post-fix target. After
-                    -- T008 the bash recipe under
-                    -- pragma-org/amaru-treasury will be
-                    -- updated to produce these bytes again,
-                    -- restoring "Haskell ≡ bash" parity.
+                    -- output as the post-fix target. This
+                    -- target intentionally prices the
+                    -- expected signed tx vkey witnesses,
+                    -- not cardano-cli's conservative
+                    -- default witness count.
                     BS.writeFile
                         (fixtureDir <> "/expected.cbor")
                         actualHex
@@ -260,7 +265,11 @@ expectedSwapValidation =
         { vfIntentNetwork = "mainnet"
         , vfSocketNetworkMagic = 764_824_073
         , vfNetworkMatches = True
-        , vfFeeLovelace = 1_041_155
+        , -- Local expected-vkey fee target. This is 17,776
+          -- lovelace below the previous cardano-cli-style
+          -- conservative target: 7 synthetic witnesses vs
+          -- 3 expected vkey witnesses.
+          vfFeeLovelace = 1_023_379
         , vfBodySizeBytes = 14_987
         , vfRedeemerCount = 2
         , vfRedeemerFailures = 0

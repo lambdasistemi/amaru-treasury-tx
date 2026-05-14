@@ -97,9 +97,8 @@ newtype SlippageBps = SlippageBps
     }
     deriving (Eq, Show)
 
-data QuoteInput
-    = AdaUsdOverride !Text
-    | AdaUsdmOverride !Text
+newtype QuoteInput
+    = AdaUsdmOverride Text
     deriving (Eq, Show)
 
 data SwapQuoteRequest = SwapQuoteRequest
@@ -182,20 +181,14 @@ data SwapQuoteError
 
 parseQuoteInput
     :: QuoteInput -> Either SwapQuoteError QuoteObservation
-parseQuoteInput = \case
-    AdaUsdOverride raw ->
-        override AdaUsd raw
-    AdaUsdmOverride raw ->
-        override AdaUsdm raw
-  where
-    override pair raw = do
-        quote <- parsePositiveDecimal raw
-        pure
-            QuoteObservation
-                { qoPair = pair
-                , qoQuote = quote
-                , qoProvenance = OperatorOverride
-                }
+parseQuoteInput (AdaUsdmOverride raw) = do
+    quote <- parsePositiveDecimal raw
+    pure
+        QuoteObservation
+            { qoPair = AdaUsdm
+            , qoQuote = quote
+            , qoProvenance = OperatorOverride
+            }
 
 parseSlippageBps :: Maybe Text -> Either SwapQuoteError SlippageBps
 parseSlippageBps Nothing = Left MissingSlippage

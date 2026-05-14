@@ -113,7 +113,7 @@ sampleDerivedParameters =
     DerivedSwapParameters
         { dspQuote =
             QuoteObservation
-                { qoPair = AdaUsd
+                { qoPair = AdaUsdm
                 , qoQuote = 8123 % 10_000
                 , qoProvenance = OperatorOverride
                 }

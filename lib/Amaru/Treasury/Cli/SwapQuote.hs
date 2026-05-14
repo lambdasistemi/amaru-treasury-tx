@@ -308,7 +308,7 @@ positiveSplit =
 positiveDecimalReader :: ReadM Rational
 positiveDecimalReader =
     eitherReader $ \raw ->
-        case parseQuoteInput (AdaUsdOverride (T.pack raw)) of
+        case parseQuoteInput (AdaUsdmOverride (T.pack raw)) of
             Right observation ->
                 Right (qoQuote observation)
             Left err ->
@@ -461,7 +461,7 @@ observationTime observation =
 
 parsePositiveDecimalText :: String -> Text -> Either String Rational
 parsePositiveDecimalText label raw =
-    case parseQuoteInput (AdaUsdOverride raw) of
+    case parseQuoteInput (AdaUsdmOverride raw) of
         Right observation ->
             Right (qoQuote observation)
         Left err ->

@@ -39,7 +39,7 @@ import Amaru.Treasury.Tx.SwapQuote
     ( QuoteObservation
     )
 import Amaru.Treasury.Tx.SwapQuote.Source
-    ( coingeckoAdaUsdProvider
+    ( coingeckoAdaUsdmProvider
     , fetchQuoteSource
     , renderQuoteSourceError
     )
@@ -72,7 +72,7 @@ resolveSwapQuoteObservation tr observedAt = \case
     SwapQuoteOverride observation ->
         pure observation
     SwapQuoteSource source -> do
-        result <- fetchQuoteSource coingeckoAdaUsdProvider source observedAt
+        result <- fetchQuoteSource coingeckoAdaUsdmProvider source observedAt
         case result of
             Right observation ->
                 pure observation

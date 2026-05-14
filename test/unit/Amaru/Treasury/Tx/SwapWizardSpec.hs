@@ -102,6 +102,14 @@ import Options.Applicative
 import Amaru.Treasury.Cli.SwapWizard
     ( wizardOptsP
     )
+import Amaru.Treasury.Constants
+    ( minUtxoDepositLovelace
+    , sundaeOrderAddressMainnet
+    , sundaeProtocolFeeLovelace
+    , sundaeUsdmPoolHex
+    , usdmAssetHex
+    , usdmPolicyHex
+    )
 
 spec :: Spec
 spec = describe "SwapWizard" $ do
@@ -147,15 +155,18 @@ spec = describe "SwapWizard" $ do
             let Right intent = wizardToTreasuryIntent env answers
                 sw = tiPayload intent
             swiSwapOrderAddress sw
-                `shouldBe` "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n"
+                `shouldBe` sundaeOrderAddressMainnet
             swiChunkSizeLovelace sw `shouldBe` 12500000000
             swiAmountLovelace sw `shouldBe` 408163265306
-            swiExtraPerChunkLovelace sw `shouldBe` 3280000
+            swiExtraPerChunkLovelace sw
+                `shouldBe` ( sundaeProtocolFeeLovelace
+                                + minUtxoDepositLovelace
+                           )
             swiRateNumerator sw `shouldBe` 245
             swiRateDenominator sw `shouldBe` 1000
-            swiSundaeProtocolFeeLovelace sw `shouldBe` 1280000
-            swiPoolId sw
-                `shouldBe` "64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef"
+            swiSundaeProtocolFeeLovelace sw
+                `shouldBe` sundaeProtocolFeeLovelace
+            swiPoolId sw `shouldBe` sundaeUsdmPoolHex
             swiCoreOwner sw
                 `shouldBe` "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
             swiOpsOwner sw
@@ -164,9 +175,8 @@ spec = describe "SwapWizard" $ do
                 `shouldBe` "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
             swiMiddlewareOwner sw
                 `shouldBe` "97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2"
-            swiUsdmPolicy sw
-                `shouldBe` "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad"
-            swiUsdmToken sw `shouldBe` "0014df105553444d"
+            swiUsdmPolicy sw `shouldBe` usdmPolicyHex
+            swiUsdmToken sw `shouldBe` usdmAssetHex
 
         it "carries the resolved network at the top level" $ do
             let Right intent = wizardToTreasuryIntent env answers

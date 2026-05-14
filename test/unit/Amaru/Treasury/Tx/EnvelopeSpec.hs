@@ -7,11 +7,15 @@ License     : Apache-2.0
 -}
 module Amaru.Treasury.Tx.EnvelopeSpec (spec) where
 
-import Test.Hspec (Spec, describe, it, shouldBe)
+import Data.Text qualified as T
+import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
 
 import Amaru.Treasury.Tx.Envelope
-    ( EnvelopeKind (..)
+    ( EnvelopeError (..)
+    , EnvelopeKind (..)
+    , decodeEnvelope
     , encodeEnvelope
+    , renderEnvelopeError
     )
 
 spec :: Spec
@@ -36,3 +40,76 @@ spec =
         it "trims trailing ASCII whitespace before encoding" $
             encodeEnvelope Tx "deadbeef\n\t \r"
                 `shouldBe` "{\n    \"type\": \"Tx ConwayEra\",\n    \"description\": \"Ledger Cddl Format\",\n    \"cborHex\": \"deadbeef\"\n}\n"
+
+        describe "decodeEnvelope" $ do
+            it "extracts cborHex and appends one trailing newline" $
+                decodeEnvelope
+                    "{\"type\":\"Tx ConwayEra\",\"description\":\"Ledger Cddl Format\",\"cborHex\":\"deadbeef\"}"
+                    `shouldBe` Right "deadbeef\n"
+
+            it "ignores description and extra top-level keys" $
+                decodeEnvelope
+                    "{\"type\":\"TxWitness ConwayEra\",\"description\":\"anything\",\"cborHex\":\"8258\",\"_source\":\"operator\"}"
+                    `shouldBe` Right "8258\n"
+
+            it "rejects input whose first non-whitespace byte is not an object" $
+                decodeEnvelope "  deadbeef"
+                    `shouldSatisfy` isNotEnvelopeJson
+
+            it "rejects malformed JSON" $
+                decodeEnvelope "{\"type\":\"Tx ConwayEra\""
+                    `shouldSatisfy` isMalformedEnvelopeJson
+
+            it "rejects envelopes missing type" $
+                decodeEnvelope "{\"cborHex\":\"deadbeef\"}"
+                    `shouldSatisfy` isMissingType
+
+            it "rejects envelopes missing cborHex" $
+                decodeEnvelope "{\"type\":\"Tx ConwayEra\"}"
+                    `shouldSatisfy` isMissingCborHex
+
+            it "rejects non-string type fields" $
+                decodeEnvelope "{\"type\":1,\"cborHex\":\"deadbeef\"}"
+                    `shouldSatisfy` isWrongTypeField
+
+            it "rejects non-string cborHex fields" $
+                decodeEnvelope "{\"type\":\"Tx ConwayEra\",\"cborHex\":1}"
+                    `shouldSatisfy` isWrongCborHexField
+
+            it "rejects stale eras and keeps the offending era in diagnostics" $
+                case decodeEnvelope "{\"type\":\"Tx BabbageEra\",\"cborHex\":\"deadbeef\"}" of
+                    Left err ->
+                        renderEnvelopeError err
+                            `shouldSatisfy` T.isInfixOf "BabbageEra"
+                    Right raw ->
+                        fail ("expected stale-era rejection, got " <> show raw)
+
+isNotEnvelopeJson :: Either EnvelopeError a -> Bool
+isNotEnvelopeJson = \case
+    Left EnvelopeInputNotJsonObject{} -> True
+    _ -> False
+
+isMalformedEnvelopeJson :: Either EnvelopeError a -> Bool
+isMalformedEnvelopeJson = \case
+    Left EnvelopeMalformedJson{} -> True
+    _ -> False
+
+isMissingType :: Either EnvelopeError a -> Bool
+isMissingType = \case
+    Left (EnvelopeMissingField "type") -> True
+    _ -> False
+
+isMissingCborHex :: Either EnvelopeError a -> Bool
+isMissingCborHex = \case
+    Left (EnvelopeMissingField "cborHex") -> True
+    _ -> False
+
+isWrongTypeField :: Either EnvelopeError a -> Bool
+isWrongTypeField = \case
+    Left (EnvelopeWrongFieldType "type") -> True
+    _ -> False
+
+isWrongCborHexField :: Either EnvelopeError a -> Bool
+isWrongCborHexField = \case
+    Left (EnvelopeWrongFieldType "cborHex") -> True
+    _ -> False

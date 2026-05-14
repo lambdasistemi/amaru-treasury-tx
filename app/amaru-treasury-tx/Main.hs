@@ -28,7 +28,8 @@ import Amaru.Treasury.Cli.DisburseWizard
     ( runDisburseWizard
     )
 import Amaru.Treasury.Cli.Envelope
-    ( runEnvelope
+    ( runDeEnvelope
+    , runEnvelope
     )
 import Amaru.Treasury.Cli.ReportRender
     ( runReportRender
@@ -84,3 +85,5 @@ main = do
             runEnvelope Witness
         CmdEnvelopeSignedTx ->
             runEnvelope SignedTx
+        CmdDeEnvelope ->
+            runDeEnvelope

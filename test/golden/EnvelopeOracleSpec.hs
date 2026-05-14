@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 {- |
 Module      : EnvelopeOracleSpec
 Description : cardano-cli envelope byte-identity oracle
@@ -10,11 +12,21 @@ production envelope code must match the oracle byte-for-byte.
 module EnvelopeOracleSpec (spec) where
 
 import Data.ByteString qualified as BS
-import Test.Hspec (Spec, describe, it, shouldBe)
+import Data.Text qualified as T
+import Test.Hspec
+    ( Spec
+    , describe
+    , expectationFailure
+    , it
+    , shouldBe
+    , shouldSatisfy
+    )
 
 import Amaru.Treasury.Tx.Envelope
     ( EnvelopeKind (..)
+    , decodeEnvelope
     , encodeEnvelope
+    , renderEnvelopeError
     )
 
 fixtureDir :: FilePath
@@ -37,3 +49,34 @@ spec =
             raw <- BS.readFile (fixtureDir <> "/tx.signed.cborHex")
             oracle <- BS.readFile (fixtureDir <> "/tx.signed.json")
             encodeEnvelope SignedTx raw `shouldBe` oracle
+
+        it "unwraps cardano-cli tx body envelopes to raw hex" $
+            shouldDeEnvelope
+                "tx.body.json"
+                "tx.body.cborHex"
+
+        it "unwraps cardano-cli witness envelopes to raw hex" $
+            shouldDeEnvelope
+                "tx.witness.json"
+                "tx.witness.cborHex"
+
+        it "unwraps cardano-cli signed tx envelopes to raw hex" $
+            shouldDeEnvelope
+                "tx.signed.json"
+                "tx.signed.cborHex"
+
+        it "rejects stale non-Conway envelopes with the offending era" $ do
+            stale <- BS.readFile (fixtureDir <> "/tx.babbage.json")
+            case decodeEnvelope stale of
+                Left err ->
+                    renderEnvelopeError err
+                        `shouldSatisfy` T.isInfixOf "BabbageEra"
+                Right raw ->
+                    expectationFailure
+                        ("expected BabbageEra rejection, got " <> show raw)
+
+shouldDeEnvelope :: FilePath -> FilePath -> IO ()
+shouldDeEnvelope envelopeFile rawFile = do
+    envelope <- BS.readFile (fixtureDir <> "/" <> envelopeFile)
+    raw <- BS.readFile (fixtureDir <> "/" <> rawFile)
+    decodeEnvelope envelope `shouldBe` Right (raw <> "\n")

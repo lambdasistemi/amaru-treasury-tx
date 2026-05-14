@@ -48,6 +48,11 @@ jq -r .cborHex tx.witness.json | tr -d '\n' > tx.witness.cborHex
 jq -r .cborHex tx.signed.json | tr -d '\n' > tx.signed.cborHex
 ```
 
+`tx.babbage.json` is a stale-era negative fixture derived from
+`tx.body.json` by changing only the `type` field to `Tx BabbageEra`.
+It is not a `cardano-cli` output from this run; it pins the
+operator-facing era rejection path.
+
 The test signing key is intentionally not checked in. Refresh this directory
 as a unit; refreshed witness and signed transaction bytes will differ if a new
 key pair is generated.

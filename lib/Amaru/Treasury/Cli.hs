@@ -74,6 +74,7 @@ data Cmd
     | CmdEnvelopeTx
     | CmdEnvelopeWitness
     | CmdEnvelopeSignedTx
+    | CmdDeEnvelope
 
 cmdP :: Parser Cmd
 cmdP =
@@ -164,6 +165,14 @@ cmdP =
                     (pure CmdEnvelopeSignedTx)
                     ( progDesc
                         "Wrap raw signed tx CBOR hex as a cardano-cli Conway tx envelope"
+                    )
+                )
+            <> command
+                "de-envelope"
+                ( info
+                    (pure CmdDeEnvelope)
+                    ( progDesc
+                        "Extract raw CBOR hex from a cardano-cli Conway envelope"
                     )
                 )
         )

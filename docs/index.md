@@ -14,7 +14,7 @@ Haskell port of the bash recipes in
 - [Architecture overview](architecture.md) — modules and data flow.
 - [Trust model](trust-model.md) — what the wizard verifies, what the operator must assert.
 - [Swap recipe](swap.md) — building an existing swap intent with `tx-build`.
-- [Disburse](disburse.md) — resolving owned-scope ADA or USDM disbursements with `disburse-wizard`, emergency ADA top-ups from contingency with `emergency-top-up-wizard`, or building an existing disburse intent with `tx-build`.
+- [Disburse](disburse.md) — resolving owned-scope ADA or USDM disbursements with `disburse-wizard`, contingency ADA top-ups from contingency with `contingency-top-up-wizard`, or building an existing disburse intent with `tx-build`.
 - [Withdraw](withdraw.md) — resolving treasury rewards with `withdraw-wizard` or building an existing withdraw intent.
 - [Local devnet smoke](local-devnet-smoke.md) — opt-in live `cardano-node-clients` devnet node check.
 - [ChainContext](chain-context.md)
@@ -32,7 +32,7 @@ Haskell port of the bash recipes in
 | `swap-cancel` | Verify an explicitly supplied pending SundaeSwap order and build unsigned cancellation CBOR that returns the order value to the selected treasury. |
 | `withdraw-wizard` | Verify upstream `metadata.json` against the chain, resolve the treasury reward account + reward balance, emit a unified withdraw `intent.json`, or exit cleanly when rewards are zero. |
 | `disburse-wizard` | Verify upstream `metadata.json` against the chain, resolve wallet and treasury UTxOs, emit a unified ADA or USDM disburse `intent.json`. USDM is the default unit. |
-| `emergency-top-up-wizard` | Verify contingency and destination-scope registry state, move ADA from `contingency` to an owned treasury scope, and emit a unified disburse `intent.json`. |
+| `contingency-top-up-wizard` | Verify contingency and destination-scope registry state, move ADA from `contingency` to an owned treasury scope, and emit a unified disburse `intent.json`. |
 | `tx-build` | Turn a unified `intent.json` into unsigned Conway CBOR; re-evaluates every redeemer against a live `ChainContext` (typed step trace via `BuildEvent`) and can write a deterministic pre-signing report with `--report PATH`. |
 | `vault create` | Import one pasted or streamed Cardano payment signing key (`cardano-cli` `.skey` JSON or `addr_xsk`) into an encrypted age witness vault. |
 | `witness` | Create one detached Conway vkey witness from an encrypted age vault identity. |

@@ -35,9 +35,9 @@ import Amaru.Treasury.Cli.Common
     )
 import Amaru.Treasury.Cli.DisburseWizard
     ( DisburseWizardOpts
-    , EmergencyTopUpOpts
+    , ContingencyTopUpOpts
     , disburseWizardOptsP
-    , emergencyTopUpOptsP
+    , contingencyTopUpOptsP
     )
 import Amaru.Treasury.Cli.Submit
     ( SubmitOpts
@@ -85,7 +85,7 @@ data Cmd
     | CmdSwapQuote SwapQuoteOpts
     | CmdSwapCancel SwapCancelOpts
     | CmdDisburseWizard DisburseWizardOpts
-    | CmdEmergencyTopUp EmergencyTopUpOpts
+    | CmdContingencyTopUp ContingencyTopUpOpts
     | CmdWithdrawWizard WithdrawOpts
     | CmdTxBuild TxBuildOpts
     | CmdReportRender ReportRenderOpts
@@ -151,9 +151,9 @@ cmdP =
                     )
                 )
             <> command
-                "emergency-top-up-wizard"
+                "contingency-top-up-wizard"
                 ( info
-                    (CmdEmergencyTopUp <$> emergencyTopUpOptsP)
+                    (CmdContingencyTopUp <$> contingencyTopUpOptsP)
                     ( progDesc
                         "Move ADA from the contingency treasury to another treasury scope"
                     )

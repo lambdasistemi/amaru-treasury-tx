@@ -118,10 +118,32 @@ matching the build id, materialized output
 reward balance `2000000 -> 0` after submit, and treasury ADA
 `200000000 -> 202000000`.
 
+Run the swap readiness boundary check with:
+
+```bash
+nix develop --quiet -c just devnet-smoke swap-ready
+```
+
+The swap readiness phase uses the checked-in public
+`SundaeSwap-finance/sundae-contracts@be33466b7dbe0f8e6c0e0f46ff23737897f45835`
+`order.spend` artifact, publishes it as a local DevNet reference
+script, and writes `swap-ready/registry.json` for the later #84
+order-build slice. Latest local evidence for this branch is
+`runs/devnet/20260515T124545Z`: script hash
+`02eee6c4d128c9700c178922163645f1fdb381bbdce071acbbd49465`,
+reference UTxO
+`490b9bc8a80e8a55434b895bea6ca47fc612105c0cf71b781a61e99cd2be46af#0`,
+and local order address
+`addr_test1xqpwaeky6y5vjuqvz7yjy93kghclmvuph0wwqudvh02fgegzamnvf5fge9cqc9ufygtrv303lkecrw7uupc6ew75j3jsdhyjpu`.
+This is readiness evidence only; it does not build, fund, submit, or
+spend a swap order.
+
 The DevNet release experiment is tracked in slices: governance action
 [#82](https://github.com/lambdasistemi/amaru-treasury-tx/issues/82),
 withdrawal [#83](https://github.com/lambdasistemi/amaru-treasury-tx/issues/83),
 disburse [#86](https://github.com/lambdasistemi/amaru-treasury-tx/issues/86),
+SundaeSwap V3 contract readiness
+[#132](https://github.com/lambdasistemi/amaru-treasury-tx/issues/132),
 SundaeSwap V3 order build/funding
 [#84](https://github.com/lambdasistemi/amaru-treasury-tx/issues/84),
 and SundaeSwap V3 order spend

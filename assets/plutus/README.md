@@ -11,6 +11,8 @@ embedded by `Amaru.Treasury.Registry.Constants`.
   - `permissions.permissions.withdraw` -> `permissions.cbor`
 - `SundaeSwap-finance/treasury-contracts@8a3183c929be57886214624b45ee0c43a0c19277`
   - `treasury.treasury.spend` -> `treasury.cbor`
+- `SundaeSwap-finance/sundae-contracts@be33466b7dbe0f8e6c0e0f46ff23737897f45835`
+  - `order.spend` -> `sundae_order.cbor`
 
 ## Refresh Procedure
 

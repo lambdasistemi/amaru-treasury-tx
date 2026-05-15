@@ -4,6 +4,20 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+### Maintainer Notes
+
+* Local DevNet swap readiness evidence now proves the prerequisite for
+  the SundaeSwap order-build slice: `just devnet-smoke swap-ready`
+  hashes the checked-in public
+  `SundaeSwap-finance/sundae-contracts@be33466b7dbe0f8e6c0e0f46ff23737897f45835`
+  `order.spend` artifact, publishes it as a local DevNet reference
+  script, and writes a readiness registry for #84. Latest branch
+  evidence: `runs/devnet/20260515T124545Z`, script hash
+  `02eee6c4d128c9700c178922163645f1fdb381bbdce071acbbd49465`,
+  reference UTxO
+  `490b9bc8a80e8a55434b895bea6ca47fc612105c0cf71b781a61e99cd2be46af#0`.
+  This is not swap order build, funding, submission, or spend proof.
+
 ## [0.2.9.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.8.0...v0.2.9.0) (2026-05-15)
 
 ### Features

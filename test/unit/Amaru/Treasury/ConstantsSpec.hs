@@ -25,7 +25,16 @@ import Amaru.Treasury.Constants
     , sundaeOrderScriptRefMainnet
     )
 import Amaru.Treasury.LedgerParse (addrFromText)
-import Amaru.Treasury.Registry.Derive (scriptHashToHex)
+import Amaru.Treasury.Registry.Derive
+    ( scriptHashOfBlob
+    , scriptHashToHex
+    )
+import Amaru.Treasury.Sundae.Contracts
+    ( sundaeOrderValidatorBlob
+    , sundaeOrderValidatorScriptHashHex
+    , sundaeOrderValidatorSourceCommit
+    , sundaeOrderValidatorTitle
+    )
 
 spec :: Spec
 spec =
@@ -46,5 +55,18 @@ spec =
                 Right _ ->
                     expectationFailure
                         "Sundae order address is not a script address"
+                Left e ->
+                    expectationFailure e
+
+        it "pins the public SundaeSwap V3 order.spend artifact" $ do
+            sundaeOrderValidatorSourceCommit
+                `shouldBe` "be33466b7dbe0f8e6c0e0f46ff23737897f45835"
+            sundaeOrderValidatorTitle `shouldBe` "order.spend"
+            sundaeOrderValidatorScriptHashHex
+                `shouldBe` "02eee6c4d128c9700c178922163645f1fdb381bbdce071acbbd49465"
+            case scriptHashOfBlob sundaeOrderValidatorBlob of
+                Right scriptHash ->
+                    scriptHashToHex scriptHash
+                        `shouldBe` sundaeOrderValidatorScriptHashHex
                 Left e ->
                     expectationFailure e

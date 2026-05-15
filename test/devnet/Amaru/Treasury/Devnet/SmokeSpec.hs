@@ -62,6 +62,7 @@ import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Conway.Governance (Anchor (..))
 import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
 import Cardano.Ledger.Core (PParams, Script)
+import Cardano.Ledger.Core qualified as Core
 import Cardano.Ledger.Credential
     ( Credential (..)
     , StakeReference (..)
@@ -257,6 +258,13 @@ import Amaru.Treasury.Report.Render qualified as ReportRender
 import Amaru.Treasury.Scope
     ( ScopeId (CoreDevelopment)
     )
+import Amaru.Treasury.Sundae.Contracts
+    ( sundaeOrderValidatorBlob
+    , sundaeOrderValidatorScriptHashHex
+    , sundaeOrderValidatorSourceCommit
+    , sundaeOrderValidatorSourceRepository
+    , sundaeOrderValidatorTitle
+    )
 import Amaru.Treasury.Tx.AttachWitness
     ( decodeUnsignedTxHex
     , encodeSignedTxHex
@@ -289,6 +297,79 @@ instance FromJSON ShelleyGenesisTiming where
 spec :: Spec
 spec =
     describe "local devnet smoke" $ do
+        describe "swap-ready readiness" $ do
+            it "records order-validator reference handoff metadata" $
+                swapReadinessRegistryValue
+                    sampleRunDir
+                    sampleSocket
+                    sampleTiming
+                    sampleSwapReadinessEvidence
+                    `shouldBe` object
+                        [ "schemaVersion" .= (1 :: Int)
+                        , "phase" .= ("swap-ready" :: String)
+                        , "status" .= ("passed" :: String)
+                        , "runDirectory" .= sampleRunDir
+                        , "socket" .= sampleSocket
+                        , "network" .= ("devnet" :: String)
+                        , "networkMagic" .= sgtNetworkMagic sampleTiming
+                        , "epochDurationSeconds"
+                            .= epochDurationSeconds sampleTiming
+                        , "orderValidator"
+                            .= object
+                                [ "sourceRepository"
+                                    .= ( "https://github.com/SundaeSwap-finance/sundae-contracts"
+                                            :: String
+                                       )
+                                , "sourceCommit"
+                                    .= ( "be33466b7dbe0f8e6c0e0f46ff23737897f45835"
+                                            :: String
+                                       )
+                                , "validatorTitle"
+                                    .= ("order.spend" :: String)
+                                , "scriptHash"
+                                    .= ( "02eee6c4d128c9700c178922163645f1fdb381bbdce071acbbd49465"
+                                            :: String
+                                       )
+                                , "fixtureOnly" .= False
+                                ]
+                        , "orderReference"
+                            .= object
+                                [ "referenceTxIn"
+                                    .= ( "4c945c6b2d9d8df841f7079d20d32e7bc4eb1f3b0873a134b9dca7c95d22afad#0"
+                                            :: String
+                                       )
+                                , "address"
+                                    .= ("addr_test1wzsampleorder" :: String)
+                                , "scriptHash"
+                                    .= ( "02eee6c4d128c9700c178922163645f1fdb381bbdce071acbbd49465"
+                                            :: String
+                                       )
+                                ]
+                        , "orderBuildInputs"
+                            .= object
+                                [ "swapOrderAddress"
+                                    .= ("addr_test1wzsampleorder" :: String)
+                                , "orderScriptRef"
+                                    .= ( "4c945c6b2d9d8df841f7079d20d32e7bc4eb1f3b0873a134b9dca7c95d22afad#0"
+                                            :: String
+                                       )
+                                ]
+                        , "registryPath"
+                            .= ( sampleRunDir
+                                    </> "swap-ready"
+                                    </> "registry.json"
+                               )
+                        , "summaryPath"
+                            .= ( sampleRunDir
+                                    </> "swap-ready"
+                                    </> "summary.json"
+                               )
+                        , "provenancePath"
+                            .= ( sampleRunDir
+                                    </> "swap-ready"
+                                    </> "provenance.json"
+                               )
+                        ]
         describe "withdraw diagnostics" $ do
             it "records submitted withdrawal materialization proof" $ do
                 let submitted =
@@ -482,6 +563,9 @@ spec =
         it
             "withdraw: submits built rewards and materializes ADA"
             (runForPhases ["withdraw"] withdrawSmoke)
+        it
+            "swap-ready: publishes SundaeSwap V3 order validator readiness"
+            (runForPhases ["swap-ready"] swapReadySmoke)
 
 runForPhases :: [String] -> IO () -> IO ()
 runForPhases accepted action = do
@@ -540,6 +624,35 @@ withdrawSmoke = do
                 registry
                 evidence
                 rewards
+
+swapReadySmoke :: IO ()
+swapReadySmoke = do
+    runDir <- resolveRunDir
+    prepareRunDir runDir
+    createDirectoryIfMissing True (runDir </> "swap-ready")
+
+    gDir <- genesisDir
+    assertGenesisDir gDir
+    timing <- readShelleyTiming gDir
+    sgtNetworkMagic timing `shouldBe` 42
+
+    withCardanoNode gDir $ \socket startMs -> do
+        accepted <- probeNetworkMagic devnetMagic socket
+        accepted `shouldBe` True
+
+        copyNodeLog socket runDir
+        writeTiming runDir startMs socket timing
+        withGovernanceNode socket $ \provider submitter -> do
+            pp <- queryProtocolParams provider
+            utxos <- queryUTxOs provider genesisAddr
+            evidence <-
+                publishSwapReadiness
+                    provider
+                    submitter
+                    pp
+                    utxos
+            writeSwapReadinessArtifacts runDir socket timing evidence
+            putSwapReadinessLines runDir evidence
 
 withFundedGovernanceReward
     :: FilePath
@@ -650,6 +763,16 @@ data WithdrawalSubmissionEvidence = WithdrawalSubmissionEvidence
     }
     deriving stock (Eq, Show)
 
+data SwapReadinessEvidence = SwapReadinessEvidence
+    { sreOrderValidatorSourceRepository :: !T.Text
+    , sreOrderValidatorSourceCommit :: !T.Text
+    , sreOrderValidatorTitle :: !T.Text
+    , sreOrderValidatorScriptHash :: !T.Text
+    , sreOrderReferenceTxIn :: !T.Text
+    , sreOrderAddress :: !T.Text
+    }
+    deriving stock (Eq, Show)
+
 data WithdrawalFailure
     = WithdrawalRewardTimeout !String !Coin !(Maybe Word64) !(Maybe Word64)
     | WithdrawalZeroRewards !String !Coin !(Maybe Word64) !(Maybe Word64)
@@ -736,6 +859,23 @@ sampleEvidence =
         , geSetupEpoch = 2
         , geVoteEpoch = 3
         , geFinalEpoch = 4
+        }
+
+sampleSwapReadinessEvidence :: SwapReadinessEvidence
+sampleSwapReadinessEvidence =
+    SwapReadinessEvidence
+        { sreOrderValidatorSourceRepository =
+            sundaeOrderValidatorSourceRepository
+        , sreOrderValidatorSourceCommit =
+            sundaeOrderValidatorSourceCommit
+        , sreOrderValidatorTitle =
+            sundaeOrderValidatorTitle
+        , sreOrderValidatorScriptHash =
+            sundaeOrderValidatorScriptHashHex
+        , sreOrderReferenceTxIn =
+            "4c945c6b2d9d8df841f7079d20d32e7bc4eb1f3b0873a134b9dca7c95d22afad#0"
+        , sreOrderAddress =
+            "addr_test1wzsampleorder"
         }
 
 preparePinnedTreasuryTarget
@@ -966,6 +1106,89 @@ submitReferenceScripts provider submitter pp scripts seed@(seedIn, _) = do
             genesisAddr
             prog
     pure (txOutRef txId 0, txOutRef txId 1)
+
+publishSwapReadiness
+    :: Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> [(TxIn, TxOut ConwayEra)]
+    -> IO SwapReadinessEvidence
+publishSwapReadiness provider submitter pp utxos = do
+    orderHash <-
+        expectEither
+            "hash public SundaeSwap V3 order.spend validator"
+            (scriptHashOfBlob sundaeOrderValidatorBlob)
+    scriptHashToHex orderHash
+        `shouldBe` sundaeOrderValidatorScriptHashHex
+    orderScript <- scriptFromBlob sundaeOrderValidatorBlob
+    seed@(seedIn, _) <-
+        selectLargestAdaUtxo
+            "SundaeSwap V3 order reference script publishing"
+            utxos
+    snapshot <- queryLedgerSnapshot provider
+    let orderAddress =
+            scriptAddr Testnet orderHash
+        orderOut =
+            refScriptTxOut orderAddress orderScript
+        interpret :: InterpretIO NoCtx
+        interpret =
+            InterpretIO $ \case {}
+        eval tx =
+            fmap
+                (Map.map (either (Left . show) Right))
+                (evaluateTx provider tx)
+        upperSlot =
+            addSlots 20 (ledgerTipSlot snapshot)
+        prog :: TxBuild NoCtx Void ()
+        prog = do
+            _ <- spend seedIn
+            orderIx <- output orderOut
+            checkMinUtxo pp orderIx
+            validTo upperSlot
+    txId <-
+        buildSubmitAndWait
+            "publish SundaeSwap V3 order reference script"
+            provider
+            submitter
+            pp
+            interpret
+            eval
+            [seed]
+            []
+            genesisAddr
+            prog
+    let referenceTxIn =
+            txOutRef txId 0
+    found <-
+        waitForTxIns provider [referenceTxIn] 60
+    published <- case found of
+        [(_, txOut)] -> pure txOut
+        _ ->
+            expectationFailure "published order reference UTxO was not found"
+                *> error "unreachable"
+    published ^. addrTxOutL `shouldBe` orderAddress
+    case published ^. referenceScriptTxOutL of
+        SJust script ->
+            scriptHashToHex (Core.hashScript @ConwayEra script)
+                `shouldBe` sundaeOrderValidatorScriptHashHex
+        SNothing ->
+            expectationFailure
+                "published order reference UTxO has no reference script"
+    pure
+        SwapReadinessEvidence
+            { sreOrderValidatorSourceRepository =
+                sundaeOrderValidatorSourceRepository
+            , sreOrderValidatorSourceCommit =
+                sundaeOrderValidatorSourceCommit
+            , sreOrderValidatorTitle =
+                sundaeOrderValidatorTitle
+            , sreOrderValidatorScriptHash =
+                sundaeOrderValidatorScriptHashHex
+            , sreOrderReferenceTxIn =
+                txInToText referenceTxIn
+            , sreOrderAddress =
+                renderAddr orderAddress
+            }
 
 buildSubmitAndWait
     :: String
@@ -1893,6 +2116,137 @@ governanceSummaryLines runDir socket timing evidence =
         <> show (geAmountLovelace evidence)
     , "devnet-smoke: governance-summary "
         <> (runDir </> "governance" </> "summary.json")
+    ]
+
+writeSwapReadinessArtifacts
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> SwapReadinessEvidence
+    -> IO ()
+writeSwapReadinessArtifacts runDir socket timing evidence = do
+    let swapDir =
+            runDir </> "swap-ready"
+        registry =
+            swapReadinessRegistryValue runDir socket timing evidence
+        summary =
+            swapReadinessSummaryValue runDir socket timing evidence
+        provenance =
+            swapReadinessProvenanceValue runDir evidence
+    createDirectoryIfMissing True swapDir
+    BSL.writeFile (swapReadinessRegistryPath runDir) (encode registry)
+    BSL.writeFile (swapReadinessSummaryPath runDir) (encode summary)
+    BSL.writeFile (swapReadinessProvenancePath runDir) (encode provenance)
+    BSL.writeFile (runDir </> "summary.json") (encode summary)
+    writeFile
+        (runDir </> "summary.log")
+        (unlines (swapReadinessLines runDir evidence))
+
+swapReadinessRegistryValue
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> SwapReadinessEvidence
+    -> Value
+swapReadinessRegistryValue runDir socket timing evidence =
+    object
+        [ "schemaVersion" .= (1 :: Int)
+        , "phase" .= ("swap-ready" :: String)
+        , "status" .= ("passed" :: String)
+        , "runDirectory" .= runDir
+        , "socket" .= socket
+        , "network" .= ("devnet" :: String)
+        , "networkMagic" .= sgtNetworkMagic timing
+        , "epochDurationSeconds" .= epochDurationSeconds timing
+        , "orderValidator"
+            .= object
+                [ "sourceRepository"
+                    .= sreOrderValidatorSourceRepository evidence
+                , "sourceCommit"
+                    .= sreOrderValidatorSourceCommit evidence
+                , "validatorTitle" .= sreOrderValidatorTitle evidence
+                , "scriptHash" .= sreOrderValidatorScriptHash evidence
+                , "fixtureOnly" .= False
+                ]
+        , "orderReference"
+            .= object
+                [ "referenceTxIn" .= sreOrderReferenceTxIn evidence
+                , "address" .= sreOrderAddress evidence
+                , "scriptHash" .= sreOrderValidatorScriptHash evidence
+                ]
+        , "orderBuildInputs"
+            .= object
+                [ "swapOrderAddress" .= sreOrderAddress evidence
+                , "orderScriptRef" .= sreOrderReferenceTxIn evidence
+                ]
+        , "registryPath" .= swapReadinessRegistryPath runDir
+        , "summaryPath" .= swapReadinessSummaryPath runDir
+        , "provenancePath" .= swapReadinessProvenancePath runDir
+        ]
+
+swapReadinessSummaryValue
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> SwapReadinessEvidence
+    -> Value
+swapReadinessSummaryValue runDir socket timing evidence =
+    object
+        [ "schemaVersion" .= (1 :: Int)
+        , "phase" .= ("swap-ready" :: String)
+        , "status" .= ("passed" :: String)
+        , "runDirectory" .= runDir
+        , "socket" .= socket
+        , "network" .= ("devnet" :: String)
+        , "networkMagic" .= sgtNetworkMagic timing
+        , "epochDurationSeconds" .= epochDurationSeconds timing
+        , "orderValidatorSourceRepository"
+            .= sreOrderValidatorSourceRepository evidence
+        , "orderValidatorSourceCommit"
+            .= sreOrderValidatorSourceCommit evidence
+        , "orderValidatorTitle" .= sreOrderValidatorTitle evidence
+        , "orderValidatorScriptHash"
+            .= sreOrderValidatorScriptHash evidence
+        , "orderReferenceTxIn" .= sreOrderReferenceTxIn evidence
+        , "orderAddress" .= sreOrderAddress evidence
+        , "registryPath" .= swapReadinessRegistryPath runDir
+        , "provenancePath" .= swapReadinessProvenancePath runDir
+        ]
+
+swapReadinessProvenanceValue
+    :: FilePath
+    -> SwapReadinessEvidence
+    -> Value
+swapReadinessProvenanceValue runDir evidence =
+    object
+        [ "sourceRepository"
+            .= sreOrderValidatorSourceRepository evidence
+        , "sourceCommit" .= sreOrderValidatorSourceCommit evidence
+        , "validatorTitle" .= sreOrderValidatorTitle evidence
+        , "checkedInArtifactPath"
+            .= ("assets/plutus/sundae_order.cbor" :: String)
+        , "scriptHash" .= sreOrderValidatorScriptHash evidence
+        , "referenceTxIn" .= sreOrderReferenceTxIn evidence
+        , "registryPath" .= swapReadinessRegistryPath runDir
+        , "fixtureOnly" .= False
+        ]
+
+putSwapReadinessLines :: FilePath -> SwapReadinessEvidence -> IO ()
+putSwapReadinessLines runDir evidence =
+    mapM_ putStrLn (swapReadinessLines runDir evidence)
+
+swapReadinessLines :: FilePath -> SwapReadinessEvidence -> [String]
+swapReadinessLines runDir evidence =
+    [ "devnet-smoke: run-dir " <> runDir
+    , "devnet-smoke: phase swap-ready passed"
+    , "devnet-smoke: swap-ready-order-script-hash "
+        <> T.unpack (sreOrderValidatorScriptHash evidence)
+    , "devnet-smoke: swap-ready-order-script-ref "
+        <> T.unpack (sreOrderReferenceTxIn evidence)
+    , "devnet-smoke: swap-ready-order-address "
+        <> T.unpack (sreOrderAddress evidence)
+    , "devnet-smoke: swap-ready-registry "
+        <> swapReadinessRegistryPath runDir
     ]
 
 writeWithdrawalIntentArtifacts
@@ -2998,6 +3352,18 @@ withdrawSubmitLogPath runDir =
 withdrawMaterializationPath :: FilePath -> FilePath
 withdrawMaterializationPath runDir =
     runDir </> "withdraw" </> "materialized.json"
+
+swapReadinessRegistryPath :: FilePath -> FilePath
+swapReadinessRegistryPath runDir =
+    runDir </> "swap-ready" </> "registry.json"
+
+swapReadinessSummaryPath :: FilePath -> FilePath
+swapReadinessSummaryPath runDir =
+    runDir </> "swap-ready" </> "summary.json"
+
+swapReadinessProvenancePath :: FilePath -> FilePath
+swapReadinessProvenancePath runDir =
+    runDir </> "swap-ready" </> "provenance.json"
 
 placeholderEvidence :: String -> Coin -> GovernanceEvidence
 placeholderEvidence treasuryHash rewardBefore =

@@ -8,7 +8,9 @@ artifacts under a fresh run directory. The withdrawal phase proves the
 live reward-to-materialized-ADA boundary by writing a withdrawal intent,
 building unsigned CBOR, signing and submitting it inside the opt-in
 DevNet harness, and recording the treasury UTxO that materialized from
-the reward account.
+the reward account. The swap readiness phase publishes the public
+SundaeSwap V3 order validator as a local DevNet reference script and
+writes handoff metadata for the later order-build slice.
 
 This check is not part of `just ci`: it starts a real local
 `cardano-node` and is meant as manual live evidence before a release.
@@ -192,9 +194,55 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
     `-- summary.json
 ```
 
+## Swap Readiness Boundary
+
+```bash
+just devnet-smoke swap-ready
+```
+
+Expected output:
+
+```text
+devnet-smoke: run-dir runs/devnet/YYYYMMDDTHHMMSSZ
+devnet-smoke: phase swap-ready passed
+devnet-smoke: swap-ready-order-script-hash 02eee6c4d128c9700c178922163645f1fdb381bbdce071acbbd49465
+devnet-smoke: swap-ready-order-script-ref 490b...#0
+devnet-smoke: swap-ready-order-address addr_test1...
+devnet-smoke: swap-ready-registry runs/devnet/YYYYMMDDTHHMMSSZ/swap-ready/registry.json
+```
+
+The readiness phase uses the checked-in public
+`SundaeSwap-finance/sundae-contracts@be33466b7dbe0f8e6c0e0f46ff23737897f45835`
+`order.spend` artifact. It hashes the artifact locally, publishes it as
+a reference script on the local DevNet, waits for the reference UTxO,
+and verifies that the observed reference script hash matches the pinned
+artifact hash. It does not build, fund, submit, or spend a swap order.
+
+The verified 2026-05-15 slice used run directory
+`runs/devnet/20260515T124545Z`. It published order reference
+`490b9bc8a80e8a55434b895bea6ca47fc612105c0cf71b781a61e99cd2be46af#0`
+with script hash
+`02eee6c4d128c9700c178922163645f1fdb381bbdce071acbbd49465` at local
+DevNet order address
+`addr_test1xqpwaeky6y5vjuqvz7yjy93kghclmvuph0wwqudvh02fgegzamnvf5fge9cqc9ufygtrv303lkecrw7uupc6ew75j3jsdhyjpu`.
+
+The swap readiness phase writes:
+
+```text
+runs/devnet/YYYYMMDDTHHMMSSZ/
+|-- node.log
+|-- summary.json
+|-- summary.log
+|-- timing.json
+`-- swap-ready/
+    |-- provenance.json
+    |-- registry.json
+    `-- summary.json
+```
+
 ## DevNet Experiment Order
 
-The experiment is split into six tickets:
+The experiment is split into seven tickets:
 
 - [#82](https://github.com/lambdasistemi/amaru-treasury-tx/issues/82):
   governance action slice. This prepares and submits the local Conway
@@ -207,10 +255,14 @@ The experiment is split into six tickets:
   disburse slice. This exercises `disburse-wizard` and `tx-build`
   against live treasury UTxOs, with USDM as the common operator path
   and ADA as an explicit covered variant.
+- [#132](https://github.com/lambdasistemi/amaru-treasury-tx/issues/132):
+  SundaeSwap V3 contract readiness slice. This publishes the public
+  V3 `order.spend` validator as a local DevNet reference script and
+  writes the readiness registry consumed by #84.
 - [#84](https://github.com/lambdasistemi/amaru-treasury-tx/issues/84):
   SundaeSwap V3 order build/funding slice. This brings the current
-  swap path up to live DevNet evidence against the open-source
-  SundaeSwap V3 order interface.
+  swap path up to live DevNet evidence against the readiness registry
+  and the open-source SundaeSwap V3 order interface.
 - [#85](https://github.com/lambdasistemi/amaru-treasury-tx/issues/85):
   SundaeSwap V3 order spend slice. This consumes the funded order
   under the real V3 contract rules on local DevNet.
@@ -218,8 +270,9 @@ The experiment is split into six tickets:
   reorganize slice. This consolidates live treasury UTxOs once the
   release-facing reorganize builder from #46 exists.
 
-The passing phases today are `node`, `governance`, and `withdraw`.
-`just devnet-smoke all` runs those three phases into separate
+The passing phases today are `node`, `governance`, `withdraw`, and
+`swap-ready`. `just devnet-smoke all` still runs only `node`,
+`governance`, and `withdraw` into separate
 subdirectories under one timestamped run directory.
 
 `node` proves only the local node boundary, network magic, and timing.
@@ -230,6 +283,9 @@ CBOR plus review reports, signed and submitted by the DevNet harness,
 and observed as ADA materialized at the treasury script address. It is
 not proof that disburse, SundaeSwap order-build, SundaeSwap order-spend,
 or reorganize transactions have been built or observed on DevNet.
+`swap-ready` proves only that the public V3 order-validator reference is
+available on the local DevNet and recorded in machine-readable metadata
+for #84.
 
 SundaeSwap V3 contract compatibility should use the public V3 Aiken
 contracts and SDK/reference material:
@@ -293,9 +349,17 @@ and the run directory's node log together. When diagnosing submission
 or materialization, inspect `withdraw/signed-tx.cbor.hex`,
 `withdraw/submit.log`, `withdraw/materialized.json`, and the node log.
 
+The swap readiness phase may fail during artifact hashing, reference
+script publication, reference UTxO lookup, or observed reference-script
+hash verification. Inspect `swap-ready/registry.json`,
+`swap-ready/summary.json`, `swap-ready/provenance.json`, `summary.log`,
+and the node log together.
+
 Use the run directory's `node.log`, `summary.log`, `timing.json`, and
 `governance/summary.json` when recording governance evidence. Use
 `withdraw/intent.json`, `withdraw/registry.json`,
 `withdraw/report.json`, `withdraw/signed-tx.cbor.hex`,
 `withdraw/submit.log`, and `withdraw/materialized.json` when recording
-withdrawal evidence.
+withdrawal evidence. Use `swap-ready/registry.json`,
+`swap-ready/summary.json`, and `swap-ready/provenance.json` when
+recording swap readiness evidence.

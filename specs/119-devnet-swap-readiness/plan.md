@@ -12,15 +12,13 @@ withdrawal proof. The current harness baseline rejects `swap-ready`
 with exit `64` and `devnet-smoke: unknown phase: swap-ready`, proving
 the phase is not already present.
 
-**Current**: Spec Kit artifacts define the readiness-only boundary,
-the public SundaeSwap V3 source assumptions, and the TDD gate. No
-production code has been changed. The next task is the focused Hspec
-RED test that captures the readiness artifact contract.
+**Current**: The RED/GREEN path has reached a live local DevNet
+readiness proof. `just devnet-smoke swap-ready` publishes the pinned
+public SundaeSwap V3 `order.spend` validator as a reference script and
+writes readiness registry artifacts for #84.
 
-**Blockers**: The implementation must pin or otherwise obtain the
-public SundaeSwap V3 `order.spend` validator artifact before a GREEN
-readiness run can be accepted. A fixture-only validator is not
-compatibility evidence.
+**Blockers**: None for the happy-path readiness handoff. Fixture-only
+validators remain disallowed as compatibility evidence.
 
 ## Summary
 
@@ -124,6 +122,13 @@ nix develop --quiet -c just devnet-smoke swap-ready
 The command must exit 0 and write `swap-ready/summary.json`,
 `swap-ready/registry.json`, and any referenced contract/provenance
 artifacts. Before PR handoff, run the local gate:
+
+Observed GREEN on 2026-05-15: `runs/devnet/20260515T124545Z`,
+script hash
+`02eee6c4d128c9700c178922163645f1fdb381bbdce071acbbd49465`,
+reference UTxO
+`490b9bc8a80e8a55434b895bea6ca47fc612105c0cf71b781a61e99cd2be46af#0`,
+registry path `runs/devnet/20260515T124545Z/swap-ready/registry.json`.
 
 ```bash
 ./llm/reviews/local-119-devnet-swap-readiness/gate.sh

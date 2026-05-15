@@ -103,6 +103,7 @@ For live local-node evidence, also run the opt-in devnet smoke:
 nix develop --quiet -c just devnet-smoke node
 nix develop --quiet -c just devnet-smoke governance
 nix develop --quiet -c just devnet-smoke withdraw
+nix develop --quiet -c just devnet-smoke swap-ready
 ```
 
 Record the generated `runs/devnet/<timestamp>/` directory in the
@@ -136,11 +137,26 @@ report/proof paths under
 `withdraw/report.json`, `withdraw/signed-tx.cbor.hex`,
 `withdraw/submit.log`, and `withdraw/materialized.json`.
 
+The swap readiness phase uses the checked-in public
+`SundaeSwap-finance/sundae-contracts@be33466b7dbe0f8e6c0e0f46ff23737897f45835`
+`order.spend` artifact, publishes it as a local DevNet reference
+script, and writes `swap-ready/registry.json` for the later #84 order
+build/funding slice. Latest branch readiness evidence is
+`runs/devnet/20260515T124545Z`, script hash
+`02eee6c4d128c9700c178922163645f1fdb381bbdce071acbbd49465`,
+reference UTxO
+`490b9bc8a80e8a55434b895bea6ca47fc612105c0cf71b781a61e99cd2be46af#0`,
+and local order address
+`addr_test1xqpwaeky6y5vjuqvz7yjy93kghclmvuph0wwqudvh02fgegzamnvf5fge9cqc9ufygtrv303lkecrw7uupc6ew75j3jsdhyjpu`.
+This is readiness evidence only; it is not a built, funded, submitted,
+or spent swap order.
+
 The DevNet experiment is split into governance action (#82),
-withdrawal (#83), disburse (#86), SundaeSwap V3 order build/funding
-(#84), SundaeSwap V3 order spend (#85), and reorganize (#87) slices.
-Do not record disburse, swap-order, swap-spend, or reorganize evidence
-until those slices land and their phase-specific smoke commands pass.
+withdrawal (#83), disburse (#86), SundaeSwap V3 contract readiness
+(#132), SundaeSwap V3 order build/funding (#84), SundaeSwap V3 order
+spend (#85), and reorganize (#87) slices. Do not record disburse,
+swap-order build/funding, swap-spend, or reorganize evidence until
+those slices land and their phase-specific smoke commands pass.
 SundaeSwap compatibility claims must be based on the public V3
 contracts/SDK, not on an Amaru-only toy validator.
 
@@ -171,6 +187,18 @@ ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d#0,
 reward 2000000 -> 0 after submit, and treasury ADA
 200000000 -> 202000000. This is not disburse,
 SundaeSwap order, or reorganize proof.
+
+Local DevNet swap readiness evidence now proves the prerequisite for
+the SundaeSwap order-build slice: the smoke hashes the checked-in public
+SundaeSwap V3 order.spend artifact, publishes it as a local DevNet
+reference script, and writes a readiness registry for #84. Evidence:
+runs/devnet/20260515T124545Z, source
+SundaeSwap-finance/sundae-contracts@be33466b7dbe0f8e6c0e0f46ff23737897f45835,
+script hash
+02eee6c4d128c9700c178922163645f1fdb381bbdce071acbbd49465,
+reference UTxO
+490b9bc8a80e8a55434b895bea6ca47fc612105c0cf71b781a61e99cd2be46af#0.
+This is not swap order build, funding, submission, or spend proof.
 ```
 
 The release workflows run `scripts/release/check-version-consistency`

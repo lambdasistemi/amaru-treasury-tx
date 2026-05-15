@@ -4,37 +4,19 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
-### Maintainer Notes
+## [0.2.9.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.8.0...v0.2.9.0) (2026-05-15)
 
-* Local DevNet governance evidence now proves the first treasury setup
-  slice: `just devnet-smoke governance` submits and votes through a
-  treasury-withdrawal governance action, then observes the Amaru
-  treasury script reward account funded through Provider reward
-  queries. Latest branch evidence: `runs/devnet/20260513T143827Z`,
-  `cardano-node-clients` main
-  `d6773e4cd8a2421617568c8dac0972b0f312a509`, reward account
-  `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34`
-  `0 -> 2000000` lovelace. Withdrawal, disburse, SundaeSwap order, and
-  reorganize proofs remain follow-up DevNet slices.
-* Local DevNet withdrawal evidence now proves the second treasury setup
-  slice: `just devnet-smoke withdraw` observes funded script rewards,
-  writes a schema-v1 withdraw intent, builds unsigned withdrawal CBOR
-  plus JSON/Markdown reports through `tx-build`, then signs and submits
-  the built transaction inside the opt-in DevNet harness and proves the
-  ADA materialized at the treasury script address. Latest branch
-  evidence: `runs/devnet/20260515T091231Z`, reward account
-  `ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af`,
-  reward `2000000` lovelace, tx id
-  `ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d`,
-  fee `457683` lovelace, validity upper bound slot `222`, submitted tx
-  id matching the build id, materialized output
-  `ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d#0`,
-  reward balance `2000000 -> 0` after submit, and treasury ADA
-  `200000000 -> 202000000`. Disburse,
-  SundaeSwap order, and reorganize proofs remain follow-up slices.
-* DevNet Markdown reports no longer render a mainnet Cardanoscan link
-  for local transactions; they state that no public explorer exists for
-  `devnet`.
+### Features
+
+* support local devnet network identity ([dd07666](https://github.com/lambdasistemi/amaru-treasury-tx/commit/dd07666f09ffb80f7d4e28daddaafc9abe5d72f9))
+* **withdraw:** use provider reward queries ([bd7fa4f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/bd7fa4f9c4e083d74d7c426be97706c3a6432883))
+* add swap-wizard all-ada mode (#130) ([e30fe5f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/e30fe5f3a93e4624a99a7c32ca4fa2722bbeb434))
+* **128:** add age-backed vault witness flow ([e3f0d3b](https://github.com/lambdasistemi/amaru-treasury-tx/commit/e3f0d3b1372a9f6428d53b654b4b85e889be8ad2))
+
+### Bug Fixes
+
+* **rebase:** adapt withdraw resolver stub ([e358604](https://github.com/lambdasistemi/amaru-treasury-tx/commit/e358604e76816c3dda7cde5f98e7e8818b2ef0cb))
+* **report:** avoid public explorer links for devnet ([9b74732](https://github.com/lambdasistemi/amaru-treasury-tx/commit/9b74732a1dba9eeec602cdcee48ae043ab85f94e))
 
 ## [0.2.8.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.7.1...v0.2.8.0) (2026-05-14)
 

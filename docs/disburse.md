@@ -59,9 +59,9 @@ the required lovelace. The treasury leftover output receives leftover
 lovelace, leftover USDM, and any other non-USDM assets preserved from
 the selected treasury inputs.
 
-## Contingency top-ups
+## Contingency disburses
 
-Use `contingency-top-up-wizard` when ADA must move from the `contingency`
+Use `contingency-disburse-wizard` when ADA must move from the `contingency`
 treasury to another scope treasury. This is intentionally narrower
 than `disburse-wizard`:
 
@@ -86,12 +86,12 @@ For example, to top up Network Compliance with 200,000 ADA:
 ```bash
 amaru-treasury-tx \
     --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
-    contingency-top-up-wizard \
+    contingency-disburse-wizard \
         --wallet-addr addr1q... \
         --metadata metadata-mainnet.json \
         --destination-scope network_compliance \
         --ada 200000 \
-        --description "Contingency top-up for Network Compliance" \
+        --description "Contingency disburse for Network Compliance" \
         --justification "Treasury reallocation approved by scope owners" \
   | amaru-treasury-tx \
         --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
@@ -101,7 +101,7 @@ amaru-treasury-tx \
 `--ada` accepts an ADA decimal and converts it to lovelace in the
 emitted intent. The command still emits the unified `disburse` intent
 shape consumed by `tx-build`, but the public CLI surface enforces the
-contingency top-up policy above.
+contingency disburse policy above.
 
 ## Existing intent
 

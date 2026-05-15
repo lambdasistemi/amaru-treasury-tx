@@ -14,11 +14,11 @@ and intent writing.
 -}
 module Amaru.Treasury.Cli.DisburseWizard
     ( DisburseWizardOpts (..)
-    , ContingencyTopUpOpts (..)
+    , ContingencyDisburseOpts (..)
     , disburseWizardOptsP
-    , contingencyTopUpOptsP
+    , contingencyDisburseOptsP
     , runDisburseWizard
-    , runContingencyTopUp
+    , runContingencyDisburse
     ) where
 
 import Control.Tracer (Tracer (..), traceWith)
@@ -110,22 +110,22 @@ data DisburseWizardOpts = DisburseWizardOpts
     }
     deriving stock (Eq, Show)
 
-{- | Flags for the @contingency-top-up-wizard@ subcommand.
+{- | Flags for the @contingency-disburse-wizard@ subcommand.
 The command is intentionally narrower than @disburse-wizard@:
 source scope is always @contingency@, the unit is always ADA,
 and the destination is another treasury scope resolved from
 verified metadata.
 -}
-data ContingencyTopUpOpts = ContingencyTopUpOpts
-    { ctuOptsWalletAddr :: !Text
-    , ctuOptsMetadataPath :: !FilePath
-    , ctuOptsOut :: !(Maybe FilePath)
-    , ctuOptsLog :: !(Maybe FilePath)
-    , ctuOptsDestinationScope :: !ScopeId
-    , ctuOptsAdaLovelace :: !Integer
-    , ctuOptsValidityHours :: !(Maybe Word16)
-    , ctuOptsDescription :: !Text
-    , ctuOptsJustification :: !Text
+data ContingencyDisburseOpts = ContingencyDisburseOpts
+    { cdOptsWalletAddr :: !Text
+    , cdOptsMetadataPath :: !FilePath
+    , cdOptsOut :: !(Maybe FilePath)
+    , cdOptsLog :: !(Maybe FilePath)
+    , cdOptsDestinationScope :: !ScopeId
+    , cdOptsAdaLovelace :: !Integer
+    , cdOptsValidityHours :: !(Maybe Word16)
+    , cdOptsDescription :: !Text
+    , cdOptsJustification :: !Text
     }
     deriving stock (Eq, Show)
 
@@ -239,9 +239,9 @@ disburseWizardOptsP =
                 )
             )
 
-contingencyTopUpOptsP :: Parser ContingencyTopUpOpts
-contingencyTopUpOptsP =
-    ContingencyTopUpOpts
+contingencyDisburseOptsP :: Parser ContingencyDisburseOpts
+contingencyDisburseOptsP =
+    ContingencyDisburseOpts
         <$> strOption
             ( long "wallet-addr"
                 <> metavar "BECH32"
@@ -409,46 +409,46 @@ runDisburseWizard g DisburseWizardOpts{..} =
                         }
             in  Right (answers, ri)
 
-runContingencyTopUp
+runContingencyDisburse
     :: GlobalOpts
-    -> ContingencyTopUpOpts
+    -> ContingencyDisburseOpts
     -> IO ()
-runContingencyTopUp g ContingencyTopUpOpts{..} =
+runContingencyDisburse g ContingencyDisburseOpts{..} =
     runDisburseCommand
-        "contingency-top-up-wizard"
+        "contingency-disburse-wizard"
         g
-        ctuOptsLog
-        ctuOptsMetadataPath
-        ctuOptsOut
-        (Set.fromList [Contingency, ctuOptsDestinationScope])
+        cdOptsLog
+        cdOptsMetadataPath
+        cdOptsOut
+        (Set.fromList [Contingency, cdOptsDestinationScope])
         Contingency
         $ \networkName rv verified -> do
             destinationAddr <-
                 destinationScopeAddress
-                    ctuOptsDestinationScope
+                    cdOptsDestinationScope
                     verified
             let answers =
                     Disburse.DisburseAnswers
                         { Disburse.daScope = Contingency
                         , Disburse.daUnit = ADA
-                        , Disburse.daAmount = ctuOptsAdaLovelace
+                        , Disburse.daAmount = cdOptsAdaLovelace
                         , Disburse.daBeneficiaryAddrBech32 =
                             destinationAddr
                         , Disburse.daValidityHours =
-                            ctuOptsValidityHours
+                            cdOptsValidityHours
                         , Disburse.daRationale =
                             Disburse.RationaleAnswers
                                 { Disburse.raDescription =
-                                    ctuOptsDescription
+                                    cdOptsDescription
                                 , Disburse.raJustification =
-                                    ctuOptsJustification
+                                    cdOptsJustification
                                 , Disburse.raDestinationLabel =
                                     destinationScopeLabel
-                                        ctuOptsDestinationScope
+                                        cdOptsDestinationScope
                                 , Disburse.raEvent =
                                     Just "disburse"
                                 , Disburse.raLabel =
-                                    Just "Contingency top-up"
+                                    Just "Contingency disburse"
                                 }
                         , Disburse.daExtraSigners = []
                         }
@@ -456,15 +456,15 @@ runContingencyTopUp g ContingencyTopUpOpts{..} =
                     Disburse.ResolverInput
                         { Disburse.riNetwork = networkName
                         , Disburse.riWalletAddrBech32 =
-                            ctuOptsWalletAddr
+                            cdOptsWalletAddr
                         , Disburse.riBeneficiaryAddrBech32 =
                             destinationAddr
                         , Disburse.riScope = Contingency
                         , Disburse.riUnit = ADA
-                        , Disburse.riAmount = ctuOptsAdaLovelace
+                        , Disburse.riAmount = cdOptsAdaLovelace
                         , Disburse.riRegistry = rv
                         , Disburse.riValidityHours =
-                            ctuOptsValidityHours
+                            cdOptsValidityHours
                         }
             Right (answers, ri)
 

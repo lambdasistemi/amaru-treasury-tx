@@ -91,7 +91,7 @@ breaking the body-shape goldens:
    `disburse`, `complete`, `withdraw`, `pause`, `resume`, `modify`,
    `cancel`, `Sweep`. Custom values silently break the SundaeSwap
    indexers / dashboards that aggregate treasury actions by `event`.
-   An Amaru contingency top-up from the contingency budget is
+   An Amaru contingency disburse from the contingency budget is
    mechanically a `disburse` event and MUST emit
    `event: "disburse"`.
 

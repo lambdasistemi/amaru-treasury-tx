@@ -27,7 +27,7 @@ import Amaru.Treasury.Cli
     , opts
     )
 import Amaru.Treasury.Cli.DisburseWizard
-    ( ContingencyTopUpOpts (..)
+    ( ContingencyDisburseOpts (..)
     )
 import Amaru.Treasury.Cli.Envelope
     ( DeEnvelopeFilterResult (..)
@@ -82,20 +82,20 @@ spec =
                 )
                 `shouldBe` Left "parse failure"
 
-        it "parses contingency-top-up-wizard as a contingency ADA top-up" $
-            parseCmd contingencyTopUpArgs
-                `shouldBe` Right "contingency-top-up-wizard"
+        it "parses contingency-disburse-wizard as a contingency ADA disburse" $
+            parseCmd contingencyDisburseArgs
+                `shouldBe` Right "contingency-disburse-wizard"
 
-        it "parses contingency-top-up-wizard ADA into lovelace" $
-            parseContingencyTopUp contingencyTopUpArgs
+        it "parses contingency-disburse-wizard ADA into lovelace" $
+            parseContingencyDisburse contingencyDisburseArgs
                 `shouldBe` Right (NetworkCompliance, 200000500000)
 
-        it "rejects contingency as an contingency-top-up-wizard destination" $
+        it "rejects contingency as an contingency-disburse-wizard destination" $
             parseCmd
                 ( replaceArg
                     "network_compliance"
                     "contingency"
-                    contingencyTopUpArgs
+                    contingencyDisburseArgs
                 )
                 `shouldBe` Left "parse failure"
 
@@ -135,13 +135,14 @@ parseCmd args =
         Failure{} -> Left "parse failure"
         CompletionInvoked{} -> Left "completion invoked"
 
-parseContingencyTopUp :: [String] -> Either String (ScopeId, Integer)
-parseContingencyTopUp args =
+parseContingencyDisburse
+    :: [String] -> Either String (ScopeId, Integer)
+parseContingencyDisburse args =
     case execParserPure defaultPrefs opts args of
-        Success (_, CmdContingencyTopUp etu) ->
+        Success (_, CmdContingencyDisburse o) ->
             Right
-                ( etuOptsDestinationScope etu
-                , etuOptsAdaLovelace etu
+                ( cdOptsDestinationScope o
+                , cdOptsAdaLovelace o
                 )
         Success{} -> Left "wrong command"
         Failure{} -> Left "parse failure"
@@ -160,16 +161,16 @@ cmdTag = \case
     CmdSwapQuote{} -> "swap-quote"
     CmdSwapCancel{} -> "swap-cancel"
     CmdDisburseWizard{} -> "disburse-wizard"
-    CmdContingencyTopUp{} -> "contingency-top-up-wizard"
+    CmdContingencyDisburse{} -> "contingency-disburse-wizard"
     CmdWithdrawWizard{} -> "withdraw-wizard"
     CmdReportRender{} -> "report-render"
     CmdTreasuryInspect{} -> "treasury-inspect"
     CmdVaultCreate{} -> "vault-create"
     CmdWitness{} -> "witness"
 
-contingencyTopUpArgs :: [String]
-contingencyTopUpArgs =
-    [ "contingency-top-up-wizard"
+contingencyDisburseArgs :: [String]
+contingencyDisburseArgs =
+    [ "contingency-disburse-wizard"
     , "--wallet-addr"
     , "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz"
     , "--metadata"

@@ -46,6 +46,7 @@ export DEVNET_SMOKE_REWARD_TIMEOUT_SECONDS="$reward_timeout_seconds"
 if [[ "$phase" == "all" ]]; then
   "$0" --phase node --run-dir "$run_dir/node"
   "$0" --phase governance --run-dir "$run_dir/governance"
+  "$0" --phase withdraw --run-dir "$run_dir/withdraw"
 else
   cabal test devnet-tests -O0 \
     --test-show-details=direct \

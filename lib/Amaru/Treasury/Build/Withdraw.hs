@@ -14,7 +14,9 @@ module Amaru.Treasury.Build.Withdraw
 import Control.Monad (unless)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Except (ExceptT, throwE)
+import Data.Foldable (toList)
 import Data.Map.Strict qualified as Map
+import Data.Sequence.Strict qualified as StrictSeq
 import Data.Text qualified as T
 
 import Cardano.Ledger.Address (Addr)
@@ -22,8 +24,10 @@ import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.Api.Tx.Body
     ( collateralReturnTxBodyL
     , feeTxBodyL
+    , outputsTxBodyL
     , totalCollateralTxBodyL
     )
+import Cardano.Ledger.Api.Tx.Out (coinTxOutL)
 import Cardano.Ledger.BaseTypes (StrictMaybe (..))
 import Cardano.Ledger.Binary (serialize)
 import Cardano.Ledger.Coin (Coin (..))
@@ -37,7 +41,7 @@ import Cardano.Node.Client.TxBuild
     , setMetadata
     )
 import Cardano.Node.Client.TxBuild qualified as TxBuild
-import Lens.Micro ((^.))
+import Lens.Micro ((&), (.~), (^.))
 
 import Amaru.Treasury.AuxData (label1694)
 import Amaru.Treasury.Build.Common
@@ -146,12 +150,23 @@ runWithdrawAction ctx intent rationale walletAddr = do
                     BuildPhaseBuild
                     (diagnosticFromTxBuildError (e :: TxBuild.BuildError ()))
         Right tx0 -> do
+            txWithWithdrawal <-
+                case addWithdrawalToChange
+                    changeOutputIndex
+                    (wiRewardsAmount intent)
+                    tx0 of
+                    Left e ->
+                        throwE $
+                            actionBuildError
+                                BuildPhaseFeeAlignment
+                                (DiagnosticFeeAlignmentFailed (T.pack e))
+                    Right ok -> pure ok
             tx <-
                 case alignCardanoCliBuildFee
                     pp
                     refUtxos
                     changeOutputIndex
-                    tx0 of
+                    txWithWithdrawal of
                     Left e ->
                         throwE $
                             actionBuildError
@@ -202,3 +217,24 @@ runWithdrawAction ctx intent rationale walletAddr = do
                         strictMaybe
                             (body ^. collateralReturnTxBodyL)
                     }
+
+addWithdrawalToChange
+    :: Int -> Coin -> ConwayTx -> Either String ConwayTx
+addWithdrawalToChange changeIx (Coin rewards) tx =
+    case splitAt changeIx (toList (tx ^. bodyTxL . outputsTxBodyL)) of
+        (_, []) ->
+            Left "change output index out of range"
+        (before, changeOut : after) ->
+            let Coin current = changeOut ^. coinTxOutL
+                outputs' =
+                    StrictSeq.fromList $
+                        before
+                            ++ [ changeOut
+                                    & coinTxOutL
+                                        .~ Coin (current + rewards)
+                               ]
+                            ++ after
+            in  Right $
+                    tx
+                        & bodyTxL . outputsTxBodyL
+                            .~ outputs'

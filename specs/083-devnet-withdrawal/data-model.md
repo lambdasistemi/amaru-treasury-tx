@@ -40,6 +40,23 @@
 - `feeLovelace`: builder fee.
 - `validityUpperBoundSlot`: copied from the intent/report.
 
+## WithdrawalMaterializationEvidence
+
+- `signedTxPath`: signed CBOR hex output path.
+- `submitLogPath`: local submitter acceptance log.
+- `materializationPath`: JSON proof path.
+- `submittedTxId`: node-accepted transaction id.
+- `treasuryMaterializedTxIn`: submitted transaction output `#0`.
+- `treasuryAddress`: script address that received the withdrawn ADA.
+- `materializedAdaLovelace`: ADA observed at the materialized output.
+- `rewardBeforeSubmitLovelace`: reward balance immediately before
+  submission.
+- `rewardAfterSubmitLovelace`: reward balance after the materialized
+  output is observed; must be `0`.
+- `treasuryUtxoLovelaceBefore` / `treasuryUtxoLovelaceAfter`: treasury
+  address ADA totals used to prove the delta equals the withdrawn
+  rewards.
+
 ## WithdrawalDiagnostic
 
 - `phase`: setup, reward-observation, wizard, build, or docs.

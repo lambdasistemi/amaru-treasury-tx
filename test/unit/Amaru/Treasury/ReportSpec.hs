@@ -226,10 +226,20 @@ spec = describe "Amaru.Treasury.Report" $ do
             waCollateralReturn wallet `shouldSatisfy` isJust
             waFeeLovelace wallet
                 `shouldBe` vfFeeLovelace (trValidation report)
+            waWithdrawalLovelace wallet `shouldBe` 0
             tiTotalCollateralLovelace (trIdentity report)
                 `shouldSatisfy` (> 0)
             waNetSpendLovelace wallet
                 `shouldBe` vfFeeLovelace (trValidation report)
+
+    it
+        "accounts for withdraw rewards as transaction supply, not wallet spend"
+        $ do
+            report <- buildWithdrawFixtureReport
+            let wallet = trWalletAccounting report
+            waWithdrawalLovelace wallet `shouldBe` 12_500_000_000
+            waNetSpendLovelace wallet
+                `shouldBe` waFeeLovelace wallet
 
     it
         "accounts for swap treasury inputs, orders, overhead, leftover, and net debit"
@@ -465,6 +475,22 @@ buildSwapFixtureReportWith reportContext = do
             reportContext
             tbr
 
+buildWithdrawFixtureReport :: IO TransactionReport
+buildWithdrawFixtureReport = do
+    si <-
+        decodeTreasuryIntentFile
+            "test/fixtures/withdraw/synthetic/intent.json"
+    some <- case si of
+        Left e -> error ("intent JSON: " <> e)
+        Right v -> pure v
+    fixture <- readSwapFixture "test/fixtures/withdraw/synthetic"
+    let ctx = toFrozenContext fixture
+    tbr <- runFromIntent ctx some
+    pure $
+        buildTransactionReport
+            emptyReportContext
+            tbr
+
 emptyReportContext :: ReportContext
 emptyReportContext =
     ReportContext
@@ -602,6 +628,7 @@ sampleWalletAccounting =
         , waChangeOutput = Nothing
         , waCollateralReturn = Nothing
         , waFeeLovelace = 1041155
+        , waWithdrawalLovelace = 0
         , waNetSpendLovelace = 1041155
         }
 
@@ -685,6 +712,7 @@ expectedWalletAccounting =
         , "changeOutput" .= (Nothing :: Maybe Value)
         , "collateralReturn" .= (Nothing :: Maybe Value)
         , "feeLovelace" .= (1041155 :: Int)
+        , "withdrawalLovelace" .= (0 :: Int)
         , "netSpendLovelace" .= (1041155 :: Int)
         ]
 

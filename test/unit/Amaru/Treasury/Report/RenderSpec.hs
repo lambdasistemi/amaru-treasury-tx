@@ -187,6 +187,7 @@ fixtureReport =
                 , waChangeOutput = Nothing
                 , waCollateralReturn = Nothing
                 , waFeeLovelace = 1_000_000
+                , waWithdrawalLovelace = 0
                 , waNetSpendLovelace = 1_000_000
                 }
         , trTreasuryAccounting =

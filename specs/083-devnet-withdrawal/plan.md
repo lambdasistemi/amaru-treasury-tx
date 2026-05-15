@@ -10,15 +10,18 @@ rebase-merged into `main` at `d6773e4cd8a2421617568c8dac0972b0f312a509`;
 the #82 governance proof branch merged into Amaru `main` through PR #93
 at `308f0c9`; this branch is now based directly on `main`; Amaru now
 pins that upstream main commit in Cabal and Nix; the withdrawal phase
-contract, live reward-to-intent slice, intent-to-unsigned-build slice,
-and focused diagnostics slice are implemented.
+contract, live reward-to-intent slice, intent-to-build slice, focused
+diagnostics slice, and sign/submit/materialization acceptance slice are
+implemented.
 
 **Current**: External review handoff is ready after retargeting PR #100
 from the merged #93 branch to `main`. The withdraw smoke creates local DevNet
 registry anchors, funds the local treasury script reward account
 through governance, resolves live rewards with `withdraw-wizard`,
-writes `withdraw/intent.json`, then runs `tx-build` and writes
-unsigned CBOR plus JSON/Markdown review reports. Failure paths now
+writes `withdraw/intent.json`, runs `tx-build` and writes unsigned
+CBOR plus JSON/Markdown review reports, signs and submits the
+withdrawal transaction inside the DevNet harness, and records the
+materialized treasury UTxO plus reward-drain proof. Failure paths now
 write typed diagnostics for reward timeout, zero rewards, network
 mismatch, and tx-build failure.
 
@@ -31,11 +34,14 @@ Add a `withdraw` phase to the local DevNet smoke. The phase consumes
 the #82 funded reward-account setup, runs the existing
 `withdraw-wizard` resolver against live local-node state, verifies that
 the emitted schema-v1 withdraw intent contains positive rewards, then
-runs `tx-build` to produce unsigned Conway CBOR and reports.
+runs `tx-build` to produce unsigned Conway CBOR and reports. The
+DevNet harness then signs and submits the built withdrawal and proves
+the reward ADA materialized at the treasury script address.
 
-The slice proves withdrawal build evidence only. It does not sign or
-submit the final withdrawal transaction and does not claim disburse,
-SundaeSwap, or reorganize evidence.
+The slice proves withdrawal evidence only. It does not claim disburse,
+SundaeSwap, or reorganize evidence. Signing/submission stays
+harness-internal; release-facing Amaru commands still emit unsigned
+transactions for the operator's signer flow.
 
 ## Technical Context
 
@@ -74,9 +80,10 @@ build unsigned CBOR.
 **III. Pluggable data source, local-node default**: PASS. The proof uses
 the local N2C provider and the upstream Provider reward queries.
 
-**IV. Build, never sign or submit**: PASS WITH BOUNDARY NOTE. The smoke
-may submit governance setup transactions to create reward state, but
-the withdrawal transaction itself is only built.
+**IV. Build, never sign or submit**: PASS WITH BOUNDARY NOTE. The
+release-facing CLI remains build-only. The opt-in DevNet smoke harness
+may sign and submit the final withdrawal transaction as acceptance
+evidence, using local DevNet key material only.
 
 **V. Test-first with golden CBOR fixtures**: PASS. Offline withdraw
 fixtures already exist; this slice adds live-boundary RED/GREEN smoke
@@ -110,11 +117,18 @@ hlint, Cabal checks, and the existing CI gate.
    validity evidence. RED: artifact contract fails after intent
    creation. GREEN: local `just devnet-smoke withdraw` records build
    evidence. Status: complete on this branch.
-6. **Diagnostics slice**: cover zero reward, timeout/stale evidence,
+6. **Sign-submit-materialize slice**: sign the built withdrawal inside
+   the DevNet harness, submit through `cardano-node-clients`, wait for
+   the treasury output, and prove the reward account drained to zero.
+   RED: focused devnet diagnostic test requires materialization fields
+   before they exist. GREEN: local `just devnet-smoke withdraw` records
+   signed tx, submit log, submitted tx id, materialized UTxO, and ADA
+   delta evidence. Status: complete on this branch.
+7. **Diagnostics slice**: cover zero reward, timeout/stale evidence,
    network mismatch, and build failure preservation as typed
    diagnostics that do not write success artifacts. Status: complete
    on this branch.
-7. **Docs/release slice**: update README, local DevNet docs, release
+8. **Docs/release slice**: update README, local DevNet docs, release
    notes, CHANGELOG, and #83 metadata with the verified run directory
    and boundaries. Status: current next slice.
 

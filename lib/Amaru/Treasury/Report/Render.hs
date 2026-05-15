@@ -276,8 +276,9 @@ cborFingerprint (TxCborHex hex) =
 
 conservationLine :: TransactionReport -> Text
 conservationLine report =
-    "inputs "
+    supplyPrefix
         <> formatValueSummary inputTotal
+        <> withdrawalText
         <> " = outputs "
         <> formatValueSummary outputTotal
         <> " + fee "
@@ -287,10 +288,22 @@ conservationLine report =
   where
     wallet = trWalletAccounting report
     treasury = trTreasuryAccounting report
+    withdrawal =
+        ValueSummary
+            { vsLovelace = waWithdrawalLovelace wallet
+            , vsAssets = Map.empty
+            }
     inputTotal =
         sumValueSummaries $
             fmap usValue (waInputs wallet)
                 <> fmap usValue (taInputs treasury)
+    supplyTotal = inputTotal `addValueSummary` withdrawal
+    supplyPrefix =
+        "inputs "
+    withdrawalText
+        | waWithdrawalLovelace wallet == 0 = ""
+        | otherwise =
+            " + withdrawals " <> formatValueSummary withdrawal
     outputTotal = sumValueSummaries (poValue <$> trOutputs report)
     fee =
         ValueSummary
@@ -298,7 +311,7 @@ conservationLine report =
             , vsAssets = Map.empty
             }
     residual =
-        inputTotal `subtractValueSummary` (outputTotal `addValueSummary` fee)
+        supplyTotal `subtractValueSummary` (outputTotal `addValueSummary` fee)
 
 consumedInputLines
     :: SomeTreasuryIntent -> TransactionReport -> AddressBook -> [Text]

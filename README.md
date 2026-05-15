@@ -103,16 +103,20 @@ nix develop --quiet -c just devnet-smoke withdraw
 
 The withdrawal phase creates fresh local governance prerequisite
 evidence, resolves the funded treasury script reward account through
-`withdraw-wizard`, then builds unsigned withdrawal CBOR and
-JSON/Markdown reports through the release-facing `tx-build` path. The
+`withdraw-wizard`, builds unsigned withdrawal CBOR and JSON/Markdown
+reports through the release-facing `tx-build` path, then signs and
+submits the built transaction inside the opt-in DevNet harness to prove
+the withdrawn ADA materializes at the treasury script address. The
 latest local evidence for this branch is
-`/tmp/tmp.KP53a1HDRL/withdraw-render`: reward account
+`runs/devnet/20260515T091231Z`: reward account
 `ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af`, reward
 `2000000` lovelace, tx id
-`fdedbf33e61132a9fdbb883eb6bff4b6d4517ded08e5ca64ee373c1e1db064d3`,
-fee `469749` lovelace, and validity upper bound slot `222`. This is
-unsigned build evidence only; it does not sign or submit the final
-withdrawal transaction.
+`ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d`,
+fee `457683` lovelace, validity upper bound slot `222`, submitted tx id
+matching the build id, materialized output
+`ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d#0`,
+reward balance `2000000 -> 0` after submit, and treasury ADA
+`200000000 -> 202000000`.
 
 The DevNet release experiment is tracked in slices: governance action
 [#82](https://github.com/lambdasistemi/amaru-treasury-tx/issues/82),

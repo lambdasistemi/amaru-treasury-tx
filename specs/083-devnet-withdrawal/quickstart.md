@@ -17,7 +17,9 @@ nix develop --quiet -c just devnet-smoke withdraw
 
 The command starts a short-epoch local DevNet, prepares governance
 prerequisite reward state, runs `withdraw-wizard` against the live node,
-then runs `tx-build` on the live withdraw intent.
+then runs `tx-build` on the live withdraw intent. The opt-in DevNet
+harness signs and submits that built transaction and waits for the
+treasury output that materializes the withdrawn ADA.
 
 On success, inspect:
 
@@ -25,10 +27,16 @@ On success, inspect:
 runs/devnet/<timestamp>/withdraw/summary.json
 runs/devnet/<timestamp>/withdraw/intent.json
 runs/devnet/<timestamp>/withdraw/tx-body.cbor.hex
+runs/devnet/<timestamp>/withdraw/signed-tx.cbor.hex
+runs/devnet/<timestamp>/withdraw/submit.log
+runs/devnet/<timestamp>/withdraw/materialized.json
 runs/devnet/<timestamp>/withdraw/report.json
 runs/devnet/<timestamp>/withdraw/report.md
 ```
 
 The intent must contain `action = "withdraw"` and
-`rewardsLovelace > 0`. The transaction body is unsigned and must not be
-submitted by this tool.
+`rewardsLovelace > 0`. The final summary and materialization artifact
+must show `submittedTxAccepted = true`, `rewardAfterSubmitLovelace = 0`,
+and `materializedAdaLovelace` equal to the withdrawn rewards. This
+signing/submission is local DevNet harness behavior; the release-facing
+CLI still emits unsigned transactions for the operator signer flow.

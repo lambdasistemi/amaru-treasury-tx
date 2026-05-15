@@ -445,6 +445,10 @@
                 "netSpendLovelace": {
                     "minimum": 0,
                     "type": "integer"
+                },
+                "withdrawalLovelace": {
+                    "minimum": 0,
+                    "type": "integer"
                 }
             },
             "required": [
@@ -453,6 +457,7 @@
                 "changeOutput",
                 "collateralReturn",
                 "feeLovelace",
+                "withdrawalLovelace",
                 "netSpendLovelace"
             ],
             "type": "object"

@@ -13,8 +13,9 @@
   effects. This slice should test that live boundary instead of
   rewriting the resolver.
 - The offline withdraw fixture already proves schema and pure builder
-  replay. The missing release evidence is live DevNet resolver plus
-  `tx-build` artifact production.
+  replay. The missing release evidence is live DevNet resolver,
+  `tx-build` artifact production, node acceptance of the signed
+  withdrawal, and observed ADA materialization.
 - A previous governance run directory is evidence, not live state. The
   withdraw phase needs either the same live node state or an in-process
   #82 fixture setup that records fresh governance prerequisite evidence
@@ -29,7 +30,9 @@
 - Write withdrawal artifacts under `withdraw/` and governance
   prerequisite artifacts under a distinct prerequisite path so release
   docs cannot confuse the claims.
-- Keep final withdrawal signing/submission out of scope.
+- Keep final withdrawal signing/submission out of the release-facing
+  CLI, but perform it inside the opt-in DevNet smoke harness as the
+  #83 acceptance proof.
 - Refresh the upstream pin to the merged `cardano-node-clients/main`
   commit before implementation.
 
@@ -41,6 +44,7 @@
 - **Create a synthetic reward fixture for DevNet**: Rejected for #83
   because offline synthetic withdraw evidence already exists; this
   slice is specifically live node evidence.
-- **Submit the final withdrawal transaction**: Rejected by the project
-  constitution. The release-facing CLI builds unsigned transactions
-  only.
+- **Add release-facing signing/submission commands to the withdrawal
+  CLI path**: Rejected. The existing `attach-witness`/`submit` pipeline
+  remains the operator boundary, and #83 only needs harness-internal
+  local DevNet signing/submission to prove acceptance.

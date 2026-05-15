@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Prove the interactive hidden-input paths under a pseudo-terminal:
+# --signing-key-paste and /dev/tty passphrase prompts. This covers the
+# boundaries used by human vault import ceremonies.
+
+if [[ -n "${AMARU_TREASURY_TX_EXE:-}" ]]; then
+  exe="$AMARU_TREASURY_TX_EXE"
+else
+  cabal build exe:amaru-treasury-tx -O0 >/dev/null
+  exe="$(
+    cabal list-bin exe:amaru-treasury-tx -O0
+  )"
+fi
+
+fixture="test/fixtures/118-vault-witness"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+passphrase="correct horse battery staple"
+
+fail() {
+  printf 'vault-witness-tty: %s\n' "$*" >&2
+  exit 1
+}
+
+run_pty() {
+  local command_path="$1"
+  local script_bin
+  script_bin="$(command -v script || true)"
+  if [[ -z "$script_bin" && -x /usr/bin/script ]]; then
+    script_bin=/usr/bin/script
+  fi
+  [[ -n "$script_bin" ]] || fail 'script(1) is required for pty smoke'
+  if "$script_bin" --version >/dev/null 2>&1; then
+    "$script_bin" -qfec "$command_path" /dev/null
+  else
+    "$script_bin" -q /dev/null "$command_path"
+  fi
+}
+
+run_pty_expect() {
+  local command_path="$1"
+  local expect_bin
+  expect_bin="$(command -v expect || true)"
+  [[ -n "$expect_bin" ]] || return 127
+  "$expect_bin" -f - "$command_path" "$passphrase" "$fixture/payment.skey" <<'EOF'
+set timeout 20
+set command_path [lindex $argv 0]
+set passphrase [lindex $argv 1]
+set signing_key_path [lindex $argv 2]
+
+spawn -noecho $command_path
+expect {
+  -exact "signing-key JSON:" {
+    set signing_key_file [open $signing_key_path r]
+    set signing_key [split [read $signing_key_file] "\n"]
+    close $signing_key_file
+    foreach line $signing_key {
+      if {$line ne ""} {
+        send -- "$line\r"
+      }
+    }
+  }
+  timeout {
+    exit 18
+  }
+  eof {
+    exit 19
+  }
+}
+expect {
+  -exact "New vault passphrase:" {
+    send -- "$passphrase\r"
+  }
+  timeout {
+    exit 20
+  }
+  eof {
+    exit 21
+  }
+}
+expect {
+  -exact "Confirm vault passphrase:" {
+    send -- "$passphrase\r"
+  }
+  timeout {
+    exit 22
+  }
+  eof {
+    exit 23
+  }
+}
+expect eof
+set wait_result [wait]
+exit [lindex $wait_result 3]
+EOF
+}
+
+dump_pty_logs() {
+  sed -n '1,80p' "$tmp/transcript" >&2 || true
+  sed -n '1,80p' "$tmp/err" >&2 || true
+}
+
+wait_for_prompt() {
+  local needle="$1"
+  local deadline=$((SECONDS + 20))
+  while [[ "$SECONDS" -lt "$deadline" ]]; do
+    if grep -F "$needle" "$tmp/transcript" >/dev/null 2>&1; then
+      return 0
+    fi
+    if ! kill -0 "$pty_pid" 2>/dev/null; then
+      return 1
+    fi
+    sleep 0.1
+  done
+  return 1
+}
+
+run_pty_script_driver() {
+  local command_path="$1"
+  local input_fifo="$tmp/pty-input"
+  mkfifo "$input_fifo"
+  run_pty "$command_path" \
+    <"$input_fifo" >"$tmp/transcript" 2>"$tmp/err" &
+  pty_pid=$!
+  exec 8>"$input_fifo"
+
+  if ! wait_for_prompt "signing-key JSON:"; then
+    exec 8>&-
+    kill "$pty_pid" 2>/dev/null || true
+    wait "$pty_pid" 2>/dev/null || true
+    dump_pty_logs
+    fail 'interactive vault create did not prompt for signing-key JSON'
+  fi
+  while IFS= read -r key_line; do
+    printf '%s\n' "$key_line" >&8
+  done <"$fixture/payment.skey"
+
+  if ! wait_for_prompt "New vault passphrase:"; then
+    exec 8>&-
+    kill "$pty_pid" 2>/dev/null || true
+    wait "$pty_pid" 2>/dev/null || true
+    dump_pty_logs
+    fail 'interactive vault create did not prompt for the new passphrase'
+  fi
+  printf '%s\n' "$passphrase" >&8
+
+  if ! wait_for_prompt "Confirm vault passphrase:"; then
+    exec 8>&-
+    kill "$pty_pid" 2>/dev/null || true
+    wait "$pty_pid" 2>/dev/null || true
+    dump_pty_logs
+    fail 'interactive vault create did not prompt for passphrase confirmation'
+  fi
+  printf '%s\n' "$passphrase" >&8
+
+  exec 8>&-
+  if ! wait "$pty_pid"; then
+    dump_pty_logs
+    fail 'interactive vault create failed under a pseudo-terminal'
+  fi
+}
+
+vault="$tmp/treasury.vault.age"
+create_script="$tmp/create-vault"
+cat >"$create_script" <<EOF
+#!$BASH
+set -euo pipefail
+"$exe" --network preprod vault create \\
+  --signing-key-paste \\
+  --label core_development \\
+  --out "$vault" \\
+  --vault-work-factor 1
+EOF
+chmod +x "$create_script"
+
+if command -v expect >/dev/null 2>&1; then
+  if ! run_pty_expect "$create_script" >"$tmp/transcript" 2>"$tmp/err"; then
+    dump_pty_logs
+    fail 'interactive vault create failed under an expect pseudo-terminal'
+  fi
+else
+  run_pty_script_driver "$create_script"
+fi
+
+if grep -F "$passphrase" "$tmp/transcript" "$tmp/err" >/dev/null; then
+  dump_pty_logs
+  fail 'interactive passphrase was echoed into the transcript'
+fi
+if grep -F 'PaymentSigningKeyShelley_ed25519' \
+  "$tmp/transcript" "$tmp/err" >/dev/null; then
+  dump_pty_logs
+  fail 'interactive signing key was echoed into the transcript'
+fi
+
+[[ -s "$vault" ]] || fail 'interactive vault create did not write a vault'
+
+exec 9<<<"$passphrase"
+"$exe" --network preprod witness \
+  --tx "$fixture/unsigned.cbor.hex" \
+  --vault "$vault" \
+  --vault-passphrase-fd 9 \
+  --identity core_development \
+  --out "$tmp/core_development.witness.hex"
+exec 9<&-
+
+diff -u "$fixture/witness.expected.hex" \
+  "$tmp/core_development.witness.hex"
+
+printf 'vault-witness-tty: OK\n'

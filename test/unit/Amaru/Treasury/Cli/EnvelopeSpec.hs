@@ -158,11 +158,14 @@ cmdTag = \case
     CmdTxBuild{} -> "tx-build"
     CmdSwapWizard{} -> "swap-wizard"
     CmdSwapQuote{} -> "swap-quote"
+    CmdSwapCancel{} -> "swap-cancel"
     CmdDisburseWizard{} -> "disburse-wizard"
     CmdEmergencyTopUp{} -> "emergency-top-up-wizard"
     CmdWithdrawWizard{} -> "withdraw-wizard"
     CmdReportRender{} -> "report-render"
     CmdTreasuryInspect{} -> "treasury-inspect"
+    CmdVaultCreate{} -> "vault-create"
+    CmdWitness{} -> "witness"
 
 emergencyTopUpArgs :: [String]
 emergencyTopUpArgs =

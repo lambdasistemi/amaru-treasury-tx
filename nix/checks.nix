@@ -87,7 +87,10 @@ let
         components.tests.golden-tests
         pkgs.coreutils
         pkgs.diffutils
+        pkgs.expect
         pkgs.gnugrep
+      ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
+        pkgs.util-linux
       ];
       text = ''
         # ---- swap-wizard signer UX (carried over from feature 002) ----
@@ -282,8 +285,31 @@ EOF
         grep -F -- 'swap-wizard' docs/swap.md >/dev/null
         grep -F -- 'tx-build --out /dev/null --report -' docs/swap.md >/dev/null
 
+        AMARU_TREASURY_TX_EXE=amaru-treasury-tx \
+          ${pkgs.bash}/bin/bash scripts/smoke/vault-witness
+        AMARU_TREASURY_TX_EXE=amaru-treasury-tx \
+          ${pkgs.bash}/bin/bash scripts/smoke/vault-witness-tty
+
         printf 'smoke: OK (swap-wizard --help %ss, withdraw-wizard --help %ss, tx-build --help %ss, report-render --help %ss)\n' \
           "$wizard_elapsed" "$withdraw_elapsed" "$build_elapsed" "$render_elapsed"
+      '';
+    };
+
+    vault-tty-smoke = {
+      runtimeInputs = [
+        components.exes.amaru-treasury-tx
+        pkgs.bash
+        pkgs.coreutils
+        pkgs.diffutils
+        pkgs.expect
+        pkgs.gnugrep
+        pkgs.gnused
+      ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
+        pkgs.util-linux
+      ];
+      text = ''
+        AMARU_TREASURY_TX_EXE=amaru-treasury-tx \
+          ${pkgs.bash}/bin/bash scripts/smoke/vault-witness-tty
       '';
     };
   };
@@ -332,6 +358,7 @@ in
   golden = mkCheck "golden" scripts.golden;
   lint = mkCheck "lint" scripts.lint;
   smoke = mkCheck "smoke" scripts.smoke;
+  vault-tty-smoke = mkCheck "vault-tty-smoke" scripts.vault-tty-smoke;
 
   # The same writeShellApplication apps the checks invoke,
   # re-exported for `nix/apps.nix` to expose under

@@ -33,6 +33,7 @@ extra-source-files:
   scripts/smoke/treasury-inspect
   scripts/smoke/tx-build-pipe
   test/fixtures/106-cardano-cli-oracle/*
+  test/fixtures/118-vault-witness/*
   test/fixtures/disburse/**/*.cbor
   test/fixtures/disburse/**/*.json
   test/fixtures/disburse/**/*.md
@@ -108,6 +109,7 @@ library
     Amaru.Treasury.Cli.Common
     Amaru.Treasury.Cli.DisburseWizard
     Amaru.Treasury.Cli.Envelope
+    Amaru.Treasury.Cli.Passphrase
     Amaru.Treasury.Cli.ReportRender
     Amaru.Treasury.Cli.Submit
     Amaru.Treasury.Cli.SwapCancel
@@ -117,7 +119,9 @@ library
     Amaru.Treasury.Cli.SwapWizard
     Amaru.Treasury.Cli.TreasuryInspect
     Amaru.Treasury.Cli.TxBuild
+    Amaru.Treasury.Cli.Vault
     Amaru.Treasury.Cli.WithdrawWizard
+    Amaru.Treasury.Cli.Witness
     Amaru.Treasury.Constants
     Amaru.Treasury.Inspect
     Amaru.Treasury.Inspect.Render
@@ -169,13 +173,17 @@ library
     Amaru.Treasury.Tx.Withdraw
     Amaru.Treasury.Tx.WithdrawWizard
     Amaru.Treasury.Tx.WithdrawWizard.Trace
+    Amaru.Treasury.Tx.Witness
     Amaru.Treasury.UtxoSelect
     Amaru.Treasury.Validity
+    Amaru.Treasury.Vault.Age
+    Amaru.Treasury.Vault.Witness
     Amaru.Treasury.Wizard.Common
 
   build-depends:
     , aeson
     , aeson-pretty
+    , age
     , async
     , base                         <5
     , base16-bytestring
@@ -195,11 +203,14 @@ library
     , cardano-strict-containers
     , containers
     , contra-tracer
+    , crypton
     , directory
     , file-embed
     , filepath
+    , haskeline
     , http-client
     , http-conduit
+    , memory
     , microlens
     , optparse-applicative
     , ouroboros-consensus
@@ -212,6 +223,7 @@ library
     , text
     , time
     , transformers
+    , unix
 
 executable amaru-treasury-tx
   import:           warnings
@@ -335,6 +347,8 @@ test-suite unit-tests
     Amaru.Treasury.BuildSpec
     Amaru.Treasury.Cli.EnvelopeSpec
     Amaru.Treasury.Cli.SwapCancelSpec
+    Amaru.Treasury.Cli.VaultSpec
+    Amaru.Treasury.Cli.WitnessSpec
     Amaru.Treasury.ConstantsSpec
     Amaru.Treasury.Inspect.SchemaSpec
     Amaru.Treasury.Inspect.SwapOrderDatumSpec
@@ -367,13 +381,17 @@ test-suite unit-tests
     Amaru.Treasury.Tx.SwapWizardSpec
     Amaru.Treasury.Tx.WithdrawSpec
     Amaru.Treasury.Tx.WithdrawWizardSpec
+    Amaru.Treasury.Tx.WitnessSpec
     Amaru.Treasury.UtxoSelectSpec
+    Amaru.Treasury.Vault.AgeSpec
+    Amaru.Treasury.Vault.WitnessSpec
     Paths_amaru_treasury_tx
     PlaceholderSpec
 
   build-depends:
     , aeson
     , aeson-pretty
+    , age
     , amaru-treasury-tx
     , base                    <5
     , base16-bytestring

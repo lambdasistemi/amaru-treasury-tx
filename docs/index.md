@@ -1,7 +1,8 @@
 # amaru-treasury-tx
 
 CLI for building unsigned Conway transactions against the Amaru
-treasury contracts on top of the
+treasury contracts, creating detached vault-backed witnesses, and
+assembling/submitting signed transactions on top of the
 [`cardano-node-clients` `TxBuild` DSL][txbuild].
 
 Haskell port of the bash recipes in
@@ -9,7 +10,7 @@ Haskell port of the bash recipes in
 
 ## Quick links
 
-- [**Quickstart**](quickstart.md) — wizard-to-`tx-build` pipes, including the pre-signing report review step.
+- [**Quickstart**](quickstart.md) — wizard-to-`tx-build` pipes, pre-signing report review, and vault-backed witness creation.
 - [Architecture overview](architecture.md) — modules and data flow.
 - [Trust model](trust-model.md) — what the wizard verifies, what the operator must assert.
 - [Swap recipe](swap.md) — building an existing swap intent with `tx-build`.
@@ -33,6 +34,10 @@ Haskell port of the bash recipes in
 | `disburse-wizard` | Verify upstream `metadata.json` against the chain, resolve wallet and treasury UTxOs, emit a unified ADA or USDM disburse `intent.json`. USDM is the default unit. |
 | `emergency-top-up-wizard` | Verify contingency and destination-scope registry state, move ADA from `contingency` to an owned treasury scope, and emit a unified disburse `intent.json`. |
 | `tx-build` | Turn a unified `intent.json` into unsigned Conway CBOR; re-evaluates every redeemer against a live `ChainContext` (typed step trace via `BuildEvent`) and can write a deterministic pre-signing report with `--report PATH`. |
+| `vault create` | Import one pasted or streamed Cardano payment signing-key envelope into an encrypted age witness vault. |
+| `witness` | Create one detached Conway vkey witness from an encrypted age vault identity. |
+| `attach-witness` | Merge detached vkey witness CBOR hex into an unsigned Conway transaction. |
+| `submit` | Submit signed Conway CBOR hex through a local node socket. |
 
 `tx-build` reads the action discriminator and the network from
 the intent itself (single source of truth) and dispatches to the
@@ -47,8 +52,8 @@ matching builder.
 
 ## Out of scope
 
-- Signing the unsigned CBOR.
-- Submitting the signed transaction.
+- Implicit signing during `tx-build`.
+- Vault custody policy, recipient rotation, and key ceremony design.
 - Registry / scopes NFT minting.
 - Reference-script publishing.
 - The Sundae `Fund` redeemer (Amaru disables it).

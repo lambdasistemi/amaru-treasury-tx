@@ -63,9 +63,17 @@ import Amaru.Treasury.Cli.TxBuild
     ( TxBuildOpts
     , txBuildOptsP
     )
+import Amaru.Treasury.Cli.Vault
+    ( VaultCreateOpts
+    , vaultCreateOptsP
+    )
 import Amaru.Treasury.Cli.WithdrawWizard
     ( WithdrawOpts
     , withdrawOptsP
+    )
+import Amaru.Treasury.Cli.Witness
+    ( WitnessOpts
+    , witnessOptsP
     )
 import Amaru.Treasury.Report.Cli
     ( ReportRenderOpts
@@ -83,6 +91,8 @@ data Cmd
     | CmdReportRender ReportRenderOpts
     | CmdTreasuryInspect InspectOpts
     | CmdAttachWitness AttachWitnessOpts
+    | CmdVaultCreate VaultCreateOpts
+    | CmdWitness WitnessOpts
     | CmdSubmit SubmitOpts
     | CmdEnvelopeTx
     | CmdEnvelopeWitness
@@ -173,6 +183,22 @@ cmdP =
                     )
                 )
             <> command
+                "vault"
+                ( info
+                    vaultCmdP
+                    ( progDesc
+                        "Manage encrypted witness vaults"
+                    )
+                )
+            <> command
+                "witness"
+                ( info
+                    (CmdWitness <$> witnessOptsP)
+                    ( progDesc
+                        "Create a detached Conway vkey witness from an encrypted vault identity"
+                    )
+                )
+            <> command
                 "submit"
                 ( info
                     (CmdSubmit <$> submitOptsP)
@@ -212,6 +238,19 @@ cmdP =
                         "Extract raw CBOR hex from a cardano-cli Conway envelope"
                     )
                 )
+        )
+
+vaultCmdP :: Parser Cmd
+vaultCmdP =
+    hsubparser
+        ( command
+            "create"
+            ( info
+                (CmdVaultCreate <$> vaultCreateOptsP)
+                ( progDesc
+                    "Create an age-encrypted witness vault from a signing key"
+                )
+            )
         )
 
 opts :: ParserInfo (GlobalOpts, Cmd)

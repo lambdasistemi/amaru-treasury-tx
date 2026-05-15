@@ -70,6 +70,8 @@ smoke:
     scripts/smoke/withdraw-wizard-pipe
     scripts/smoke/tx-build-pipe
     scripts/smoke/treasury-inspect
+    scripts/smoke/vault-witness
+    scripts/smoke/vault-witness-tty
 
 # Build all components
 build:

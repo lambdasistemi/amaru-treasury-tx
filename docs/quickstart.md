@@ -176,14 +176,77 @@ The `VERIFIED scope=…` line and the `NetworkConstants` row are
 the chain- and build-time roots binding the produced
 transaction to the upstream pin. Read them before signing.
 
-## 7. Sign + submit (out of scope for this CLI)
+## 7. Sign + submit
 
 After the report and traces pass review, extract `result.tx-cbor`
-from the JSON envelope and pass it to your signer (hardware wallet,
-[`cardano-wallet-sign`][cws], MPC service) then
-`cardano-cli transaction submit` (or any other broadcaster).
-Submit within minutes — the wizard's `validityUpperBoundSlot`
-ticks down with the tip.
+from the JSON envelope and create the required detached witnesses.
+External signers such as hardware wallets, [`cardano-wallet-sign`][cws],
+or MPC services can still feed `attach-witness` directly.
+
+Create an encrypted age vault once from the Cardano signing-key
+envelope, then use the built-in `witness` command for signing. Humans
+should use `--signing-key-paste`; the pasted signing-key JSON is hidden
+while the CLI reads it, and the vault passphrase prompt is no-echo too.
+
+Treat `vault create` as the import ceremony: pasted or streamed
+signing-key JSON is the only plaintext key input, and normal signing
+after this point uses `treasury.vault.age` plus the passphrase. After
+verifying and backing up the encrypted vault, clear the clipboard or
+source buffer under your custody policy.
+
+```bash
+amaru-treasury-tx --network mainnet vault create \
+    --signing-key-paste \
+    --label core_development \
+    --out treasury.vault.age
+
+# Paste the full cardano-cli signing-key JSON when prompted.
+# The pasted bytes are hidden; parsing stops once the JSON object closes.
+```
+
+For automation, stream the signing key from a secret manager and pass the
+vault passphrase through an inherited file descriptor:
+
+```bash
+exec 9<<<"$VAULT_PASSPHRASE"
+
+secret-manager-read core-development-payment-skey \
+| amaru-treasury-tx --network mainnet vault create \
+    --signing-key-stdin \
+    --label core_development \
+    --out treasury.vault.age \
+    --vault-passphrase-fd 9
+
+exec 9<&-
+exec 9<<<"$VAULT_PASSPHRASE"
+```
+
+```bash
+amaru-treasury-tx --network mainnet witness \
+    --tx unsigned.cbor.hex \
+    --vault treasury.vault.age \
+    --vault-passphrase-fd 9 \
+    --identity core_development \
+    --out core_development.witness.hex
+
+exec 9<&-
+
+owner_witness_hex="$(
+  tr -d '\n' < core_development.witness.hex
+)"
+
+amaru-treasury-tx attach-witness \
+    --tx unsigned.cbor.hex \
+    --witness "$owner_witness_hex" \
+    --out signed.cbor.hex
+
+amaru-treasury-tx --network mainnet submit --tx signed.cbor.hex
+```
+
+If the transaction does not declare required signer hashes, add
+`--expected-key-hash HASH` or the explicit `--allow-unlisted-key`
+acknowledgement. Submit within minutes — the wizard's
+`validityUpperBoundSlot` ticks down with the tip.
 
 ## 8. Deterministic quote override
 
@@ -311,8 +374,10 @@ nix develop --quiet -c just smoke
 ```
 
 The smoke check runs the focused signer regression, checks the
-release-facing help surfaces, and exercises the withdraw fixture path
-through schema validation plus the synthetic CBOR golden.
+release-facing help surfaces, exercises the vault-backed witness path,
+including hidden paste and no-echo passphrase prompts, and exercises
+the withdraw fixture path through schema validation plus the synthetic
+CBOR golden.
 
 ## 14. Trust model
 

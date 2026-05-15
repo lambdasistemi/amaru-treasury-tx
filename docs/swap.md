@@ -119,6 +119,44 @@ per-chunk overhead, the wizard exits before emitting an intent. The
 operator wallet is only preflighted for fee/change slack; it does not
 fund the order min-UTxO or Sundae per-order fee.
 
+## Swap the remaining pure ADA in a treasury scope
+
+Use `--all-ada` when the selected scope has a pure ADA treasury UTxO
+and the goal is to convert the maximum ledger-valid ADA amount to
+USDM. This mode is mutually exclusive with `--usdm`, requires
+`--split`, and rejects `--chunk-usdm` because the USDM target is
+derived after the ADA amount is known.
+
+```bash
+amaru-treasury-tx \
+  --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
+  swap-wizard \
+    --wallet-addr "$WALLET_ADDR" \
+    --metadata metadata-mainnet.json \
+    --scope network_compliance \
+    --all-ada \
+    --split 1 \
+    --ada-usdm 0.265 \
+    --slippage-bps 100 \
+    --validity-hours 28 \
+    --description "Swap remaining ADA to USDM" \
+    --justification "Convert remaining treasury ADA balance" \
+    --destination-label "Network Compliance's treasury" \
+    --extra-signer ops_and_use_cases \
+| amaru-treasury-tx \
+  --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
+  tx-build --out /dev/null --report - \
+| amaru-treasury-tx report-render --metadata metadata-mainnet.json
+```
+
+All-ADA mode intentionally selects pure ADA treasury UTxOs only. If
+the selected scope also has USDM-bearing or other token-bearing UTxOs,
+those deposits are ignored by this mode so the swap intent does not
+need to preserve native assets on the leftover output. The
+`swap-wizard:` trace logs the selected pure ADA UTxOs, available
+lovelace, computed ADA amount, implied USDM target, treasury leftover,
+split/chunk count, per-chunk overhead, and effective minimum rate.
+
 ## Recommended quote-derived workflow (swap-quote)
 
 `swap-quote` is the end-to-end command for a live, quote-derived swap

@@ -65,7 +65,11 @@ import Amaru.Treasury.Registry.Verify
     )
 import Amaru.Treasury.Scope (ScopeId (..))
 import Amaru.Treasury.Tx.SwapWizard
-    ( RegistryView (..)
+    ( AllAdaError (..)
+    , AllAdaPlan (..)
+    , NetworkConstants (..)
+    , RegistryView (..)
+    , ResolverAllAdaInput (..)
     , ResolverEnv (..)
     , ResolverError (..)
     , ResolverInput (..)
@@ -79,9 +83,11 @@ import Amaru.Treasury.Tx.SwapWizard
     , addrNetwork
     , chunkLovelaces
     , networkConstants
+    , planAllAda
     , registryViewFromVerified
     , renderWalletShortfall
     , resolveWizardEnv
+    , resolveWizardEnvAllAda
     , selectTreasury
     , selectWallet
     , wizardToTreasuryIntent
@@ -109,6 +115,10 @@ import Amaru.Treasury.Constants
     , sundaeUsdmPoolHex
     , usdmAssetHex
     , usdmPolicyHex
+    )
+import Amaru.Treasury.Tx.SwapWizard.Trace
+    ( WizardEvent (..)
+    , renderEvent
     )
 
 spec :: Spec
@@ -399,6 +409,97 @@ spec = describe "SwapWizard" $ do
                 Right _ ->
                     expectationFailure'
                         "unexpected Right for narnia"
+
+    describe "planAllAda" $ do
+        it
+            "spends every available pure ADA lovelace except overhead and minimum leftover"
+            $ do
+                nc <- expectRight (networkConstants "mainnet")
+                let available = 52_821_860_941
+                    rateNum = 262_350
+                    rateDen = 1_000_000
+                    Right plan =
+                        planAllAda
+                            nc
+                            1
+                            (rateNum, rateDen)
+                            [
+                                ( "22e914892e83c22e19514937914ca32a0c059f9d1c5b555429edde0ea3406ae4#5"
+                                , available
+                                , False
+                                )
+                            ]
+                    expectedOverhead =
+                        ncExtraPerChunkLovelace nc
+                    expectedAmount =
+                        available
+                            - expectedOverhead
+                            - minUtxoDepositLovelace
+                aapSelectedTreasuryUtxos plan
+                    `shouldBe` [ "22e914892e83c22e19514937914ca32a0c059f9d1c5b555429edde0ea3406ae4#5"
+                               ]
+                aapAvailableLovelace plan `shouldBe` available
+                aapAmountLovelace plan `shouldBe` expectedAmount
+                aapChunkSizeLovelace plan `shouldBe` expectedAmount
+                aapChunkCount plan `shouldBe` 1
+                aapOverheadLovelace plan `shouldBe` expectedOverhead
+                aapLeftoverLovelace plan
+                    `shouldBe` minUtxoDepositLovelace
+                aapImpliedUsdm plan
+                    `shouldBe` ceilingDiv (expectedAmount * rateNum) rateDen
+
+        it "ignores token-bearing treasury UTxOs in all-ADA mode" $ do
+            nc <- expectRight (networkConstants "mainnet")
+            let Right plan =
+                    planAllAda
+                        nc
+                        1
+                        (1, 1)
+                        [ ("token-bearing#0", 999_000_000, True)
+                        , ("pure#1", 10_000_000, False)
+                        ]
+            aapSelectedTreasuryUtxos plan `shouldBe` ["pure#1"]
+            aapAvailableLovelace plan `shouldBe` 10_000_000
+
+        it
+            "rejects a pure ADA balance that cannot cover overhead, leftover, and one lovelace"
+            $ do
+                nc <- expectRight (networkConstants "mainnet")
+                let available =
+                        ncExtraPerChunkLovelace nc
+                            + minUtxoDepositLovelace
+                    result =
+                        planAllAda
+                            nc
+                            1
+                            (1, 1)
+                            [("pure#0", available, False)]
+                result
+                    `shouldBe` Left
+                        ( AllAdaInsufficientLovelace
+                            available
+                            (available + 1)
+                        )
+
+        it "rejects a split count larger than the derived lovelace amount" $ do
+            nc <- expectRight (networkConstants "mainnet")
+            let split = 2
+                required =
+                    toInteger split
+                        * ncExtraPerChunkLovelace nc
+                        + minUtxoDepositLovelace
+                        + toInteger split
+                available = required - 1
+            planAllAda
+                nc
+                split
+                (1, 1)
+                [("pure#0", available, False)]
+                `shouldBe` Left
+                    ( AllAdaInsufficientLovelace
+                        available
+                        required
+                    )
 
     describe "addrNetwork" $ do
         it "classifies any addr_test1 address as Testnet" $
@@ -721,6 +822,75 @@ spec = describe "SwapWizard" $ do
                 `shouldBe` Left
                     (ResolverInvalidChunkSize 0)
 
+        it
+            "derives all-ADA mode and translates through the unified intent path"
+            $ do
+                nc <- expectRight (networkConstants "mainnet")
+                let treasuryRef =
+                        "64f27254f3c0311fb2e672cdb87de200089a596aa90dc09f8be4248540267cf0#0"
+                    available = 52_821_860_941
+                    walletRef =
+                        "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0"
+                    rateNum = 262_350
+                    rateDen = 1_000_000
+                    stub =
+                        ResolverEnv
+                            { reEnvQueryWalletUtxos = \_ ->
+                                pure [(walletRef, 5_000_000, False)]
+                            , reEnvQueryTreasuryUtxos = \_ ->
+                                pure
+                                    [ (treasuryRef, available, False)
+                                    , ("token-bearing#1", 10_000_000, True)
+                                    ]
+                            , reEnvComputeUpperBound = \_ ->
+                                pure (Right 186364542)
+                            }
+                    rai =
+                        ResolverAllAdaInput
+                            { raiNetwork = "mainnet"
+                            , raiWalletAddrBech32 =
+                                "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+                            , raiScope = CoreDevelopment
+                            , raiSplit = 1
+                            , raiRateNumerator = rateNum
+                            , raiRateDenominator = rateDen
+                            , raiRegistry = weRegistry env
+                            , raiValidityHours = Nothing
+                            }
+                r <- resolveWizardEnvAllAda stub rai
+                case r of
+                    Left e -> expectationFailure' (show e)
+                    Right (env', plan) -> do
+                        aapSelectedTreasuryUtxos plan
+                            `shouldBe` [treasuryRef]
+                        aapAmountLovelace plan
+                            `shouldBe` available
+                                - ncExtraPerChunkLovelace nc
+                                - minUtxoDepositLovelace
+                        let allAdaAnswers =
+                                answers
+                                    { wqAmountLovelace =
+                                        aapAmountLovelace plan
+                                    , wqChunkSizeLovelace =
+                                        aapChunkSizeLovelace plan
+                                    , wqRateNumerator = rateNum
+                                    , wqRateDenominator = rateDen
+                                    }
+                        intent <-
+                            expectRight $
+                                wizardToTreasuryIntent env' allAdaAnswers
+                        let bytes =
+                                encodeSomeTreasuryIntent
+                                    (SomeTreasuryIntent SSwap intent)
+                        case decodeTreasuryIntent bytes of
+                            Left e ->
+                                expectationFailure' e
+                            Right (SomeTreasuryIntent sa parsed) ->
+                                case translateIntent sa parsed of
+                                    Left e ->
+                                        expectationFailure' e
+                                    Right _ -> pure ()
+
     describe "swap-wizard CLI parser" $ do
         it "accepts --min-rate alone (expert path)" $
             parseWizardOpts (baseWizardArgs <> ["--min-rate", "0.245"])
@@ -755,6 +925,69 @@ spec = describe "SwapWizard" $ do
                 )
                 `shouldSatisfy` isLeft
 
+        it "accepts --all-ada with --split" $
+            parseWizardOpts
+                ( allAdaWizardArgs
+                    <> ["--ada-usdm", "0.270", "--slippage-bps", "100"]
+                )
+                `shouldSatisfy` isRight
+
+        it "rejects --all-ada together with --usdm" $
+            parseWizardOpts
+                ( allAdaWizardArgs
+                    <> ["--usdm", "100000"]
+                    <> ["--ada-usdm", "0.270", "--slippage-bps", "100"]
+                )
+                `shouldSatisfy` isLeft
+
+        it "rejects commands with no target mode" $
+            parseWizardOpts
+                ( targetlessWizardArgs
+                    <> ["--ada-usdm", "0.270", "--slippage-bps", "100"]
+                )
+                `shouldSatisfy` isLeft
+
+        it "rejects --all-ada with --chunk-usdm" $
+            parseWizardOpts
+                ( targetlessWizardArgs
+                    <> [ "--all-ada"
+                       , "--chunk-usdm"
+                       , "10000"
+                       , "--ada-usdm"
+                       , "0.270"
+                       , "--slippage-bps"
+                       , "100"
+                       ]
+                )
+                `shouldSatisfy` isLeft
+
+    describe "WizardEvent all-ADA trace" $ do
+        it "renders the derived amount facts" $ do
+            let rendered =
+                    renderEvent $
+                        WeAllAdaPlan
+                            ["pure#0"]
+                            10_000_000
+                            4_720_000
+                            4_720_000
+                            2_000_000
+                            1
+                            1
+                            3_280_000
+                            3_280_000
+                            1
+                            1
+            rendered `shouldContainText` "all-ada"
+            rendered `shouldContainText` "pure#0"
+            rendered `shouldContainText` "available=10000000"
+            rendered `shouldContainText` "amount=4720000"
+            rendered `shouldContainText` "impliedUsdm=4720000"
+            rendered `shouldContainText` "leftover=2000000"
+            rendered `shouldContainText` "split=1"
+            rendered `shouldContainText` "chunks=1"
+            rendered `shouldContainText` "overhead=3280000"
+            rendered `shouldContainText` "rate=1/1"
+
     describe "renderWalletShortfall"
         $ it
             "produces the operator-facing single-line shape"
@@ -784,16 +1017,21 @@ parseWizardOpts args =
 
 baseWizardArgs :: [String]
 baseWizardArgs =
+    targetlessWizardArgs
+        <> [ "--usdm"
+           , "100000"
+           , "--split"
+           , "33"
+           ]
+
+targetlessWizardArgs :: [String]
+targetlessWizardArgs =
     [ "--wallet-addr"
     , "addr1test"
     , "--metadata"
     , "metadata.json"
     , "--scope"
     , "network_compliance"
-    , "--usdm"
-    , "100000"
-    , "--split"
-    , "33"
     , "--description"
     , "Treasury swap"
     , "--justification"
@@ -801,6 +1039,14 @@ baseWizardArgs =
     , "--destination-label"
     , "USDM reserve"
     ]
+
+allAdaWizardArgs :: [String]
+allAdaWizardArgs =
+    targetlessWizardArgs
+        <> [ "--all-ada"
+           , "--split"
+           , "1"
+           ]
 
 loadFixture :: forall a. (FromJSON a) => FilePath -> IO a
 loadFixture path = do
@@ -917,3 +1163,10 @@ expectJust label =
 
 expectationFailure' :: String -> IO a
 expectationFailure' = errorWithoutStackTrace
+
+ceilingDiv :: Integer -> Integer -> Integer
+ceilingDiv n d = (n + d - 1) `div` d
+
+shouldContainText :: Text -> Text -> IO ()
+shouldContainText haystack needle =
+    haystack `shouldSatisfy` T.isInfixOf needle

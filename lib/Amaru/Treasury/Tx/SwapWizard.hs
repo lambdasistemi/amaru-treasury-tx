@@ -34,6 +34,8 @@ module Amaru.Treasury.Tx.SwapWizard
     , ScopeView (..)
     , TreasurySelection (..)
     , WalletSelection (..)
+    , AllAdaPlan (..)
+    , AllAdaError (..)
 
       -- * Translation
     , WizardError (..)
@@ -47,12 +49,16 @@ module Amaru.Treasury.Tx.SwapWizard
     , networkConstants
     , chunkCountFor
     , chunkLovelaces
+    , planAllAda
+    , impliedUsdmFor
     , selectTreasury
     , selectWallet
     , WalletSelectionError (..)
     , walletFeeSlackLovelace
     , addrNetwork
     , resolveWizardEnv
+    , ResolverAllAdaInput (..)
+    , resolveWizardEnvAllAda
     , renderWalletShortfall
 
       -- * Re-usable helpers
@@ -277,6 +283,39 @@ data WalletSelection = WalletSelection
     -- fuel alongside @wsTxIn@. Empty when the head UTxO
     -- already covers the wallet target.
     }
+    deriving (Eq, Show)
+
+{- | Pure max-spend result for @swap-wizard --all-ada@.
+The resolver turns this into the ordinary 'TreasurySelection'
+and 'SwapWizardQ' consumed by the existing translation path.
+-}
+data AllAdaPlan = AllAdaPlan
+    { aapSelectedTreasuryUtxos :: ![Text]
+    , aapAvailableLovelace :: !Integer
+    , aapAmountLovelace :: !Integer
+    , aapChunkSizeLovelace :: !Integer
+    , aapChunkCount :: !Integer
+    , aapExtraPerChunkLovelace :: !Integer
+    , aapOverheadLovelace :: !Integer
+    , aapLeftoverLovelace :: !Integer
+    , aapImpliedUsdm :: !Integer
+    , aapRateNumerator :: !Integer
+    , aapRateDenominator :: !Integer
+    }
+    deriving (Eq, Show)
+
+-- | Pure calculation failures for all-ADA mode.
+data AllAdaError
+    = AllAdaNoPureTreasuryUtxos
+    | AllAdaSplitNotPositive !Int
+    | AllAdaRateDenominatorZero
+    | -- | @AllAdaInsufficientLovelace available required@.
+      -- Required includes per-chunk overhead, minimum
+      -- treasury leftover, and one lovelace to swap.
+      AllAdaInsufficientLovelace !Integer !Integer
+    | -- | Current chunking cannot produce the requested
+      -- split count for the derived amount.
+      AllAdaUnexpectedChunkCount !Int !Integer
     deriving (Eq, Show)
 
 {- | Everything the resolver hands the pure translation.
@@ -673,6 +712,23 @@ data ResolverError
       --   horizon. Carries the typed 'Validity.HorizonError'
       --   so the CLI can render a one-line diagnostic.
       ResolverValidityOvershoot !Validity.HorizonError
+    | ResolverAllAdaFailed !AllAdaError
+    deriving (Eq, Show)
+
+{- | Resolver inputs for all-ADA mode. Amount and chunk size
+are intentionally absent: they are derived after live
+treasury UTxOs are known.
+-}
+data ResolverAllAdaInput = ResolverAllAdaInput
+    { raiNetwork :: !Text
+    , raiWalletAddrBech32 :: !Text
+    , raiScope :: !ScopeId
+    , raiSplit :: !Int
+    , raiRateNumerator :: !Integer
+    , raiRateDenominator :: !Integer
+    , raiRegistry :: !RegistryView
+    , raiValidityHours :: !(Maybe Word16)
+    }
     deriving (Eq, Show)
 
 {- | Project a verified registry walk into the compact view
@@ -870,6 +926,89 @@ selectTreasury inputs target
             (reverse picked, acc - target)
         | otherwise =
             go (acc + l) (ref : picked) rest
+
+{- | Compute the max-spend plan for @--all-ada@.
+
+Only pure ADA treasury UTxOs are eligible. The selected amount
+reserves the existing minimum treasury leftover and the per-order
+overhead for the requested split count before deriving chunk size
+and implied USDM.
+-}
+planAllAda
+    :: NetworkConstants
+    -> Int
+    -> (Integer, Integer)
+    -> [(Text, Integer, Bool)]
+    -> Either AllAdaError AllAdaPlan
+planAllAda nc split (rateNum, rateDen) inputs
+    | split <= 0 = Left (AllAdaSplitNotPositive split)
+    | rateDen == 0 = Left AllAdaRateDenominatorZero
+    | null pureInputs = Left AllAdaNoPureTreasuryUtxos
+    | available < minimumForOneLovelace =
+        Left
+            ( AllAdaInsufficientLovelace
+                available
+                minimumForOneLovelace
+            )
+    | amount < splitCount =
+        Left
+            ( AllAdaInsufficientLovelace
+                available
+                minimumForRequestedSplit
+            )
+    | chunkCount /= splitCount =
+        Left (AllAdaUnexpectedChunkCount split chunkCount)
+    | otherwise =
+        Right
+            AllAdaPlan
+                { aapSelectedTreasuryUtxos =
+                    [ref | (ref, _, _) <- pureInputs]
+                , aapAvailableLovelace = available
+                , aapAmountLovelace = amount
+                , aapChunkSizeLovelace = chunkSize
+                , aapChunkCount = chunkCount
+                , aapExtraPerChunkLovelace = extraPerChunk
+                , aapOverheadLovelace = overhead
+                , aapLeftoverLovelace = minUtxoDepositLovelace
+                , aapImpliedUsdm =
+                    impliedUsdmFor
+                        (rateNum, rateDen)
+                        (chunkLovelaces amount chunkSize)
+                , aapRateNumerator = rateNum
+                , aapRateDenominator = rateDen
+                }
+  where
+    pureInputs =
+        L.sortBy
+            (flip compare `on` snd3)
+            [ input
+            | input@(_, _, hasNativeAssets) <- inputs
+            , not hasNativeAssets
+            ]
+    available = sum [lovelace | (_, lovelace, _) <- pureInputs]
+    splitCount = toInteger split
+    extraPerChunk = ncExtraPerChunkLovelace nc
+    overhead = splitCount * extraPerChunk
+    minimumForOneLovelace =
+        overhead + minUtxoDepositLovelace + 1
+    minimumForRequestedSplit =
+        overhead + minUtxoDepositLovelace + splitCount
+    amount = available - overhead - minUtxoDepositLovelace
+    chunkSize = amount `div` splitCount
+    chunkCount = chunkCountFor amount chunkSize
+    snd3 (_, l, _) = l
+
+{- | Sum per-chunk USDM datum amounts using the same ceiling
+arithmetic as 'Amaru.Treasury.IntentJSON.mkChunks'.
+-}
+impliedUsdmFor :: (Integer, Integer) -> [Integer] -> Integer
+impliedUsdmFor (rateNum, rateDen) chunks
+    | rateDen <= 0 = 0
+    | otherwise =
+        sum
+            [ (chunk * rateNum + rateDen - 1) `div` rateDen
+            | chunk <- chunks
+            ]
 
 {- | Re-export of the chunk shape from
 'Amaru.Treasury.IntentJSON.chunkLovelaces'. Kept here so the
@@ -1126,6 +1265,133 @@ resolveWizardEnv ResolverEnv{..} ri =
                                                                                 }
                                                                         }
                                                             in  pure (Right env)
+
+{- | Resolve @swap-wizard --all-ada@ from live data.
+
+Fixed-USDM mode keeps 'resolveWizardEnv'. All-ADA mode derives
+amount and chunk size after treasury UTxOs are known, then returns
+the ordinary 'WizardEnv' consumed by the pure translator.
+-}
+resolveWizardEnvAllAda
+    :: (Monad m)
+    => ResolverEnv m
+    -> ResolverAllAdaInput
+    -> m (Either ResolverError (WizardEnv, AllAdaPlan))
+resolveWizardEnvAllAda ResolverEnv{..} rai =
+    case networkConstants (raiNetwork rai) of
+        Left _ ->
+            pure (Left (ResolverNetworkUnsupported (raiNetwork rai)))
+        Right nc -> do
+            case ( addrNetwork (raiWalletAddrBech32 rai)
+                 , networkFamily (raiNetwork rai)
+                 ) of
+                (Just obs, Just want)
+                    | obs /= want ->
+                        let observed = case obs of
+                                Mainnet -> "mainnet" :: Text
+                                Testnet -> "testnet"
+                        in  pure
+                                ( Left
+                                    ( ResolverNetworkMismatch
+                                        (raiNetwork rai)
+                                        observed
+                                    )
+                                )
+                _ -> resolveWith nc
+  where
+    resolveWith nc =
+        case Map.lookup
+            (raiScope rai)
+            (rvTreasuryByScope (raiRegistry rai)) of
+            Nothing ->
+                pure (Left (ResolverScopeUnsupported (raiScope rai)))
+            Just refs -> do
+                walletUtxos <-
+                    reEnvQueryWalletUtxos
+                        (raiWalletAddrBech32 rai)
+                if null walletUtxos
+                    then pure (Left ResolverEmptyWalletUtxos)
+                    else do
+                        treasuryUtxos <-
+                            reEnvQueryTreasuryUtxos
+                                (trAddress refs)
+                        if null treasuryUtxos
+                            then pure (Left ResolverEmptyTreasuryUtxos)
+                            else case planAllAda
+                                nc
+                                (raiSplit rai)
+                                ( raiRateNumerator rai
+                                , raiRateDenominator rai
+                                )
+                                treasuryUtxos of
+                                Left e ->
+                                    pure (Left (ResolverAllAdaFailed e))
+                                Right plan ->
+                                    resolveSelections
+                                        refs
+                                        plan
+                                        walletUtxos
+                                        nc
+
+    resolveSelections refs plan walletUtxos nc =
+        case selectWallet walletFeeSlackLovelace walletUtxos of
+            Left WalletNoPureAda ->
+                pure (Left ResolverEmptyWalletUtxos)
+            Left (WalletShortfall avail target) ->
+                pure
+                    ( Left
+                        ( ResolverWalletShortfall
+                            avail
+                            target
+                        )
+                    )
+            Right ([], _) ->
+                pure (Left ResolverEmptyWalletUtxos)
+            Right (walletHead : walletTail, _) -> do
+                upper <-
+                    resolveUpperBound
+                        reEnvComputeUpperBound
+                        (raiValidityHours rai)
+                case upper of
+                    Left e -> pure (Left e)
+                    Right upperBound ->
+                        let owners = rvOwners (raiRegistry rai)
+                            env =
+                                WizardEnv
+                                    { weNetwork = raiNetwork rai
+                                    , weUpperBoundSlot = upperBound
+                                    , weNetworkConstants = nc
+                                    , weRegistry = raiRegistry rai
+                                    , weScopeView =
+                                        ScopeView
+                                            { svScope = raiScope rai
+                                            , svRefs = refs
+                                            , svDefaultSigners =
+                                                maybeToList
+                                                    ( scopeOwnerText
+                                                        owners
+                                                        (raiScope rai)
+                                                    )
+                                            }
+                                    , weTreasurySelection =
+                                        TreasurySelection
+                                            { tsInputs =
+                                                aapSelectedTreasuryUtxos
+                                                    plan
+                                            , tsLeftoverLovelace =
+                                                aapLeftoverLovelace
+                                                    plan
+                                            }
+                                    , weWalletSelection =
+                                        WalletSelection
+                                            { wsTxIn = walletHead
+                                            , wsAddress =
+                                                raiWalletAddrBech32
+                                                    rai
+                                            , wsExtraTxIns = walletTail
+                                            }
+                                    }
+                        in  pure (Right (env, plan))
 
 {- | Drive the resolver's @reEnvComputeUpperBound@ effect with
 the operator's optional @--validity-hours@.

@@ -101,6 +101,7 @@ What the flags mean:
 | `--metadata`   | Local `metadata.json` (untrusted hint; verified against chain). |
 | `--scope`      | One of `core_development`, `ops_and_use_cases`, `network_compliance`, `middleware`. |
 | `--usdm`       | Total USDM the swap should buy. ADA spend is derived from the quote and slippage policy. |
+| `--all-ada`    | Alternative to `--usdm`. Spend the maximum ledger-valid ADA from pure ADA treasury UTxOs in the selected scope. Requires `--split`; incompatible with `--chunk-usdm`. |
 | `--split N`    | Slice the order into N equal chunks. Use `--chunk-usdm X` instead to pin per-chunk size. |
 | `--ada-usdm`   | Operator-supplied ADA/USDM quote (USDM per ADA). The wizard applies slippage on top. For live retrieval, use the separate `swap-quote` command. |
 | `--slippage-bps` | Required slippage policy in basis points. There is no hidden default. |
@@ -120,6 +121,13 @@ What the flags mean:
 | successful `result` | Contains required `tx-cbor` and `report`. |
 | final stdout | Markdown review report. |
 | stderr | `swap-wizard:` and `tx-build:` typed traces. |
+
+For a remaining-ADA swap, replace `--usdm 100000` with `--all-ada`
+and keep `--split N`. The wizard uses verified metadata and live
+treasury UTxOs to select pure ADA only, reserves the per-order
+Sundae overhead plus the minimum treasury leftover, and logs the
+computed ADA amount plus implied USDM target before emitting the
+intent.
 
 ## 6. Read the audit files before signing
 

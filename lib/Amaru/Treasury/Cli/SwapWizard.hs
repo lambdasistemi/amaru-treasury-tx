@@ -27,6 +27,7 @@ import Options.Applicative
     , ReadM
     , auto
     , eitherReader
+    , flag'
     , help
     , long
     , many
@@ -72,7 +73,9 @@ import Amaru.Treasury.Tx.SwapQuote
     )
 import Amaru.Treasury.Tx.SwapQuote qualified as SQ
 import Amaru.Treasury.Tx.SwapWizard
-    ( RationaleAnswers (..)
+    ( AllAdaPlan (..)
+    , RationaleAnswers (..)
+    , ResolverAllAdaInput (..)
     , ResolverError (..)
     , ResolverInput (..)
     , SwapWizardQ (..)
@@ -80,6 +83,7 @@ import Amaru.Treasury.Tx.SwapWizard
     , registryViewFromVerified
     , renderWalletShortfall
     , resolveWizardEnv
+    , resolveWizardEnvAllAda
     , wizardToTreasuryIntent
     )
 import Amaru.Treasury.Tx.SwapWizard.Trace
@@ -90,6 +94,10 @@ import Amaru.Treasury.Tx.SwapWizard.Trace
 data ChunkSpec
     = SplitCount !Int
     | ChunkUsdm !Double
+
+data WizardOrder
+    = FixedUsdm !Double !ChunkSpec
+    | AllAda !Int
 
 data WizardRate
     = WizardMinRate !Double
@@ -105,6 +113,11 @@ data WizardSwapParameters = WizardSwapParameters
     , wspRateDenominator :: !Integer
     }
 
+data WizardRateParameters = WizardRateParameters
+    { wrpRateNumerator :: !Integer
+    , wrpRateDenominator :: !Integer
+    }
+
 {- | Flags for the @swap-wizard@ subcommand.
 Mirrors @specs/002-swap-wizard/contracts/swap-wizard-cli.md §1@.
 -}
@@ -116,10 +129,8 @@ data WizardOpts = WizardOpts
     , wOptsLog :: !(Maybe FilePath)
     -- ^ where to send 'WizardEvent' lines. 'Nothing' = stderr.
     , wOptsScope :: !ScopeId
-    , wOptsUsdm :: !Double
-    -- ^ target USDM amount (whole USDM, decimals OK).
-    , wOptsChunkSpec :: !ChunkSpec
-    -- ^ how to split the amount into chunks
+    , wOptsOrder :: !WizardOrder
+    -- ^ fixed-USDM target or all-ADA max-spend target.
     , wOptsRate :: !WizardRate
     -- ^ minimum acceptable USDM per ADA, either explicit or quote-derived
     , wOptsValidityHours :: !(Maybe Word16)
@@ -168,30 +179,7 @@ wizardOptsP =
                 <> help
                     "core_development|ops_and_use_cases|network_compliance|middleware"
             )
-        <*> option
-            auto
-            ( long "usdm"
-                <> metavar "USDM"
-                <> help
-                    "Target USDM amount (decimals OK; e.g. 100000). The ADA spend is derived as usdm / min-rate."
-            )
-        <*> ( SplitCount
-                <$> option
-                    positiveSplit
-                    ( long "split"
-                        <> metavar "INT"
-                        <> help
-                            "Split the order into N equal chunks (N >= 1)"
-                    )
-                <|> ChunkUsdm
-                    <$> option
-                        auto
-                        ( long "chunk-usdm"
-                            <> metavar "USDM"
-                            <> help
-                                "Per-chunk USDM size (alternative to --split; decimals OK)"
-                        )
-            )
+        <*> wizardOrderP
         <*> wizardRateP
         <*> optional
             ( option
@@ -246,6 +234,54 @@ scopeReader :: ReadM ScopeId
 scopeReader =
     eitherReader $
         scopeFromText . T.pack . map toLower
+
+wizardOrderP :: Parser WizardOrder
+wizardOrderP = fixedUsdmP <|> allAdaP
+  where
+    fixedUsdmP =
+        FixedUsdm
+            <$> option
+                auto
+                ( long "usdm"
+                    <> metavar "USDM"
+                    <> help
+                        "Target USDM amount (decimals OK; e.g. 100000). The ADA spend is derived as usdm / min-rate."
+                )
+            <*> chunkSpecP
+    allAdaP =
+        AllAda
+            <$> ( flag'
+                    ()
+                    ( long "all-ada"
+                        <> help
+                            "Swap the maximum spendable pure ADA from the selected treasury scope. Requires --split and is mutually exclusive with --usdm."
+                    )
+                    *> option
+                        positiveSplit
+                        ( long "split"
+                            <> metavar "INT"
+                            <> help
+                                "Split the all-ADA order into N equal chunks (N >= 1)"
+                        )
+                )
+
+chunkSpecP :: Parser ChunkSpec
+chunkSpecP =
+    SplitCount
+        <$> option
+            positiveSplit
+            ( long "split"
+                <> metavar "INT"
+                <> help "Split the order into N equal chunks (N >= 1)"
+            )
+        <|> ChunkUsdm
+            <$> option
+                auto
+                ( long "chunk-usdm"
+                    <> metavar "USDM"
+                    <> help
+                        "Per-chunk USDM size (alternative to --split; decimals OK)"
+                )
 
 positiveSplit :: ReadM Int
 positiveSplit = eitherReader $ \s -> case reads s of
@@ -340,12 +376,69 @@ resolveWizardSwapParameters tr usdm chunkSpec = \case
                 , wspRateDenominator = SQ.dspRateDenominator derived
                 }
 
+resolveWizardRateParameters
+    :: Tracer IO WizardEvent
+    -> WizardRate
+    -> IO WizardRateParameters
+resolveWizardRateParameters tr = \case
+    WizardMinRate minRate ->
+        let (rateNum, rateDen) = rateToFraction minRate
+        in  pure
+                WizardRateParameters
+                    { wrpRateNumerator = rateNum
+                    , wrpRateDenominator = rateDen
+                    }
+    WizardOverrideRate adaUsdm slippage -> do
+        let observation =
+                SQ.QuoteObservation
+                    { SQ.qoPair = SQ.AdaUsdm
+                    , SQ.qoQuote = toRational adaUsdm
+                    , SQ.qoProvenance = SQ.OperatorOverride
+                    }
+        derived <-
+            case SQ.deriveSwapParameters
+                observation
+                slippage
+                SQ.SwapQuoteRequest
+                    { SQ.sqrRequestedUsdm = 1
+                    , SQ.sqrChunk = SQ.SplitInto 1
+                    } of
+                Right value ->
+                    pure value
+                Left err ->
+                    abortTr tr ("derive swap rate: " <> T.pack (show err))
+        pure
+            WizardRateParameters
+                { wrpRateNumerator = SQ.dspRateNumerator derived
+                , wrpRateDenominator = SQ.dspRateDenominator derived
+                }
+
 swapQuoteRequestChunk :: ChunkSpec -> SQ.SwapQuoteRequestChunk
 swapQuoteRequestChunk = \case
     SplitCount n ->
         SQ.SplitInto n
     ChunkUsdm x ->
         SQ.ChunkUsdm (toRational x)
+
+traceAllAdaPlan
+    :: Tracer IO WizardEvent
+    -> AllAdaPlan
+    -> Int
+    -> IO ()
+traceAllAdaPlan tr plan requestedSplit =
+    traceWith tr $
+        WeAllAdaPlan
+            (aapSelectedTreasuryUtxos plan)
+            (aapAvailableLovelace plan)
+            (aapAmountLovelace plan)
+            (aapImpliedUsdm plan)
+            (aapLeftoverLovelace plan)
+            (toInteger requestedSplit)
+            (aapChunkCount plan)
+            (aapExtraPerChunkLovelace plan)
+            (aapOverheadLovelace plan)
+            (aapRateNumerator plan)
+            (aapRateDenominator plan)
 
 runWizard :: GlobalOpts -> WizardOpts -> IO ()
 runWizard g WizardOpts{..} = do
@@ -359,35 +452,6 @@ runWizard g WizardOpts{..} = do
         let NetworkMagic magic = goNetworkMagic g
         traceWith tr (WeNetwork networkName (fromIntegral magic))
         traceWith tr (WeMetadata wOptsMetadataPath)
-
-        params <-
-            resolveWizardSwapParameters
-                tr
-                wOptsUsdm
-                wOptsChunkSpec
-                wOptsRate
-        let amountLov = wspAmountLovelace params
-            chunkSize = wspChunkSizeLovelace params
-            answers =
-                SwapWizardQ
-                    { wqScope = wOptsScope
-                    , wqAmountLovelace = amountLov
-                    , wqChunkSizeLovelace = chunkSize
-                    , wqRateNumerator = wspRateNumerator params
-                    , wqRateDenominator = wspRateDenominator params
-                    , wqValidityHours =
-                        wOptsValidityHours
-                    , wqRationale =
-                        RationaleAnswers
-                            { raDescription = wOptsDescription
-                            , raJustification = wOptsJustification
-                            , raDestinationLabel =
-                                wOptsDestinationLabel
-                            , raEvent = wOptsEvent
-                            , raLabel = wOptsLabel
-                            }
-                    , wqExtraSigners = wOptsSigners
-                    }
 
         withLocalNodeBackend (goNetworkMagic g) socket $
             \backend -> do
@@ -409,28 +473,118 @@ runWizard g WizardOpts{..} = do
                                     ("project: " <> T.pack (show e))
                             Right view -> pure view
                 traceRegistryView tr wOptsScope rv
-                let ri =
-                        ResolverInput
-                            { riNetwork = networkName
-                            , riWalletAddrBech32 = wOptsWalletAddr
-                            , riScope = wOptsScope
-                            , riAmountLovelace = amountLov
-                            , riChunkSizeLovelace = chunkSize
-                            , riRegistry = rv
-                            , riValidityHours =
-                                wOptsValidityHours
-                            }
                 let renv =
                         traceResolverEnv tr $
                             providerToResolverEnv backend
-                er <- resolveWizardEnv renv ri
-                env <- case er of
-                    Left (ResolverWalletShortfall avail required) ->
-                        abortTr tr (renderWalletShortfall ri avail required)
-                    Left e ->
-                        abortTr tr ("resolve: " <> T.pack (show e))
-                    Right e -> pure e
+                (env, params) <-
+                    case wOptsOrder of
+                        FixedUsdm usdm chunkSpec -> do
+                            params <-
+                                resolveWizardSwapParameters
+                                    tr
+                                    usdm
+                                    chunkSpec
+                                    wOptsRate
+                            let ri =
+                                    ResolverInput
+                                        { riNetwork = networkName
+                                        , riWalletAddrBech32 =
+                                            wOptsWalletAddr
+                                        , riScope = wOptsScope
+                                        , riAmountLovelace =
+                                            wspAmountLovelace params
+                                        , riChunkSizeLovelace =
+                                            wspChunkSizeLovelace params
+                                        , riRegistry = rv
+                                        , riValidityHours =
+                                            wOptsValidityHours
+                                        }
+                            er <- resolveWizardEnv renv ri
+                            env <- case er of
+                                Left
+                                    ( ResolverWalletShortfall
+                                            avail
+                                            required
+                                        ) ->
+                                        abortTr
+                                            tr
+                                            ( renderWalletShortfall
+                                                ri
+                                                avail
+                                                required
+                                            )
+                                Left e ->
+                                    abortTr
+                                        tr
+                                        ("resolve: " <> T.pack (show e))
+                                Right e -> pure e
+                            pure (env, params)
+                        AllAda split -> do
+                            rateParams <-
+                                resolveWizardRateParameters tr wOptsRate
+                            let rai =
+                                    ResolverAllAdaInput
+                                        { raiNetwork = networkName
+                                        , raiWalletAddrBech32 =
+                                            wOptsWalletAddr
+                                        , raiScope = wOptsScope
+                                        , raiSplit = split
+                                        , raiRateNumerator =
+                                            wrpRateNumerator rateParams
+                                        , raiRateDenominator =
+                                            wrpRateDenominator rateParams
+                                        , raiRegistry = rv
+                                        , raiValidityHours =
+                                            wOptsValidityHours
+                                        }
+                            er <- resolveWizardEnvAllAda renv rai
+                            (env, plan) <- case er of
+                                Left e ->
+                                    abortTr
+                                        tr
+                                        ("resolve: " <> T.pack (show e))
+                                Right e -> pure e
+                            traceAllAdaPlan tr plan split
+                            pure
+                                ( env
+                                , WizardSwapParameters
+                                    { wspAmountLovelace =
+                                        aapAmountLovelace plan
+                                    , wspChunkSizeLovelace =
+                                        aapChunkSizeLovelace plan
+                                    , wspRateNumerator =
+                                        aapRateNumerator plan
+                                    , wspRateDenominator =
+                                        aapRateDenominator plan
+                                    }
+                                )
                 traceEnv tr env
+                let answers =
+                        SwapWizardQ
+                            { wqScope = wOptsScope
+                            , wqAmountLovelace =
+                                wspAmountLovelace params
+                            , wqChunkSizeLovelace =
+                                wspChunkSizeLovelace params
+                            , wqRateNumerator =
+                                wspRateNumerator params
+                            , wqRateDenominator =
+                                wspRateDenominator params
+                            , wqValidityHours =
+                                wOptsValidityHours
+                            , wqRationale =
+                                RationaleAnswers
+                                    { raDescription =
+                                        wOptsDescription
+                                    , raJustification =
+                                        wOptsJustification
+                                    , raDestinationLabel =
+                                        wOptsDestinationLabel
+                                    , raEvent = wOptsEvent
+                                    , raLabel = wOptsLabel
+                                    }
+                            , wqExtraSigners = wOptsSigners
+                            }
                 intent <-
                     case wizardToTreasuryIntent env answers of
                         Left we ->

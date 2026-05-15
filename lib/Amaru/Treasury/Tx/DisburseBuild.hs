@@ -57,6 +57,7 @@ import Cardano.Tx.Build
     ( BuildError
     , InterpretIO (..)
     , build
+    , mkPParamsBound
     , setMetadata
     )
 import Cardano.Tx.Ledger (ConwayTx)
@@ -184,7 +185,7 @@ runAda ctx dbi fields payload = do
                     )
     result <-
         build
-            pp
+            (mkPParamsBound pp)
             noCtxIO
             evaluator
             inputUtxos

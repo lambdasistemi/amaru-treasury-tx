@@ -140,6 +140,7 @@ import Cardano.Tx.Build
     , checkMinUtxo
     , collateral
     , mint
+    , mkPParamsBound
     , output
     , payTo
     , proposeTreasuryWithdrawal
@@ -995,20 +996,28 @@ buildSubmitAndWait
     refs
     changeAddr
     prog =
-        build pp interpret eval inputs refs changeAddr prog >>= \case
-            Left err ->
-                expectationFailure (label <> ": " <> show err)
-                    *> error "unreachable"
-            Right tx -> do
-                let signed = addKeyWitness genesisSignKey tx
-                    txId = txIdTx signed
-                submitTx submitter signed >>= \case
-                    Submitted _ -> pure ()
-                    Rejected reason ->
-                        expectationFailure $
-                            label <> " rejected: " <> show reason
-                waitForTxChange provider txId genesisAddr 60
-                pure txId
+        build
+            (mkPParamsBound pp)
+            interpret
+            eval
+            inputs
+            refs
+            changeAddr
+            prog
+            >>= \case
+                Left err ->
+                    expectationFailure (label <> ": " <> show err)
+                        *> error "unreachable"
+                Right tx -> do
+                    let signed = addKeyWitness genesisSignKey tx
+                        txId = txIdTx signed
+                    submitTx submitter signed >>= \case
+                        Submitted _ -> pure ()
+                        Rejected reason ->
+                            expectationFailure $
+                                label <> " rejected: " <> show reason
+                    waitForTxChange provider txId genesisAddr 60
+                    pure txId
 
 submitTreasuryWithdrawal
     :: TreasuryTarget
@@ -1096,7 +1105,7 @@ submitTreasuryWithdrawal target provider submitter pp utxos = do
             validTo upperSlot
 
     rewardBefore <- rewardBalance provider treasuryAccount
-    build pp interpret eval [seed] [] genesisAddr prog
+    build (mkPParamsBound pp) interpret eval [seed] [] genesisAddr prog
         >>= \case
             Left err ->
                 expectationFailure (show err)
@@ -1214,7 +1223,7 @@ submitVote
                     SNothing
                 validTo upperSlot
         build
-            pp
+            (mkPParamsBound pp)
             interpret
             eval
             [seed]

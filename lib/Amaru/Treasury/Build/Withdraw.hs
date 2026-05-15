@@ -136,7 +136,7 @@ runWithdrawAction ctx intent rationale walletAddr = do
     result <-
         liftIO $
             build
-                pp
+                (TxBuild.mkPParamsBound pp)
                 noCtxIO
                 evaluator
                 inputUtxos

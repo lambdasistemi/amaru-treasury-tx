@@ -62,6 +62,30 @@ data WizardEvent
       WeTreasuryUtxosQueried !Int !Integer
     | -- | Treasury UTxOs picked + leftover lovelace.
       WeTreasuryUtxosSelected ![Text] !Integer
+    | -- | All-ADA max-spend calculation facts.
+      WeAllAdaPlan
+        ![Text]
+        -- ^ selected pure ADA treasury UTxOs
+        !Integer
+        -- ^ available lovelace
+        !Integer
+        -- ^ amount lovelace
+        !Integer
+        -- ^ implied USDM in smallest units
+        !Integer
+        -- ^ leftover lovelace
+        !Integer
+        -- ^ requested split count
+        !Integer
+        -- ^ produced chunk count
+        !Integer
+        -- ^ extra per chunk lovelace
+        !Integer
+        -- ^ total overhead lovelace
+        !Integer
+        -- ^ rate numerator
+        !Integer
+        -- ^ rate denominator
     | -- | Chain horizon helper resolved an upper-bound slot.
       WeUpperBoundResolved !Word64
     | -- | Chunks computed: total, chunkSize, fullChunks, remainder.
@@ -136,6 +160,40 @@ renderEvent =
                 <> T.intercalate "," picks
                 <> " leftover="
                 <> tshow leftover
+        WeAllAdaPlan
+            picks
+            available
+            amount
+            impliedUsdm
+            leftover
+            split
+            chunks
+            extra
+            overhead
+            rateNum
+            rateDen ->
+                "all-ada selected="
+                    <> T.intercalate "," picks
+                    <> " available="
+                    <> tshow available
+                    <> " amount="
+                    <> tshow amount
+                    <> " impliedUsdm="
+                    <> tshow impliedUsdm
+                    <> " leftover="
+                    <> tshow leftover
+                    <> " split="
+                    <> tshow split
+                    <> " chunks="
+                    <> tshow chunks
+                    <> " extraPerChunk="
+                    <> tshow extra
+                    <> " overhead="
+                    <> tshow overhead
+                    <> " rate="
+                    <> tshow rateNum
+                    <> "/"
+                    <> tshow rateDen
         WeUpperBoundResolved ub ->
             "upperBound slot "
                 <> tshow ub

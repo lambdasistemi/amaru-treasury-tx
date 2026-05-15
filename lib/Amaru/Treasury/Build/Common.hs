@@ -44,8 +44,8 @@ import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (PParams, TopTx, TxBody, bodyTxL)
 import Cardano.Ledger.Hashes (extractHash)
 import Cardano.Ledger.TxIn (TxId (..), TxIn)
-import Cardano.Node.Client.Balance (refScriptsSize)
-import Cardano.Node.Client.Ledger (ConwayTx)
+import Cardano.Tx.Balance (refScriptsSize)
+import Cardano.Tx.Ledger (ConwayTx)
 import Lens.Micro ((&), (.~), (^.))
 
 txIdText :: ConwayTx -> Text

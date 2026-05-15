@@ -34,7 +34,7 @@ Haskell port of the bash recipes in
 | `disburse-wizard` | Verify upstream `metadata.json` against the chain, resolve wallet and treasury UTxOs, emit a unified ADA or USDM disburse `intent.json`. USDM is the default unit. |
 | `emergency-top-up-wizard` | Verify contingency and destination-scope registry state, move ADA from `contingency` to an owned treasury scope, and emit a unified disburse `intent.json`. |
 | `tx-build` | Turn a unified `intent.json` into unsigned Conway CBOR; re-evaluates every redeemer against a live `ChainContext` (typed step trace via `BuildEvent`) and can write a deterministic pre-signing report with `--report PATH`. |
-| `vault create` | Import one pasted or streamed Cardano payment signing-key envelope into an encrypted age witness vault. |
+| `vault create` | Import one pasted or streamed Cardano payment signing key (`cardano-cli` `.skey` JSON or `addr_xsk`) into an encrypted age witness vault. |
 | `witness` | Create one detached Conway vkey witness from an encrypted age vault identity. |
 | `attach-witness` | Merge detached vkey witness CBOR hex into an unsigned Conway transaction. |
 | `submit` | Submit signed Conway CBOR hex through a local node socket. |

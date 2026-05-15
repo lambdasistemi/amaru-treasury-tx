@@ -21,8 +21,8 @@ import Control.Monad.Trans.Except
 import Data.Text qualified as T
 
 import Cardano.Ledger.TxIn (TxIn)
-import Cardano.Node.Client.Balance (BalanceError (..))
-import Cardano.Node.Client.TxBuild qualified as TxBuild
+import Cardano.Tx.Balance (BalanceError (..))
+import Cardano.Tx.Build qualified as TxBuild
 
 import Amaru.Treasury.Build.Error.Exception
     ( BuildException (..)

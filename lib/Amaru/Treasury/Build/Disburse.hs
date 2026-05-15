@@ -32,13 +32,13 @@ import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (bodyTxL)
 import Cardano.Ledger.Mary.Value (MaryValue (..))
 import Cardano.Ledger.Metadata (Metadatum)
-import Cardano.Node.Client.Ledger (ConwayTx)
-import Cardano.Node.Client.TxBuild
+import Cardano.Tx.Build
     ( InterpretIO (..)
     , build
     , setMetadata
     )
-import Cardano.Node.Client.TxBuild qualified as TxBuild
+import Cardano.Tx.Build qualified as TxBuild
+import Cardano.Tx.Ledger (ConwayTx)
 import Lens.Micro ((^.))
 
 import Amaru.Treasury.AuxData (label1694)

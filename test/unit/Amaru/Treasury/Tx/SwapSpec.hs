@@ -74,7 +74,7 @@ import Test.Hspec
     , shouldSatisfy
     )
 
-import Cardano.Node.Client.TxBuild (draft)
+import Cardano.Tx.Build (draft)
 import PlutusCore.Data (Data (..))
 
 import Amaru.Treasury.Tx.Swap

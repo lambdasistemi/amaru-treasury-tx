@@ -127,10 +127,10 @@ import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (TxBody)
 import Cardano.Ledger.Mary.Value (MaryValue (..))
-import Cardano.Node.Client.Balance
+import Cardano.Tx.Balance
     ( BalanceError (..)
     )
-import Cardano.Node.Client.TxBuild qualified as TxBuild
+import Cardano.Tx.Build qualified as TxBuild
 import Lens.Micro ((^.))
 
 spec :: Spec

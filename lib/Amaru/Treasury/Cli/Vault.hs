@@ -21,13 +21,13 @@ module Amaru.Treasury.Cli.Vault
 import Control.Applicative ((<|>))
 import Control.Exception (IOException, catch, onException)
 import Control.Monad (when)
-import Data.Aeson (Value, eitherDecodeStrict')
+import Data.Aeson (eitherDecodeStrict')
 import Data.ByteString qualified as BS
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text.Encoding (encodeUtf8)
+import Data.Text.Encoding (decodeUtf8', encodeUtf8)
 import Options.Applicative
     ( Parser
     , auto
@@ -73,8 +73,8 @@ import Amaru.Treasury.Cli.Passphrase
     ( readVaultPassphraseConfirmed
     )
 import Amaru.Treasury.Tx.Witness
-    ( cardanoCliSigningKeyHash
-    , renderTxWitnessError
+    ( renderTxWitnessError
+    , signingSourceKeyHash
     )
 import Amaru.Treasury.Vault.Age
     ( defaultVaultWorkFactor
@@ -162,7 +162,7 @@ signingKeyInputP =
             ()
             ( long "signing-key-paste"
                 <> help
-                    "Paste the Cardano payment signing-key JSON envelope with terminal echo disabled"
+                    "Paste a cardano-cli .skey JSON envelope or cardano-addresses addr_xsk with terminal echo disabled"
             )
     )
         <|> ( VaultSigningKeyStdin
@@ -170,7 +170,7 @@ signingKeyInputP =
                     ()
                     ( long "signing-key-stdin"
                         <> help
-                            "Read the Cardano payment signing-key JSON envelope from non-terminal stdin"
+                            "Read cardano-cli .skey JSON or cardano-addresses addr_xsk from non-terminal stdin"
                     )
             )
         <|> ( VaultSigningKeyFile
@@ -178,7 +178,7 @@ signingKeyInputP =
                     ( long "signing-key-file"
                         <> metavar "PATH"
                         <> help
-                            "Read the Cardano payment signing-key JSON envelope from a file (compatibility/testing; prefer --signing-key-paste)"
+                            "Read cardano-cli .skey JSON or cardano-addresses addr_xsk from a file (compatibility/testing; prefer --signing-key-paste)"
                     )
             )
 
@@ -188,10 +188,10 @@ runVaultCreate g VaultCreateOpts{..} = do
     networkName <-
         either (die . T.pack) pure (resolveNetworkName g)
     ensureWritableOutput vcoOutPath vcoForce
-    keyEnvelope <- readSigningKeyEnvelope vcoSigningKeyInput
+    signingSource <- readSigningKeySource vcoSigningKeyInput
     keyHash <-
         either (die . renderTxWitnessError) pure $
-            cardanoCliSigningKeyHash keyEnvelope
+            signingSourceKeyHash signingSource
     workFactor <-
         either (die . renderAgeVaultError) pure $
             parseVaultWorkFactor (fromMaybe defaultVaultWorkFactor vcoWorkFactor)
@@ -208,32 +208,32 @@ runVaultCreate g VaultCreateOpts{..} = do
                         , visNetwork = networkName
                         , visKeyHash = keyHash
                         , visDescription = vcoDescription
-                        , visSource = CardanoCliSKey keyEnvelope
+                        , visSource = signingSource
                         }
                         :| []
                     )
                 )
     writeFileAtomic vcoOutPath encrypted
 
-readSigningKeyEnvelope :: VaultSigningKeyInput -> IO Value
-readSigningKeyEnvelope = \case
+readSigningKeySource :: VaultSigningKeyInput -> IO SigningSource
+readSigningKeySource = \case
     VaultSigningKeyPaste ->
         either die pure =<< runInputT defaultSettings readPastedSigningKey
     VaultSigningKeyStdin -> do
         terminal <- hIsTerminalDevice stdin
         when terminal $
             die
-                "refusing to read signing-key JSON from terminal stdin; use --signing-key-paste"
-        decodeSigningKeyEnvelope "from stdin" =<< BS.getContents
+                "refusing to read signing-key material from terminal stdin; use --signing-key-paste"
+        decodeSigningKeySource "from stdin" =<< BS.getContents
     VaultSigningKeyFile path ->
-        decodeSigningKeyEnvelope
+        decodeSigningKeySource
             ("`" <> T.pack path <> "`")
             =<< BS.readFile path
 
-readPastedSigningKey :: InputT IO (Either Text Value)
+readPastedSigningKey :: InputT IO (Either Text SigningSource)
 readPastedSigningKey = do
     outputStrLn
-        "Paste Cardano signing-key JSON. Input is hidden; parsing stops at the closing brace."
+        "Paste Cardano signing-key material. Accepted formats: cardano-cli .skey JSON or cardano-addresses addr_xsk. Input is hidden."
     go mempty
   where
     go acc = do
@@ -243,39 +243,67 @@ readPastedSigningKey = do
                 pure (decodePastedSigningKey acc)
             Just pastedLine -> do
                 let next = acc <> T.pack pastedLine <> "\n"
-                case eitherDecodeStrict' (textBytes next) of
-                    Right value -> pure (Right value)
-                    Left _ -> go next
+                case decodePastedSigningKey next of
+                    Right source -> pure (Right source)
+                    Left err
+                        | looksLikeJsonObject next -> go next
+                        | otherwise -> pure (Left err)
 
     prompt acc
-        | T.null acc = "signing-key JSON: "
+        | T.null acc = "signing key: "
         | otherwise = ""
 
-decodePastedSigningKey :: Text -> Either Text Value
+decodePastedSigningKey :: Text -> Either Text SigningSource
 decodePastedSigningKey raw
-    | T.null raw = Left "no signing-key JSON was pasted"
+    | T.null raw = Left "no signing-key material was pasted"
     | otherwise =
-        case eitherDecodeStrict' (textBytes raw) of
-            Right value -> Right value
-            Left err ->
-                Left $
-                    "malformed pasted signing-key envelope: "
-                        <> T.pack err
+        decodeSigningKeySourceText "from hidden paste" raw
 
-decodeSigningKeyEnvelope :: Text -> BS.ByteString -> IO Value
-decodeSigningKeyEnvelope source raw =
-    case eitherDecodeStrict' raw of
+decodeSigningKeySource :: Text -> BS.ByteString -> IO SigningSource
+decodeSigningKeySource source raw =
+    case decodeUtf8' raw of
         Left err ->
             die $
-                "malformed signing-key envelope "
+                "signing-key material "
                     <> source
-                    <> ": "
-                    <> T.pack err
-        Right value -> pure value
+                    <> " is not UTF-8 text: "
+                    <> T.pack (show err)
+        Right text ->
+            case decodeSigningKeySourceText source text of
+                Left err -> die err
+                Right value -> pure value
+
+decodeSigningKeySourceText
+    :: Text -> Text -> Either Text SigningSource
+decodeSigningKeySourceText source raw
+    | T.null trimmed =
+        Left ("empty signing-key material " <> source)
+    | looksLikeJsonObject trimmed =
+        case eitherDecodeStrict' (textBytes raw) of
+            Left err ->
+                Left $
+                    "malformed signing-key JSON "
+                        <> source
+                        <> ": "
+                        <> T.pack err
+            Right value -> Right (CardanoCliSKey value)
+    | "addr_xsk1" `T.isPrefixOf` T.toLower trimmed =
+        Right (CardanoAddressesAddrXsk trimmed)
+    | otherwise =
+        Left $
+            "unsupported signing-key material "
+                <> source
+                <> ": expected cardano-cli .skey JSON or cardano-addresses addr_xsk"
+  where
+    trimmed = T.strip raw
 
 textBytes :: Text -> BS.ByteString
 textBytes =
     encodeUtf8
+
+looksLikeJsonObject :: Text -> Bool
+looksLikeJsonObject raw =
+    "{" `T.isPrefixOf` T.stripStart raw
 
 ensureWritableOutput :: FilePath -> Bool -> IO ()
 ensureWritableOutput path force = do

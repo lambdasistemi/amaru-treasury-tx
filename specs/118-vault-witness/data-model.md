@@ -1,20 +1,24 @@
 # Data Model: vault-backed transaction witness command
 
-## SigningKeyEnvelope
+## SigningKeyMaterial
 
-Cardano payment signing-key JSON imported by `vault create`.
+Cardano payment signing-key material imported by `vault create`.
 
-Fields:
+Supported forms:
 
-- `type`: must be `PaymentSigningKeyShelley_ed25519`
-- `description`: optional Cardano CLI description
-- `cborHex`: CBOR-encoded Ed25519 signing key payload
+- cardano-cli payment signing-key JSON envelope
+  - `type`: must be `PaymentSigningKeyShelley_ed25519`
+  - `description`: optional Cardano CLI description
+  - `cborHex`: CBOR-encoded Ed25519 signing key payload
+- cardano-addresses address extended signing key
+  - bech32 text with the `addr_xsk` human-readable prefix
 
 Validation rules:
 
-- the signing key must decode as an Ed25519 payment signing key.
+- the signing key must decode as an Ed25519 payment signing key or
+  address extended signing key.
 - the derived verification-key hash becomes vault metadata.
-- human operators paste the envelope with hidden input; automation
+- human operators paste the material with hidden input; automation
   streams it from a non-terminal secret source. File import is retained
   only for compatibility/testing, and `witness` does not accept a
   plaintext signing-key file.
@@ -82,6 +86,9 @@ Variants:
 - `cardano-cli-skey`
   - `keyEnvelope`: Cardano signing-key JSON envelope stored inside the
     encrypted vault payload
+- `cardano-addresses-addr-xsk`
+  - `bech32`: address extended signing key stored inside the encrypted
+    vault payload
 - `cip1852-derived` (future extension; not accepted by v1 code)
   - `root`: encrypted root/account secret material
   - `path`: derivation path, for example
@@ -90,7 +97,8 @@ Variants:
 
 Validation rules:
 
-- imported signing keys must derive to `VaultIdentity.keyHash`.
+- imported signing keys and address extended signing keys must derive to
+  `VaultIdentity.keyHash`.
 - derived keys, once implemented, must use supported Cardano derivation
   rules and derive to `VaultIdentity.keyHash`.
 - unsupported source kinds fail before signing.
@@ -101,7 +109,7 @@ Operator request to create one encrypted vault.
 
 Fields:
 
-- `signingKeyInput`: Cardano signing-key envelope source used for import
+- `signingKeyInput`: Cardano signing-key material source used for import
   (`paste`, non-terminal `stdin`, or compatibility/testing `file`)
 - `label`: vault identity label
 - `network`: command network selection
@@ -118,8 +126,8 @@ Validation rules:
 - `stdin` signing-key input must not be terminal stdin; humans use the
   hidden paste mode instead.
 - passphrase source must produce a non-empty passphrase.
-- signing key hash is derived from the imported key, not supplied by the
-  user.
+- signing key hash is derived from the imported key material, not
+  supplied by the user.
 
 ## SigningRequest
 

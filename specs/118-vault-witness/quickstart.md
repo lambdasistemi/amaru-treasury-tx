@@ -15,15 +15,17 @@ unsigned_tx=tx.body.cborHex
 
 ## 2. Create The Encrypted Vault
 
-Humans use `--signing-key-paste` to paste the Cardano signing-key JSON
+Humans use `--signing-key-paste` to paste Cardano signing-key material
 with terminal echo disabled, then omit `--vault-passphrase-fd` to enter
 the vault passphrase at the no-echo terminal prompt.
 
-`vault create` is the import ceremony. The pasted signing-key JSON is
-read once to create `treasury.vault.age`; normal signing uses the
-encrypted vault plus the passphrase. After verifying and backing up the
-encrypted vault, clear the clipboard or source buffer under the operator
-custody policy.
+`vault create` is the import ceremony. The pasted material is read once
+to create `treasury.vault.age`; normal signing uses the encrypted vault
+plus the passphrase. Accepted material is either a `cardano-cli` `.skey`
+JSON envelope or one `cardano-addresses` `addr_xsk1...` address
+extended signing key line. After verifying and backing up the encrypted
+vault, clear the clipboard or source buffer under the operator custody
+policy.
 
 Interactive ceremony:
 
@@ -34,8 +36,8 @@ amaru-treasury-tx --network preprod vault create \
   --description "core development payment key" \
   --out treasury.vault.age
 
-# Paste the full cardano-cli signing-key JSON when prompted.
-# The pasted bytes are hidden; parsing stops once the JSON object closes.
+# Paste either the full cardano-cli .skey JSON or the addr_xsk1... line.
+# The pasted bytes are hidden.
 ```
 
 Automation can stream the signing key through stdin and the passphrase

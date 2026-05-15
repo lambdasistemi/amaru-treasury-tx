@@ -184,15 +184,18 @@ External signers such as hardware wallets, [`cardano-wallet-sign`][cws],
 or MPC services can still feed `attach-witness` directly.
 
 Create an encrypted age vault once from the Cardano signing-key
-envelope, then use the built-in `witness` command for signing. Humans
-should use `--signing-key-paste`; the pasted signing-key JSON is hidden
-while the CLI reads it, and the vault passphrase prompt is no-echo too.
+material, then use the built-in `witness` command for signing. Humans
+should use `--signing-key-paste`; the pasted signing-key material is
+hidden while the CLI reads it, and the vault passphrase prompt is
+no-echo too.
 
 Treat `vault create` as the import ceremony: pasted or streamed
-signing-key JSON is the only plaintext key input, and normal signing
-after this point uses `treasury.vault.age` plus the passphrase. After
-verifying and backing up the encrypted vault, clear the clipboard or
-source buffer under your custody policy.
+signing-key material is the only plaintext key input, and normal
+signing after this point uses `treasury.vault.age` plus the passphrase.
+Accepted input is either a `cardano-cli` `.skey` JSON envelope or one
+`cardano-addresses` address extended signing key line beginning
+`addr_xsk1`. After verifying and backing up the encrypted vault, clear
+the clipboard or source buffer under your custody policy.
 
 ```bash
 amaru-treasury-tx --network mainnet vault create \
@@ -200,9 +203,14 @@ amaru-treasury-tx --network mainnet vault create \
     --label core_development \
     --out treasury.vault.age
 
-# Paste the full cardano-cli signing-key JSON when prompted.
-# The pasted bytes are hidden; parsing stops once the JSON object closes.
+# Paste either the full cardano-cli .skey JSON or the addr_xsk1... line.
+# The pasted bytes are hidden.
 ```
+
+The `addr_xsk1...` input is the address-level extended signing key
+format produced by `cardano-addresses`, not a root or account private
+key. Paste the single bech32 line exactly as exported by the custody
+tool.
 
 For automation, stream the signing key from a secret manager and pass the
 vault passphrase through an inherited file descriptor:
@@ -220,6 +228,21 @@ secret-manager-read core-development-payment-skey \
 exec 9<&-
 exec 9<<<"$VAULT_PASSPHRASE"
 ```
+
+The transaction passed to `witness --tx` may be either raw Conway CBOR
+hex or a `cardano-cli` `Tx ConwayEra` JSON envelope. If the transaction
+comes from `cardano-cli`, put the full JSON envelope in a file and pass
+that file directly to `witness`; do not paste the JSON interactively
+into `de-envelope`.
+
+```bash
+jq -e . cli.tx.body.json >/dev/null
+test "$(jq -r .cborHex cli.tx.body.json | wc -l | tr -d ' ')" = 1
+```
+
+That check confirms the envelope parses as JSON and that `cborHex`
+contains one logical line. Terminal or browser visual wrapping is fine;
+real newlines inside the JSON string are not.
 
 ```bash
 amaru-treasury-tx --network mainnet witness \
@@ -241,6 +264,15 @@ amaru-treasury-tx attach-witness \
     --out signed.cbor.hex
 
 amaru-treasury-tx --network mainnet submit --tx signed.cbor.hex
+```
+
+For a `cardano-cli` envelope input, replace `--tx unsigned.cbor.hex`
+with `--tx cli.tx.body.json` in the `witness` command above. Before
+`attach-witness`, unwrap the same envelope once because `attach-witness`
+uses the raw CBOR-hex contract:
+
+```bash
+amaru-treasury-tx de-envelope < cli.tx.body.json > unsigned.cbor.hex
 ```
 
 If the transaction does not declare required signer hashes, add

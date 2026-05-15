@@ -8,7 +8,7 @@ Sister of the swap branch in
 [`Amaru.Treasury.Build`](Amaru.Treasury.Build.html).
 Threads a 'DisburseIntent' + rationale 'Metadatum'
 through a 'ChainContext' and runs the full
-[`Cardano.Node.Client.TxBuild.build`](https://github.com/lambdasistemi/cardano-node-clients)
+[`Cardano.Tx.Build.build`](https://github.com/lambdasistemi/cardano-tx-tools)
 loop.
 
 This compatibility module handles the ADA disburse case
@@ -53,13 +53,13 @@ import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (bodyTxL)
 import Cardano.Ledger.Metadata (Metadatum)
-import Cardano.Node.Client.Ledger (ConwayTx)
-import Cardano.Node.Client.TxBuild
+import Cardano.Tx.Build
     ( BuildError
     , InterpretIO (..)
     , build
     , setMetadata
     )
+import Cardano.Tx.Ledger (ConwayTx)
 import Lens.Micro ((^.))
 
 import Amaru.Treasury.AuxData (label1694)

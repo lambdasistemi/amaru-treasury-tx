@@ -72,7 +72,7 @@ import Test.Hspec
     , shouldBe
     )
 
-import Cardano.Node.Client.TxBuild (draft)
+import Cardano.Tx.Build (draft)
 
 import Amaru.Treasury.Tx.SwapCancel
     ( SwapCancelIntent (..)

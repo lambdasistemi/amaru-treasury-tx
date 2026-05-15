@@ -49,7 +49,7 @@ import Data.ByteString (ByteString)
 import Data.Map.Strict qualified as Map
 import PlutusCore.Data (Data (..))
 
-import Cardano.Node.Client.TxBuild
+import Cardano.Tx.Build
     ( TxBuild
     , collateral
     , payTo

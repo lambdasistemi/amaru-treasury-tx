@@ -18,12 +18,20 @@ repository cardano-haskell-packages
     c00aae8461a256275598500ea0e187588c35a5d5d7454fb57eac18d9edb86a56
     d4a35cd3121aa00d18544bb0ac01c3e1691d618f462c46129271bccf39f7e8ee
 
--- amaru-treasury-tx pinned dependency: cardano-node-clients main after #132
+-- amaru-treasury-tx pinned dependency: transaction build helpers split
+-- from cardano-node-clients under the Cardano.Tx.* module namespace.
+source-repository-package
+  type: git
+  location: https://github.com/lambdasistemi/cardano-tx-tools
+  tag: e528dbeb6816e552f790fcbfd745f1d25394a945
+  --sha256: 1nq67g07m0a6xjlq4pb07c8q781kd8g0fh3iz8p8b58khz0bfyjq
+
+-- Provider, Submitter, N2C, and devnet helpers remain in cardano-node-clients.
 source-repository-package
   type: git
   location: https://github.com/lambdasistemi/cardano-node-clients
-  tag: d6773e4cd8a2421617568c8dac0972b0f312a509
-  --sha256: 08a92884flfnph406n14kdknbiyj61hph5f9qdvhj95zx9dq7d5g
+  tag: ca86f11d27b34e37d3814e4d3c3d66e256400403
+  --sha256: 01ic1620d3qs1y224qgvx21k1i4jzf5z6ygprwajsnrgjzacni5y
 
 -- Mirrored from cardano-node-clients/cabal.project (SRPs are not transitive
 -- in cabal; see https://cabal.readthedocs.io/en/3.10/cabal-project.html).

@@ -10,16 +10,18 @@ amaru-treasury-tx [GLOBAL_OPTS] vault create [OPTIONS]
 
 ```text
 --signing-key-paste
-    Prompt for a pasted Cardano payment signing-key JSON envelope with
-    terminal echo disabled. Recommended for human import ceremonies.
+    Prompt for pasted Cardano payment signing-key material with terminal
+    echo disabled. Accepts either a cardano-cli .skey JSON envelope or
+    a cardano-addresses addr_xsk address extended signing key.
+    Recommended for human import ceremonies.
 
 --signing-key-stdin
-    Read the Cardano payment signing-key JSON envelope from stdin.
-    Intended for non-terminal streams from secret managers or fixtures;
-    terminal stdin is rejected to avoid echoing pasted key material.
+    Read Cardano payment signing-key material from stdin. Intended for
+    non-terminal streams from secret managers or fixtures; terminal
+    stdin is rejected to avoid echoing pasted key material.
 
 --signing-key-file PATH
-    Read the Cardano payment signing-key JSON envelope from a file.
+    Read Cardano payment signing-key material from a file.
     Compatibility/testing path, not the recommended custody ceremony;
     normal operator documentation uses paste or non-terminal stdin.
 
@@ -47,12 +49,12 @@ amaru-treasury-tx [GLOBAL_OPTS] vault create [OPTIONS]
 
 Exactly one signing-key input option is required. The global network
 option supplies the vault identity network metadata. The command derives
-the imported key hash from the signing key envelope.
+the imported key hash from the signing key material.
 
 ### Input
 
-All signing-key input modes accept a Cardano payment signing-key JSON
-envelope:
+All signing-key input modes accept either a Cardano payment signing-key
+JSON envelope:
 
 ```json
 {
@@ -60,6 +62,12 @@ envelope:
   "description": "Payment Signing Key",
   "cborHex": "..."
 }
+```
+
+or one `cardano-addresses` address extended signing key line:
+
+```text
+addr_xsk1...
 ```
 
 ### Output
@@ -90,6 +98,15 @@ The decrypted v1 cleartext schema is:
       }
     }
   }
+}
+```
+
+An `addr_xsk` import stores the same identity fields, with this source:
+
+```json
+{
+  "kind": "cardano-addresses-addr-xsk",
+  "bech32": "addr_xsk1..."
 }
 ```
 
@@ -173,7 +190,7 @@ seed phrases.
 
 Required error cases:
 
-- malformed signing-key envelope
+- malformed signing-key material
 - passphrase prompt or descriptor failure
 - passphrase confirmation mismatch
 - age encryption or decryption failure

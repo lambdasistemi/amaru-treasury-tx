@@ -45,7 +45,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString.Short qualified as SBS
 import Data.Map.Strict qualified as Map
 
-import Cardano.Node.Client.TxBuild
+import Cardano.Tx.Build
     ( TxBuild
     , collateral
     , payTo

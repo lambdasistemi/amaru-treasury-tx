@@ -27,7 +27,7 @@ import Amaru.Treasury.Cli
     , opts
     )
 import Amaru.Treasury.Cli.DisburseWizard
-    ( EmergencyTopUpOpts (..)
+    ( ContingencyTopUpOpts (..)
     )
 import Amaru.Treasury.Cli.Envelope
     ( DeEnvelopeFilterResult (..)
@@ -82,20 +82,20 @@ spec =
                 )
                 `shouldBe` Left "parse failure"
 
-        it "parses emergency-top-up-wizard as a contingency ADA top-up" $
-            parseCmd emergencyTopUpArgs
-                `shouldBe` Right "emergency-top-up-wizard"
+        it "parses contingency-top-up-wizard as a contingency ADA top-up" $
+            parseCmd contingencyTopUpArgs
+                `shouldBe` Right "contingency-top-up-wizard"
 
-        it "parses emergency-top-up-wizard ADA into lovelace" $
-            parseEmergencyTopUp emergencyTopUpArgs
+        it "parses contingency-top-up-wizard ADA into lovelace" $
+            parseContingencyTopUp contingencyTopUpArgs
                 `shouldBe` Right (NetworkCompliance, 200000500000)
 
-        it "rejects contingency as an emergency-top-up-wizard destination" $
+        it "rejects contingency as an contingency-top-up-wizard destination" $
             parseCmd
                 ( replaceArg
                     "network_compliance"
                     "contingency"
-                    emergencyTopUpArgs
+                    contingencyTopUpArgs
                 )
                 `shouldBe` Left "parse failure"
 
@@ -135,10 +135,10 @@ parseCmd args =
         Failure{} -> Left "parse failure"
         CompletionInvoked{} -> Left "completion invoked"
 
-parseEmergencyTopUp :: [String] -> Either String (ScopeId, Integer)
-parseEmergencyTopUp args =
+parseContingencyTopUp :: [String] -> Either String (ScopeId, Integer)
+parseContingencyTopUp args =
     case execParserPure defaultPrefs opts args of
-        Success (_, CmdEmergencyTopUp etu) ->
+        Success (_, CmdContingencyTopUp etu) ->
             Right
                 ( etuOptsDestinationScope etu
                 , etuOptsAdaLovelace etu
@@ -160,16 +160,16 @@ cmdTag = \case
     CmdSwapQuote{} -> "swap-quote"
     CmdSwapCancel{} -> "swap-cancel"
     CmdDisburseWizard{} -> "disburse-wizard"
-    CmdEmergencyTopUp{} -> "emergency-top-up-wizard"
+    CmdContingencyTopUp{} -> "contingency-top-up-wizard"
     CmdWithdrawWizard{} -> "withdraw-wizard"
     CmdReportRender{} -> "report-render"
     CmdTreasuryInspect{} -> "treasury-inspect"
     CmdVaultCreate{} -> "vault-create"
     CmdWitness{} -> "witness"
 
-emergencyTopUpArgs :: [String]
-emergencyTopUpArgs =
-    [ "emergency-top-up-wizard"
+contingencyTopUpArgs :: [String]
+contingencyTopUpArgs =
+    [ "contingency-top-up-wizard"
     , "--wallet-addr"
     , "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz"
     , "--metadata"

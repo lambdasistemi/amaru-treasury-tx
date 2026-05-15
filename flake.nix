@@ -61,8 +61,8 @@
           indexTool = { index-state = indexState; };
           cardanoNodeClientsSrc = pkgs.fetchgit {
             url = "https://github.com/lambdasistemi/cardano-node-clients";
-            rev = "ca86f11d27b34e37d3814e4d3c3d66e256400403";
-            sha256 = "01ic1620d3qs1y224qgvx21k1i4jzf5z6ygprwajsnrgjzacni5y";
+            rev = "38fc1917ba475b90edd974576e1c71790d165532";
+            sha256 = "09i3ysv7650imhd4b26cwybjckfs8qfv75kh1r6511zyjvmxykrh";
           };
           devnetGenesis =
             pkgs.runCommand "cardano-node-clients-devnet-genesis" { } ''

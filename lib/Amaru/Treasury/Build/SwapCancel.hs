@@ -120,7 +120,7 @@ runSwapCancelAction ctx intent = do
     result <-
         liftIO $
             build
-                pp
+                (TxBuild.mkPParamsBound pp)
                 noCtxIO
                 evaluator
                 inputUtxos

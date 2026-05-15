@@ -159,7 +159,7 @@ runDisburseAdaAction ctx fields payload rationale walletAddr = do
     result <-
         liftIO $
             build
-                pp
+                (TxBuild.mkPParamsBound pp)
                 noCtxIO
                 evaluator
                 inputUtxos
@@ -288,7 +288,7 @@ runDisburseUsdmAction ctx fields payload rationale walletAddr = do
     result <-
         liftIO $
             build
-                pp
+                (TxBuild.mkPParamsBound pp)
                 noCtxIO
                 evaluator
                 inputUtxos

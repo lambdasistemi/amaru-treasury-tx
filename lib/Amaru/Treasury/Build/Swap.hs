@@ -158,7 +158,7 @@ runSwapAction ctx intent rationale walletInput walletAddr = do
     result <-
         liftIO $
             build
-                pp
+                (TxBuild.mkPParamsBound pp)
                 noCtxIO
                 evaluator
                 inputUtxos

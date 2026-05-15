@@ -93,6 +93,7 @@
 - DOCS READY: README, local DevNet docs, release notes, and CHANGELOG distinguish governance funding from unsigned withdrawal build evidence and record `/tmp/tmp.KP53a1HDRL/withdraw-render` as the latest #83 run.
 - PR GATE AFTER DOCS SLICE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed on 2026-05-14 after the README, release notes, CHANGELOG, and Spec Kit updates.
 - FINAL STACK REBASE: PR #93 and #100 were rebased onto `origin/main` `c36139c` / Cabal `0.2.7.0` on 2026-05-14 after the `v0.2.7.0` release landed. The post-rebase #83 gate `./llm/reviews/local-083-devnet-withdrawal/gate.sh` exited 0 with build, schema-check, 332 unit examples, 25 golden examples with 1 pending, format-check, hlint, smoke scripts, and release-check passing.
+- REBASE REFRESH: PR #93 and #100 were rebased onto `origin/main` `c1fb9f3` / Cabal `0.2.8.0` on 2026-05-15 after the `v0.2.8.0` release landed. The post-rebase #83 gate `./llm/reviews/local-083-devnet-withdrawal/gate.sh` exited 0 with build, schema-check, 364 unit examples, 25 golden examples with 1 pending, format-check, hlint, smoke scripts, and release-check passing.
 
 ## Parallel Notes
 

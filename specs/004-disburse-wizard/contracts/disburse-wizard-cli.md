@@ -4,7 +4,7 @@
 **Date**: 2026-05-06
 
 This file fixes the user-visible CLI surface for `disburse-wizard` and
-the contingency-specific `contingency-top-up-wizard` wrapper: options, defaults,
+the contingency-specific `contingency-disburse-wizard` wrapper: options, defaults,
 exit codes, and stdout shape. Mirrors the structure of
 [`swap-wizard-cli.md`](../../002-swap-wizard/contracts/swap-wizard-cli.md).
 
@@ -47,7 +47,7 @@ Notes:
 - `--scope` takes the canonical name from
   [`Amaru.Treasury.Scope`](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/lib/Amaru/Treasury/Scope.hs).
 - `disburse-wizard` is for owned scopes only. `contingency` is reserved
-  for `contingency-top-up-wizard`.
+  for `contingency-disburse-wizard`.
 - For owned scopes, the selected `--scope` implies its owner key as the
   first required signer. `--extra-signer` is repeated for each witness
   beyond that owner and accepts either a scope name (lowercased) or a
@@ -61,12 +61,12 @@ Notes:
   file.
 - `--log` defaults to stderr.
 
-## 1.1 Contingency top-up subcommand
+## 1.1 Contingency disburse subcommand
 
 ```text
 amaru-treasury-tx [--node-socket PATH]
                   (--network mainnet|preprod|preview | --network-magic N)
-    contingency-top-up-wizard
+    contingency-disburse-wizard
     --wallet-addr ADDR
     --metadata PATH
     --destination-scope core_development|ops_and_use_cases|network_compliance|middleware
@@ -89,7 +89,7 @@ Notes:
   the verified destination treasury address as the beneficiary address.
 - The emitted intent is still a unified `disburse` intent so the
   shipped `tx-build` path can build it, but the command surface enforces
-  the contingency top-up policy.
+  the contingency disburse policy.
 - Because `contingency` has no owner key of its own, the emitted intent
   requires all four owned scope owner key hashes as signers.
 
@@ -102,7 +102,7 @@ Notes:
 - A successful run writes nothing else to stdout when `--out` is
   given; stderr is silent on success when `--log` is given.
 - Errors go to stderr as a single line with `disburse-wizard: <message>`
-  or `contingency-top-up-wizard: <message>` prefix.
+  or `contingency-disburse-wizard: <message>` prefix.
 
 ## 3. Exit codes
 

@@ -40,6 +40,14 @@
 - [x] T020 [US3] Record tx id/body hash, fee, validity bound, report paths, and upstream dependency SHA in `withdraw/summary.json`.
 - [x] T021 [US3] GREEN: `nix develop --quiet -c just devnet-smoke withdraw` passes and records withdrawal evidence.
 
+## Phase 5b: Sign, Submit, And Materialize
+
+- [x] T021a [US3] RED: require submitted-withdrawal materialization fields in the focused devnet diagnostics contract.
+- [x] T021b [US3] Decode the built withdrawal CBOR, sign it with the local DevNet wallet key, and write `withdraw/signed-tx.cbor.hex`.
+- [x] T021c [US3] Submit the signed withdrawal through the local `cardano-node-clients` submitter and write `withdraw/submit.log`.
+- [x] T021d [US3] Wait for the treasury output UTxO, assert output `#0` contains the withdrawn ADA at the treasury script address, assert reward-after-submit is zero, and assert the treasury ADA delta equals the withdrawn amount.
+- [x] T021e [US3] Write `withdraw/materialized.json` and final summary fields for signed tx, submitted tx id, materialized UTxO, reward drain, and treasury ADA before/after totals.
+
 ## Phase 6: Failure Diagnostics
 
 - [x] T022 [US1] Cover reward timeout with last observed reward and epoch/tip context.
@@ -64,6 +72,8 @@
   evidence, observes positive rewards, and writes the withdraw intent.
 - Phase 5 is complete: `tx-build` consumes the live intent and writes
   unsigned CBOR plus JSON/Markdown reports.
+- Phase 5b is complete: the DevNet harness signs/submits the built
+  withdrawal and records materialized treasury ADA evidence.
 - Phase 6 is complete: typed diagnostics cover reward timeout, zero
   rewards, network mismatch, and tx-build failure artifact handling.
 - Phase 7 starts only after a successful withdrawal run exists.
@@ -86,15 +96,24 @@
 - WITHDRAW BUILD GREEN: `scripts/smoke/devnet-local --phase withdraw --run-dir /tmp/tmp.gE9yQunNvS/withdraw-build` exits 0; it writes `withdraw/tx-body.cbor.hex`, `withdraw/report.json`, `withdraw/report.md`, and `withdraw/tx-build.log`. Summary records reward account `5da22eab0370edee0d4591f54bba0d79a89d973598f15eb609d968c4`, tx id `5fd2aa15f7269474fa5709e9b804b26f3df60ff4b3c38b3f225797cfef165d43`, fee `469749`, reward `2000000`, and validity upper bound slot `222`.
 - PR GATE AFTER BUILD SLICE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed on 2026-05-14 after the intent-to-unsigned-build code, docs, and review-state updates.
 - DIAGNOSTICS RED: the first focused `devnet-tests --match 'withdraw diagnostics'` run failed to compile because `WithdrawalRewardTimeout`, `WithdrawalZeroRewards`, `WithdrawalTxBuildFailed`, `withdrawalFailureValue`, `writeWithdrawalFailure`, and the diagnostic fixtures did not exist yet.
-- DIAGNOSTICS GREEN: `nix develop --quiet -c cabal test devnet-tests -O0 --test-show-details=direct --test-option=--match --test-option='withdraw diagnostics'` passes 4 examples, 0 failures. It covers reward timeout fields, network mismatch classification before intent writing, zero-rewards stale-artifact removal, and tx-build failure intent preservation with tx-body cleanup.
+- DIAGNOSTICS GREEN: `nix develop --quiet -c cabal test devnet-tests -O0 --test-show-details=direct --test-option=--match --test-option='withdraw diagnostics'` passes 5 examples, 0 failures. It covers materialization proof fields, reward timeout fields, network mismatch classification before intent writing, zero-rewards stale-artifact removal, and tx-build failure intent preservation with tx-body cleanup.
 - WITHDRAW REGRESSION AFTER DIAGNOSTICS: `scripts/smoke/devnet-local --phase withdraw --run-dir /tmp/tmp.KP53a1HDRL/withdraw-render` exits 0 after the DevNet report-render fix; it writes live build artifacts with reward account `ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af`, tx id `fdedbf33e61132a9fdbb883eb6bff4b6d4517ded08e5ca64ee373c1e1db064d3`, fee `469749`, reward `2000000`, validity upper bound slot `222`, and `withdraw/report.md` line `Explorer: no public explorer for devnet`.
 - PR GATE AFTER DIAGNOSTICS SLICE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed on 2026-05-14 after the typed diagnostics code, Spec Kit, and review-state updates.
 - DEVNET REPORT RENDER RED/GREEN: `nix develop --quiet -c just unit 'Amaru.Treasury.Report.Render/does not render a public explorer link for devnet'` first failed because DevNet reports rendered a mainnet Cardanoscan URL, then passed after the renderer switched DevNet/custom networks to `Explorer: no public explorer for devnet`.
-- DOCS READY: README, local DevNet docs, release notes, and CHANGELOG distinguish governance funding from unsigned withdrawal build evidence and record `/tmp/tmp.KP53a1HDRL/withdraw-render` as the latest #83 run.
+- MATERIALIZATION CONTRACT RED: `nix develop --quiet -c cabal test devnet-tests -O0 --test-show-details=direct --test-option=--match --test-option='records submitted withdrawal materialization proof'` first failed to compile because `WithdrawalSubmissionEvidence` did not exist.
+- MATERIALIZATION CONTRACT GREEN: the same focused command passes and requires signed tx path, submit log path, materialization path, submitted tx id, treasury materialized output, reward-before/after-submit values, and treasury ADA before/after totals.
+- WITHDRAW VALUE-CONSERVATION RED: `nix develop --quiet -c just unit 'Amaru.Treasury.Build/runWithdraw/balances the reward withdrawal as value supplied by the transaction'` first failed with `expected: 50007239276 but got: 62507239276`, proving the builder had balanced the treasury output from wallet input instead of treating the withdrawal as transaction supply.
+- WITHDRAW VALUE-CONSERVATION GREEN: the same focused unit passes after `runWithdrawAction` adds the withdrawal amount to wallet change before fee alignment.
+- WITHDRAW SUBMIT RED: `nix develop --quiet -c just devnet-smoke withdraw` reached node submission and was rejected by the node with `ValueNotConservedUTxO` by exactly `2000000` lovelace before the value-conservation fix.
+- WITHDRAW REPORT ACCOUNTING RED/GREEN: `nix develop --quiet -c just unit 'Amaru.Treasury.Report/accounts for withdraw rewards'` passes after proving reports count reward withdrawals as transaction supply, not wallet spend.
+- WITHDRAW GOLDEN REFRESH: `nix develop --quiet -c just golden withdraw` passes after refreshing withdraw CBOR and report goldens; the Markdown conservation line now reads `inputs + withdrawals = outputs + fee` with residual `0`.
+- WITHDRAW SUBMIT/MATERIALIZATION GREEN: `nix develop --quiet -c just devnet-smoke withdraw` exits 0 with run directory `runs/devnet/20260515T091231Z`; it writes `withdraw/signed-tx.cbor.hex`, `withdraw/submit.log`, and `withdraw/materialized.json`, submits tx `ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d`, observes materialized output `ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d#0` with `2000000` lovelace at the treasury script address, records reward `2000000 -> 0` after submit, and records treasury ADA `200000000 -> 202000000`.
+- DOCS READY: README, local DevNet docs, release notes, and CHANGELOG distinguish governance funding from withdrawal materialization evidence and record `runs/devnet/20260515T091231Z` as the latest #83 run.
 - PR GATE AFTER DOCS SLICE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` passed on 2026-05-14 after the README, release notes, CHANGELOG, and Spec Kit updates.
 - FINAL STACK REBASE: PR #93 and #100 were rebased onto `origin/main` `c36139c` / Cabal `0.2.7.0` on 2026-05-14 after the `v0.2.7.0` release landed. The post-rebase #83 gate `./llm/reviews/local-083-devnet-withdrawal/gate.sh` exited 0 with build, schema-check, 332 unit examples, 25 golden examples with 1 pending, format-check, hlint, smoke scripts, and release-check passing.
 - REBASE REFRESH: PR #93 and #100 were rebased onto `origin/main` `c1fb9f3` / Cabal `0.2.8.0` on 2026-05-15 after the `v0.2.8.0` release landed. The post-rebase #83 gate `./llm/reviews/local-083-devnet-withdrawal/gate.sh` exited 0 with build, schema-check, 364 unit examples, 25 golden examples with 1 pending, format-check, hlint, smoke scripts, and release-check passing.
 - MAIN RETARGET: after PR #93 merged into `origin/main` at `308f0c9` on 2026-05-15, PR #100 was rebased directly onto `main` by replaying only the withdrawal commits after the old `080-local-devnet-smoke` base. The retarget gate `./llm/reviews/local-083-devnet-withdrawal/gate.sh` exited 0 with build, schema-check, 364 unit examples, 25 golden examples with 1 pending, format-check, hlint, smoke scripts, and release-check passing.
+- FINAL GATE AFTER MATERIALIZATION SLICE: `./llm/reviews/local-083-devnet-withdrawal/gate.sh` exits 0 after the signed/submitted/materialized withdrawal slice, report-accounting schema refresh, docs, and fixture updates. It passes build, schema-check, 366 unit examples, 25 golden examples with 1 pending, format-check, hlint, smoke scripts, and release-check.
 
 ## Parallel Notes
 

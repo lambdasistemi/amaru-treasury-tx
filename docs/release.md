@@ -120,17 +120,21 @@ from `0` to `2000000` lovelace.
 
 The withdrawal phase creates fresh local governance prerequisite
 evidence, resolves the funded treasury script reward account through
-`withdraw-wizard`, and runs the release-facing `tx-build` path to
-write unsigned CBOR plus JSON/Markdown reports. Latest branch
-withdrawal evidence is `/tmp/tmp.KP53a1HDRL/withdraw-render`,
+`withdraw-wizard`, runs the release-facing `tx-build` path to write
+unsigned CBOR plus JSON/Markdown reports, then signs and submits the
+built withdrawal inside the opt-in DevNet harness. Latest branch
+withdrawal evidence is `runs/devnet/20260515T091231Z`,
 reward account
 `ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af`, reward
 `2000000` lovelace, tx id
-`fdedbf33e61132a9fdbb883eb6bff4b6d4517ded08e5ca64ee373c1e1db064d3`,
-fee `469749` lovelace, validity upper bound slot `222`, and report
-paths under `withdraw/report.json` and `withdraw/report.md`. This is
-unsigned build evidence only; it does not sign or submit the final
-withdrawal transaction.
+`ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d`,
+fee `457683` lovelace, validity upper bound slot `222`, submitted tx id
+matching the build id, materialized output
+`ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d#0`,
+reward-after-submit `0`, treasury ADA `200000000 -> 202000000`, and
+report/proof paths under
+`withdraw/report.json`, `withdraw/signed-tx.cbor.hex`,
+`withdraw/submit.log`, and `withdraw/materialized.json`.
 
 The DevNet experiment is split into governance action (#82),
 withdrawal (#83), disburse (#86), SundaeSwap V3 order build/funding
@@ -154,14 +158,18 @@ d6773e4cd8a2421617568c8dac0972b0f312a509, reward
 
 Local DevNet withdrawal evidence now proves the second treasury setup
 slice: the smoke observes a funded Amaru treasury script reward
-account, writes a schema-v1 withdraw intent, and builds unsigned
-withdrawal CBOR plus JSON/Markdown reports through tx-build. Evidence:
-/tmp/tmp.KP53a1HDRL/withdraw-render, reward account
+account, writes a schema-v1 withdraw intent, builds unsigned
+withdrawal CBOR plus JSON/Markdown reports through tx-build, then signs
+and submits the withdrawal inside the opt-in DevNet harness and proves
+ADA materialized at the treasury script address. Evidence:
+runs/devnet/20260515T091231Z, reward account
 ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af,
 reward 2000000 lovelace, tx id
-fdedbf33e61132a9fdbb883eb6bff4b6d4517ded08e5ca64ee373c1e1db064d3,
-fee 469749 lovelace, validity upper bound slot 222. This is unsigned
-build evidence only; it is not signing/submission, disburse,
+ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d,
+fee 457683 lovelace, validity upper bound slot 222, materialized output
+ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d#0,
+reward 2000000 -> 0 after submit, and treasury ADA
+200000000 -> 202000000. This is not disburse,
 SundaeSwap order, or reorganize proof.
 ```
 

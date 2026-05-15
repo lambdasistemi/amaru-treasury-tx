@@ -65,24 +65,38 @@ carry the funded treasury reward account, and contain a positive
 
 ---
 
-### User Story 3 - Build Unsigned Withdrawal CBOR (Priority: P1)
+### User Story 3 - Build, Submit, And Materialize Withdrawal (Priority: P1)
 
 As a release maintainer, I need `tx-build` to consume the live DevNet
-withdraw intent and produce unsigned Conway CBOR plus reports, without
-signing or submitting the final withdrawal transaction.
+withdraw intent, produce unsigned Conway CBOR plus reports, then have
+the opt-in DevNet harness sign and submit that transaction and prove
+the withdrawn ADA materialized at the treasury script address.
 
 **Why this priority**: The release-facing Amaru CLI builds unsigned
-transactions. DevNet evidence for #83 must stop at that same boundary.
+transactions. DevNet evidence for #83 must go one step further inside
+the harness so maintainers know the built withdrawal is accepted by the
+node and actually drains reward state into a spendable treasury UTxO.
 
 **Independent Test**: Run `just devnet-smoke withdraw` and verify that
 the run directory contains unsigned CBOR, machine-readable report JSON,
-human report markdown, tx body hash, and the source intent.
+human report markdown, tx body hash, signed CBOR, submit log, submitted
+tx id, materialized treasury UTxO, reward-after-submit value, and the
+source intent.
 
 **Acceptance Scenarios**:
 
 1. **Given** a valid live withdraw intent, **When** `tx-build` runs,
    **Then** it produces unsigned withdrawal CBOR and report artifacts.
-2. **Given** `tx-build` fails, **When** the smoke records the failure,
+2. **Given** the unsigned withdrawal CBOR is produced, **When** the
+   DevNet harness signs and submits it, **Then** the node accepts the
+   transaction, `withdraw/materialized.json` records the signed tx path
+   and submitted tx id, and output `#0` is observed at the treasury
+   script address with ADA equal to the withdrawn rewards.
+3. **Given** the submitted transaction is observed, **When** the smoke
+   queries reward and treasury UTxO state, **Then** the reward account
+   balance is zero and the treasury UTxO ADA total increased by the
+   withdrawn amount.
+4. **Given** `tx-build` fails, **When** the smoke records the failure,
    **Then** the diagnostic identifies the build phase and preserves the
    intent plus live chain context used for reproduction.
 
@@ -126,6 +140,12 @@ only.
 - The intent network and node magic disagree.
 - `tx-build` fails during context query, script evaluation, balancing,
   report rendering, or CBOR writing.
+- The unsigned transaction decodes locally but node submission rejects
+  the signed transaction.
+- The submitted transaction is accepted but the expected treasury UTxO
+  is not observed before the materialization wait budget expires.
+- The treasury UTxO is observed but the reward account did not drain to
+  zero or the treasury ADA delta does not match the withdrawn amount.
 - The withdrawal smoke is rerun into a directory containing stale
   artifacts.
 
@@ -148,15 +168,17 @@ only.
 - **FR-006**: The withdrawal phase MUST run `tx-build` against the live
   DevNet intent and write unsigned CBOR plus mechanical report
   artifacts.
-- **FR-007**: The withdrawal phase MUST NOT sign or submit the final
-  withdrawal transaction.
+- **FR-007**: The withdrawal phase MUST sign the built withdrawal
+  transaction inside the opt-in DevNet harness, submit it through the
+  local node, and write signed-tx and submit-log artifacts.
 - **FR-008**: Zero reward, timeout, stale evidence, network mismatch,
   and build failure cases MUST fail with typed diagnostics and no
   misleading success artifacts.
 - **FR-009**: The run directory MUST include enough reproduction
   artifacts to rerun the wizard/build path without rediscovering state:
   summary JSON/logs, intent JSON, tx body path, report paths, reward
-  evidence, epoch/tip context, and upstream dependency SHA.
+  evidence, signed tx path, submit log, materialization proof,
+  epoch/tip context, and upstream dependency SHA.
 - **FR-010**: README, release docs, and #83 metadata MUST document this
   as withdrawal evidence only.
 
@@ -172,6 +194,10 @@ only.
   `withdraw-wizard` from live local-node state.
 - **Withdrawal Build Evidence**: Unsigned CBOR, tx body hash/report,
   mechanical JSON report, human markdown report, and build diagnostics.
+- **Withdrawal Materialization Evidence**: Signed CBOR, submit log,
+  submitted tx id, observed treasury output reference, materialized ADA
+  amount, reward-after-submit value, and treasury UTxO ADA before/after
+  totals.
 - **Withdrawal Diagnostic**: Typed failure record with phase, last
   observed reward, epoch/tip context, and artifact paths.
 
@@ -188,7 +214,11 @@ only.
   artifacts from the live DevNet intent.
 - **SC-004**: On zero reward or timeout, no `intent.json` or success
   CBOR is written.
-- **SC-005**: Release docs distinguish governance funding evidence
+- **SC-005**: On success, `withdraw/materialized.json` proves a node
+  accepted tx id, a treasury output containing the withdrawn ADA, reward
+  balance `0` after submit, and a treasury ADA delta equal to the
+  withdrawn reward.
+- **SC-006**: Release docs distinguish governance funding evidence
   from withdrawal build evidence and leave later slices unclaimed.
 
 ## Assumptions
@@ -201,5 +231,6 @@ only.
 - `cardano-node-clients` #132 is merged into upstream `main`; Amaru
   should refresh its pin from the temporary stack SHA to the merged
   upstream `main` commit before implementation.
-- The release-facing CLI remains build-only: no signing or final
-  withdrawal submission.
+- The release-facing CLI remains build-only; the final signing and
+  submission required by this acceptance remain harness-internal to the
+  opt-in DevNet smoke.

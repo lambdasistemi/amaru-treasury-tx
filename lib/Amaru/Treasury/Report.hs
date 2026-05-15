@@ -47,6 +47,7 @@ module Amaru.Treasury.Report
 import Cardano.Crypto.Hash.Class (hashToBytes)
 import Cardano.Ledger.Address
     ( Addr
+    , Withdrawals (..)
     , getNetwork
     , serialiseAddr
     )
@@ -58,6 +59,7 @@ import Cardano.Ledger.Api.Tx.Body
     , referenceInputsTxBodyL
     , reqSignerHashesTxBodyL
     , vldtTxBodyL
+    , withdrawalsTxBodyL
     )
 import Cardano.Ledger.Api.Tx.Out
     ( TxOut
@@ -108,6 +110,7 @@ import Data.ByteString.Lazy qualified as BSL
 import Data.Char (isDigit)
 import Data.Either (fromRight)
 import Data.Foldable (toList)
+import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -212,6 +215,7 @@ data WalletAccounting = WalletAccounting
     , waChangeOutput :: Maybe UtxoSummary
     , waCollateralReturn :: Maybe UtxoSummary
     , waFeeLovelace :: Integer
+    , waWithdrawalLovelace :: Integer
     , waNetSpendLovelace :: Integer
     }
     deriving stock (Eq, Show)
@@ -414,6 +418,7 @@ instance ToJSON WalletAccounting where
             , "changeOutput" .= waChangeOutput accounting
             , "collateralReturn" .= waCollateralReturn accounting
             , "feeLovelace" .= waFeeLovelace accounting
+            , "withdrawalLovelace" .= waWithdrawalLovelace accounting
             , "netSpendLovelace" .= waNetSpendLovelace accounting
             ]
 
@@ -425,6 +430,7 @@ instance FromJSON WalletAccounting where
             <*> o .: "changeOutput"
             <*> o .: "collateralReturn"
             <*> o .: "feeLovelace"
+            <*> o .: "withdrawalLovelace"
             <*> o .: "netSpendLovelace"
 
 instance ToJSON TreasuryAccounting where
@@ -605,6 +611,7 @@ buildTransactionReport context result =
                     collateralReturnSummary result
                         <$> brCollateralReturn result
                 , waFeeLovelace = feeLovelace
+                , waWithdrawalLovelace = withdrawalLovelace
                 , waNetSpendLovelace = walletNetSpend
                 }
         , trTreasuryAccounting =
@@ -652,6 +659,15 @@ buildTransactionReport context result =
     Coin feeLovelace = brFeeLovelace result
     Coin totalCollateral = brTotalCollateralLovelace result
     Coin perChunkOverhead = brPerChunkOverheadLovelace result
+    withdrawalLovelace =
+        sum
+            [ lovelace
+            | Coin lovelace <-
+                Map.elems withdrawals
+            ]
+      where
+        Withdrawals withdrawals =
+            body ^. withdrawalsTxBodyL
     scriptResults = brScriptResults result
     walletInputs = inputSummary <$> brWalletInputs result
     treasuryInputs =
@@ -864,6 +880,7 @@ sampleSwapReport =
                 , waChangeOutput = Nothing
                 , waCollateralReturn = Nothing
                 , waFeeLovelace = 1041155
+                , waWithdrawalLovelace = 0
                 , waNetSpendLovelace = 1041155
                 }
         , trTreasuryAccounting =

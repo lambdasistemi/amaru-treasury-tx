@@ -18,14 +18,19 @@ All notable changes to `amaru-treasury-tx` are documented here.
   reorganize proofs remain follow-up DevNet slices.
 * Local DevNet withdrawal evidence now proves the second treasury setup
   slice: `just devnet-smoke withdraw` observes funded script rewards,
-  writes a schema-v1 withdraw intent, and builds unsigned withdrawal
-  CBOR plus JSON/Markdown reports through `tx-build`. Latest branch
-  evidence: `/tmp/tmp.KP53a1HDRL/withdraw-render`, reward account
+  writes a schema-v1 withdraw intent, builds unsigned withdrawal CBOR
+  plus JSON/Markdown reports through `tx-build`, then signs and submits
+  the built transaction inside the opt-in DevNet harness and proves the
+  ADA materialized at the treasury script address. Latest branch
+  evidence: `runs/devnet/20260515T091231Z`, reward account
   `ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af`,
   reward `2000000` lovelace, tx id
-  `fdedbf33e61132a9fdbb883eb6bff4b6d4517ded08e5ca64ee373c1e1db064d3`,
-  fee `469749` lovelace, validity upper bound slot `222`. This is
-  unsigned build evidence only; signing/submission, disburse,
+  `ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d`,
+  fee `457683` lovelace, validity upper bound slot `222`, submitted tx
+  id matching the build id, materialized output
+  `ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d#0`,
+  reward balance `2000000 -> 0` after submit, and treasury ADA
+  `200000000 -> 202000000`. Disburse,
   SundaeSwap order, and reorganize proofs remain follow-up slices.
 * DevNet Markdown reports no longer render a mainnet Cardanoscan link
   for local transactions; they state that no public explorer exists for

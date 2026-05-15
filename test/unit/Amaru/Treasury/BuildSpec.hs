@@ -27,6 +27,7 @@ import Control.Tracer (Tracer (..))
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
+import Data.Foldable (toList)
 import Data.IORef
     ( modifyIORef'
     , newIORef
@@ -120,11 +121,17 @@ import Amaru.Treasury.IntentJSON.Common
 import Cardano.Ledger.Address
     ( AccountAddress
     )
+import Cardano.Ledger.Api.Tx.Body (outputsTxBodyL)
+import Cardano.Ledger.Api.Tx.Out (TxOut, valueTxOutL)
 import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Conway (ConwayEra)
+import Cardano.Ledger.Core (TxBody)
+import Cardano.Ledger.Mary.Value (MaryValue (..))
 import Cardano.Node.Client.Balance
     ( BalanceError (..)
     )
 import Cardano.Node.Client.TxBuild qualified as TxBuild
+import Lens.Micro ((^.))
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Build" $ do
@@ -447,6 +454,25 @@ spec = describe "Amaru.Treasury.Build" $ do
                 Right{} ->
                     expectationFailure "expected typed missing-UTxO error"
 
+        it
+            "balances the reward withdrawal as value supplied by the transaction"
+            $ do
+                some <-
+                    expectRightIO
+                        =<< decodeTreasuryIntentFile
+                            "test/fixtures/withdraw/synthetic/intent.json"
+                fixture <- readSwapFixture "test/fixtures/withdraw/synthetic"
+                result <- runFromIntent (toFrozenContext fixture) some
+                let rewardLovelace = 12_500_000_000
+                    inputLovelace =
+                        sum (txOutLovelace . snd <$> brWalletInputs result)
+                    outputLovelace =
+                        txBodyOutputLovelace (brFinalTxBody result)
+                    Coin feeLovelace =
+                        brFeeLovelace result
+                inputLovelace + rewardLovelace
+                    `shouldBe` outputLovelace + feeLovelace
+
     describe "runSwap" $
         it "returns a normalized swap runner failure on the Either path" $ do
             some <-
@@ -523,6 +549,15 @@ missingWithdrawUtxos :: SomeException -> Bool
 missingWithdrawUtxos =
     isInfixOf "tx-build: withdraw failed while gathering inputs"
         . displayException
+
+txBodyOutputLovelace :: TxBody era ConwayEra -> Integer
+txBodyOutputLovelace body =
+    sum (txOutLovelace <$> toList (body ^. outputsTxBodyL))
+
+txOutLovelace :: TxOut ConwayEra -> Integer
+txOutLovelace txOut =
+    let MaryValue (Coin lovelace) _ = txOut ^. valueTxOutL
+    in  lovelace
 
 expectRightIO :: (Show e) => Either e a -> IO a
 expectRightIO =

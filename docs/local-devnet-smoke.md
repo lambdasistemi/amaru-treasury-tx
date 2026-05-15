@@ -5,8 +5,10 @@ The local DevNet smoke is an opt-in release check. It starts the
 magic `42`, can run the governance funding setup on a patched
 short-epoch genesis, records timing/action/reward evidence, and writes
 artifacts under a fresh run directory. The withdrawal phase proves the
-live reward-to-unsigned-build boundary by writing a withdrawal intent,
-unsigned CBOR, and JSON/Markdown review reports.
+live reward-to-materialized-ADA boundary by writing a withdrawal intent,
+building unsigned CBOR, signing and submitting it inside the opt-in
+DevNet harness, and recording the treasury UTxO that materialized from
+the reward account.
 
 This check is not part of `just ci`: it starts a real local
 `cardano-node` and is meant as manual live evidence before a release.
@@ -128,6 +130,12 @@ devnet-smoke: withdraw-fee 469749
 devnet-smoke: withdraw-tx-body runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/tx-body.cbor.hex
 devnet-smoke: withdraw-report-json runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/report.json
 devnet-smoke: withdraw-report-md runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/report.md
+devnet-smoke: withdraw-signed-tx runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/signed-tx.cbor.hex
+devnet-smoke: withdraw-submitted-tx-id 5fd2...
+devnet-smoke: withdraw-materialized-tx-in 5fd2...#0
+devnet-smoke: withdraw-materialized-ada 2000000
+devnet-smoke: withdraw-reward-after-submit 0
+devnet-smoke: withdraw-materialization runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/materialized.json
 ```
 
 The smoke copies and patches the DevNet genesis to a short epoch,
@@ -138,15 +146,24 @@ action, observes the reward through the provider, and writes the
 schema-v1 withdrawal intent. It then runs the release-facing
 `tx-build` path against the live node, using a short DevNet validity
 horizon so script evaluation stays inside the hard-fork forecast
-window.
+window. After the build evidence is written, the smoke signs the
+withdrawal transaction with the local DevNet wallet key, submits it via
+`cardano-node-clients`, waits for output `#0` to appear at the treasury
+script address, and verifies that the reward account has drained to
+zero and the treasury UTxO ADA total increased by the withdrawn amount.
 
-The verified 2026-05-14 slice used run directory
-`/tmp/tmp.KP53a1HDRL/withdraw-render`. It wrote `withdraw/intent.json`
-with reward account
+The verified 2026-05-15 slice used run directory
+`runs/devnet/20260515T091231Z`. It wrote `withdraw/intent.json` with
+reward account
 `ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af` and
-`rewardsLovelace = 2000000`, then built unsigned tx id
-`fdedbf33e61132a9fdbb883eb6bff4b6d4517ded08e5ca64ee373c1e1db064d3`
-with fee `469749` lovelace and validity upper bound slot `222`.
+`rewardsLovelace = 2000000`, built tx id
+`ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d`
+with fee `457683` lovelace and validity upper bound slot `222`, signed
+and submitted the same tx id, observed materialized output
+`ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d#0`
+with `2000000` lovelace at the treasury script address, and confirmed
+the reward account moved from `2000000` to `0` lovelace after submit
+while treasury ADA moved from `200000000` to `202000000`.
 
 The withdrawal phase writes:
 
@@ -167,6 +184,9 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
     |-- registry.json
     |-- report.json
     |-- report.md
+    |-- signed-tx.cbor.hex
+    |-- submit.log
+    |-- materialized.json
     |-- tx-body.cbor.hex
     |-- tx-build.log
     `-- summary.json
@@ -199,15 +219,17 @@ The experiment is split into six tickets:
   release-facing reorganize builder from #46 exists.
 
 The passing phases today are `node`, `governance`, and `withdraw`.
+`just devnet-smoke all` runs those three phases into separate
+subdirectories under one timestamped run directory.
 
 `node` proves only the local node boundary, network magic, and timing.
 `governance` proves the local setup path that funds the Amaru treasury
 script reward account. `withdraw` proves that the funded script reward
-account can be resolved into a schema-v1 intent and built into unsigned
-CBOR plus review reports. It is not proof that the withdrawal
-transaction was signed or submitted, and it is not proof that disburse,
-SundaeSwap order-build, SundaeSwap order-spend, or reorganize
-transactions have been built or observed on DevNet.
+account can be resolved into a schema-v1 intent, built into unsigned
+CBOR plus review reports, signed and submitted by the DevNet harness,
+and observed as ADA materialized at the treasury script address. It is
+not proof that disburse, SundaeSwap order-build, SundaeSwap order-spend,
+or reorganize transactions have been built or observed on DevNet.
 
 SundaeSwap V3 contract compatibility should use the public V3 Aiken
 contracts and SDK/reference material:
@@ -265,11 +287,15 @@ not observed, or the reward account is not funded before the wait
 budget expires.
 
 The withdrawal phase may fail during setup, reward observation, intent
-resolution, or `tx-build`. When diagnosing `tx-build`, inspect
-`withdraw/tx-build.log`, `withdraw/report.json`, and the run
-directory's node log together.
+resolution, `tx-build`, submission, or materialization. When diagnosing
+`tx-build`, inspect `withdraw/tx-build.log`, `withdraw/report.json`,
+and the run directory's node log together. When diagnosing submission
+or materialization, inspect `withdraw/signed-tx.cbor.hex`,
+`withdraw/submit.log`, `withdraw/materialized.json`, and the node log.
 
 Use the run directory's `node.log`, `summary.log`, `timing.json`, and
 `governance/summary.json` when recording governance evidence. Use
-`withdraw/intent.json`, `withdraw/registry.json`, and
-`withdraw/report.json` when recording withdrawal build evidence.
+`withdraw/intent.json`, `withdraw/registry.json`,
+`withdraw/report.json`, `withdraw/signed-tx.cbor.hex`,
+`withdraw/submit.log`, and `withdraw/materialized.json` when recording
+withdrawal evidence.

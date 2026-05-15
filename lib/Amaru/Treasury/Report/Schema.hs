@@ -134,6 +134,7 @@ walletAccountingSchema =
         , "changeOutput"
         , "collateralReturn"
         , "feeLovelace"
+        , "withdrawalLovelace"
         , "netSpendLovelace"
         ]
         [ ("inputs", arrayOf (ref "utxoSummary"))
@@ -141,6 +142,7 @@ walletAccountingSchema =
         , ("changeOutput", nullable (ref "utxoSummary"))
         , ("collateralReturn", nullable (ref "utxoSummary"))
         , ("feeLovelace", nonNegativeIntegerSchema)
+        , ("withdrawalLovelace", nonNegativeIntegerSchema)
         , ("netSpendLovelace", nonNegativeIntegerSchema)
         ]
 

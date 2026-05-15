@@ -7,14 +7,14 @@
 
 **Completed**: #83 is scoped; upstream `cardano-node-clients` #132 was
 rebase-merged into `main` at `d6773e4cd8a2421617568c8dac0972b0f312a509`;
-the current branch is stacked on the #82 governance proof branch; Amaru
-now pins that upstream main commit in Cabal and Nix; the withdrawal
-phase contract, live reward-to-intent slice, and intent-to-unsigned-build
-slice are implemented. The focused diagnostics slice is also
-implemented.
+the #82 governance proof branch merged into Amaru `main` through PR #93
+at `308f0c9`; this branch is now based directly on `main`; Amaru now
+pins that upstream main commit in Cabal and Nix; the withdrawal phase
+contract, live reward-to-intent slice, intent-to-unsigned-build slice,
+and focused diagnostics slice are implemented.
 
-**Current**: Release documentation is being finalized. The withdraw
-smoke now creates local DevNet
+**Current**: External review handoff is ready after retargeting PR #100
+from the merged #93 branch to `main`. The withdraw smoke creates local DevNet
 registry anchors, funds the local treasury script reward account
 through governance, resolves live rewards with `withdraw-wizard`,
 writes `withdraw/intent.json`, then runs `tx-build` and writes
@@ -22,9 +22,8 @@ unsigned CBOR plus JSON/Markdown review reports. Failure paths now
 write typed diagnostics for reward timeout, zero rewards, network
 mismatch, and tx-build failure.
 
-**Blockers**: #82/PR #93 should remain the source of standalone
-governance proof. #83 still needs the final gate and PR/issue metadata
-refresh before undrafting.
+**Blockers**: none for the retarget. #82/PR #93 remains the merged
+source of standalone governance proof.
 
 ## Summary
 

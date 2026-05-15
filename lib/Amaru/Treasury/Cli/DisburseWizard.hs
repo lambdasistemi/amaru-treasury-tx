@@ -446,7 +446,7 @@ runEmergencyTopUp g EmergencyTopUpOpts{..} =
                                     destinationScopeLabel
                                         etuOptsDestinationScope
                                 , Disburse.raEvent =
-                                    Just "emergency_top_up"
+                                    Just "disburse"
                                 , Disburse.raLabel =
                                     Just "Emergency top-up"
                                 }

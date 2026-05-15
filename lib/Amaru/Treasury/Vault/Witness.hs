@@ -59,8 +59,9 @@ import Data.Text.Encoding qualified as TE
 import Amaru.Treasury.IntentJSON.Common (parseGuardKeyHash)
 
 -- | A supported signing-material source in a decrypted vault.
-newtype SigningSource
+data SigningSource
     = CardanoCliSKey Value
+    | CardanoAddressesAddrXsk Text
     deriving stock (Eq, Show)
 
 -- | One selectable vault identity.
@@ -118,6 +119,7 @@ data RawIdentity = RawIdentity
 data RawSource = RawSource
     { rsKind :: !Text
     , rsKeyEnvelope :: !(Maybe Value)
+    , rsBech32 :: !(Maybe Text)
     }
 
 instance FromJSON VaultDocument where
@@ -147,6 +149,7 @@ instance FromJSON RawSource where
             RawSource
                 <$> o .: "kind"
                 <*> o .:? "keyEnvelope"
+                <*> o .:? "bech32"
 
 -- | Parse a decrypted v1 witness vault payload.
 decodeWitnessVault :: ByteString -> Either VaultError WitnessVault
@@ -234,6 +237,11 @@ sourceValue = \case
             [ "kind" .= ("cardano-cli-skey" :: Text)
             , "keyEnvelope" .= keyEnvelope
             ]
+    CardanoAddressesAddrXsk bech32 ->
+        object
+            [ "kind" .= ("cardano-addresses-addr-xsk" :: Text)
+            , "bech32" .= bech32
+            ]
 
 validateSource :: Text -> RawSource -> Either VaultError SigningSource
 validateSource label RawSource{..} =
@@ -241,6 +249,10 @@ validateSource label RawSource{..} =
         "cardano-cli-skey" ->
             case rsKeyEnvelope of
                 Just value -> Right (CardanoCliSKey value)
+                Nothing -> Left (VaultUnsupportedSource label)
+        "cardano-addresses-addr-xsk" ->
+            case rsBech32 of
+                Just bech32 -> Right (CardanoAddressesAddrXsk bech32)
                 Nothing -> Left (VaultUnsupportedSource label)
         other -> Left (VaultUnsupportedSource other)
 

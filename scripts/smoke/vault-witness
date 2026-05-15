@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # End-to-end replay for issue #128. The smoke proves the supported
-# lifecycle: create an encrypted age vault from signing-key JSON on
-# stdin, unlock it in memory to create a detached witness, and attach
-# that witness.
+# lifecycle: create an encrypted age vault from signing-key material on
+# stdin (cardano-cli .skey JSON and cardano-addresses addr_xsk), unlock
+# it in memory to create a detached witness, and attach that witness.
 
 if [[ -n "${AMARU_TREASURY_TX_EXE:-}" ]]; then
   exe="$AMARU_TREASURY_TX_EXE"
@@ -49,6 +49,7 @@ with_passphrase() {
 vault="$tmp/treasury.vault.age"
 wrong_vault="$tmp/wrong.vault.age"
 paste_vault="$tmp/paste.vault.age"
+addr_xsk_vault="$tmp/addr-xsk.vault.age"
 
 with_passphrase "$passphrase" \
   "$exe" --network preprod vault create \
@@ -86,6 +87,15 @@ with_passphrase "$passphrase" \
   --vault-work-factor 1 \
   <"$fixture/wrong-payment.skey"
 
+with_passphrase "$passphrase" \
+  "$exe" --network preprod vault create \
+  --signing-key-stdin \
+  --label addr_xsk_fixture \
+  --out "$addr_xsk_vault" \
+  --vault-work-factor 1 \
+  <"$fixture/payment.addr_xsk"
+[[ -s "$addr_xsk_vault" ]] || fail 'addr_xsk vault create did not write a vault'
+
 expected_witness_stdout="$tmp/witness.stdout.expected.hex"
 expect_with_newline "$fixture/witness.expected.hex" "$expected_witness_stdout"
 
@@ -106,6 +116,16 @@ exec 9<<<"$passphrase"
   >"$tmp/stdout.witness.hex"
 exec 9<&-
 diff -u "$expected_witness_stdout" "$tmp/stdout.witness.hex"
+
+with_passphrase "$passphrase" \
+  "$exe" --network preprod witness \
+  --tx "test/fixtures/106-cardano-cli-oracle/tx.body.cborHex" \
+  --vault "$addr_xsk_vault" \
+  --identity addr_xsk_fixture \
+  --allow-unlisted-key \
+  --out "$tmp/addr-xsk.witness.hex"
+[[ -s "$tmp/addr-xsk.witness.hex" ]] \
+  || fail 'addr_xsk witness did not write output'
 
 owner_witness_hex="$(
   tr -d '\n' <"$tmp/owner.witness.hex"

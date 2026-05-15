@@ -83,7 +83,7 @@ import Test.QuickCheck
     , (===)
     )
 
-import Cardano.Node.Client.TxBuild (draft)
+import Cardano.Tx.Build (draft)
 
 import Amaru.Treasury.IntentJSON
     ( Action (..)

@@ -10,7 +10,7 @@ License     : Apache-2.0
 Pure helpers for the vault-backed witness command. The module decodes
 the unsigned Conway transaction shape already used by @attach-witness@,
 checks selected-key facts, and creates one detached vkey witness from
-a decrypted vault signing-key envelope.
+decrypted vault signing-key material.
 -}
 module Amaru.Treasury.Tx.Witness
     ( TransactionSigningFacts (..)
@@ -21,6 +21,7 @@ module Amaru.Treasury.Tx.Witness
     , parseWitnessKeyHash
     , renderGuardKeyHash
     , renderTxWitnessError
+    , signingSourceKeyHash
     , validateWitnessRequest
     , witnessTransactionFacts
     ) where
@@ -47,10 +48,14 @@ import Lens.Micro ((^.))
 
 import Cardano.Crypto.DSIGN.Class
     ( SignKeyDSIGN
+    , SignedDSIGN (..)
     , deriveVerKeyDSIGN
+    , rawDeserialiseSigDSIGN
     , rawDeserialiseSignKeyDSIGN
+    , rawDeserialiseVerKeyDSIGN
     )
 import Cardano.Crypto.Hash.Class (Hash, hashToBytes)
+import Cardano.Crypto.Wallet qualified as Wallet
 import Cardano.Ledger.Address (getNetwork)
 import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.Api.Tx
@@ -80,7 +85,10 @@ import Cardano.Ledger.Keys
     , hashKey
     , signedDSIGN
     )
-import Cardano.Node.Client.Ledger (ConwayTx)
+import Cardano.Tx.Ledger (ConwayTx)
+import Codec.Binary.Bech32 qualified as Bech32
+import Crypto.ECC.Edwards25519 qualified as Ed25519
+import Crypto.Error (eitherCryptoError)
 
 import Amaru.Treasury.IntentJSON.Common
     ( decodeHexBytesAny
@@ -221,17 +229,15 @@ validateWitnessRequest expectedKeyHash allowUnlisted identity facts = do
 createWitness
     :: VaultIdentity -> ConwayTx -> Either TxWitnessError ByteString
 createWitness identity tx =
-    case vaultIdentitySource identity of
-        CardanoCliSKey keyEnvelope -> do
-            signKey <- decodeCardanoCliSigningKey keyEnvelope
-            let body = tx ^. bodyTxL
-                bodyHash = extractHash (hashAnnotated body)
-                vkey = VKey (deriveVerKeyDSIGN signKey) :: VKey Witness
-                derived = witnessKeyHashToGuard (hashKey vkey)
-                witness =
-                    WitVKey
-                        vkey
-                        (signedDSIGN signKey bodyHash)
+    let body = tx ^. bodyTxL
+        bodyHash = extractHash (hashAnnotated body)
+    in  do
+            (vkey, signature) <-
+                signingSourceWitnessParts
+                    (vaultIdentitySource identity)
+                    bodyHash
+            let derived = witnessKeyHashToGuard (hashKey vkey)
+                witness = WitVKey vkey signature
             unless (derived == vaultIdentityKeyHash identity) $
                 Left
                     ( TxWitnessSigningKeyHashMismatch
@@ -239,10 +245,9 @@ createWitness identity tx =
                         derived
                     )
             Right $
-                B16.encode
-                    ( BSL.toStrict
-                        (serialize (eraProtVerLow @ConwayEra) witness)
-                    )
+                B16.encode $
+                    BSL.toStrict $
+                        serialize (eraProtVerLow @ConwayEra) witness
 
 -- | Derive the payment key hash from an imported cardano-cli signing key.
 cardanoCliSigningKeyHash
@@ -251,6 +256,36 @@ cardanoCliSigningKeyHash keyEnvelope = do
     signKey <- decodeCardanoCliSigningKey keyEnvelope
     let vkey = VKey (deriveVerKeyDSIGN signKey) :: VKey Witness
     Right (witnessKeyHashToGuard (hashKey vkey))
+
+-- | Derive the payment key hash from a supported vault signing source.
+signingSourceKeyHash
+    :: SigningSource -> Either TxWitnessError (KeyHash Guard)
+signingSourceKeyHash = \case
+    CardanoCliSKey keyEnvelope ->
+        cardanoCliSigningKeyHash keyEnvelope
+    CardanoAddressesAddrXsk bech32 -> do
+        vkey <- addrXskVKey =<< decodeAddrXsk bech32
+        Right (witnessKeyHashToGuard (hashKey vkey))
+
+signingSourceWitnessParts
+    :: SigningSource
+    -> Hash HASH EraIndependentTxBody
+    -> Either
+        TxWitnessError
+        ( VKey Witness
+        , SignedDSIGN DSIGN (Hash HASH EraIndependentTxBody)
+        )
+signingSourceWitnessParts source bodyHash =
+    case source of
+        CardanoCliSKey keyEnvelope -> do
+            signKey <- decodeCardanoCliSigningKey keyEnvelope
+            let vkey = VKey (deriveVerKeyDSIGN signKey) :: VKey Witness
+            Right (vkey, signedDSIGN signKey bodyHash)
+        CardanoAddressesAddrXsk bech32 -> do
+            xsk <- decodeAddrXsk bech32
+            vkey <- addrXskVKey xsk
+            signature <- addrXskSignature xsk bodyHash
+            Right (vkey, signature)
 
 decodeCardanoCliSigningKey
     :: Value -> Either TxWitnessError (SignKeyDSIGN DSIGN)
@@ -295,6 +330,107 @@ parseSigningKeyEnvelope =
         SigningKeyEnvelope
             <$> o .: "type"
             <*> o .: "cborHex"
+
+decodeAddrXsk :: Text -> Either TxWitnessError Wallet.XPrv
+decodeAddrXsk bech32Text = do
+    (hrp, dataPart) <-
+        case Bech32.decodeLenient (T.strip bech32Text) of
+            Left err ->
+                Left $
+                    TxWitnessMalformedSigningKey $
+                        "malformed addr_xsk bech32: "
+                            <> T.pack (show err)
+            Right decoded -> Right decoded
+    let prefix = Bech32.humanReadablePartToText hrp
+    unless (prefix == "addr_xsk") $
+        Left $
+            TxWitnessUnsupportedSigningSource $
+                "cardano-addresses key prefix " <> prefix
+    raw <-
+        case Bech32.dataPartToBytes dataPart of
+            Nothing ->
+                Left $
+                    TxWitnessMalformedSigningKey
+                        "malformed addr_xsk data part"
+            Just bytes -> Right bytes
+    decodeAddrXskBytes raw
+
+decodeAddrXskBytes :: ByteString -> Either TxWitnessError Wallet.XPrv
+decodeAddrXskBytes raw
+    | BS.length raw == 96 =
+        decodeCardanoAddressesXPrv raw
+    | BS.length raw == 128 =
+        decodeWalletXPrv raw
+    | otherwise =
+        Left $
+            TxWitnessMalformedSigningKey $
+                "malformed addr_xsk extended signing key: expected 96-byte cardano-addresses key or 128-byte cardano-crypto key, got "
+                    <> T.pack (show (BS.length raw))
+                    <> " bytes"
+
+decodeCardanoAddressesXPrv
+    :: ByteString -> Either TxWitnessError Wallet.XPrv
+decodeCardanoAddressesXPrv raw = do
+    -- cardano-addresses serializes xprv as private key + chain code;
+    -- cardano-crypto stores the derived public key between them.
+    publicKey <- ed25519PublicKeyFromPrivateKey privateKey
+    decodeWalletXPrv (privateKey <> publicKey <> chainCode)
+  where
+    (privateKey, chainCode) = BS.splitAt 64 raw
+
+decodeWalletXPrv :: ByteString -> Either TxWitnessError Wallet.XPrv
+decodeWalletXPrv raw =
+    case Wallet.xprv raw of
+        Left err ->
+            Left $
+                TxWitnessMalformedSigningKey $
+                    "malformed addr_xsk extended signing key: "
+                        <> T.pack err
+        Right xsk -> Right xsk
+
+ed25519PublicKeyFromPrivateKey
+    :: ByteString -> Either TxWitnessError ByteString
+ed25519PublicKeyFromPrivateKey privateKey =
+    case eitherCryptoError $
+        Ed25519.scalarDecodeLong $
+            BS.take 32 privateKey of
+        Left _ ->
+            Left $
+                TxWitnessMalformedSigningKey
+                    "malformed addr_xsk private scalar"
+        Right scalar ->
+            Right $
+                Ed25519.pointEncode $
+                    Ed25519.toPoint scalar
+
+addrXskVKey :: Wallet.XPrv -> Either TxWitnessError (VKey Witness)
+addrXskVKey xsk =
+    case rawDeserialiseVerKeyDSIGN @DSIGN $
+        Wallet.xpubPublicKey $
+            Wallet.toXPub xsk of
+        Nothing ->
+            Left $
+                TxWitnessMalformedSigningKey
+                    "could not decode addr_xsk public key"
+        Just vkey -> Right (VKey vkey)
+
+addrXskSignature
+    :: Wallet.XPrv
+    -> Hash HASH EraIndependentTxBody
+    -> Either
+        TxWitnessError
+        (SignedDSIGN DSIGN (Hash HASH EraIndependentTxBody))
+addrXskSignature xsk bodyHash =
+    case rawDeserialiseSigDSIGN @DSIGN signatureBytes of
+        Nothing ->
+            Left $
+                TxWitnessMalformedSigningKey
+                    "could not decode addr_xsk signature"
+        Just signature -> Right (SignedDSIGN signature)
+  where
+    signatureBytes =
+        Wallet.unXSignature $
+            Wallet.sign BS.empty xsk (hashToBytes bodyHash)
 
 -- | Parse a 28-byte key hash into the Guard role used by tx bodies.
 parseWitnessKeyHash :: Text -> Either TxWitnessError (KeyHash Guard)

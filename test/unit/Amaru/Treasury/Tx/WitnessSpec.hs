@@ -24,7 +24,7 @@ import Test.Hspec
 import Cardano.Ledger.BaseTypes (Network (..))
 import Cardano.Ledger.Hashes (KeyHash)
 import Cardano.Ledger.Keys (KeyRole (..))
-import Cardano.Node.Client.Ledger (ConwayTx)
+import Cardano.Tx.Ledger (ConwayTx)
 
 import Amaru.Treasury.Tx.AttachWitness
     ( attachWitnesses
@@ -151,6 +151,15 @@ spec = describe "Amaru.Treasury.Tx.Witness" $ do
         expected <- BS.readFile (fixtureDir <> "/witness.expected.hex")
         createWitness ident tx `shouldBe` Right expected
 
+    it "creates a detached witness from an address extended signing key" $ do
+        ident <- loadIdentityBytes addrXskVault "addr_xsk_fixture"
+        tx <- loadUnsignedTx
+        case createWitness ident tx of
+            Left err -> expectationFailure (T.unpack (renderTxWitnessError err))
+            Right witnessHex ->
+                decodeVKeyWitnessHex 1 witnessHex
+                    `shouldSatisfy` isRight
+
     it
         "attaches the produced witness into the expected signed transaction"
         $ do
@@ -216,9 +225,25 @@ isWrongKey = \case
     Left TxWitnessSelectedKeyNotRequired{} -> True
     _ -> False
 
+isRight :: Either a b -> Bool
+isRight = \case
+    Right _ -> True
+    Left _ -> False
+
 mainnetVault :: T.Text -> BS.ByteString
 mainnetVault keyHash =
     TE.encodeUtf8 $
         "{\"amaruTreasuryWitnessVault\":{\"version\":1,\"identities\":{\"core_development\":{\"label\":\"core_development\",\"network\":\"mainnet\",\"keyHash\":\""
             <> keyHash
             <> "\",\"source\":{\"kind\":\"cardano-cli-skey\",\"keyEnvelope\":{\"type\":\"PaymentSigningKeyShelley_ed25519\",\"description\":\"Payment Signing Key\",\"cborHex\":\"582083c69e0facc37e938558a50b4335f0ca9855857bb5625f583a68464f54496bde\"}}}}}}"
+
+addrXskVault :: BS.ByteString
+addrXskVault =
+    TE.encodeUtf8 $
+        "{\"amaruTreasuryWitnessVault\":{\"version\":1,\"identities\":{\"addr_xsk_fixture\":{\"label\":\"addr_xsk_fixture\",\"network\":\"preprod\",\"keyHash\":\"62af57d18328e645219a713e8f63952beae9dbdd34b91d8c909e20c7\",\"source\":{\"kind\":\"cardano-addresses-addr-xsk\",\"bech32\":\""
+            <> addrXsk
+            <> "\"}}}}}"
+
+addrXsk :: T.Text
+addrXsk =
+    "addr_xsk12pzle3450wwj2djlsvvpwdad0akp97ty70p4r57cjwctqdnr8pppcz4awzey5flzj3vc6utscunxufq7udekvu29ha5qgpk4rw6q6nudgm3llqq8ynvpedekfg5d8hczz6snz34lkf2heu3qkq2e0xzspg90765n"

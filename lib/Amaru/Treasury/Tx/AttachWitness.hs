@@ -53,7 +53,7 @@ import Cardano.Ledger.Binary
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (witsTxL)
 import Cardano.Ledger.Keys (KeyRole (..), WitVKey)
-import Cardano.Node.Client.Ledger (ConwayTx)
+import Cardano.Tx.Ledger (ConwayTx)
 
 {- | Failure cases for witness attachment. Each variant
 carries enough context to render a typed, human-readable

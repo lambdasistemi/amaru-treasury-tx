@@ -55,9 +55,9 @@ References:
 
 ## Decision: add `vault create` as the supported vault creation ceremony
 
-Add a CLI command that imports one Cardano payment signing-key envelope,
-derives its key hash, wraps it in the v1 vault cleartext schema, and
-writes an age-encrypted vault file. The command prompts for a passphrase
+Add a CLI command that imports one Cardano payment signing-key material
+item, derives its key hash, wraps it in the v1 vault cleartext schema,
+and writes an age-encrypted vault file. The command prompts for a passphrase
 twice on `/dev/tty` by default and accepts a passphrase file descriptor
 for automation.
 
@@ -93,6 +93,8 @@ Supported source kinds for the first v1 implementation:
 
 - `cardano-cli-skey`: a Cardano payment signing-key JSON envelope
   imported by `vault create`.
+- `cardano-addresses-addr-xsk`: a cardano-addresses address extended
+  signing key imported by `vault create`.
 
 Deferred source kinds:
 
@@ -105,11 +107,12 @@ Deferred source kinds:
 
 - A project-owned schema lets the CLI produce precise diagnostics and
   validate labels, network metadata, and key hashes before signing.
-- Supporting imported `cardano-cli` keys gives operators a short
-  migration path away from plaintext `*.skey` files.
+- Supporting imported `cardano-cli` keys and cardano-addresses
+  `addr_xsk` address extended signing keys gives operators a short
+  migration path away from loose plaintext signing-key files.
 - Human imports should use hidden paste input rather than a plaintext
-  file path; automated imports should stream the signing-key JSON from a
-  secret manager or fixture through non-terminal stdin.
+  file path; automated imports should stream the signing-key material
+  from a secret manager or fixture through non-terminal stdin.
 - Documenting CIP-1852-derived entries as a future extension aligns the
   long-term format with Cardano wallet derivation standards without
   inventing or shipping an unreviewed treasury derivation convention in

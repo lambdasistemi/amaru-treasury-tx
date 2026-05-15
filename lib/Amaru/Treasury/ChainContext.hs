@@ -4,7 +4,7 @@ Description : Frozen-or-live ledger context for tx building
 Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
-Everything 'Cardano.Node.Client.TxBuild.build' needs from
+Everything 'Cardano.Tx.Build.build' needs from
 "reality":
 
 * the protocol parameters at a moment in time,
@@ -51,11 +51,11 @@ import Cardano.Ledger.Api.Tx.Out (TxOut)
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (PParams)
 import Cardano.Ledger.TxIn (TxIn)
-import Cardano.Node.Client.Ledger (ConwayTx)
 import Cardano.Node.Client.Provider
     ( EvaluateTxResult
     , Provider (..)
     )
+import Cardano.Tx.Ledger (ConwayTx)
 
 {- | The chain-side inputs to a tx build, frozen as
 plain data. Either the rows are filled in by querying a

@@ -13,8 +13,8 @@ merge detached witnesses with `attach-witness`. Operators still need a
 signing step that normally exposes a plaintext `*.skey` file. This
 feature adds two explicit ceremonies:
 
-- create an encrypted local witness vault from an imported Cardano
-  signing-key envelope
+- create an encrypted local witness vault from imported Cardano
+  signing-key material
 - unlock that vault in memory to create one detached transaction witness
 
 The command boundaries must stay clear. `tx-build` builds only,
@@ -26,14 +26,14 @@ submits only.
 
 ### User Story 1 - Create An Encrypted Signing Vault (Priority: P1)
 
-An operator has a Cardano payment signing-key envelope and wants to
-store it once in an encrypted vault, then stop passing that plaintext
-key material to signing commands.
+An operator has Cardano payment signing-key material and wants to store
+it once in an encrypted vault, then stop passing that plaintext key
+material to signing commands.
 
 **Why this priority**: A witness command is not safe enough if users
 must hand-build the encrypted vault or keep using loose plaintext keys.
 
-**Independent Test**: Stream a fixture signing-key envelope into
+**Independent Test**: Stream fixture signing-key material into
 `amaru-treasury-tx --network preprod vault create --signing-key-stdin
 --label core_development --out treasury.vault.age` using a passphrase
 supplied through a file descriptor. Separately run the interactive
@@ -44,15 +44,15 @@ by `witness`.
 
 **Acceptance Scenarios**:
 
-1. **Given** a valid Cardano payment signing-key envelope, **When** the
+1. **Given** valid Cardano payment signing-key material, **When** the
    operator runs `vault create`, **Then** the command writes one
    encrypted vault file and exits with code 0.
-2. **Given** a signing-key envelope, **When** the command creates the
+2. **Given** signing-key material, **When** the command creates the
    vault, **Then** it derives and stores non-secret metadata including
    label, network, and payment key hash.
 3. **Given** a human import ceremony, **When** the operator runs
-   `vault create --signing-key-paste`, **Then** the signing-key JSON is
-   read with terminal echo disabled.
+   `vault create --signing-key-paste`, **Then** the signing-key
+   material is read with terminal echo disabled.
 4. **Given** no automation file descriptor, **When** a human creates a
    vault, **Then** the passphrase is read from a no-echo terminal prompt
    and confirmation is required.
@@ -211,7 +211,7 @@ envelope conversion on a clean checkout.
 ### Functional Requirements
 
 - **FR-001**: The system MUST add a standalone `vault create` command
-  that imports one Cardano payment signing-key envelope into an
+  that imports one Cardano payment signing-key material item into an
   encrypted local witness vault.
 - **FR-002**: `vault create` MUST encrypt the vault with an established
   age passphrase file format and MUST NOT persist a cleartext vault
@@ -220,10 +220,12 @@ envelope conversion on a clean checkout.
   terminal prompt by default and from a file descriptor for automation.
   It MUST NOT accept passphrases as argv values.
 - **FR-003a**: `vault create` MUST support hidden pasted signing-key
-  JSON for human import ceremonies and non-terminal stdin for automated
-  secret streams. It MUST reject terminal stdin for signing-key JSON to
-  avoid echoing pasted key material. The compatibility file input MUST
-  remain outside the recommended operator path.
+  material for human import ceremonies and non-terminal stdin for
+  automated secret streams. It MUST accept both `cardano-cli` `.skey`
+  JSON envelopes and `cardano-addresses` `addr_xsk` address extended
+  signing keys. It MUST reject terminal stdin for signing-key material
+  to avoid echoing pasted key material. The compatibility file input
+  MUST remain outside the recommended operator path.
 - **FR-004**: `vault create` MUST derive the imported signing key's
   payment key hash and store that key hash as non-secret vault metadata.
 - **FR-005**: The system MUST add a standalone `witness` command that
@@ -272,8 +274,9 @@ envelope conversion on a clean checkout.
 
 ### Key Entities
 
-- **Signing Key Envelope**: A Cardano payment signing-key JSON envelope
-  imported once by `vault create`.
+- **Signing Key Material**: A Cardano payment signing key imported once
+  by `vault create`, either as a `cardano-cli` `.skey` JSON envelope or
+  as a `cardano-addresses` `addr_xsk` address extended signing key.
 - **Vault**: An age-encrypted local file containing non-secret identity
   metadata plus encrypted signing material.
 - **Vault Identity**: A named signing identity with key hash, network
@@ -293,7 +296,7 @@ envelope conversion on a clean checkout.
 ### Measurable Outcomes
 
 - **SC-001**: A checked-in fixture workflow can create an encrypted age
-  vault from a signing-key envelope and later produce a detached witness
+  vault from signing-key material and later produce a detached witness
   from that vault with no plaintext signing-key file passed to
   `witness`.
 - **SC-002**: Wrong-key, wrong-network, wrong-passphrase,

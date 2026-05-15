@@ -53,7 +53,7 @@ set signing_key_path [lindex $argv 2]
 
 spawn -noecho $command_path
 expect {
-  -exact "signing-key JSON:" {
+  -exact "signing key:" {
     set signing_key_file [open $signing_key_path r]
     set signing_key [split [read $signing_key_file] "\n"]
     close $signing_key_file
@@ -127,12 +127,12 @@ run_pty_script_driver() {
   pty_pid=$!
   exec 8>"$input_fifo"
 
-  if ! wait_for_prompt "signing-key JSON:"; then
+  if ! wait_for_prompt "signing key:"; then
     exec 8>&-
     kill "$pty_pid" 2>/dev/null || true
     wait "$pty_pid" 2>/dev/null || true
     dump_pty_logs
-    fail 'interactive vault create did not prompt for signing-key JSON'
+    fail 'interactive vault create did not prompt for signing-key material'
   fi
   while IFS= read -r key_line; do
     printf '%s\n' "$key_line" >&8

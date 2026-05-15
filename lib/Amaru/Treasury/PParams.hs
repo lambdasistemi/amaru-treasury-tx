@@ -7,7 +7,7 @@ License     : Apache-2.0
 Reads a @cardano-cli conway query protocol-parameters@
 JSON dump into a 'PParams' 'ConwayEra' value, suitable
 for feeding to
-[`Cardano.Node.Client.TxBuild`](https://github.com/lambdasistemi/cardano-node-clients/blob/main/lib/Cardano/Node/Client/TxBuild.hs)
+[`Cardano.Tx.Build`](https://github.com/lambdasistemi/cardano-tx-tools/blob/main/src/Cardano/Tx/Build.hs)
 helpers.
 
 The frozen

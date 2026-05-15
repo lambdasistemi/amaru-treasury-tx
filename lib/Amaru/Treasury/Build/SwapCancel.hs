@@ -35,12 +35,12 @@ import Cardano.Ledger.Binary (serialize)
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (bodyTxL)
-import Cardano.Node.Client.Ledger (ConwayTx)
-import Cardano.Node.Client.TxBuild
+import Cardano.Tx.Build
     ( InterpretIO (..)
     , build
     )
-import Cardano.Node.Client.TxBuild qualified as TxBuild
+import Cardano.Tx.Build qualified as TxBuild
+import Cardano.Tx.Ledger (ConwayTx)
 import Lens.Micro ((^.))
 
 import Amaru.Treasury.Build.Common

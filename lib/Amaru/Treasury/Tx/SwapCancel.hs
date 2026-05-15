@@ -23,7 +23,7 @@ import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Slotting.Slot (SlotNo)
 import Control.Monad (forM_, void)
 
-import Cardano.Node.Client.TxBuild
+import Cardano.Tx.Build
     ( TxBuild
     , collateral
     , payTo

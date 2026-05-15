@@ -103,7 +103,6 @@ import Cardano.Node.Client.E2E.Setup
     , genesisSignKey
     , mkSignKey
     )
-import Cardano.Node.Client.Ledger (ConwayTx)
 import Cardano.Node.Client.N2C.Connection
     ( newLSQChannel
     , newLTxSChannel
@@ -120,7 +119,8 @@ import Cardano.Node.Client.Submitter
     ( SubmitResult (..)
     , Submitter (..)
     )
-import Cardano.Node.Client.TxBuild
+import Cardano.Slotting.Slot (SlotNo (..))
+import Cardano.Tx.Build
     ( CertWitness (..)
     , ConwayDelegCert (..)
     , ConwayGovCert (..)
@@ -148,7 +148,7 @@ import Cardano.Node.Client.TxBuild
     , validTo
     , vote
     )
-import Cardano.Slotting.Slot (SlotNo (..))
+import Cardano.Tx.Ledger (ConwayTx)
 import Codec.Binary.Bech32 qualified as Bech32
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (poll, withAsync)

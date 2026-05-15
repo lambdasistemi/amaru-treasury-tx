@@ -1,8 +1,8 @@
 # vault witness fixture
 
 These files are test-only fixtures for issue #128. The signing keys in
-`payment.skey` and `wrong-payment.skey` are generated throwaway keys
-with no value outside this repository's tests.
+`payment.skey`, `wrong-payment.skey`, and `payment.addr_xsk` are
+generated throwaway keys with no value outside this repository's tests.
 
 Generated with the Nix-provided `cardano-cli`:
 
@@ -50,3 +50,8 @@ descriptor 9, and verifies that `witness` signs from the encrypted vault
 without a plaintext signing-key argument. `scripts/smoke/vault-witness-tty`
 adds a pseudo-terminal check for hidden signing-key paste and the
 no-echo passphrase prompt.
+
+`payment.addr_xsk` is a deterministic cardano-addresses address
+extended signing key fixture in the 96-byte `addr_xsk1...` wire format.
+It covers the operator-facing import format and is unrelated to the
+`payment.skey` required-signer fixture.

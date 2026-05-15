@@ -263,10 +263,13 @@ same raw witness artifact without passing a plaintext `*.skey` file to
 the signing command:
 
 Run `vault create` during the key import ceremony. Humans should use
-`--signing-key-paste`; the pasted signing-key JSON is hidden while the
-CLI reads it. Normal signing then uses only the encrypted vault plus the
-passphrase. After verifying and backing up the encrypted vault, clear the
-clipboard or source buffer under your custody policy.
+`--signing-key-paste`; the pasted signing-key material is hidden while
+the CLI reads it. The accepted human input is either a full
+`cardano-cli` `.skey` JSON envelope or one `cardano-addresses`
+`addr_xsk1...` address extended signing key line. Normal signing then
+uses only the encrypted vault plus the passphrase. After verifying and
+backing up the encrypted vault, clear the clipboard or source buffer
+under your custody policy.
 
 ```bash
 amaru-treasury-tx --network mainnet vault create \
@@ -274,9 +277,12 @@ amaru-treasury-tx --network mainnet vault create \
   --label core_development \
   --out treasury.vault.age
 
-# Paste the full cardano-cli signing-key JSON when prompted.
-# The pasted bytes are hidden; parsing stops once the JSON object closes.
+# Paste either the full cardano-cli .skey JSON or the addr_xsk1... line.
+# The pasted bytes are hidden.
 ```
+
+The `addr_xsk1...` value is the address-level extended signing key line
+used for payment signing. It is not a root or account private key.
 
 For automation, stream the signing key from a secret manager and pass the
 vault passphrase through an inherited file descriptor:
@@ -304,6 +310,34 @@ amaru-treasury-tx --network mainnet witness \
   --out core_development.witness.hex
 
 exec 9<&-
+```
+
+`witness --tx` accepts either raw unsigned CBOR hex or a `cardano-cli`
+`Tx ConwayEra` JSON envelope. If the body came from `cardano-cli`, store
+the full JSON in a file and pass that file directly to `witness`.
+Interactive paste into `de-envelope` is fragile because any real newline
+inside the long `cborHex` JSON string makes the JSON invalid.
+
+```bash
+jq -e . cli.tx.body.json >/dev/null
+test "$(jq -r .cborHex cli.tx.body.json | wc -l | tr -d ' ')" = 1
+
+exec 9<<<"$VAULT_PASSPHRASE"
+
+amaru-treasury-tx --network mainnet witness \
+  --tx cli.tx.body.json \
+  --vault treasury.vault.age \
+  --vault-passphrase-fd 9 \
+  --identity core_development \
+  --out core_development.witness.hex
+
+exec 9<&-
+```
+
+Unwrap that same envelope only when moving back to raw-hex commands:
+
+```bash
+amaru-treasury-tx de-envelope < cli.tx.body.json > unsigned.cbor.hex
 ```
 
 Use `tr -d '\n' < core_development.witness.hex` when passing the file
@@ -340,6 +374,21 @@ commands. Use the envelope filters only at the boundary where a
 | `envelope-witness` | raw witness hex -> `TxWitness ConwayEra` JSON |
 | `envelope-signed-tx` | raw signed transaction hex -> `Tx ConwayEra` JSON |
 | `de-envelope` | any Conway envelope JSON -> raw `cborHex` |
+
+`de-envelope` parses complete JSON from stdin and writes the extracted
+`cborHex` plus one trailing newline. It does not unwrap terminal
+transcripts or repair line-broken strings. If a long transaction body
+arrives through a clipboard or chat UI, write it to a file first and
+validate it:
+
+```bash
+jq -e . cli.tx.body.json >/dev/null
+test "$(jq -r .cborHex cli.tx.body.json | wc -l | tr -d ' ')" = 1
+```
+
+Visual wrapping in a terminal is harmless. A real newline inside the
+quoted `cborHex` value is different data and is rejected by JSON
+parsing.
 
 To hand an Amaru-built transaction body to `cardano-cli` for assembly or
 submission, wrap the raw `tx-build` output. Prefer the Amaru vault flow

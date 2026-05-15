@@ -189,6 +189,7 @@ library
     , base16-bytestring
     , bech32
     , bytestring
+    , cardano-crypto
     , cardano-crypto-class
     , cardano-ledger-allegra
     , cardano-ledger-alonzo
@@ -201,6 +202,7 @@ library
     , cardano-node-clients
     , cardano-slotting
     , cardano-strict-containers
+    , cardano-tx-tools
     , containers
     , contra-tracer
     , crypton
@@ -405,6 +407,7 @@ test-suite unit-tests
     , cardano-ledger-mary
     , cardano-node-clients
     , cardano-slotting
+    , cardano-tx-tools
     , containers
     , contra-tracer
     , directory
@@ -502,6 +505,7 @@ test-suite devnet-tests
     , cardano-node-clients
     , cardano-node-clients:devnet
     , cardano-slotting
+    , cardano-tx-tools
     , containers
     , directory
     , filepath

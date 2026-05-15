@@ -54,8 +54,14 @@ import Amaru.Treasury.Cli.TreasuryInspect
 import Amaru.Treasury.Cli.TxBuild
     ( runTxBuild
     )
+import Amaru.Treasury.Cli.Vault
+    ( runVaultCreate
+    )
 import Amaru.Treasury.Cli.WithdrawWizard
     ( runWithdrawWizard
+    )
+import Amaru.Treasury.Cli.Witness
+    ( runWitness
     )
 import Amaru.Treasury.Tx.Envelope
     ( EnvelopeKind (..)
@@ -93,6 +99,10 @@ main = withUtf8 $ do
                 runTreasuryInspect g{goSocketPath = Just socket} io
         CmdAttachWitness ao ->
             runAttachWitness ao
+        CmdVaultCreate vo ->
+            runVaultCreate g vo
+        CmdWitness wo ->
+            runWitness g wo
         CmdSubmit so ->
             withSocket g $ \socket ->
                 runSubmit (goNetworkMagic g) socket so

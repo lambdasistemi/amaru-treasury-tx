@@ -258,6 +258,59 @@ external signer (HSM, hardware wallet, key-only ceremony) hands back
 swap is gated by the scope-owner approval rule on chain, so attach at
 least one owner witness plus any extra signers the wizard required.
 
+If an owner key is imported into an age vault, `witness` can produce the
+same raw witness artifact without passing a plaintext `*.skey` file to
+the signing command:
+
+Run `vault create` during the key import ceremony. Humans should use
+`--signing-key-paste`; the pasted signing-key JSON is hidden while the
+CLI reads it. Normal signing then uses only the encrypted vault plus the
+passphrase. After verifying and backing up the encrypted vault, clear the
+clipboard or source buffer under your custody policy.
+
+```bash
+amaru-treasury-tx --network mainnet vault create \
+  --signing-key-paste \
+  --label core_development \
+  --out treasury.vault.age
+
+# Paste the full cardano-cli signing-key JSON when prompted.
+# The pasted bytes are hidden; parsing stops once the JSON object closes.
+```
+
+For automation, stream the signing key from a secret manager and pass the
+vault passphrase through an inherited file descriptor:
+
+```bash
+exec 9<<<"$VAULT_PASSPHRASE"
+
+secret-manager-read core-development-payment-skey \
+| amaru-treasury-tx --network mainnet vault create \
+  --signing-key-stdin \
+  --label core_development \
+  --out treasury.vault.age \
+  --vault-passphrase-fd 9
+
+exec 9<&-
+exec 9<<<"$VAULT_PASSPHRASE"
+```
+
+```bash
+amaru-treasury-tx --network mainnet witness \
+  --tx unsigned.cbor.hex \
+  --vault treasury.vault.age \
+  --vault-passphrase-fd 9 \
+  --identity core_development \
+  --out core_development.witness.hex
+
+exec 9<&-
+```
+
+Use `tr -d '\n' < core_development.witness.hex` when passing the file
+contents to `attach-witness`. If the transaction body does not declare
+required signer hashes, include `--expected-key-hash HASH` or
+`--allow-unlisted-key`.
+
 On success, `submit` prints the accepted tx hash to stdout and a
 `submit: accepted <txId>` line to stderr. On rejection, it prints the
 rejection reason from the node to stderr and exits non-zero.
@@ -288,23 +341,38 @@ commands. Use the envelope filters only at the boundary where a
 | `envelope-signed-tx` | raw signed transaction hex -> `Tx ConwayEra` JSON |
 | `de-envelope` | any Conway envelope JSON -> raw `cborHex` |
 
-To hand an Amaru-built transaction body to `cardano-cli` for signing,
-wrap the raw `tx-build` output:
+To hand an Amaru-built transaction body to `cardano-cli` for assembly or
+submission, wrap the raw `tx-build` output. Prefer the Amaru vault flow
+for the signing step, then wrap the produced witness when a
+`cardano-cli` JSON witness is needed:
 
 ```bash
-amaru-treasury-tx tx-build --out - --report swap.report.json < intent.json \
-| amaru-treasury-tx envelope-tx \
-> swap.tx.body.json
+amaru-treasury-tx tx-build \
+  --out unsigned.cbor.hex \
+  --report swap.report.json \
+  < intent.json
 
-cardano-cli conway transaction witness \
-  --tx-body-file swap.tx.body.json \
-  --signing-key-file owner.skey \
-  --mainnet \
-  --out-file owner.witness.json
+amaru-treasury-tx envelope-tx \
+  < unsigned.cbor.hex \
+  > swap.tx.body.json
+
+exec 9<<<"$VAULT_PASSPHRASE"
+
+amaru-treasury-tx --network mainnet witness \
+  --tx unsigned.cbor.hex \
+  --vault treasury.vault.age \
+  --vault-passphrase-fd 9 \
+  --identity core_development \
+| amaru-treasury-tx envelope-witness \
+> owner.witness.json
+
+exec 9<&-
 ```
 
-To bring a `cardano-cli` witness back into the Amaru raw-hex pipeline,
-extract its `cborHex` and pass that value to `attach-witness`:
+If a separate signer or legacy process already returns a `cardano-cli`
+witness envelope, bring that witness back into the Amaru raw-hex
+pipeline by extracting its `cborHex` and passing the value to
+`attach-witness`:
 
 ```bash
 owner_witness_hex="$(
@@ -318,27 +386,34 @@ amaru-treasury-tx attach-witness \
 ```
 
 A full Amaru-to-`cardano-cli` round trip keeps the shape changes at the
-pipeline ends:
+pipeline ends and still signs through the encrypted vault:
 
 ```bash
-amaru-treasury-tx tx-build --out - --report swap.report.json < intent.json \
-| amaru-treasury-tx envelope-tx \
-> swap.tx.body.json
+amaru-treasury-tx tx-build \
+  --out unsigned.cbor.hex \
+  --report swap.report.json \
+  < intent.json
 
-cardano-cli conway transaction witness \
+amaru-treasury-tx envelope-tx \
+  < unsigned.cbor.hex \
+  > swap.tx.body.json
+
+exec 9<<<"$VAULT_PASSPHRASE"
+
+amaru-treasury-tx --network mainnet witness \
+  --tx unsigned.cbor.hex \
+  --vault treasury.vault.age \
+  --vault-passphrase-fd 9 \
+  --identity core_development \
+| amaru-treasury-tx envelope-witness \
+> owner.witness.json
+
+exec 9<&-
+
+cardano-cli conway transaction assemble \
   --tx-body-file swap.tx.body.json \
-  --signing-key-file owner.skey \
-  --mainnet \
-  --out-file owner.witness.json
-
-owner_witness_hex="$(
-  amaru-treasury-tx de-envelope < owner.witness.json | tr -d '\n'
-)"
-
-amaru-treasury-tx de-envelope < swap.tx.body.json \
-| amaru-treasury-tx attach-witness --witness "$owner_witness_hex" \
-| amaru-treasury-tx envelope-signed-tx \
-> swap.signed.tx.json
+  --witness-file owner.witness.json \
+  --out-file swap.signed.tx.json
 
 cardano-cli conway transaction submit \
   --tx-file swap.signed.tx.json \

@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# End-to-end replay for issue #128. The smoke proves the supported
+# lifecycle: create an encrypted age vault from signing-key JSON on
+# stdin, unlock it in memory to create a detached witness, and attach
+# that witness.
+
+if [[ -n "${AMARU_TREASURY_TX_EXE:-}" ]]; then
+  exe="$AMARU_TREASURY_TX_EXE"
+else
+  cabal build exe:amaru-treasury-tx -O0 >/dev/null
+  exe="$(
+    cabal list-bin exe:amaru-treasury-tx -O0
+  )"
+fi
+
+fixture="test/fixtures/118-vault-witness"
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+passphrase="correct horse battery staple"
+
+fail() {
+  printf 'vault-witness: %s\n' "$*" >&2
+  exit 1
+}
+
+expect_with_newline() {
+  local raw_file="$1"
+  local expected="$2"
+  cp "$raw_file" "$expected"
+  chmod u+w "$expected"
+  printf '\n' >>"$expected"
+}
+
+with_passphrase() {
+  local phrase="$1"
+  shift
+  exec 9<<<"$phrase"
+  set +e
+  "$@" --vault-passphrase-fd 9
+  local status="$?"
+  set -e
+  exec 9<&-
+  return "$status"
+}
+
+vault="$tmp/treasury.vault.age"
+wrong_vault="$tmp/wrong.vault.age"
+paste_vault="$tmp/paste.vault.age"
+
+with_passphrase "$passphrase" \
+  "$exe" --network preprod vault create \
+  --signing-key-stdin \
+  --label core_development \
+  --description "core development payment key" \
+  --out "$vault" \
+  --vault-work-factor 1 \
+  <"$fixture/payment.skey"
+
+[[ -s "$vault" ]] || fail 'vault create did not write an encrypted vault'
+if grep -aF 'PaymentSigningKeyShelley_ed25519' "$vault" >/dev/null; then
+  fail 'encrypted vault contains cleartext signing-key envelope text'
+fi
+
+with_passphrase "$passphrase" \
+  "$exe" --network preprod vault create \
+  --signing-key-paste \
+  --label pasted_key \
+  --out "$paste_vault" \
+  --vault-work-factor 1 \
+  <"$fixture/payment.skey" \
+  >"$tmp/paste.out" 2>"$tmp/paste.err"
+[[ -s "$paste_vault" ]] || fail 'signing-key paste did not write a vault'
+if grep -F 'PaymentSigningKeyShelley_ed25519' \
+  "$tmp/paste.out" "$tmp/paste.err" >/dev/null; then
+  fail 'signing-key paste echoed key material'
+fi
+
+with_passphrase "$passphrase" \
+  "$exe" --network preprod vault create \
+  --signing-key-stdin \
+  --label wrong_key \
+  --out "$wrong_vault" \
+  --vault-work-factor 1 \
+  <"$fixture/wrong-payment.skey"
+
+expected_witness_stdout="$tmp/witness.stdout.expected.hex"
+expect_with_newline "$fixture/witness.expected.hex" "$expected_witness_stdout"
+
+with_passphrase "$passphrase" \
+  "$exe" --network preprod witness \
+  --tx "$fixture/unsigned.cbor.hex" \
+  --vault "$vault" \
+  --identity core_development \
+  --out "$tmp/owner.witness.hex"
+diff -u "$fixture/witness.expected.hex" "$tmp/owner.witness.hex"
+
+exec 9<<<"$passphrase"
+"$exe" --network preprod witness \
+  --vault "$vault" \
+  --vault-passphrase-fd 9 \
+  --identity core_development \
+  <"$fixture/unsigned.cbor.hex" \
+  >"$tmp/stdout.witness.hex"
+exec 9<&-
+diff -u "$expected_witness_stdout" "$tmp/stdout.witness.hex"
+
+owner_witness_hex="$(
+  tr -d '\n' <"$tmp/owner.witness.hex"
+)"
+"$exe" attach-witness \
+  --tx "$fixture/unsigned.cbor.hex" \
+  --witness "$owner_witness_hex" \
+  --out "$tmp/signed.cbor.hex"
+diff -u "$fixture/signed.expected.cbor.hex" "$tmp/signed.cbor.hex"
+
+if with_passphrase "$passphrase" \
+  "$exe" --network preprod witness \
+  --tx "$fixture/unsigned.cbor.hex" \
+  --vault "$wrong_vault" \
+  --identity wrong_key \
+  --out "$tmp/wrong-key.witness.hex" \
+  >"$tmp/wrong-key.out" 2>"$tmp/wrong-key.err"; then
+  fail 'wrong-key witness unexpectedly succeeded'
+fi
+[[ ! -e "$tmp/wrong-key.witness.hex" ]] \
+  || fail 'wrong-key failure created an output file'
+[[ ! -s "$tmp/wrong-key.out" ]] \
+  || fail 'wrong-key failure wrote stdout'
+grep -F 'is not in transaction required signer hashes' \
+  "$tmp/wrong-key.err" >/dev/null
+
+if with_passphrase "$passphrase" \
+  "$exe" --network mainnet witness \
+  --tx "$fixture/unsigned.cbor.hex" \
+  --vault "$vault" \
+  --identity core_development \
+  --out "$tmp/wrong-network.witness.hex" \
+  >"$tmp/wrong-network.out" 2>"$tmp/wrong-network.err"; then
+  fail 'wrong-network witness unexpectedly succeeded'
+fi
+[[ ! -e "$tmp/wrong-network.witness.hex" ]] \
+  || fail 'wrong-network failure created an output file'
+grep -F 'does not match selected network' \
+  "$tmp/wrong-network.err" >/dev/null
+
+if with_passphrase "wrong passphrase" \
+  "$exe" --network preprod witness \
+  --tx "$fixture/unsigned.cbor.hex" \
+  --vault "$vault" \
+  --identity core_development \
+  >"$tmp/decrypt.out" 2>"$tmp/decrypt.err"; then
+  fail 'wrong-passphrase decrypt unexpectedly succeeded'
+fi
+[[ ! -s "$tmp/decrypt.out" ]] \
+  || fail 'decrypt failure wrote stdout'
+grep -F 'failed to decrypt witness vault' "$tmp/decrypt.err" >/dev/null
+if grep -F "$passphrase" "$tmp/decrypt.err" >/dev/null; then
+  fail 'decrypt failure leaked the passphrase'
+fi
+
+printf 'keep\n' >"$tmp/existing.witness.hex"
+if with_passphrase "$passphrase" \
+  "$exe" --network preprod witness \
+  --tx "$fixture/unsigned.cbor.hex" \
+  --vault "$vault" \
+  --identity core_development \
+  --out "$tmp/existing.witness.hex" \
+  >"$tmp/existing.out" 2>"$tmp/existing.err"; then
+  fail 'existing output path unexpectedly succeeded'
+fi
+diff -u <(printf 'keep\n') "$tmp/existing.witness.hex"
+grep -F 'output path already exists' "$tmp/existing.err" >/dev/null
+
+with_passphrase "$passphrase" \
+  "$exe" --network preprod witness \
+  --tx "$fixture/unsigned.cbor.hex" \
+  --vault "$vault" \
+  --identity core_development \
+  --out "$tmp/existing.witness.hex" \
+  --force
+diff -u "$fixture/witness.expected.hex" "$tmp/existing.witness.hex"
+
+printf 'keep\n' >"$tmp/existing.vault.age"
+if with_passphrase "$passphrase" \
+  "$exe" --network preprod vault create \
+  --signing-key-stdin \
+  --label core_development \
+  --out "$tmp/existing.vault.age" \
+  --vault-work-factor 1 \
+  <"$fixture/payment.skey" \
+  >"$tmp/existing-vault.out" 2>"$tmp/existing-vault.err"; then
+  fail 'existing vault output path unexpectedly succeeded'
+fi
+diff -u <(printf 'keep\n') "$tmp/existing.vault.age"
+grep -F 'output path already exists' "$tmp/existing-vault.err" >/dev/null
+
+printf 'vault-witness: OK\n'

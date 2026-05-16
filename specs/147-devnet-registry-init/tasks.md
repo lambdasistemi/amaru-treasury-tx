@@ -157,3 +157,51 @@ GREEN proof:
 - nix develop --quiet -c just unit "Amaru.Treasury.Devnet.RegistryInit"
 - git diff must show reusable registry publication builders under lib/.
 ```
+
+## Second Subagent Brief Template
+
+Use only after T013-T020 is reviewed and accepted.
+
+```text
+Task: T021-T027 only.
+Owned files:
+- lib/Amaru/Treasury/Devnet/RegistryInit.hs
+- test/unit/Amaru/Treasury/Devnet/RegistryInitSpec.hs
+- test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs
+- scripts/smoke/devnet-local
+- amaru-treasury-tx.cabal only if the focused tests require a metadata
+  update
+
+Required orchestrator analysis already applied:
+- The T013-T020 extraction preserves final registry anchors but does
+  not preserve the seed-split tx id required by
+  contracts/devnet-registry-init.md.
+- Extend the production module with a registry-init publication result
+  that records seed-split, registry-mint, and reference-script tx ids
+  plus the final anchors.
+- Keep `prepareDevnetWithdrawalRegistry` available for the existing
+  withdraw path by projecting from the richer publication result.
+- Add registry-init artifact rendering helpers under `lib/`; do not
+  render registry-init artifacts ad hoc in `SmokeSpec.hs`.
+- `SmokeSpec.hs` owns phase dispatch, calling the production entry
+  point, querying `Provider.queryUTxOByTxIn`, checking the expected
+  registry/reference-script UTxOs exist, and writing the production
+  artifact values.
+
+Forbidden scope:
+- Do not edit spec.md, plan.md, tasks.md, README.md, docs, PR metadata,
+  or issue metadata.
+- Do not add staking setup, governance funding, treasury withdrawal
+  materialization, disburse action submission, swap/order execution, or
+  external-role behavior.
+- Do not move registry transaction construction back into SmokeSpec.hs.
+
+RED proof:
+- Add a devnet diagnostics/unit expectation for registry-init summary
+  and registry artifact fields before the implementation satisfies it.
+
+GREEN proof:
+- nix develop --quiet -c just unit "Amaru.Treasury.Devnet.RegistryInit"
+- nix develop --quiet -c cabal build test:devnet-tests -O0
+- nix develop --quiet -c just devnet-smoke registry-init
+```

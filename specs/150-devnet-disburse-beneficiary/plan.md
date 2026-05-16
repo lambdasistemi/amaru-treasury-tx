@@ -52,14 +52,18 @@ docs/release.md
 README.md
 ```
 
-## Phases
+## Implementation Slices
 
-1. Command slice: parser, production DevNet module, artifact rendering,
-   prerequisite validation, focused tests.
-2. Submission/effect slice: live signing/submission and chain-state
-   verification through the command runner.
-3. Smoke proof slice: add `disburse-submit` phase and assert artifacts.
-4. Documentation/finalization slice: align README/docs/contracts/tasks
+1. Submitted-command slice: parser, production DevNet module,
+   prerequisite validation, artifact rendering, ADA disburse intent,
+   production tx-build, signing/submission, treasury-state
+   verification, beneficiary receipt verification, and focused
+   RED/GREEN tests. This is one vertical commit because the command is
+   the ticket; a parser-only or unsigned-build command would not satisfy
+   the P1 user story.
+2. Smoke proof slice: add `disburse-submit` phase and assert artifacts
+   and ledger effects while invoking the shipped command runner.
+3. Documentation/finalization slice: align README/docs/contracts/tasks
    and remove `gate.sh`.
 
 ## Risks

@@ -11,6 +11,7 @@ import Cardano.Ledger.Address
     , serialiseAddr
     )
 import Cardano.Ledger.BaseTypes (Network (..))
+import Cardano.Ledger.TxIn (TxId, TxIn (..))
 import Codec.Binary.Bech32 qualified as Bech32
 import Data.Aeson
     ( object
@@ -29,8 +30,15 @@ import Test.Hspec
 
 import Amaru.Treasury.Devnet.RegistryInit
     ( DevnetRegistryAnchors (..)
+    , DevnetRegistryPublication (..)
     , TreasuryTarget (..)
     , devnetRegistryView
+    , registryInitProvenancePath
+    , registryInitProvenanceValue
+    , registryInitRegistryPath
+    , registryInitRegistryValue
+    , registryInitSummaryPath
+    , registryInitSummaryValue
     , treasuryTargetFromBlob
     , withdrawalRegistryPath
     , withdrawalRegistryValue
@@ -56,6 +64,90 @@ spec =
         it "renders the withdrawal registry artifact path" $
             withdrawalRegistryPath sampleRunDir
                 `shouldBe` sampleRunDir </> "withdraw" </> "registry.json"
+
+        it "renders the registry-init artifact paths" $ do
+            registryInitSummaryPath sampleRunDir
+                `shouldBe` sampleRunDir
+                    </> "registry-init"
+                    </> "summary.json"
+            registryInitRegistryPath sampleRunDir
+                `shouldBe` sampleRunDir
+                    </> "registry-init"
+                    </> "registry.json"
+            registryInitProvenancePath sampleRunDir
+                `shouldBe` sampleRunDir
+                    </> "registry-init"
+                    </> "provenance.json"
+
+        it "renders registry-init summary and registry artifact fields" $ do
+            publication <- sampleRegistryPublication
+            let registry =
+                    drpAnchors publication
+            registryInitSummaryValue 42 sampleRunDir publication
+                `shouldBe` object
+                    [ "phase" .= ("registry-init" :: T.Text)
+                    , "network" .= ("devnet" :: T.Text)
+                    , "networkMagic" .= (42 :: Int)
+                    , "seedSplitTxId" .= sampleSeedSplitTxId
+                    , "registryMintTxId" .= sampleRegistryMintTxId
+                    , "referenceScriptsTxId"
+                        .= sampleReferenceScriptsTxId
+                    , "registryPath" .= registryInitRegistryPath sampleRunDir
+                    , "provenancePath"
+                        .= registryInitProvenancePath sampleRunDir
+                    ]
+            registryInitRegistryValue publication
+                `shouldBe` object
+                    [ "phase" .= ("registry-init" :: T.Text)
+                    , "network" .= ("devnet" :: T.Text)
+                    , "anchors"
+                        .= object
+                            [ "scopesDeployedAt" .= sampleScopesRefText
+                            , "registryDeployedAt"
+                                .= sampleRegistryRefText
+                            , "permissionsDeployedAt"
+                                .= samplePermissionsRefText
+                            , "treasuryDeployedAt"
+                                .= sampleTreasuryRefText
+                            ]
+                    , "policies"
+                        .= object
+                            [ "scopesPolicyId" .= sampleScopesPolicyId
+                            , "registryPolicyId" .= sampleRegistryPolicyId
+                            ]
+                    , "scripts"
+                        .= object
+                            [ "permissionsScriptHash"
+                                .= samplePermissionsHashText
+                            , "treasuryScriptHash"
+                                .= ttScriptHashText
+                                    (draTreasuryTarget registry)
+                            ]
+                    , "addresses"
+                        .= object
+                            [ "treasuryAddress"
+                                .= renderAddr
+                                    (ttAddress (draTreasuryTarget registry))
+                            ]
+                    , "owners"
+                        .= object
+                            [ "scopeOwnerKeyHash" .= sampleOwnerKeyHash
+                            ]
+                    , "submittedTxIds"
+                        .= object
+                            [ "seedSplit" .= sampleSeedSplitTxId
+                            , "registryMint" .= sampleRegistryMintTxId
+                            , "referenceScripts"
+                                .= sampleReferenceScriptsTxId
+                            ]
+                    ]
+            registryInitProvenanceValue
+                `shouldBe` object
+                    [ "phase" .= ("registry-init" :: T.Text)
+                    , "source" .= ("amaru-treasury-tx" :: T.Text)
+                    , "issue" .= (147 :: Int)
+                    , "parentIssue" .= (151 :: Int)
+                    ]
 
         it "renders withdrawal registry artifact fields" $ do
             registry <- sampleRegistryAnchors
@@ -132,9 +224,25 @@ sampleRegistryRefText :: T.Text
 sampleRegistryRefText =
     "0000000000000000000000000000000000000000000000000000000000000004#3"
 
+sampleSeedSplitTxId :: T.Text
+sampleSeedSplitTxId =
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+sampleRegistryMintTxId :: T.Text
+sampleRegistryMintTxId =
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+sampleReferenceScriptsTxId :: T.Text
+sampleReferenceScriptsTxId =
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+
 samplePermissionsHashText :: T.Text
 samplePermissionsHashText =
     "11111111111111111111111111111111111111111111111111111111"
+
+sampleScopesPolicyId :: T.Text
+sampleScopesPolicyId =
+    "44444444444444444444444444444444444444444444444444444444"
 
 sampleRegistryPolicyId :: T.Text
 sampleRegistryPolicyId =
@@ -143,6 +251,20 @@ sampleRegistryPolicyId =
 sampleOwnerKeyHash :: T.Text
 sampleOwnerKeyHash =
     "33333333333333333333333333333333333333333333333333333333"
+
+sampleRegistryPublication :: IO DevnetRegistryPublication
+sampleRegistryPublication = do
+    registry <- sampleRegistryAnchors
+    seedSplitTxId <- parseTxId sampleSeedSplitTxId
+    registryMintTxId <- parseTxId sampleRegistryMintTxId
+    referenceScriptsTxId <- parseTxId sampleReferenceScriptsTxId
+    pure
+        DevnetRegistryPublication
+            { drpSeedSplitTxId = seedSplitTxId
+            , drpRegistryMintTxId = registryMintTxId
+            , drpReferenceScriptsTxId = referenceScriptsTxId
+            , drpAnchors = registry
+            }
 
 sampleRegistryAnchors :: IO DevnetRegistryAnchors
 sampleRegistryAnchors = do
@@ -160,11 +282,17 @@ sampleRegistryAnchors = do
             , draPermissionsRef = permissionsRef
             , draTreasuryRef = treasuryRef
             , draRegistryRef = registryRef
+            , draScopesPolicyId = sampleScopesPolicyId
             , draRegistryPolicyId = sampleRegistryPolicyId
             , draPermissionsHash = permissionsHash
             , draOwnerKeyHash = sampleOwnerKeyHash
             , draTreasuryTarget = target
             }
+
+parseTxId :: T.Text -> IO TxId
+parseTxId txIdText = do
+    TxIn txId _ <- parse "tx id" txInFromText (txIdText <> "#0")
+    pure txId
 
 parse :: String -> (T.Text -> Either String a) -> T.Text -> IO a
 parse label parser input =

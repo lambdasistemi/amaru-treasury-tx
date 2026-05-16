@@ -23,14 +23,24 @@ module Amaru.Treasury.Devnet.RegistryInit
     , TreasuryTarget (..)
     , DevnetScriptSet (..)
     , DevnetRegistryAnchors (..)
+    , DevnetRegistryPublication (..)
 
       -- * Publication
     , prepareDevnetWithdrawalRegistry
     , deployDevnetWithdrawalRegistry
+    , publishDevnetRegistryInit
     , deriveDevnetScripts
     , treasuryTargetFromBlob
 
       -- * Artifacts
+    , registryInitSummaryPath
+    , registryInitRegistryPath
+    , registryInitProvenancePath
+    , registryInitSummaryValue
+    , registryInitRegistryValue
+    , registryInitProvenanceValue
+    , registryInitLines
+    , writeRegistryInitArtifacts
     , withdrawalRegistryPath
     , withdrawalRegistryValue
     , writeWithdrawalRegistryArtifacts
@@ -144,6 +154,7 @@ import Lens.Micro
     , (^.)
     )
 import PlutusCore.Data (Data (..))
+import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 
 import Amaru.Treasury.Redeemer
@@ -170,6 +181,7 @@ import Amaru.Treasury.Registry.Derive
 import Amaru.Treasury.Scope
     ( ScopeId (..)
     )
+import Amaru.Treasury.Tx.Submit (renderTxId)
 import Amaru.Treasury.Tx.SwapWizard
     ( ScopeOwners (..)
     , txInToText
@@ -211,10 +223,19 @@ data DevnetRegistryAnchors = DevnetRegistryAnchors
     , draPermissionsRef :: !TxIn
     , draTreasuryRef :: !TxIn
     , draRegistryRef :: !TxIn
+    , draScopesPolicyId :: !T.Text
     , draRegistryPolicyId :: !T.Text
     , draPermissionsHash :: !ScriptHash
     , draOwnerKeyHash :: !T.Text
     , draTreasuryTarget :: !TreasuryTarget
+    }
+
+-- | Submitted transaction ids plus the resulting registry anchors.
+data DevnetRegistryPublication = DevnetRegistryPublication
+    { drpSeedSplitTxId :: !TxId
+    , drpRegistryMintTxId :: !TxId
+    , drpReferenceScriptsTxId :: !TxId
+    , drpAnchors :: !DevnetRegistryAnchors
     }
 
 -- | Publish the registry and return the treasury target plus anchors.
@@ -226,8 +247,10 @@ prepareDevnetWithdrawalRegistry
     -> [(TxIn, TxOut ConwayEra)]
     -> IO (TreasuryTarget, DevnetRegistryAnchors)
 prepareDevnetWithdrawalRegistry config provider submitter pp utxos = do
-    registry <-
-        deployDevnetWithdrawalRegistry config provider submitter pp utxos
+    publication <-
+        publishDevnetRegistryInit config provider submitter pp utxos
+    let registry =
+            drpAnchors publication
     pure (draTreasuryTarget registry, registry)
 
 -- | Publish registry NFTs and reference scripts from live DevNet UTxOs.
@@ -238,9 +261,21 @@ deployDevnetWithdrawalRegistry
     -> PParams ConwayEra
     -> [(TxIn, TxOut ConwayEra)]
     -> IO DevnetRegistryAnchors
-deployDevnetWithdrawalRegistry config provider submitter pp utxos = do
+deployDevnetWithdrawalRegistry config provider submitter pp utxos =
+    drpAnchors
+        <$> publishDevnetRegistryInit config provider submitter pp utxos
+
+-- | Publish DevNet registry state and retain submitted transaction ids.
+publishDevnetRegistryInit
+    :: DevnetRegistryInitConfig
+    -> Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> [(TxIn, TxOut ConwayEra)]
+    -> IO DevnetRegistryPublication
+publishDevnetRegistryInit config provider submitter pp utxos = do
     seed <- selectLargestAdaUtxo "registry deployment" utxos
-    (scopesSeedRef, registrySeedRef) <-
+    (seedSplitTxId, scopesSeedRef, registrySeedRef) <-
         submitSeedSplit config provider submitter pp seed
     seedOuts <-
         waitForTxIns provider [scopesSeedRef, registrySeedRef] 60
@@ -249,7 +284,7 @@ deployDevnetWithdrawalRegistry config provider submitter pp utxos = do
             (dricNetwork config)
             scopesSeedRef
             registrySeedRef
-    (scopesRef, registryRef) <-
+    (registryMintTxId, scopesRef, registryRef) <-
         submitRegistryNfts
             config
             provider
@@ -261,7 +296,7 @@ deployDevnetWithdrawalRegistry config provider submitter pp utxos = do
         queryUTxOs provider (dricFundingAddress config)
     publishSeed <-
         selectLargestAdaUtxo "reference script publishing" publishUtxos
-    (permissionsRef, treasuryRef) <-
+    (referenceScriptsTxId, permissionsRef, treasuryRef) <-
         submitReferenceScripts
             config
             provider
@@ -271,19 +306,28 @@ deployDevnetWithdrawalRegistry config provider submitter pp utxos = do
             publishSeed
     let treasuryTarget =
             dssTreasuryTarget scripts
+        anchors =
+            DevnetRegistryAnchors
+                { draScopesRef = scopesRef
+                , draPermissionsRef = permissionsRef
+                , draTreasuryRef = treasuryRef
+                , draRegistryRef = registryRef
+                , draScopesPolicyId =
+                    scriptHashToHex (dssScopesHash scripts)
+                , draRegistryPolicyId =
+                    scriptHashToHex (dssRegistryHash scripts)
+                , draPermissionsHash =
+                    dssPermissionsHash scripts
+                , draOwnerKeyHash =
+                    keyHashToText (dricOwnerKeyHash config)
+                , draTreasuryTarget = treasuryTarget
+                }
     pure
-        DevnetRegistryAnchors
-            { draScopesRef = scopesRef
-            , draPermissionsRef = permissionsRef
-            , draTreasuryRef = treasuryRef
-            , draRegistryRef = registryRef
-            , draRegistryPolicyId =
-                scriptHashToHex (dssRegistryHash scripts)
-            , draPermissionsHash =
-                dssPermissionsHash scripts
-            , draOwnerKeyHash =
-                keyHashToText (dricOwnerKeyHash config)
-            , draTreasuryTarget = treasuryTarget
+        DevnetRegistryPublication
+            { drpSeedSplitTxId = seedSplitTxId
+            , drpRegistryMintTxId = registryMintTxId
+            , drpReferenceScriptsTxId = referenceScriptsTxId
+            , drpAnchors = anchors
             }
 
 submitSeedSplit
@@ -292,7 +336,7 @@ submitSeedSplit
     -> Submitter IO
     -> PParams ConwayEra
     -> (TxIn, TxOut ConwayEra)
-    -> IO (TxIn, TxIn)
+    -> IO (TxId, TxIn, TxIn)
 submitSeedSplit config provider submitter pp seed@(seedIn, _) = do
     snapshot <- queryLedgerSnapshot provider
     let interpret :: InterpretIO NoCtx
@@ -322,7 +366,7 @@ submitSeedSplit config provider submitter pp seed@(seedIn, _) = do
             [seed]
             []
             prog
-    pure (txOutRef txId 0, txOutRef txId 1)
+    pure (txId, txOutRef txId 0, txOutRef txId 1)
 
 submitRegistryNfts
     :: DevnetRegistryInitConfig
@@ -331,7 +375,7 @@ submitRegistryNfts
     -> PParams ConwayEra
     -> DevnetScriptSet
     -> [(TxIn, TxOut ConwayEra)]
-    -> IO (TxIn, TxIn)
+    -> IO (TxId, TxIn, TxIn)
 submitRegistryNfts config provider submitter pp scripts seedOuts = do
     (scopesSeed@(scopesSeedRef, _), registrySeed@(registrySeedRef, _)) <-
         case seedOuts of
@@ -393,7 +437,7 @@ submitRegistryNfts config provider submitter pp scripts seedOuts = do
             [scopesSeed, registrySeed]
             []
             prog
-    pure (txOutRef txId 0, txOutRef txId 1)
+    pure (txId, txOutRef txId 0, txOutRef txId 1)
 
 submitReferenceScripts
     :: DevnetRegistryInitConfig
@@ -402,7 +446,7 @@ submitReferenceScripts
     -> PParams ConwayEra
     -> DevnetScriptSet
     -> (TxIn, TxOut ConwayEra)
-    -> IO (TxIn, TxIn)
+    -> IO (TxId, TxIn, TxIn)
 submitReferenceScripts config provider submitter pp scripts seed@(seedIn, _) = do
     snapshot <- queryLedgerSnapshot provider
     let refAddr =
@@ -440,7 +484,7 @@ submitReferenceScripts config provider submitter pp scripts seed@(seedIn, _) = d
             [seed]
             []
             prog
-    pure (txOutRef txId 0, txOutRef txId 1)
+    pure (txId, txOutRef txId 0, txOutRef txId 1)
 
 buildSubmitAndWait
     :: DevnetRegistryInitConfig
@@ -784,6 +828,151 @@ devnetNftCoin = Coin 5_000_000
 
 devnetReferenceScriptCoin :: Coin
 devnetReferenceScriptCoin = Coin 100_000_000
+
+registryInitDirectory :: FilePath -> FilePath
+registryInitDirectory runDir =
+    runDir </> "registry-init"
+
+-- | Path of the registry-init summary artifact.
+registryInitSummaryPath :: FilePath -> FilePath
+registryInitSummaryPath runDir =
+    registryInitDirectory runDir </> "summary.json"
+
+-- | Path of the registry-init registry artifact.
+registryInitRegistryPath :: FilePath -> FilePath
+registryInitRegistryPath runDir =
+    registryInitDirectory runDir </> "registry.json"
+
+-- | Path of the registry-init provenance artifact.
+registryInitProvenancePath :: FilePath -> FilePath
+registryInitProvenancePath runDir =
+    registryInitDirectory runDir </> "provenance.json"
+
+-- | JSON summary for a successful registry-init smoke phase.
+registryInitSummaryValue
+    :: Int
+    -> FilePath
+    -> DevnetRegistryPublication
+    -> Value
+registryInitSummaryValue networkMagic runDir publication =
+    object
+        [ "phase" .= ("registry-init" :: T.Text)
+        , "network" .= ("devnet" :: T.Text)
+        , "networkMagic" .= networkMagic
+        , "seedSplitTxId" .= renderTxId (drpSeedSplitTxId publication)
+        , "registryMintTxId"
+            .= renderTxId (drpRegistryMintTxId publication)
+        , "referenceScriptsTxId"
+            .= renderTxId (drpReferenceScriptsTxId publication)
+        , "registryPath" .= registryInitRegistryPath runDir
+        , "provenancePath" .= registryInitProvenancePath runDir
+        ]
+
+-- | JSON registry handoff consumed by later DevNet slices.
+registryInitRegistryValue :: DevnetRegistryPublication -> Value
+registryInitRegistryValue publication =
+    object
+        [ "phase" .= ("registry-init" :: T.Text)
+        , "network" .= ("devnet" :: T.Text)
+        , "anchors"
+            .= object
+                [ "scopesDeployedAt"
+                    .= txInToText (draScopesRef registry)
+                , "registryDeployedAt"
+                    .= txInToText (draRegistryRef registry)
+                , "permissionsDeployedAt"
+                    .= txInToText (draPermissionsRef registry)
+                , "treasuryDeployedAt"
+                    .= txInToText (draTreasuryRef registry)
+                ]
+        , "policies"
+            .= object
+                [ "scopesPolicyId" .= draScopesPolicyId registry
+                , "registryPolicyId" .= draRegistryPolicyId registry
+                ]
+        , "scripts"
+            .= object
+                [ "permissionsScriptHash"
+                    .= scriptHashToHex (draPermissionsHash registry)
+                , "treasuryScriptHash"
+                    .= ttScriptHashText target
+                ]
+        , "addresses"
+            .= object
+                [ "treasuryAddress" .= renderAddr (ttAddress target)
+                ]
+        , "owners"
+            .= object
+                [ "scopeOwnerKeyHash" .= draOwnerKeyHash registry
+                ]
+        , "submittedTxIds"
+            .= object
+                [ "seedSplit" .= renderTxId (drpSeedSplitTxId publication)
+                , "registryMint"
+                    .= renderTxId (drpRegistryMintTxId publication)
+                , "referenceScripts"
+                    .= renderTxId (drpReferenceScriptsTxId publication)
+                ]
+        ]
+  where
+    registry =
+        drpAnchors publication
+    target =
+        draTreasuryTarget registry
+
+-- | JSON provenance for the registry-init artifact set.
+registryInitProvenanceValue :: Value
+registryInitProvenanceValue =
+    object
+        [ "phase" .= ("registry-init" :: T.Text)
+        , "source" .= ("amaru-treasury-tx" :: T.Text)
+        , "issue" .= (147 :: Int)
+        , "parentIssue" .= (151 :: Int)
+        ]
+
+-- | Human-readable success lines printed by the registry-init phase.
+registryInitLines
+    :: Int
+    -> FilePath
+    -> DevnetRegistryPublication
+    -> [String]
+registryInitLines networkMagic runDir publication =
+    [ "devnet-smoke: run-dir " <> runDir
+    , "devnet-smoke: network devnet magic " <> show networkMagic
+    , "devnet-smoke: phase registry-init passed"
+    , "devnet-smoke: registry-init-seed-split-tx-id "
+        <> T.unpack (renderTxId (drpSeedSplitTxId publication))
+    , "devnet-smoke: registry-init-registry-mint-tx-id "
+        <> T.unpack (renderTxId (drpRegistryMintTxId publication))
+    , "devnet-smoke: registry-init-reference-scripts-tx-id "
+        <> T.unpack (renderTxId (drpReferenceScriptsTxId publication))
+    , "devnet-smoke: registry-init-summary "
+        <> registryInitSummaryPath runDir
+    , "devnet-smoke: registry-init-registry "
+        <> registryInitRegistryPath runDir
+    ]
+
+-- | Write the registry-init artifact set under the run directory.
+writeRegistryInitArtifacts
+    :: Int
+    -> FilePath
+    -> DevnetRegistryPublication
+    -> IO ()
+writeRegistryInitArtifacts networkMagic runDir publication = do
+    let summary =
+            registryInitSummaryValue networkMagic runDir publication
+    createDirectoryIfMissing True (registryInitDirectory runDir)
+    BSL.writeFile (registryInitSummaryPath runDir) (encode summary)
+    BSL.writeFile
+        (registryInitRegistryPath runDir)
+        (encode (registryInitRegistryValue publication))
+    BSL.writeFile
+        (registryInitProvenancePath runDir)
+        (encode registryInitProvenanceValue)
+    BSL.writeFile (runDir </> "summary.json") (encode summary)
+    writeFile
+        (runDir </> "summary.log")
+        (unlines (registryInitLines networkMagic runDir publication))
 
 -- | Path of the withdraw registry artifact in a DevNet run directory.
 withdrawalRegistryPath :: FilePath -> FilePath

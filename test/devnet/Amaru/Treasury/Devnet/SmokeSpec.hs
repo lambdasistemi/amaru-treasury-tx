@@ -215,6 +215,7 @@ import Amaru.Treasury.Cli.TxBuild qualified as TxBuild
 import Amaru.Treasury.Devnet.RegistryInit
     ( DevnetRegistryAnchors (..)
     , DevnetRegistryInitConfig (..)
+    , DevnetRegistryPublication (..)
     , TreasuryTarget (..)
     )
 import Amaru.Treasury.Devnet.RegistryInit qualified as RegistryInit
@@ -350,6 +351,90 @@ spec =
                                     </> "swap-ready"
                                     </> "provenance.json"
                                )
+                        ]
+        describe "registry-init diagnostics" $ do
+            it "records registry-init summary and registry artifact fields" $ do
+                publication <- sampleRegistryPublication
+                let registry =
+                        drpAnchors publication
+                    target =
+                        draTreasuryTarget registry
+                RegistryInit.registryInitSummaryValue
+                    (sgtNetworkMagic sampleTiming)
+                    sampleRunDir
+                    publication
+                    `shouldBe` object
+                        [ "phase" .= ("registry-init" :: String)
+                        , "network" .= ("devnet" :: String)
+                        , "networkMagic" .= sgtNetworkMagic sampleTiming
+                        , "seedSplitTxId"
+                            .= renderTxId (drpSeedSplitTxId publication)
+                        , "registryMintTxId"
+                            .= renderTxId
+                                (drpRegistryMintTxId publication)
+                        , "referenceScriptsTxId"
+                            .= renderTxId
+                                (drpReferenceScriptsTxId publication)
+                        , "registryPath"
+                            .= RegistryInit.registryInitRegistryPath
+                                sampleRunDir
+                        , "provenancePath"
+                            .= RegistryInit.registryInitProvenancePath
+                                sampleRunDir
+                        ]
+                RegistryInit.registryInitRegistryValue publication
+                    `shouldBe` object
+                        [ "phase" .= ("registry-init" :: String)
+                        , "network" .= ("devnet" :: String)
+                        , "anchors"
+                            .= object
+                                [ "scopesDeployedAt"
+                                    .= txInToText (draScopesRef registry)
+                                , "registryDeployedAt"
+                                    .= txInToText (draRegistryRef registry)
+                                , "permissionsDeployedAt"
+                                    .= txInToText
+                                        (draPermissionsRef registry)
+                                , "treasuryDeployedAt"
+                                    .= txInToText (draTreasuryRef registry)
+                                ]
+                        , "policies"
+                            .= object
+                                [ "scopesPolicyId"
+                                    .= draScopesPolicyId registry
+                                , "registryPolicyId"
+                                    .= draRegistryPolicyId registry
+                                ]
+                        , "scripts"
+                            .= object
+                                [ "permissionsScriptHash"
+                                    .= scriptHashToHex
+                                        (draPermissionsHash registry)
+                                , "treasuryScriptHash"
+                                    .= ttScriptHashText target
+                                ]
+                        , "addresses"
+                            .= object
+                                [ "treasuryAddress"
+                                    .= renderAddr (ttAddress target)
+                                ]
+                        , "owners"
+                            .= object
+                                [ "scopeOwnerKeyHash"
+                                    .= draOwnerKeyHash registry
+                                ]
+                        , "submittedTxIds"
+                            .= object
+                                [ "seedSplit"
+                                    .= renderTxId
+                                        (drpSeedSplitTxId publication)
+                                , "registryMint"
+                                    .= renderTxId
+                                        (drpRegistryMintTxId publication)
+                                , "referenceScripts"
+                                    .= renderTxId
+                                        (drpReferenceScriptsTxId publication)
+                                ]
                         ]
         describe "withdraw diagnostics" $ do
             it "records submitted withdrawal materialization proof" $ do
@@ -547,6 +632,9 @@ spec =
         it
             "swap-ready: publishes SundaeSwap V3 order validator readiness"
             (runForPhases ["swap-ready"] swapReadySmoke)
+        it
+            "registry-init: publishes registry artifacts"
+            (runForPhases ["registry-init"] registryInitSmoke)
 
 runForPhases :: [String] -> IO () -> IO ()
 runForPhases accepted action = do
@@ -609,6 +697,45 @@ withdrawSmoke = do
                 registry
                 evidence
                 rewards
+
+registryInitSmoke :: IO ()
+registryInitSmoke = do
+    runDir <- resolveRunDir
+    prepareRunDir runDir
+
+    gDir <- genesisDir
+    assertGenesisDir gDir
+    timing <- readShelleyTiming gDir
+    sgtNetworkMagic timing `shouldBe` 42
+
+    withCardanoNode gDir $ \socket startMs -> do
+        accepted <- probeNetworkMagic devnetMagic socket
+        accepted `shouldBe` True
+
+        copyNodeLog socket runDir
+        writeTiming runDir startMs socket timing
+        withGovernanceNode socket $ \provider submitter -> do
+            pp <- queryProtocolParams provider
+            utxos <- queryUTxOs provider genesisAddr
+            publication <-
+                RegistryInit.publishDevnetRegistryInit
+                    devnetRegistryInitConfig
+                    provider
+                    submitter
+                    pp
+                    utxos
+            verifyRegistryInitPublication provider publication
+            RegistryInit.writeRegistryInitArtifacts
+                (sgtNetworkMagic timing)
+                runDir
+                publication
+            mapM_
+                putStrLn
+                ( RegistryInit.registryInitLines
+                    (sgtNetworkMagic timing)
+                    runDir
+                    publication
+                )
 
 swapReadySmoke :: IO ()
 swapReadySmoke = do
@@ -838,6 +965,35 @@ sampleSwapReadinessEvidence =
             "addr_test1wzsampleorder"
         }
 
+sampleRegistryPublication :: IO DevnetRegistryPublication
+sampleRegistryPublication = do
+    target <-
+        RegistryInit.treasuryTargetFromBlob Testnet
+            =<< expectEither
+                "derive sample registry-init treasury script"
+                (derivedTreasuryScriptBlob CoreDevelopment)
+    pure
+        DevnetRegistryPublication
+            { drpSeedSplitTxId = sampleTxId 10
+            , drpRegistryMintTxId = sampleTxId 11
+            , drpReferenceScriptsTxId = sampleTxId 12
+            , drpAnchors =
+                DevnetRegistryAnchors
+                    { draScopesRef = txOutRef (sampleTxId 20) 0
+                    , draPermissionsRef = txOutRef (sampleTxId 21) 1
+                    , draTreasuryRef = txOutRef (sampleTxId 22) 2
+                    , draRegistryRef = txOutRef (sampleTxId 23) 3
+                    , draScopesPolicyId =
+                        "44444444444444444444444444444444444444444444444444444444"
+                    , draRegistryPolicyId =
+                        "22222222222222222222222222222222222222222222222222222222"
+                    , draPermissionsHash = ttScriptHash target
+                    , draOwnerKeyHash =
+                        "33333333333333333333333333333333333333333333333333333333"
+                    , draTreasuryTarget = target
+                    }
+            }
+
 preparePinnedTreasuryTarget
     :: Provider IO
     -> Submitter IO
@@ -934,6 +1090,62 @@ publishSwapReadiness provider submitter pp utxos = do
             , sreOrderAddress =
                 renderAddr orderAddress
             }
+
+verifyRegistryInitPublication
+    :: Provider IO
+    -> DevnetRegistryPublication
+    -> IO ()
+verifyRegistryInitPublication provider publication = do
+    let registry =
+            drpAnchors publication
+        refs =
+            [ draScopesRef registry
+            , draRegistryRef registry
+            , draPermissionsRef registry
+            , draTreasuryRef registry
+            ]
+    found <- queryUTxOByTxIn provider (Set.fromList refs)
+    let missing =
+            filter (`Map.notMember` found) refs
+    unless (null missing) $
+        expectationFailure $
+            "registry-init missing anchor UTxOs: "
+                <> show (txInToText <$> missing)
+    verifyRegistryReferenceScript
+        found
+        "permissions"
+        (draPermissionsRef registry)
+        (draPermissionsHash registry)
+    verifyRegistryReferenceScript
+        found
+        "treasury"
+        (draTreasuryRef registry)
+        (ttScriptHash (draTreasuryTarget registry))
+
+verifyRegistryReferenceScript
+    :: Map.Map TxIn (TxOut ConwayEra)
+    -> String
+    -> TxIn
+    -> ScriptHash
+    -> IO ()
+verifyRegistryReferenceScript found label ref expectedHash =
+    case Map.lookup ref found of
+        Nothing ->
+            expectationFailure $
+                "registry-init missing "
+                    <> label
+                    <> " reference script UTxO "
+                    <> T.unpack (txInToText ref)
+        Just txOut ->
+            case txOut ^. referenceScriptTxOutL of
+                SJust script ->
+                    scriptHashToHex (Core.hashScript @ConwayEra script)
+                        `shouldBe` scriptHashToHex expectedHash
+                SNothing ->
+                    expectationFailure $
+                        "registry-init "
+                            <> label
+                            <> " UTxO has no reference script"
 
 buildSubmitAndWait
     :: String
@@ -2962,6 +3174,10 @@ mkHash32 n =
         hashFromBytes $
             BS.pack $
                 replicate 31 0 ++ [n]
+
+sampleTxId :: Word8 -> TxId
+sampleTxId n =
+    TxId (unsafeMakeSafeHash (mkHash32 n))
 
 resolveRunDir :: IO FilePath
 resolveRunDir = do

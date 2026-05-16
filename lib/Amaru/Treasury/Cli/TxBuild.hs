@@ -51,7 +51,10 @@ import Amaru.Treasury.Build.Trace
     ( BuildEvent (..)
     , buildEventTracer
     )
-import Amaru.Treasury.ChainContext (liveContext)
+import Amaru.Treasury.ChainContext
+    ( networkFromMagic
+    , withLiveContext
+    )
 import Amaru.Treasury.Cli.Common (withLogHandle)
 import Amaru.Treasury.IntentJSON
     ( ScopeJSON (..)
@@ -163,21 +166,31 @@ runTxBuild socket TxBuildOpts{..} = do
             (BuildEventRequiredUtxos (Set.size required))
         assertSocketNetwork tr socket netName magic
         withLocalNodeBackend magic socket $ \backend -> do
-            ctx <- liveContext backend required
-            buildResult <- runFromIntentEither ctx some
-            tbr <- case buildResult of
-                Right result -> pure result
-                Left err -> do
-                    let message = renderBuildError err
-                    TIO.hPutStrLn IO.stderr message
-                    writeFailureReport
+            withLiveContext
+                (networkFromMagic magic)
+                backend
+                required
+                $ \ctx -> do
+                    buildResult <- runFromIntentEither ctx some
+                    tbr <- case buildResult of
+                        Right result -> pure result
+                        Left err -> do
+                            let message = renderBuildError err
+                            TIO.hPutStrLn IO.stderr message
+                            writeFailureReport
+                                tr
+                                tboReportPath
+                                some
+                                (buildErrorCode err)
+                                message
+                            exitFailure
+                    emitBuildResult
                         tr
+                        tboOutPath
                         tboReportPath
+                        magic
                         some
-                        (buildErrorCode err)
-                        message
-                    exitFailure
-            emitBuildResult tr tboOutPath tboReportPath magic some tbr
+                        tbr
 
 emitBuildResult
     :: Tracer IO BuildEvent

@@ -23,8 +23,8 @@ repository cardano-haskell-packages
 source-repository-package
   type: git
   location: https://github.com/lambdasistemi/cardano-tx-tools
-  tag: 92d17dcaa02e42cd29b649383778f881a14b7e20
-  --sha256: 1bda0dbba1j5lcrfs3xmfs0kb43bbi9s46m4892k9gz0qxj59qyr
+  tag: 25d7ce349f826e9888fb8565eeb816babb06d922
+  --sha256: 1nhds5ihs1ywi7sl6i27q6zlphcmi5wiqgdhlbvhp0s1p170jjgm
 
 -- Provider, Submitter, N2C, and devnet helpers remain in cardano-node-clients.
 source-repository-package

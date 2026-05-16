@@ -66,7 +66,11 @@ import Amaru.Treasury.Build
     , ScriptResult (..)
     , runFromIntent
     )
-import Amaru.Treasury.ChainContext (ChainContext (..), liveContext)
+import Amaru.Treasury.ChainContext
+    ( ChainContext (..)
+    , networkFromMagic
+    , withLiveContext
+    )
 import Amaru.Treasury.ChainContext.Fixture (writeSwapFixture)
 import Amaru.Treasury.IntentJSON
     ( SAction (..)
@@ -153,54 +157,58 @@ main = do
                     "required UTxOs: " <> e
             Right s -> pure s
         IO.hPutStrLn stderr "capture: querying chain context"
-        ctx <- liveContext backend allRequired
-        IO.hPutStrLn stderr "capture: building tx"
-        BuildResult{..} <- runFromIntent ctx some
-        let exUnitsMap =
-                Map.fromList
-                    [ (srPurpose r, ex)
-                    | r@ScriptResult{srOutcome = Right ex} <-
-                        brScriptResults
-                    ]
-            failures =
-                [ (srPurpose r, e)
-                | r@ScriptResult{srOutcome = Left e} <-
-                    brScriptResults
-                ]
-        case failures of
-            [] -> pure ()
-            _ -> do
-                mapM_
-                    ( \(p, e) ->
-                        IO.hPutStrLn stderr $
-                            "  FAIL: "
-                                <> show p
-                                <> " — "
-                                <> e
-                    )
-                    failures
-                throwIO
-                    ( userError
-                        "capture: live evaluator reported failures; refusing to write fixture"
-                    )
-        IO.hPutStrLn stderr $
-            "capture: writing utxos.json + exunits.json into "
-                <> coOutDir
-        createDirectoryIfMissing True coOutDir
-        writeSwapFixture coOutDir (ccUtxos ctx) exUnitsMap
-        let cborStrict = BSL.toStrict brCborBytes
-            hexed = B16.encode cborStrict
-            Coin feeLov = brFeeLovelace
-        BSL.writeFile
-            (coOutDir <> "/expected.cbor")
-            (BSL.fromStrict hexed)
-        IO.hPutStrLn stderr $
-            "capture: expected.cbor "
-                <> show (BSL.length (BSL.fromStrict cborStrict))
-                <> " bytes  fee="
-                <> show feeLov
-                <> "  exUnits captured: "
-                <> show (Map.size exUnitsMap)
+        withLiveContext
+            (networkFromMagic coNetworkMagic)
+            backend
+            allRequired
+            $ \ctx -> do
+                IO.hPutStrLn stderr "capture: building tx"
+                BuildResult{..} <- runFromIntent ctx some
+                let exUnitsMap =
+                        Map.fromList
+                            [ (srPurpose r, ex)
+                            | r@ScriptResult{srOutcome = Right ex} <-
+                                brScriptResults
+                            ]
+                    failures =
+                        [ (srPurpose r, e)
+                        | r@ScriptResult{srOutcome = Left e} <-
+                            brScriptResults
+                        ]
+                case failures of
+                    [] -> pure ()
+                    _ -> do
+                        mapM_
+                            ( \(p, e) ->
+                                IO.hPutStrLn stderr $
+                                    "  FAIL: "
+                                        <> show p
+                                        <> " — "
+                                        <> e
+                            )
+                            failures
+                        throwIO
+                            ( userError
+                                "capture: live evaluator reported failures; refusing to write fixture"
+                            )
+                IO.hPutStrLn stderr $
+                    "capture: writing utxos.json + exunits.json into "
+                        <> coOutDir
+                createDirectoryIfMissing True coOutDir
+                writeSwapFixture coOutDir (ccUtxos ctx) exUnitsMap
+                let cborStrict = BSL.toStrict brCborBytes
+                    hexed = B16.encode cborStrict
+                    Coin feeLov = brFeeLovelace
+                BSL.writeFile
+                    (coOutDir <> "/expected.cbor")
+                    (BSL.fromStrict hexed)
+                IO.hPutStrLn stderr $
+                    "capture: expected.cbor "
+                        <> show (BSL.length (BSL.fromStrict cborStrict))
+                        <> " bytes  fee="
+                        <> show feeLov
+                        <> "  exUnits captured: "
+                        <> show (Map.size exUnitsMap)
 
 resolveSocket :: Maybe FilePath -> IO FilePath
 resolveSocket (Just p) = pure p

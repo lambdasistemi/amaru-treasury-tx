@@ -88,6 +88,10 @@ import Amaru.Treasury.Report
     ( BuildFailure (..)
     )
 import Cardano.Ledger.Api.PParams (emptyPParams)
+import Cardano.Ledger.BaseTypes
+    ( Network (..)
+    , SlotNo (..)
+    )
 import Options.Applicative
     ( ParserResult (..)
     , defaultPrefs
@@ -425,7 +429,9 @@ spec = describe "Amaru.Treasury.Build" $ do
                         "test/fixtures/withdraw/synthetic/intent.json"
             let ctx =
                     ChainContext
-                        { ccPParams = emptyPParams
+                        { ccNetwork = Mainnet
+                        , ccTipSlot = SlotNo 0
+                        , ccPParams = emptyPParams
                         , ccUtxos = Map.empty
                         , ccEvaluateTx =
                             const (pure Map.empty)
@@ -440,7 +446,9 @@ spec = describe "Amaru.Treasury.Build" $ do
                         "test/fixtures/withdraw/synthetic/intent.json"
             let ctx =
                     ChainContext
-                        { ccPParams = emptyPParams
+                        { ccNetwork = Mainnet
+                        , ccTipSlot = SlotNo 0
+                        , ccPParams = emptyPParams
                         , ccUtxos = Map.empty
                         , ccEvaluateTx =
                             const (pure Map.empty)
@@ -481,7 +489,9 @@ spec = describe "Amaru.Treasury.Build" $ do
                         "test/fixtures/swap/intent.json"
             let ctx =
                     ChainContext
-                        { ccPParams = emptyPParams
+                        { ccNetwork = Mainnet
+                        , ccTipSlot = SlotNo 0
+                        , ccPParams = emptyPParams
                         , ccUtxos = Map.empty
                         , ccEvaluateTx =
                             const (pure Map.empty)

@@ -33,8 +33,19 @@ extra-source-files:
   scripts/smoke/swap-wizard-signers
   scripts/smoke/treasury-inspect
   scripts/smoke/tx-build-pipe
-  test/fixtures/106-cardano-cli-oracle/*
-  test/fixtures/118-vault-witness/*
+  test/fixtures/106-cardano-cli-oracle/*.addr
+  test/fixtures/106-cardano-cli-oracle/*.cborHex
+  test/fixtures/106-cardano-cli-oracle/*.json
+  test/fixtures/106-cardano-cli-oracle/*.md
+  test/fixtures/106-cardano-cli-oracle/*.version
+  test/fixtures/118-vault-witness/*.addr
+  test/fixtures/118-vault-witness/*.addr_xsk
+  test/fixtures/118-vault-witness/*.hash
+  test/fixtures/118-vault-witness/*.hex
+  test/fixtures/118-vault-witness/*.json
+  test/fixtures/118-vault-witness/*.md
+  test/fixtures/118-vault-witness/*.skey
+  test/fixtures/118-vault-witness/*.vkey
   test/fixtures/disburse/**/*.cbor
   test/fixtures/disburse/**/*.json
   test/fixtures/disburse/**/*.md
@@ -76,6 +87,10 @@ common warnings
     TypeApplications
     TypeOperators
     ViewPatterns
+
+source-repository head
+  type:     git
+  location: https://github.com/lambdasistemi/amaru-treasury-tx
 
 library
   import:           warnings

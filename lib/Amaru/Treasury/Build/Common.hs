@@ -14,18 +14,22 @@ module Amaru.Treasury.Build.Common
     , indexedOutputs
     , strictMaybe
     , txIdText
+    , validateFinalPhase1
     ) where
 
 import Cardano.Crypto.Hash.Class (hashToBytes)
 import Data.ByteString.Base16 qualified as B16
 import Data.Foldable (toList)
 import Data.List (find)
+import Data.Map.Strict qualified as Map
 import Data.Maybe (listToMaybe)
 import Data.Sequence.Strict qualified as StrictSeq
 import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
 
+import Cardano.Ledger.Address (Withdrawals (..))
 import Cardano.Ledger.Alonzo.PParams (ppCollateralPercentageL)
 import Cardano.Ledger.Api.Tx (estimateMinFeeTx, txIdTx)
 import Cardano.Ledger.Api.Tx.Body
@@ -36,17 +40,27 @@ import Cardano.Ledger.Api.Tx.Body
     , referenceInputsTxBodyL
     , reqSignerHashesTxBodyL
     , totalCollateralTxBodyL
+    , withdrawalsTxBodyL
     )
 import Cardano.Ledger.Api.Tx.Out (TxOut, coinTxOutL)
 import Cardano.Ledger.BaseTypes (StrictMaybe (..))
 import Cardano.Ledger.Coin (Coin (..))
-import Cardano.Ledger.Conway (ConwayEra)
+import Cardano.Ledger.Conway (ApplyTxError (..), ConwayEra)
+import Cardano.Ledger.Conway.Rules (ConwayLedgerPredFailure)
 import Cardano.Ledger.Core (PParams, TopTx, TxBody, bodyTxL)
 import Cardano.Ledger.Hashes (extractHash)
 import Cardano.Ledger.TxIn (TxId (..), TxIn)
+import Cardano.Slotting.Slot (SlotNo (..))
 import Cardano.Tx.Balance (refScriptsSize)
+import Cardano.Tx.Build (mkPParamsBound)
 import Cardano.Tx.Ledger (ConwayTx)
+import Cardano.Tx.Validate
+    ( isWitnessCompletenessFailure
+    , validatePhase1
+    )
 import Lens.Micro ((&), (.~), (^.))
+
+import Amaru.Treasury.ChainContext (ChainContext (..))
 
 txIdText :: ConwayTx -> Text
 txIdText tx =
@@ -89,6 +103,56 @@ strictMaybe :: StrictMaybe a -> Maybe a
 strictMaybe = \case
     SNothing -> Nothing
     SJust value -> Just value
+
+{- | Run the tx-tools Conway Phase-1 pre-flight on the final tx.
+
+Unsigned transactions normally fail with missing vkey witnesses. Those
+failures are signing-step noise, so this helper accepts a tx when every
+ledger failure is witness-completeness noise and rejects only remaining
+structural failures.
+
+The current tx-tools validator seeds UTxO and protocol parameters, but
+not reward-account state. Transactions with a @withdrawals@ field would
+therefore get false @WithdrawalsNotInRewardsCERTS@ failures; skip those
+until the upstream validation context grows reward-state support.
+-}
+validateFinalPhase1 :: ChainContext -> ConwayTx -> Either Text ()
+validateFinalPhase1 ctx tx
+    | hasWithdrawals tx = Right ()
+    | otherwise =
+        case validatePhase1
+            (ccNetwork ctx)
+            (mkPParamsBound (ccPParams ctx))
+            (Map.toList (ccUtxos ctx))
+            (ccTipSlot ctx)
+            tx of
+            Right () -> Right ()
+            Left err ->
+                let structural =
+                        filter
+                            (not . isWitnessCompletenessFailure)
+                            (phase1Failures err)
+                in  if null structural
+                        then Right ()
+                        else
+                            Left $
+                                "Phase-1 validation rejected final transaction at sampled slot "
+                                    <> renderSlot (ccTipSlot ctx)
+                                    <> ": "
+                                    <> T.pack (show structural)
+
+phase1Failures
+    :: ApplyTxError ConwayEra
+    -> [ConwayLedgerPredFailure ConwayEra]
+phase1Failures (ConwayApplyTxError errs) = toList errs
+
+hasWithdrawals :: ConwayTx -> Bool
+hasWithdrawals tx =
+    let Withdrawals withdrawals = tx ^. bodyTxL . withdrawalsTxBodyL
+    in  not (Map.null withdrawals)
+
+renderSlot :: SlotNo -> Text
+renderSlot (SlotNo slot) = T.pack (show slot)
 
 {- | Align the builder fee with the expected signed tx size.
 

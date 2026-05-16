@@ -61,6 +61,13 @@ returns the full order value to the selected treasury address. The
 optional JSON report names the cancelled order, returned value,
 treasury destination, required signers, fee, and next steps.
 
+After fee alignment, `swap-cancel` runs the final unsigned transaction
+through tx-tools phase-1 validation against the sampled N2C
+`ChainContext`. Missing vkey witnesses are expected before signing and
+are ignored; structural ledger failures such as missing inputs, value
+non-conservation, or script-integrity mismatches abort before CBOR is
+written.
+
 The required signatures come from the order datum, not from a CLI
 override. For the Amaru-generated orders built by this tool today,
 that means at least two of the four treasury owner keys encoded in the

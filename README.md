@@ -13,8 +13,13 @@ treasury contracts. The release-facing commands are:
   is the common operator path.
 - `tx-build` — turns a unified `intent.json` into the unsigned
   Conway CBOR the user signs and submits. Swap, ADA/USDM disburse, and
-  withdraw intents are wired; reorganize is parsed but still fails
-  closed until its builder ships.
+  withdraw intents are wired; final unsigned transactions are
+  phase-1 preflighted against the sampled chain context before CBOR is
+  written. Reorganize is parsed but still fails closed until its
+  builder ships.
+- `swap-cancel` — verifies one explicitly supplied pending SundaeSwap
+  V3 order and builds unsigned cancellation CBOR that returns the order
+  value to the selected treasury.
 
 Haskell port of the bash recipes in
 [`pragma-org/amaru-treasury/journal/2026/`](https://github.com/pragma-org/amaru-treasury/tree/main/journal/2026),

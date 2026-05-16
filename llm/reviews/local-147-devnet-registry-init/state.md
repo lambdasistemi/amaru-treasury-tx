@@ -1,7 +1,7 @@
-state: WaitingForSubagentCode
+state: WaitingForDocs
 pr: 152
 branch: 147-devnet-registry-init
-sha: b9106a5d1641601536604dae409851708165516b
-review_file: llm/reviews/local-147-devnet-registry-init/b9106a5d1641601536604dae409851708165516b.md
+sha: a5e74d83ff46474f125d0501a9ab357d01785f2a
+review_file: llm/reviews/local-147-devnet-registry-init/a5e74d83ff46474f125d0501a9ab357d01785f2a.md
 updated_by: solo
-notes: "T013-T020 accepted. Orchestrator analysis for T021-T027 identified the missing seed-split tx id and updated the second subagent brief before handoff."
+notes: "T021-T027 accepted after local review and live registry-init verification. Next step is orchestrator-owned docs and PR metadata."

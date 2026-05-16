@@ -68,16 +68,23 @@ with the contract fields in `contracts/devnet-registry-init.md`.
 
 ### Tests For User Story 2
 
-- [ ] T021 [US2] RED: add a devnet diagnostics expectation in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` for the `registry-init` summary and registry artifact fields before the phase exists.
+- [x] T021 [US2] RED: add a devnet diagnostics expectation in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` for the `registry-init` summary and registry artifact fields before the phase exists.
 
 ### Implementation For User Story 2
 
-- [ ] T022 [US2] Add `registry-init` phase parsing to `scripts/smoke/devnet-local` and `just devnet-smoke`.
-- [ ] T023 [US2] Add `registry-init` Hspec phase dispatch in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`.
-- [ ] T024 [US2] Write `registry-init/summary.json`, `registry-init/registry.json`, and `registry-init/provenance.json` from the production artifact projection.
-- [ ] T025 [US2] Verify anchor UTxOs through `Provider.queryUTxOByTxIn` and reference-script hashes before reporting success.
-- [ ] T026 [US2] GREEN: run `nix develop --quiet -c just devnet-smoke registry-init` and record the run directory, tx ids, and anchor TxIns.
-- [ ] T027 [US2] Commit the live registry-init slice as `test(devnet): prove registry initiator`.
+- [x] T022 [US2] Add `registry-init` phase parsing to `scripts/smoke/devnet-local` and `just devnet-smoke`.
+- [x] T023 [US2] Add `registry-init` Hspec phase dispatch in `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`.
+- [x] T024 [US2] Write `registry-init/summary.json`, `registry-init/registry.json`, and `registry-init/provenance.json` from the production artifact projection.
+- [x] T025 [US2] Verify anchor UTxOs through `Provider.queryUTxOByTxIn` and reference-script hashes before reporting success.
+- [x] T026 [US2] GREEN: run `nix develop --quiet -c just devnet-smoke registry-init` and record the run directory, tx ids, and anchor TxIns.
+- [x] T027 [US2] Commit the live registry-init slice as `test(devnet): prove registry initiator`.
+
+Evidence:
+
+- RED: `nix develop --quiet -c just unit "Amaru.Treasury.Devnet.RegistryInit"` exited 1 before implementation because the production module did not export the richer registry publication type or registry-init artifact helpers.
+- GREEN: local orchestrator verification of `a5e74d83ff46474f125d0501a9ab357d01785f2a` passed `git diff --check`, `nix develop --quiet -c just unit "Amaru.Treasury.Devnet.RegistryInit"` with 5 examples and 0 failures, `nix develop --quiet -c cabal build test:devnet-tests -O0`, focused `fourmolu -m check`, `cabal-fmt -c amaru-treasury-tx.cabal`, and the commit message gate.
+- LIVE GREEN: `nix develop --quiet -c just devnet-smoke registry-init` passed with 2 devnet examples and 0 failures in `runs/devnet/20260516T184944Z`; seed split tx `f31917b80a3649c90bead84e5aea925d68945021a811f0dc68bd7dcce372a90b`, registry mint tx `8dbb8d18e1814ee733ace77c5c7e59e17bb70c22382c69637e6a154729ec3912`, reference scripts tx `f730f2360b82a8a8fd0a4e071110bb78223d5c09eb2413d32eb48d5e54acb44c`.
+- LIVE ANCHORS: scopes `8dbb8d18e1814ee733ace77c5c7e59e17bb70c22382c69637e6a154729ec3912#0`, registry `8dbb8d18e1814ee733ace77c5c7e59e17bb70c22382c69637e6a154729ec3912#1`, permissions `f730f2360b82a8a8fd0a4e071110bb78223d5c09eb2413d32eb48d5e54acb44c#0`, treasury `f730f2360b82a8a8fd0a4e071110bb78223d5c09eb2413d32eb48d5e54acb44c#1`.
 
 ## Phase 5: User Story 3 - Keep DevNet Smoke Thin (Priority: P2)
 

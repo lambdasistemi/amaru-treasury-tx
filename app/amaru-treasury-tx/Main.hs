@@ -54,6 +54,9 @@ import Amaru.Treasury.Cli.TreasuryInspect
 import Amaru.Treasury.Cli.TxBuild
     ( runTxBuild
     )
+import Amaru.Treasury.Cli.UpdateCheck
+    ( withUpdateCheckMain
+    )
 import Amaru.Treasury.Cli.Vault
     ( runVaultCreate
     )
@@ -68,7 +71,7 @@ import Amaru.Treasury.Tx.Envelope
     )
 
 main :: IO ()
-main = withUtf8 $ do
+main = withUtf8 . withUpdateCheckMain $ do
     (g, c) <- execParser opts
     case c of
         CmdReportRender ro ->

@@ -78,6 +78,15 @@ source-repository-package
   tag: cuddle-1.1.1.0
   --sha256: 1f4wk3kgb68bg97gfb9wycv5zkv0dsghlkf9pj64z0bpcr0wkxrc
 
+-- Update-banner library: prints a stderr notice when amaru-treasury-tx
+-- is behind its latest GitHub release. See feat: --version flag and
+-- update-available banner (#141).
+source-repository-package
+  type: git
+  location: https://github.com/lambdasistemi/github-release-check
+  tag: 9b7e78160d605731b9eec7ce1900b285ad494162
+  --sha256: 1ally9sks1hb7jqg5q7652d2ls2mgjdmhld6gqq0d98pmd5bs1kk
+
 -- Pin Cardano and Ouroboros packages for the cardano-node 10.7.0 line
 -- (mirrored from cardano-node-clients).
 constraints:

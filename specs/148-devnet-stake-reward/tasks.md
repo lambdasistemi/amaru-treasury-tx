@@ -363,3 +363,74 @@ Commit:
 - Commit body must include Tasks: T022,T023,T024,T025,T026,T027.
 - Do not push.
 ```
+
+## Third Subagent Brief Template
+
+Use only after T022-T027 are reviewed and pushed.
+
+```text
+Task: T028-T034 only.
+
+Owned files:
+- scripts/smoke/devnet-local
+- test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs
+
+Required orchestrator analysis already applied:
+- `scripts/smoke/devnet-local` currently accepts only
+  `node|governance|withdraw|swap-ready|registry-init|all`; it rejects
+  `stake-reward-init`.
+- `SmokeSpec.hs` already has `registryInitSmoke` that starts the local
+  DevNet, writes the genesis payment signing key, and calls
+  `runDevnetRegistryInit` through the production command runner.
+- The new smoke phase must call the shipped
+  `runDevnetStakeRewardInit` command runner, not reimplement setup
+  transaction construction inside the smoke.
+- A fresh `stake-reward-init` smoke may run `registry-init` first in the
+  same run directory and then consume
+  `<run-dir>/registry-init/registry.json`.
+- #148 proves prepared treasury and permissions reward accounts only;
+  #149 governance funding and #150 disburse submission remain
+  forbidden.
+
+Forbidden scope:
+- Do not edit specs, plan, tasks, README, docs, PR metadata, issue
+  metadata, gate.sh, production command code, parser code, governance
+  funding, withdrawal materialization, disburse submission, or
+  swap/order behavior.
+- Do not add `stake-reward-init` to `all` unless the current script
+  structure makes that unavoidable; the required operator proof is
+  `just devnet-smoke stake-reward-init`.
+
+RED proof:
+- Before implementation, run
+  `scripts/smoke/devnet-local --phase stake-reward-init --run-dir <tmp>`
+  or `nix develop --quiet -c just devnet-smoke stake-reward-init` and
+  record that it fails because the phase is unknown.
+
+Implementation:
+- Add `stake-reward-init` to the script phase parser/allowlist.
+- Add a live Hspec example for `stake-reward-init` using
+  `runForPhases ["stake-reward-init"]`.
+- Implement `stakeRewardInitSmoke` by following `registryInitSmoke`:
+  start the local DevNet, verify magic 42, copy node log, write timing,
+  write the genesis payment signing key, run `runDevnetRegistryInit`,
+  then run `runDevnetStakeRewardInit` with the registry artifact path
+  and the same funding address/signing key/run directory.
+- Assert the command-written artifacts exist:
+  `stake-reward-init/summary.json`, `accounts.json`, and
+  `provenance.json`; decode enough JSON or reuse exported artifact
+  helpers to assert phase/network and treasury/permissions account
+  fields.
+- Do not move setup construction into `SmokeSpec.hs`; the smoke owns
+  DevNet setup, command invocation, and proof assertions only.
+
+GREEN proof:
+- nix develop --quiet -c just devnet-smoke stake-reward-init
+- git diff --check
+
+Commit:
+- One bisect-safe commit titled
+  test(devnet): prove stake reward setup
+- Commit body must include Tasks: T028,T029,T030,T031,T032,T033,T034.
+- Do not push.
+```

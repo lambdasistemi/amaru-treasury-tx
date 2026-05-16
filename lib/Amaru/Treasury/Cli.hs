@@ -42,7 +42,9 @@ import Amaru.Treasury.Cli.Common
     )
 import Amaru.Treasury.Cli.Devnet
     ( DevnetRegistryInitOpts
+    , DevnetStakeRewardInitOpts
     , devnetRegistryInitOptsP
+    , devnetStakeRewardInitOptsP
     )
 import Amaru.Treasury.Cli.DisburseWizard
     ( ContingencyDisburseOpts
@@ -96,6 +98,7 @@ data Cmd
     | CmdSwapQuote SwapQuoteOpts
     | CmdSwapCancel SwapCancelOpts
     | CmdDevnetRegistryInit DevnetRegistryInitOpts
+    | CmdDevnetStakeRewardInit DevnetStakeRewardInitOpts
     | CmdDisburseWizard DisburseWizardOpts
     | CmdContingencyDisburse ContingencyDisburseOpts
     | CmdWithdrawWizard WithdrawOpts
@@ -284,6 +287,16 @@ devnetCmdP =
                     "Publish DevNet registry and reference-script anchors"
                 )
             )
+            <> command
+                "stake-reward-init"
+                ( info
+                    ( CmdDevnetStakeRewardInit
+                        <$> devnetStakeRewardInitOptsP
+                    )
+                    ( progDesc
+                        "Register DevNet treasury and permissions reward accounts"
+                    )
+                )
         )
 
 versionOption :: Parser (a -> a)

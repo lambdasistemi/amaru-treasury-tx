@@ -142,6 +142,7 @@ library
     Amaru.Treasury.Cli.Witness
     Amaru.Treasury.Constants
     Amaru.Treasury.Devnet.RegistryInit
+    Amaru.Treasury.Devnet.StakeRewardInit
     Amaru.Treasury.Inspect
     Amaru.Treasury.Inspect.Render
     Amaru.Treasury.Inspect.Schema
@@ -375,6 +376,7 @@ test-suite unit-tests
     Amaru.Treasury.Cli.WitnessSpec
     Amaru.Treasury.ConstantsSpec
     Amaru.Treasury.Devnet.RegistryInitSpec
+    Amaru.Treasury.Devnet.StakeRewardInitSpec
     Amaru.Treasury.Inspect.SchemaSpec
     Amaru.Treasury.Inspect.SwapOrderDatumSpec
     Amaru.Treasury.IntentJSONSchemaSpec

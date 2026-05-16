@@ -5,39 +5,51 @@
 **Status**: Draft  
 **GitHub Issue**: [#147](https://github.com/lambdasistemi/amaru-treasury-tx/issues/147)  
 **Parent Issue**: [#151](https://github.com/lambdasistemi/amaru-treasury-tx/issues/151)  
-**Input**: User description: "Move the DevNet registry/reference-script publication setup out of specs and into production-backed code that can be invoked by the CLI or by a thin smoke layer."
+**Input**: User description: "Move the DevNet registry/reference-script publication setup out of specs and into production-backed code that can be invoked by the CLI or by a thin smoke layer." Parent issue #151 requires the operator-created bootstrap transactions to be recovered as production commands, so the CLI command surface is required for #147.
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Publish Registry State From Production Code (Priority: P1)
 
 As a release maintainer recovering the DevNet bootstrap path, I need a
-production-backed initiator to publish the local DevNet scopes NFT,
-registry NFT, permissions reference script, and treasury reference
-script, so later DevNet slices can start from real on-chain registry
-state without constructing those transactions inside `SmokeSpec.hs`.
+shipped `amaru-treasury-tx` DevNet command to publish the local DevNet
+scopes NFT, registry NFT, permissions reference script, and treasury
+reference script through production-backed code, so later DevNet slices
+can start from real on-chain registry state without constructing those
+transactions inside `SmokeSpec.hs`.
 
-**Why this priority**: Later withdrawal, governance-funding,
-treasury-withdrawal, and disburse slices depend on the registry and
-reference-script anchors. If those anchors are created by test-only
-code, the DevNet proof does not demonstrate a reusable operator path.
+**Why this priority**: Parent issue #151 is command recovery. Later
+withdrawal, governance-funding, treasury-withdrawal, and disburse
+slices depend on the registry and reference-script anchors. If those
+anchors are created only by test-only code or by an unshipped smoke
+harness, the DevNet proof does not demonstrate a reusable operator path.
 
-**Independent Test**: Run the new registry-init DevNet phase and verify
-that the smoke invokes the production initiator, submits the publication
-transactions, and observes the expected UTxOs on the local DevNet.
+**Independent Test**: Run the shipped `amaru-treasury-tx` DevNet
+registry-init command against a local DevNet and verify that it invokes
+the production initiator, submits the publication transactions, emits
+the structured artifacts, and observes the expected UTxOs on the local
+DevNet. The `just devnet-smoke registry-init` phase remains the live
+proof harness, but it is not the only acceptable command surface.
 
 **Acceptance Scenarios**:
 
 1. **Given** a fresh short-epoch local DevNet with usable bootstrap
-   ADA, **When** the registry initiator runs, **Then** it submits the
-   seed split, registry NFT mint, and reference-script publication
-   transactions through production-backed code.
+   ADA, **When** an operator runs the shipped DevNet registry-init
+   command with an explicit socket, funding address, signing source,
+   and run directory, **Then** it submits the seed split, registry NFT
+   mint, and reference-script publication transactions through
+   production-backed code.
 2. **Given** the submitted transactions are accepted, **When** the smoke
-   queries the local node, **Then** it observes scopes, registry,
-   permissions, and treasury anchors at the expected script addresses.
+   or command runner queries the local node, **Then** it observes scopes,
+   registry, permissions, and treasury anchors at the expected script
+   addresses.
 3. **Given** the node rejects a publication transaction or the expected
    UTxOs never appear, **When** the initiator records the failure,
    **Then** it writes a typed diagnostic without success artifacts.
+4. **Given** the command is invoked for a non-DevNet network or without
+   required signing/funding inputs, **When** argument validation runs,
+   **Then** it fails before submission and does not write success
+   artifacts.
 
 ---
 
@@ -115,6 +127,8 @@ effects.
   on chain.
 - The run is pointed at a non-DevNet network or a socket with the wrong
   network magic.
+- The CLI command is run without an explicit funding address, signing
+  source, or run directory.
 - A stale run directory contains success artifacts from a prior run.
 - A downstream phase requests registry fields that the artifact contract
   did not preserve.
@@ -123,15 +137,16 @@ effects.
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST provide a production-backed DevNet
-  registry initiator callable by the opt-in DevNet smoke layer.
+- **FR-001**: The system MUST provide a shipped `amaru-treasury-tx`
+  DevNet registry-init command. A smoke-only command is not sufficient
+  for #147 under parent #151.
 - **FR-002**: The initiator MUST publish scopes and registry NFT UTxOs
   using derived DevNet policy scripts.
 - **FR-003**: The initiator MUST publish permissions and treasury
   reference-script UTxOs needed by later bootstrap slices.
-- **FR-004**: The smoke layer MUST invoke the production-backed entry
-  point instead of constructing registry publication transactions
-  inline.
+- **FR-004**: The CLI command and smoke layer MUST invoke the
+  production-backed entry point instead of constructing registry
+  publication transactions inline.
 - **FR-005**: The smoke layer MUST verify that the expected registry and
   reference-script UTxOs exist on the local DevNet after submission.
 - **FR-006**: The initiator MUST emit structured artifacts with tx ids,
@@ -141,14 +156,20 @@ effects.
   the registry views consumed by withdrawal and disburse DevNet slices.
 - **FR-008**: Failure paths MUST use typed diagnostics and MUST NOT
   leave misleading success artifacts.
-- **FR-009**: Documentation MUST explain how a maintainer runs the
-  registry initiator and what artifacts it emits.
+- **FR-009**: Documentation MUST explain how a maintainer runs both the
+  shipped DevNet registry-init CLI command and the live smoke proof, and
+  what artifacts they emit.
 - **FR-010**: The initiator MUST NOT include external-role transaction
   behavior, synthetic scooper execution, swap order execution, or
   disburse action submission.
-- **FR-011**: Release-facing treasury commands remain build-only unless
-  a later reviewed ticket explicitly changes that boundary; local
-  DevNet signing/submission remains scoped to bootstrap proof.
+- **FR-011**: Normal release-facing treasury build commands remain
+  build-only; the registry-init command is an explicit reviewed DevNet
+  bootstrap exception and MUST reject non-DevNet networks before signing
+  or submitting.
+- **FR-012**: The command MUST require explicit operator inputs for the
+  live node socket, funding address, signing source, and run directory,
+  and MUST write the same registry-init artifact contract as the smoke
+  proof.
 
 ### Key Entities
 
@@ -171,9 +192,9 @@ effects.
 
 ### Measurable Outcomes
 
-- **SC-001**: `just devnet-smoke registry-init` either completes with
-  registry artifacts or fails with a typed diagnostic within the
-  configured wait budget.
+- **SC-001**: The shipped `amaru-treasury-tx` DevNet registry-init
+  command either completes with registry artifacts or fails with a typed
+  diagnostic within the configured wait budget.
 - **SC-002**: On success, the run directory contains machine-readable
   artifacts with all required registry anchors and submitted tx ids.
 - **SC-003**: On success, the smoke verifies scopes, registry,
@@ -183,20 +204,21 @@ effects.
   transaction construction; reusable builders and artifact projection
   live under production `lib/` modules.
 - **SC-005**: README and local DevNet documentation describe the
-  registry-init phase without claiming the staking, governance funding,
-  treasury withdrawal, or disburse effects tracked by #148, #149, and
-  #150.
+  registry-init command and proof phase without claiming the staking,
+  governance funding, treasury withdrawal, or disburse effects tracked
+  by #148, #149, and #150.
+- **SC-006**: `just devnet-smoke registry-init` remains green and proves
+  the same production command path on a live local DevNet.
 
 ## Assumptions
 
 - Issue #147 is the first child of parent issue #151 and must be
   completed before #148 starts.
-- The existing local DevNet harness may sign and submit bootstrap
-  transactions for proof purposes; that does not broaden the
-  release-facing build-only boundary for normal treasury commands.
-- The current production-backed entry point can be a library module
-  called by the thin smoke layer. A broader public CLI wrapper is a
-  follow-up only if the operator UX needs command-line invocation
-  outside the DevNet harness.
+- The shipped registry-init command is a DevNet-only bootstrap command.
+  It does not broaden the build-only boundary for normal mainnet,
+  preprod, or preview treasury transaction builders.
+- The command should remain a thin wrapper around the production
+  registry-init module; it must not recreate transaction construction in
+  CLI or smoke code.
 - The checked-in Amaru registry and treasury script constants remain
   the source for deriving DevNet scripts.

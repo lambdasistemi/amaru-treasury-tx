@@ -1,14 +1,15 @@
 # Plan review
 
-decision: Approved
+decision: Changes requested after command-gap review
 
 Findings:
 
-- The plan traces to #147 and parent #151: production-backed registry
-  publication first, later bootstrap child tickets explicitly excluded.
-- Technical decisions name the core tradeoff: library entry point now,
-  CLI wrapper only if a later operator UX ticket needs it.
-- Proof strategy is vertical and reviewable: contract RED, production
-  extraction, live DevNet proof, docs.
-- Constitution boundary for local DevNet signing/submission is recorded
-  and does not broaden normal release-facing commands.
+- The initial plan traced to #147 but under-read parent #151. It treated
+  the public CLI command as a follow-up even though #151 is explicitly
+  command recovery for operator-created bootstrap transactions.
+- The corrected plan now requires a shipped DevNet registry-init command
+  and keeps the normal build-only boundary by making it a DevNet-only
+  bootstrap exception.
+- The next reviewed implementation slice is T035-T042: command parser,
+  runner, executable dispatch, command-path smoke proof, and focused
+  verification.

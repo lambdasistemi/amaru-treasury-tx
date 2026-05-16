@@ -115,6 +115,69 @@ Metadata:
 - PR #152 title/body updated with #147 scope, live `registry-init` evidence, local verification commands, and process notes.
 - Docs slice committed as `fa60cc3`.
 
+## Phase 6: Command Gap Correction - Shipped DevNet Registry Init Command (Priority: P1)
+
+**Goal**: #147 exposes a real `amaru-treasury-tx` command for the
+registry-init bootstrap action. `just devnet-smoke registry-init`
+remains the live proof harness, but it cannot be the only command
+surface.
+
+**Owner**: One implementation subagent. The orchestrator owns this
+analysis and spec/task correction, then reviews the returned code and
+runs verification locally.
+
+**Independent Test**: A focused CLI parser/runner test proves the
+command is present, and the live DevNet smoke proves the command path
+publishes and verifies registry/reference-script UTxOs.
+
+### Orchestration Correction
+
+- [x] T033 [US1] Reclassify the missing shipped command as a blocking
+  #147 acceptance gap against parent #151.
+- [x] T034 [US1] Update `spec.md`, `plan.md`, `research.md`,
+  `quickstart.md`, and `contracts/devnet-registry-init.md` so the
+  production CLI command is required, not a follow-up.
+
+### Tests For Command Slice
+
+- [ ] T035 [US1] RED: add focused CLI parser coverage showing
+  `amaru-treasury-tx --network devnet devnet registry-init ...` parses
+  as the registry-init command and that non-DevNet networks are rejected
+  before submission.
+- [ ] T036 [US1] RED: add command-runner or smoke coverage that fails
+  before the shipped command path exists.
+
+### Implementation For Command Slice
+
+- [ ] T037 [US1] Add the DevNet registry-init command parser and option
+  record under `lib/Amaru/Treasury/Cli/`, using the existing top-level
+  `GlobalOpts` for `--network` and `--node-socket`.
+- [ ] T038 [US1] Wire the command into `Amaru.Treasury.Cli`, the
+  `amaru-treasury-tx` executable dispatch, and Cabal exposure as needed.
+- [ ] T039 [US1] Implement the command runner as a thin wrapper around
+  `Amaru.Treasury.Devnet.RegistryInit`: parse explicit funding address,
+  signing key file, and run directory; open the local node
+  provider/submitter; publish registry init; verify the expected anchors;
+  write the existing artifact contract; and print command-prefixed
+  success lines.
+- [ ] T040 [US1] Ensure `just devnet-smoke registry-init` proves the
+  same production command path rather than a smoke-only transaction
+  construction path.
+- [ ] T041 [US1] GREEN: run focused parser/unit tests,
+  `nix develop --quiet -c cabal build exe:amaru-treasury-tx -O0`,
+  `nix develop --quiet -c cabal build test:devnet-tests -O0`, and
+  `nix develop --quiet -c just devnet-smoke registry-init`.
+- [ ] T042 [US1] Commit the command slice as
+  `feat(devnet): expose registry init command`.
+
+### Docs And Metadata Follow-Up
+
+- [ ] T043 [US1] Update README and local DevNet docs with the shipped
+  command invocation, smoke proof command, artifact paths, and the new
+  verified run directory.
+- [ ] T044 [US1] Rerun the local gate and update PR #152 metadata before
+  returning it to external review.
+
 ## Dependencies
 
 - Phase 2 must complete before any implementation subagent starts.
@@ -122,13 +185,18 @@ Metadata:
   the production entry point.
 - Phase 4 must complete before Phase 5 because docs need verified run
   artifacts.
-- Issue #148 starts only after #147 artifacts are available and PR #152
-  is ready for external review or merged.
+- Phase 6 is a blocking correction discovered after initial
+  finalization. Issue #148 starts only after the shipped command slice is
+  reviewed, verified, documented, and PR #152 is ready for external
+  review or merged.
 
 ## Subagent Protocol
 
 - Start subagents only after `spec.md`, `plan.md`, and `tasks.md` are
   written and locally reviewed.
+- For #148, #149, and #150, make the shipped operator command the
+  paramount P1 user story before any implementation handoff. A smoke
+  phase is proof, not a substitute for the command.
 - Before every handoff, the orchestrator analyzes the relevant code,
   architecture, and task slice, then applies any needed corrections to
   the artifacts or brief locally.
@@ -218,6 +286,70 @@ RED proof:
 
 GREEN proof:
 - nix develop --quiet -c just unit "Amaru.Treasury.Devnet.RegistryInit"
+- nix develop --quiet -c cabal build test:devnet-tests -O0
+- nix develop --quiet -c just devnet-smoke registry-init
+```
+
+## Third Subagent Brief Template
+
+Use only after T033-T034 are committed by the orchestrator.
+
+```text
+Task: T035-T042 only.
+
+Owned files:
+- lib/Amaru/Treasury/Cli.hs
+- app/amaru-treasury-tx/Main.hs
+- lib/Amaru/Treasury/Cli/Devnet.hs, or the closest existing CLI module
+  pattern if a different name fits better
+- lib/Amaru/Treasury/Devnet/RegistryInit.hs, only for reusable
+  command-line rendering or anchor-verification helpers
+- lib/Amaru/Treasury/Backend/N2C.hs, only if a shared
+  provider+submitter helper is needed
+- amaru-treasury-tx.cabal
+- test/unit/Amaru/Treasury/Cli/EnvelopeSpec.hs, or a new focused CLI
+  parser spec if that matches existing test organization better
+- test/unit/Amaru/Treasury/Devnet/RegistryInitSpec.hs
+- test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs
+
+Required orchestrator analysis already applied:
+- Parent #151 is command recovery, so a smoke-only `just` command is not
+  enough for #147.
+- The existing production module already owns registry transaction
+  construction and artifact values; the new CLI command must be a thin
+  wrapper around it.
+- The command should be scoped as `amaru-treasury-tx --network devnet
+  --node-socket <socket> devnet registry-init ...` unless the existing
+  parser shape makes a top-level `devnet-registry-init` materially
+  simpler. Keep the command documented and discoverable either way.
+- Require explicit `--funding-address`, `--signing-key-file`, and
+  `--run-dir` options. Reject non-DevNet networks before any signing or
+  submission.
+- Reuse existing N2C provider/submitter patterns from
+  `Amaru.Treasury.Tx.Submit` and `Amaru.Treasury.Backend.N2C`.
+- Reuse existing signing-key decoding patterns from
+  `Amaru.Treasury.Tx.Witness` rather than inventing an ad hoc parser.
+- The smoke proof must exercise the same production command path or
+  command runner. It must not reconstruct registry transaction
+  construction inside `SmokeSpec.hs`.
+
+Forbidden scope:
+- Do not edit spec.md, plan.md, tasks.md, research.md, quickstart.md, or
+  contracts; the orchestrator owns those corrections.
+- Do not add staking setup, governance funding, treasury withdrawal
+  materialization, disburse action submission, swap/order execution, or
+  external-role behavior.
+- Do not move registry transaction construction back into `SmokeSpec.hs`
+  or CLI glue.
+- Do not update PR metadata, merge, close issues, or declare #147 done.
+
+RED proof:
+- Add focused parser coverage that fails before the command is wired.
+- Add runner/smoke coverage that fails before the command path exists.
+
+GREEN proof:
+- nix develop --quiet -c just unit "registry-init command"
+- nix develop --quiet -c cabal build exe:amaru-treasury-tx -O0
 - nix develop --quiet -c cabal build test:devnet-tests -O0
 - nix develop --quiet -c just devnet-smoke registry-init
 ```

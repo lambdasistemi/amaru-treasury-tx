@@ -11,7 +11,29 @@ nix develop --quiet
 The shell must provide the pinned `cardano-node-clients` DevNet support
 and `cardano-node`.
 
-## Run Registry Init
+## Run Registry Init Command
+
+Run the shipped command against a running local DevNet:
+
+```bash
+amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+  devnet registry-init \
+  --funding-address "$DEVNET_FUNDING_ADDRESS" \
+  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
+  --run-dir runs/devnet/manual-registry-init
+```
+
+Expected success output includes:
+
+```text
+registry-init: run-dir runs/devnet/manual-registry-init
+registry-init: network devnet magic 42
+registry-init: phase registry-init passed
+registry-init: summary runs/devnet/manual-registry-init/registry-init/summary.json
+registry-init: registry runs/devnet/manual-registry-init/registry-init/registry.json
+```
+
+## Run Live Smoke Proof
 
 ```bash
 just devnet-smoke registry-init

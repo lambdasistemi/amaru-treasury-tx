@@ -33,21 +33,31 @@ run. The orchestrator reviews the returned diff, runs verification
 locally, updates artifacts/PR metadata, and only then starts the next
 subagent or child ticket.
 
+## Parent Carry-Forward Invariant
+
+For every remaining child ticket under #151 (#148, #149, and #150), the
+operator command is paramount: the first P1 user story and acceptance
+target must be a shipped production command for the operator-created
+bootstrap transaction. A smoke phase may prove the command on DevNet,
+but it must not replace the command, and the orchestrator must correct
+any spec/plan/tasks draft that treats the command as optional or
+follow-up before handing work to a subagent.
+
 ## Summary
 
 Move the DevNet registry/scopes NFT publication and permissions/treasury
 reference-script publication out of
 `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` into a production
-library entry point. Add a `registry-init` opt-in DevNet smoke phase
-that calls that entry point, verifies the resulting on-chain UTxOs, and
+library entry point, and expose it through a shipped
+`amaru-treasury-tx` DevNet registry-init command. Add a
+`registry-init` opt-in DevNet smoke phase that proves the same
+production command path, verifies the resulting on-chain UTxOs, and
 writes structured handoff artifacts for later bootstrap child tickets.
 
-The production entry point is intentionally a library module first. A
-public CLI wrapper is not required for #147 because the local DevNet
-bootstrap proof still owns local signing/submission; the parent
-acceptance allows production-backed callable entry points. If operator
-usage outside the harness needs a direct command, it should wrap the
-same module in a later reviewed slice.
+Correction note: the earlier plan treated the public CLI wrapper as a
+follow-up. That was too weak for parent issue #151, which is explicitly
+about command recovery. #147 is not complete until the shipped command
+surface exists and is documented.
 
 ## Technical Context
 
@@ -55,17 +65,20 @@ same module in a later reviewed slice.
 **Primary Dependencies**: `cardano-node-clients`, `cardano-tx-tools`,
 Cardano ledger packages, existing Amaru registry constants.  
 **Storage**: Run-directory JSON artifacts under `runs/devnet/...`.  
-**Testing**: Hspec unit/devnet tests, `just ci`, opt-in
-`just devnet-smoke registry-init` for live boundary evidence.  
+**Testing**: Hspec unit/devnet tests, CLI parser/runner tests,
+`just ci`, opt-in `just devnet-smoke registry-init` for live boundary
+evidence.
 **Target Platform**: Local Linux Nix development shell.  
 **Project Type**: Haskell CLI/library plus opt-in DevNet smoke.  
 **Performance Goals**: Registry-init smoke completes inside the
 existing DevNet wait budget; no default CI DevNet startup.  
-**Constraints**: Keep release-facing treasury commands build-only; keep
-DevNet signing/submission scoped to the opt-in harness; no external-role
-transaction behavior in this slice.  
-**Scale/Scope**: One production-backed registry initiator, one smoke
-phase, focused tests, docs, and PR metadata for #147.
+**Constraints**: Keep normal release-facing treasury build commands
+build-only; add only the explicit DevNet bootstrap command needed by
+#147; reject non-DevNet networks before signing/submission; no
+external-role transaction behavior in this slice.
+**Scale/Scope**: One production-backed registry initiator, one shipped
+DevNet command, one smoke proof phase, focused tests, docs, and PR
+metadata for #147.
 
 ## Constitution Check
 
@@ -82,10 +95,11 @@ verification.
 **III. Pluggable data source, local-node default**: PASS. The proof uses
 the local node provider/submitter path already used by the DevNet smoke.
 
-**IV. Build, never sign or submit**: PASS WITH DEVNET EXCEPTION. Normal
-release-facing treasury commands remain build-only. The local DevNet
-bootstrap initiator signs/submits setup transactions only as opt-in
-DevNet proof.
+**IV. Build, never sign or submit**: PASS WITH REVIEWED DEVNET
+EXCEPTION. Normal release-facing treasury build commands remain
+build-only. The registry-init command is a DevNet-only bootstrap
+exception required by #151 and must reject non-DevNet networks before
+signing/submitting.
 
 **V. Test-first with golden CBOR fixtures**: PASS. Behavior changes get
 RED/GREEN proof in the same reviewed slice. Live chain effects are
@@ -119,7 +133,13 @@ body shape or event values.
    for scopes/registry/reference-script anchors, and write
    `registry-init/*.json` artifacts. The subagent implements the slice;
    the orchestrator reruns the live proof locally.
-5. **Docs/metadata slice**: document the phase and artifacts in README
+5. **CLI command correction slice**: add the shipped
+   `amaru-treasury-tx` DevNet registry-init command as a thin wrapper
+   around the production module. It must accept explicit socket,
+   funding address, signing source, and run directory inputs; reject
+   non-DevNet networks; write the same artifact contract; and be proved
+   by focused parser/runner tests plus the live DevNet smoke.
+6. **Docs/metadata slice**: document the command, phase, and artifacts in README
    and local DevNet docs, then update PR metadata with the verified run
    directory and command evidence. Documentation may be orchestrator-owned
    after the code slice has been reviewed.
@@ -141,6 +161,9 @@ specs/147-devnet-registry-init/
 
 lib/Amaru/Treasury/Devnet/
 `-- RegistryInit.hs
+
+lib/Amaru/Treasury/Cli/
+`-- Devnet.hs
 
 test/unit/Amaru/Treasury/Devnet/
 `-- RegistryInitSpec.hs

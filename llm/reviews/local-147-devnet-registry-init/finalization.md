@@ -1,6 +1,14 @@
 # Finalization
 
-state: ReadyForExternalReview
+state: SupersededByCommandGapCorrection
+
+## Superseded Note
+
+This finalization was valid for the production-backed smoke slice, but
+it is no longer the current #147 state. Parent #151 requires a shipped
+operator command. See
+`llm/reviews/local-147-devnet-registry-init/command-gap-correction.md`
+and tasks T033-T044.
 
 ## Completed Scope
 

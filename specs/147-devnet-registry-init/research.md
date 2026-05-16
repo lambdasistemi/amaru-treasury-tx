@@ -1,22 +1,27 @@
 # Research: DevNet Registry Initiator
 
-## Decision: Production module before CLI wrapper
+## Decision: Production module plus shipped CLI command
 
 **Decision**: Implement #147 as a production library entry point under
-`lib/Amaru/Treasury/Devnet/RegistryInit.hs`, then call it from the
-opt-in smoke phase.
+`lib/Amaru/Treasury/Devnet/RegistryInit.hs`, expose it through a
+shipped `amaru-treasury-tx` DevNet registry-init command, then prove the
+same command path from the opt-in smoke phase.
 
-**Rationale**: The acceptance criteria require production-backed code
-callable by a CLI or thin smoke layer. A library entry point removes
-transaction construction from `SmokeSpec.hs` immediately and can be
-wrapped by a public command later without changing the DevNet proof.
+**Rationale**: Issue #147 says the code may be invoked by the CLI or a
+thin smoke layer, but parent #151 is explicitly command recovery for
+operator-created bootstrap transactions. A library entry point removes
+transaction construction from `SmokeSpec.hs`; the shipped command is the
+operator path required by the parent ticket.
 
 **Alternatives considered**:
 
-- Put a full public CLI command in #147. Rejected for this slice because
-  the DevNet proof still relies on local bootstrap signing/submission
-  and a broader operator UX would add option parsing and key handling
-  before the production ownership problem is solved.
+- Put only a smoke phase in #147. Rejected after orchestration review:
+  it proves production-backed code exists, but it does not satisfy the
+  command-recovery user story in #151.
+- Put the command in a broad operator UX redesign. Rejected because #147
+  only needs a narrow DevNet bootstrap command that wraps the production
+  module and preserves the existing build-only boundary for normal
+  treasury transaction builders.
 - Keep helpers in `test/devnet`. Rejected because it repeats the PR #145
   failure mode.
 

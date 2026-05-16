@@ -1,5 +1,34 @@
 # Contract: DevNet Registry Initiator
 
+## CLI Command
+
+Command shape:
+
+```bash
+amaru-treasury-tx --network devnet --node-socket <socket> \
+  devnet registry-init \
+  --funding-address <addr_test...> \
+  --signing-key-file <payment.skey> \
+  --run-dir <run-dir>
+```
+
+The command MUST reject non-DevNet networks before signing or
+submitting. It MUST call `Amaru.Treasury.Devnet.RegistryInit`; it MUST
+NOT reconstruct registry publication transactions in CLI glue.
+
+Expected success stdout lines:
+
+```text
+registry-init: run-dir <run-dir>
+registry-init: network devnet magic 42
+registry-init: phase registry-init passed
+registry-init: seed-split-tx-id <tx-id>
+registry-init: registry-mint-tx-id <tx-id>
+registry-init: reference-scripts-tx-id <tx-id>
+registry-init: summary <run-dir>/registry-init/summary.json
+registry-init: registry <run-dir>/registry-init/registry.json
+```
+
 ## Smoke Phase
 
 Command:

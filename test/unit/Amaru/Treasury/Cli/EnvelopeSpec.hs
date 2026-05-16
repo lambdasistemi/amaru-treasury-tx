@@ -160,6 +160,7 @@ cmdTag = \case
     CmdSwapWizard{} -> "swap-wizard"
     CmdSwapQuote{} -> "swap-quote"
     CmdSwapCancel{} -> "swap-cancel"
+    CmdDevnetRegistryInit{} -> "devnet-registry-init"
     CmdDisburseWizard{} -> "disburse-wizard"
     CmdContingencyDisburse{} -> "contingency-disburse-wizard"
     CmdWithdrawWizard{} -> "withdraw-wizard"

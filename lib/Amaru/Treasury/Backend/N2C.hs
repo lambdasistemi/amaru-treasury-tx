@@ -16,6 +16,7 @@ This is the only impure module in
 -}
 module Amaru.Treasury.Backend.N2C
     ( withLocalNodeBackend
+    , withLocalNodeClient
     , probeNetworkMagic
     , probeResultAccepted
     , findSocketMagic
@@ -39,11 +40,15 @@ import Cardano.Node.Client.N2C.Connection
     )
 import Cardano.Node.Client.N2C.LocalStateQuery (queryLSQ)
 import Cardano.Node.Client.N2C.Provider (mkN2CProvider)
+import Cardano.Node.Client.N2C.Submitter (mkN2CSubmitter)
+import Cardano.Node.Client.Submitter
+    ( Submitter
+    )
 import Ouroboros.Consensus.Ledger.Query
     ( Query (GetChainPoint)
     )
 
-import Amaru.Treasury.Backend (Backend)
+import Amaru.Treasury.Backend (Backend, Provider)
 
 {- | Run an 'IO' action with a local-node-backed
 'Backend'. Spawns a background thread that drives the
@@ -73,6 +78,31 @@ withLocalNodeBackend magic socketPath action = do
                 Right () -> pure ()
                 Left e -> throwIO e
     withAsync connect $ \_ -> action backend
+
+{- | Run an 'IO' action with local-node-backed query and submission
+channels. This is the command-runner variant used by DevNet bootstrap
+commands that need to query protocol parameters, build from live UTxOs,
+and submit transactions in one N2C session.
+-}
+withLocalNodeClient
+    :: NetworkMagic
+    -- ^ network magic (mainnet, preprod, preview, devnet)
+    -> FilePath
+    -- ^ path to the cardano-node socket
+    -> (Provider IO -> Submitter IO -> IO a)
+    -- ^ action that consumes provider and submitter
+    -> IO a
+withLocalNodeClient magic socketPath action = do
+    lsq <- newLSQChannel 16
+    ltxs <- newLTxSChannel 16
+    let provider = mkN2CProvider lsq
+        submitter = mkN2CSubmitter ltxs
+        connect = do
+            r <- runNodeClient magic socketPath lsq ltxs
+            case r of
+                Right () -> pure ()
+                Left e -> throwIO e
+    withAsync connect $ \_ -> action provider submitter
 
 {- | Probe whether a Unix socket accepts the given
 'NetworkMagic' on the N2C handshake. Returns 'True' if

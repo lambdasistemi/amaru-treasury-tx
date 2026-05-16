@@ -85,6 +85,47 @@ Run the opt-in local devnet node smoke with:
 nix develop --quiet -c just devnet-smoke node
 ```
 
+Run the shipped DevNet registry/reference-script initiator command
+against a running local DevNet with:
+
+```bash
+amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+  devnet registry-init \
+  --funding-address "$DEVNET_FUNDING_ADDRESS" \
+  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
+  --run-dir runs/devnet/manual-registry-init
+```
+
+Run the matching live proof harness with:
+
+```bash
+nix develop --quiet -c just devnet-smoke registry-init
+```
+
+The registry-init command publishes local seed-derived scopes and
+registry NFTs plus permissions and treasury reference scripts through
+production-backed code, then verifies the expected UTxOs on the local
+DevNet and writes `registry-init/summary.json`,
+`registry-init/registry.json`, and `registry-init/provenance.json`. The
+latest local evidence for this branch is
+`runs/devnet/20260516T193404Z`: seed split tx
+`82b1f12f0ceeae86c50753a61528599c4d7b8ccef769a56accd3011c0e24084d`,
+registry mint tx
+`1f427e73979ee6150e69944fb384cbe0809148e64307a2a75221bacea8cb4ff9`,
+reference-script tx
+`5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44`,
+scopes anchor
+`1f427e73979ee6150e69944fb384cbe0809148e64307a2a75221bacea8cb4ff9#0`,
+registry anchor
+`1f427e73979ee6150e69944fb384cbe0809148e64307a2a75221bacea8cb4ff9#1`,
+permissions reference
+`5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44#0`,
+and treasury reference
+`5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44#1`.
+This is registry/reference-script publication evidence only; staking,
+reward setup, governance funding, treasury withdrawal setup, and
+disburse submission remain separate recovery slices.
+
 Run the governance slice boundary check with:
 
 ```bash
@@ -143,7 +184,18 @@ and local order address
 This is readiness evidence only; it does not build, fund, submit, or
 spend a swap order.
 
-The DevNet release experiment is tracked in slices: governance action
+The DevNet release experiment is tracked in slices. The current
+bootstrap initiator recovery is orchestrated by
+[#151](https://github.com/lambdasistemi/amaru-treasury-tx/issues/151):
+registry/reference-script publication
+[#147](https://github.com/lambdasistemi/amaru-treasury-tx/issues/147),
+staking and reward-account setup
+[#148](https://github.com/lambdasistemi/amaru-treasury-tx/issues/148),
+governance funding and treasury withdrawal setup
+[#149](https://github.com/lambdasistemi/amaru-treasury-tx/issues/149),
+and disburse action/beneficiary receipt
+[#150](https://github.com/lambdasistemi/amaru-treasury-tx/issues/150).
+Older evidence slices remain tracked as governance action
 [#82](https://github.com/lambdasistemi/amaru-treasury-tx/issues/82),
 withdrawal [#83](https://github.com/lambdasistemi/amaru-treasury-tx/issues/83),
 disburse [#86](https://github.com/lambdasistemi/amaru-treasury-tx/issues/86),

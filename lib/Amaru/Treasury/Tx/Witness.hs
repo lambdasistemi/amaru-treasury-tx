@@ -15,8 +15,11 @@ decrypted vault signing-key material.
 module Amaru.Treasury.Tx.Witness
     ( TransactionSigningFacts (..)
     , TxWitnessError (..)
+    , addCardanoCliPaymentKeyWitness
+    , cardanoCliPaymentKeyHash
     , cardanoCliSigningKeyHash
     , createWitness
+    , decodeCardanoCliSigningKey
     , decodeWitnessTransaction
     , parseWitnessKeyHash
     , renderGuardKeyHash
@@ -44,7 +47,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Word (Word8)
-import Lens.Micro ((^.))
+import Lens.Micro ((%~), (&), (^.))
 
 import Cardano.Crypto.DSIGN.Class
     ( SignKeyDSIGN
@@ -59,7 +62,8 @@ import Cardano.Crypto.Wallet qualified as Wallet
 import Cardano.Ledger.Address (getNetwork)
 import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.Api.Tx
-    ( bodyTxL
+    ( addrTxWitsL
+    , bodyTxL
     , outputsTxBodyL
     , reqSignerHashesTxBodyL
     )
@@ -70,6 +74,7 @@ import Cardano.Ledger.Binary
     )
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (TopTx, TxBody, TxOut)
+import Cardano.Ledger.Core qualified as Core
 import Cardano.Ledger.Hashes
     ( EraIndependentTxBody
     , HASH
@@ -256,6 +261,23 @@ cardanoCliSigningKeyHash keyEnvelope = do
     signKey <- decodeCardanoCliSigningKey keyEnvelope
     let vkey = VKey (deriveVerKeyDSIGN signKey) :: VKey Witness
     Right (witnessKeyHashToGuard (hashKey vkey))
+
+-- | Derive the payment key hash from a decoded cardano-cli signing key.
+cardanoCliPaymentKeyHash
+    :: SignKeyDSIGN DSIGN -> KeyHash Payment
+cardanoCliPaymentKeyHash signKey =
+    hashKey (VKey (deriveVerKeyDSIGN signKey) :: VKey Payment)
+
+-- | Add one payment key witness from a decoded cardano-cli signing key.
+addCardanoCliPaymentKeyWitness
+    :: SignKeyDSIGN DSIGN -> ConwayTx -> ConwayTx
+addCardanoCliPaymentKeyWitness signKey tx =
+    tx & Core.witsTxL . addrTxWitsL %~ Set.insert witness
+  where
+    body = tx ^. bodyTxL
+    bodyHash = extractHash (hashAnnotated body)
+    vkey = VKey (deriveVerKeyDSIGN signKey) :: VKey Witness
+    witness = WitVKey vkey (signedDSIGN signKey bodyHash)
 
 -- | Derive the payment key hash from a supported vault signing source.
 signingSourceKeyHash

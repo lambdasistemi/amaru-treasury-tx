@@ -40,6 +40,10 @@ import Amaru.Treasury.Cli.Common
     ( GlobalOpts
     , globalOptsP
     )
+import Amaru.Treasury.Cli.Devnet
+    ( DevnetRegistryInitOpts
+    , devnetRegistryInitOptsP
+    )
 import Amaru.Treasury.Cli.DisburseWizard
     ( ContingencyDisburseOpts
     , DisburseWizardOpts
@@ -91,6 +95,7 @@ data Cmd
     = CmdSwapWizard WizardOpts
     | CmdSwapQuote SwapQuoteOpts
     | CmdSwapCancel SwapCancelOpts
+    | CmdDevnetRegistryInit DevnetRegistryInitOpts
     | CmdDisburseWizard DisburseWizardOpts
     | CmdContingencyDisburse ContingencyDisburseOpts
     | CmdWithdrawWizard WithdrawOpts
@@ -147,6 +152,14 @@ cmdP =
                     (CmdSwapCancel <$> swapCancelOptsP)
                     ( progDesc
                         "Build an unsigned transaction that cancels one pending SundaeSwap order"
+                    )
+                )
+            <> command
+                "devnet"
+                ( info
+                    devnetCmdP
+                    ( progDesc
+                        "Run local DevNet bootstrap commands"
                     )
                 )
             <> command
@@ -256,6 +269,19 @@ vaultCmdP =
                 (CmdVaultCreate <$> vaultCreateOptsP)
                 ( progDesc
                     "Create an age-encrypted witness vault from a signing key"
+                )
+            )
+        )
+
+devnetCmdP :: Parser Cmd
+devnetCmdP =
+    hsubparser
+        ( command
+            "registry-init"
+            ( info
+                (CmdDevnetRegistryInit <$> devnetRegistryInitOptsP)
+                ( progDesc
+                    "Publish DevNet registry and reference-script anchors"
                 )
             )
         )

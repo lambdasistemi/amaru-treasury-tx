@@ -85,51 +85,54 @@ and library compile before live smoke.
 
 ### Tests For User Story 1
 
-- [ ] T017 [US1] RED: add focused CLI parser coverage in
+- [x] T017 [US1] RED: add focused CLI parser coverage in
   `test/unit/Amaru/Treasury/Cli/DevnetSpec.hs` for
   `amaru-treasury-tx --network devnet devnet
-  governance-withdrawal-init ...`.
-- [ ] T018 [US1] RED: add non-DevNet guard coverage proving the command
+  governance-withdrawal-init ...`. Commit: command slice.
+- [x] T018 [US1] RED: add non-DevNet guard coverage proving the command
   rejects before reading nonexistent registry, stake/reward, key, or
-  socket inputs.
-- [ ] T019 [US1] RED: add artifact path, JSON projection, success-line,
+  socket inputs. Commit: command slice.
+- [x] T019 [US1] RED: add artifact path, JSON projection, success-line,
   and failure projection coverage in
   `test/unit/Amaru/Treasury/Devnet/GovernanceWithdrawalInitSpec.hs`.
+  Commit: command slice.
 
 ### Implementation For User Story 1
 
-- [ ] T020 [US1] Add
+- [x] T020 [US1] Add
   `lib/Amaru/Treasury/Devnet/GovernanceWithdrawalInit.hs` with config,
   prerequisite artifact readers, result/failure types, artifact paths,
-  JSON rendering, and success lines.
-- [ ] T021 [US1] Implement prerequisite validation that consumes #147
+  JSON rendering, and success lines. Commit: command slice.
+- [x] T021 [US1] Implement prerequisite validation that consumes #147
   `registry-init/registry.json` and #148
   `stake-reward-init/accounts.json`, requires DevNet, requires matching
   treasury script hash, and requires the treasury account to be marked
-  registered.
-- [ ] T022 [US1] Implement the governance proposal/vote flow in the
+  registered. Commit: command slice.
+- [x] T022 [US1] Implement the governance proposal/vote flow in the
   production module, using the #148 treasury reward account without
-  re-registering treasury or permissions reward accounts.
-- [ ] T023 [US1] Implement reward wait/verification with stable timeout
+  re-registering treasury or permissions reward accounts. Commit: command slice.
+- [x] T023 [US1] Implement reward wait/verification with stable timeout
   diagnostics, epoch/tip recording, and reward before/after artifacts.
-- [ ] T024 [US1] Implement withdrawal intent creation through the
+  Commit: command slice.
+- [x] T024 [US1] Implement withdrawal intent creation through the
   existing production withdraw resolver/translator and build the
-  unsigned transaction through the production tx-build path.
-- [ ] T025 [US1] Implement DevNet-only signing, submission, and
+  unsigned transaction through the production tx-build path. Commit: command slice.
+- [x] T025 [US1] Implement DevNet-only signing, submission, and
   materialization verification, writing signed tx, submit log, and
-  `materialized.json`.
-- [ ] T026 [US1] Add `devnet governance-withdrawal-init` option parsing
+  `materialized.json`. Commit: command slice.
+- [x] T026 [US1] Add `devnet governance-withdrawal-init` option parsing
   and runner wiring in `lib/Amaru/Treasury/Cli/Devnet.hs`,
   `lib/Amaru/Treasury/Cli.hs`, `app/amaru-treasury-tx/Main.hs`, and
-  Cabal exposure as needed.
-- [ ] T027 [US1] GREEN: run focused unit tests for
+  Cabal exposure as needed. Commit: command slice.
+- [x] T027 [US1] GREEN: run focused unit tests for
   `governance-withdrawal-init`, `nix develop --quiet -c cabal build
   lib:amaru-treasury-tx -O0`, and `nix develop --quiet -c cabal build
-  exe:amaru-treasury-tx -O0`.
-- [ ] T028 [US1] Commit the command slice as
+  exe:amaru-treasury-tx -O0`. Commit: command slice.
+- [x] T028 [US1] Commit the command slice as
   `feat(devnet): expose governance withdrawal init command` with
   `Tasks: T017,T018,T019,T020,T021,T022,T023,T024,T025,T026,T027,T028`
   in the commit body and task lines updated with the commit short SHA.
+  Commit: command slice.
 
 ## Phase 4: User Story 2 - Thin DevNet Smoke Proof (Priority: P1)
 

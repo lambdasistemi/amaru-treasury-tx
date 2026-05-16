@@ -25,7 +25,9 @@ Validation:
 - `rewardAccount`: 28-byte reward-account credential hex used by
   intent JSON.
 - `ledgerNetwork`: `Testnet`.
-- `registered`: boolean indicating the setup verification result.
+- `registered`: boolean indicating whether this setup transaction
+  registered the credential on chain. For #148 this is `true` for
+  `treasury` and `false` for `permissions`.
 - `rewardsLovelace`: observed reward balance at verification time.
 
 Validation:
@@ -41,7 +43,10 @@ Validation:
 - `fundingAddress`: DevNet address that funds deposits, fees, and
   collateral.
 - `submittedTxId`: setup transaction id.
-- `registeredAccounts`: treasury and permissions account roles.
+- `registeredAccounts`: treasury account role only.
+- `availableAccounts`: permissions account role, derived from the
+  verified permissions reference script and emitted for later
+  withdraw-zero transactions.
 - `depositsLovelace`: total stake deposits consumed by setup.
 
 Validation:

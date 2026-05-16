@@ -74,6 +74,12 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
     `-- summary.json
 ```
 
+In `accounts.json`, `treasury.registered` is expected to be `true` and
+`permissions.registered` is expected to be `false`. The permissions
+reward account is still emitted because later disburse/swap transactions
+use it as the withdraw-zero target; registration through a certificate
+is not part of this command.
+
 Failure paths:
 
 ```text

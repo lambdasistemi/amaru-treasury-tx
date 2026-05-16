@@ -38,8 +38,8 @@ prepared reward accounts.
    submits the setup transaction through production-backed code.
 2. **Given** setup submission succeeds, **When** the command verifies
    the local ledger, **Then** it reports the treasury script reward
-   account and permissions script reward account as prepared for later
-   treasury actions.
+   account as registered and the permissions script reward account as
+   available for later withdraw-zero witnesses.
 3. **Given** the command is invoked for a non-DevNet network or without
    required inputs, **When** argument validation runs, **Then** it fails
    before reading signing-key material, opening the node socket, or
@@ -131,7 +131,10 @@ and disburse child tickets.
 - **FR-003**: The command MUST prepare the treasury script reward
   account used by later treasury withdrawal materialization.
 - **FR-004**: The command MUST prepare the permissions script reward
-  account used by disburse and other permissions zero-withdrawal paths.
+  account used by disburse and other permissions zero-withdrawal paths
+  without attempting to register it through a certificate witness; the
+  permissions validator is exercised by withdraw-zero transactions, not
+  by stake-certification.
 - **FR-005**: The command and smoke layer MUST invoke the
   production-backed setup entry point instead of constructing setup
   transactions inline in `SmokeSpec.hs`.
@@ -160,8 +163,9 @@ and disburse child tickets.
 - **PreparedRewardAccount**: Treasury or permissions script reward
   account with script hash, ledger network, setup status, and observed
   rewards.
-- **StakeRewardSetupTransaction**: DevNet transaction that registers or
-  prepares the script reward accounts needed by later treasury actions.
+- **StakeRewardSetupTransaction**: DevNet transaction that registers the
+  treasury script reward account and verifies the permissions script
+  reward account handoff needed by later treasury actions.
 - **StakeRewardDiagnostic**: Typed failure record for invalid network,
   missing registry, funding shortfall, submission rejection, or
   verification timeout.

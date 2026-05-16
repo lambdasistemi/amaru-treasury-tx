@@ -58,8 +58,9 @@ Evidence:
 
 ## Phase 3: User Story 1 - Shipped Stake/Reward Setup Command (Priority: P1)
 
-**Goal**: `amaru-treasury-tx devnet stake-reward-init` prepares the
-treasury and permissions script reward accounts from #147 registry
+**Goal**: `amaru-treasury-tx devnet stake-reward-init` registers the
+treasury script reward account and emits the permissions script reward
+account as the available withdraw-zero target from #147 registry
 artifacts through production-backed code.
 
 **Owner**: One implementation subagent. The orchestrator does not make
@@ -124,6 +125,11 @@ Evidence:
   zero-reward account from an absent reward row, so the command records
   the explicit diagnostic
   `RewardAccountRegistrationInferredFromAcceptedTx`.
+- Live DevNet smoke later proved this first implementation overreached:
+  certificate index 1 evaluates the permissions script under
+  `ConwayCertifying` and fails with a Plutus `CekError`. The corrected
+  contract is to register treasury only and publish permissions as the
+  later withdraw-zero target.
 
 ## Phase 4: User Story 2 - Testnet-Aware Permissions Reward Parsing (Priority: P1)
 
@@ -218,19 +224,50 @@ contains `stake-reward-init/summary.json`, `accounts.json`, and
   T028,T029,T030,T031,T032,T033,T034` in the commit body and task lines
   updated with the commit short SHA.
 
-## Phase 6: Documentation, Metadata, And Finalization
+## Phase 6: User Story 1 Correction - Permissions Is Withdraw-Zero Only (Priority: P1)
 
-- [ ] T035 [US3] Update README with the shipped command, proof command,
+- [ ] T035 [US1] RED: add focused unit coverage proving the setup
+  artifacts mark treasury as registered and permissions as available but
+  not registered.
+- [ ] T036 [US1] Update `Amaru.Treasury.Devnet.StakeRewardInit` so the
+  setup transaction registers only the treasury script credential,
+  verifies the permissions reference script handoff, and emits a typed
+  diagnostic for the permissions withdraw-zero-only account.
+- [ ] T037 [US1] Update CLI help/success artifact wording where it
+  currently claims permissions registration.
+- [ ] T038 [US1] GREEN: run `nix develop --quiet -c just unit
+  "stake-reward-init"` and
+  `nix develop --quiet -c cabal build exe:amaru-treasury-tx -O0`.
+- [ ] T039 [US1] Commit the correction slice as
+  `fix(devnet): avoid certifying permissions reward account` with
+  `Tasks: T035,T036,T037,T038,T039` in the commit body and task lines
+  updated with the commit short SHA.
+
+Evidence:
+
+- `nix develop --quiet -c just devnet-smoke stake-reward-init` failed
+  on 2026-05-16 in run directory
+  `runs/devnet/20260516T211137Z`.
+- The failure is
+  `EvalFailure (ConwayCertifying (AsIx {unAsIx = 1})) ... CekError`.
+  Certificate index 1 corresponds to the permissions script credential
+  in `StakeRewardInit.submitStakeRewardSetup`.
+- Existing production disburse/swap builders invoke the permissions
+  script through a 0-lovelace withdrawal, not through a certificate.
+
+## Phase 7: Documentation, Metadata, And Finalization
+
+- [ ] T040 [US3] Update README with the shipped command, proof command,
   latest live run directory, and explicit #149/#150 exclusions.
-- [ ] T036 [US3] Update `docs/local-devnet-smoke.md` with command,
+- [ ] T041 [US3] Update `docs/local-devnet-smoke.md` with command,
   expected output, artifacts, and proof evidence.
-- [ ] T037 [US3] Update `quickstart.md`, contract, and tasks evidence
+- [ ] T042 [US3] Update `quickstart.md`, contract, and tasks evidence
   with final command/proof output.
-- [ ] T038 [US3] Run `./gate.sh` and record exact output evidence.
-- [ ] T039 [US3] Remove `gate.sh` in a final ready-for-review commit.
-- [ ] T040 [US3] Update PR #153 title/body with final scope,
+- [ ] T043 [US3] Run `./gate.sh` and record exact output evidence.
+- [ ] T044 [US3] Remove `gate.sh` in a final ready-for-review commit.
+- [ ] T045 [US3] Update PR #153 title/body with final scope,
   verification evidence, live run evidence, and non-claims.
-- [ ] T041 [US3] Mark PR #153 ready only after docs, README,
+- [ ] T046 [US3] Mark PR #153 ready only after docs, README,
   repository metadata, specs/tasks, and PR metadata all align.
 
 ## Dependencies
@@ -238,7 +275,8 @@ contains `stake-reward-init/summary.json`, `accounts.json`, and
 - Phase 2 must complete before any implementation subagent starts.
 - Phase 3 must complete before the smoke proof can call the command.
 - Phase 4 must complete before #150 uses DevNet disburse translation.
-- Phase 5 must complete before docs/finalization claim live proof.
+- Phase 5 and Phase 6 must complete before docs/finalization claim live
+  proof.
 - #149 starts only after #148 is reviewed, verified, documented, and PR
   #153 is ready for external review or merged.
 
@@ -275,7 +313,8 @@ Owned files:
 Required orchestrator analysis already applied:
 - Parent #151 makes the shipped command the P1 story.
 - Command shape is documented in contracts/devnet-stake-reward-init.md.
-- #148 prepares treasury and permissions reward accounts only.
+- #148 registers the treasury reward account and emits the permissions
+  reward account as the later withdraw-zero target only.
 - #149 governance funding and #150 disburse are forbidden.
 - The command must reject non-DevNet before reading signing keys or
   opening the socket.

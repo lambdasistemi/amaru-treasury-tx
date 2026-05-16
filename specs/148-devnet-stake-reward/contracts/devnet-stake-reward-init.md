@@ -95,12 +95,17 @@ stake-reward-init: accounts <run-dir>/stake-reward-init/accounts.json
       "scriptHash": "<28-byte-hex>",
       "rewardAccount": "<28-byte-hex>",
       "ledgerNetwork": "Testnet",
-      "registered": true,
+      "registered": false,
       "rewardsLovelace": 0
     }
   }
 }
 ```
+
+The permissions entry is deliberately `registered: false`. The
+permissions validator is invoked by later withdraw-zero transactions;
+the live DevNet setup must not try to run that script as a Conway
+certificate witness.
 
 `stake-reward-init/provenance.json`:
 

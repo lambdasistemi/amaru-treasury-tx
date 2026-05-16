@@ -32,14 +32,19 @@ make later child tickets ambiguous.
 - Query everything from logs: rejected because logs are not a stable
   machine-readable interface.
 
-## Decision 3: Prepare Both Treasury And Permissions Reward Accounts
+## Decision 3: Register Treasury, Publish Permissions As Withdraw-Zero Account
 
-**Decision**: The setup prepares the treasury script reward account and
-the permissions script reward account.
+**Decision**: The setup registers the treasury script reward account and
+publishes the permissions script reward account as an available
+withdraw-zero credential. It must not attempt to register the permissions
+script credential with a delegation certificate.
 
 **Rationale**: #149 needs the treasury reward account for governance
 funding and withdrawal materialization. #150 needs the permissions
-reward account for the zero-withdrawal witness path.
+reward account for the zero-withdrawal witness path. Live DevNet proof
+showed that evaluating the permissions script under
+`ConwayCertifying` fails at certificate index 1, while the existing
+permissions contract is the withdraw-zero path used by disburse/swap.
 
 **Alternatives considered**:
 
@@ -47,6 +52,8 @@ reward account for the zero-withdrawal witness path.
   permissions zero-withdrawal boundary.
 - Permissions account only: rejected because #149 must fund and
   materialize treasury rewards next.
+- Registering permissions with a script certificate: rejected because
+  the permissions validator is not a certificate-purpose validator.
 
 ## Decision 4: Fix Disburse Reward Account Parsing In This Slice
 

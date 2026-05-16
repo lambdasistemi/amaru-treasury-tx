@@ -8,7 +8,9 @@
 
 **Current**: Draft PR #153 is open with the temporary `gate.sh`.
 Specs, plan, contracts, quickstart, and tasks are orchestrator-owned.
-No implementation subagent has started.
+The command and parser implementation slices are complete; the live
+smoke proof exposed a permissions certificate-purpose mismatch that must
+be corrected before finalization.
 
 **Phase Review Choice**: User said "merge and proceed" after #147, so
 the workflow continues with phase stop `none`. Artifacts are still
@@ -37,7 +39,8 @@ evidence for the command; it does not replace the command.
 
 Add a DevNet-only `amaru-treasury-tx devnet stake-reward-init` command
 that consumes #147 registry artifacts, submits the setup transaction
-that prepares treasury and permissions script reward accounts, writes
+that registers the treasury script reward account, emits the permissions
+script reward account as the available withdraw-zero target, writes
 structured setup artifacts, and rejects non-DevNet networks before
 effects. Update disburse reward-account parsing so DevNet permissions
 zero-withdrawal uses a ledger `Testnet` reward account. Update the
@@ -160,6 +163,10 @@ test/devnet/Amaru/Treasury/Devnet/
   unregistered accounts from registered accounts with zero rewards.
   The implementation brief must require a stronger verification signal
   or a typed diagnostic if the pinned dependency cannot expose one.
+- Live DevNet evaluation rejects the permissions script when it is used
+  as a Conway certificate witness. The command must register only the
+  treasury script reward account and emit the permissions reward account
+  as available for later withdraw-zero validation.
 - Existing smoke code combines account setup, governance proposal, vote,
   and reward increase. #148 must not carry #149 behavior into this PR.
 - Disburse intent translation has both unified and legacy paths; tests

@@ -156,33 +156,33 @@ effects.
 
 ### Tests For User Story 2
 
-- [ ] T029 [US2] RED: run `scripts/smoke/devnet-local --phase
+- [x] T029 [US2] RED: run `scripts/smoke/devnet-local --phase
   governance-withdrawal-init --run-dir <tmp>` and record that the
   current branch rejects the phase as unknown.
-- [ ] T030 [US2] RED: add devnet diagnostics coverage in
+- [x] T030 [US2] RED: add devnet diagnostics coverage in
   `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` for #149 command
   artifact fields before the phase exists.
 
 ### Implementation For User Story 2
 
-- [ ] T031 [US2] Add `governance-withdrawal-init` phase parsing to
+- [x] T031 [US2] Add `governance-withdrawal-init` phase parsing to
   `scripts/smoke/devnet-local` and support it through
   `just devnet-smoke`.
-- [ ] T032 [US2] Update `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
+- [x] T032 [US2] Update `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
   so the phase starts a governance-enabled DevNet, runs
   `registry-init`, runs `stake-reward-init`, then invokes the #149
   production command runner.
-- [ ] T033 [US2] Remove or isolate inline governance proposal, vote,
+- [x] T033 [US2] Remove or isolate inline governance proposal, vote,
   withdrawal intent, tx-build, sign/submit, and materialization
   construction from `SmokeSpec.hs` so smoke no longer owns #149
   behavior.
-- [ ] T034 [US2] Decide and implement `withdraw` smoke compatibility:
+- [x] T034 [US2] Decide and implement `withdraw` smoke compatibility:
   either make it an alias to the same production command proof or
   remove it from documented passing phase lists.
-- [ ] T035 [US2] GREEN: run `nix develop --quiet -c cabal build
+- [x] T035 [US2] GREEN: run `nix develop --quiet -c cabal build
   test:devnet-tests -O0` and `nix develop --quiet -c just devnet-smoke
   governance-withdrawal-init`.
-- [ ] T036 [US2] Commit the smoke proof slice as
+- [x] T036 [US2] Commit the smoke proof slice as
   `test(devnet): prove governance withdrawal init` with `Tasks:
   T029,T030,T031,T032,T033,T034,T035,T036` in the commit body and task
   lines updated with the commit short SHA.

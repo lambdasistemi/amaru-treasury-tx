@@ -9,7 +9,7 @@
 - [x] T001 Create branch `147-devnet-registry-init` from current `origin/main`.
 - [x] T002 Assign issue #147 to the current GitHub user.
 - [x] T003 Open draft PR #152 for issue #147.
-- [ ] T004 Update PR #152 metadata after the Spec Kit artifacts are committed.
+- [x] T004 Update PR #152 metadata after the Spec Kit artifacts are committed.
 
 ## Phase 2: Spec Kit And Solo Review Gate
 
@@ -20,7 +20,7 @@
 - [x] T009 Locally review the plan against the PR skill plan gate and record the verdict in `llm/reviews/local-147-devnet-registry-init/plan-review.md`.
 - [x] T010 Locally review the tasks against the PR skill tasks gate and record the verdict in `llm/reviews/local-147-devnet-registry-init/tasks-review.md`.
 - [x] T011 Verify the process slice with `.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks` and `git diff --check`.
-- [ ] T012 Commit the process slice as `docs(devnet): plan registry initiator`.
+- [x] T012 Commit the process slice as `docs(devnet): plan registry initiator`.
 
 ## Phase 3: User Story 1 - Publish Registry State From Production Code (Priority: P1)
 
@@ -36,17 +36,23 @@ passes and the diff shows registry publication builders under `lib/`.
 
 ### Tests For User Story 1
 
-- [ ] T013 [US1] RED: run `scripts/smoke/devnet-local --phase registry-init --run-dir <tmp>` and record that the current branch rejects `registry-init` as an unknown phase.
-- [ ] T014 [US1] RED: add focused unit coverage for registry artifact rendering in `test/unit/Amaru/Treasury/Devnet/RegistryInitSpec.hs`, expecting the missing production module to fail before implementation.
+- [x] T013 [US1] RED: run `scripts/smoke/devnet-local --phase registry-init --run-dir <tmp>` and record that the current branch rejects `registry-init` as an unknown phase.
+- [x] T014 [US1] RED: add focused unit coverage for registry artifact rendering in `test/unit/Amaru/Treasury/Devnet/RegistryInitSpec.hs`, expecting the missing production module to fail before implementation.
 
 ### Implementation For User Story 1
 
-- [ ] T015 [US1] Add `Amaru.Treasury.Devnet.RegistryInit` in `lib/Amaru/Treasury/Devnet/RegistryInit.hs` with explicit exports for registry publication types, artifact paths, artifact rendering, and the production-backed publication entry point.
-- [ ] T016 [US1] Expose `Amaru.Treasury.Devnet.RegistryInit` and the unit spec in `amaru-treasury-tx.cabal`.
-- [ ] T017 [US1] Move reusable registry script derivation, NFT publication, reference-script publication, anchor rendering, and registry-view projection out of `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` into the production module.
-- [ ] T018 [US1] Replace the inline `SmokeSpec.hs` registry construction with calls into `Amaru.Treasury.Devnet.RegistryInit`.
-- [ ] T019 [US1] GREEN: run `nix develop --quiet -c just unit "Amaru.Treasury.Devnet.RegistryInit"`.
-- [ ] T020 [US1] Commit the production initiator slice as `feat(devnet): add registry initiator`.
+- [x] T015 [US1] Add `Amaru.Treasury.Devnet.RegistryInit` in `lib/Amaru/Treasury/Devnet/RegistryInit.hs` with explicit exports for registry publication types, artifact paths, artifact rendering, and the production-backed publication entry point.
+- [x] T016 [US1] Expose `Amaru.Treasury.Devnet.RegistryInit` and the unit spec in `amaru-treasury-tx.cabal`.
+- [x] T017 [US1] Move reusable registry script derivation, NFT publication, reference-script publication, anchor rendering, and registry-view projection out of `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` into the production module.
+- [x] T018 [US1] Replace the inline `SmokeSpec.hs` registry construction with calls into `Amaru.Treasury.Devnet.RegistryInit`.
+- [x] T019 [US1] GREEN: run `nix develop --quiet -c just unit "Amaru.Treasury.Devnet.RegistryInit"`.
+- [x] T020 [US1] Commit the production initiator slice as `feat(devnet): add registry initiator`.
+
+Evidence:
+
+- RED: `scripts/smoke/devnet-local --phase registry-init --run-dir /tmp/tmp.gbzyVXpWqB` exited 64 with `devnet-smoke: unknown phase: registry-init`.
+- RED: focused unit coverage initially failed before production wiring because `Amaru.Treasury.Devnet.RegistryInit` did not exist.
+- GREEN: local orchestrator verification of `b9106a5d1641601536604dae409851708165516b` passed `git diff --check`, `nix develop --quiet -c cabal build lib:amaru-treasury-tx -O0`, `nix develop --quiet -c just unit "Amaru.Treasury.Devnet.RegistryInit"` with 3 examples and 0 failures, `nix develop --quiet -c cabal build test:devnet-tests -O0`, focused `fourmolu -m check`, `cabal-fmt -c amaru-treasury-tx.cabal`, and the commit message gate.
 
 ## Phase 4: User Story 2 - Emit Bootstrap Artifacts For Later Slices (Priority: P1)
 

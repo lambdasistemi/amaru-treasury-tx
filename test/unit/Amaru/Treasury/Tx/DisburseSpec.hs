@@ -109,8 +109,10 @@ import Amaru.Treasury.Tx.DisburseIntentJSON
     , DisburseRationaleJSON (..)
     , DisburseScopeJSON (..)
     , DisburseWalletJSON (..)
+    , TranslatedDisburseIntent (..)
     , decodeDisburseIntent
     , encodeDisburseIntent
+    , translateDisburseIntent
     )
 import Amaru.Treasury.Tx.DisburseWizard
     ( DisburseAnswers
@@ -164,6 +166,9 @@ permissionsRewardAcct n =
     AccountAddress
         Mainnet
         (AccountId (ScriptHashObj (ScriptHash (mkHash28 n))))
+
+rewardAccountNetwork :: AccountAddress -> Network
+rewardAccountNetwork (AccountAddress network _) = network
 
 fields :: DisburseIntentFields
 fields =
@@ -288,10 +293,30 @@ spec = do
                                 )
                            ]
 
-    describe "Amaru.Treasury.Tx.DisburseIntentJSON" $
+    describe "Amaru.Treasury.Tx.DisburseIntentJSON" $ do
         it
             "decodeDisburseIntent . encodeDisburseIntent = Right"
             roundTripProp
+
+        it "translates DevNet disburse reward accounts as Testnet" $ do
+            dij <-
+                eitherDecodeStrict
+                    "test/fixtures/disburse/ada/intent.json"
+                    :: IO DisburseIntentJSON
+            TranslatedDisburseIntent{tdDisburseIntent = di} <-
+                expectRight $
+                    translateDisburseIntent
+                        dij{dijNetwork = "devnet"}
+            case di of
+                DisburseAdaIntent translatedFields _ ->
+                    rewardAccountNetwork
+                        ( difPermissionsRewardAccount
+                            translatedFields
+                        )
+                        `shouldBe` Testnet
+                DisburseUsdmIntent{} ->
+                    expectationFailure
+                        "expected ADA disburse payload"
 
     describe "Amaru.Treasury.Tx.DisburseWizard.disburseToTreasuryIntent" $
         do

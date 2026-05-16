@@ -13,10 +13,14 @@ signing-key material is read or any node connection is opened.
 -}
 module Amaru.Treasury.Cli.Devnet
     ( DevnetRegistryInitOpts (..)
+    , DevnetStakeRewardInitOpts (..)
     , devnetRegistryInitOptsP
+    , devnetStakeRewardInitOptsP
     , requireDevnetRegistryInitNetwork
+    , requireDevnetStakeRewardInitNetwork
     , registryInitCommandLines
     , runDevnetRegistryInit
+    , runDevnetStakeRewardInit
     ) where
 
 import Control.Monad (unless)
@@ -53,6 +57,10 @@ import Amaru.Treasury.Devnet.RegistryInit
     ( DevnetRegistryInitConfig (..)
     )
 import Amaru.Treasury.Devnet.RegistryInit qualified as RegistryInit
+import Amaru.Treasury.Devnet.StakeRewardInit
+    ( DevnetStakeRewardInitConfig (..)
+    )
+import Amaru.Treasury.Devnet.StakeRewardInit qualified as StakeRewardInit
 import Amaru.Treasury.IntentJSON.Common
     ( parseAddr
     )
@@ -71,6 +79,15 @@ data DevnetRegistryInitOpts = DevnetRegistryInitOpts
     { drioFundingAddress :: !String
     , drioSigningKeyFile :: !FilePath
     , drioRunDir :: !FilePath
+    }
+    deriving stock (Eq, Show)
+
+-- | Options for @devnet stake-reward-init@.
+data DevnetStakeRewardInitOpts = DevnetStakeRewardInitOpts
+    { dsrioRegistryFile :: !FilePath
+    , dsrioFundingAddress :: !String
+    , dsrioSigningKeyFile :: !FilePath
+    , dsrioRunDir :: !FilePath
     }
     deriving stock (Eq, Show)
 
@@ -94,6 +111,31 @@ devnetRegistryInitOptsP =
                 <> help "Directory where registry-init artifacts are written"
             )
 
+-- | Parser for the @stake-reward-init@ DevNet subcommand.
+devnetStakeRewardInitOptsP :: Parser DevnetStakeRewardInitOpts
+devnetStakeRewardInitOptsP =
+    DevnetStakeRewardInitOpts
+        <$> strOption
+            ( long "registry-file"
+                <> metavar "PATH"
+                <> help "registry-init registry.json artifact"
+            )
+        <*> strOption
+            ( long "funding-address"
+                <> metavar "ADDR"
+                <> help "DevNet funding address that owns bootstrap UTxOs"
+            )
+        <*> strOption
+            ( long "signing-key-file"
+                <> metavar "PATH"
+                <> help "cardano-cli payment signing-key JSON for funding UTxOs"
+            )
+        <*> strOption
+            ( long "run-dir"
+                <> metavar "DIR"
+                <> help "Directory where stake-reward-init artifacts are written"
+            )
+
 -- | Validate that the global network selection is exactly DevNet.
 requireDevnetRegistryInitNetwork :: GlobalOpts -> Either String ()
 requireDevnetRegistryInitNetwork GlobalOpts{..}
@@ -102,6 +144,15 @@ requireDevnetRegistryInitNetwork GlobalOpts{..}
         Right ()
     | otherwise =
         Left "registry-init: --network must be devnet"
+
+-- | Validate that the stake/reward setup is only run on DevNet.
+requireDevnetStakeRewardInitNetwork :: GlobalOpts -> Either String ()
+requireDevnetStakeRewardInitNetwork GlobalOpts{..}
+    | goNetworkName == Just "devnet"
+        && goNetworkMagic == NetworkMagic 42 =
+        Right ()
+    | otherwise =
+        Left "stake-reward-init: --network must be devnet"
 
 -- | Run @devnet registry-init@ against a local DevNet node.
 runDevnetRegistryInit
@@ -112,8 +163,9 @@ runDevnetRegistryInit globals DevnetRegistryInitOpts{..} = do
     case requireDevnetRegistryInitNetwork globals of
         Left err -> abort err
         Right () -> pure ()
-    fundingAddress <- parseFundingAddress drioFundingAddress
-    signingKey <- readPaymentSigningKey drioSigningKeyFile
+    fundingAddress <-
+        parseFundingAddress "registry-init" drioFundingAddress
+    signingKey <- readPaymentSigningKey "registry-init" drioSigningKeyFile
     socket <- resolveSocket (goSocketPath globals)
     let networkMagic =
             fromIntegral (unNetworkMagic (goNetworkMagic globals))
@@ -172,6 +224,63 @@ runDevnetRegistryInit globals DevnetRegistryInitOpts{..} = do
                 putStrLn
                 linesOut
 
+-- | Run @devnet stake-reward-init@ against a local DevNet node.
+runDevnetStakeRewardInit
+    :: GlobalOpts
+    -> DevnetStakeRewardInitOpts
+    -> IO ()
+runDevnetStakeRewardInit globals DevnetStakeRewardInitOpts{..} = do
+    case requireDevnetStakeRewardInitNetwork globals of
+        Left err -> abort err
+        Right () -> pure ()
+    registry <-
+        StakeRewardInit.readDevnetStakeRewardRegistry dsrioRegistryFile
+            >>= \case
+                Left err ->
+                    abort $
+                        "stake-reward-init: --registry-file: " <> err
+                Right ok -> pure ok
+    fundingAddress <-
+        parseFundingAddress "stake-reward-init" dsrioFundingAddress
+    signingKey <-
+        readPaymentSigningKey
+            "stake-reward-init"
+            dsrioSigningKeyFile
+    socket <- resolveSocket (goSocketPath globals)
+    let networkMagic =
+            fromIntegral (unNetworkMagic (goNetworkMagic globals))
+        config =
+            DevnetStakeRewardInitConfig
+                { dsricNetwork = Testnet
+                , dsricFundingAddress = fundingAddress
+                , dsricSignTx =
+                    addCardanoCliPaymentKeyWitness signingKey
+                }
+    withLocalNodeClient (goNetworkMagic globals) socket $
+        \provider submitter -> do
+            pp <- queryProtocolParams provider
+            utxos <- queryUTxOs provider fundingAddress
+            result <-
+                StakeRewardInit.setupDevnetStakeRewards
+                    config
+                    registry
+                    provider
+                    submitter
+                    pp
+                    utxos
+            let linesOut =
+                    StakeRewardInit.stakeRewardInitCommandLines
+                        networkMagic
+                        dsrioRunDir
+                        result
+            StakeRewardInit.writeStakeRewardInitArtifactsWithLines
+                networkMagic
+                dsrioRunDir
+                dsrioRegistryFile
+                result
+                linesOut
+            mapM_ putStrLn linesOut
+
 -- | Human-readable success lines for the shipped registry-init command.
 registryInitCommandLines
     :: Int
@@ -199,32 +308,36 @@ registryInitCommandLines
             <> RegistryInit.registryInitRegistryPath runDir
         ]
 
-parseFundingAddress :: String -> IO Addr
-parseFundingAddress raw =
+parseFundingAddress :: String -> String -> IO Addr
+parseFundingAddress prefix raw =
     case parseAddr (T.pack raw) of
         Left err ->
             abort $
-                "registry-init: --funding-address: " <> err
+                prefix <> ": --funding-address: " <> err
         Right addr -> do
             unless (getNetwork addr == Testnet) $
                 abort
-                    "registry-init: --funding-address must be a testnet address"
+                    ( prefix
+                        <> ": --funding-address must be a testnet address"
+                    )
             pure addr
 
 readPaymentSigningKey
-    :: FilePath
+    :: String
+    -> FilePath
     -> IO (SignKeyDSIGN DSIGN)
-readPaymentSigningKey path = do
+readPaymentSigningKey prefix path = do
     decoded <- eitherDecodeFileStrict path :: IO (Either String Value)
     value <- case decoded of
         Left err ->
             abort $
-                "registry-init: --signing-key-file: " <> err
+                prefix <> ": --signing-key-file: " <> err
         Right value -> pure value
     case decodeCardanoCliSigningKey value of
         Left err ->
             abort $
-                "registry-init: --signing-key-file: "
+                prefix
+                    <> ": --signing-key-file: "
                     <> T.unpack (renderTxWitnessError err)
         Right signingKey -> pure signingKey
 

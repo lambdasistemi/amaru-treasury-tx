@@ -38,17 +38,13 @@ module Amaru.Treasury.Tx.DisburseIntentJSON
 
 import Cardano.Crypto.Hash.Class (Hash, HashAlgorithm, hashFromBytes)
 import Cardano.Ledger.Address
-    ( AccountAddress (..)
-    , AccountId (..)
-    , Addr (..)
+    ( Addr (..)
     , decodeAddrEither
     )
-import Cardano.Ledger.BaseTypes (Network (..), mkTxIxPartial)
+import Cardano.Ledger.BaseTypes (mkTxIxPartial)
 import Cardano.Ledger.Coin (Coin (..))
-import Cardano.Ledger.Credential (Credential (..))
 import Cardano.Ledger.Hashes
     ( KeyHash (..)
-    , ScriptHash (..)
     , unsafeMakeSafeHash
     )
 import Cardano.Ledger.Keys (KeyRole (..))
@@ -86,6 +82,9 @@ import Data.Word (Word64)
 import Amaru.Treasury.AuxData
     ( RationaleBody (..)
     , rationaleMetadatum
+    )
+import Amaru.Treasury.IntentJSON.Common
+    ( parseRewardAccountForNetwork
     )
 import Amaru.Treasury.Tx.Disburse
     ( DisburseAdaPayload (..)
@@ -384,7 +383,8 @@ buildFields DisburseIntentJSON{..} = do
     treasuryUtxos <-
         traverse parseTxIn (dsjTreasuryUtxos dijScope)
     permissionsAcct <-
-        parseRewardAccount
+        parseRewardAccountForNetwork
+            dijNetwork
             (dsjPermissionsRewardAccount dijScope)
     scopesRef <-
         parseTxIn (dsjScopesDeployedAt dijScope)
@@ -490,20 +490,6 @@ parseTxIn t = case T.splitOn "#" t of
             ( "txIn must be \"<hex>#<ix>\", got "
                 <> T.unpack t
             )
-
-parseRewardAccount
-    :: Text -> Either String AccountAddress
-parseRewardAccount t = do
-    bs <- decodeHexBytes 28 t
-    Right
-        ( AccountAddress
-            Mainnet
-            ( AccountId
-                ( ScriptHashObj
-                    (ScriptHash (mkHash28 bs))
-                )
-            )
-        )
 
 parseGuardKeyHash :: Text -> Either String (KeyHash Guard)
 parseGuardKeyHash t = do

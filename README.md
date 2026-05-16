@@ -122,9 +122,43 @@ permissions reference
 `5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44#0`,
 and treasury reference
 `5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44#1`.
-This is registry/reference-script publication evidence only; staking,
-reward setup, governance funding, treasury withdrawal setup, and
+This is registry/reference-script publication evidence only; staking
+and reward setup, governance funding, treasury withdrawal setup, and
 disburse submission remain separate recovery slices.
+
+Run the shipped DevNet stake/reward setup command against a running
+local DevNet after registry-init with:
+
+```bash
+amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+  devnet stake-reward-init \
+  --registry-file runs/devnet/manual-registry-init/registry-init/registry.json \
+  --funding-address "$DEVNET_FUNDING_ADDRESS" \
+  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
+  --run-dir runs/devnet/manual-stake-reward-init
+```
+
+Run the matching live proof harness with:
+
+```bash
+nix develop --quiet -c just devnet-smoke stake-reward-init
+```
+
+The stake-reward-init command registers the DevNet treasury script
+reward account, verifies the registry handoff, and emits the
+permissions script hash as the later withdraw-zero reward account. It
+writes `stake-reward-init/summary.json`,
+`stake-reward-init/accounts.json`, and
+`stake-reward-init/provenance.json`. The latest local evidence for this
+branch is `runs/devnet/20260516T213258Z`: setup tx
+`89737f7b4439008d5aeca01789addbbbfeb2876cb4a0fab224f1c545e4076598`,
+treasury reward account
+`b2b7201c62e43ae8e03b61c96931379ebbcdce61befc3f4e4b1f4be4`
+registered on `Testnet`, and permissions reward account
+`f9dc1d931a3f52eaf83891f8621cbba5ba64f6faa5792f1b00c17333`
+reported as `registered: false` for later withdraw-zero witnesses.
+This slice does not submit governance funding, treasury withdrawal
+materialization, or disburse transactions; those remain #149 and #150.
 
 Run the governance slice boundary check with:
 

@@ -3,9 +3,11 @@
 The local DevNet smoke is an opt-in release check. It starts the
 `cardano-node-clients` DevNet, verifies the node socket with network
 magic `42`, can publish registry/reference-script bootstrap state,
-can run the governance funding setup on a patched short-epoch genesis,
-records timing/action/reward evidence, and writes artifacts under a
-fresh run directory. The withdrawal phase proves the live
+can register the treasury reward account and emit the permissions
+withdraw-zero reward account, can run the governance funding setup on a
+patched short-epoch genesis, records timing/action/reward evidence, and
+writes artifacts under a fresh run directory. The withdrawal phase proves
+the live
 reward-to-materialized-ADA boundary by writing a withdrawal intent,
 building unsigned CBOR, signing and submitting it inside the opt-in
 DevNet harness, and recording the treasury UTxO that materialized from
@@ -136,6 +138,77 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
 This is registry/reference-script publication evidence only. It does
 not prove staking setup, reward-account funding, treasury withdrawal
 materialization, disburse submission, swap execution, or reorganize.
+
+## Stake/Reward Initiator Boundary
+
+The shipped command for this boundary is:
+
+```bash
+amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+  devnet stake-reward-init \
+  --registry-file runs/devnet/manual-registry-init/registry-init/registry.json \
+  --funding-address "$DEVNET_FUNDING_ADDRESS" \
+  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
+  --run-dir runs/devnet/manual-stake-reward-init
+```
+
+The local smoke runs registry-init first in the same fresh run, then
+invokes the same production command runner:
+
+```bash
+just devnet-smoke stake-reward-init
+```
+
+Expected output:
+
+```text
+stake-reward-init: run-dir runs/devnet/YYYYMMDDTHHMMSSZ
+stake-reward-init: network devnet magic 42
+stake-reward-init: phase stake-reward-init passed
+stake-reward-init: setup-tx-id 8973...
+stake-reward-init: treasury-reward-account b2b7...
+stake-reward-init: permissions-reward-account f9dc...
+stake-reward-init: summary runs/devnet/YYYYMMDDTHHMMSSZ/stake-reward-init/summary.json
+stake-reward-init: accounts runs/devnet/YYYYMMDDTHHMMSSZ/stake-reward-init/accounts.json
+```
+
+The stake-reward-init command registers only the treasury script reward
+account. The permissions script is not a certificate-purpose validator;
+it is invoked later by disburse/swap transactions through the
+withdraw-zero pattern. The command still emits the permissions reward
+account because later transactions need that script hash as their
+withdraw-zero target.
+
+The verified 2026-05-16 slice used run directory
+`runs/devnet/20260516T213258Z`. It submitted setup tx
+`89737f7b4439008d5aeca01789addbbbfeb2876cb4a0fab224f1c545e4076598`,
+reported treasury reward account
+`b2b7201c62e43ae8e03b61c96931379ebbcdce61befc3f4e4b1f4be4` as
+`registered: true`, and reported permissions reward account
+`f9dc1d931a3f52eaf83891f8621cbba5ba64f6faa5792f1b00c17333` as
+`registered: false`, both on ledger network `Testnet`.
+
+The stake-reward-init command writes:
+
+```text
+runs/devnet/YYYYMMDDTHHMMSSZ/
+|-- node.log
+|-- summary.json
+|-- summary.log
+|-- timing.json
+|-- registry-init/
+|   |-- provenance.json
+|   |-- registry.json
+|   `-- summary.json
+`-- stake-reward-init/
+    |-- accounts.json
+    |-- provenance.json
+    `-- summary.json
+```
+
+This is stake/reward prerequisite evidence only. It does not submit
+governance funding, treasury withdrawal materialization, disburse
+submission, swap execution, or reorganize transactions.
 
 ## Governance Boundary
 
@@ -358,14 +431,16 @@ The prior experiment is split into seven tickets:
   reorganize slice. This consolidates live treasury UTxOs once the
   release-facing reorganize builder from #46 exists.
 
-The passing phases today are `node`, `registry-init`, `governance`,
-`withdraw`, and `swap-ready`. `just devnet-smoke all` still runs only `node`,
-`governance`, and `withdraw` into separate
+The passing phases today are `node`, `registry-init`,
+`stake-reward-init`, `governance`, `withdraw`, and `swap-ready`.
+`just devnet-smoke all` still runs only `node`, `governance`, and `withdraw` into separate
 subdirectories under one timestamped run directory.
 
 `node` proves only the local node boundary, network magic, and timing.
 `registry-init` proves only production-backed registry/reference-script
 publication and artifact handoff.
+`stake-reward-init` proves only treasury reward-account registration
+and permissions withdraw-zero account handoff.
 `governance` proves the local setup path that funds the Amaru treasury
 script reward account. `withdraw` proves that the funded script reward
 account can be resolved into a schema-v1 intent, built into unsigned

@@ -101,6 +101,8 @@ For live local-node evidence, also run the opt-in devnet smoke:
 
 ```bash
 nix develop --quiet -c just devnet-smoke node
+nix develop --quiet -c just devnet-smoke registry-init
+nix develop --quiet -c just devnet-smoke stake-reward-init
 nix develop --quiet -c just devnet-smoke governance
 nix develop --quiet -c just devnet-smoke withdraw
 nix develop --quiet -c just devnet-smoke swap-ready
@@ -118,6 +120,20 @@ The latest branch evidence is `runs/devnet/20260513T143827Z` on
 `d6773e4cd8a2421617568c8dac0972b0f312a509`, with reward account
 `5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34` moving
 from `0` to `2000000` lovelace.
+
+The registry-init phase proves the production-backed DevNet registry
+and reference-script publication command. The stake-reward-init phase
+then consumes the registry artifact, registers the treasury reward
+account, and emits the permissions reward account for later
+withdraw-zero witnesses. Latest branch stake/reward evidence is
+`runs/devnet/20260516T213258Z`, setup tx
+`89737f7b4439008d5aeca01789addbbbfeb2876cb4a0fab224f1c545e4076598`,
+treasury reward account
+`b2b7201c62e43ae8e03b61c96931379ebbcdce61befc3f4e4b1f4be4` with
+`registered: true`, and permissions reward account
+`f9dc1d931a3f52eaf83891f8621cbba5ba64f6faa5792f1b00c17333` with
+`registered: false`. This is prerequisite evidence only; governance
+funding and disburse remain separate slices.
 
 The withdrawal phase creates fresh local governance prerequisite
 evidence, resolves the funded treasury script reward account through
@@ -151,12 +167,16 @@ and local order address
 This is readiness evidence only; it is not a built, funded, submitted,
 or spent swap order.
 
-The DevNet experiment is split into governance action (#82),
+The DevNet bootstrap recovery is split into registry/reference-script
+publication (#147), stake/reward setup (#148), governance funding and
+treasury withdrawal setup (#149), and disburse/beneficiary receipt
+(#150). Older evidence slices also track governance action (#82),
 withdrawal (#83), disburse (#86), SundaeSwap V3 contract readiness
 (#132), SundaeSwap V3 order build/funding (#84), SundaeSwap V3 order
-spend (#85), and reorganize (#87) slices. Do not record disburse,
-swap-order build/funding, swap-spend, or reorganize evidence until
-those slices land and their phase-specific smoke commands pass.
+spend (#85), and reorganize (#87). Do not record #149 governance
+funding, #150 disburse, swap-order build/funding, swap-spend, or
+reorganize evidence until those slices land and their phase-specific
+smoke commands pass.
 SundaeSwap compatibility claims must be based on the public V3
 contracts/SDK, not on an Amaru-only toy validator.
 

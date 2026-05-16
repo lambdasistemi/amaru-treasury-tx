@@ -67,6 +67,10 @@ import Amaru.Treasury.IntentJSON
     , encodeSomeTreasuryIntent
     , translateIntent
     )
+import Amaru.Treasury.Tx.Disburse
+    ( DisburseIntent (..)
+    , DisburseIntentFields (..)
+    )
 import Amaru.Treasury.Tx.Withdraw (WithdrawIntent (..))
 
 -- ----------------------------------------------------
@@ -198,6 +202,22 @@ spec = describe "Amaru.Treasury.IntentJSON" $ do
                     SWithdraw
                     (withdrawIntent "localnet")
                 )
+
+    describe "disburse contract" $
+        it "translates DevNet disburse reward accounts as Testnet" $ do
+            (_, di) <-
+                expectRight $
+                    translateIntent
+                        SDisburse
+                        (disburseIntent "devnet")
+            case di of
+                DisburseAdaIntent fields _ ->
+                    rewardAccountNetwork
+                        (difPermissionsRewardAccount fields)
+                        `shouldBe` Testnet
+                DisburseUsdmIntent{} ->
+                    expectationFailure
+                        "expected ADA disburse payload"
 
 -- ----------------------------------------------------
 -- Round-trip property
@@ -516,6 +536,33 @@ rawSwapMissingNetwork =
 
 withdrawIntentMainnet :: TreasuryIntent 'Withdraw
 withdrawIntentMainnet = withdrawIntent "mainnet"
+
+disburseIntent :: Text -> TreasuryIntent 'Disburse
+disburseIntent network =
+    TreasuryIntent
+        SDisburse
+        1
+        network
+        (tiWallet base)
+        (tiScope base)
+        (tiSigners base)
+        (tiValidityUpperBoundSlot base)
+        ( RationaleJSON
+            "disburse"
+            "Disburse ADA"
+            "Send vendor payment"
+            "Approved budget line"
+            "ACME Translations Ltd."
+        )
+        ( DisburseInputs
+            "ada"
+            50_000_000
+            "addr1qy8ac7qqy0vtulyl7wntmsxc6wex80gvcyjy33qffrhm7sh927ysx5sftuw0dlft05dz3c7revpf7jx0xnlcjz3g69mq4afdhv"
+            "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad"
+            "0014df105553444d"
+        )
+  where
+    base = withdrawIntent network
 
 withdrawIntent :: Text -> TreasuryIntent 'Withdraw
 withdrawIntent network =

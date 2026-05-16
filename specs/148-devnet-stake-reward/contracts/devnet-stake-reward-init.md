@@ -144,3 +144,15 @@ certificate witness.
   runner, and asserting observed chain effects.
 - #149 consumes the treasury reward-account setup; #150 consumes the
   permissions reward-account setup.
+
+Latest accepted live proof:
+
+- Run directory: `runs/devnet/20260516T213258Z`.
+- Setup tx id:
+  `89737f7b4439008d5aeca01789addbbbfeb2876cb4a0fab224f1c545e4076598`.
+- Treasury account:
+  `b2b7201c62e43ae8e03b61c96931379ebbcdce61befc3f4e4b1f4be4`,
+  `registered: true`.
+- Permissions account:
+  `f9dc1d931a3f52eaf83891f8621cbba5ba64f6faa5792f1b00c17333`,
+  `registered: false`.

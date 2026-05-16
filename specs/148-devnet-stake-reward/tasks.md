@@ -198,31 +198,49 @@ contains `stake-reward-init/summary.json`, `accounts.json`, and
 
 ### Tests For User Story 3
 
-- [ ] T028 [US3] RED: run `scripts/smoke/devnet-local --phase
+- [x] T028 [US3] RED: run `scripts/smoke/devnet-local --phase
   stake-reward-init --run-dir <tmp>` and record that the current branch
-  rejects the phase as unknown.
-- [ ] T029 [US3] RED: add devnet diagnostics coverage for
+  rejects the phase as unknown (commit: b5e0a88).
+- [x] T029 [US3] RED: add devnet diagnostics coverage for
   stake/reward setup artifact fields in
-  `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`.
+  `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` (commit: b5e0a88).
 
 ### Implementation For User Story 3
 
-- [ ] T030 [US3] Add `stake-reward-init` phase parsing to
-  `scripts/smoke/devnet-local` and `just devnet-smoke`.
-- [ ] T031 [US3] Update `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
+- [x] T030 [US3] Add `stake-reward-init` phase parsing to
+  `scripts/smoke/devnet-local` and `just devnet-smoke` (commit:
+  b5e0a88).
+- [x] T031 [US3] Update `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
   so the phase runs registry-init as prerequisite when needed, then
-  invokes the production stake/reward setup runner.
-- [ ] T032 [US3] Verify expected treasury and permissions reward
+  invokes the production stake/reward setup runner (commit: b5e0a88).
+- [x] T032 [US3] Verify expected treasury and permissions reward
   account state through the strongest available provider or transaction
   validation signal; emit a typed diagnostic if the pinned dependency
-  cannot distinguish registered zero-reward accounts.
-- [ ] T033 [US3] GREEN: run `nix develop --quiet -c cabal build
+  cannot distinguish registered zero-reward accounts (commit:
+  b5e0a88).
+- [x] T033 [US3] GREEN: run `nix develop --quiet -c cabal build
   test:devnet-tests -O0` and `nix develop --quiet -c just devnet-smoke
-  stake-reward-init`.
-- [ ] T034 [US3] Commit the smoke proof slice as
+  stake-reward-init` (commit: b5e0a88).
+- [x] T034 [US3] Commit the smoke proof slice as
   `test(devnet): prove stake reward setup` with `Tasks:
   T028,T029,T030,T031,T032,T033,T034` in the commit body and task lines
-  updated with the commit short SHA.
+  updated with the commit short SHA (commit: b5e0a88).
+
+Evidence:
+
+- Subagent RED proof: `scripts/smoke/devnet-local --phase
+  stake-reward-init --run-dir <tmp>` exited 64 with
+  `devnet-smoke: unknown phase: stake-reward-init`.
+- Orchestrator review accepted commit `b5e0a88`, whose body carries
+  `Tasks: T028,T029,T030,T031,T032,T033,T034`.
+- `nix develop --quiet -c cabal build test:devnet-tests -O0` exited 0.
+- `nix develop --quiet -c just devnet-smoke stake-reward-init` passed
+  with 1 example and 0 failures in
+  `runs/devnet/20260516T213258Z`.
+- Live setup tx id:
+  `89737f7b4439008d5aeca01789addbbbfeb2876cb4a0fab224f1c545e4076598`.
+- Live artifacts confirmed `treasury.registered = true`,
+  `permissions.registered = false`, both on ledger network `Testnet`.
 
 ## Phase 6: User Story 1 Correction - Permissions Is Withdraw-Zero Only (Priority: P1)
 
@@ -272,11 +290,11 @@ Evidence:
 
 ## Phase 7: Documentation, Metadata, And Finalization
 
-- [ ] T040 [US3] Update README with the shipped command, proof command,
+- [x] T040 [US3] Update README with the shipped command, proof command,
   latest live run directory, and explicit #149/#150 exclusions.
-- [ ] T041 [US3] Update `docs/local-devnet-smoke.md` with command,
+- [x] T041 [US3] Update `docs/local-devnet-smoke.md` with command,
   expected output, artifacts, and proof evidence.
-- [ ] T042 [US3] Update `quickstart.md`, contract, and tasks evidence
+- [x] T042 [US3] Update `quickstart.md`, contract, and tasks evidence
   with final command/proof output.
 - [ ] T043 [US3] Run `./gate.sh` and record exact output evidence.
 - [ ] T044 [US3] Remove `gate.sh` in a final ready-for-review commit.
@@ -284,6 +302,22 @@ Evidence:
   verification evidence, live run evidence, and non-claims.
 - [ ] T046 [US3] Mark PR #153 ready only after docs, README,
   repository metadata, specs/tasks, and PR metadata all align.
+
+Evidence:
+
+- README documents the shipped `devnet stake-reward-init` command, the
+  proof command, run directory `runs/devnet/20260516T213258Z`, setup tx
+  id
+  `89737f7b4439008d5aeca01789addbbbfeb2876cb4a0fab224f1c545e4076598`,
+  and the explicit #149/#150 exclusions.
+- `docs/local-devnet-smoke.md` documents the stake/reward initiator
+  boundary, expected output, artifact paths, registered treasury account,
+  and permissions withdraw-zero account.
+- `quickstart.md` and
+  `contracts/devnet-stake-reward-init.md` record the latest accepted
+  live proof.
+- `nix develop github:paolino/dev-assets?dir=mkdocs --quiet -c mkdocs
+  build --strict --site-dir site` exited 0.
 
 ## Dependencies
 

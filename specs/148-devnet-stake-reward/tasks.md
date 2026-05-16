@@ -285,3 +285,64 @@ Commit:
 - Commit body must include Tasks: T014,T015,T016,T017,T018,T019,T020,T021.
 - Do not push.
 ```
+
+## Second Subagent Brief Template
+
+Use only after T014-T021 are reviewed and pushed.
+
+```text
+Task: T022-T027 only.
+
+Owned files:
+- lib/Amaru/Treasury/IntentJSON.hs
+- lib/Amaru/Treasury/Tx/DisburseIntentJSON.hs
+- test/unit/Amaru/Treasury/IntentJSONSpec.hs
+- test/unit/Amaru/Treasury/Tx/DisburseSpec.hs
+
+Required orchestrator analysis already applied:
+- `Amaru.Treasury.IntentJSON.Common.parseRewardAccountForNetwork`
+  already maps `devnet`, `preprod`, and `preview` to ledger `Testnet`.
+- Unified `translateDisburse` still calls Mainnet-default
+  `parseRewardAccount` for `sjPermissionsRewardAccount`.
+- Legacy `Amaru.Treasury.Tx.DisburseIntentJSON.buildFields` still has
+  its own Mainnet-only `parseRewardAccount`.
+- The legacy disburse JSON module is still exported and covered by
+  disburse-wizard tests, so it must be fixed rather than ignored.
+
+Forbidden scope:
+- Do not edit specs, plan, tasks, README, docs, PR metadata, issue
+  metadata, gate.sh, DevNet command code, smoke code, swap/order code,
+  governance setup, or disburse submission behavior.
+- Do not broaden this slice to #149 or #150 behavior.
+
+RED proof:
+- Add unified DevNet disburse intent coverage in
+  `test/unit/Amaru/Treasury/IntentJSONSpec.hs` proving
+  `difPermissionsRewardAccount` uses ledger `Testnet`.
+- Add legacy DevNet disburse intent coverage in
+  `test/unit/Amaru/Treasury/Tx/DisburseSpec.hs` proving
+  `difPermissionsRewardAccount` uses ledger `Testnet`.
+- These tests must fail before implementation because both disburse
+  translation paths currently construct Mainnet reward accounts.
+
+Implementation:
+- Replace the unified disburse Mainnet-default parser call with
+  `parseRewardAccountForNetwork (tiNetwork ti)`.
+- Replace the legacy disburse Mainnet-only parser with network-aware
+  parsing, preferably by reusing
+  `Amaru.Treasury.IntentJSON.Common.parseRewardAccountForNetwork`.
+- Preserve mainnet behavior and reject unknown network names with the
+  existing unknown-network diagnostic shape.
+
+GREEN proof:
+- nix develop --quiet -c just unit "reward accounts as Testnet"
+- nix develop --quiet -c just unit "DisburseIntentJSON"
+- nix develop --quiet -c cabal build lib:amaru-treasury-tx -O0
+- git diff --check
+
+Commit:
+- One bisect-safe commit titled
+  fix(devnet): parse disburse reward accounts by network
+- Commit body must include Tasks: T022,T023,T024,T025,T026,T027.
+- Do not push.
+```

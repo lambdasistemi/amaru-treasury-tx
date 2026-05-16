@@ -304,6 +304,8 @@ Owned files:
   pattern if a different name fits better
 - lib/Amaru/Treasury/Devnet/RegistryInit.hs, only for reusable
   command-line rendering or anchor-verification helpers
+- lib/Amaru/Treasury/Tx/Witness.hs, only for a minimal reusable
+  cardano-cli signing-key helper if the command runner needs it
 - lib/Amaru/Treasury/Backend/N2C.hs, only if a shared
   provider+submitter helper is needed
 - amaru-treasury-tx.cabal

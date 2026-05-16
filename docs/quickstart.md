@@ -109,7 +109,7 @@ What the flags mean:
 | `--validity-hours` | Optional. Omit to use the chain's current horizon (longest plutus-translatable slot). When present, must be inside the horizon — overshoot returns a typed wizard error before `tx-build` runs. |
 | `--description` / `--justification` / `--destination-label` | Free-form rationale fields, pinned into the on-chain audit trail. |
 | `--extra-signer SCOPE\|HEX` | Repeated for each witness owner beyond the selected scope owner. Scope names and 28-byte key hashes are accepted; `--signer` remains as an alias. |
-| `tx-build --report -` | Emits `{ intent, result }` on stdout. Successful `result` contains both `tx-cbor` and the mechanical report; expected build failures contain `result.failure.code` and `result.failure.message`. |
+| `tx-build --report -` | Emits `{ intent, result }` on stdout. Successful `result` contains both `tx-cbor` and the mechanical report; expected build failures contain `result.failure.code` and `result.failure.message`. Final unsigned transactions are phase-1 preflighted against the sampled chain context before CBOR is written. |
 | `report-render` | Reads the build-output envelope from stdin and renders Markdown. |
 
 ## 5. What flows where
@@ -142,6 +142,8 @@ Pre-signing audit checklist:
 - the scope, required signers, and rationale match the operator decision;
 - the validity slot and rendered UTC instant are acceptable;
 - conservation has zero residual;
+- no `result.failure.code` is present; phase-1 preflight failures are
+  reported as build failures and no `tx-cbor` is emitted;
 - `result.tx-cbor` is present in the JSON envelope used for rendering.
 
 Use the typed traces as the second audit trail. A successful run looks

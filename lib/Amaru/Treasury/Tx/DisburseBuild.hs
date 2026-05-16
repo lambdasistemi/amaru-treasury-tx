@@ -40,6 +40,7 @@ import Control.Exception (throwIO)
 import Control.Monad (unless)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Map.Strict qualified as Map
+import Data.Text qualified as T
 
 import Cardano.Ledger.Address (Addr)
 import Cardano.Ledger.Api.Era (eraProtVerLow)
@@ -65,6 +66,7 @@ import Lens.Micro ((^.))
 
 import Amaru.Treasury.AuxData (label1694)
 import Amaru.Treasury.Build (ScriptResult (..))
+import Amaru.Treasury.Build.Common (validateFinalPhase1)
 import Amaru.Treasury.ChainContext (ChainContext (..))
 import Amaru.Treasury.Tx.Disburse
     ( DisburseAdaPayload
@@ -198,6 +200,12 @@ runAda ctx dbi fields payload = do
                 "runDisburseBuild: build failed: "
                     <> show (e :: BuildError ())
         Right tx -> do
+            case validateFinalPhase1 ctx tx of
+                Left e ->
+                    throwIO . userError $
+                        "runDisburseBuild: final validation failed: "
+                            <> T.unpack e
+                Right () -> pure ()
             let body = tx ^. bodyTxL
                 feeLov = body ^. feeTxBodyL
                 totalColl = case body

@@ -5,21 +5,25 @@ as a single value.
 
 ## Why
 
-Every Cardano tx build needs three things from the outside world:
+Every Cardano tx build needs five things from the outside world:
 
 1. **Protocol parameters** at a moment in time (fee coefficients,
    cost models, collateral percentage).
 2. **Resolved UTxOs** for every input the tx refers to (wallet,
    treasury, reference scripts).
-3. A **script evaluator** that runs Plutus redeemers against a
+3. The **network id** and **tip slot** for that same ledger view.
+4. A **script evaluator** that runs Plutus redeemers against a
    draft tx so the builder can patch in the right `ExUnits`.
+5. A **phase-1 validation context** for the final unsigned tx.
 
 Bundling these into a record makes the dependency on "reality"
 explicit, replaceable, and testable.
 
 ```haskell
 data ChainContext = ChainContext
-    { ccPParams    :: PParams ConwayEra
+    { ccNetwork    :: Network
+    , ccTipSlot    :: SlotNo
+    , ccPParams    :: PParams ConwayEra
     , ccUtxos      :: Map TxIn (TxOut ConwayEra)
     , ccEvaluateTx :: ConwayTx -> IO (EvaluateTxResult ConwayEra)
     }
@@ -32,16 +36,28 @@ the build is the same code path.
 
 ## Live mode
 
-The CLI and the parity probe use this path. It queries a `Provider`
-(currently `Amaru.Treasury.Backend.N2C` over the local-node N2C
-socket) for everything needed by a known set of `TxIn`s and surfaces
-"missing UTxO" errors before the build starts.
+The release-facing CLI paths use `withLiveContext`. It acquires one
+local-node N2C query handle, samples protocol parameters, required
+UTxOs, tip slot, and network, then keeps the build and evaluator calls
+inside the acquired callback. That matters because the builder can call
+the evaluator more than once while converging fees and `ExUnits`.
 
 ```haskell
-import Amaru.Treasury.ChainContext (liveContext)
+import Amaru.Treasury.ChainContext (withLiveContext)
 
-ctx <- liveContext provider (Set.fromList allRequiredTxIns)
+withLiveContext network provider (Set.fromList allRequiredTxIns) $ \ctx ->
+    runFromIntent ctx intent
 ```
+
+`liveContext` still exists for one-shot callers, but production builds
+prefer `withLiveContext` so protocol parameters, UTxOs, tip slot, and
+script evaluation all come from one sampled view.
+
+After building and fee alignment, the action runners call
+`Cardano.Tx.Validate.validatePhase1` through
+`Build.Common.validateFinalPhase1`. Missing vkey witnesses are expected
+for an unsigned transaction and are filtered out; remaining ledger
+failures abort the build before CBOR is written.
 
 ## Frozen mode
 
@@ -51,6 +67,8 @@ Same record, populated from fixtures:
   protocol-parameters`.
 - UTxOs — a small JSON / CBOR pack carrying value and reference
   script for each `TxIn` the build will reference.
+- network and tip slot — fixed values used by the final phase-1
+  preflight.
 - evaluator — usually a `pure (Right knownExUnits)` map keyed by
   redeemer purpose, captured during a previous live run.
 
@@ -59,6 +77,9 @@ import Amaru.Treasury.ChainContext (frozenContext)
 
 let ctx = frozenContext frozenPParams frozenUtxos pureEvaluator
 ```
+
+Use `frozenContextAt` when the test needs to pin a specific network or
+slot instead of the default mainnet slot `0`.
 
 A frozen `ChainContext` makes the build immune to:
 
@@ -86,7 +107,7 @@ regardless.
         ┌───────────────────────┐
         │  Build        │  ← dispatcher: translate,
         │     runFromIntent     │     build, fee-align,
-        └───────────────────────┘     re-evaluate
+        └───────────────────────┘     re-evaluate, phase-1 validate
                    │
                    ▼
         ┌───────────────────────┐

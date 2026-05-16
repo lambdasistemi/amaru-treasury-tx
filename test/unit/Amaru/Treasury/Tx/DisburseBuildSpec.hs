@@ -19,6 +19,10 @@ import Test.Hspec
     )
 
 import Cardano.Ledger.Api.PParams (emptyPParams)
+import Cardano.Ledger.BaseTypes
+    ( Network (..)
+    , SlotNo (..)
+    )
 
 import Amaru.Treasury.Build (runFromIntent)
 import Amaru.Treasury.ChainContext (ChainContext (..))
@@ -36,7 +40,9 @@ spec =
                         "test/fixtures/disburse/ada/intent.json"
             let ctx =
                     ChainContext
-                        { ccPParams = emptyPParams
+                        { ccNetwork = Mainnet
+                        , ccTipSlot = SlotNo 0
+                        , ccPParams = emptyPParams
                         , ccUtxos = Map.empty
                         , ccEvaluateTx =
                             const (pure Map.empty)
@@ -51,7 +57,9 @@ spec =
                         "test/fixtures/disburse/usdm/intent.json"
             let ctx =
                     ChainContext
-                        { ccPParams = emptyPParams
+                        { ccNetwork = Mainnet
+                        , ccTipSlot = SlotNo 0
+                        , ccPParams = emptyPParams
                         , ccUtxos = Map.empty
                         , ccEvaluateTx =
                             const (pure Map.empty)

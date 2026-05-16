@@ -5,7 +5,7 @@ trusts when it produces an unsigned transaction. It synthesises the
 upstream Amaru treasury system into a dependency graph and names the
 trust roots and threat surfaces this CLI cannot eliminate.
 
-The CLI's safety story has two layers:
+The CLI's safety story has three layers:
 
 1. **The on-chain registry walk verifier** (under
    `Amaru.Treasury.Registry.Verify`) reduces an untrusted
@@ -16,9 +16,37 @@ The CLI's safety story has two layers:
    composes verified registry data with operator-supplied wizard
    answers and a curated `NetworkConstants` table to produce
    `intent.json`.
+3. **The final transaction preflight** (under
+   `Amaru.Treasury.Build.Common`) runs the finished unsigned Conway
+   transaction through `Cardano.Tx.Validate.validatePhase1` against the
+   sampled `ChainContext` before CBOR is written.
 
 The verifier's trust roots are described below; the wizard adds two
 more layers that are explicitly NOT verified by this codebase.
+
+## Final transaction preflight
+
+Every build action produces a final unsigned transaction after
+balancing, script evaluation, and local fee alignment. Before the CLI
+writes CBOR, it runs the tx-tools Conway phase-1 validator with:
+
+- the network family selected by the CLI/N2C magic;
+- the protocol parameters sampled from the local node;
+- the resolved spend and reference UTxOs sampled from the same node
+  view;
+- the tip slot sampled from that same view.
+
+Unsigned transactions are expected to miss vkey witnesses. That witness
+completeness noise is filtered out because signing happens later. Any
+remaining phase-1 ledger failure is treated as a build failure and the
+CLI writes no unsigned transaction.
+
+The current upstream validator does not seed reward-account state. For
+transactions that include withdrawals, the builder keeps the existing
+script-evaluation checks but skips this phase-1 preflight to avoid false
+`WithdrawalsNotInRewardsCERTS` failures until tx-tools grows reward
+state support. `swap-cancel`, which has no withdrawals, exercises the
+full phase-1 preflight.
 
 ## System overview
 

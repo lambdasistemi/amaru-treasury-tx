@@ -70,7 +70,10 @@ import Amaru.Treasury.Build
     , ScriptResult (..)
     , runSwap
     )
-import Amaru.Treasury.ChainContext (liveContext)
+import Amaru.Treasury.ChainContext
+    ( networkFromMagic
+    , withLiveContext
+    )
 import Amaru.Treasury.Tx.Swap
     ( SwapIntent (..)
     , SwapOrderDatumParams (..)
@@ -315,61 +318,62 @@ main = do
     IO.hPutStrLn stderr $ "swap-probe: connecting to " <> socket
     withLocalNodeBackend mainnetMagic socket $ \backend -> do
         IO.hPutStrLn stderr "swap-probe: capturing chain context"
-        ctx <-
-            liveContext
-                backend
-                ( Set.fromList
-                    [ walletInput
-                    , treasuryInput
-                    , scopesRefIn
-                    , permissionsRefIn
-                    , treasuryRefIn
-                    , registryRefIn
-                    ]
-                )
-        IO.hPutStrLn stderr "swap-probe: building tx"
-        let rationale =
-                swapRationaleMetadatum
-                    "Swapping ADA for $100k at a rate of $0.245 per ADA"
-                    "Network Compliance's treasury"
-                    "Required to pay Antithesis as vendor"
-                    registryPolicyId
-        BuildResult{..} <-
-            runSwap ctx intent rationale walletInput walletAddr
-        let cborStrict = BSL.toStrict brCborBytes
-            hexed = B16.encode cborStrict
-            Coin feeLov = brFeeLovelace
-            Coin tcLov = brTotalCollateralLovelace
-        IO.hPutStrLn stderr $
-            "swap-probe: emitted "
-                <> show (BS.length cborStrict)
-                <> " bytes  fee="
-                <> show feeLov
-                <> "  total_collateral="
-                <> show tcLov
-        let failures =
-                [ (purpose, e)
-                | ScriptResult purpose (Left e) <-
-                    brScriptResults
+        withLiveContext
+            (networkFromMagic mainnetMagic)
+            backend
+            ( Set.fromList
+                [ walletInput
+                , treasuryInput
+                , scopesRefIn
+                , permissionsRefIn
+                , treasuryRefIn
+                , registryRefIn
                 ]
-        IO.hPutStrLn stderr $
-            "swap-probe: re-evaluated "
-                <> show (length brScriptResults)
-                <> " redeemers, "
-                <> show (length failures)
-                <> " failed"
-        mapM_
-            ( \(p, e) ->
-                IO.hPutStrLn stderr $
-                    "  FAIL: " <> show p <> " — " <> e
             )
-            failures
-        BS.putStr hexed
-        putStr "\n"
-        if null failures
-            then IO.hPutStrLn stderr "swap-probe: VALIDATION OK"
-            else do
-                IO.hPutStrLn
-                    stderr
-                    "swap-probe: VALIDATION FAILED"
-                exitFailure
+            $ \ctx -> do
+                IO.hPutStrLn stderr "swap-probe: building tx"
+                let rationale =
+                        swapRationaleMetadatum
+                            "Swapping ADA for $100k at a rate of $0.245 per ADA"
+                            "Network Compliance's treasury"
+                            "Required to pay Antithesis as vendor"
+                            registryPolicyId
+                BuildResult{..} <-
+                    runSwap ctx intent rationale walletInput walletAddr
+                let cborStrict = BSL.toStrict brCborBytes
+                    hexed = B16.encode cborStrict
+                    Coin feeLov = brFeeLovelace
+                    Coin tcLov = brTotalCollateralLovelace
+                IO.hPutStrLn stderr $
+                    "swap-probe: emitted "
+                        <> show (BS.length cborStrict)
+                        <> " bytes  fee="
+                        <> show feeLov
+                        <> "  total_collateral="
+                        <> show tcLov
+                let failures =
+                        [ (purpose, e)
+                        | ScriptResult purpose (Left e) <-
+                            brScriptResults
+                        ]
+                IO.hPutStrLn stderr $
+                    "swap-probe: re-evaluated "
+                        <> show (length brScriptResults)
+                        <> " redeemers, "
+                        <> show (length failures)
+                        <> " failed"
+                mapM_
+                    ( \(p, e) ->
+                        IO.hPutStrLn stderr $
+                            "  FAIL: " <> show p <> " — " <> e
+                    )
+                    failures
+                BS.putStr hexed
+                putStr "\n"
+                if null failures
+                    then IO.hPutStrLn stderr "swap-probe: VALIDATION OK"
+                    else do
+                        IO.hPutStrLn
+                            stderr
+                            "swap-probe: VALIDATION FAILED"
+                        exitFailure

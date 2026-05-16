@@ -4,7 +4,23 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+### Features
+
+* Build runners now preflight final unsigned Conway transactions with
+  `cardano-tx-tools` phase-1 validation against the sampled
+  `ChainContext` before writing CBOR. Missing vkey witnesses remain a
+  signing-step concern; remaining structural ledger failures abort as
+  build failures.
+
 ### Maintainer Notes
+
+* Live `ChainContext` sampling now keeps protocol parameters, required
+  UTxOs, tip slot, and script evaluation inside one acquired N2C view.
+  The live mainnet `swap-cancel` smoke for
+  `59e10ca5e03b8d243c699fc45e1e18a2a825e2a09c5efa6954aec820a4d64dfe#0`
+  passed without rewriting existing `/tmp` outputs, and an intentional
+  missing-order-UTxO validation-context mutation failed with
+  `final-validation-failed`.
 
 * Local DevNet swap readiness evidence now proves the prerequisite for
   the SundaeSwap order-build slice: `just devnet-smoke swap-ready`

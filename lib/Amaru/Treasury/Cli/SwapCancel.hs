@@ -41,10 +41,7 @@ import Cardano.Ledger.Plutus.Data
     )
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Node.Client.Provider
-    ( evaluateTx
-    , queryProtocolParams
-    , queryUTxOByTxIn
-    , queryUpperBoundSlot
+    ( queryUpperBoundSlot
     )
 import Cardano.Node.Client.Validity qualified as Validity
 import Cardano.Slotting.Slot (SlotNo)
@@ -109,7 +106,11 @@ import Amaru.Treasury.Build.Result
     , ScriptResult (..)
     )
 import Amaru.Treasury.Build.SwapCancel qualified as Build
-import Amaru.Treasury.ChainContext (ChainContext (..))
+import Amaru.Treasury.ChainContext
+    ( ChainContext (..)
+    , networkFromMagic
+    , withLiveContext
+    )
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , resolveNetworkName
@@ -323,83 +324,85 @@ runSwapCancel g opts@SwapCancelOpts{..} = do
                         opts
                         backend
                         scoValidityHours
-                ctx <-
-                    resolveCancelContext
-                        logH
-                        opts
-                        backend
-                        (Set.fromList [walletTxIn, orderTxIn, orderScriptRef])
-                orderOut <- case Map.lookup orderTxIn (ccUtxos ctx) of
-                    Nothing ->
-                        abortWith
-                            logH
-                            opts
-                            "missing-utxos"
-                            ("missing order UTxO " <> txInToText orderTxIn)
-                    Just txOut -> pure txOut
-                datum <- case inlineOrderDatum orderOut of
-                    Left err ->
-                        abortWith
-                            logH
-                            opts
-                            "order-datum-invalid"
-                            err
-                    Right d -> pure d
-                parsed <- case validateSwapOrderDatum
-                    expectedOwners
-                    (vsTreasuryScriptHash selected)
-                    datum of
-                    Left err ->
-                        abortWith
-                            logH
-                            opts
-                            "order-datum-invalid"
-                            (renderSwapOrderDatumError err)
-                    Right ok -> pure ok
-                requiredSigners <-
-                    case selectCancelSigners
-                        registry
-                        parsed
-                        scoCancelSigners of
-                        Left err ->
-                            abortWith
-                                logH
-                                opts
-                                "bad-cli-input"
-                                err
-                        Right signers -> pure signers
-                let intent =
-                        SwapCancelIntent
-                            { sciWalletTxIn = walletTxIn
-                            , sciOrderTxIn = orderTxIn
-                            , sciOrderValue =
-                                orderOut ^. valueTxOutL
-                            , sciOrderScriptRef = orderScriptRef
-                            , sciTreasuryAddress = vsAddress selected
-                            , sciRequiredSigners = requiredSigners
-                            , sciUpperBound = upperBound
-                            }
-                buildResult <-
-                    runExceptT (Build.runSwapCancelAction ctx intent)
-                result <- case buildResult of
-                    Left err -> do
-                        let buildErr =
-                                nestActionBuildError
-                                    BuildActionSwapCancel
+                withLiveContext
+                    (networkFromMagic (goNetworkMagic g))
+                    backend
+                    (Set.fromList [walletTxIn, orderTxIn, orderScriptRef])
+                    $ \ctx -> do
+                        orderOut <- case Map.lookup orderTxIn (ccUtxos ctx) of
+                            Nothing ->
+                                abortWith
+                                    logH
+                                    opts
+                                    "missing-utxos"
+                                    ( "missing order UTxO "
+                                        <> txInToText orderTxIn
+                                    )
+                            Just txOut -> pure txOut
+                        datum <- case inlineOrderDatum orderOut of
+                            Left err ->
+                                abortWith
+                                    logH
+                                    opts
+                                    "order-datum-invalid"
                                     err
-                            message = renderBuildError buildErr
-                        abortWith
+                            Right d -> pure d
+                        parsed <- case validateSwapOrderDatum
+                            expectedOwners
+                            (vsTreasuryScriptHash selected)
+                            datum of
+                            Left err ->
+                                abortWith
+                                    logH
+                                    opts
+                                    "order-datum-invalid"
+                                    (renderSwapOrderDatumError err)
+                            Right ok -> pure ok
+                        requiredSigners <-
+                            case selectCancelSigners
+                                registry
+                                parsed
+                                scoCancelSigners of
+                                Left err ->
+                                    abortWith
+                                        logH
+                                        opts
+                                        "bad-cli-input"
+                                        err
+                                Right signers -> pure signers
+                        let intent =
+                                SwapCancelIntent
+                                    { sciWalletTxIn = walletTxIn
+                                    , sciOrderTxIn = orderTxIn
+                                    , sciOrderValue =
+                                        orderOut ^. valueTxOutL
+                                    , sciOrderScriptRef = orderScriptRef
+                                    , sciTreasuryAddress =
+                                        vsAddress selected
+                                    , sciRequiredSigners = requiredSigners
+                                    , sciUpperBound = upperBound
+                                    }
+                        buildResult <-
+                            runExceptT (Build.runSwapCancelAction ctx intent)
+                        result <- case buildResult of
+                            Left err -> do
+                                let buildErr =
+                                        nestActionBuildError
+                                            BuildActionSwapCancel
+                                            err
+                                    message = renderBuildError buildErr
+                                abortWith
+                                    logH
+                                    opts
+                                    (buildErrorCode buildErr)
+                                    message
+                            Right ok -> pure ok
+                        emitSwapCancelResult
                             logH
                             opts
-                            (buildErrorCode buildErr)
-                            message
-                    Right ok -> pure ok
-                emitSwapCancelResult
-                    logH
-                    opts
-                    intent
-                    selected
-                    result
+                            intent
+                            selected
+                            result
 
 parseCliTxIn
     :: IO.Handle
@@ -442,33 +445,6 @@ resolveValidityUpperBound logH opts backend = \case
                     opts
                     "validity-failed"
                     (T.pack (show err))
-
-resolveCancelContext
-    :: IO.Handle
-    -> SwapCancelOpts
-    -> Provider IO
-    -> Set.Set TxIn
-    -> IO ChainContext
-resolveCancelContext logH opts backend needed = do
-    pp <- queryProtocolParams backend
-    utxos <- queryUTxOByTxIn backend needed
-    let missing = Set.difference needed (Map.keysSet utxos)
-    unless (Set.null missing) $
-        abortWith
-            logH
-            opts
-            "missing-utxos"
-            ( "missing required UTxOs: "
-                <> T.intercalate
-                    ", "
-                    (txInToText <$> Set.toList missing)
-            )
-    pure
-        ChainContext
-            { ccPParams = pp
-            , ccUtxos = utxos
-            , ccEvaluateTx = evaluateTx backend
-            }
 
 inlineOrderDatum :: TxOut ConwayEra -> Either Text Data
 inlineOrderDatum txOut =

@@ -48,6 +48,7 @@ import Amaru.Treasury.Build.Common
     , indexedOutputs
     , strictMaybe
     , txIdText
+    , validateFinalPhase1
     )
 import Amaru.Treasury.Build.Error
     ( ActionBuildError
@@ -184,6 +185,13 @@ runSwapAction ctx intent rationale walletInput walletAddr = do
                                 BuildPhaseFeeAlignment
                                 (DiagnosticFeeAlignmentFailed (T.pack e))
                     Right ok -> pure ok
+            case validateFinalPhase1 ctx tx of
+                Left e ->
+                    throwE $
+                        actionBuildError
+                            BuildPhaseBuild
+                            (DiagnosticChecksFailed e)
+                Right () -> pure ()
             let body = tx ^. bodyTxL
                 feeLov = body ^. feeTxBodyL
                 totalColl = case body

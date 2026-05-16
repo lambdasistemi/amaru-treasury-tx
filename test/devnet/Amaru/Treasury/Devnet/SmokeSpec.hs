@@ -218,7 +218,9 @@ import Amaru.Treasury.Cli.Common
     )
 import Amaru.Treasury.Cli.Devnet
     ( DevnetRegistryInitOpts (..)
+    , DevnetStakeRewardInitOpts (..)
     , runDevnetRegistryInit
+    , runDevnetStakeRewardInit
     )
 import Amaru.Treasury.Cli.TxBuild qualified as TxBuild
 import Amaru.Treasury.Devnet.RegistryInit
@@ -228,6 +230,7 @@ import Amaru.Treasury.Devnet.RegistryInit
     , TreasuryTarget (..)
     )
 import Amaru.Treasury.Devnet.RegistryInit qualified as RegistryInit
+import Amaru.Treasury.Devnet.StakeRewardInit qualified as StakeRewardInit
 import Amaru.Treasury.IntentJSON
     ( SAction (..)
     , SomeTreasuryIntent (..)
@@ -284,6 +287,79 @@ instance FromJSON ShelleyGenesisTiming where
                 <$> o .: "epochLength"
                 <*> o .: "networkMagic"
                 <*> o .: "slotLength"
+
+data StakeRewardInitSummary = StakeRewardInitSummary
+    { srisPhase :: !T.Text
+    , srisNetwork :: !T.Text
+    , srisNetworkMagic :: !Int
+    , srisRegistryPath :: !FilePath
+    , srisAccountsPath :: !FilePath
+    , srisProvenancePath :: !FilePath
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON StakeRewardInitSummary where
+    parseJSON =
+        withObject "StakeRewardInitSummary" $ \o ->
+            StakeRewardInitSummary
+                <$> o .: "phase"
+                <*> o .: "network"
+                <*> o .: "networkMagic"
+                <*> o .: "registryPath"
+                <*> o .: "accountsPath"
+                <*> o .: "provenancePath"
+
+data StakeRewardInitAccounts = StakeRewardInitAccounts
+    { sriaPhase :: !T.Text
+    , sriaNetwork :: !T.Text
+    , sriaTreasury :: !StakeRewardInitAccount
+    , sriaPermissions :: !StakeRewardInitAccount
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON StakeRewardInitAccounts where
+    parseJSON =
+        withObject "StakeRewardInitAccounts" $ \o -> do
+            accounts <- o .: "accounts"
+            StakeRewardInitAccounts
+                <$> o .: "phase"
+                <*> o .: "network"
+                <*> accounts .: "treasury"
+                <*> accounts .: "permissions"
+
+data StakeRewardInitAccount = StakeRewardInitAccount
+    { sriaScriptHash :: !T.Text
+    , sriaRewardAccount :: !T.Text
+    , sriaLedgerNetwork :: !T.Text
+    , sriaRegistered :: !Bool
+    , sriaRewardsLovelace :: !Integer
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON StakeRewardInitAccount where
+    parseJSON =
+        withObject "StakeRewardInitAccount" $ \o ->
+            StakeRewardInitAccount
+                <$> o .: "scriptHash"
+                <*> o .: "rewardAccount"
+                <*> o .: "ledgerNetwork"
+                <*> o .: "registered"
+                <*> o .: "rewardsLovelace"
+
+data StakeRewardInitProvenance = StakeRewardInitProvenance
+    { sripPhase :: !T.Text
+    , sripSource :: !T.Text
+    , sripIssue :: !Int
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON StakeRewardInitProvenance where
+    parseJSON =
+        withObject "StakeRewardInitProvenance" $ \o ->
+            StakeRewardInitProvenance
+                <$> o .: "phase"
+                <*> o .: "source"
+                <*> o .: "issue"
 
 spec :: Spec
 spec =
@@ -644,6 +720,9 @@ spec =
         it
             "registry-init: publishes registry artifacts"
             (runForPhases ["registry-init"] registryInitSmoke)
+        it
+            "stake-reward-init: prepares treasury and permissions reward accounts"
+            (runForPhases ["stake-reward-init"] stakeRewardInitSmoke)
 
 runForPhases :: [String] -> IO () -> IO ()
 runForPhases accepted action = do
@@ -736,6 +815,50 @@ registryInitSmoke = do
                 , drioSigningKeyFile = signingKeyFile
                 , drioRunDir = runDir
                 }
+
+stakeRewardInitSmoke :: IO ()
+stakeRewardInitSmoke = do
+    runDir <- resolveRunDir
+    prepareRunDir runDir
+
+    gDir <- genesisDir
+    assertGenesisDir gDir
+    timing <- readShelleyTiming gDir
+    sgtNetworkMagic timing `shouldBe` 42
+
+    withCardanoNode gDir $ \socket startMs -> do
+        accepted <- probeNetworkMagic devnetMagic socket
+        accepted `shouldBe` True
+
+        copyNodeLog socket runDir
+        writeTiming runDir startMs socket timing
+        signingKeyFile <- writeGenesisPaymentSigningKey runDir
+        let globals =
+                GlobalOpts
+                    { goSocketPath = Just socket
+                    , goNetworkMagic = devnetMagic
+                    , goNetworkName = Just "devnet"
+                    }
+            fundingAddress =
+                T.unpack (renderAddr genesisAddr)
+            registryPath =
+                RegistryInit.registryInitRegistryPath runDir
+        runDevnetRegistryInit
+            globals
+            DevnetRegistryInitOpts
+                { drioFundingAddress = fundingAddress
+                , drioSigningKeyFile = signingKeyFile
+                , drioRunDir = runDir
+                }
+        runDevnetStakeRewardInit
+            globals
+            DevnetStakeRewardInitOpts
+                { dsrioRegistryFile = registryPath
+                , dsrioFundingAddress = fundingAddress
+                , dsrioSigningKeyFile = signingKeyFile
+                , dsrioRunDir = runDir
+                }
+        assertStakeRewardInitArtifacts runDir registryPath timing
 
 swapReadySmoke :: IO ()
 swapReadySmoke = do
@@ -3195,6 +3318,80 @@ readShelleyTiming gDir = do
                 )
                 *> error "unreachable"
         Right timing -> pure timing
+
+assertStakeRewardInitArtifacts
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> IO ()
+assertStakeRewardInitArtifacts runDir registryPath timing = do
+    let summaryPath = StakeRewardInit.stakeRewardInitSummaryPath runDir
+        accountsPath = StakeRewardInit.stakeRewardInitAccountsPath runDir
+        provenancePath = StakeRewardInit.stakeRewardInitProvenancePath runDir
+    traverse_
+        assertFileExists
+        [ summaryPath
+        , accountsPath
+        , provenancePath
+        ]
+    summary <-
+        decodeJsonFile
+            "stake-reward-init summary"
+            summaryPath
+    srisPhase summary `shouldBe` "stake-reward-init"
+    srisNetwork summary `shouldBe` "devnet"
+    srisNetworkMagic summary `shouldBe` sgtNetworkMagic timing
+    srisRegistryPath summary `shouldBe` registryPath
+    srisAccountsPath summary `shouldBe` accountsPath
+    srisProvenancePath summary `shouldBe` provenancePath
+
+    accounts <-
+        decodeJsonFile
+            "stake-reward-init accounts"
+            accountsPath
+    sriaPhase accounts `shouldBe` "stake-reward-init"
+    sriaNetwork accounts `shouldBe` "devnet"
+    assertPreparedStakeRewardAccount True (sriaTreasury accounts)
+    assertPreparedStakeRewardAccount False (sriaPermissions accounts)
+
+    provenance <-
+        decodeJsonFile
+            "stake-reward-init provenance"
+            provenancePath
+    sripPhase provenance `shouldBe` "stake-reward-init"
+    sripSource provenance `shouldBe` "amaru-treasury-tx"
+    sripIssue provenance `shouldBe` 148
+
+assertPreparedStakeRewardAccount
+    :: Bool -> StakeRewardInitAccount -> IO ()
+assertPreparedStakeRewardAccount expectedRegistered account = do
+    sriaScriptHash account
+        `shouldSatisfy` (not . T.null)
+    sriaRewardAccount account
+        `shouldSatisfy` (not . T.null)
+    sriaLedgerNetwork account `shouldBe` "Testnet"
+    sriaRegistered account `shouldBe` expectedRegistered
+    sriaRewardsLovelace account `shouldSatisfy` (>= 0)
+
+assertFileExists :: FilePath -> IO ()
+assertFileExists path = do
+    exists <- doesFileExist path
+    exists `shouldBe` True
+
+decodeJsonFile :: (FromJSON a) => String -> FilePath -> IO a
+decodeJsonFile label path =
+    eitherDecodeFileStrict path >>= \case
+        Left err ->
+            expectationFailure
+                ( "decode "
+                    <> label
+                    <> " at "
+                    <> path
+                    <> ": "
+                    <> err
+                )
+                *> error "unreachable"
+        Right value -> pure value
 
 epochDurationSeconds :: ShelleyGenesisTiming -> Double
 epochDurationSeconds timing =

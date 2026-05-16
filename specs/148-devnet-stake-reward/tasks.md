@@ -139,27 +139,44 @@ the permissions reward account network as `Testnet`.
 
 ### Tests For User Story 2
 
-- [ ] T022 [US2] RED: add unified disburse intent coverage in
+- [x] T022 [US2] RED: add unified disburse intent coverage in
   `test/unit/Amaru/Treasury/IntentJSONSpec.hs` showing DevNet
-  permissions reward accounts translate as `Testnet`.
-- [ ] T023 [US2] RED: add legacy disburse intent coverage in
+  permissions reward accounts translate as `Testnet` (commit:
+  602d1ed).
+- [x] T023 [US2] RED: add legacy disburse intent coverage in
   `test/unit/Amaru/Treasury/Tx/DisburseSpec.hs` if the legacy parser is
-  still used by any command or fixture path.
+  still used by any command or fixture path (commit: 602d1ed).
 
 ### Implementation For User Story 2
 
-- [ ] T024 [US2] Replace Mainnet-only disburse reward-account parsing
+- [x] T024 [US2] Replace Mainnet-only disburse reward-account parsing
   with `parseRewardAccountForNetwork` in
-  `lib/Amaru/Treasury/IntentJSON.hs`.
-- [ ] T025 [US2] Update `lib/Amaru/Treasury/Tx/DisburseIntentJSON.hs`
+  `lib/Amaru/Treasury/IntentJSON.hs` (commit: 602d1ed).
+- [x] T025 [US2] Update `lib/Amaru/Treasury/Tx/DisburseIntentJSON.hs`
   or document an explicit removal/deprecation path if that legacy
-  parser is no longer used.
-- [ ] T026 [US2] GREEN: run `nix develop --quiet -c just unit
-  "reward accounts as Testnet"` and focused disburse parser tests.
-- [ ] T027 [US2] Commit the parser slice as
+  parser is no longer used (commit: 602d1ed).
+- [x] T026 [US2] GREEN: run `nix develop --quiet -c just unit
+  "reward accounts as Testnet"` and focused disburse parser tests
+  (commit: 602d1ed).
+- [x] T027 [US2] Commit the parser slice as
   `fix(devnet): parse disburse reward accounts by network` with
   `Tasks: T022,T023,T024,T025,T026,T027` in the commit body and task
-  lines updated with the commit short SHA.
+  lines updated with the commit short SHA (commit: 602d1ed).
+
+Evidence:
+
+- Subagent RED proof: `nix develop --quiet -c just unit "reward
+  accounts as Testnet"` failed before implementation with two
+  `expected: Testnet` / `but got: Mainnet` failures.
+- Orchestrator review accepted commit `602d1ed`, whose body carries
+  `Tasks: T022,T023,T024,T025,T026,T027`.
+- `nix develop --quiet -c just unit "reward accounts as Testnet"`
+  passed with 4 examples and 0 failures.
+- `nix develop --quiet -c just unit "DisburseIntentJSON"` passed with
+  2 examples and 0 failures.
+- `nix develop --quiet -c cabal build lib:amaru-treasury-tx -O0`
+  exited 0.
+- `git diff --check` exited 0.
 
 ## Phase 5: User Story 3 - Thin DevNet Smoke Proof (Priority: P2)
 

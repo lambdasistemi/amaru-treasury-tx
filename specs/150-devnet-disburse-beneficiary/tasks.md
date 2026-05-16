@@ -32,7 +32,7 @@
 - [x] T014 Run `.specify/scripts/bash/check-prerequisites.sh --json
   --require-tasks --include-tasks` and `git diff --check`.
 - [x] T015 Commit the spec/process slice.
-- [ ] T016 Update PR #155 body with committed phase assets.
+- [x] T016 Update PR #155 body with committed phase assets.
 
 ## Phase 3: User Story 1 - Shipped Disburse Submit Command (Priority: P1)
 

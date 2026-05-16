@@ -136,6 +136,14 @@ and library compile before live smoke.
 
 ## Phase 4: User Story 2 - Thin DevNet Smoke Proof (Priority: P1)
 
+### Phase 3 Review Fix
+
+- [ ] T044 [US1] Fix live command address rendering so
+  `governance-withdrawal-init` emits Bech32 addresses instead of
+  UTF-8-decoding serialized binary address bytes, add a regression test
+  that covers a real DevNet funding/wallet address render path, and
+  rerun the focused command tests/build before the smoke slice resumes.
+
 **Goal**: `just devnet-smoke governance-withdrawal-init` proves the
 shipped command runner path on a fresh governance-enabled local DevNet.
 

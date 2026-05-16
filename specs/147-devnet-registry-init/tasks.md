@@ -140,35 +140,72 @@ publishes and verifies registry/reference-script UTxOs.
 
 ### Tests For Command Slice
 
-- [ ] T035 [US1] RED: add focused CLI parser coverage showing
+- [x] T035 [US1] RED: add focused CLI parser coverage showing
   `amaru-treasury-tx --network devnet devnet registry-init ...` parses
   as the registry-init command and that non-DevNet networks are rejected
   before submission.
-- [ ] T036 [US1] RED: add command-runner or smoke coverage that fails
+- [x] T036 [US1] RED: add command-runner or smoke coverage that fails
   before the shipped command path exists.
 
 ### Implementation For Command Slice
 
-- [ ] T037 [US1] Add the DevNet registry-init command parser and option
+- [x] T037 [US1] Add the DevNet registry-init command parser and option
   record under `lib/Amaru/Treasury/Cli/`, using the existing top-level
   `GlobalOpts` for `--network` and `--node-socket`.
-- [ ] T038 [US1] Wire the command into `Amaru.Treasury.Cli`, the
+- [x] T038 [US1] Wire the command into `Amaru.Treasury.Cli`, the
   `amaru-treasury-tx` executable dispatch, and Cabal exposure as needed.
-- [ ] T039 [US1] Implement the command runner as a thin wrapper around
+- [x] T039 [US1] Implement the command runner as a thin wrapper around
   `Amaru.Treasury.Devnet.RegistryInit`: parse explicit funding address,
   signing key file, and run directory; open the local node
   provider/submitter; publish registry init; verify the expected anchors;
   write the existing artifact contract; and print command-prefixed
   success lines.
-- [ ] T040 [US1] Ensure `just devnet-smoke registry-init` proves the
+- [x] T040 [US1] Ensure `just devnet-smoke registry-init` proves the
   same production command path rather than a smoke-only transaction
   construction path.
-- [ ] T041 [US1] GREEN: run focused parser/unit tests,
+- [x] T041 [US1] GREEN: run focused parser/unit tests,
   `nix develop --quiet -c cabal build exe:amaru-treasury-tx -O0`,
   `nix develop --quiet -c cabal build test:devnet-tests -O0`, and
   `nix develop --quiet -c just devnet-smoke registry-init`.
-- [ ] T042 [US1] Commit the command slice as
+- [x] T042 [US1] Commit the command slice as
   `feat(devnet): expose registry init command`.
+
+Evidence:
+
+- RED: focused command parser/unit coverage failed before implementation
+  because `Amaru.Treasury.Cli.Devnet` and `CmdDevnetRegistryInit` did
+  not exist.
+- RED: devnet smoke runner coverage failed before implementation because
+  `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` could not import the
+  missing command runner.
+- REVIEW CORRECTION: the first returned command slice printed
+  smoke-style key names under the `registry-init:` prefix; the same
+  subagent amended the commit so CLI output matches
+  `contracts/devnet-registry-init.md`.
+- GREEN: local orchestrator verification of
+  `9acc8c9d5e67f163ebcc5cb0ee4b204f76535612` passed `git diff
+  --check`, `nix develop --quiet -c just unit "registry-init command"`
+  with 3 examples and 0 failures,
+  `nix develop --quiet -c cabal build exe:amaru-treasury-tx -O0`,
+  `nix develop --quiet -c cabal build test:devnet-tests -O0`,
+  focused `fourmolu -m check`, and `cabal-fmt -c
+  amaru-treasury-tx.cabal`.
+- LIVE GREEN: `nix develop --quiet -c just devnet-smoke registry-init`
+  passed with 2 devnet examples and 0 failures in
+  `runs/devnet/20260516T193404Z`; seed split tx
+  `82b1f12f0ceeae86c50753a61528599c4d7b8ccef769a56accd3011c0e24084d`,
+  registry mint tx
+  `1f427e73979ee6150e69944fb384cbe0809148e64307a2a75221bacea8cb4ff9`,
+  reference scripts tx
+  `5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44`.
+- LIVE ANCHORS: scopes
+  `1f427e73979ee6150e69944fb384cbe0809148e64307a2a75221bacea8cb4ff9#0`,
+  registry
+  `1f427e73979ee6150e69944fb384cbe0809148e64307a2a75221bacea8cb4ff9#1`,
+  permissions
+  `5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44#0`,
+  treasury
+  `5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44#1`.
 
 ### Docs And Metadata Follow-Up
 

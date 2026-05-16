@@ -103,23 +103,14 @@ For live local-node evidence, also run the opt-in devnet smoke:
 nix develop --quiet -c just devnet-smoke node
 nix develop --quiet -c just devnet-smoke registry-init
 nix develop --quiet -c just devnet-smoke stake-reward-init
-nix develop --quiet -c just devnet-smoke governance
-nix develop --quiet -c just devnet-smoke withdraw
+nix develop --quiet -c just devnet-smoke governance-withdrawal-init
 nix develop --quiet -c just devnet-smoke swap-ready
 ```
 
 Record the generated `runs/devnet/<timestamp>/` directory in the
 release notes when this check is used. The node phase proves the
 `cardano-node-clients` DevNet node boundary, socket magic `42`, and
-50-second epoch timing. The governance phase copies and patches a
-short-epoch genesis, submits the treasury-withdrawal governance action
-through the pinned `cardano-node-clients` governance stack, votes it
-through, and observes the Amaru treasury script reward account funded.
-The latest branch evidence is `runs/devnet/20260513T143827Z` on
-`cardano-node-clients` main commit
-`d6773e4cd8a2421617568c8dac0972b0f312a509`, with reward account
-`5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34` moving
-from `0` to `2000000` lovelace.
+50-second epoch timing.
 
 The registry-init phase proves the production-backed DevNet registry
 and reference-script publication command. The stake-reward-init phase
@@ -135,23 +126,28 @@ treasury reward account
 `registered: false`. This is prerequisite evidence only; governance
 funding and disburse remain separate slices.
 
-The withdrawal phase creates fresh local governance prerequisite
-evidence, resolves the funded treasury script reward account through
-`withdraw-wizard`, runs the release-facing `tx-build` path to write
-unsigned CBOR plus JSON/Markdown reports, then signs and submits the
-built withdrawal inside the opt-in DevNet harness. Latest branch
-withdrawal evidence is `runs/devnet/20260515T091231Z`,
+The governance-withdrawal-init phase copies and patches a short-epoch
+genesis, runs registry-init and stake-reward-init prerequisites, then
+invokes the shipped `devnet governance-withdrawal-init` command. The
+production command submits and votes through the treasury-withdrawal
+governance action, observes the reward account funded, builds the
+withdrawal through the production withdraw/tx-build path, signs/submits
+it, and writes the #150 handoff at
+`governance-withdrawal-init/materialized.json`. Latest branch evidence
+is `runs/devnet/20260516T231003Z`: proposal tx
+`baffa774b368b1da8c3ff80be399bcf6fa63b5cff658b6889fc00109da218e23`,
+governance action
+`baffa774b368b1da8c3ff80be399bcf6fa63b5cff658b6889fc00109da218e23#0`,
+vote tx
+`009801303fc5cc3c3dfe474c30cc4b7d31e99b5af29467cc317072ea6b728c45`,
 reward account
-`ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af`, reward
-`2000000` lovelace, tx id
-`ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d`,
-fee `457683` lovelace, validity upper bound slot `222`, submitted tx id
-matching the build id, materialized output
-`ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d#0`,
-reward-after-submit `0`, treasury ADA `200000000 -> 202000000`, and
-report/proof paths under
-`withdraw/report.json`, `withdraw/signed-tx.cbor.hex`,
-`withdraw/submit.log`, and `withdraw/materialized.json`.
+`b2b7201c62e43ae8e03b61c96931379ebbcdce61befc3f4e4b1f4be4`, reward
+`0 -> 2000000 -> 0`, withdrawal tx
+`4a87409b52b8104d51d41df7ee562196cf33621f64c4c40985b4aef5ff21e9bd`,
+fee `456417`, materialized output
+`4a87409b52b8104d51d41df7ee562196cf33621f64c4c40985b4aef5ff21e9bd#0`,
+and treasury ADA `200000000 -> 202000000`. The legacy `withdraw`
+smoke phase remains a compatibility alias for the same command proof.
 
 The swap readiness phase uses the checked-in public
 `SundaeSwap-finance/sundae-contracts@be33466b7dbe0f8e6c0e0f46ff23737897f45835`
@@ -173,39 +169,31 @@ treasury withdrawal setup (#149), and disburse/beneficiary receipt
 (#150). Older evidence slices also track governance action (#82),
 withdrawal (#83), disburse (#86), SundaeSwap V3 contract readiness
 (#132), SundaeSwap V3 order build/funding (#84), SundaeSwap V3 order
-spend (#85), and reorganize (#87). Do not record #149 governance
-funding, #150 disburse, swap-order build/funding, swap-spend, or
-reorganize evidence until those slices land and their phase-specific
-smoke commands pass.
+spend (#85), and reorganize (#87). Do not record #150 disburse,
+swap-order build/funding, swap-spend, or reorganize evidence until
+those slices land and their phase-specific smoke commands pass.
 SundaeSwap compatibility claims must be based on the public V3
 contracts/SDK, not on an Amaru-only toy validator.
 
 Release note wording for this slice:
 
 ```text
-Local DevNet governance evidence now proves the first treasury setup
-slice: the smoke submits and votes through a treasury-withdrawal
-governance action, then observes the Amaru treasury script reward
-account funded through Provider reward queries. Evidence:
-runs/devnet/20260513T143827Z, cardano-node-clients main
-d6773e4cd8a2421617568c8dac0972b0f312a509, reward
-5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34
-0 -> 2000000 lovelace.
-
-Local DevNet withdrawal evidence now proves the second treasury setup
-slice: the smoke observes a funded Amaru treasury script reward
-account, writes a schema-v1 withdraw intent, builds unsigned
-withdrawal CBOR plus JSON/Markdown reports through tx-build, then signs
-and submits the withdrawal inside the opt-in DevNet harness and proves
-ADA materialized at the treasury script address. Evidence:
-runs/devnet/20260515T091231Z, reward account
-ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af,
-reward 2000000 lovelace, tx id
-ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d,
-fee 457683 lovelace, validity upper bound slot 222, materialized output
-ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d#0,
-reward 2000000 -> 0 after submit, and treasury ADA
-200000000 -> 202000000. This is not disburse,
+Local DevNet governance-withdrawal-init evidence now proves #149: the
+smoke runs registry-init and stake-reward-init prerequisites, invokes
+the shipped `devnet governance-withdrawal-init` command, submits and
+votes through the treasury-withdrawal governance action, observes the
+reward account funded, builds/signs/submits the withdrawal through the
+production withdraw/tx-build path, and records the materialized treasury
+UTxO handoff for #150. Evidence: runs/devnet/20260516T231003Z,
+proposal baffa774b368b1da8c3ff80be399bcf6fa63b5cff658b6889fc00109da218e23,
+action baffa774b368b1da8c3ff80be399bcf6fa63b5cff658b6889fc00109da218e23#0,
+vote 009801303fc5cc3c3dfe474c30cc4b7d31e99b5af29467cc317072ea6b728c45,
+reward account b2b7201c62e43ae8e03b61c96931379ebbcdce61befc3f4e4b1f4be4,
+reward 0 -> 2000000 -> 0 lovelace, withdrawal
+4a87409b52b8104d51d41df7ee562196cf33621f64c4c40985b4aef5ff21e9bd,
+fee 456417 lovelace, materialized output
+4a87409b52b8104d51d41df7ee562196cf33621f64c4c40985b4aef5ff21e9bd#0,
+and treasury ADA 200000000 -> 202000000. This is not disburse,
 SundaeSwap order, or reorganize proof.
 
 Local DevNet swap readiness evidence now proves the prerequisite for

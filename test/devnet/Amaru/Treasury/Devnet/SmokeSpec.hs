@@ -170,7 +170,6 @@ import Data.Maybe (fromJust, fromMaybe)
 import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
-import Data.Text.IO qualified as TIO
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import Data.Void (Void)
@@ -209,6 +208,7 @@ import Test.Hspec
     , shouldBe
     , shouldSatisfy
     )
+import Text.Read (readMaybe)
 
 import Amaru.Treasury.Backend.N2C
     ( probeNetworkMagic
@@ -217,28 +217,21 @@ import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     )
 import Amaru.Treasury.Cli.Devnet
-    ( DevnetRegistryInitOpts (..)
+    ( DevnetGovernanceWithdrawalInitOpts (..)
+    , DevnetRegistryInitOpts (..)
     , DevnetStakeRewardInitOpts (..)
+    , runDevnetGovernanceWithdrawalInit
     , runDevnetRegistryInit
     , runDevnetStakeRewardInit
     )
-import Amaru.Treasury.Cli.TxBuild qualified as TxBuild
+import Amaru.Treasury.Devnet.GovernanceWithdrawalInit qualified as GovernanceWithdrawalInit
 import Amaru.Treasury.Devnet.RegistryInit
     ( DevnetRegistryAnchors (..)
-    , DevnetRegistryInitConfig (..)
     , DevnetRegistryPublication (..)
     , TreasuryTarget (..)
     )
 import Amaru.Treasury.Devnet.RegistryInit qualified as RegistryInit
 import Amaru.Treasury.Devnet.StakeRewardInit qualified as StakeRewardInit
-import Amaru.Treasury.IntentJSON
-    ( SAction (..)
-    , SomeTreasuryIntent (..)
-    , TreasuryIntent (..)
-    , WithdrawInputs (..)
-    , decodeTreasuryIntentFile
-    , encodeSomeTreasuryIntent
-    )
 import Amaru.Treasury.Redeemer
     ( RawPlutusData (..)
     , emptyListRedeemer
@@ -249,7 +242,6 @@ import Amaru.Treasury.Registry.Derive
     , scriptHashToHex
     )
 import Amaru.Treasury.Report qualified as Report
-import Amaru.Treasury.Report.Render qualified as ReportRender
 import Amaru.Treasury.Scope
     ( ScopeId (CoreDevelopment)
     )
@@ -259,11 +251,6 @@ import Amaru.Treasury.Sundae.Contracts
     , sundaeOrderValidatorSourceCommit
     , sundaeOrderValidatorSourceRepository
     , sundaeOrderValidatorTitle
-    )
-import Amaru.Treasury.Tx.AttachWitness
-    ( decodeUnsignedTxHex
-    , encodeSignedTxHex
-    , renderAttachError
     )
 import Amaru.Treasury.Tx.Submit
     ( renderTxId
@@ -360,6 +347,168 @@ instance FromJSON StakeRewardInitProvenance where
                 <$> o .: "phase"
                 <*> o .: "source"
                 <*> o .: "issue"
+
+data GovernanceWithdrawalInitSummary = GovernanceWithdrawalInitSummary
+    { gwisPhase :: !T.Text
+    , gwisStatus :: !T.Text
+    , gwisNetwork :: !T.Text
+    , gwisNetworkMagic :: !Int
+    , gwisRunDirectory :: !FilePath
+    , gwisRegistryPath :: !FilePath
+    , gwisStakeRewardPath :: !FilePath
+    , gwisAmountLovelace :: !Integer
+    , gwisGovernancePath :: !FilePath
+    , gwisWithdrawalPath :: !FilePath
+    , gwisMaterializationPath :: !FilePath
+    , gwisProvenancePath :: !FilePath
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON GovernanceWithdrawalInitSummary where
+    parseJSON =
+        withObject "GovernanceWithdrawalInitSummary" $ \o ->
+            GovernanceWithdrawalInitSummary
+                <$> o .: "phase"
+                <*> o .: "status"
+                <*> o .: "network"
+                <*> o .: "networkMagic"
+                <*> o .: "runDirectory"
+                <*> o .: "registryPath"
+                <*> o .: "stakeRewardPath"
+                <*> o .: "amountLovelace"
+                <*> o .: "governancePath"
+                <*> o .: "withdrawalPath"
+                <*> o .: "materializationPath"
+                <*> o .: "provenancePath"
+
+data GovernanceWithdrawalInitGovernance = GovernanceWithdrawalInitGovernance
+    { gwigPhase :: !T.Text
+    , gwigNetwork :: !T.Text
+    , gwigProposalTxId :: !T.Text
+    , gwigGovernanceActionId :: !T.Text
+    , gwigVoteTxId :: !T.Text
+    , gwigTreasuryRewardAccount :: !T.Text
+    , gwigTreasuryScriptHash :: !T.Text
+    , gwigAmountLovelace :: !Integer
+    , gwigRewardBeforeLovelace :: !Integer
+    , gwigRewardAfterGovernanceLovelace :: !Integer
+    , gwigSetupEpoch :: !Word64
+    , gwigVoteEpoch :: !Word64
+    , gwigFinalEpoch :: !Word64
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON GovernanceWithdrawalInitGovernance where
+    parseJSON =
+        withObject "GovernanceWithdrawalInitGovernance" $ \o ->
+            GovernanceWithdrawalInitGovernance
+                <$> o .: "phase"
+                <*> o .: "network"
+                <*> o .: "proposalTxId"
+                <*> o .: "governanceActionId"
+                <*> o .: "voteTxId"
+                <*> o .: "treasuryRewardAccount"
+                <*> o .: "treasuryScriptHash"
+                <*> o .: "amountLovelace"
+                <*> o .: "rewardBeforeLovelace"
+                <*> o .: "rewardAfterGovernanceLovelace"
+                <*> o .: "setupEpoch"
+                <*> o .: "voteEpoch"
+                <*> o .: "finalEpoch"
+
+data GovernanceWithdrawalInitWithdrawal = GovernanceWithdrawalInitWithdrawal
+    { gwiwPhase :: !T.Text
+    , gwiwNetwork :: !T.Text
+    , gwiwIntentPath :: !FilePath
+    , gwiwTxBodyPath :: !FilePath
+    , gwiwReportJsonPath :: !FilePath
+    , gwiwReportMarkdownPath :: !FilePath
+    , gwiwTxBuildLogPath :: !FilePath
+    , gwiwSignedTxPath :: !FilePath
+    , gwiwSubmitLogPath :: !FilePath
+    , gwiwTxId :: !T.Text
+    , gwiwSubmittedTxId :: !T.Text
+    , gwiwFeeLovelace :: !Integer
+    , gwiwRewardBeforeSubmitLovelace :: !Integer
+    , gwiwRewardAfterSubmitLovelace :: !Integer
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON GovernanceWithdrawalInitWithdrawal where
+    parseJSON =
+        withObject "GovernanceWithdrawalInitWithdrawal" $ \o ->
+            GovernanceWithdrawalInitWithdrawal
+                <$> o .: "phase"
+                <*> o .: "network"
+                <*> o .: "intentPath"
+                <*> o .: "txBodyPath"
+                <*> o .: "reportJsonPath"
+                <*> o .: "reportMarkdownPath"
+                <*> o .: "txBuildLogPath"
+                <*> o .: "signedTxPath"
+                <*> o .: "submitLogPath"
+                <*> o .: "txId"
+                <*> o .: "submittedTxId"
+                <*> o .: "feeLovelace"
+                <*> o .: "rewardBeforeSubmitLovelace"
+                <*> o .: "rewardAfterSubmitLovelace"
+
+data GovernanceWithdrawalInitMaterialization
+    = GovernanceWithdrawalInitMaterialization
+    { gwimPhase :: !T.Text
+    , gwimNetwork :: !T.Text
+    , gwimGovernanceActionId :: !T.Text
+    , gwimTreasuryRewardAccount :: !T.Text
+    , gwimSubmittedTxId :: !T.Text
+    , gwimTreasuryMaterializedTxIn :: !T.Text
+    , gwimTreasuryAddress :: !T.Text
+    , gwimMaterializedAdaLovelace :: !Integer
+    , gwimRewardBeforeSubmitLovelace :: !Integer
+    , gwimRewardAfterSubmitLovelace :: !Integer
+    , gwimTreasuryUtxoLovelaceBefore :: !Integer
+    , gwimTreasuryUtxoLovelaceAfter :: !Integer
+    , gwimRegistryPath :: !FilePath
+    , gwimStakeRewardPath :: !FilePath
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON GovernanceWithdrawalInitMaterialization where
+    parseJSON =
+        withObject "GovernanceWithdrawalInitMaterialization" $ \o ->
+            GovernanceWithdrawalInitMaterialization
+                <$> o .: "phase"
+                <*> o .: "network"
+                <*> o .: "governanceActionId"
+                <*> o .: "treasuryRewardAccount"
+                <*> o .: "submittedTxId"
+                <*> o .: "treasuryMaterializedTxIn"
+                <*> o .: "treasuryAddress"
+                <*> o .: "materializedAdaLovelace"
+                <*> o .: "rewardBeforeSubmitLovelace"
+                <*> o .: "rewardAfterSubmitLovelace"
+                <*> o .: "treasuryUtxoLovelaceBefore"
+                <*> o .: "treasuryUtxoLovelaceAfter"
+                <*> o .: "registryPath"
+                <*> o .: "stakeRewardPath"
+
+data GovernanceWithdrawalInitProvenance = GovernanceWithdrawalInitProvenance
+    { gwipPhase :: !T.Text
+    , gwipSource :: !T.Text
+    , gwipIssue :: !Int
+    , gwipParentIssue :: !Int
+    , gwipDependsOnIssues :: ![Int]
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON GovernanceWithdrawalInitProvenance where
+    parseJSON =
+        withObject "GovernanceWithdrawalInitProvenance" $ \o ->
+            GovernanceWithdrawalInitProvenance
+                <$> o .: "phase"
+                <*> o .: "source"
+                <*> o .: "issue"
+                <*> o .: "parentIssue"
+                <*> o .: "dependsOnIssues"
 
 spec :: Spec
 spec =
@@ -520,6 +669,124 @@ spec =
                                     .= renderTxId
                                         (drpReferenceScriptsTxId publication)
                                 ]
+                        ]
+        describe "governance-withdrawal-init diagnostics" $ do
+            it "records command artifact fields for the #150 handoff" $ do
+                let result = sampleGovernanceWithdrawalInitResult
+                GovernanceWithdrawalInit.governanceWithdrawalInitSummaryValue
+                    (sgtNetworkMagic sampleTiming)
+                    sampleRunDir
+                    result
+                    `shouldBe` object
+                        [ "phase"
+                            .= ("governance-withdrawal-init" :: T.Text)
+                        , "status" .= ("passed" :: T.Text)
+                        , "network" .= ("devnet" :: T.Text)
+                        , "networkMagic" .= sgtNetworkMagic sampleTiming
+                        , "runDirectory" .= sampleRunDir
+                        , "registryPath" .= sampleRegistryPath
+                        , "stakeRewardPath" .= sampleStakeRewardPath
+                        , "amountLovelace" .= (2_000_000 :: Integer)
+                        , "governancePath"
+                            .= GovernanceWithdrawalInit.governanceWithdrawalInitGovernancePath
+                                sampleRunDir
+                        , "withdrawalPath"
+                            .= GovernanceWithdrawalInit.governanceWithdrawalInitWithdrawalPath
+                                sampleRunDir
+                        , "materializationPath"
+                            .= GovernanceWithdrawalInit.governanceWithdrawalInitMaterializationPath
+                                sampleRunDir
+                        , "provenancePath"
+                            .= GovernanceWithdrawalInit.governanceWithdrawalInitProvenancePath
+                                sampleRunDir
+                        ]
+                GovernanceWithdrawalInit.governanceWithdrawalInitGovernanceValue
+                    result
+                    `shouldBe` object
+                        [ "phase"
+                            .= ("governance-withdrawal-init" :: T.Text)
+                        , "network" .= ("devnet" :: T.Text)
+                        , "proposalTxId"
+                            .= sampleGovernanceProposalTxId
+                        , "governanceActionId"
+                            .= sampleGovernanceActionId
+                        , "voteTxId" .= sampleGovernanceVoteTxId
+                        , "treasuryRewardAccount"
+                            .= sampleGovernanceTreasuryHash
+                        , "treasuryScriptHash"
+                            .= sampleGovernanceTreasuryHash
+                        , "amountLovelace" .= (2_000_000 :: Integer)
+                        , "rewardBeforeLovelace" .= (0 :: Integer)
+                        , "rewardAfterGovernanceLovelace"
+                            .= (2_000_000 :: Integer)
+                        , "setupEpoch" .= (2 :: Word64)
+                        , "voteEpoch" .= (3 :: Word64)
+                        , "finalEpoch" .= (4 :: Word64)
+                        ]
+                GovernanceWithdrawalInit.governanceWithdrawalInitWithdrawalValue
+                    result
+                    `shouldBe` object
+                        [ "phase"
+                            .= ("governance-withdrawal-init" :: T.Text)
+                        , "network" .= ("devnet" :: T.Text)
+                        , "intentPath"
+                            .= GovernanceWithdrawalInit.governanceWithdrawalInitIntentPath
+                                sampleRunDir
+                        , "txBodyPath"
+                            .= GovernanceWithdrawalInit.governanceWithdrawalInitTxBodyPath
+                                sampleRunDir
+                        , "reportJsonPath"
+                            .= GovernanceWithdrawalInit.governanceWithdrawalInitReportJsonPath
+                                sampleRunDir
+                        , "reportMarkdownPath"
+                            .= GovernanceWithdrawalInit.governanceWithdrawalInitReportMarkdownPath
+                                sampleRunDir
+                        , "txBuildLogPath"
+                            .= GovernanceWithdrawalInit.governanceWithdrawalInitTxBuildLogPath
+                                sampleRunDir
+                        , "signedTxPath"
+                            .= GovernanceWithdrawalInit.governanceWithdrawalInitSignedTxPath
+                                sampleRunDir
+                        , "submitLogPath"
+                            .= GovernanceWithdrawalInit.governanceWithdrawalInitSubmitLogPath
+                                sampleRunDir
+                        , "txId" .= sampleGovernanceWithdrawTxId
+                        , "submittedTxId"
+                            .= sampleGovernanceWithdrawTxId
+                        , "feeLovelace" .= (173_000 :: Integer)
+                        , "rewardBeforeSubmitLovelace"
+                            .= (2_000_000 :: Integer)
+                        , "rewardAfterSubmitLovelace"
+                            .= (0 :: Integer)
+                        ]
+                GovernanceWithdrawalInit.governanceWithdrawalInitMaterializationValue
+                    result
+                    `shouldBe` object
+                        [ "phase"
+                            .= ("governance-withdrawal-init" :: T.Text)
+                        , "network" .= ("devnet" :: T.Text)
+                        , "governanceActionId"
+                            .= sampleGovernanceActionId
+                        , "treasuryRewardAccount"
+                            .= sampleGovernanceTreasuryHash
+                        , "submittedTxId"
+                            .= sampleGovernanceWithdrawTxId
+                        , "treasuryMaterializedTxIn"
+                            .= sampleGovernanceMaterializedTxIn
+                        , "treasuryAddress"
+                            .= sampleGovernanceTreasuryAddress
+                        , "materializedAdaLovelace"
+                            .= (2_000_000 :: Integer)
+                        , "rewardBeforeSubmitLovelace"
+                            .= (2_000_000 :: Integer)
+                        , "rewardAfterSubmitLovelace"
+                            .= (0 :: Integer)
+                        , "treasuryUtxoLovelaceBefore"
+                            .= (0 :: Integer)
+                        , "treasuryUtxoLovelaceAfter"
+                            .= (2_000_000 :: Integer)
+                        , "registryPath" .= sampleRegistryPath
+                        , "stakeRewardPath" .= sampleStakeRewardPath
                         ]
         describe "withdraw diagnostics" $ do
             it "records submitted withdrawal materialization proof" $ do
@@ -712,8 +979,11 @@ spec =
             "governance: funds the treasury script reward account"
             (runForPhases ["governance", "all"] governanceSmoke)
         it
-            "withdraw: submits built rewards and materializes ADA"
-            (runForPhases ["withdraw"] withdrawSmoke)
+            "governance-withdrawal-init / withdraw: proves the production command runner"
+            ( runForPhases
+                ["governance-withdrawal-init", "withdraw", "all"]
+                withdrawSmoke
+            )
         it
             "swap-ready: publishes SundaeSwap V3 order validator readiness"
             (runForPhases ["swap-ready"] swapReadySmoke)
@@ -758,33 +1028,78 @@ nodeSmoke = do
         writeSummary runDir socket timing "passed"
         putSummaryLines runDir socket timing "passed"
 
-withdrawSmoke :: IO ()
-withdrawSmoke = do
+governanceWithdrawalInitSmoke :: IO ()
+governanceWithdrawalInitSmoke = do
     runDir <- resolveRunDir
-    withFundedGovernanceReward
-        runDir
-        ( RegistryInit.prepareDevnetWithdrawalRegistry
-            devnetRegistryInitConfig
-        )
-        $ \socket timing provider submitter registry evidence -> do
-            writeGovernanceArtifacts runDir socket timing evidence
-            rewards <-
-                writeWithdrawalIntentArtifacts
-                    runDir
-                    socket
-                    timing
-                    provider
-                    registry
-                    evidence
-            writeWithdrawalBuildArtifacts
-                runDir
-                socket
-                timing
-                provider
-                submitter
-                registry
-                evidence
-                rewards
+    prepareRunDir runDir
+
+    sourceGenesis <- genesisDir
+    assertGenesisDir sourceGenesis
+    let smokeGenesis = runDir </> "genesis"
+    copyGovernanceGenesis sourceGenesis smokeGenesis
+    patchGovernanceGenesis smokeGenesis
+    timing <- readShelleyTiming smokeGenesis
+    let epochDuration = epochDurationSeconds timing
+    sgtNetworkMagic timing `shouldBe` 42
+    epochDuration `shouldSatisfy` (<= 10)
+
+    rewardTimeoutSeconds <- resolveRewardTimeoutSeconds
+
+    withCardanoNode smokeGenesis $ \socket startMs -> do
+        accepted <- probeNetworkMagic devnetMagic socket
+        accepted `shouldBe` True
+
+        copyNodeLog socket runDir
+        writeTiming runDir startMs socket timing
+        signingKeyFile <- writeGenesisPaymentSigningKey runDir
+        let globals =
+                GlobalOpts
+                    { goSocketPath = Just socket
+                    , goNetworkMagic = devnetMagic
+                    , goNetworkName = Just "devnet"
+                    }
+            fundingAddress =
+                T.unpack (renderAddr genesisAddr)
+            registryPath =
+                RegistryInit.registryInitRegistryPath runDir
+            stakeRewardPath =
+                StakeRewardInit.stakeRewardInitAccountsPath runDir
+        runDevnetRegistryInit
+            globals
+            DevnetRegistryInitOpts
+                { drioFundingAddress = fundingAddress
+                , drioSigningKeyFile = signingKeyFile
+                , drioRunDir = runDir
+                }
+        runDevnetStakeRewardInit
+            globals
+            DevnetStakeRewardInitOpts
+                { dsrioRegistryFile = registryPath
+                , dsrioFundingAddress = fundingAddress
+                , dsrioSigningKeyFile = signingKeyFile
+                , dsrioRunDir = runDir
+                }
+        assertStakeRewardInitArtifacts runDir registryPath timing
+        runDevnetGovernanceWithdrawalInit
+            globals
+            DevnetGovernanceWithdrawalInitOpts
+                { dgwioRegistryFile = registryPath
+                , dgwioStakeRewardFile = stakeRewardPath
+                , dgwioFundingAddress = fundingAddress
+                , dgwioSigningKeyFile = signingKeyFile
+                , dgwioRunDir = runDir
+                , dgwioAmountLovelace = coinLovelace withdrawalAmount
+                , dgwioRewardTimeoutSeconds = rewardTimeoutSeconds
+                }
+        assertGovernanceWithdrawalInitArtifacts
+            runDir
+            registryPath
+            stakeRewardPath
+            timing
+
+withdrawSmoke :: IO ()
+withdrawSmoke =
+    governanceWithdrawalInitSmoke
 
 registryInitSmoke :: IO ()
 registryInitSmoke = do
@@ -1024,15 +1339,6 @@ voterSignKey =
 devnetReferenceScriptCoin :: Coin
 devnetReferenceScriptCoin = Coin 100_000_000
 
-devnetRegistryInitConfig :: DevnetRegistryInitConfig
-devnetRegistryInitConfig =
-    DevnetRegistryInitConfig
-        { dricNetwork = Testnet
-        , dricFundingAddress = genesisAddr
-        , dricOwnerKeyHash = paymentKeyHashFromSignKey genesisSignKey
-        , dricSignTx = addKeyWitness genesisSignKey
-        }
-
 upstreamCardanoNodeClientsMain :: String
 upstreamCardanoNodeClientsMain =
     "d6773e4cd8a2421617568c8dac0972b0f312a509"
@@ -1069,6 +1375,134 @@ sampleEvidence =
         , geSetupEpoch = 2
         , geVoteEpoch = 3
         , geFinalEpoch = 4
+        }
+
+sampleRegistryPath :: FilePath
+sampleRegistryPath =
+    RegistryInit.registryInitRegistryPath sampleRunDir
+
+sampleStakeRewardPath :: FilePath
+sampleStakeRewardPath =
+    StakeRewardInit.stakeRewardInitAccountsPath sampleRunDir
+
+sampleGovernanceProposalTxId :: T.Text
+sampleGovernanceProposalTxId =
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+sampleGovernanceVoteTxId :: T.Text
+sampleGovernanceVoteTxId =
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+
+sampleGovernanceWithdrawTxId :: T.Text
+sampleGovernanceWithdrawTxId =
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+
+sampleGovernanceActionId :: T.Text
+sampleGovernanceActionId =
+    sampleGovernanceProposalTxId <> "#0"
+
+sampleGovernanceMaterializedTxIn :: T.Text
+sampleGovernanceMaterializedTxIn =
+    sampleGovernanceWithdrawTxId <> "#0"
+
+sampleGovernanceTreasuryHash :: T.Text
+sampleGovernanceTreasuryHash =
+    T.pack sampleRewardAccount
+
+sampleGovernanceTreasuryAddress :: T.Text
+sampleGovernanceTreasuryAddress =
+    "addr_test1wzsampletreasury"
+
+sampleGovernanceWithdrawalInitResult
+    :: GovernanceWithdrawalInit.GovernanceWithdrawalInitResult
+sampleGovernanceWithdrawalInitResult =
+    GovernanceWithdrawalInit.GovernanceWithdrawalInitResult
+        { GovernanceWithdrawalInit.gwirRegistryPath =
+            sampleRegistryPath
+        , GovernanceWithdrawalInit.gwirStakeRewardPath =
+            sampleStakeRewardPath
+        , GovernanceWithdrawalInit.gwirGovernance =
+            GovernanceWithdrawalInit.GovernanceWithdrawalGovernanceEvidence
+                { GovernanceWithdrawalInit.gwgeProposalTxId =
+                    sampleGovernanceProposalTxId
+                , GovernanceWithdrawalInit.gwgeGovernanceActionId =
+                    sampleGovernanceActionId
+                , GovernanceWithdrawalInit.gwgeVoteTxId =
+                    sampleGovernanceVoteTxId
+                , GovernanceWithdrawalInit.gwgeTreasuryRewardAccount =
+                    sampleGovernanceTreasuryHash
+                , GovernanceWithdrawalInit.gwgeTreasuryScriptHash =
+                    sampleGovernanceTreasuryHash
+                , GovernanceWithdrawalInit.gwgeAmountLovelace =
+                    2_000_000
+                , GovernanceWithdrawalInit.gwgeRewardBeforeLovelace =
+                    0
+                , GovernanceWithdrawalInit.gwgeRewardAfterGovernanceLovelace =
+                    2_000_000
+                , GovernanceWithdrawalInit.gwgeSetupEpoch =
+                    2
+                , GovernanceWithdrawalInit.gwgeVoteEpoch =
+                    3
+                , GovernanceWithdrawalInit.gwgeFinalEpoch =
+                    4
+                }
+        , GovernanceWithdrawalInit.gwirWithdrawal =
+            GovernanceWithdrawalInit.GovernanceWithdrawalWithdrawalEvidence
+                { GovernanceWithdrawalInit.gwweIntentPath =
+                    GovernanceWithdrawalInit.governanceWithdrawalInitIntentPath
+                        sampleRunDir
+                , GovernanceWithdrawalInit.gwweTxBodyPath =
+                    GovernanceWithdrawalInit.governanceWithdrawalInitTxBodyPath
+                        sampleRunDir
+                , GovernanceWithdrawalInit.gwweReportJsonPath =
+                    GovernanceWithdrawalInit.governanceWithdrawalInitReportJsonPath
+                        sampleRunDir
+                , GovernanceWithdrawalInit.gwweReportMarkdownPath =
+                    GovernanceWithdrawalInit.governanceWithdrawalInitReportMarkdownPath
+                        sampleRunDir
+                , GovernanceWithdrawalInit.gwweTxBuildLogPath =
+                    GovernanceWithdrawalInit.governanceWithdrawalInitTxBuildLogPath
+                        sampleRunDir
+                , GovernanceWithdrawalInit.gwweSignedTxPath =
+                    GovernanceWithdrawalInit.governanceWithdrawalInitSignedTxPath
+                        sampleRunDir
+                , GovernanceWithdrawalInit.gwweSubmitLogPath =
+                    GovernanceWithdrawalInit.governanceWithdrawalInitSubmitLogPath
+                        sampleRunDir
+                , GovernanceWithdrawalInit.gwweTxId =
+                    sampleGovernanceWithdrawTxId
+                , GovernanceWithdrawalInit.gwweSubmittedTxId =
+                    sampleGovernanceWithdrawTxId
+                , GovernanceWithdrawalInit.gwweFeeLovelace =
+                    173_000
+                , GovernanceWithdrawalInit.gwweRewardBeforeSubmitLovelace =
+                    2_000_000
+                , GovernanceWithdrawalInit.gwweRewardAfterSubmitLovelace =
+                    0
+                }
+        , GovernanceWithdrawalInit.gwirMaterialization =
+            GovernanceWithdrawalInit.GovernanceWithdrawalMaterializationEvidence
+                { GovernanceWithdrawalInit.gwmeGovernanceActionId =
+                    sampleGovernanceActionId
+                , GovernanceWithdrawalInit.gwmeTreasuryRewardAccount =
+                    sampleGovernanceTreasuryHash
+                , GovernanceWithdrawalInit.gwmeSubmittedTxId =
+                    sampleGovernanceWithdrawTxId
+                , GovernanceWithdrawalInit.gwmeTreasuryMaterializedTxIn =
+                    sampleGovernanceMaterializedTxIn
+                , GovernanceWithdrawalInit.gwmeTreasuryAddress =
+                    sampleGovernanceTreasuryAddress
+                , GovernanceWithdrawalInit.gwmeMaterializedAdaLovelace =
+                    2_000_000
+                , GovernanceWithdrawalInit.gwmeRewardBeforeSubmitLovelace =
+                    2_000_000
+                , GovernanceWithdrawalInit.gwmeRewardAfterSubmitLovelace =
+                    0
+                , GovernanceWithdrawalInit.gwmeTreasuryUtxoLovelaceBefore =
+                    0
+                , GovernanceWithdrawalInit.gwmeTreasuryUtxoLovelaceAfter =
+                    2_000_000
+                }
         }
 
 sampleSwapReadinessEvidence :: SwapReadinessEvidence
@@ -1878,21 +2312,6 @@ waitForTxIns provider refs attempts = do
             threadDelay 500_000
             waitForTxIns provider refs (attempts - 1)
 
-waitForMaterializedTxOut
-    :: Provider IO
-    -> TxIn
-    -> Int
-    -> IO (Maybe (TxIn, TxOut ConwayEra))
-waitForMaterializedTxOut _ _ attempts
-    | attempts <= 0 = pure Nothing
-waitForMaterializedTxOut provider ref attempts = do
-    found <- queryUTxOByTxIn provider (Set.singleton ref)
-    case Map.lookup ref found of
-        Just txOut -> pure (Just (ref, txOut))
-        Nothing -> do
-            threadDelay 500_000
-            waitForMaterializedTxOut provider ref (attempts - 1)
-
 writeGovernanceArtifacts
     :: FilePath
     -> FilePath
@@ -2123,154 +2542,6 @@ swapReadinessLines runDir evidence =
         <> swapReadinessRegistryPath runDir
     ]
 
-writeWithdrawalIntentArtifacts
-    :: FilePath
-    -> FilePath
-    -> ShelleyGenesisTiming
-    -> Provider IO
-    -> DevnetRegistryAnchors
-    -> GovernanceEvidence
-    -> IO Coin
-writeWithdrawalIntentArtifacts runDir socket timing provider registry evidence = do
-    createDirectoryIfMissing True (runDir </> "withdraw")
-    RegistryInit.writeWithdrawalRegistryArtifacts runDir registry
-    let treasuryHash =
-            ttScriptHash (draTreasuryTarget registry)
-    ttScriptHashText (draTreasuryTarget registry)
-        `shouldBe` T.pack (geTreasuryScriptHash evidence)
-    let treasuryAccount =
-            AccountAddress Testnet (AccountId (ScriptHashObj treasuryHash))
-    observedRewards <- rewardBalance provider treasuryAccount
-    observedRewards `shouldBe` Coin (geRewardAfter evidence)
-    let registryView =
-            RegistryInit.devnetRegistryView registry
-    let walletAddress = renderAddr genesisAddr
-        resolver =
-            Withdraw.WithdrawResolverEnv
-                { Withdraw.wreQueryWalletUtxos =
-                    queryWalletUtxosForWithdraw provider walletAddress
-                , Withdraw.wreQueryRewardsLovelace = \account -> do
-                    account `shouldBe` T.pack (geRewardAccount evidence)
-                    coinLovelace <$> rewardBalance provider treasuryAccount
-                , Withdraw.wreComputeUpperBound = \_ -> do
-                    snapshot <- queryLedgerSnapshot provider
-                    pure $
-                        Right $
-                            slotNumber $
-                                addSlots 20 (ledgerTipSlot snapshot)
-                }
-        input =
-            Withdraw.WithdrawResolverInput
-                { Withdraw.wriNetwork = "devnet"
-                , Withdraw.wriWalletAddrBech32 = walletAddress
-                , Withdraw.wriScope = CoreDevelopment
-                , Withdraw.wriRegistry = registryView
-                , Withdraw.wriValidityHours = Nothing
-                }
-    when (observedRewards <= Coin 0) $ do
-        (epoch, tipSlot) <- withdrawalEpochTip provider
-        message <-
-            writeWithdrawalFailure
-                runDir
-                socket
-                timing
-                (Just evidence)
-                ( WithdrawalZeroRewards
-                    (geRewardAccount evidence)
-                    observedRewards
-                    epoch
-                    tipSlot
-                )
-        expectationFailure message
-    resolved <- Withdraw.resolveWithdrawEnv resolver input
-    env <- case resolved of
-        Right ok -> pure ok
-        Left err -> do
-            (epoch, tipSlot) <- withdrawalEpochTip provider
-            let failure = withdrawalResolverFailure err observedRewards epoch tipSlot
-            message <-
-                writeWithdrawalFailure
-                    runDir
-                    socket
-                    timing
-                    (Just evidence)
-                    failure
-            expectationFailure message *> error "unreachable"
-    Withdraw.weTreasuryRewardAccount env
-        `shouldBe` T.pack (geRewardAccount evidence)
-    Withdraw.weRewardsLovelace env
-        `shouldBe` coinLovelace observedRewards
-    let answers =
-            Withdraw.WithdrawAnswers
-                { Withdraw.waScope = CoreDevelopment
-                , Withdraw.waValidityHours = Nothing
-                , Withdraw.waDescription = Nothing
-                , Withdraw.waJustification = Nothing
-                , Withdraw.waDestinationLabel = Nothing
-                , Withdraw.waEvent = Nothing
-                , Withdraw.waLabel = Nothing
-                }
-    intent <- case Withdraw.withdrawToTreasuryResult env answers of
-        Left err -> do
-            (epoch, tipSlot) <- withdrawalEpochTip provider
-            let failure =
-                    withdrawalIntentFailure err observedRewards epoch tipSlot
-            message <-
-                writeWithdrawalFailure
-                    runDir
-                    socket
-                    timing
-                    (Just evidence)
-                    failure
-            expectationFailure message *> error "unreachable"
-        Right (Withdraw.WithdrawNoRewards account) -> do
-            (epoch, tipSlot) <- withdrawalEpochTip provider
-            message <-
-                writeWithdrawalFailure
-                    runDir
-                    socket
-                    timing
-                    (Just evidence)
-                    ( WithdrawalZeroRewards
-                        (T.unpack account)
-                        observedRewards
-                        epoch
-                        tipSlot
-                    )
-            expectationFailure message *> error "unreachable"
-        Right (Withdraw.WithdrawIntentReady ready) -> pure ready
-    BSL.writeFile
-        (withdrawIntentPath runDir)
-        (encodeSomeTreasuryIntent (SomeTreasuryIntent SWithdraw intent))
-    decoded <- decodeTreasuryIntentFile (withdrawIntentPath runDir)
-    case decoded of
-        Right (SomeTreasuryIntent SWithdraw parsed) -> do
-            wdiTreasuryRewardAccount (tiPayload parsed)
-                `shouldBe` T.pack (geRewardAccount evidence)
-            wdiRewardsLovelace (tiPayload parsed)
-                `shouldBe` coinLovelace observedRewards
-        Right _ ->
-            expectationFailure "withdraw smoke wrote non-withdraw intent"
-        Left err ->
-            expectationFailure ("decode withdraw intent: " <> err)
-    writeWithdrawalGovernancePrerequisite runDir evidence
-    writeWithdrawalIntentSummary
-        runDir
-        socket
-        timing
-        evidence
-        (coinLovelace observedRewards)
-    putWithdrawalIntentLines runDir evidence observedRewards
-    pure observedRewards
-
-withdrawalEpochTip :: Provider IO -> IO (Maybe Word64, Maybe Word64)
-withdrawalEpochTip provider = do
-    snapshot <- queryLedgerSnapshot provider
-    pure
-        ( Just (epochNumber (ledgerEpoch snapshot))
-        , Just (slotNumber (ledgerTipSlot snapshot))
-        )
-
 withdrawalResolverFailure
     :: Withdraw.WithdrawResolverError
     -> Coin
@@ -2283,369 +2554,6 @@ withdrawalResolverFailure err rewards epoch tipSlot =
             WithdrawalNetworkMismatch expected observed rewards epoch tipSlot
         _ ->
             WithdrawalResolverFailed err rewards epoch tipSlot
-
-withdrawalIntentFailure
-    :: Withdraw.WithdrawError
-    -> Coin
-    -> Maybe Word64
-    -> Maybe Word64
-    -> WithdrawalFailure
-withdrawalIntentFailure err rewards epoch tipSlot =
-    case err of
-        Withdraw.WithdrawNetworkMismatch expected observed ->
-            WithdrawalNetworkMismatch expected observed rewards epoch tipSlot
-        _ ->
-            WithdrawalIntentFailed err rewards epoch tipSlot
-
-writeWithdrawalBuildArtifacts
-    :: FilePath
-    -> FilePath
-    -> ShelleyGenesisTiming
-    -> Provider IO
-    -> Submitter IO
-    -> DevnetRegistryAnchors
-    -> GovernanceEvidence
-    -> Coin
-    -> IO ()
-writeWithdrawalBuildArtifacts
-    runDir
-    socket
-    timing
-    provider
-    submitter
-    registry
-    evidence
-    rewards = do
-        createDirectoryIfMissing True (runDir </> "withdraw")
-        removeIfExists (withdrawTxBodyPath runDir)
-        removeIfExists (withdrawReportJsonPath runDir)
-        removeIfExists (withdrawReportMarkdownPath runDir)
-        removeIfExists (withdrawTxBuildLogPath runDir)
-        removeIfExists (withdrawSignedTxPath runDir)
-        removeIfExists (withdrawSubmitLogPath runDir)
-        removeIfExists (withdrawMaterializationPath runDir)
-        buildExit <-
-            try @ExitCode $
-                TxBuild.runTxBuild
-                    socket
-                    TxBuild.TxBuildOpts
-                        { TxBuild.tboIntentPath =
-                            Just (withdrawIntentPath runDir)
-                        , TxBuild.tboOutPath = Just (withdrawTxBodyPath runDir)
-                        , TxBuild.tboLog = Just (withdrawTxBuildLogPath runDir)
-                        , TxBuild.tboReportPath =
-                            Just (withdrawReportJsonPath runDir)
-                        }
-        case buildExit of
-            Right () -> pure ()
-            Left exitCode -> do
-                failure <- readWithdrawalTxBuildFailure runDir
-                message <-
-                    writeWithdrawalFailure
-                        runDir
-                        socket
-                        timing
-                        (Just evidence)
-                        (WithdrawalTxBuildFailed exitCode failure)
-                expectationFailure message
-        buildOutput <-
-            expectEither
-                "decode withdrawal tx-build report"
-                =<< eitherDecodeFileStrict
-                    @Report.TxBuildOutput
-                    (withdrawReportJsonPath runDir)
-        success <- case Report.txoResult buildOutput of
-            Report.TxBuildOutputSuccess ok -> pure ok
-            Report.TxBuildOutputFailure failure ->
-                expectationFailure
-                    ( "withdrawal tx-build report is failure: "
-                        <> show failure
-                    )
-                    *> error "unreachable"
-        txBodyHex <- TE.decodeUtf8 <$> BS.readFile (withdrawTxBodyPath runDir)
-        txBodyHex `shouldBe` Report.unTxCborHex (Report.tbsTxCbor success)
-        render <- case ReportRender.renderBuildOutput buildOutput of
-            Right ok -> pure ok
-            Left err ->
-                expectationFailure
-                    ("render withdrawal report: " <> show err)
-                    *> error "unreachable"
-        TIO.writeFile
-            (withdrawReportMarkdownPath runDir)
-            (ReportRender.unRenderOutput render)
-        writeWithdrawalBuildSummary
-            runDir
-            socket
-            timing
-            evidence
-            rewards
-            success
-        putWithdrawalBuildLines runDir evidence rewards success
-        submitted <-
-            signSubmitAndMaterializeWithdrawal
-                runDir
-                provider
-                submitter
-                registry
-                evidence
-                rewards
-                success
-        writeWithdrawalSubmittedSummary
-            runDir
-            socket
-            timing
-            evidence
-            rewards
-            success
-            submitted
-        putWithdrawalSubmittedLines runDir evidence rewards success submitted
-
-signSubmitAndMaterializeWithdrawal
-    :: FilePath
-    -> Provider IO
-    -> Submitter IO
-    -> DevnetRegistryAnchors
-    -> GovernanceEvidence
-    -> Coin
-    -> Report.TxBuildSuccess
-    -> IO WithdrawalSubmissionEvidence
-signSubmitAndMaterializeWithdrawal
-    runDir
-    provider
-    submitter
-    registry
-    evidence
-    rewards
-    success = do
-        txHex <- BS.readFile (withdrawTxBodyPath runDir)
-        tx <- case decodeUnsignedTxHex txHex of
-            Right ok -> pure ok
-            Left err ->
-                expectationFailure
-                    ( "decode withdrawal tx before signing: "
-                        <> T.unpack (renderAttachError err)
-                    )
-                    *> error "unreachable"
-        let target =
-                draTreasuryTarget registry
-            treasuryAccount =
-                AccountAddress
-                    Testnet
-                    (AccountId (ScriptHashObj (ttScriptHash target)))
-            signed =
-                addKeyWitness genesisSignKey tx
-            submittedTxId =
-                txIdTx signed
-            submittedTxIdText =
-                renderTxId submittedTxId
-            materializedRef =
-                txOutRef submittedTxId 0
-            identity =
-                Report.trIdentity (Report.tbsReport success)
-        Report.tiTxId identity `shouldBe` submittedTxIdText
-        rewardBeforeSubmit <- rewardBalance provider treasuryAccount
-        rewardBeforeSubmit `shouldBe` rewards
-        treasuryBefore <- queryUTxOs provider (ttAddress target)
-        let treasuryLovelaceBefore =
-                sumUtxoLovelace treasuryBefore
-        BS.writeFile
-            (withdrawSignedTxPath runDir)
-            (encodeSignedTxHex signed)
-        submitTx submitter signed >>= \case
-            Submitted _ -> pure ()
-            Rejected reason ->
-                expectationFailure
-                    ( "withdrawal submit rejected: "
-                        <> BS8.unpack reason
-                    )
-        writeFile
-            (withdrawSubmitLogPath runDir)
-            ( "submit: accepted "
-                <> T.unpack submittedTxIdText
-                <> "\n"
-            )
-        materialized <-
-            waitForMaterializedTxOut
-                provider
-                materializedRef
-                60
-        materializedOut <- case materialized of
-            Just (_, txOut) -> pure txOut
-            Nothing ->
-                expectationFailure
-                    ( "timed out waiting for materialized treasury UTxO "
-                        <> T.unpack (txInToText materializedRef)
-                    )
-                    *> error "unreachable"
-        materializedOut ^. addrTxOutL `shouldBe` ttAddress target
-        let materializedLovelace =
-                txOutLovelace materializedOut
-            materializedAssets =
-                txOutHasAssets materializedOut
-        materializedLovelace `shouldBe` coinLovelace rewards
-        materializedAssets `shouldBe` False
-        rewardAfterSubmit <- rewardBalance provider treasuryAccount
-        rewardAfterSubmit `shouldBe` Coin 0
-        treasuryAfter <- queryUTxOs provider (ttAddress target)
-        let treasuryLovelaceAfter =
-                sumUtxoLovelace treasuryAfter
-            submitted =
-                WithdrawalSubmissionEvidence
-                    { wseSubmittedTxId = submittedTxIdText
-                    , wseSignedTxPath = withdrawSignedTxPath runDir
-                    , wseSubmitLogPath = withdrawSubmitLogPath runDir
-                    , wseMaterializationPath =
-                        withdrawMaterializationPath runDir
-                    , wseTreasuryMaterializedTxIn =
-                        txInToText materializedRef
-                    , wseTreasuryAddress = renderAddr (ttAddress target)
-                    , wseMaterializedLovelace =
-                        materializedLovelace
-                    , wseRewardBeforeSubmit =
-                        coinLovelace rewardBeforeSubmit
-                    , wseRewardAfterSubmit =
-                        coinLovelace rewardAfterSubmit
-                    , wseTreasuryLovelaceBefore =
-                        treasuryLovelaceBefore
-                    , wseTreasuryLovelaceAfter =
-                        treasuryLovelaceAfter
-                    }
-        treasuryLovelaceAfter - treasuryLovelaceBefore
-            `shouldBe` coinLovelace rewards
-        BSL.writeFile
-            (withdrawMaterializationPath runDir)
-            (encode (withdrawalMaterializationValue evidence submitted))
-        pure submitted
-
-readWithdrawalTxBuildFailure
-    :: FilePath -> IO (Maybe Report.BuildFailure)
-readWithdrawalTxBuildFailure runDir = do
-    let path = withdrawReportJsonPath runDir
-    exists <- doesFileExist path
-    if not exists
-        then pure Nothing
-        else
-            eitherDecodeFileStrict @Report.TxBuildOutput path >>= \case
-                Right buildOutput ->
-                    case Report.txoResult buildOutput of
-                        Report.TxBuildOutputFailure failure ->
-                            pure (Just failure)
-                        Report.TxBuildOutputSuccess{} ->
-                            pure Nothing
-                Left{} -> pure Nothing
-
-queryWalletUtxosForWithdraw
-    :: Provider IO
-    -> T.Text
-    -> T.Text
-    -> IO [(T.Text, Integer, Bool)]
-queryWalletUtxosForWithdraw provider expectedWallet requestedWallet = do
-    requestedWallet `shouldBe` expectedWallet
-    utxos <- queryUTxOs provider genesisAddr
-    pure
-        [ (txInToText txIn, lovelace, not (Map.null assets))
-        | (txIn, txOut) <- utxos
-        , let MaryValue (Coin lovelace) (MultiAsset assets) =
-                txOut ^. valueTxOutL
-        ]
-
-writeWithdrawalGovernancePrerequisite
-    :: FilePath
-    -> GovernanceEvidence
-    -> IO ()
-writeWithdrawalGovernancePrerequisite runDir evidence =
-    BSL.writeFile
-        (runDir </> "withdraw" </> "governance-prerequisite.json")
-        ( encode $
-            object
-                [ "governanceSummaryPath"
-                    .= (runDir </> "governance" </> "summary.json")
-                , "rewardAccount" .= geRewardAccount evidence
-                , "rewardBeforeLovelace" .= geRewardBefore evidence
-                , "rewardAfterGovernanceLovelace"
-                    .= geRewardAfter evidence
-                , "governanceActionId" .= geActionId evidence
-                ]
-        )
-
-writeWithdrawalIntentSummary
-    :: FilePath
-    -> FilePath
-    -> ShelleyGenesisTiming
-    -> GovernanceEvidence
-    -> Integer
-    -> IO ()
-writeWithdrawalIntentSummary runDir socket timing evidence observedRewards = do
-    let summary =
-            withdrawalIntentSummaryValue
-                runDir
-                socket
-                timing
-                evidence
-                observedRewards
-    BSL.writeFile
-        (runDir </> "withdraw" </> "summary.json")
-        (encode summary)
-    BSL.writeFile (runDir </> "summary.json") (encode summary)
-    writeFile
-        (runDir </> "summary.log")
-        ( unlines $
-            withdrawalIntentLines
-                runDir
-                evidence
-                (Coin observedRewards)
-        )
-
-withdrawalIntentSummaryValue
-    :: FilePath
-    -> FilePath
-    -> ShelleyGenesisTiming
-    -> GovernanceEvidence
-    -> Integer
-    -> Value
-withdrawalIntentSummaryValue runDir socket timing evidence observedRewards =
-    object
-        [ "phase" .= ("withdraw" :: String)
-        , "status" .= ("intent-ready" :: String)
-        , "runDirectory" .= runDir
-        , "socket" .= socket
-        , "network" .= ("devnet" :: String)
-        , "networkMagic" .= sgtNetworkMagic timing
-        , "epochDurationSeconds" .= epochDurationSeconds timing
-        , "rewardAccount" .= geRewardAccount evidence
-        , "rewardBeforeLovelace" .= geRewardBefore evidence
-        , "rewardAfterGovernanceLovelace" .= geRewardAfter evidence
-        , "withdrawRewardsLovelace" .= observedRewards
-        , "governancePrerequisitePath"
-            .= (runDir </> "withdraw" </> "governance-prerequisite.json")
-        , "intentPath" .= withdrawIntentPath runDir
-        , "txBodyPath" .= withdrawTxBodyPath runDir
-        , "reportJsonPath" .= withdrawReportJsonPath runDir
-        , "reportMarkdownPath" .= withdrawReportMarkdownPath runDir
-        ]
-
-putWithdrawalIntentLines
-    :: FilePath
-    -> GovernanceEvidence
-    -> Coin
-    -> IO ()
-putWithdrawalIntentLines runDir evidence rewards =
-    mapM_ putStrLn (withdrawalIntentLines runDir evidence rewards)
-
-withdrawalIntentLines
-    :: FilePath
-    -> GovernanceEvidence
-    -> Coin
-    -> [String]
-withdrawalIntentLines runDir evidence rewards =
-    [ "devnet-smoke: run-dir " <> runDir
-    , "devnet-smoke: phase withdraw intent-ready"
-    , "devnet-smoke: reward-account " <> geRewardAccount evidence
-    , "devnet-smoke: withdraw-rewards "
-        <> show (coinLovelace rewards)
-    , "devnet-smoke: withdraw-intent "
-        <> withdrawIntentPath runDir
-    ]
 
 writeWithdrawalFailure
     :: FilePath
@@ -2845,193 +2753,6 @@ removeIfExists path = do
     exists <- doesFileExist path
     when exists (removeFile path)
 
-writeWithdrawalBuildSummary
-    :: FilePath
-    -> FilePath
-    -> ShelleyGenesisTiming
-    -> GovernanceEvidence
-    -> Coin
-    -> Report.TxBuildSuccess
-    -> IO ()
-writeWithdrawalBuildSummary
-    runDir
-    socket
-    timing
-    evidence
-    rewards
-    success = do
-        let summary =
-                withdrawalBuildSummaryValue
-                    runDir
-                    socket
-                    timing
-                    evidence
-                    rewards
-                    success
-        BSL.writeFile
-            (runDir </> "withdraw" </> "summary.json")
-            (encode summary)
-        BSL.writeFile (runDir </> "summary.json") (encode summary)
-        writeFile
-            (runDir </> "summary.log")
-            ( unlines $
-                withdrawalBuildLines runDir evidence rewards success
-            )
-
-withdrawalBuildSummaryValue
-    :: FilePath
-    -> FilePath
-    -> ShelleyGenesisTiming
-    -> GovernanceEvidence
-    -> Coin
-    -> Report.TxBuildSuccess
-    -> Value
-withdrawalBuildSummaryValue runDir socket timing evidence rewards success =
-    object
-        [ "phase" .= ("withdraw" :: String)
-        , "status" .= ("passed" :: String)
-        , "runDirectory" .= runDir
-        , "socket" .= socket
-        , "network" .= ("devnet" :: String)
-        , "networkMagic" .= sgtNetworkMagic timing
-        , "epochDurationSeconds" .= epochDurationSeconds timing
-        , "rewardAccount" .= geRewardAccount evidence
-        , "rewardBeforeLovelace" .= geRewardBefore evidence
-        , "rewardAfterGovernanceLovelace" .= geRewardAfter evidence
-        , "withdrawRewardsLovelace" .= coinLovelace rewards
-        , "governancePrerequisitePath"
-            .= (runDir </> "withdraw" </> "governance-prerequisite.json")
-        , "intentPath" .= withdrawIntentPath runDir
-        , "txBodyPath" .= withdrawTxBodyPath runDir
-        , "reportJsonPath" .= withdrawReportJsonPath runDir
-        , "reportMarkdownPath" .= withdrawReportMarkdownPath runDir
-        , "txBuildLogPath" .= withdrawTxBuildLogPath runDir
-        , "upstreamCardanoNodeClientsMain"
-            .= upstreamCardanoNodeClientsMain
-        , "txId" .= Report.tiTxId identity
-        , "bodySizeBytes" .= Report.tiBodySizeBytes identity
-        , "feeLovelace" .= Report.tiFeeLovelace identity
-        , "totalCollateralLovelace"
-            .= Report.tiTotalCollateralLovelace identity
-        , "validityInterval" .= Report.tiValidityInterval identity
-        , "txCborHexLength"
-            .= T.length (Report.unTxCborHex (Report.tbsTxCbor success))
-        ]
-  where
-    identity =
-        Report.trIdentity (Report.tbsReport success)
-
-writeWithdrawalSubmittedSummary
-    :: FilePath
-    -> FilePath
-    -> ShelleyGenesisTiming
-    -> GovernanceEvidence
-    -> Coin
-    -> Report.TxBuildSuccess
-    -> WithdrawalSubmissionEvidence
-    -> IO ()
-writeWithdrawalSubmittedSummary
-    runDir
-    socket
-    timing
-    evidence
-    rewards
-    success
-    submitted = do
-        let summary =
-                withdrawalSubmittedSummaryValue
-                    runDir
-                    socket
-                    timing
-                    evidence
-                    rewards
-                    success
-                    submitted
-        BSL.writeFile
-            (runDir </> "withdraw" </> "summary.json")
-            (encode summary)
-        BSL.writeFile (runDir </> "summary.json") (encode summary)
-        writeFile
-            (runDir </> "summary.log")
-            ( unlines $
-                withdrawalSubmittedLines
-                    runDir
-                    evidence
-                    rewards
-                    success
-                    submitted
-            )
-
-withdrawalSubmittedSummaryValue
-    :: FilePath
-    -> FilePath
-    -> ShelleyGenesisTiming
-    -> GovernanceEvidence
-    -> Coin
-    -> Report.TxBuildSuccess
-    -> WithdrawalSubmissionEvidence
-    -> Value
-withdrawalSubmittedSummaryValue
-    runDir
-    socket
-    timing
-    evidence
-    rewards
-    success
-    submitted =
-        object
-            [ "phase" .= ("withdraw" :: String)
-            , "status" .= ("passed" :: String)
-            , "runDirectory" .= runDir
-            , "socket" .= socket
-            , "network" .= ("devnet" :: String)
-            , "networkMagic" .= sgtNetworkMagic timing
-            , "epochDurationSeconds" .= epochDurationSeconds timing
-            , "rewardAccount" .= geRewardAccount evidence
-            , "rewardBeforeLovelace" .= geRewardBefore evidence
-            , "rewardAfterGovernanceLovelace" .= geRewardAfter evidence
-            , "withdrawRewardsLovelace" .= coinLovelace rewards
-            , "governancePrerequisitePath"
-                .= (runDir </> "withdraw" </> "governance-prerequisite.json")
-            , "intentPath" .= withdrawIntentPath runDir
-            , "txBodyPath" .= withdrawTxBodyPath runDir
-            , "reportJsonPath" .= withdrawReportJsonPath runDir
-            , "reportMarkdownPath" .= withdrawReportMarkdownPath runDir
-            , "txBuildLogPath" .= withdrawTxBuildLogPath runDir
-            , "signedTxPath" .= wseSignedTxPath submitted
-            , "submitLogPath" .= wseSubmitLogPath submitted
-            , "materializationPath" .= wseMaterializationPath submitted
-            , "upstreamCardanoNodeClientsMain"
-                .= upstreamCardanoNodeClientsMain
-            , "txId" .= Report.tiTxId identity
-            , "bodySizeBytes" .= Report.tiBodySizeBytes identity
-            , "feeLovelace" .= Report.tiFeeLovelace identity
-            , "totalCollateralLovelace"
-                .= Report.tiTotalCollateralLovelace identity
-            , "validityInterval" .= Report.tiValidityInterval identity
-            , "txCborHexLength"
-                .= T.length (Report.unTxCborHex (Report.tbsTxCbor success))
-            , "submittedTxAccepted" .= True
-            , "submittedTxId" .= wseSubmittedTxId submitted
-            , "treasuryMaterializedTxIn"
-                .= wseTreasuryMaterializedTxIn submitted
-            , "treasuryAddress" .= wseTreasuryAddress submitted
-            , "materialized" .= True
-            , "materializedAdaLovelace"
-                .= wseMaterializedLovelace submitted
-            , "rewardBeforeSubmitLovelace"
-                .= wseRewardBeforeSubmit submitted
-            , "rewardAfterSubmitLovelace"
-                .= wseRewardAfterSubmit submitted
-            , "treasuryUtxoLovelaceBefore"
-                .= wseTreasuryLovelaceBefore submitted
-            , "treasuryUtxoLovelaceAfter"
-                .= wseTreasuryLovelaceAfter submitted
-            ]
-      where
-        identity =
-            Report.trIdentity (Report.tbsReport success)
-
 withdrawalMaterializationValue
     :: GovernanceEvidence
     -> WithdrawalSubmissionEvidence
@@ -3058,76 +2779,6 @@ withdrawalMaterializationValue evidence submitted =
         , "treasuryUtxoLovelaceAfter"
             .= wseTreasuryLovelaceAfter submitted
         ]
-
-putWithdrawalBuildLines
-    :: FilePath
-    -> GovernanceEvidence
-    -> Coin
-    -> Report.TxBuildSuccess
-    -> IO ()
-putWithdrawalBuildLines runDir evidence rewards success =
-    mapM_ putStrLn (withdrawalBuildLines runDir evidence rewards success)
-
-withdrawalBuildLines
-    :: FilePath
-    -> GovernanceEvidence
-    -> Coin
-    -> Report.TxBuildSuccess
-    -> [String]
-withdrawalBuildLines runDir evidence rewards success =
-    [ "devnet-smoke: run-dir " <> runDir
-    , "devnet-smoke: phase withdraw passed"
-    , "devnet-smoke: reward-account " <> geRewardAccount evidence
-    , "devnet-smoke: withdraw-rewards "
-        <> show (coinLovelace rewards)
-    , "devnet-smoke: withdraw-tx-id "
-        <> T.unpack (Report.tiTxId identity)
-    , "devnet-smoke: withdraw-fee "
-        <> show (Report.tiFeeLovelace identity)
-    , "devnet-smoke: withdraw-tx-body "
-        <> withdrawTxBodyPath runDir
-    , "devnet-smoke: withdraw-report-json "
-        <> withdrawReportJsonPath runDir
-    , "devnet-smoke: withdraw-report-md "
-        <> withdrawReportMarkdownPath runDir
-    ]
-  where
-    identity =
-        Report.trIdentity (Report.tbsReport success)
-
-putWithdrawalSubmittedLines
-    :: FilePath
-    -> GovernanceEvidence
-    -> Coin
-    -> Report.TxBuildSuccess
-    -> WithdrawalSubmissionEvidence
-    -> IO ()
-putWithdrawalSubmittedLines runDir evidence rewards success submitted =
-    mapM_ putStrLn $
-        withdrawalSubmittedLines runDir evidence rewards success submitted
-
-withdrawalSubmittedLines
-    :: FilePath
-    -> GovernanceEvidence
-    -> Coin
-    -> Report.TxBuildSuccess
-    -> WithdrawalSubmissionEvidence
-    -> [String]
-withdrawalSubmittedLines runDir evidence rewards success submitted =
-    withdrawalBuildLines runDir evidence rewards success
-        <> [ "devnet-smoke: withdraw-signed-tx "
-                <> wseSignedTxPath submitted
-           , "devnet-smoke: withdraw-submitted-tx-id "
-                <> T.unpack (wseSubmittedTxId submitted)
-           , "devnet-smoke: withdraw-materialized-tx-in "
-                <> T.unpack (wseTreasuryMaterializedTxIn submitted)
-           , "devnet-smoke: withdraw-materialized-ada "
-                <> show (wseMaterializedLovelace submitted)
-           , "devnet-smoke: withdraw-reward-after-submit "
-                <> show (wseRewardAfterSubmit submitted)
-           , "devnet-smoke: withdraw-materialization "
-                <> wseMaterializationPath submitted
-           ]
 
 withdrawIntentPath :: FilePath -> FilePath
 withdrawIntentPath runDir =
@@ -3196,27 +2847,9 @@ addCoin :: Coin -> Coin -> Coin
 addCoin (Coin a) (Coin b) =
     Coin (a + b)
 
-sumUtxoLovelace :: [(TxIn, TxOut ConwayEra)] -> Integer
-sumUtxoLovelace =
-    sum . fmap (txOutLovelace . snd)
-
-txOutLovelace :: TxOut ConwayEra -> Integer
-txOutLovelace txOut =
-    let MaryValue (Coin lovelace) _ = txOut ^. valueTxOutL
-    in  lovelace
-
-txOutHasAssets :: TxOut ConwayEra -> Bool
-txOutHasAssets txOut =
-    let MaryValue _ (MultiAsset assets) = txOut ^. valueTxOutL
-    in  not (Map.null assets)
-
 addSlots :: Word64 -> SlotNo -> SlotNo
 addSlots delta (SlotNo slot) =
     SlotNo (slot + delta)
-
-slotNumber :: SlotNo -> Word64
-slotNumber (SlotNo slot) =
-    slot
 
 coinLovelace :: Coin -> Integer
 coinLovelace (Coin lovelace) =
@@ -3281,6 +2914,19 @@ resolveRunDir = do
             cwd <- getCurrentDirectory
             stamp <- utcStamp
             pure (cwd </> "dist-newstyle" </> "devnet-smoke" </> stamp)
+
+resolveRewardTimeoutSeconds :: IO Int
+resolveRewardTimeoutSeconds = do
+    raw <-
+        fromMaybe "600" <$> lookupEnv "DEVNET_SMOKE_REWARD_TIMEOUT_SECONDS"
+    case readMaybe raw of
+        Just seconds | seconds > 0 -> pure seconds
+        _ -> do
+            expectationFailure
+                ( "DEVNET_SMOKE_REWARD_TIMEOUT_SECONDS must be a positive integer: "
+                    <> raw
+                )
+            pure 600
 
 prepareRunDir :: FilePath -> IO ()
 prepareRunDir runDir = do
@@ -3362,6 +3008,169 @@ assertStakeRewardInitArtifacts runDir registryPath timing = do
     sripSource provenance `shouldBe` "amaru-treasury-tx"
     sripIssue provenance `shouldBe` 148
 
+assertGovernanceWithdrawalInitArtifacts
+    :: FilePath
+    -> FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> IO ()
+assertGovernanceWithdrawalInitArtifacts
+    runDir
+    registryPath
+    stakeRewardPath
+    timing = do
+        let summaryPath =
+                GovernanceWithdrawalInit.governanceWithdrawalInitSummaryPath
+                    runDir
+            governancePath =
+                GovernanceWithdrawalInit.governanceWithdrawalInitGovernancePath
+                    runDir
+            withdrawalPath =
+                GovernanceWithdrawalInit.governanceWithdrawalInitWithdrawalPath
+                    runDir
+            materializationPath =
+                GovernanceWithdrawalInit.governanceWithdrawalInitMaterializationPath
+                    runDir
+            provenancePath =
+                GovernanceWithdrawalInit.governanceWithdrawalInitProvenancePath
+                    runDir
+            intentPath =
+                GovernanceWithdrawalInit.governanceWithdrawalInitIntentPath
+                    runDir
+            txBodyPath =
+                GovernanceWithdrawalInit.governanceWithdrawalInitTxBodyPath
+                    runDir
+            reportJsonPath =
+                GovernanceWithdrawalInit.governanceWithdrawalInitReportJsonPath
+                    runDir
+            reportMarkdownPath =
+                GovernanceWithdrawalInit.governanceWithdrawalInitReportMarkdownPath
+                    runDir
+            txBuildLogPath =
+                GovernanceWithdrawalInit.governanceWithdrawalInitTxBuildLogPath
+                    runDir
+            signedTxPath =
+                GovernanceWithdrawalInit.governanceWithdrawalInitSignedTxPath
+                    runDir
+            submitLogPath =
+                GovernanceWithdrawalInit.governanceWithdrawalInitSubmitLogPath
+                    runDir
+        traverse_
+            assertDirectoryExists
+            [ runDir </> "registry-init"
+            , runDir </> "stake-reward-init"
+            , GovernanceWithdrawalInit.governanceWithdrawalInitDirectory runDir
+            ]
+        traverse_
+            assertFileExists
+            [ summaryPath
+            , governancePath
+            , withdrawalPath
+            , materializationPath
+            , provenancePath
+            , intentPath
+            , txBodyPath
+            , reportJsonPath
+            , reportMarkdownPath
+            , txBuildLogPath
+            , signedTxPath
+            , submitLogPath
+            ]
+
+        summary <-
+            decodeJsonFile
+                "governance-withdrawal-init summary"
+                summaryPath
+        gwisPhase summary `shouldBe` "governance-withdrawal-init"
+        gwisStatus summary `shouldBe` "passed"
+        gwisNetwork summary `shouldBe` "devnet"
+        gwisNetworkMagic summary `shouldBe` sgtNetworkMagic timing
+        gwisRunDirectory summary `shouldBe` runDir
+        gwisRegistryPath summary `shouldBe` registryPath
+        gwisStakeRewardPath summary `shouldBe` stakeRewardPath
+        gwisAmountLovelace summary `shouldBe` coinLovelace withdrawalAmount
+        gwisGovernancePath summary `shouldBe` governancePath
+        gwisWithdrawalPath summary `shouldBe` withdrawalPath
+        gwisMaterializationPath summary `shouldBe` materializationPath
+        gwisProvenancePath summary `shouldBe` provenancePath
+
+        governance <-
+            decodeJsonFile
+                "governance-withdrawal-init governance"
+                governancePath
+        gwigPhase governance `shouldBe` "governance-withdrawal-init"
+        gwigNetwork governance `shouldBe` "devnet"
+        gwigProposalTxId governance `shouldSatisfy` (not . T.null)
+        gwigGovernanceActionId governance
+            `shouldSatisfy` T.isSuffixOf "#0"
+        gwigVoteTxId governance `shouldSatisfy` (not . T.null)
+        gwigTreasuryRewardAccount governance
+            `shouldBe` gwigTreasuryScriptHash governance
+        gwigAmountLovelace governance
+            `shouldBe` coinLovelace withdrawalAmount
+        gwigRewardAfterGovernanceLovelace governance
+            - gwigRewardBeforeLovelace governance
+            `shouldBe` coinLovelace withdrawalAmount
+        gwigFinalEpoch governance
+            `shouldSatisfy` (>= gwigVoteEpoch governance)
+        gwigVoteEpoch governance
+            `shouldSatisfy` (>= gwigSetupEpoch governance)
+
+        withdrawal <-
+            decodeJsonFile
+                "governance-withdrawal-init withdrawal"
+                withdrawalPath
+        gwiwPhase withdrawal `shouldBe` "governance-withdrawal-init"
+        gwiwNetwork withdrawal `shouldBe` "devnet"
+        gwiwIntentPath withdrawal `shouldBe` intentPath
+        gwiwTxBodyPath withdrawal `shouldBe` txBodyPath
+        gwiwReportJsonPath withdrawal `shouldBe` reportJsonPath
+        gwiwReportMarkdownPath withdrawal `shouldBe` reportMarkdownPath
+        gwiwTxBuildLogPath withdrawal `shouldBe` txBuildLogPath
+        gwiwSignedTxPath withdrawal `shouldBe` signedTxPath
+        gwiwSubmitLogPath withdrawal `shouldBe` submitLogPath
+        gwiwTxId withdrawal `shouldBe` gwiwSubmittedTxId withdrawal
+        gwiwFeeLovelace withdrawal `shouldSatisfy` (>= 0)
+        gwiwRewardBeforeSubmitLovelace withdrawal
+            `shouldBe` gwigRewardAfterGovernanceLovelace governance
+        gwiwRewardAfterSubmitLovelace withdrawal `shouldBe` 0
+
+        materialization <-
+            decodeJsonFile
+                "governance-withdrawal-init materialization"
+                materializationPath
+        gwimPhase materialization `shouldBe` "governance-withdrawal-init"
+        gwimNetwork materialization `shouldBe` "devnet"
+        gwimGovernanceActionId materialization
+            `shouldBe` gwigGovernanceActionId governance
+        gwimTreasuryRewardAccount materialization
+            `shouldBe` gwigTreasuryRewardAccount governance
+        gwimSubmittedTxId materialization
+            `shouldBe` gwiwSubmittedTxId withdrawal
+        gwimTreasuryMaterializedTxIn materialization
+            `shouldSatisfy` T.isSuffixOf "#0"
+        gwimTreasuryAddress materialization `shouldSatisfy` (not . T.null)
+        gwimMaterializedAdaLovelace materialization
+            `shouldBe` coinLovelace withdrawalAmount
+        gwimRewardBeforeSubmitLovelace materialization
+            `shouldBe` gwiwRewardBeforeSubmitLovelace withdrawal
+        gwimRewardAfterSubmitLovelace materialization `shouldBe` 0
+        gwimTreasuryUtxoLovelaceAfter materialization
+            - gwimTreasuryUtxoLovelaceBefore materialization
+            `shouldBe` gwimMaterializedAdaLovelace materialization
+        gwimRegistryPath materialization `shouldBe` registryPath
+        gwimStakeRewardPath materialization `shouldBe` stakeRewardPath
+
+        provenance <-
+            decodeJsonFile
+                "governance-withdrawal-init provenance"
+                provenancePath
+        gwipPhase provenance `shouldBe` "governance-withdrawal-init"
+        gwipSource provenance `shouldBe` "amaru-treasury-tx"
+        gwipIssue provenance `shouldBe` 149
+        gwipParentIssue provenance `shouldBe` 151
+        gwipDependsOnIssues provenance `shouldBe` [147, 148]
+
 assertPreparedStakeRewardAccount
     :: Bool -> StakeRewardInitAccount -> IO ()
 assertPreparedStakeRewardAccount expectedRegistered account = do
@@ -3376,6 +3185,11 @@ assertPreparedStakeRewardAccount expectedRegistered account = do
 assertFileExists :: FilePath -> IO ()
 assertFileExists path = do
     exists <- doesFileExist path
+    exists `shouldBe` True
+
+assertDirectoryExists :: FilePath -> IO ()
+assertDirectoryExists path = do
+    exists <- doesDirectoryExist path
     exists `shouldBe` True
 
 decodeJsonFile :: (FromJSON a) => String -> FilePath -> IO a

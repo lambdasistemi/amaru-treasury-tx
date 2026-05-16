@@ -12,13 +12,17 @@ are intentionally gated to the local @devnet@ network before any
 signing-key material is read or any node connection is opened.
 -}
 module Amaru.Treasury.Cli.Devnet
-    ( DevnetRegistryInitOpts (..)
+    ( DevnetGovernanceWithdrawalInitOpts (..)
+    , DevnetRegistryInitOpts (..)
     , DevnetStakeRewardInitOpts (..)
+    , devnetGovernanceWithdrawalInitOptsP
     , devnetRegistryInitOptsP
     , devnetStakeRewardInitOptsP
+    , requireDevnetGovernanceWithdrawalInitNetwork
     , requireDevnetRegistryInitNetwork
     , requireDevnetStakeRewardInitNetwork
     , registryInitCommandLines
+    , runDevnetGovernanceWithdrawalInit
     , runDevnetRegistryInit
     , runDevnetStakeRewardInit
     ) where
@@ -31,10 +35,14 @@ import Data.Aeson
 import Data.Text qualified as T
 import Options.Applicative
     ( Parser
+    , auto
     , help
     , long
     , metavar
+    , option
+    , showDefault
     , strOption
+    , value
     )
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.Exit (exitFailure)
@@ -53,6 +61,10 @@ import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , resolveSocket
     )
+import Amaru.Treasury.Devnet.GovernanceWithdrawalInit
+    ( DevnetGovernanceWithdrawalInitConfig (..)
+    )
+import Amaru.Treasury.Devnet.GovernanceWithdrawalInit qualified as GovernanceWithdrawalInit
 import Amaru.Treasury.Devnet.RegistryInit
     ( DevnetRegistryInitConfig (..)
     )
@@ -88,6 +100,18 @@ data DevnetStakeRewardInitOpts = DevnetStakeRewardInitOpts
     , dsrioFundingAddress :: !String
     , dsrioSigningKeyFile :: !FilePath
     , dsrioRunDir :: !FilePath
+    }
+    deriving stock (Eq, Show)
+
+-- | Options for @devnet governance-withdrawal-init@.
+data DevnetGovernanceWithdrawalInitOpts = DevnetGovernanceWithdrawalInitOpts
+    { dgwioRegistryFile :: !FilePath
+    , dgwioStakeRewardFile :: !FilePath
+    , dgwioFundingAddress :: !String
+    , dgwioSigningKeyFile :: !FilePath
+    , dgwioRunDir :: !FilePath
+    , dgwioAmountLovelace :: !Integer
+    , dgwioRewardTimeoutSeconds :: !Int
     }
     deriving stock (Eq, Show)
 
@@ -136,6 +160,54 @@ devnetStakeRewardInitOptsP =
                 <> help "Directory where stake-reward-init artifacts are written"
             )
 
+-- | Parser for the @governance-withdrawal-init@ DevNet subcommand.
+devnetGovernanceWithdrawalInitOptsP
+    :: Parser DevnetGovernanceWithdrawalInitOpts
+devnetGovernanceWithdrawalInitOptsP =
+    DevnetGovernanceWithdrawalInitOpts
+        <$> strOption
+            ( long "registry-file"
+                <> metavar "PATH"
+                <> help "registry-init registry.json artifact"
+            )
+        <*> strOption
+            ( long "stake-reward-file"
+                <> metavar "PATH"
+                <> help "stake-reward-init accounts.json artifact"
+            )
+        <*> strOption
+            ( long "funding-address"
+                <> metavar "ADDR"
+                <> help "DevNet funding address that owns bootstrap UTxOs"
+            )
+        <*> strOption
+            ( long "signing-key-file"
+                <> metavar "PATH"
+                <> help "cardano-cli payment signing-key JSON for funding UTxOs"
+            )
+        <*> strOption
+            ( long "run-dir"
+                <> metavar "DIR"
+                <> help
+                    "Directory where governance-withdrawal-init artifacts are written"
+            )
+        <*> option
+            auto
+            ( long "amount-lovelace"
+                <> metavar "LOVELACE"
+                <> value 2_000_000
+                <> showDefault
+                <> help "Lovelace to withdraw from the DevNet treasury pot"
+            )
+        <*> option
+            auto
+            ( long "reward-timeout-seconds"
+                <> metavar "SECONDS"
+                <> value 180
+                <> showDefault
+                <> help "Seconds to wait for treasury reward account funding"
+            )
+
 -- | Validate that the global network selection is exactly DevNet.
 requireDevnetRegistryInitNetwork :: GlobalOpts -> Either String ()
 requireDevnetRegistryInitNetwork GlobalOpts{..}
@@ -153,6 +225,16 @@ requireDevnetStakeRewardInitNetwork GlobalOpts{..}
         Right ()
     | otherwise =
         Left "stake-reward-init: --network must be devnet"
+
+-- | Validate that governance/withdrawal setup is only run on DevNet.
+requireDevnetGovernanceWithdrawalInitNetwork
+    :: GlobalOpts -> Either String ()
+requireDevnetGovernanceWithdrawalInitNetwork GlobalOpts{..}
+    | goNetworkName == Just "devnet"
+        && goNetworkMagic == NetworkMagic 42 =
+        Right ()
+    | otherwise =
+        Left "governance-withdrawal-init: --network must be devnet"
 
 -- | Run @devnet registry-init@ against a local DevNet node.
 runDevnetRegistryInit
@@ -281,6 +363,114 @@ runDevnetStakeRewardInit globals DevnetStakeRewardInitOpts{..} = do
                 linesOut
             mapM_ putStrLn linesOut
 
+-- | Run @devnet governance-withdrawal-init@ against a local DevNet node.
+runDevnetGovernanceWithdrawalInit
+    :: GlobalOpts
+    -> DevnetGovernanceWithdrawalInitOpts
+    -> IO ()
+runDevnetGovernanceWithdrawalInit
+    globals
+    DevnetGovernanceWithdrawalInitOpts{..} = do
+        case requireDevnetGovernanceWithdrawalInitNetwork globals of
+            Left err -> abort err
+            Right () -> pure ()
+        case GovernanceWithdrawalInit.validateGovernanceWithdrawalInitInputs
+            dgwioAmountLovelace
+            dgwioRewardTimeoutSeconds of
+            Left failure -> do
+                GovernanceWithdrawalInit.writeGovernanceWithdrawalInitFailure
+                    dgwioRunDir
+                    failure
+                mapM_
+                    (hPutStrLn stderr)
+                    ( GovernanceWithdrawalInit.governanceWithdrawalInitFailureLines
+                        dgwioRunDir
+                        failure
+                    )
+                exitFailure
+            Right () -> pure ()
+        registry <-
+            GovernanceWithdrawalInit.readDevnetGovernanceWithdrawalRegistry
+                dgwioRegistryFile
+                >>= \case
+                    Left err ->
+                        abort $
+                            "governance-withdrawal-init: --registry-file: "
+                                <> err
+                    Right ok -> pure ok
+        stakeRewardAccounts <-
+            GovernanceWithdrawalInit.readDevnetGovernanceStakeRewardAccounts
+                dgwioStakeRewardFile
+                >>= \case
+                    Left err ->
+                        abort $
+                            "governance-withdrawal-init: --stake-reward-file: "
+                                <> err
+                    Right ok -> pure ok
+        prereqs <-
+            case GovernanceWithdrawalInit.validateGovernanceWithdrawalPrerequisites
+                registry
+                stakeRewardAccounts of
+                Left failure -> do
+                    GovernanceWithdrawalInit.writeGovernanceWithdrawalInitFailure
+                        dgwioRunDir
+                        failure
+                    mapM_
+                        (hPutStrLn stderr)
+                        ( GovernanceWithdrawalInit.governanceWithdrawalInitFailureLines
+                            dgwioRunDir
+                            failure
+                        )
+                    exitFailure
+                Right ok -> pure ok
+        fundingAddress <-
+            parseFundingAddress
+                "governance-withdrawal-init"
+                dgwioFundingAddress
+        signingKey <-
+            readPaymentSigningKey
+                "governance-withdrawal-init"
+                dgwioSigningKeyFile
+        socket <- resolveSocket (goSocketPath globals)
+        let networkMagic =
+                fromIntegral (unNetworkMagic (goNetworkMagic globals))
+            config =
+                DevnetGovernanceWithdrawalInitConfig
+                    { dgwicNetworkMagic = networkMagic
+                    , dgwicSocketPath = socket
+                    , dgwicFundingAddress = fundingAddress
+                    , dgwicSigningKey = signingKey
+                    , dgwicRunDir = dgwioRunDir
+                    , dgwicAmountLovelace = dgwioAmountLovelace
+                    , dgwicRewardTimeoutSeconds =
+                        dgwioRewardTimeoutSeconds
+                    }
+        withLocalNodeClient (goNetworkMagic globals) socket $
+            \provider submitter -> do
+                GovernanceWithdrawalInit.runDevnetGovernanceWithdrawalInit
+                    config
+                    dgwioRegistryFile
+                    dgwioStakeRewardFile
+                    prereqs
+                    provider
+                    submitter
+                    >>= \case
+                        Left failure -> do
+                            mapM_
+                                (hPutStrLn stderr)
+                                ( GovernanceWithdrawalInit.governanceWithdrawalInitFailureLines
+                                    dgwioRunDir
+                                    failure
+                                )
+                            exitFailure
+                        Right result -> do
+                            let linesOut =
+                                    GovernanceWithdrawalInit.governanceWithdrawalInitCommandLines
+                                        networkMagic
+                                        dgwioRunDir
+                                        result
+                            mapM_ putStrLn linesOut
+
 -- | Human-readable success lines for the shipped registry-init command.
 registryInitCommandLines
     :: Int
@@ -328,12 +518,12 @@ readPaymentSigningKey
     -> IO (SignKeyDSIGN DSIGN)
 readPaymentSigningKey prefix path = do
     decoded <- eitherDecodeFileStrict path :: IO (Either String Value)
-    value <- case decoded of
+    jsonValue <- case decoded of
         Left err ->
             abort $
                 prefix <> ": --signing-key-file: " <> err
-        Right value -> pure value
-    case decodeCardanoCliSigningKey value of
+        Right ok -> pure ok
+    case decodeCardanoCliSigningKey jsonValue of
         Left err ->
             abort $
                 prefix

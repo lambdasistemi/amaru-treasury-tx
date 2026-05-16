@@ -29,9 +29,11 @@ import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     )
 import Amaru.Treasury.Cli.Devnet
-    ( DevnetRegistryInitOpts (..)
+    ( DevnetGovernanceWithdrawalInitOpts (..)
+    , DevnetRegistryInitOpts (..)
     , DevnetStakeRewardInitOpts (..)
     , registryInitCommandLines
+    , requireDevnetGovernanceWithdrawalInitNetwork
     , requireDevnetRegistryInitNetwork
     , requireDevnetStakeRewardInitNetwork
     )
@@ -111,6 +113,40 @@ spec = describe "devnet commands" $ do
                 `shouldBe` Left
                     "stake-reward-init: --network must be devnet"
 
+    describe "governance-withdrawal-init command" $ do
+        it "parses the nested devnet governance-withdrawal-init command" $
+            case parseCmd governanceWithdrawalInitArgs of
+                Right (g, CmdDevnetGovernanceWithdrawalInit o) -> do
+                    goSocketPath g `shouldBe` Just "node.socket"
+                    goNetworkMagic g `shouldBe` NetworkMagic 42
+                    goNetworkName g `shouldBe` Just "devnet"
+                    o
+                        `shouldBe` DevnetGovernanceWithdrawalInitOpts
+                            { dgwioRegistryFile =
+                                "runs/devnet/registry-init/registry.json"
+                            , dgwioStakeRewardFile =
+                                "runs/devnet/stake-reward-init/accounts.json"
+                            , dgwioFundingAddress = fundingAddress
+                            , dgwioSigningKeyFile = "payment.skey"
+                            , dgwioRunDir = "runs/devnet"
+                            , dgwioAmountLovelace = 2_000_000
+                            , dgwioRewardTimeoutSeconds = 180
+                            }
+                Right _ ->
+                    expectationFailure
+                        "expected devnet governance-withdrawal-init command"
+                Left e -> expectationFailure e
+
+        it "rejects non-DevNet networks before governance inputs are read" $
+            requireDevnetGovernanceWithdrawalInitNetwork
+                GlobalOpts
+                    { goSocketPath = Just "/does/not/exist/node.socket"
+                    , goNetworkMagic = NetworkMagic 764_824_073
+                    , goNetworkName = Just "mainnet"
+                    }
+                `shouldBe` Left
+                    "governance-withdrawal-init: --network must be devnet"
+
 parseCmd :: [String] -> Either String (GlobalOpts, Cmd)
 parseCmd args =
     case execParserPure defaultPrefs opts args of
@@ -150,6 +186,30 @@ stakeRewardInitArgs =
     , "payment.skey"
     , "--run-dir"
     , "runs/devnet/stake"
+    ]
+
+governanceWithdrawalInitArgs :: [String]
+governanceWithdrawalInitArgs =
+    [ "--network"
+    , "devnet"
+    , "--node-socket"
+    , "node.socket"
+    , "devnet"
+    , "governance-withdrawal-init"
+    , "--registry-file"
+    , "runs/devnet/registry-init/registry.json"
+    , "--stake-reward-file"
+    , "runs/devnet/stake-reward-init/accounts.json"
+    , "--funding-address"
+    , fundingAddress
+    , "--signing-key-file"
+    , "payment.skey"
+    , "--run-dir"
+    , "runs/devnet"
+    , "--amount-lovelace"
+    , "2000000"
+    , "--reward-timeout-seconds"
+    , "180"
     ]
 
 fundingAddress :: String

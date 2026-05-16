@@ -161,6 +161,9 @@ cmdTag = \case
     CmdSwapQuote{} -> "swap-quote"
     CmdSwapCancel{} -> "swap-cancel"
     CmdDevnetRegistryInit{} -> "devnet-registry-init"
+    CmdDevnetStakeRewardInit{} -> "devnet-stake-reward-init"
+    CmdDevnetGovernanceWithdrawalInit{} ->
+        "devnet-governance-withdrawal-init"
     CmdDisburseWizard{} -> "disburse-wizard"
     CmdContingencyDisburse{} -> "contingency-disburse-wizard"
     CmdWithdrawWizard{} -> "withdraw-wizard"

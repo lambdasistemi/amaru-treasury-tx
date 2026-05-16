@@ -41,8 +41,10 @@ import Amaru.Treasury.Cli.Common
     , globalOptsP
     )
 import Amaru.Treasury.Cli.Devnet
-    ( DevnetRegistryInitOpts
+    ( DevnetGovernanceWithdrawalInitOpts
+    , DevnetRegistryInitOpts
     , DevnetStakeRewardInitOpts
+    , devnetGovernanceWithdrawalInitOptsP
     , devnetRegistryInitOptsP
     , devnetStakeRewardInitOptsP
     )
@@ -99,6 +101,7 @@ data Cmd
     | CmdSwapCancel SwapCancelOpts
     | CmdDevnetRegistryInit DevnetRegistryInitOpts
     | CmdDevnetStakeRewardInit DevnetStakeRewardInitOpts
+    | CmdDevnetGovernanceWithdrawalInit DevnetGovernanceWithdrawalInitOpts
     | CmdDisburseWizard DisburseWizardOpts
     | CmdContingencyDisburse ContingencyDisburseOpts
     | CmdWithdrawWizard WithdrawOpts
@@ -295,6 +298,16 @@ devnetCmdP =
                     )
                     ( progDesc
                         "Register DevNet treasury reward account; report permissions withdraw-zero"
+                    )
+                )
+            <> command
+                "governance-withdrawal-init"
+                ( info
+                    ( CmdDevnetGovernanceWithdrawalInit
+                        <$> devnetGovernanceWithdrawalInitOptsP
+                    )
+                    ( progDesc
+                        "Fund DevNet treasury rewards through governance and materialize a treasury UTxO"
                     )
                 )
         )

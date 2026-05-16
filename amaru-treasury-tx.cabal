@@ -141,6 +141,7 @@ library
     Amaru.Treasury.Cli.WithdrawWizard
     Amaru.Treasury.Cli.Witness
     Amaru.Treasury.Constants
+    Amaru.Treasury.Devnet.GovernanceWithdrawalInit
     Amaru.Treasury.Devnet.RegistryInit
     Amaru.Treasury.Devnet.StakeRewardInit
     Amaru.Treasury.Inspect
@@ -375,6 +376,7 @@ test-suite unit-tests
     Amaru.Treasury.Cli.VaultSpec
     Amaru.Treasury.Cli.WitnessSpec
     Amaru.Treasury.ConstantsSpec
+    Amaru.Treasury.Devnet.GovernanceWithdrawalInitSpec
     Amaru.Treasury.Devnet.RegistryInitSpec
     Amaru.Treasury.Devnet.StakeRewardInitSpec
     Amaru.Treasury.Inspect.SchemaSpec

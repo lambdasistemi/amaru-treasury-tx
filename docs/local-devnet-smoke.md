@@ -2,18 +2,15 @@
 
 The local DevNet smoke is an opt-in release check. It starts the
 `cardano-node-clients` DevNet, verifies the node socket with network
-magic `42`, can publish registry/reference-script bootstrap state,
-can register the treasury reward account and emit the permissions
-withdraw-zero reward account, can run the governance funding setup on a
-patched short-epoch genesis, records timing/action/reward evidence, and
-writes artifacts under a fresh run directory. The withdrawal phase proves
-the live
-reward-to-materialized-ADA boundary by writing a withdrawal intent,
-building unsigned CBOR, signing and submitting it inside the opt-in
-DevNet harness, and recording the treasury UTxO that materialized from
-the reward account. The swap readiness phase publishes the public
-SundaeSwap V3 order validator as a local DevNet reference script and
-writes handoff metadata for the later order-build slice.
+magic `42`, can publish registry/reference-script bootstrap state, can
+register the treasury reward account and emit the permissions
+withdraw-zero reward account, and proves the shipped
+`devnet governance-withdrawal-init` command on a patched short-epoch
+genesis. The command proof records governance proposal/vote evidence,
+reward funding, withdrawal build/submission, and the treasury UTxO that
+materialized from the reward account. The swap readiness phase publishes
+the public SundaeSwap V3 order validator as a local DevNet reference
+script and writes handoff metadata for the later order-build slice.
 
 This check is not part of `just ci`: it starts a real local
 `cardano-node` and is meant as manual live evidence before a release.
@@ -210,136 +207,106 @@ This is stake/reward prerequisite evidence only. It does not submit
 governance funding, treasury withdrawal materialization, disburse
 submission, swap execution, or reorganize transactions.
 
-## Governance Boundary
+## Governance Withdrawal Init Boundary
+
+The shipped command for this boundary is:
 
 ```bash
-just devnet-smoke governance
+amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+  devnet governance-withdrawal-init \
+  --registry-file runs/devnet/manual-registry-init/registry-init/registry.json \
+  --stake-reward-file runs/devnet/manual-stake-reward-init/stake-reward-init/accounts.json \
+  --funding-address "$DEVNET_FUNDING_ADDRESS" \
+  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
+  --run-dir runs/devnet/manual-governance-withdrawal-init
 ```
 
-Expected output:
-
-```text
-devnet-smoke: run-dir runs/devnet/YYYYMMDDTHHMMSSZ
-devnet-smoke: network devnet magic 42
-devnet-smoke: epoch-duration 5.0
-devnet-smoke: socket /tmp/.../cardano-e2e/node.sock
-devnet-smoke: phase governance passed
-devnet-smoke: governance-tx-id TxId {...}
-devnet-smoke: governance-action-id GovActionId {...}
-devnet-smoke: reward-account 5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34
-devnet-smoke: governance-amount 2000000
-devnet-smoke: governance-summary runs/devnet/YYYYMMDDTHHMMSSZ/governance/summary.json
-```
-
-The governance smoke copies the pinned DevNet genesis into the run
-directory, patches it to a 5-second epoch for manual reward testing,
-registers the Amaru treasury script stake credential with the
-registration-plus-always-abstain certificate shape, submits a Conway
-treasury-withdrawal governance action, votes it through, waits for the
-next epoch, and observes the script reward account through
-`Provider.queryRewardAccounts`.
-
-The latest local evidence for this branch is
-`runs/devnet/20260513T143827Z`, using `cardano-node-clients` main
-commit `d6773e4cd8a2421617568c8dac0972b0f312a509`. It funded the script
-reward account from `0` to `2000000` lovelace across epochs `2 -> 4`.
-
-The governance phase writes:
-
-```text
-runs/devnet/YYYYMMDDTHHMMSSZ/
-|-- node.log
-|-- summary.json
-|-- summary.log
-|-- timing.json
-`-- governance/
-    |-- action.json
-    |-- certificates.json
-    |-- genesis/
-    `-- summary.json
-```
-
-## Withdrawal Boundary
+The live proof harness runs the prerequisite commands and then invokes
+the same production command runner:
 
 ```bash
-just devnet-smoke withdraw
+just devnet-smoke governance-withdrawal-init
 ```
 
-Expected output:
+Expected command-prefixed output:
 
 ```text
-devnet-smoke: run-dir runs/devnet/YYYYMMDDTHHMMSSZ
-devnet-smoke: phase withdraw intent-ready
-devnet-smoke: reward-account 5da22e...
-devnet-smoke: withdraw-rewards 2000000
-devnet-smoke: withdraw-intent runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/intent.json
-devnet-smoke: phase withdraw passed
-devnet-smoke: withdraw-tx-id 5fd2...
-devnet-smoke: withdraw-fee 469749
-devnet-smoke: withdraw-tx-body runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/tx-body.cbor.hex
-devnet-smoke: withdraw-report-json runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/report.json
-devnet-smoke: withdraw-report-md runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/report.md
-devnet-smoke: withdraw-signed-tx runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/signed-tx.cbor.hex
-devnet-smoke: withdraw-submitted-tx-id 5fd2...
-devnet-smoke: withdraw-materialized-tx-in 5fd2...#0
-devnet-smoke: withdraw-materialized-ada 2000000
-devnet-smoke: withdraw-reward-after-submit 0
-devnet-smoke: withdraw-materialization runs/devnet/YYYYMMDDTHHMMSSZ/withdraw/materialized.json
+governance-withdrawal-init: run-dir runs/devnet/YYYYMMDDTHHMMSSZ
+governance-withdrawal-init: network devnet magic 42
+governance-withdrawal-init: phase governance-withdrawal-init passed
+governance-withdrawal-init: governance-proposal-tx-id <tx-id>
+governance-withdrawal-init: governance-action-id <tx-id>#0
+governance-withdrawal-init: vote-tx-id <tx-id>
+governance-withdrawal-init: treasury-reward-account <script-hash>
+governance-withdrawal-init: reward-before-lovelace 0
+governance-withdrawal-init: reward-after-governance-lovelace 2000000
+governance-withdrawal-init: withdraw-tx-id <tx-id>
+governance-withdrawal-init: withdraw-submitted-tx-id <tx-id>
+governance-withdrawal-init: treasury-materialized-tx-in <tx-id>#0
+governance-withdrawal-init: treasury-materialized-ada 2000000
+governance-withdrawal-init: summary runs/devnet/YYYYMMDDTHHMMSSZ/governance-withdrawal-init/summary.json
+governance-withdrawal-init: materialization runs/devnet/YYYYMMDDTHHMMSSZ/governance-withdrawal-init/materialized.json
 ```
 
-The smoke copies and patches the DevNet genesis to a short epoch,
-deploys local seed-derived scopes and registry policy scripts, publishes local
-permissions and treasury reference scripts, funds the local treasury
-script reward account through a Conway treasury-withdrawal governance
-action, observes the reward through the provider, and writes the
-schema-v1 withdrawal intent. It then runs the release-facing
-`tx-build` path against the live node, using a short DevNet validity
-horizon so script evaluation stays inside the hard-fork forecast
-window. After the build evidence is written, the smoke signs the
-withdrawal transaction with the local DevNet wallet key, submits it via
-`cardano-node-clients`, waits for output `#0` to appear at the treasury
-script address, and verifies that the reward account has drained to
-zero and the treasury UTxO ADA total increased by the withdrawn amount.
+The proof copies and patches the DevNet genesis to a short epoch, runs
+`devnet registry-init`, runs `devnet stake-reward-init`, then calls
+`devnet governance-withdrawal-init`. Production code owns the Conway
+treasury-withdrawal proposal, vote, reward wait, withdrawal intent,
+tx-build, signing, submission, and materialization verification. The
+smoke layer only prepares the local node/prerequisites and asserts the
+observed artifacts and chain effects.
 
-The verified 2026-05-15 slice used run directory
-`runs/devnet/20260515T091231Z`. It wrote `withdraw/intent.json` with
+The verified 2026-05-16 slice used run directory
+`runs/devnet/20260516T231003Z`. It submitted proposal tx
+`baffa774b368b1da8c3ff80be399bcf6fa63b5cff658b6889fc00109da218e23`
+with action id
+`baffa774b368b1da8c3ff80be399bcf6fa63b5cff658b6889fc00109da218e23#0`,
+vote tx
+`009801303fc5cc3c3dfe474c30cc4b7d31e99b5af29467cc317072ea6b728c45`,
 reward account
-`ffbb1bb8f19e6ee2357b899043b7337525c072f968a68c8aaf01b2af` and
-`rewardsLovelace = 2000000`, built tx id
-`ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d`
-with fee `457683` lovelace and validity upper bound slot `222`, signed
-and submitted the same tx id, observed materialized output
-`ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d#0`
-with `2000000` lovelace at the treasury script address, and confirmed
-the reward account moved from `2000000` to `0` lovelace after submit
-while treasury ADA moved from `200000000` to `202000000`.
+`b2b7201c62e43ae8e03b61c96931379ebbcdce61befc3f4e4b1f4be4`, and
+withdrawal tx
+`4a87409b52b8104d51d41df7ee562196cf33621f64c4c40985b4aef5ff21e9bd`
+with fee `456417` lovelace. The materialized output was
+`4a87409b52b8104d51d41df7ee562196cf33621f64c4c40985b4aef5ff21e9bd#0`
+with `2000000` lovelace at
+`addr_test1xzetwgquvtjr468q8dsuj6f3x70thnwwvxl0c06wfv05he9jkuspcchy8t5wqwmpe95nzdu7h0xuucd7lsl5ujclf0jqnpvejf`.
+The reward account moved `0 -> 2000000 -> 0`, and treasury ADA moved
+`200000000 -> 202000000`.
 
-The withdrawal phase writes:
+The command proof writes:
 
 ```text
 runs/devnet/YYYYMMDDTHHMMSSZ/
 |-- node.log
-|-- summary.json
 |-- summary.log
 |-- timing.json
-|-- governance/
-|   |-- action.json
-|   |-- certificates.json
-|   |-- genesis/
+|-- registry-init/
+|   |-- provenance.json
+|   |-- registry.json
 |   `-- summary.json
-`-- withdraw/
-    |-- governance-prerequisite.json
+|-- stake-reward-init/
+|   |-- accounts.json
+|   |-- provenance.json
+|   `-- summary.json
+`-- governance-withdrawal-init/
+    |-- governance.json
     |-- intent.json
-    |-- registry.json
+    |-- materialized.json
+    |-- provenance.json
     |-- report.json
     |-- report.md
     |-- signed-tx.cbor.hex
     |-- submit.log
-    |-- materialized.json
+    |-- summary.json
     |-- tx-body.cbor.hex
     |-- tx-build.log
-    `-- summary.json
+    `-- withdrawal.json
 ```
+
+`just devnet-smoke withdraw` remains accepted as a compatibility alias
+for this same production command proof. It is not a separate
+smoke-owned withdrawal implementation.
 
 ## Swap Readiness Boundary
 
@@ -432,8 +399,9 @@ The prior experiment is split into seven tickets:
   release-facing reorganize builder from #46 exists.
 
 The passing phases today are `node`, `registry-init`,
-`stake-reward-init`, `governance`, `withdraw`, and `swap-ready`.
-`just devnet-smoke all` still runs only `node`, `governance`, and `withdraw` into separate
+`stake-reward-init`, `governance`, `governance-withdrawal-init`,
+`withdraw`, and `swap-ready`. `just devnet-smoke all` runs `node`,
+`governance`, and `governance-withdrawal-init` into separate
 subdirectories under one timestamped run directory.
 
 `node` proves only the local node boundary, network magic, and timing.
@@ -441,13 +409,14 @@ subdirectories under one timestamped run directory.
 publication and artifact handoff.
 `stake-reward-init` proves only treasury reward-account registration
 and permissions withdraw-zero account handoff.
-`governance` proves the local setup path that funds the Amaru treasury
-script reward account. `withdraw` proves that the funded script reward
-account can be resolved into a schema-v1 intent, built into unsigned
-CBOR plus review reports, signed and submitted by the DevNet harness,
-and observed as ADA materialized at the treasury script address. It is
-not proof that disburse, SundaeSwap order-build, SundaeSwap order-spend,
-or reorganize transactions have been built or observed on DevNet.
+`governance` remains a governance-only boundary for the local funding
+mechanics. `governance-withdrawal-init` is the #149 command proof: it
+consumes registry-init and stake-reward-init artifacts, runs the shipped
+production command runner, and observes ADA materialized at the treasury
+script address. `withdraw` is a compatibility alias for
+`governance-withdrawal-init`. It is not proof that disburse, SundaeSwap
+order-build, SundaeSwap order-spend, or reorganize transactions have
+been built or observed on DevNet.
 `swap-ready` proves only that the public V3 order-validator reference is
 available on the local DevNet and recorded in machine-readable metadata
 for #84.
@@ -501,18 +470,22 @@ The node phase fails before any treasury action if:
 - the effective epoch duration is not short enough for manual
   governance/reward testing.
 
-The governance phase may still fail with a typed upstream or local
+The governance-only phase may still fail with a typed upstream or local
 boundary if the pinned `cardano-node-clients` main commit moves, the
 genesis patch no longer applies, funds are insufficient, the action is
 not observed, or the reward account is not funded before the wait
 budget expires.
 
-The withdrawal phase may fail during setup, reward observation, intent
-resolution, `tx-build`, submission, or materialization. When diagnosing
-`tx-build`, inspect `withdraw/tx-build.log`, `withdraw/report.json`,
-and the run directory's node log together. When diagnosing submission
-or materialization, inspect `withdraw/signed-tx.cbor.hex`,
-`withdraw/submit.log`, `withdraw/materialized.json`, and the node log.
+The governance-withdrawal-init phase may fail during prerequisite
+setup, governance proposal/vote, reward wait, withdrawal intent
+creation, `tx-build`, submission, or materialization. When diagnosing
+`tx-build`, inspect
+`governance-withdrawal-init/tx-build.log`,
+`governance-withdrawal-init/report.json`, and the run directory's node
+log together. When diagnosing submission or materialization, inspect
+`governance-withdrawal-init/signed-tx.cbor.hex`,
+`governance-withdrawal-init/submit.log`,
+`governance-withdrawal-init/materialized.json`, and the node log.
 
 The swap readiness phase may fail during artifact hashing, reference
 script publication, reference UTxO lookup, or observed reference-script
@@ -521,10 +494,12 @@ hash verification. Inspect `swap-ready/registry.json`,
 and the node log together.
 
 Use the run directory's `node.log`, `summary.log`, `timing.json`, and
-`governance/summary.json` when recording governance evidence. Use
-`withdraw/intent.json`, `withdraw/registry.json`,
-`withdraw/report.json`, `withdraw/signed-tx.cbor.hex`,
-`withdraw/submit.log`, and `withdraw/materialized.json` when recording
-withdrawal evidence. Use `swap-ready/registry.json`,
+`governance/summary.json` when recording legacy governance-only
+evidence. Use `registry-init/registry.json`,
+`stake-reward-init/accounts.json`,
+`governance-withdrawal-init/governance.json`,
+`governance-withdrawal-init/withdrawal.json`, and
+`governance-withdrawal-init/materialized.json` when recording #149
+command evidence. Use `swap-ready/registry.json`,
 `swap-ready/summary.json`, and `swap-ready/provenance.json` when
 recording swap readiness evidence.

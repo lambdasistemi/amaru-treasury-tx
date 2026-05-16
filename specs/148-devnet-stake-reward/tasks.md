@@ -71,35 +71,59 @@ the success-line contract.
 
 ### Tests For User Story 1
 
-- [ ] T014 [US1] RED: add focused CLI parser coverage in
+- [x] T014 [US1] RED: add focused CLI parser coverage in
   `test/unit/Amaru/Treasury/Cli/DevnetSpec.hs` for
-  `amaru-treasury-tx --network devnet devnet stake-reward-init ...`.
-- [ ] T015 [US1] RED: add success-line/artifact rendering coverage in
+  `amaru-treasury-tx --network devnet devnet stake-reward-init ...`
+  (commit: dfe56e6).
+- [x] T015 [US1] RED: add success-line/artifact rendering coverage in
   `test/unit/Amaru/Treasury/Devnet/StakeRewardInitSpec.hs`, expecting
-  the missing production module to fail before implementation.
+  the missing production module to fail before implementation
+  (commit: dfe56e6).
 
 ### Implementation For User Story 1
 
-- [ ] T016 [US1] Add `Amaru.Treasury.Devnet.StakeRewardInit` in
+- [x] T016 [US1] Add `Amaru.Treasury.Devnet.StakeRewardInit` in
   `lib/Amaru/Treasury/Devnet/StakeRewardInit.hs` with setup config,
   result types, artifact paths, JSON rendering, success lines, and
-  typed diagnostics.
-- [ ] T017 [US1] Implement the production setup entry point that
+  typed diagnostics (commit: dfe56e6).
+- [x] T017 [US1] Implement the production setup entry point that
   consumes #147 registry artifacts/projections, prepares treasury and
   permissions script reward accounts, submits the setup transaction,
-  and verifies the expected setup state.
-- [ ] T018 [US1] Add `devnet stake-reward-init` parser and option
+  and verifies the expected setup state (commit: dfe56e6).
+- [x] T018 [US1] Add `devnet stake-reward-init` parser and option
   record to `lib/Amaru/Treasury/Cli/Devnet.hs`, following the
-  registry-init command pattern.
-- [ ] T019 [US1] Wire the command into `Amaru.Treasury.Cli`,
-  `app/amaru-treasury-tx/Main.hs`, and Cabal exposure as needed.
-- [ ] T020 [US1] GREEN: run `nix develop --quiet -c just unit
+  registry-init command pattern (commit: dfe56e6).
+- [x] T019 [US1] Wire the command into `Amaru.Treasury.Cli`,
+  `app/amaru-treasury-tx/Main.hs`, and Cabal exposure as needed
+  (commit: dfe56e6).
+- [x] T020 [US1] GREEN: run `nix develop --quiet -c just unit
   "stake-reward-init"` and `nix develop --quiet -c cabal build
-  exe:amaru-treasury-tx -O0`.
-- [ ] T021 [US1] Commit the command slice as
+  exe:amaru-treasury-tx -O0` (commit: dfe56e6).
+- [x] T021 [US1] Commit the command slice as
   `feat(devnet): expose stake reward init command` with `Tasks:
   T014,T015,T016,T017,T018,T019,T020,T021` in the commit body and task
-  lines updated with the commit short SHA.
+  lines updated with the commit short SHA (commit: dfe56e6).
+
+Evidence:
+
+- Subagent RED proof: focused `stake-reward-init` unit target failed
+  before implementation because
+  `Amaru.Treasury.Devnet.StakeRewardInit` did not exist.
+- Orchestrator review accepted commit `dfe56e6`, whose body carries
+  `Tasks: T014,T015,T016,T017,T018,T019,T020,T021`.
+- `nix develop --quiet -c just unit "stake-reward-init"` passed with
+  5 examples and 0 failures.
+- `nix develop --quiet -c cabal build exe:amaru-treasury-tx -O0`
+  exited 0.
+- `git diff --check` exited 0.
+- A direct non-DevNet CLI invocation using nonexistent registry,
+  signing-key, and socket inputs exited 1 with
+  `stake-reward-init: --network must be devnet`, proving the network
+  guard runs before those effects.
+- The provider API cannot strongly distinguish a registered
+  zero-reward account from an absent reward row, so the command records
+  the explicit diagnostic
+  `RewardAccountRegistrationInferredFromAcceptedTx`.
 
 ## Phase 4: User Story 2 - Testnet-Aware Permissions Reward Parsing (Priority: P1)
 

@@ -13,17 +13,24 @@ module Amaru.Treasury.Cli
     , opts
     ) where
 
+import Data.Version (showVersion)
 import Options.Applicative
     ( Parser
     , ParserInfo
     , command
     , fullDesc
+    , help
     , helper
     , hsubparser
     , info
+    , infoOption
+    , long
     , progDesc
+    , short
     , (<**>)
     )
+
+import Paths_amaru_treasury_tx (version)
 
 import Amaru.Treasury.Cli.AttachWitness
     ( AttachWitnessOpts
@@ -253,11 +260,21 @@ vaultCmdP =
             )
         )
 
+versionOption :: Parser (a -> a)
+versionOption =
+    infoOption
+        ("amaru-treasury-tx " <> showVersion version)
+        ( long "version"
+            <> short 'V'
+            <> help "Show version and exit"
+        )
+
 opts :: ParserInfo (GlobalOpts, Cmd)
 opts =
     info
         ( ((,) <$> globalOptsP <*> cmdP)
             <**> helper
+            <**> versionOption
         )
         ( fullDesc
             <> progDesc

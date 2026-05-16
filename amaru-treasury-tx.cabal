@@ -120,6 +120,7 @@ library
     Amaru.Treasury.Cli.SwapWizard
     Amaru.Treasury.Cli.TreasuryInspect
     Amaru.Treasury.Cli.TxBuild
+    Amaru.Treasury.Cli.UpdateCheck
     Amaru.Treasury.Cli.Vault
     Amaru.Treasury.Cli.WithdrawWizard
     Amaru.Treasury.Cli.Witness
@@ -211,6 +212,7 @@ library
     , directory
     , file-embed
     , filepath
+    , github-release-check
     , haskeline
     , http-client
     , http-conduit

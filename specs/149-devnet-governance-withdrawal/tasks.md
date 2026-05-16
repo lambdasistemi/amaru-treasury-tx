@@ -44,7 +44,7 @@ Evidence:
   --require-tasks --include-tasks` and `git diff --check`.
 - [x] T015 Commit the spec/process slice as
   `docs(devnet): plan governance withdrawal init`.
-- [ ] T016 Update PR #154 body with the committed phase assets.
+- [x] T016 Update PR #154 body with the committed phase assets.
 
 Evidence:
 
@@ -65,6 +65,8 @@ Evidence:
   available.
 - `git diff --check` exited 0 before the spec/process commit.
 - The spec/process commit added the Spec Kit/process assets to PR #154.
+- PR #154 body was updated with the committed assets, command contract,
+  phase-review choice, and next implementation slice boundary.
 
 ## Phase 3: User Story 1 - Shipped Governance/Withdrawal Command (Priority: P1)
 

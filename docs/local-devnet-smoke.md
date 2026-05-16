@@ -66,6 +66,19 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
 
 ## Registry Initiator Boundary
 
+The shipped command for this boundary is:
+
+```bash
+amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+  devnet registry-init \
+  --funding-address "$DEVNET_FUNDING_ADDRESS" \
+  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
+  --run-dir runs/devnet/manual-registry-init
+```
+
+The local smoke runs the same command runner against the
+`cardano-node-clients` DevNet:
+
 ```bash
 just devnet-smoke registry-init
 ```
@@ -73,41 +86,40 @@ just devnet-smoke registry-init
 Expected output:
 
 ```text
-devnet-smoke: run-dir runs/devnet/YYYYMMDDTHHMMSSZ
-devnet-smoke: network devnet magic 42
-devnet-smoke: phase registry-init passed
-devnet-smoke: registry-init-seed-split-tx-id f319...
-devnet-smoke: registry-init-registry-mint-tx-id 8dbb...
-devnet-smoke: registry-init-reference-scripts-tx-id f730...
-devnet-smoke: registry-init-summary runs/devnet/YYYYMMDDTHHMMSSZ/registry-init/summary.json
-devnet-smoke: registry-init-registry runs/devnet/YYYYMMDDTHHMMSSZ/registry-init/registry.json
+registry-init: run-dir runs/devnet/YYYYMMDDTHHMMSSZ
+registry-init: network devnet magic 42
+registry-init: phase registry-init passed
+registry-init: seed-split-tx-id 82b1...
+registry-init: registry-mint-tx-id 1f42...
+registry-init: reference-scripts-tx-id 5c32...
+registry-init: summary runs/devnet/YYYYMMDDTHHMMSSZ/registry-init/summary.json
+registry-init: registry runs/devnet/YYYYMMDDTHHMMSSZ/registry-init/registry.json
 ```
 
-The registry-init smoke invokes the production-backed registry
+The registry-init command invokes the production-backed registry
 initiator, publishes local seed-derived scopes and registry NFTs,
 publishes permissions and treasury reference scripts, then verifies the
 expected registry/reference-script UTxOs through the local provider
-before reporting success. The smoke layer owns orchestration and chain
-verification; reusable registry transaction construction lives in
-production code.
+before reporting success. The smoke layer owns DevNet setup and proof;
+reusable registry transaction construction lives in production code.
 
 The verified 2026-05-16 slice used run directory
-`runs/devnet/20260516T184944Z`. It submitted seed split tx
-`f31917b80a3649c90bead84e5aea925d68945021a811f0dc68bd7dcce372a90b`,
+`runs/devnet/20260516T193404Z`. It submitted seed split tx
+`82b1f12f0ceeae86c50753a61528599c4d7b8ccef769a56accd3011c0e24084d`,
 registry mint tx
-`8dbb8d18e1814ee733ace77c5c7e59e17bb70c22382c69637e6a154729ec3912`,
+`1f427e73979ee6150e69944fb384cbe0809148e64307a2a75221bacea8cb4ff9`,
 and reference-script tx
-`f730f2360b82a8a8fd0a4e071110bb78223d5c09eb2413d32eb48d5e54acb44c`.
+`5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44`.
 It observed scopes
-`8dbb8d18e1814ee733ace77c5c7e59e17bb70c22382c69637e6a154729ec3912#0`,
+`1f427e73979ee6150e69944fb384cbe0809148e64307a2a75221bacea8cb4ff9#0`,
 registry
-`8dbb8d18e1814ee733ace77c5c7e59e17bb70c22382c69637e6a154729ec3912#1`,
+`1f427e73979ee6150e69944fb384cbe0809148e64307a2a75221bacea8cb4ff9#1`,
 permissions reference
-`f730f2360b82a8a8fd0a4e071110bb78223d5c09eb2413d32eb48d5e54acb44c#0`,
+`5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44#0`,
 and treasury reference
-`f730f2360b82a8a8fd0a4e071110bb78223d5c09eb2413d32eb48d5e54acb44c#1`.
+`5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44#1`.
 
-The registry-init phase writes:
+The registry-init command writes:
 
 ```text
 runs/devnet/YYYYMMDDTHHMMSSZ/

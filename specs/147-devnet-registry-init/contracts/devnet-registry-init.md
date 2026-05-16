@@ -46,14 +46,14 @@ scripts/smoke/devnet-local --phase registry-init --run-dir <run-dir>
 Expected success stdout lines:
 
 ```text
-devnet-smoke: run-dir <run-dir>
-devnet-smoke: network devnet magic 42
-devnet-smoke: phase registry-init passed
-devnet-smoke: registry-init-seed-split-tx-id <tx-id>
-devnet-smoke: registry-init-registry-mint-tx-id <tx-id>
-devnet-smoke: registry-init-reference-scripts-tx-id <tx-id>
-devnet-smoke: registry-init-summary <run-dir>/registry-init/summary.json
-devnet-smoke: registry-init-registry <run-dir>/registry-init/registry.json
+registry-init: run-dir <run-dir>
+registry-init: network devnet magic 42
+registry-init: phase registry-init passed
+registry-init: seed-split-tx-id <tx-id>
+registry-init: registry-mint-tx-id <tx-id>
+registry-init: reference-scripts-tx-id <tx-id>
+registry-init: summary <run-dir>/registry-init/summary.json
+registry-init: registry <run-dir>/registry-init/registry.json
 ```
 
 ## Success Artifacts

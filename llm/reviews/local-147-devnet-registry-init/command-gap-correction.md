@@ -1,6 +1,6 @@
 # Command Gap Correction
 
-state: WorkRequired
+state: ResolvedByCommandSlice
 
 ## Finding
 
@@ -27,6 +27,8 @@ command surface is insufficient.
 
 ## Next Actor
 
-Implementation subagent for T035-T042 only. The orchestrator will review
-the returned diff and rerun verification locally before docs/PR metadata
-are updated.
+Resolved by Dalton's T035-T042 command slice at
+`663c0e2fd57d54a2cf2c8c669b31f209ada26451`. The orchestrator reviewed
+the diff, sent output-contract and HLint corrections back to the same
+subagent, reran local verification, updated docs/spec metadata, and
+returned #147 to final PR review.

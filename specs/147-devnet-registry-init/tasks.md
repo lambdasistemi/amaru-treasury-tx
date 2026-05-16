@@ -183,13 +183,18 @@ Evidence:
   subagent amended the commit so CLI output matches
   `contracts/devnet-registry-init.md`.
 - GREEN: local orchestrator verification of
-  `9acc8c9d5e67f163ebcc5cb0ee4b204f76535612` passed `git diff
+  `663c0e2fd57d54a2cf2c8c669b31f209ada26451` passed `git diff
   --check`, `nix develop --quiet -c just unit "registry-init command"`
   with 3 examples and 0 failures,
   `nix develop --quiet -c cabal build exe:amaru-treasury-tx -O0`,
   `nix develop --quiet -c cabal build test:devnet-tests -O0`,
   focused `fourmolu -m check`, and `cabal-fmt -c
   amaru-treasury-tx.cabal`.
+- HLint correction: Dalton amended the command slice from the reviewed
+  `9acc8c9d5e67f163ebcc5cb0ee4b204f76535612` to
+  `663c0e2fd57d54a2cf2c8c669b31f209ada26451` for a behavior-neutral
+  eta-reduction in `RegistryInit.hs`; `nix develop --quiet -c just
+  hlint` reported `No hints`.
 - LIVE GREEN: `nix develop --quiet -c just devnet-smoke registry-init`
   passed with 2 devnet examples and 0 failures in
   `runs/devnet/20260516T193404Z`; seed split tx
@@ -209,11 +214,24 @@ Evidence:
 
 ### Docs And Metadata Follow-Up
 
-- [ ] T043 [US1] Update README and local DevNet docs with the shipped
+- [x] T043 [US1] Update README and local DevNet docs with the shipped
   command invocation, smoke proof command, artifact paths, and the new
   verified run directory.
-- [ ] T044 [US1] Rerun the local gate and update PR #152 metadata before
+- [x] T044 [US1] Rerun the local gate and update PR #152 metadata before
   returning it to external review.
+
+Evidence:
+
+- DOCS/METADATA: README, `docs/local-devnet-smoke.md`,
+  `quickstart.md`, and `contracts/devnet-registry-init.md` now document
+  the shipped `amaru-treasury-tx --network devnet --node-socket
+  <socket> devnet registry-init ...` command first, then the
+  `just devnet-smoke registry-init` proof harness.
+- GATE GREEN: `./llm/reviews/local-147-devnet-registry-init/gate.sh`
+  passed after the command slice and documentation updates.
+- PR METADATA: PR #152 body was updated with the shipped command, latest
+  verification evidence, live run `runs/devnet/20260516T193404Z`, and
+  explicit non-claims for #148, #149, and #150.
 
 ## Dependencies
 

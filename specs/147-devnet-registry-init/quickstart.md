@@ -29,6 +29,9 @@ Expected success output includes:
 registry-init: run-dir runs/devnet/manual-registry-init
 registry-init: network devnet magic 42
 registry-init: phase registry-init passed
+registry-init: seed-split-tx-id <tx-id>
+registry-init: registry-mint-tx-id <tx-id>
+registry-init: reference-scripts-tx-id <tx-id>
 registry-init: summary runs/devnet/manual-registry-init/registry-init/summary.json
 registry-init: registry runs/devnet/manual-registry-init/registry-init/registry.json
 ```
@@ -42,11 +45,14 @@ just devnet-smoke registry-init
 Expected success output includes:
 
 ```text
-devnet-smoke: run-dir runs/devnet/YYYYMMDDTHHMMSSZ
-devnet-smoke: network devnet magic 42
-devnet-smoke: phase registry-init passed
-devnet-smoke: registry-init-summary runs/devnet/YYYYMMDDTHHMMSSZ/registry-init/summary.json
-devnet-smoke: registry-init-registry runs/devnet/YYYYMMDDTHHMMSSZ/registry-init/registry.json
+registry-init: run-dir runs/devnet/YYYYMMDDTHHMMSSZ
+registry-init: network devnet magic 42
+registry-init: phase registry-init passed
+registry-init: seed-split-tx-id <tx-id>
+registry-init: registry-mint-tx-id <tx-id>
+registry-init: reference-scripts-tx-id <tx-id>
+registry-init: summary runs/devnet/YYYYMMDDTHHMMSSZ/registry-init/summary.json
+registry-init: registry runs/devnet/YYYYMMDDTHHMMSSZ/registry-init/registry.json
 ```
 
 ## Inspect Artifacts

@@ -25,6 +25,7 @@ import Test.Hspec
     , expectationFailure
     , it
     , shouldBe
+    , shouldSatisfy
     )
 
 import Amaru.Treasury.Devnet.GovernanceWithdrawalInit
@@ -59,6 +60,7 @@ import Amaru.Treasury.Devnet.GovernanceWithdrawalInit
     , governanceWithdrawalInitWithdrawalPath
     , governanceWithdrawalInitWithdrawalValue
     , gwpRegistry
+    , renderAddr
     , validateGovernanceWithdrawalInitInputs
     , validateGovernanceWithdrawalPrerequisites
     , validateTreasuryMaterializationDelta
@@ -138,6 +140,12 @@ spec =
                     Right{} ->
                         expectationFailure
                             "expected unregistered treasury account to fail"
+
+        it "renders real testnet addresses as Bech32" $ do
+            let rendered =
+                    renderAddr (dgwrTreasuryAddress sampleRegistry)
+            rendered `shouldSatisfy` T.isPrefixOf "addr_test1"
+            T.length rendered `shouldSatisfy` (> 20)
 
         it "rejects non-positive scalar command inputs with stable failures" $ do
             case validateGovernanceWithdrawalInitInputs 0 180 of

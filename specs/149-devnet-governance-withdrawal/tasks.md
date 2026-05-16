@@ -138,7 +138,7 @@ and library compile before live smoke.
 
 ### Phase 3 Review Fix
 
-- [ ] T044 [US1] Fix live command address rendering so
+- [x] T044 [US1] Fix live command address rendering so
   `governance-withdrawal-init` emits Bech32 addresses instead of
   UTF-8-decoding serialized binary address bytes, add a regression test
   that covers a real DevNet funding/wallet address render path, and

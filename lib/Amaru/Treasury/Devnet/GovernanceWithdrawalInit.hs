@@ -70,6 +70,7 @@ module Amaru.Treasury.Devnet.GovernanceWithdrawalInit
     , governanceWithdrawalInitFailureLines
     , writeGovernanceWithdrawalInitArtifactsWithLines
     , writeGovernanceWithdrawalInitFailure
+    , renderAddr
     ) where
 
 import Cardano.Crypto.DSIGN.Class
@@ -161,6 +162,7 @@ import Cardano.Tx.Build
     , validTo
     , vote
     )
+import Codec.Binary.Bech32 qualified as Bech32
 import Control.Concurrent (threadDelay)
 import Control.Exception
     ( try
@@ -2473,8 +2475,20 @@ rewardWaitAttempts seconds =
     max 1 (seconds * 2)
 
 renderAddr :: Addr -> T.Text
-renderAddr =
-    TE.decodeUtf8 . serialiseAddr
+renderAddr addr =
+    Bech32.encodeLenient
+        hrp
+        (Bech32.dataPartFromBytes (serialiseAddr addr))
+  where
+    hrp =
+        either
+            (error . ("renderAddr: " <>) . show)
+            id
+            (Bech32.humanReadablePartFromText (addressHrp addr))
+    addressHrp target =
+        case getNetwork target of
+            Mainnet -> "addr"
+            Testnet -> "addr_test"
 
 decodeUtf8Lenient :: BS8.ByteString -> T.Text
 decodeUtf8Lenient =

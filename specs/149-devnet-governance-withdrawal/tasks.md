@@ -209,15 +209,15 @@ artifact paths, live run evidence, and #150 handoff.
   `contracts/devnet-governance-withdrawal-init.md`, and this
   `tasks.md` with accepted live evidence: run directory, proposal tx id,
   action id, vote tx id, withdrawal tx id, materialized TxIn, and ADA.
-- [ ] T040 [US3] Update PR #154 body with committed assets,
+- [x] T040 [US3] Update PR #154 body with committed assets,
   implementation slices, verification evidence, docs/metadata
   alignment, and remaining risk.
-- [ ] T041 [US3] Run `.specify/scripts/bash/check-prerequisites.sh
+- [x] T041 [US3] Run `.specify/scripts/bash/check-prerequisites.sh
   --json --require-tasks --include-tasks`, `git diff --check`, and
   `./gate.sh`.
-- [ ] T042 [US3] Remove `gate.sh` in a final
+- [x] T042 [US3] Remove `gate.sh` in a final
   `chore(devnet): drop #149 gate` commit before marking the PR ready.
-- [ ] T043 [US3] Mark PR #154 ready only after docs, README,
+- [x] T043 [US3] Mark PR #154 ready only after docs, README,
   repository metadata, specs, quickstart, tasks, and PR body align with
   delivered behavior.
 
@@ -235,6 +235,18 @@ Accepted live evidence for T037-T039:
 - materialized TxIn:
   `4a87409b52b8104d51d41df7ee562196cf33621f64c4c40985b4aef5ff21e9bd#0`
 - materialized ADA: `2000000`
+
+Finalization evidence:
+
+- `.specify/scripts/bash/check-prerequisites.sh --json
+  --require-tasks --include-tasks` found `research.md`,
+  `data-model.md`, `contracts/`, `quickstart.md`, and `tasks.md`.
+- `git diff --check` exited 0.
+- `./gate.sh` exited 0 before gate removal, covering build, schema
+  check, full unit, golden, format-check, hlint, smoke, and release
+  consistency.
+- PR #154 body was updated with the accepted assets, slices, live proof,
+  local gate evidence, and remaining risk.
 
 ## Subagent Handoff Contract
 

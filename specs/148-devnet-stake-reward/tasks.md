@@ -226,22 +226,24 @@ contains `stake-reward-init/summary.json`, `accounts.json`, and
 
 ## Phase 6: User Story 1 Correction - Permissions Is Withdraw-Zero Only (Priority: P1)
 
-- [ ] T035 [US1] RED: add focused unit coverage proving the setup
+- [x] T035 [US1] RED: add focused unit coverage proving the setup
   artifacts mark treasury as registered and permissions as available but
-  not registered.
-- [ ] T036 [US1] Update `Amaru.Treasury.Devnet.StakeRewardInit` so the
+  not registered (commit: fcb29a3).
+- [x] T036 [US1] Update `Amaru.Treasury.Devnet.StakeRewardInit` so the
   setup transaction registers only the treasury script credential,
   verifies the permissions reference script handoff, and emits a typed
-  diagnostic for the permissions withdraw-zero-only account.
-- [ ] T037 [US1] Update CLI help/success artifact wording where it
-  currently claims permissions registration.
-- [ ] T038 [US1] GREEN: run `nix develop --quiet -c just unit
+  diagnostic for the permissions withdraw-zero-only account (commit:
+  fcb29a3).
+- [x] T037 [US1] Update CLI help/success artifact wording where it
+  currently claims permissions registration (commit: fcb29a3).
+- [x] T038 [US1] GREEN: run `nix develop --quiet -c just unit
   "stake-reward-init"` and
-  `nix develop --quiet -c cabal build exe:amaru-treasury-tx -O0`.
-- [ ] T039 [US1] Commit the correction slice as
+  `nix develop --quiet -c cabal build exe:amaru-treasury-tx -O0`
+  (commit: fcb29a3).
+- [x] T039 [US1] Commit the correction slice as
   `fix(devnet): avoid certifying permissions reward account` with
   `Tasks: T035,T036,T037,T038,T039` in the commit body and task lines
-  updated with the commit short SHA.
+  updated with the commit short SHA (commit: fcb29a3).
 
 Evidence:
 
@@ -254,6 +256,19 @@ Evidence:
   in `StakeRewardInit.submitStakeRewardSetup`.
 - Existing production disburse/swap builders invoke the permissions
   script through a 0-lovelace withdrawal, not through a certificate.
+- Subagent RED proof: `nix develop --quiet -c just unit
+  "stake-reward-init"` exited 1 before production changes because the
+  old module did not export the pure setup program needed to inspect
+  certificate shape.
+- Orchestrator review accepted commit `fcb29a3`, whose body carries
+  `Tasks: T035,T036,T037,T038,T039`.
+- `nix develop --quiet -c just unit "stake-reward-init"` passed with
+  6 examples and 0 failures.
+- `nix develop --quiet -c cabal build exe:amaru-treasury-tx -O0`
+  exited 0.
+- `./gate.sh` exited 0 with 426 unit examples, 25 golden examples,
+  0 failures, 1 pending, no hlint hints, smoke scripts, and release
+  check passing.
 
 ## Phase 7: Documentation, Metadata, And Finalization
 

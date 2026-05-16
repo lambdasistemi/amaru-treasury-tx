@@ -199,13 +199,13 @@ second.
 quickstart, tasks, and PR body agree on command shape, smoke proof,
 artifact paths, live run evidence, and #150 handoff.
 
-- [ ] T037 [US3] Update README with manual
+- [x] T037 [US3] Update README with manual
   `devnet governance-withdrawal-init` usage, expected artifacts, and
   latest live run evidence.
-- [ ] T038 [US3] Update `docs/local-devnet-smoke.md` and
+- [x] T038 [US3] Update `docs/local-devnet-smoke.md` and
   `docs/release.md` so governance/withdrawal setup documentation leads
   with the shipped command and accurately names any smoke phase aliases.
-- [ ] T039 [US3] Update `quickstart.md`,
+- [x] T039 [US3] Update `quickstart.md`,
   `contracts/devnet-governance-withdrawal-init.md`, and this
   `tasks.md` with accepted live evidence: run directory, proposal tx id,
   action id, vote tx id, withdrawal tx id, materialized TxIn, and ADA.
@@ -220,6 +220,21 @@ artifact paths, live run evidence, and #150 handoff.
 - [ ] T043 [US3] Mark PR #154 ready only after docs, README,
   repository metadata, specs, quickstart, tasks, and PR body align with
   delivered behavior.
+
+Accepted live evidence for T037-T039:
+
+- run directory: `runs/devnet/20260516T231003Z`
+- proposal tx id:
+  `baffa774b368b1da8c3ff80be399bcf6fa63b5cff658b6889fc00109da218e23`
+- governance action id:
+  `baffa774b368b1da8c3ff80be399bcf6fa63b5cff658b6889fc00109da218e23#0`
+- vote tx id:
+  `009801303fc5cc3c3dfe474c30cc4b7d31e99b5af29467cc317072ea6b728c45`
+- withdrawal tx id:
+  `4a87409b52b8104d51d41df7ee562196cf33621f64c4c40985b4aef5ff21e9bd`
+- materialized TxIn:
+  `4a87409b52b8104d51d41df7ee562196cf33621f64c4c40985b4aef5ff21e9bd#0`
+- materialized ADA: `2000000`
 
 ## Subagent Handoff Contract
 

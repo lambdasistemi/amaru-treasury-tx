@@ -71,6 +71,21 @@ If `withdraw` remains accepted by `scripts/smoke/devnet-local`, it MUST
 be an alias for the same production command proof or be removed from the
 documented passing phase list.
 
+Accepted PR #154 proof:
+
+```text
+run-dir: runs/devnet/20260516T231003Z
+proposal-tx-id: baffa774b368b1da8c3ff80be399bcf6fa63b5cff658b6889fc00109da218e23
+governance-action-id: baffa774b368b1da8c3ff80be399bcf6fa63b5cff658b6889fc00109da218e23#0
+vote-tx-id: 009801303fc5cc3c3dfe474c30cc4b7d31e99b5af29467cc317072ea6b728c45
+treasury-reward-account: b2b7201c62e43ae8e03b61c96931379ebbcdce61befc3f4e4b1f4be4
+withdrawal-tx-id: 4a87409b52b8104d51d41df7ee562196cf33621f64c4c40985b4aef5ff21e9bd
+materialized-tx-in: 4a87409b52b8104d51d41df7ee562196cf33621f64c4c40985b4aef5ff21e9bd#0
+materialized-ada: 2000000
+reward-movement: 0 -> 2000000 -> 0
+treasury-ada-movement: 200000000 -> 202000000
+```
+
 ## Success Artifacts
 
 All command-owned success artifacts live under:

@@ -919,7 +919,9 @@ translateDisburse ti = do
     treasuryUtxos <-
         traverse parseTxIn (sjTreasuryUtxos scope)
     permissionsAcct <-
-        parseRewardAccount (sjPermissionsRewardAccount scope)
+        parseRewardAccountForNetwork
+            (tiNetwork ti)
+            (sjPermissionsRewardAccount scope)
     scopesRef <- parseTxIn (sjScopesDeployedAt scope)
     permissionsRef <-
         parseTxIn (sjPermissionsDeployedAt scope)

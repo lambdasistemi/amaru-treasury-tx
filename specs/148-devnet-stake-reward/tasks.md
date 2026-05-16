@@ -296,11 +296,11 @@ Evidence:
   expected output, artifacts, and proof evidence.
 - [x] T042 [US3] Update `quickstart.md`, contract, and tasks evidence
   with final command/proof output.
-- [ ] T043 [US3] Run `./gate.sh` and record exact output evidence.
-- [ ] T044 [US3] Remove `gate.sh` in a final ready-for-review commit.
-- [ ] T045 [US3] Update PR #153 title/body with final scope,
+- [x] T043 [US3] Run `./gate.sh` and record exact output evidence.
+- [x] T044 [US3] Remove `gate.sh` in a final ready-for-review commit.
+- [x] T045 [US3] Update PR #153 title/body with final scope,
   verification evidence, live run evidence, and non-claims.
-- [ ] T046 [US3] Mark PR #153 ready only after docs, README,
+- [x] T046 [US3] Mark PR #153 ready only after docs, README,
   repository metadata, specs/tasks, and PR metadata all align.
 
 Evidence:
@@ -318,6 +318,13 @@ Evidence:
   live proof.
 - `nix develop github:paolino/dev-assets?dir=mkdocs --quiet -c mkdocs
   build --strict --site-dir site` exited 0.
+- `./gate.sh` exited 0 after the smoke and documentation slices, with
+  426 unit examples, 25 golden examples, 0 failures, 1 pending, no
+  hlint hints, smoke scripts, and release check passing.
+- The branch-local `gate.sh` is removed in the final ready-for-review
+  commit so it does not enter `main`.
+- PR #153 metadata is updated after the finalization push with final
+  scope, proof, and non-claims before marking the PR ready.
 
 ## Dependencies
 

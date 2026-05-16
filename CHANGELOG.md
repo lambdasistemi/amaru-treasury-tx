@@ -4,6 +4,12 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.11.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.10.0...v0.2.11.0) (2026-05-16)
+
+### Features
+
+* **cli:** add --version flag and update-available banner (#141) ([b390a3c](https://github.com/lambdasistemi/amaru-treasury-tx/commit/b390a3c0cc63b9c077c9f8bd0a68f49edbb8dc38))
+
 ## [0.2.10.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.9.0...v0.2.10.0) (2026-05-16)
 
 ### Features

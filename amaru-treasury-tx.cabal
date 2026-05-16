@@ -140,6 +140,7 @@ library
     Amaru.Treasury.Cli.WithdrawWizard
     Amaru.Treasury.Cli.Witness
     Amaru.Treasury.Constants
+    Amaru.Treasury.Devnet.RegistryInit
     Amaru.Treasury.Inspect
     Amaru.Treasury.Inspect.Render
     Amaru.Treasury.Inspect.Schema
@@ -371,6 +372,7 @@ test-suite unit-tests
     Amaru.Treasury.Cli.VaultSpec
     Amaru.Treasury.Cli.WitnessSpec
     Amaru.Treasury.ConstantsSpec
+    Amaru.Treasury.Devnet.RegistryInitSpec
     Amaru.Treasury.Inspect.SchemaSpec
     Amaru.Treasury.Inspect.SwapOrderDatumSpec
     Amaru.Treasury.IntentJSONSchemaSpec
@@ -416,6 +418,7 @@ test-suite unit-tests
     , amaru-treasury-tx
     , base                    <5
     , base16-bytestring
+    , bech32
     , bytestring
     , cardano-crypto-class
     , cardano-ledger-allegra
@@ -430,6 +433,7 @@ test-suite unit-tests
     , containers
     , contra-tracer
     , directory
+    , filepath
     , hspec
     , hspec-discover
     , http-client

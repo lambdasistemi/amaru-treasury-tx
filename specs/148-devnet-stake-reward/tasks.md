@@ -32,9 +32,9 @@ Evidence:
 - [x] T010 Write this `tasks.md` with subagent handoff templates.
 - [x] T011 Run `.specify/scripts/bash/check-prerequisites.sh --json
   --require-tasks --include-tasks` and `git diff --check`.
-- [ ] T012 Commit the spec/process slice as
-  `docs(devnet): plan stake reward setup`.
-- [ ] T013 Update PR #153 body with the committed phase assets.
+- [x] T012 Commit the spec/process slice as
+  `docs(devnet): plan stake reward setup` (commit: ec86c26).
+- [x] T013 Update PR #153 body with the committed phase assets.
 
 Evidence:
 
@@ -52,6 +52,9 @@ Evidence:
   `specs/148-devnet-stake-reward` with `research.md`, `data-model.md`,
   `contracts/`, `quickstart.md`, and `tasks.md` available.
 - `git diff --check` exited 0 before the spec/process commit.
+- Commit `ec86c26` added the Spec Kit/process assets to PR #153.
+- PR #153 body was updated with the committed assets, P1 command
+  contract, expected artifacts, and local gate evidence.
 
 ## Phase 3: User Story 1 - Shipped Stake/Reward Setup Command (Priority: P1)
 

@@ -4,35 +4,16 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.10.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.9.0...v0.2.10.0) (2026-05-16)
+
 ### Features
 
-* Build runners now preflight final unsigned Conway transactions with
-  `cardano-tx-tools` phase-1 validation against the sampled
-  `ChainContext` before writing CBOR. Missing vkey witnesses remain a
-  signing-step concern; remaining structural ledger failures abort as
-  build failures.
+* **vault:** support addr_xsk imports ([43f8c2d](https://github.com/lambdasistemi/amaru-treasury-tx/commit/43f8c2d31b27190386542ad45c639c504a80a7b8))
+* **tx-build:** validate final transactions with tx-tools ([1f47e4a](https://github.com/lambdasistemi/amaru-treasury-tx/commit/1f47e4a7fce2528eeda82159d743dbdc22ffcf71))
 
-### Maintainer Notes
+### Bug Fixes
 
-* Live `ChainContext` sampling now keeps protocol parameters, required
-  UTxOs, tip slot, and script evaluation inside one acquired N2C view.
-  The live mainnet `swap-cancel` smoke for
-  `59e10ca5e03b8d243c699fc45e1e18a2a825e2a09c5efa6954aec820a4d64dfe#0`
-  passed without rewriting existing `/tmp` outputs, and an intentional
-  missing-order-UTxO validation-context mutation failed with
-  `final-validation-failed`.
-
-* Local DevNet swap readiness evidence now proves the prerequisite for
-  the SundaeSwap order-build slice: `just devnet-smoke swap-ready`
-  hashes the checked-in public
-  `SundaeSwap-finance/sundae-contracts@be33466b7dbe0f8e6c0e0f46ff23737897f45835`
-  `order.spend` artifact, publishes it as a local DevNet reference
-  script, and writes a readiness registry for #84. Latest branch
-  evidence: `runs/devnet/20260515T124545Z`, script hash
-  `02eee6c4d128c9700c178922163645f1fdb381bbdce071acbbd49465`,
-  reference UTxO
-  `490b9bc8a80e8a55434b895bea6ca47fc612105c0cf71b781a61e99cd2be46af#0`.
-  This is not swap order build, funding, submission, or spend proof.
+* **139:** emit "disburse" event for emergency top-up ([821be2f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/821be2f4ad79309cff7aca2182f983a605785094))
 
 ## [0.2.9.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.8.0...v0.2.9.0) (2026-05-15)
 

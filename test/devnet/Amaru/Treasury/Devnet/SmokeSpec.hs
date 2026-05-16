@@ -387,6 +387,7 @@ spec =
                     sampleTiming
                     sampleDisburseEvidence
                     sampleDisburseBuild
+                    sampleDisburseSubmission
                     sampleUsdmBoundary
                     `shouldBe` object
                         [ "schemaVersion" .= (1 :: Int)
@@ -435,6 +436,44 @@ spec =
                                     :: String
                                )
                         , "feeLovelace" .= (471_000 :: Integer)
+                        , "submittedTxAccepted" .= True
+                        , "submittedTxId"
+                            .= ( "3c945c6b2d9d8df841f7079d20d32e7bc4eb1f3b0873a134b9dca7c95d22afad"
+                                    :: String
+                               )
+                        , "signedTxPath"
+                            .= ( sampleRunDir
+                                    </> "disburse"
+                                    </> "signed-tx.cbor.hex"
+                               )
+                        , "submitLogPath"
+                            .= ( sampleRunDir
+                                    </> "disburse"
+                                    </> "submit.log"
+                               )
+                        , "submissionPath"
+                            .= ( sampleRunDir
+                                    </> "disburse"
+                                    </> "submitted.json"
+                               )
+                        , "treasurySpentTxIns"
+                            .= [ "2c945c6b2d9d8df841f7079d20d32e7bc4eb1f3b0873a134b9dca7c95d22afad#0"
+                                    :: String
+                               ]
+                        , "treasuryLovelaceBefore"
+                            .= (2_000_000 :: Integer)
+                        , "treasuryLovelaceAfter"
+                            .= (1_000_000 :: Integer)
+                        , "beneficiaryOutputTxIn"
+                            .= ( "3c945c6b2d9d8df841f7079d20d32e7bc4eb1f3b0873a134b9dca7c95d22afad#1"
+                                    :: String
+                               )
+                        , "beneficiaryLovelaceBefore"
+                            .= (0 :: Integer)
+                        , "beneficiaryLovelaceAfter"
+                            .= (1_000_000 :: Integer)
+                        , "beneficiaryReceivedLovelace"
+                            .= (1_000_000 :: Integer)
                         , "prerequisitePath"
                             .= disbursePrerequisitePath sampleRunDir
                         , "withdrawSummaryPath"
@@ -762,6 +801,9 @@ disburseSmoke = do
                 runDir
                 socket
                 timing
+                provider
+                submitter
+                registry
                 disburseEvidence
 
 swapReadySmoke :: IO ()
@@ -799,7 +841,7 @@ withFundedGovernanceReward
          -> Submitter IO
          -> PParams ConwayEra
          -> [(TxIn, TxOut ConwayEra)]
-         -> IO (TreasuryTarget, extra)
+         -> IO (TreasuryTarget, [AccountAddress], extra)
        )
     -> ( FilePath
          -> ShelleyGenesisTiming
@@ -831,12 +873,13 @@ withFundedGovernanceReward runDir prepareTarget action = do
             _ <- waitForTreasury provider withdrawalAmount 120
             pp <- queryProtocolParams provider
             utxos <- queryUTxOs provider genesisAddr
-            (target, extra) <-
+            (target, extraRewardAccounts, extra) <-
                 prepareTarget provider submitter pp utxos
             fundingUtxos <- queryUTxOs provider genesisAddr
             evidence <-
                 submitTreasuryWithdrawal
                     target
+                    extraRewardAccounts
                     provider
                     submitter
                     pp
@@ -926,6 +969,21 @@ data DisburseBuildEvidence = DisburseBuildEvidence
     }
     deriving stock (Eq, Show)
 
+data DisburseSubmissionEvidence = DisburseSubmissionEvidence
+    { dseSubmittedTxId :: !T.Text
+    , dseSignedTxPath :: !FilePath
+    , dseSubmitLogPath :: !FilePath
+    , dseSubmissionPath :: !FilePath
+    , dseTreasurySpentTxIns :: ![T.Text]
+    , dseTreasuryLovelaceBefore :: !Integer
+    , dseTreasuryLovelaceAfter :: !Integer
+    , dseBeneficiaryOutputTxIn :: !T.Text
+    , dseBeneficiaryLovelaceBefore :: !Integer
+    , dseBeneficiaryLovelaceAfter :: !Integer
+    , dseBeneficiaryReceivedLovelace :: !Integer
+    }
+    deriving stock (Eq, Show)
+
 data UsdmBoundaryEvidence = UsdmBoundaryEvidence
     { ubeStatus :: !T.Text
     , ubeCode :: !(Maybe T.Text)
@@ -997,6 +1055,17 @@ voteOutputCoin = Coin 5_000_000
 voterSignKey :: SignKeyDSIGN Ed25519DSIGN
 voterSignKey =
     mkSignKey "amaru-governance-voter-key-00001"
+
+disburseBeneficiarySignKey :: SignKeyDSIGN Ed25519DSIGN
+disburseBeneficiarySignKey =
+    mkSignKey "amaru-disburse-beneficiary-key-0001"
+
+disburseBeneficiaryAddr :: Addr
+disburseBeneficiaryAddr =
+    Addr
+        Testnet
+        (KeyHashObj (paymentKeyHashFromSignKey disburseBeneficiarySignKey))
+        StakeRefNull
 
 devnetSeedCoin :: Coin
 devnetSeedCoin = Coin 100_000_000
@@ -1085,6 +1154,27 @@ sampleDisburseBuild =
         , dbeTotalCollateralLovelace = 0
         }
 
+sampleDisburseSubmission :: DisburseSubmissionEvidence
+sampleDisburseSubmission =
+    DisburseSubmissionEvidence
+        { dseSubmittedTxId = dbeTxId sampleDisburseBuild
+        , dseSignedTxPath =
+            sampleRunDir </> "disburse" </> "signed-tx.cbor.hex"
+        , dseSubmitLogPath =
+            sampleRunDir </> "disburse" </> "submit.log"
+        , dseSubmissionPath =
+            sampleRunDir </> "disburse" </> "submitted.json"
+        , dseTreasurySpentTxIns =
+            dreTreasuryTxIns sampleDisburseEvidence
+        , dseTreasuryLovelaceBefore = 2_000_000
+        , dseTreasuryLovelaceAfter = 1_000_000
+        , dseBeneficiaryOutputTxIn =
+            dbeTxId sampleDisburseBuild <> "#1"
+        , dseBeneficiaryLovelaceBefore = 0
+        , dseBeneficiaryLovelaceAfter = 1_000_000
+        , dseBeneficiaryReceivedLovelace = 1_000_000
+        }
+
 sampleUsdmBoundary :: UsdmBoundaryEvidence
 sampleUsdmBoundary =
     UsdmBoundaryEvidence
@@ -1119,25 +1209,29 @@ preparePinnedTreasuryTarget
     -> Submitter IO
     -> PParams ConwayEra
     -> [(TxIn, TxOut ConwayEra)]
-    -> IO (TreasuryTarget, ())
+    -> IO (TreasuryTarget, [AccountAddress], ())
 preparePinnedTreasuryTarget _provider _submitter _pp _utxos = do
     target <-
         treasuryTargetFromBlob
             =<< expectEither
                 "derive pinned treasury script"
                 (derivedTreasuryScriptBlob CoreDevelopment)
-    pure (target, ())
+    pure (target, [], ())
 
 prepareDevnetWithdrawalRegistry
     :: Provider IO
     -> Submitter IO
     -> PParams ConwayEra
     -> [(TxIn, TxOut ConwayEra)]
-    -> IO (TreasuryTarget, DevnetRegistryAnchors)
+    -> IO (TreasuryTarget, [AccountAddress], DevnetRegistryAnchors)
 prepareDevnetWithdrawalRegistry provider submitter pp utxos = do
     registry <-
         deployDevnetWithdrawalRegistry provider submitter pp utxos
-    pure (draTreasuryTarget registry, registry)
+    let permissionsAccount =
+            AccountAddress
+                Testnet
+                (AccountId (ScriptHashObj (draPermissionsHash registry)))
+    pure (draTreasuryTarget registry, [permissionsAccount], registry)
 
 deployDevnetWithdrawalRegistry
     :: Provider IO
@@ -1342,6 +1436,51 @@ submitReferenceScripts provider submitter pp scripts seed@(seedIn, _) = do
             genesisAddr
             prog
     pure (txOutRef txId 0, txOutRef txId 1)
+
+registerPermissionsReward
+    :: Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> DevnetScriptSet
+    -> (TxIn, TxOut ConwayEra)
+    -> IO ()
+registerPermissionsReward provider submitter pp scripts seed@(seedIn, _) = do
+    snapshot <- queryLedgerSnapshot provider
+    let permissionsCredential =
+            ScriptHashObj (dssPermissionsHash scripts)
+        interpret :: InterpretIO NoCtx
+        interpret =
+            InterpretIO $ \case {}
+        eval tx =
+            fmap
+                (Map.map (either (Left . show) Right))
+                (evaluateTx provider tx)
+        upperSlot =
+            addSlots 20 (ledgerTipSlot snapshot)
+        prog :: TxBuild NoCtx Void ()
+        prog = do
+            _ <- spend seedIn
+            collateral seedIn
+            _ <-
+                registerAndVoteAbstain
+                    permissionsCredential
+                    stakeDeposit
+                    (ScriptCert (RawPlutusData emptyListRedeemer))
+            attachScript (dssPermissionsScript scripts)
+            validTo upperSlot
+    _ <-
+        buildSubmitAndWait
+            "register permissions reward account"
+            provider
+            submitter
+            pp
+            interpret
+            eval
+            [seed]
+            []
+            genesisAddr
+            prog
+    pure ()
 
 publishSwapReadiness
     :: Provider IO
@@ -1870,6 +2009,29 @@ waitForTxChange provider txId addr attempts = do
         else do
             threadDelay 500_000
             waitForTxChange provider txId addr (attempts - 1)
+
+waitForTxOutputAtAddress
+    :: Provider IO
+    -> TxId
+    -> Addr
+    -> Int
+    -> IO (TxIn, TxOut ConwayEra)
+waitForTxOutputAtAddress _ txId addr attempts
+    | attempts <= 0 =
+        expectationFailure
+            ( "timed out waiting for tx output "
+                <> show txId
+                <> " at "
+                <> show addr
+            )
+            >> error "unreachable"
+waitForTxOutputAtAddress provider txId addr attempts = do
+    utxos <- queryUTxOs provider addr
+    case filter (hasTxId txId . fst) utxos of
+        foundOutput : _ -> pure foundOutput
+        [] -> do
+            threadDelay 500_000
+            waitForTxOutputAtAddress provider txId addr (attempts - 1)
 
 waitForEpochAfter :: Provider IO -> EpochNo -> Int -> IO ()
 waitForEpochAfter _ epoch attempts
@@ -2511,6 +2673,8 @@ writeDisburseIntentArtifacts runDir socket timing provider registry = do
             renderAddr (ttAddress target)
         walletAddress =
             renderAddr genesisAddr
+        beneficiaryAddress =
+            renderAddr disburseBeneficiaryAddr
         registryView =
             devnetRegistryView registry
         resolver =
@@ -2533,7 +2697,8 @@ writeDisburseIntentArtifacts runDir socket timing provider registry = do
             Disburse.ResolverInput
                 { Disburse.riNetwork = "devnet"
                 , Disburse.riWalletAddrBech32 = walletAddress
-                , Disburse.riBeneficiaryAddrBech32 = walletAddress
+                , Disburse.riBeneficiaryAddrBech32 =
+                    beneficiaryAddress
                 , Disburse.riScope = CoreDevelopment
                 , Disburse.riUnit = ADA
                 , Disburse.riAmount = disburseAmountLovelace
@@ -2545,7 +2710,8 @@ writeDisburseIntentArtifacts runDir socket timing provider registry = do
                 { Disburse.daScope = CoreDevelopment
                 , Disburse.daUnit = ADA
                 , Disburse.daAmount = disburseAmountLovelace
-                , Disburse.daBeneficiaryAddrBech32 = walletAddress
+                , Disburse.daBeneficiaryAddrBech32 =
+                    beneficiaryAddress
                 , Disburse.daValidityHours = Nothing
                 , Disburse.daRationale =
                     Disburse.RationaleAnswers
@@ -2554,7 +2720,7 @@ writeDisburseIntentArtifacts runDir socket timing provider registry = do
                         , Disburse.raJustification =
                             "Exercise disburse-wizard and tx-build against live local treasury state"
                         , Disburse.raDestinationLabel =
-                            "DevNet wallet beneficiary"
+                            "DevNet disburse beneficiary"
                         , Disburse.raEvent = Just "disburse"
                         , Disburse.raLabel =
                             Just "DevNet ADA disburse"
@@ -2594,7 +2760,7 @@ writeDisburseIntentArtifacts runDir socket timing provider registry = do
             diUnit (tiPayload parsed) `shouldBe` "ada"
             diAmount (tiPayload parsed) `shouldBe` disburseAmountLovelace
             diBeneficiaryAddress (tiPayload parsed)
-                `shouldBe` walletAddress
+                `shouldBe` beneficiaryAddress
             sjTreasuryUtxos (tiScope parsed)
                 `shouldSatisfy` (not . null)
         Right _ ->
@@ -2611,14 +2777,27 @@ writeDisburseBuildArtifacts
     :: FilePath
     -> FilePath
     -> ShelleyGenesisTiming
+    -> Provider IO
+    -> Submitter IO
+    -> DevnetRegistryAnchors
     -> DisburseRunEvidence
     -> IO ()
-writeDisburseBuildArtifacts runDir socket timing evidence = do
+writeDisburseBuildArtifacts
+    runDir
+    socket
+    timing
+    provider
+    submitter
+    registry
+    evidence = do
     createDirectoryIfMissing True (runDir </> "disburse")
     removeIfExists (disburseTxBodyPath runDir)
     removeIfExists (disburseReportJsonPath runDir)
     removeIfExists (disburseReportMarkdownPath runDir)
     removeIfExists (disburseTxBuildLogPath runDir)
+    removeIfExists (disburseSignedTxPath runDir)
+    removeIfExists (disburseSubmitLogPath runDir)
+    removeIfExists (disburseSubmissionPath runDir)
     buildExit <-
         try @ExitCode $
             TxBuild.runTxBuild
@@ -2672,6 +2851,14 @@ writeDisburseBuildArtifacts runDir socket timing evidence = do
             disburseBuildEvidenceFromSuccess success
         usdmBoundary =
             missingUsdmBoundary
+    submitted <-
+        signSubmitAndVerifyDisburse
+            runDir
+            provider
+            submitter
+            registry
+            evidence
+            buildEvidence
     BSL.writeFile
         (disburseUsdmBoundaryPath runDir)
         (encode (usdmBoundaryValue runDir usdmBoundary))
@@ -2681,8 +2868,131 @@ writeDisburseBuildArtifacts runDir socket timing evidence = do
         timing
         evidence
         buildEvidence
+        submitted
         usdmBoundary
-    putDisburseBuildLines runDir evidence buildEvidence
+    putDisburseSubmittedLines runDir evidence buildEvidence submitted
+
+signSubmitAndVerifyDisburse
+    :: FilePath
+    -> Provider IO
+    -> Submitter IO
+    -> DevnetRegistryAnchors
+    -> DisburseRunEvidence
+    -> DisburseBuildEvidence
+    -> IO DisburseSubmissionEvidence
+signSubmitAndVerifyDisburse
+    runDir
+    provider
+    submitter
+    registry
+    evidence
+    buildEvidence = do
+        dreBeneficiaryAddress evidence
+            `shouldBe` renderAddr disburseBeneficiaryAddr
+        txHex <- BS.readFile (disburseTxBodyPath runDir)
+        tx <- case decodeUnsignedTxHex txHex of
+            Right ok -> pure ok
+            Left err ->
+                expectationFailure
+                    ( "decode disburse tx before signing: "
+                        <> T.unpack (renderAttachError err)
+                    )
+                    *> error "unreachable"
+        treasuryBefore <- spendableTreasuryUtxos provider registry
+        let selectedTreasuryRefs =
+                Set.fromList (dreTreasuryTxIns evidence)
+            selectedBefore =
+                filter
+                    ( (`Set.member` selectedTreasuryRefs)
+                        . txInToText
+                        . fst
+                    )
+                    treasuryBefore
+        fmap (txInToText . fst) selectedBefore
+            `shouldBe` dreTreasuryTxIns evidence
+        beneficiaryBefore <- queryUTxOs provider disburseBeneficiaryAddr
+        let signed =
+                addKeyWitness genesisSignKey tx
+            submittedTxId =
+                txIdTx signed
+            submittedTxIdText =
+                renderTxId submittedTxId
+            treasuryBeforeLovelace =
+                sumUtxoLovelace treasuryBefore
+            beneficiaryBeforeLovelace =
+                sumUtxoLovelace beneficiaryBefore
+        submittedTxIdText `shouldBe` dbeTxId buildEvidence
+        BS.writeFile
+            (disburseSignedTxPath runDir)
+            (encodeSignedTxHex signed)
+        submitTx submitter signed >>= \case
+            Submitted _ -> pure ()
+            Rejected reason ->
+                expectationFailure
+                    ("disburse submit rejected: " <> BS8.unpack reason)
+        writeFile
+            (disburseSubmitLogPath runDir)
+            ("submit: accepted " <> T.unpack submittedTxIdText <> "\n")
+        (beneficiaryOutputRef, beneficiaryOutput) <-
+            waitForTxOutputAtAddress
+                provider
+                submittedTxId
+                disburseBeneficiaryAddr
+                60
+        beneficiaryOutput ^. addrTxOutL `shouldBe` disburseBeneficiaryAddr
+        txOutLovelace beneficiaryOutput `shouldBe` dreAmount evidence
+        (_, treasuryOutput) <-
+            waitForTxOutputAtAddress
+                provider
+                submittedTxId
+                (ttAddress (draTreasuryTarget registry))
+                60
+        treasuryOutput ^. addrTxOutL
+            `shouldBe` ttAddress (draTreasuryTarget registry)
+        beneficiaryAfter <- queryUTxOs provider disburseBeneficiaryAddr
+        treasuryAfter <- spendableTreasuryUtxos provider registry
+        let treasuryAfterLovelace =
+                sumUtxoLovelace treasuryAfter
+            beneficiaryAfterLovelace =
+                sumUtxoLovelace beneficiaryAfter
+            selectedAfter =
+                filter
+                    ( (`Set.member` selectedTreasuryRefs)
+                        . txInToText
+                        . fst
+                    )
+                    treasuryAfter
+            beneficiaryReceived =
+                beneficiaryAfterLovelace - beneficiaryBeforeLovelace
+            submitted =
+                DisburseSubmissionEvidence
+                    { dseSubmittedTxId = submittedTxIdText
+                    , dseSignedTxPath = disburseSignedTxPath runDir
+                    , dseSubmitLogPath = disburseSubmitLogPath runDir
+                    , dseSubmissionPath = disburseSubmissionPath runDir
+                    , dseTreasurySpentTxIns =
+                        dreTreasuryTxIns evidence
+                    , dseTreasuryLovelaceBefore =
+                        treasuryBeforeLovelace
+                    , dseTreasuryLovelaceAfter =
+                        treasuryAfterLovelace
+                    , dseBeneficiaryOutputTxIn =
+                        txInToText beneficiaryOutputRef
+                    , dseBeneficiaryLovelaceBefore =
+                        beneficiaryBeforeLovelace
+                    , dseBeneficiaryLovelaceAfter =
+                        beneficiaryAfterLovelace
+                    , dseBeneficiaryReceivedLovelace =
+                        beneficiaryReceived
+                    }
+        selectedAfter `shouldBe` []
+        treasuryBeforeLovelace - treasuryAfterLovelace
+            `shouldBe` dreAmount evidence
+        beneficiaryReceived `shouldBe` dreAmount evidence
+        BSL.writeFile
+            (disburseSubmissionPath runDir)
+            (encode (disburseSubmissionValue evidence submitted))
+        pure submitted
 
 disburseEvidenceFromIntent
     :: FilePath
@@ -2800,6 +3110,7 @@ writeDisburseSummary
     -> ShelleyGenesisTiming
     -> DisburseRunEvidence
     -> DisburseBuildEvidence
+    -> DisburseSubmissionEvidence
     -> UsdmBoundaryEvidence
     -> IO ()
 writeDisburseSummary
@@ -2808,6 +3119,7 @@ writeDisburseSummary
     timing
     evidence
     buildEvidence
+    submitted
     usdmBoundary = do
         let summary =
                 disburseSummaryValue
@@ -2816,6 +3128,7 @@ writeDisburseSummary
                     timing
                     evidence
                     buildEvidence
+                    submitted
                     usdmBoundary
         BSL.writeFile
             (disburseSummaryPath runDir)
@@ -2823,7 +3136,13 @@ writeDisburseSummary
         BSL.writeFile (runDir </> "summary.json") (encode summary)
         writeFile
             (runDir </> "summary.log")
-            (unlines (disburseBuildLines runDir evidence buildEvidence))
+            ( unlines $
+                disburseSubmittedLines
+                    runDir
+                    evidence
+                    buildEvidence
+                    submitted
+            )
 
 disburseSummaryValue
     :: FilePath
@@ -2831,6 +3150,7 @@ disburseSummaryValue
     -> ShelleyGenesisTiming
     -> DisburseRunEvidence
     -> DisburseBuildEvidence
+    -> DisburseSubmissionEvidence
     -> UsdmBoundaryEvidence
     -> Value
 disburseSummaryValue
@@ -2839,6 +3159,7 @@ disburseSummaryValue
     timing
     evidence
     buildEvidence
+    submitted
     usdmBoundary =
         object
             [ "schemaVersion" .= (1 :: Int)
@@ -2869,6 +3190,25 @@ disburseSummaryValue
             , "txBuildLogPath" .= disburseTxBuildLogPath runDir
             , "txId" .= dbeTxId buildEvidence
             , "feeLovelace" .= dbeFeeLovelace buildEvidence
+            , "submittedTxAccepted" .= True
+            , "submittedTxId" .= dseSubmittedTxId submitted
+            , "signedTxPath" .= dseSignedTxPath submitted
+            , "submitLogPath" .= dseSubmitLogPath submitted
+            , "submissionPath" .= dseSubmissionPath submitted
+            , "treasurySpentTxIns"
+                .= dseTreasurySpentTxIns submitted
+            , "treasuryLovelaceBefore"
+                .= dseTreasuryLovelaceBefore submitted
+            , "treasuryLovelaceAfter"
+                .= dseTreasuryLovelaceAfter submitted
+            , "beneficiaryOutputTxIn"
+                .= dseBeneficiaryOutputTxIn submitted
+            , "beneficiaryLovelaceBefore"
+                .= dseBeneficiaryLovelaceBefore submitted
+            , "beneficiaryLovelaceAfter"
+                .= dseBeneficiaryLovelaceAfter submitted
+            , "beneficiaryReceivedLovelace"
+                .= dseBeneficiaryReceivedLovelace submitted
             , "prerequisitePath" .= drePrerequisitePath evidence
             , "withdrawSummaryPath" .= dreWithdrawSummaryPath evidence
             , "usdmBoundaryPath" .= disburseUsdmBoundaryPath runDir
@@ -2890,6 +3230,36 @@ usdmBoundaryValue runDir boundary =
         , "observedTreasuryQuantity"
             .= ubeObservedTreasuryQuantity boundary
         , "boundaryPath" .= disburseUsdmBoundaryPath runDir
+        ]
+
+disburseSubmissionValue
+    :: DisburseRunEvidence
+    -> DisburseSubmissionEvidence
+    -> Value
+disburseSubmissionValue evidence submitted =
+    object
+        [ "phase" .= ("disburse" :: String)
+        , "status" .= ("submitted" :: String)
+        , "submittedTxAccepted" .= True
+        , "submittedTxId" .= dseSubmittedTxId submitted
+        , "signedTxPath" .= dseSignedTxPath submitted
+        , "submitLogPath" .= dseSubmitLogPath submitted
+        , "submissionPath" .= dseSubmissionPath submitted
+        , "treasuryAddress" .= dreTreasuryAddress evidence
+        , "treasurySpentTxIns" .= dseTreasurySpentTxIns submitted
+        , "treasuryLovelaceBefore"
+            .= dseTreasuryLovelaceBefore submitted
+        , "treasuryLovelaceAfter"
+            .= dseTreasuryLovelaceAfter submitted
+        , "beneficiaryAddress" .= dreBeneficiaryAddress evidence
+        , "beneficiaryOutputTxIn"
+            .= dseBeneficiaryOutputTxIn submitted
+        , "beneficiaryLovelaceBefore"
+            .= dseBeneficiaryLovelaceBefore submitted
+        , "beneficiaryLovelaceAfter"
+            .= dseBeneficiaryLovelaceAfter submitted
+        , "beneficiaryReceivedLovelace"
+            .= dseBeneficiaryReceivedLovelace submitted
         ]
 
 writeDisburseFailure
@@ -2915,6 +3285,9 @@ writeDisburseFailure runDir socket timing evidence failure = do
         removeIfExists (disburseIntentPath runDir)
     removeIfExists (disburseTxBodyPath runDir)
     removeIfExists (disburseReportMarkdownPath runDir)
+    removeIfExists (disburseSignedTxPath runDir)
+    removeIfExists (disburseSubmitLogPath runDir)
+    removeIfExists (disburseSubmissionPath runDir)
     removeIfExists (disburseUsdmBoundaryPath runDir)
     unless (disburseFailurePreservesTxBuildArtifacts failure) $ do
         removeIfExists (disburseReportJsonPath runDir)
@@ -3053,6 +3426,9 @@ removeDisburseSuccessArtifacts runDir = do
     removeIfExists (disburseReportJsonPath runDir)
     removeIfExists (disburseReportMarkdownPath runDir)
     removeIfExists (disburseTxBuildLogPath runDir)
+    removeIfExists (disburseSignedTxPath runDir)
+    removeIfExists (disburseSubmitLogPath runDir)
+    removeIfExists (disburseSubmissionPath runDir)
     removeIfExists (disburseUsdmBoundaryPath runDir)
     removeIfExists (disburseSummaryPath runDir)
 
@@ -3086,13 +3462,15 @@ putDisburseIntentLines runDir evidence =
             <> disburseIntentPath runDir
         ]
 
-putDisburseBuildLines
+putDisburseSubmittedLines
     :: FilePath
     -> DisburseRunEvidence
     -> DisburseBuildEvidence
+    -> DisburseSubmissionEvidence
     -> IO ()
-putDisburseBuildLines runDir evidence buildEvidence =
-    mapM_ putStrLn (disburseBuildLines runDir evidence buildEvidence)
+putDisburseSubmittedLines runDir evidence buildEvidence submitted =
+    mapM_ putStrLn $
+        disburseSubmittedLines runDir evidence buildEvidence submitted
 
 disburseBuildLines
     :: FilePath
@@ -3116,6 +3494,30 @@ disburseBuildLines runDir evidence buildEvidence =
     , "devnet-smoke: disburse-usdm-boundary "
         <> disburseUsdmBoundaryPath runDir
     ]
+
+disburseSubmittedLines
+    :: FilePath
+    -> DisburseRunEvidence
+    -> DisburseBuildEvidence
+    -> DisburseSubmissionEvidence
+    -> [String]
+disburseSubmittedLines runDir evidence buildEvidence submitted =
+    disburseBuildLines runDir evidence buildEvidence
+        <> [ "devnet-smoke: disburse-signed-tx "
+                <> dseSignedTxPath submitted
+           , "devnet-smoke: disburse-submitted-tx-id "
+                <> T.unpack (dseSubmittedTxId submitted)
+           , "devnet-smoke: disburse-beneficiary-output "
+                <> T.unpack (dseBeneficiaryOutputTxIn submitted)
+           , "devnet-smoke: disburse-beneficiary-received "
+                <> show (dseBeneficiaryReceivedLovelace submitted)
+           , "devnet-smoke: disburse-treasury-before "
+                <> show (dseTreasuryLovelaceBefore submitted)
+           , "devnet-smoke: disburse-treasury-after "
+                <> show (dseTreasuryLovelaceAfter submitted)
+           , "devnet-smoke: disburse-submission "
+                <> dseSubmissionPath submitted
+           ]
 
 writeWithdrawalIntentArtifacts
     :: FilePath
@@ -4208,6 +4610,18 @@ disburseReportMarkdownPath runDir =
 disburseTxBuildLogPath :: FilePath -> FilePath
 disburseTxBuildLogPath runDir =
     runDir </> "disburse" </> "tx-build.log"
+
+disburseSignedTxPath :: FilePath -> FilePath
+disburseSignedTxPath runDir =
+    runDir </> "disburse" </> "signed-tx.cbor.hex"
+
+disburseSubmitLogPath :: FilePath -> FilePath
+disburseSubmitLogPath runDir =
+    runDir </> "disburse" </> "submit.log"
+
+disburseSubmissionPath :: FilePath -> FilePath
+disburseSubmissionPath runDir =
+    runDir </> "disburse" </> "submitted.json"
 
 disbursePrerequisitePath :: FilePath -> FilePath
 disbursePrerequisitePath runDir =

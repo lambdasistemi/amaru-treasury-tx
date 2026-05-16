@@ -19,7 +19,7 @@ while [[ $# -gt 0 ]]; do
       reward_timeout_seconds="${2:?missing value for --reward-timeout-seconds}"
       shift 2
       ;;
-    node|governance|withdraw|swap-ready|all)
+    node|governance|withdraw|disburse|swap-ready|all)
       phase="$1"
       shift
       ;;
@@ -30,7 +30,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$phase" != "node" && "$phase" != "governance" && "$phase" != "withdraw" && "$phase" != "swap-ready" && "$phase" != "all" ]]; then
+if [[ "$phase" != "node" && "$phase" != "governance" && "$phase" != "withdraw" && "$phase" != "disburse" && "$phase" != "swap-ready" && "$phase" != "all" ]]; then
   echo "devnet-smoke: unknown phase: $phase" >&2
   exit 64
 fi

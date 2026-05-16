@@ -123,6 +123,25 @@ matching the build id, materialized output
 reward balance `2000000 -> 0` after submit, and treasury ADA
 `200000000 -> 202000000`.
 
+Run the disburse slice boundary check with:
+
+```bash
+nix develop --quiet -c just devnet-smoke disburse
+```
+
+The disburse phase creates fresh governance and withdrawal prerequisite
+evidence, resolves live treasury and wallet UTxOs through
+`disburse-wizard`, and builds unsigned ADA disburse CBOR plus
+JSON/Markdown reports through `tx-build`. Latest local evidence for
+this branch is `runs/devnet/20260516T170631Z`: treasury input
+`ef153060e68a338350648a04b1e94306b03a02501512e05178b1c9d5cc7e8a46#0`,
+unit `ada`, amount `1000000` lovelace, tx id
+`75718d7fd814e9067e2715cfc557fde02aa78a30fac3dea382d6f106693b7748`,
+fee `632588` lovelace, validity upper bound slot `231`, and
+`disburse/usdm-boundary.json` code `missing-usdm-setup`. This is
+disburse evidence only; it does not build, fund, submit, or spend a
+SundaeSwap order.
+
 Run the swap readiness boundary check with:
 
 ```bash

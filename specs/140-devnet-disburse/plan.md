@@ -8,18 +8,18 @@
 **Completed**: #83 withdrawal materialization has merged through PR
 #100 and the issue is now closed as completed. `origin/main` includes
 the merged governance/withdrawal baseline and the later `swap-ready`
-readiness work. Draft PR #145 is open for this #86 slice and currently
-carries only spec/process work.
+readiness work. Draft PR #145 is open for this #86 slice. The
+`disburse` phase now materializes fresh withdrawal ADA, resolves a live
+ADA disburse intent, runs `tx-build`, writes unsigned CBOR plus reports,
+and records a typed USDM setup diagnostic.
 
-**Current**: Plan and task artifacts define the RED/GREEN path for a
-first-class `disburse` local DevNet phase. The next implementation step
-is the RED proof that the existing smoke harness still rejects
-`disburse`.
+**Current**: Documentation and issue metadata handoff are in progress
+after verified run `runs/devnet/20260516T170631Z`.
 
 **Blockers**: No blocker for ADA disburse evidence. Synthetic local
-USDM treasury setup is not yet proven on `main`, so USDM may land as a
-typed `missing-usdm-setup` diagnostic unless this slice adds the token
-setup safely.
+USDM treasury setup is not yet proven on `main`; this slice records
+USDM as a typed `missing-usdm-setup` diagnostic rather than claiming a
+USDM happy path.
 
 ## Summary
 
@@ -111,7 +111,7 @@ tmp="$(mktemp -d)"
 scripts/smoke/devnet-local --phase disburse --run-dir "$tmp"
 ```
 
-Expected current result: exit `64` with
+Observed RED: exit `64` with
 `devnet-smoke: unknown phase: disburse`.
 
 **GREEN**: After implementation:
@@ -126,6 +126,12 @@ The command must exit 0 for the successful subcase and write
 `disburse/tx-build.log`, and `disburse/summary.json`. USDM must be
 represented either by success fields or by a typed diagnostic. Before
 PR handoff, run:
+
+Observed GREEN on 2026-05-16: `runs/devnet/20260516T170631Z`, ADA
+amount `1000000`, tx id
+`75718d7fd814e9067e2715cfc557fde02aa78a30fac3dea382d6f106693b7748`,
+fee `632588`, validity upper bound slot `231`, and USDM boundary code
+`missing-usdm-setup`.
 
 ```bash
 ./llm/reviews/local-140-devnet-disburse/gate.sh

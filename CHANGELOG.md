@@ -4,6 +4,12 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+### Features
+
+* **devnet:** add `just devnet-smoke disburse`, proving live ADA
+  disburse intent/build evidence from local treasury UTxO state and
+  recording USDM as a typed `missing-usdm-setup` boundary.
+
 ## [0.2.10.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.9.0...v0.2.10.0) (2026-05-16)
 
 ### Features

@@ -223,10 +223,17 @@ import Amaru.Treasury.Backend.N2C
     ( probeNetworkMagic
     )
 import Amaru.Treasury.Cli.TxBuild qualified as TxBuild
+import Amaru.Treasury.Constants
+    ( Unit (ADA)
+    )
 import Amaru.Treasury.IntentJSON
-    ( SAction (..)
+    ( Action (..)
+    , DisburseInputs (..)
+    , SAction (..)
+    , ScopeJSON (..)
     , SomeTreasuryIntent (..)
     , TreasuryIntent (..)
+    , WalletJSON (..)
     , WithdrawInputs (..)
     , decodeTreasuryIntentFile
     , encodeSomeTreasuryIntent
@@ -257,6 +264,7 @@ import Amaru.Treasury.Report qualified as Report
 import Amaru.Treasury.Report.Render qualified as ReportRender
 import Amaru.Treasury.Scope
     ( ScopeId (CoreDevelopment)
+    , scopeText
     )
 import Amaru.Treasury.Sundae.Contracts
     ( sundaeOrderValidatorBlob
@@ -270,6 +278,7 @@ import Amaru.Treasury.Tx.AttachWitness
     , encodeSignedTxHex
     , renderAttachError
     )
+import Amaru.Treasury.Tx.DisburseWizard qualified as Disburse
 import Amaru.Treasury.Tx.Submit
     ( renderTxId
     )
@@ -369,6 +378,97 @@ spec =
                                     </> "swap-ready"
                                     </> "provenance.json"
                                )
+                        ]
+        describe "disburse diagnostics" $ do
+            it "records live disburse build evidence" $
+                disburseSummaryValue
+                    sampleRunDir
+                    sampleSocket
+                    sampleTiming
+                    sampleDisburseEvidence
+                    sampleDisburseBuild
+                    sampleUsdmBoundary
+                    `shouldBe` object
+                        [ "schemaVersion" .= (1 :: Int)
+                        , "phase" .= ("disburse" :: String)
+                        , "status" .= ("passed" :: String)
+                        , "runDirectory" .= sampleRunDir
+                        , "socket" .= sampleSocket
+                        , "network" .= ("devnet" :: String)
+                        , "networkMagic" .= sgtNetworkMagic sampleTiming
+                        , "epochDurationSeconds"
+                            .= epochDurationSeconds sampleTiming
+                        , "scope" .= ("core_development" :: String)
+                        , "unit" .= ("ada" :: String)
+                        , "amount" .= (1_000_000 :: Integer)
+                        , "beneficiaryAddress"
+                            .= ("addr_test1vzsamplebeneficiary" :: String)
+                        , "walletTxIn"
+                            .= ( "1c945c6b2d9d8df841f7079d20d32e7bc4eb1f3b0873a134b9dca7c95d22afad#0"
+                                    :: String
+                               )
+                        , "treasuryTxIns"
+                            .= [ "2c945c6b2d9d8df841f7079d20d32e7bc4eb1f3b0873a134b9dca7c95d22afad#0"
+                                    :: String
+                               ]
+                        , "treasuryAddress"
+                            .= ("addr_test1wzsampletreasury" :: String)
+                        , "registryReferenceTxIns"
+                            .= [ "scopes#0" :: String
+                               , "permissions#0" :: String
+                               , "treasury#0" :: String
+                               , "registry#0" :: String
+                               ]
+                        , "signers" .= [sampleOwnerKeyHash]
+                        , "validityUpperBoundSlot"
+                            .= (222 :: Word64)
+                        , "intentPath" .= disburseIntentPath sampleRunDir
+                        , "txBodyPath" .= disburseTxBodyPath sampleRunDir
+                        , "reportJsonPath"
+                            .= disburseReportJsonPath sampleRunDir
+                        , "reportMarkdownPath"
+                            .= disburseReportMarkdownPath sampleRunDir
+                        , "txBuildLogPath"
+                            .= disburseTxBuildLogPath sampleRunDir
+                        , "txId"
+                            .= ( "3c945c6b2d9d8df841f7079d20d32e7bc4eb1f3b0873a134b9dca7c95d22afad"
+                                    :: String
+                               )
+                        , "feeLovelace" .= (471_000 :: Integer)
+                        , "prerequisitePath"
+                            .= disbursePrerequisitePath sampleRunDir
+                        , "withdrawSummaryPath"
+                            .= ( sampleRunDir
+                                    </> "withdraw"
+                                    </> "summary.json"
+                               )
+                        , "usdmBoundaryPath"
+                            .= disburseUsdmBoundaryPath sampleRunDir
+                        , "usdmBoundaryStatus" .= ("failed" :: String)
+                        , "usdmDiagnosticCode"
+                            .= Just ("missing-usdm-setup" :: String)
+                        ]
+            it "records missing USDM setup as an explicit boundary" $
+                usdmBoundaryValue sampleRunDir sampleUsdmBoundary
+                    `shouldBe` object
+                        [ "phase" .= ("disburse" :: String)
+                        , "status" .= ("failed" :: String)
+                        , "unit" .= ("usdm" :: String)
+                        , "code" .= ("missing-usdm-setup" :: String)
+                        , "message"
+                            .= ( "Local DevNet USDM setup is not available"
+                                    :: String
+                               )
+                        , "policyId"
+                            .= (Nothing :: Maybe String)
+                        , "assetName"
+                            .= (Nothing :: Maybe String)
+                        , "requestedQuantity"
+                            .= (Nothing :: Maybe Integer)
+                        , "observedTreasuryQuantity"
+                            .= (Nothing :: Maybe Integer)
+                        , "boundaryPath"
+                            .= disburseUsdmBoundaryPath sampleRunDir
                         ]
         describe "withdraw diagnostics" $ do
             it "records submitted withdrawal materialization proof" $ do
@@ -564,6 +664,9 @@ spec =
             "withdraw: submits built rewards and materializes ADA"
             (runForPhases ["withdraw"] withdrawSmoke)
         it
+            "disburse: builds ADA spend from live treasury state"
+            (runForPhases ["disburse"] disburseSmoke)
+        it
             "swap-ready: publishes SundaeSwap V3 order validator readiness"
             (runForPhases ["swap-ready"] swapReadySmoke)
 
@@ -624,6 +727,42 @@ withdrawSmoke = do
                 registry
                 evidence
                 rewards
+
+disburseSmoke :: IO ()
+disburseSmoke = do
+    runDir <- resolveRunDir
+    withFundedGovernanceReward runDir prepareDevnetWithdrawalRegistry $
+        \socket timing provider submitter registry evidence -> do
+            writeGovernanceArtifacts runDir socket timing evidence
+            rewards <-
+                writeWithdrawalIntentArtifacts
+                    runDir
+                    socket
+                    timing
+                    provider
+                    registry
+                    evidence
+            writeWithdrawalBuildArtifacts
+                runDir
+                socket
+                timing
+                provider
+                submitter
+                registry
+                evidence
+                rewards
+            disburseEvidence <-
+                writeDisburseIntentArtifacts
+                    runDir
+                    socket
+                    timing
+                    provider
+                    registry
+            writeDisburseBuildArtifacts
+                runDir
+                socket
+                timing
+                disburseEvidence
 
 swapReadySmoke :: IO ()
 swapReadySmoke = do
@@ -763,6 +902,41 @@ data WithdrawalSubmissionEvidence = WithdrawalSubmissionEvidence
     }
     deriving stock (Eq, Show)
 
+data DisburseRunEvidence = DisburseRunEvidence
+    { dreScope :: !T.Text
+    , dreUnit :: !T.Text
+    , dreAmount :: !Integer
+    , dreBeneficiaryAddress :: !T.Text
+    , dreWalletTxIn :: !T.Text
+    , dreTreasuryTxIns :: ![T.Text]
+    , dreTreasuryAddress :: !T.Text
+    , dreRegistryReferenceTxIns :: ![T.Text]
+    , dreSigners :: ![T.Text]
+    , dreValidityUpperBoundSlot :: !Word64
+    , drePrerequisitePath :: !FilePath
+    , dreWithdrawSummaryPath :: !FilePath
+    }
+    deriving stock (Eq, Show)
+
+data DisburseBuildEvidence = DisburseBuildEvidence
+    { dbeTxId :: !T.Text
+    , dbeFeeLovelace :: !Integer
+    , dbeBodySizeBytes :: !Integer
+    , dbeTotalCollateralLovelace :: !Integer
+    }
+    deriving stock (Eq, Show)
+
+data UsdmBoundaryEvidence = UsdmBoundaryEvidence
+    { ubeStatus :: !T.Text
+    , ubeCode :: !(Maybe T.Text)
+    , ubeMessage :: !T.Text
+    , ubePolicyId :: !(Maybe T.Text)
+    , ubeAssetName :: !(Maybe T.Text)
+    , ubeRequestedQuantity :: !(Maybe Integer)
+    , ubeObservedTreasuryQuantity :: !(Maybe Integer)
+    }
+    deriving stock (Eq, Show)
+
 data SwapReadinessEvidence = SwapReadinessEvidence
     { sreOrderValidatorSourceRepository :: !T.Text
     , sreOrderValidatorSourceCommit :: !T.Text
@@ -795,8 +969,18 @@ data WithdrawalFailure
     | WithdrawalTxBuildFailed !ExitCode !(Maybe Report.BuildFailure)
     deriving stock (Eq, Show)
 
+data DisburseFailure
+    = DisburseMissingTreasuryState
+    | DisburseResolverFailed !Disburse.ResolverError
+    | DisburseIntentFailed !Disburse.DisburseError
+    | DisburseTxBuildFailed !ExitCode !(Maybe Report.BuildFailure)
+    deriving stock (Eq, Show)
+
 withdrawalAmount :: Coin
 withdrawalAmount = Coin 2_000_000
+
+disburseAmountLovelace :: Integer
+disburseAmountLovelace = 1_000_000
 
 stakeDeposit :: Coin
 stakeDeposit = Coin 400_000
@@ -859,6 +1043,58 @@ sampleEvidence =
         , geSetupEpoch = 2
         , geVoteEpoch = 3
         , geFinalEpoch = 4
+        }
+
+sampleOwnerKeyHash :: T.Text
+sampleOwnerKeyHash =
+    "9da22eab0370edee0d4591f54bba0d79a89d973598f15eb609d968c4"
+
+sampleDisburseEvidence :: DisburseRunEvidence
+sampleDisburseEvidence =
+    DisburseRunEvidence
+        { dreScope = scopeText CoreDevelopment
+        , dreUnit = "ada"
+        , dreAmount = disburseAmountLovelace
+        , dreBeneficiaryAddress = "addr_test1vzsamplebeneficiary"
+        , dreWalletTxIn =
+            "1c945c6b2d9d8df841f7079d20d32e7bc4eb1f3b0873a134b9dca7c95d22afad#0"
+        , dreTreasuryTxIns =
+            [ "2c945c6b2d9d8df841f7079d20d32e7bc4eb1f3b0873a134b9dca7c95d22afad#0"
+            ]
+        , dreTreasuryAddress = "addr_test1wzsampletreasury"
+        , dreRegistryReferenceTxIns =
+            [ "scopes#0"
+            , "permissions#0"
+            , "treasury#0"
+            , "registry#0"
+            ]
+        , dreSigners = [sampleOwnerKeyHash]
+        , dreValidityUpperBoundSlot = 222
+        , drePrerequisitePath = disbursePrerequisitePath sampleRunDir
+        , dreWithdrawSummaryPath =
+            sampleRunDir </> "withdraw" </> "summary.json"
+        }
+
+sampleDisburseBuild :: DisburseBuildEvidence
+sampleDisburseBuild =
+    DisburseBuildEvidence
+        { dbeTxId =
+            "3c945c6b2d9d8df841f7079d20d32e7bc4eb1f3b0873a134b9dca7c95d22afad"
+        , dbeFeeLovelace = 471_000
+        , dbeBodySizeBytes = 3_400
+        , dbeTotalCollateralLovelace = 0
+        }
+
+sampleUsdmBoundary :: UsdmBoundaryEvidence
+sampleUsdmBoundary =
+    UsdmBoundaryEvidence
+        { ubeStatus = "failed"
+        , ubeCode = Just "missing-usdm-setup"
+        , ubeMessage = "Local DevNet USDM setup is not available"
+        , ubePolicyId = Nothing
+        , ubeAssetName = Nothing
+        , ubeRequestedQuantity = Nothing
+        , ubeObservedTreasuryQuantity = Nothing
         }
 
 sampleSwapReadinessEvidence :: SwapReadinessEvidence
@@ -2249,6 +2485,638 @@ swapReadinessLines runDir evidence =
         <> swapReadinessRegistryPath runDir
     ]
 
+writeDisburseIntentArtifacts
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> Provider IO
+    -> DevnetRegistryAnchors
+    -> IO DisburseRunEvidence
+writeDisburseIntentArtifacts runDir socket timing provider registry = do
+    createDirectoryIfMissing True (runDir </> "disburse")
+    removeDisburseSuccessArtifacts runDir
+    treasuryUtxos <- spendableTreasuryUtxos provider registry
+    when (null treasuryUtxos) $ do
+        message <-
+            writeDisburseFailure
+                runDir
+                socket
+                timing
+                Nothing
+                DisburseMissingTreasuryState
+        expectationFailure message
+    let target =
+            draTreasuryTarget registry
+        treasuryAddress =
+            renderAddr (ttAddress target)
+        walletAddress =
+            renderAddr genesisAddr
+        registryView =
+            devnetRegistryView registry
+        resolver =
+            Disburse.ResolverEnv
+                { Disburse.reEnvQueryWalletUtxos =
+                    queryWalletUtxosForWithdraw provider walletAddress
+                , Disburse.reEnvQueryTreasuryUtxos =
+                    queryTreasuryUtxosForDisburse
+                        provider
+                        treasuryAddress
+                        (ttAddress target)
+                , Disburse.reEnvComputeUpperBound = \_ -> do
+                    snapshot <- queryLedgerSnapshot provider
+                    pure $
+                        Right $
+                            slotNumber $
+                                addSlots 20 (ledgerTipSlot snapshot)
+                }
+        input =
+            Disburse.ResolverInput
+                { Disburse.riNetwork = "devnet"
+                , Disburse.riWalletAddrBech32 = walletAddress
+                , Disburse.riBeneficiaryAddrBech32 = walletAddress
+                , Disburse.riScope = CoreDevelopment
+                , Disburse.riUnit = ADA
+                , Disburse.riAmount = disburseAmountLovelace
+                , Disburse.riRegistry = registryView
+                , Disburse.riValidityHours = Nothing
+                }
+        answers =
+            Disburse.DisburseAnswers
+                { Disburse.daScope = CoreDevelopment
+                , Disburse.daUnit = ADA
+                , Disburse.daAmount = disburseAmountLovelace
+                , Disburse.daBeneficiaryAddrBech32 = walletAddress
+                , Disburse.daValidityHours = Nothing
+                , Disburse.daRationale =
+                    Disburse.RationaleAnswers
+                        { Disburse.raDescription =
+                            "Local DevNet ADA disburse evidence"
+                        , Disburse.raJustification =
+                            "Exercise disburse-wizard and tx-build against live local treasury state"
+                        , Disburse.raDestinationLabel =
+                            "DevNet wallet beneficiary"
+                        , Disburse.raEvent = Just "disburse"
+                        , Disburse.raLabel =
+                            Just "DevNet ADA disburse"
+                        }
+                , Disburse.daExtraSigners = []
+                }
+    resolved <- Disburse.resolveDisburseEnv resolver input
+    env <- case resolved of
+        Right ok -> pure ok
+        Left err -> do
+            message <-
+                writeDisburseFailure
+                    runDir
+                    socket
+                    timing
+                    Nothing
+                    (DisburseResolverFailed err)
+            expectationFailure message *> error "unreachable"
+    intent <- case Disburse.disburseToTreasuryIntent env answers of
+        Right ok -> pure ok
+        Left err -> do
+            message <-
+                writeDisburseFailure
+                    runDir
+                    socket
+                    timing
+                    Nothing
+                    (DisburseIntentFailed err)
+            expectationFailure message *> error "unreachable"
+    BSL.writeFile
+        (disburseIntentPath runDir)
+        (encodeSomeTreasuryIntent (SomeTreasuryIntent SDisburse intent))
+    decoded <- decodeTreasuryIntentFile (disburseIntentPath runDir)
+    case decoded of
+        Right (SomeTreasuryIntent SDisburse parsed) -> do
+            tiNetwork parsed `shouldBe` "devnet"
+            diUnit (tiPayload parsed) `shouldBe` "ada"
+            diAmount (tiPayload parsed) `shouldBe` disburseAmountLovelace
+            diBeneficiaryAddress (tiPayload parsed)
+                `shouldBe` walletAddress
+            sjTreasuryUtxos (tiScope parsed)
+                `shouldSatisfy` (not . null)
+        Right _ ->
+            expectationFailure "disburse smoke wrote non-disburse intent"
+        Left err ->
+            expectationFailure ("decode disburse intent: " <> err)
+    let evidence =
+            disburseEvidenceFromIntent runDir registry intent
+    writeDisbursePrerequisite runDir registry evidence treasuryUtxos
+    putDisburseIntentLines runDir evidence
+    pure evidence
+
+writeDisburseBuildArtifacts
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> DisburseRunEvidence
+    -> IO ()
+writeDisburseBuildArtifacts runDir socket timing evidence = do
+    createDirectoryIfMissing True (runDir </> "disburse")
+    removeIfExists (disburseTxBodyPath runDir)
+    removeIfExists (disburseReportJsonPath runDir)
+    removeIfExists (disburseReportMarkdownPath runDir)
+    removeIfExists (disburseTxBuildLogPath runDir)
+    buildExit <-
+        try @ExitCode $
+            TxBuild.runTxBuild
+                socket
+                TxBuild.TxBuildOpts
+                    { TxBuild.tboIntentPath =
+                        Just (disburseIntentPath runDir)
+                    , TxBuild.tboOutPath =
+                        Just (disburseTxBodyPath runDir)
+                    , TxBuild.tboLog =
+                        Just (disburseTxBuildLogPath runDir)
+                    , TxBuild.tboReportPath =
+                        Just (disburseReportJsonPath runDir)
+                    }
+    case buildExit of
+        Right () -> pure ()
+        Left exitCode -> do
+            failure <- readDisburseTxBuildFailure runDir
+            message <-
+                writeDisburseFailure
+                    runDir
+                    socket
+                    timing
+                    (Just evidence)
+                    (DisburseTxBuildFailed exitCode failure)
+            expectationFailure message
+    buildOutput <-
+        expectEither
+            "decode disburse tx-build report"
+            =<< eitherDecodeFileStrict
+                @Report.TxBuildOutput
+                (disburseReportJsonPath runDir)
+    success <- case Report.txoResult buildOutput of
+        Report.TxBuildOutputSuccess ok -> pure ok
+        Report.TxBuildOutputFailure failure ->
+            expectationFailure
+                ("disburse tx-build report is failure: " <> show failure)
+                *> error "unreachable"
+    txBodyHex <- TE.decodeUtf8 <$> BS.readFile (disburseTxBodyPath runDir)
+    txBodyHex `shouldBe` Report.unTxCborHex (Report.tbsTxCbor success)
+    render <- case ReportRender.renderBuildOutput buildOutput of
+        Right ok -> pure ok
+        Left err ->
+            expectationFailure
+                ("render disburse report: " <> show err)
+                *> error "unreachable"
+    TIO.writeFile
+        (disburseReportMarkdownPath runDir)
+        (ReportRender.unRenderOutput render)
+    let buildEvidence =
+            disburseBuildEvidenceFromSuccess success
+        usdmBoundary =
+            missingUsdmBoundary
+    BSL.writeFile
+        (disburseUsdmBoundaryPath runDir)
+        (encode (usdmBoundaryValue runDir usdmBoundary))
+    writeDisburseSummary
+        runDir
+        socket
+        timing
+        evidence
+        buildEvidence
+        usdmBoundary
+    putDisburseBuildLines runDir evidence buildEvidence
+
+disburseEvidenceFromIntent
+    :: FilePath
+    -> DevnetRegistryAnchors
+    -> TreasuryIntent 'Disburse
+    -> DisburseRunEvidence
+disburseEvidenceFromIntent runDir registry intent =
+    DisburseRunEvidence
+        { dreScope = sjId (tiScope intent)
+        , dreUnit = diUnit (tiPayload intent)
+        , dreAmount = diAmount (tiPayload intent)
+        , dreBeneficiaryAddress =
+            diBeneficiaryAddress (tiPayload intent)
+        , dreWalletTxIn = wjTxIn (tiWallet intent)
+        , dreTreasuryTxIns = sjTreasuryUtxos (tiScope intent)
+        , dreTreasuryAddress = sjTreasuryAddress (tiScope intent)
+        , dreRegistryReferenceTxIns =
+            [ txInToText (draScopesRef registry)
+            , txInToText (draPermissionsRef registry)
+            , txInToText (draTreasuryRef registry)
+            , txInToText (draRegistryRef registry)
+            ]
+        , dreSigners = tiSigners intent
+        , dreValidityUpperBoundSlot =
+            tiValidityUpperBoundSlot intent
+        , drePrerequisitePath = disbursePrerequisitePath runDir
+        , dreWithdrawSummaryPath =
+            runDir </> "withdraw" </> "summary.json"
+        }
+
+disburseBuildEvidenceFromSuccess
+    :: Report.TxBuildSuccess -> DisburseBuildEvidence
+disburseBuildEvidenceFromSuccess success =
+    DisburseBuildEvidence
+        { dbeTxId = Report.tiTxId identity
+        , dbeFeeLovelace = Report.tiFeeLovelace identity
+        , dbeBodySizeBytes =
+            fromIntegral (Report.tiBodySizeBytes identity)
+        , dbeTotalCollateralLovelace =
+            Report.tiTotalCollateralLovelace identity
+        }
+  where
+    identity =
+        Report.trIdentity (Report.tbsReport success)
+
+missingUsdmBoundary :: UsdmBoundaryEvidence
+missingUsdmBoundary =
+    UsdmBoundaryEvidence
+        { ubeStatus = "failed"
+        , ubeCode = Just "missing-usdm-setup"
+        , ubeMessage = "Local DevNet USDM setup is not available"
+        , ubePolicyId = Nothing
+        , ubeAssetName = Nothing
+        , ubeRequestedQuantity = Nothing
+        , ubeObservedTreasuryQuantity = Nothing
+        }
+
+spendableTreasuryUtxos
+    :: Provider IO
+    -> DevnetRegistryAnchors
+    -> IO [(TxIn, TxOut ConwayEra)]
+spendableTreasuryUtxos provider registry =
+    filter isSpendableTreasuryUtxo
+        <$> queryUTxOs provider (ttAddress (draTreasuryTarget registry))
+
+isSpendableTreasuryUtxo :: (TxIn, TxOut ConwayEra) -> Bool
+isSpendableTreasuryUtxo (_, txOut) =
+    case txOut ^. referenceScriptTxOutL of
+        SNothing -> True
+        SJust{} -> False
+
+queryTreasuryUtxosForDisburse
+    :: Provider IO
+    -> T.Text
+    -> Addr
+    -> T.Text
+    -> IO [(TxIn, MaryValue)]
+queryTreasuryUtxosForDisburse provider expectedAddress address requested = do
+    requested `shouldBe` expectedAddress
+    utxos <- queryUTxOs provider address
+    pure
+        [ (txIn, txOut ^. valueTxOutL)
+        | (txIn, txOut) <- utxos
+        , isSpendableTreasuryUtxo (txIn, txOut)
+        ]
+
+writeDisbursePrerequisite
+    :: FilePath
+    -> DevnetRegistryAnchors
+    -> DisburseRunEvidence
+    -> [(TxIn, TxOut ConwayEra)]
+    -> IO ()
+writeDisbursePrerequisite runDir registry evidence treasuryUtxos =
+    BSL.writeFile
+        (disbursePrerequisitePath runDir)
+        ( encode $
+            object
+                [ "phase" .= ("disburse" :: String)
+                , "status" .= ("prerequisite-ready" :: String)
+                , "withdrawSummaryPath" .= dreWithdrawSummaryPath evidence
+                , "treasuryAddress" .= dreTreasuryAddress evidence
+                , "treasuryScriptHash"
+                    .= ttScriptHashText (draTreasuryTarget registry)
+                , "selectedTreasuryTxIns" .= dreTreasuryTxIns evidence
+                , "spendableTreasuryTxIns"
+                    .= fmap (txInToText . fst) treasuryUtxos
+                , "spendableTreasuryAdaLovelace"
+                    .= sumUtxoLovelace treasuryUtxos
+                ]
+        )
+
+writeDisburseSummary
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> DisburseRunEvidence
+    -> DisburseBuildEvidence
+    -> UsdmBoundaryEvidence
+    -> IO ()
+writeDisburseSummary
+    runDir
+    socket
+    timing
+    evidence
+    buildEvidence
+    usdmBoundary = do
+        let summary =
+                disburseSummaryValue
+                    runDir
+                    socket
+                    timing
+                    evidence
+                    buildEvidence
+                    usdmBoundary
+        BSL.writeFile
+            (disburseSummaryPath runDir)
+            (encode summary)
+        BSL.writeFile (runDir </> "summary.json") (encode summary)
+        writeFile
+            (runDir </> "summary.log")
+            (unlines (disburseBuildLines runDir evidence buildEvidence))
+
+disburseSummaryValue
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> DisburseRunEvidence
+    -> DisburseBuildEvidence
+    -> UsdmBoundaryEvidence
+    -> Value
+disburseSummaryValue
+    runDir
+    socket
+    timing
+    evidence
+    buildEvidence
+    usdmBoundary =
+        object
+            [ "schemaVersion" .= (1 :: Int)
+            , "phase" .= ("disburse" :: String)
+            , "status" .= ("passed" :: String)
+            , "runDirectory" .= runDir
+            , "socket" .= socket
+            , "network" .= ("devnet" :: String)
+            , "networkMagic" .= sgtNetworkMagic timing
+            , "epochDurationSeconds" .= epochDurationSeconds timing
+            , "scope" .= dreScope evidence
+            , "unit" .= dreUnit evidence
+            , "amount" .= dreAmount evidence
+            , "beneficiaryAddress" .= dreBeneficiaryAddress evidence
+            , "walletTxIn" .= dreWalletTxIn evidence
+            , "treasuryTxIns" .= dreTreasuryTxIns evidence
+            , "treasuryAddress" .= dreTreasuryAddress evidence
+            , "registryReferenceTxIns"
+                .= dreRegistryReferenceTxIns evidence
+            , "signers" .= dreSigners evidence
+            , "validityUpperBoundSlot"
+                .= dreValidityUpperBoundSlot evidence
+            , "intentPath" .= disburseIntentPath runDir
+            , "txBodyPath" .= disburseTxBodyPath runDir
+            , "reportJsonPath" .= disburseReportJsonPath runDir
+            , "reportMarkdownPath"
+                .= disburseReportMarkdownPath runDir
+            , "txBuildLogPath" .= disburseTxBuildLogPath runDir
+            , "txId" .= dbeTxId buildEvidence
+            , "feeLovelace" .= dbeFeeLovelace buildEvidence
+            , "prerequisitePath" .= drePrerequisitePath evidence
+            , "withdrawSummaryPath" .= dreWithdrawSummaryPath evidence
+            , "usdmBoundaryPath" .= disburseUsdmBoundaryPath runDir
+            , "usdmBoundaryStatus" .= ubeStatus usdmBoundary
+            , "usdmDiagnosticCode" .= ubeCode usdmBoundary
+            ]
+
+usdmBoundaryValue :: FilePath -> UsdmBoundaryEvidence -> Value
+usdmBoundaryValue runDir boundary =
+    object
+        [ "phase" .= ("disburse" :: String)
+        , "status" .= ubeStatus boundary
+        , "unit" .= ("usdm" :: String)
+        , "code" .= ubeCode boundary
+        , "message" .= ubeMessage boundary
+        , "policyId" .= ubePolicyId boundary
+        , "assetName" .= ubeAssetName boundary
+        , "requestedQuantity" .= ubeRequestedQuantity boundary
+        , "observedTreasuryQuantity"
+            .= ubeObservedTreasuryQuantity boundary
+        , "boundaryPath" .= disburseUsdmBoundaryPath runDir
+        ]
+
+writeDisburseFailure
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> Maybe DisburseRunEvidence
+    -> DisburseFailure
+    -> IO String
+writeDisburseFailure runDir socket timing evidence failure = do
+    let disburseDir = runDir </> "disburse"
+        value =
+            disburseFailureValue
+                runDir
+                socket
+                timing
+                evidence
+                failure
+        message = disburseFailureMessage failure
+        linesOut = disburseFailureLines runDir failure
+    createDirectoryIfMissing True disburseDir
+    when (disburseFailureRemovesIntent failure) $
+        removeIfExists (disburseIntentPath runDir)
+    removeIfExists (disburseTxBodyPath runDir)
+    removeIfExists (disburseReportMarkdownPath runDir)
+    removeIfExists (disburseUsdmBoundaryPath runDir)
+    unless (disburseFailurePreservesTxBuildArtifacts failure) $ do
+        removeIfExists (disburseReportJsonPath runDir)
+        removeIfExists (disburseTxBuildLogPath runDir)
+    BSL.writeFile (disburseDir </> "failure.json") (encode value)
+    BSL.writeFile (disburseSummaryPath runDir) (encode value)
+    BSL.writeFile (runDir </> "summary.json") (encode value)
+    writeFile (runDir </> "summary.log") (unlines linesOut)
+    mapM_ putStrLn linesOut
+    pure message
+
+disburseFailureValue
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> Maybe DisburseRunEvidence
+    -> DisburseFailure
+    -> Value
+disburseFailureValue runDir socket timing evidence failure =
+    object
+        [ "phase" .= ("disburse" :: String)
+        , "status" .= ("failed" :: String)
+        , "code" .= disburseFailureCode failure
+        , "message" .= disburseFailureMessage failure
+        , "runDirectory" .= runDir
+        , "socket" .= socket
+        , "network" .= ("devnet" :: String)
+        , "networkMagic" .= sgtNetworkMagic timing
+        , "epochDurationSeconds" .= epochDurationSeconds timing
+        , "scope" .= fmap dreScope evidence
+        , "unit" .= fmap dreUnit evidence
+        , "amount" .= fmap dreAmount evidence
+        , "beneficiaryAddress" .= fmap dreBeneficiaryAddress evidence
+        , "selectedTreasuryTxIns" .= fmap dreTreasuryTxIns evidence
+        , "selectedWalletTxIn" .= fmap dreWalletTxIn evidence
+        , "intentPath" .= disburseIntentPath runDir
+        , "txBodyPath" .= disburseTxBodyPath runDir
+        , "reportJsonPath" .= disburseReportJsonPath runDir
+        , "reportMarkdownPath" .= disburseReportMarkdownPath runDir
+        , "txBuildLogPath" .= disburseTxBuildLogPath runDir
+        , "summaryPath" .= disburseSummaryPath runDir
+        , "txBuildExitCode" .= disburseFailureTxBuildExitCode failure
+        , "txBuildFailureCode" .= disburseFailureTxBuildCode failure
+        , "txBuildFailureMessage" .= disburseFailureTxBuildMessage failure
+        ]
+
+disburseFailureLines :: FilePath -> DisburseFailure -> [String]
+disburseFailureLines runDir failure =
+    [ "devnet-smoke: run-dir " <> runDir
+    , "devnet-smoke: phase disburse failed"
+    , "devnet-smoke: "
+        <> disburseFailureCode failure
+        <> ": "
+        <> disburseFailureMessage failure
+    , "devnet-smoke: failure "
+        <> (runDir </> "disburse" </> "failure.json")
+    ]
+
+disburseFailureCode :: DisburseFailure -> String
+disburseFailureCode = \case
+    DisburseMissingTreasuryState -> "missing-treasury-state"
+    DisburseResolverFailed err -> disburseResolverFailureCode err
+    DisburseIntentFailed{} -> "intent-failed"
+    DisburseTxBuildFailed{} -> "tx-build-failed"
+
+disburseResolverFailureCode :: Disburse.ResolverError -> String
+disburseResolverFailureCode = \case
+    Disburse.ResolverNetworkUnsupported{} -> "intent-network-mismatch"
+    Disburse.ResolverWalletNetworkMismatch{} -> "intent-network-mismatch"
+    Disburse.ResolverBeneficiaryNetworkMismatch{} ->
+        "beneficiary-network-mismatch"
+    Disburse.ResolverAddressUnparseable{} -> "beneficiary-network-mismatch"
+    Disburse.ResolverScopeUnsupported{} -> "missing-registry-reference"
+    Disburse.ResolverEmptyTreasuryUtxos{} -> "missing-treasury-state"
+    Disburse.ResolverEmptyWalletUtxos{} -> "missing-wallet-fuel"
+    Disburse.ResolverShortfall{} -> "insufficient-treasury-ada"
+    Disburse.ResolverWalletShortfall{} -> "missing-wallet-fuel"
+    Disburse.ResolverUsdmConstantDecodeFailed{} ->
+        "missing-usdm-setup"
+    Disburse.ResolverValidityHoursZero{} -> "intent-network-mismatch"
+    Disburse.ResolverValidityOvershoot{} -> "tx-build-failed"
+
+disburseFailureMessage :: DisburseFailure -> String
+disburseFailureMessage = \case
+    DisburseMissingTreasuryState ->
+        "no spendable treasury UTxO is available for disburse"
+    DisburseResolverFailed err ->
+        "disburse resolver failed: " <> show err
+    DisburseIntentFailed err ->
+        "disburse intent translation failed: " <> show err
+    DisburseTxBuildFailed exitCode maybeFailure ->
+        "tx-build exited with "
+            <> show exitCode
+            <> maybe
+                ""
+                ( \failure ->
+                    ": "
+                        <> T.unpack (Report.bfCode failure)
+                        <> ": "
+                        <> T.unpack (Report.bfMessage failure)
+                )
+                maybeFailure
+
+disburseFailureTxBuildExitCode :: DisburseFailure -> Maybe Int
+disburseFailureTxBuildExitCode = \case
+    DisburseTxBuildFailed ExitSuccess _ -> Just 0
+    DisburseTxBuildFailed (ExitFailure n) _ -> Just n
+    _ -> Nothing
+
+disburseFailureTxBuildCode :: DisburseFailure -> Maybe T.Text
+disburseFailureTxBuildCode = \case
+    DisburseTxBuildFailed _ (Just failure) ->
+        Just (Report.bfCode failure)
+    _ -> Nothing
+
+disburseFailureTxBuildMessage :: DisburseFailure -> Maybe T.Text
+disburseFailureTxBuildMessage = \case
+    DisburseTxBuildFailed _ (Just failure) ->
+        Just (Report.bfMessage failure)
+    _ -> Nothing
+
+disburseFailureRemovesIntent :: DisburseFailure -> Bool
+disburseFailureRemovesIntent = \case
+    DisburseTxBuildFailed{} -> False
+    _ -> True
+
+disburseFailurePreservesTxBuildArtifacts :: DisburseFailure -> Bool
+disburseFailurePreservesTxBuildArtifacts = \case
+    DisburseTxBuildFailed{} -> True
+    _ -> False
+
+removeDisburseSuccessArtifacts :: FilePath -> IO ()
+removeDisburseSuccessArtifacts runDir = do
+    removeIfExists (disburseIntentPath runDir)
+    removeIfExists (disburseTxBodyPath runDir)
+    removeIfExists (disburseReportJsonPath runDir)
+    removeIfExists (disburseReportMarkdownPath runDir)
+    removeIfExists (disburseTxBuildLogPath runDir)
+    removeIfExists (disburseUsdmBoundaryPath runDir)
+    removeIfExists (disburseSummaryPath runDir)
+
+readDisburseTxBuildFailure
+    :: FilePath -> IO (Maybe Report.BuildFailure)
+readDisburseTxBuildFailure runDir = do
+    let path = disburseReportJsonPath runDir
+    exists <- doesFileExist path
+    if not exists
+        then pure Nothing
+        else
+            eitherDecodeFileStrict @Report.TxBuildOutput path >>= \case
+                Right buildOutput ->
+                    case Report.txoResult buildOutput of
+                        Report.TxBuildOutputFailure failure ->
+                            pure (Just failure)
+                        Report.TxBuildOutputSuccess{} ->
+                            pure Nothing
+                Left{} -> pure Nothing
+
+putDisburseIntentLines :: FilePath -> DisburseRunEvidence -> IO ()
+putDisburseIntentLines runDir evidence =
+    mapM_
+        putStrLn
+        [ "devnet-smoke: run-dir " <> runDir
+        , "devnet-smoke: phase disburse intent-ready"
+        , "devnet-smoke: disburse-unit " <> T.unpack (dreUnit evidence)
+        , "devnet-smoke: disburse-amount "
+            <> show (dreAmount evidence)
+        , "devnet-smoke: disburse-intent "
+            <> disburseIntentPath runDir
+        ]
+
+putDisburseBuildLines
+    :: FilePath
+    -> DisburseRunEvidence
+    -> DisburseBuildEvidence
+    -> IO ()
+putDisburseBuildLines runDir evidence buildEvidence =
+    mapM_ putStrLn (disburseBuildLines runDir evidence buildEvidence)
+
+disburseBuildLines
+    :: FilePath
+    -> DisburseRunEvidence
+    -> DisburseBuildEvidence
+    -> [String]
+disburseBuildLines runDir evidence buildEvidence =
+    [ "devnet-smoke: run-dir " <> runDir
+    , "devnet-smoke: phase disburse passed"
+    , "devnet-smoke: disburse-unit " <> T.unpack (dreUnit evidence)
+    , "devnet-smoke: disburse-amount "
+        <> show (dreAmount evidence)
+    , "devnet-smoke: disburse-tx-id "
+        <> T.unpack (dbeTxId buildEvidence)
+    , "devnet-smoke: disburse-fee "
+        <> show (dbeFeeLovelace buildEvidence)
+    , "devnet-smoke: disburse-tx-body "
+        <> disburseTxBodyPath runDir
+    , "devnet-smoke: disburse-summary "
+        <> disburseSummaryPath runDir
+    , "devnet-smoke: disburse-usdm-boundary "
+        <> disburseUsdmBoundaryPath runDir
+    ]
+
 writeWithdrawalIntentArtifacts
     :: FilePath
     -> FilePath
@@ -3320,6 +4188,38 @@ withdrawalSubmittedLines runDir evidence rewards success submitted =
            , "devnet-smoke: withdraw-materialization "
                 <> wseMaterializationPath submitted
            ]
+
+disburseIntentPath :: FilePath -> FilePath
+disburseIntentPath runDir =
+    runDir </> "disburse" </> "intent.json"
+
+disburseTxBodyPath :: FilePath -> FilePath
+disburseTxBodyPath runDir =
+    runDir </> "disburse" </> "tx-body.cbor.hex"
+
+disburseReportJsonPath :: FilePath -> FilePath
+disburseReportJsonPath runDir =
+    runDir </> "disburse" </> "report.json"
+
+disburseReportMarkdownPath :: FilePath -> FilePath
+disburseReportMarkdownPath runDir =
+    runDir </> "disburse" </> "report.md"
+
+disburseTxBuildLogPath :: FilePath -> FilePath
+disburseTxBuildLogPath runDir =
+    runDir </> "disburse" </> "tx-build.log"
+
+disbursePrerequisitePath :: FilePath -> FilePath
+disbursePrerequisitePath runDir =
+    runDir </> "disburse" </> "prerequisite.json"
+
+disburseUsdmBoundaryPath :: FilePath -> FilePath
+disburseUsdmBoundaryPath runDir =
+    runDir </> "disburse" </> "usdm-boundary.json"
+
+disburseSummaryPath :: FilePath -> FilePath
+disburseSummaryPath runDir =
+    runDir </> "disburse" </> "summary.json"
 
 withdrawIntentPath :: FilePath -> FilePath
 withdrawIntentPath runDir =

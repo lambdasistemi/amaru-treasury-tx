@@ -103,6 +103,7 @@ For live local-node evidence, also run the opt-in devnet smoke:
 nix develop --quiet -c just devnet-smoke node
 nix develop --quiet -c just devnet-smoke governance
 nix develop --quiet -c just devnet-smoke withdraw
+nix develop --quiet -c just devnet-smoke disburse
 nix develop --quiet -c just devnet-smoke swap-ready
 ```
 
@@ -137,6 +138,20 @@ report/proof paths under
 `withdraw/report.json`, `withdraw/signed-tx.cbor.hex`,
 `withdraw/submit.log`, and `withdraw/materialized.json`.
 
+The disburse phase creates fresh local governance and withdrawal
+prerequisite evidence, resolves live treasury and wallet UTxOs through
+`disburse-wizard`, and runs the release-facing `tx-build` path to write
+unsigned ADA disburse CBOR plus JSON/Markdown reports. Latest branch
+disburse evidence is `runs/devnet/20260516T170631Z`, treasury input
+`ef153060e68a338350648a04b1e94306b03a02501512e05178b1c9d5cc7e8a46#0`,
+unit `ada`, amount `1000000` lovelace, tx id
+`75718d7fd814e9067e2715cfc557fde02aa78a30fac3dea382d6f106693b7748`,
+fee `632588` lovelace, validity upper bound slot `231`, and
+`disburse/usdm-boundary.json` code `missing-usdm-setup`. This is
+disburse evidence only; it is not SundaeSwap order build/funding,
+order-spend, or reorganize proof, and it does not claim a USDM happy
+path.
+
 The swap readiness phase uses the checked-in public
 `SundaeSwap-finance/sundae-contracts@be33466b7dbe0f8e6c0e0f46ff23737897f45835`
 `order.spend` artifact, publishes it as a local DevNet reference
@@ -154,9 +169,10 @@ or spent swap order.
 The DevNet experiment is split into governance action (#82),
 withdrawal (#83), disburse (#86), SundaeSwap V3 contract readiness
 (#132), SundaeSwap V3 order build/funding (#84), SundaeSwap V3 order
-spend (#85), and reorganize (#87) slices. Do not record disburse,
-swap-order build/funding, swap-spend, or reorganize evidence until
-those slices land and their phase-specific smoke commands pass.
+spend (#85), and reorganize (#87) slices. Do not record USDM
+happy-path, swap-order build/funding, swap-spend, or reorganize
+evidence until those slices land and their phase-specific smoke
+commands pass.
 SundaeSwap compatibility claims must be based on the public V3
 contracts/SDK, not on an Amaru-only toy validator.
 
@@ -187,6 +203,19 @@ ff78a866216fbe1b3cb2bf356f3a01cc088ab13260d50fd0b7b4b019b4a3b52d#0,
 reward 2000000 -> 0 after submit, and treasury ADA
 200000000 -> 202000000. This is not disburse,
 SundaeSwap order, or reorganize proof.
+
+Local DevNet disburse evidence now proves the third treasury setup
+slice: the smoke creates fresh governance and withdrawal prerequisite
+state, resolves a live ADA disburse intent from treasury UTxO state,
+and builds unsigned disburse CBOR plus JSON/Markdown reports through
+tx-build. Evidence: runs/devnet/20260516T170631Z, treasury input
+ef153060e68a338350648a04b1e94306b03a02501512e05178b1c9d5cc7e8a46#0,
+unit ada, amount 1000000 lovelace, tx id
+75718d7fd814e9067e2715cfc557fde02aa78a30fac3dea382d6f106693b7748,
+fee 632588 lovelace, validity upper bound slot 231, and
+disburse/usdm-boundary.json code missing-usdm-setup. This is not USDM
+happy-path, SundaeSwap order build/funding, order-spend, or reorganize
+proof.
 
 Local DevNet swap readiness evidence now proves the prerequisite for
 the SundaeSwap order-build slice: the smoke hashes the checked-in public

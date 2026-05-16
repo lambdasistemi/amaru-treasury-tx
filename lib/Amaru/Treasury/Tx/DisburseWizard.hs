@@ -652,7 +652,7 @@ resolveDisburseEnv
     -> ResolverInput
     -> m (Either ResolverError DisburseEnv)
 resolveDisburseEnv ResolverEnv{..} ri =
-    case networkConstants (riNetwork ri) of
+    case disburseNetworkConstants (riNetwork ri) of
         Left _ ->
             pure (Left (ResolverNetworkUnsupported (riNetwork ri)))
         Right nc ->
@@ -787,6 +787,15 @@ resolveDisburseEnv ResolverEnv{..} ri =
                             ResolverShortfall
                                 availableLovelace
                                 minUtxoDepositLovelace
+
+disburseNetworkConstants :: Text -> Either String NetworkConstants
+disburseNetworkConstants n
+    | T.toLower n == "devnet" =
+        -- Local DevNet disburse needs the curated USDM token identity
+        -- for intent shape even when the ADA subcase is the happy path.
+        -- Swap-order address constants are not consumed by disburse.
+        networkConstants "mainnet"
+    | otherwise = networkConstants n
 
 validateResolverAddresses
     :: ResolverInput -> Either ResolverError ()

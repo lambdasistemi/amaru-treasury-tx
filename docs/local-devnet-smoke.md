@@ -8,7 +8,9 @@ artifacts under a fresh run directory. The withdrawal phase proves the
 live reward-to-materialized-ADA boundary by writing a withdrawal intent,
 building unsigned CBOR, signing and submitting it inside the opt-in
 DevNet harness, and recording the treasury UTxO that materialized from
-the reward account. The swap readiness phase publishes the public
+the reward account. The disburse phase consumes that live treasury
+state and writes unsigned ADA disburse evidence plus an explicit USDM
+setup diagnostic. The swap readiness phase publishes the public
 SundaeSwap V3 order validator as a local DevNet reference script and
 writes handoff metadata for the later order-build slice.
 
@@ -194,6 +196,76 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
     `-- summary.json
 ```
 
+## Disburse Boundary
+
+```bash
+just devnet-smoke disburse
+```
+
+Expected output:
+
+```text
+devnet-smoke: run-dir runs/devnet/YYYYMMDDTHHMMSSZ
+devnet-smoke: phase disburse intent-ready
+devnet-smoke: disburse-unit ada
+devnet-smoke: disburse-amount 1000000
+devnet-smoke: disburse-intent runs/devnet/YYYYMMDDTHHMMSSZ/disburse/intent.json
+devnet-smoke: phase disburse passed
+devnet-smoke: disburse-tx-id 1cf9...
+devnet-smoke: disburse-fee 632588
+devnet-smoke: disburse-tx-body runs/devnet/YYYYMMDDTHHMMSSZ/disburse/tx-body.cbor.hex
+devnet-smoke: disburse-summary runs/devnet/YYYYMMDDTHHMMSSZ/disburse/summary.json
+devnet-smoke: disburse-usdm-boundary runs/devnet/YYYYMMDDTHHMMSSZ/disburse/usdm-boundary.json
+```
+
+The disburse smoke creates fresh governance and withdrawal prerequisite
+evidence first, then resolves live treasury and wallet UTxOs through
+the disburse resolver. It writes a schema-v1 `action = "disburse"`
+intent and runs the release-facing `tx-build` path to produce unsigned
+CBOR plus JSON/Markdown reports. The current successful subcase is ADA;
+USDM is not claimed by implication and is recorded as a typed
+`missing-usdm-setup` boundary until local synthetic USDM setup lands.
+
+The verified 2026-05-16 slice used run directory
+`runs/devnet/20260516T170631Z`. It consumed treasury input
+`ef153060e68a338350648a04b1e94306b03a02501512e05178b1c9d5cc7e8a46#0`,
+wrote an ADA disburse intent for `1000000` lovelace, built tx id
+`75718d7fd814e9067e2715cfc557fde02aa78a30fac3dea382d6f106693b7748`
+with fee `632588` lovelace and validity upper bound slot `231`, and
+wrote `disburse/usdm-boundary.json` with code `missing-usdm-setup`.
+
+The disburse phase writes:
+
+```text
+runs/devnet/YYYYMMDDTHHMMSSZ/
+|-- node.log
+|-- summary.json
+|-- summary.log
+|-- timing.json
+|-- governance/
+|   |-- action.json
+|   |-- certificates.json
+|   |-- genesis/
+|   `-- summary.json
+|-- withdraw/
+|   |-- intent.json
+|   |-- materialized.json
+|   |-- registry.json
+|   |-- signed-tx.cbor.hex
+|   |-- submit.log
+|   |-- tx-body.cbor.hex
+|   `-- summary.json
+`-- disburse/
+    |-- intent.json
+    |-- prerequisite.json
+    |-- report.json
+    |-- report.md
+    |-- summary.json
+    |-- tx-body.cbor.hex
+    |-- tx-build.log
+    `-- usdm-boundary.json
+```
+
 ## Swap Readiness Boundary
 
 ```bash
@@ -270,9 +342,9 @@ The experiment is split into seven tickets:
   reorganize slice. This consolidates live treasury UTxOs once the
   release-facing reorganize builder from #46 exists.
 
-The passing phases today are `node`, `governance`, `withdraw`, and
-`swap-ready`. `just devnet-smoke all` still runs only `node`,
-`governance`, and `withdraw` into separate
+The passing phases today are `node`, `governance`, `withdraw`,
+`disburse`, and `swap-ready`. `just devnet-smoke all` still runs only
+`node`, `governance`, and `withdraw` into separate
 subdirectories under one timestamped run directory.
 
 `node` proves only the local node boundary, network magic, and timing.
@@ -281,8 +353,12 @@ script reward account. `withdraw` proves that the funded script reward
 account can be resolved into a schema-v1 intent, built into unsigned
 CBOR plus review reports, signed and submitted by the DevNet harness,
 and observed as ADA materialized at the treasury script address. It is
-not proof that disburse, SundaeSwap order-build, SundaeSwap order-spend,
-or reorganize transactions have been built or observed on DevNet.
+not proof that SundaeSwap order-build, SundaeSwap order-spend, or
+reorganize transactions have been built or observed on DevNet.
+`disburse` proves live ADA disburse intent/build evidence and records
+USDM as `missing-usdm-setup`; it is not proof that a USDM disburse,
+SundaeSwap order-build, order-spend, or reorganize transaction has been
+built or observed on DevNet.
 `swap-ready` proves only that the public V3 order-validator reference is
 available on the local DevNet and recorded in machine-readable metadata
 for #84.
@@ -349,6 +425,13 @@ and the run directory's node log together. When diagnosing submission
 or materialization, inspect `withdraw/signed-tx.cbor.hex`,
 `withdraw/submit.log`, `withdraw/materialized.json`, and the node log.
 
+The disburse phase may fail during prerequisite setup, live treasury
+selection, wallet selection, beneficiary/network validation, intent
+translation, or `tx-build`. Inspect `disburse/failure.json`,
+`disburse/summary.json`, `disburse/tx-build.log`, and
+`disburse/report.json` together. USDM setup absence is represented in
+`disburse/usdm-boundary.json`, not as ADA success.
+
 The swap readiness phase may fail during artifact hashing, reference
 script publication, reference UTxO lookup, or observed reference-script
 hash verification. Inspect `swap-ready/registry.json`,
@@ -360,6 +443,9 @@ Use the run directory's `node.log`, `summary.log`, `timing.json`, and
 `withdraw/intent.json`, `withdraw/registry.json`,
 `withdraw/report.json`, `withdraw/signed-tx.cbor.hex`,
 `withdraw/submit.log`, and `withdraw/materialized.json` when recording
-withdrawal evidence. Use `swap-ready/registry.json`,
-`swap-ready/summary.json`, and `swap-ready/provenance.json` when
-recording swap readiness evidence.
+withdrawal evidence. Use `withdraw/summary.json`,
+`disburse/intent.json`,
+`disburse/report.json`, `disburse/summary.json`, and
+`disburse/usdm-boundary.json` when recording disburse evidence. Use
+`swap-ready/registry.json`, `swap-ready/summary.json`, and
+`swap-ready/provenance.json` when recording swap readiness evidence.

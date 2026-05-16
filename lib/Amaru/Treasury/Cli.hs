@@ -294,7 +294,7 @@ devnetCmdP =
                         <$> devnetStakeRewardInitOptsP
                     )
                     ( progDesc
-                        "Register DevNet treasury and permissions reward accounts"
+                        "Register DevNet treasury reward account; report permissions withdraw-zero"
                     )
                 )
         )

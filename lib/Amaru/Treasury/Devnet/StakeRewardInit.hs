@@ -7,10 +7,11 @@ Module      : Amaru.Treasury.Devnet.StakeRewardInit
 Description : DevNet stake/reward account setup
 License     : Apache-2.0
 
-Production-backed setup for the DevNet treasury and permissions script
-reward accounts. The registry-init artifact supplies the deployed
-script anchors; this module owns the setup transaction and the
-operator-facing artifacts for the stake/reward phase.
+Production-backed setup for the DevNet treasury script reward account
+and permissions reward-account handoff. The registry-init artifact
+supplies the deployed script anchors; this module owns the setup
+transaction and the operator-facing artifacts for the stake/reward
+phase.
 -}
 module Amaru.Treasury.Devnet.StakeRewardInit
     ( -- * Configuration and registry handoff
@@ -27,6 +28,7 @@ module Amaru.Treasury.Devnet.StakeRewardInit
 
       -- * Setup
     , setupDevnetStakeRewards
+    , stakeRewardSetupProgram
 
       -- * Artifacts
     , stakeRewardInitSummaryPath
@@ -203,6 +205,7 @@ data DevnetStakeRewardInitResult = DevnetStakeRewardInitResult
 -- | Explicit limitations or notable verification facts for this phase.
 data StakeRewardInitDiagnostic
     = RewardAccountRegistrationInferredFromAcceptedTx
+    | PermissionsRewardAccountAvailableForWithdrawZero
     deriving stock (Eq, Show)
 
 data StakeRewardInitFailureStep
@@ -220,7 +223,7 @@ data StakeRewardInitFailure = StakeRewardInitFailure
     }
     deriving stock (Eq, Show)
 
--- | Submit one setup transaction for treasury and permissions rewards.
+-- | Submit one setup transaction for the treasury reward account.
 setupDevnetStakeRewards
     :: DevnetStakeRewardInitConfig
     -> DevnetStakeRewardRegistry
@@ -274,21 +277,15 @@ submitStakeRewardSetup
                 pp ^. ppKeyDepositL
             treasuryCredential =
                 ScriptHashObj (dsrrTreasuryScriptHash registry)
-            permissionsCredential =
-                ScriptHashObj (dsrrPermissionsScriptHash registry)
             prog :: TxBuild NoCtx Void ()
-            prog = do
-                _ <- spend seedIn
-                collateral seedIn
-                reference (dsrrTreasuryRef registry)
-                reference (dsrrPermissionsRef registry)
-                registerScriptRewardAccount
+            prog =
+                stakeRewardSetupProgram
+                    seedIn
+                    (dsrrTreasuryRef registry)
+                    (dsrrPermissionsRef registry)
                     treasuryCredential
                     stakeDeposit
-                registerScriptRewardAccount
-                    permissionsCredential
-                    stakeDeposit
-                validTo upperSlot
+                    upperSlot
         build
             (mkPParamsBound pp)
             interpret
@@ -318,6 +315,30 @@ submitStakeRewardSetup
                         (dsricFundingAddress config)
                         60
                     pure txId
+
+stakeRewardSetupProgram
+    :: TxIn
+    -> TxIn
+    -> TxIn
+    -> Credential Staking
+    -> Coin
+    -> SlotNo
+    -> TxBuild q e ()
+stakeRewardSetupProgram
+    seedIn
+    treasuryRef
+    permissionsRef
+    treasuryCredential
+    stakeDeposit
+    upperSlot = do
+        _ <- spend seedIn
+        collateral seedIn
+        reference treasuryRef
+        reference permissionsRef
+        registerScriptRewardAccount
+            treasuryCredential
+            stakeDeposit
+        validTo upperSlot
 
 registerScriptRewardAccount
     :: Credential Staking -> Coin -> TxBuild q e ()
@@ -357,16 +378,20 @@ verifyStakeRewardSetup config registry provider txId = do
             { dsrirSetupTxId = txId
             , dsrirTreasury =
                 accountProjection
+                    True
                     treasuryAccount
                     (dsrrTreasuryScriptHash registry)
                     rewards
             , dsrirPermissions =
                 accountProjection
+                    False
                     permissionsAccount
                     (dsrrPermissionsScriptHash registry)
                     rewards
             , dsrirDiagnostics =
-                [RewardAccountRegistrationInferredFromAcceptedTx]
+                [ RewardAccountRegistrationInferredFromAcceptedTx
+                , PermissionsRewardAccountAvailableForWithdrawZero
+                ]
             }
 
 resolveAndVerifyRegistryRefs
@@ -428,16 +453,17 @@ verifyReferenceScript found label ref expectedHash =
                             <> " UTxO has no reference script"
 
 accountProjection
-    :: AccountAddress
+    :: Bool
+    -> AccountAddress
     -> ScriptHash
     -> Map.Map AccountAddress Coin
     -> DevnetStakeRewardAccount
-accountProjection account scriptHash rewards =
+accountProjection registered account scriptHash rewards =
     DevnetStakeRewardAccount
         { dsraScriptHash = scriptHashToHex scriptHash
         , dsraRewardAccount = scriptHashToHex scriptHash
         , dsraLedgerNetwork = accountNetwork account
-        , dsraRegistered = True
+        , dsraRegistered = registered
         , dsraRewardsLovelace = coinLovelace rewardCoin
         }
   where

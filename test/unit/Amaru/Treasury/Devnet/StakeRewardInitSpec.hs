@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 {- |
@@ -7,14 +8,51 @@ License     : Apache-2.0
 -}
 module Amaru.Treasury.Devnet.StakeRewardInitSpec (spec) where
 
-import Cardano.Ledger.BaseTypes (Network (..))
-import Cardano.Ledger.TxIn (TxId, TxIn (..))
+import Cardano.Crypto.Hash.Class
+    ( Hash
+    , HashAlgorithm
+    , hashFromBytes
+    )
+import Cardano.Ledger.Api.PParams (emptyPParams)
+import Cardano.Ledger.Api.Tx.Body
+    ( certsTxBodyL
+    , collateralInputsTxBodyL
+    , inputsTxBodyL
+    , referenceInputsTxBodyL
+    )
+import Cardano.Ledger.BaseTypes
+    ( Network (..)
+    , mkTxIxPartial
+    )
+import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Core (bodyTxL)
+import Cardano.Ledger.Credential (Credential (..))
+import Cardano.Ledger.Hashes
+    ( ScriptHash (..)
+    , unsafeMakeSafeHash
+    )
+import Cardano.Ledger.Keys (KeyRole (Staking))
+import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
+import Cardano.Slotting.Slot (SlotNo (..))
+import Cardano.Tx.Build
+    ( ConwayDelegCert (..)
+    , ConwayTxCert (..)
+    , DRep (..)
+    , Delegatee (..)
+    , draft
+    )
 import Data.Aeson
     ( Value
     , object
     , (.=)
     )
+import Data.ByteString qualified as BS
+import Data.Foldable (toList)
+import Data.Maybe (fromJust)
+import Data.Set qualified as Set
 import Data.Text qualified as T
+import Data.Word (Word8)
+import Lens.Micro ((^.))
 import System.FilePath ((</>))
 import Test.Hspec
     ( Spec
@@ -35,6 +73,7 @@ import Amaru.Treasury.Devnet.StakeRewardInit
     , stakeRewardInitProvenanceValue
     , stakeRewardInitSummaryPath
     , stakeRewardInitSummaryValue
+    , stakeRewardSetupProgram
     )
 import Amaru.Treasury.LedgerParse
     ( txInFromText
@@ -56,6 +95,39 @@ spec =
                 `shouldBe` sampleRunDir
                     </> "stake-reward-init"
                     </> "provenance.json"
+
+        it
+            "drafts stake-reward-init setup certifying only the treasury reward account"
+            $ do
+                let seedIn = mkTxIn 1
+                    treasuryRef = mkTxIn 2
+                    permissionsRef = mkTxIn 3
+                    treasuryCredential = scriptCredential 10
+                    stakeDeposit = Coin 2_000_000
+                    tx =
+                        draft emptyPParams $
+                            stakeRewardSetupProgram
+                                seedIn
+                                treasuryRef
+                                permissionsRef
+                                treasuryCredential
+                                stakeDeposit
+                                (SlotNo 100)
+                    body = tx ^. bodyTxL
+                body ^. inputsTxBodyL `shouldBe` Set.singleton seedIn
+                body
+                    ^. collateralInputsTxBodyL
+                    `shouldBe` Set.singleton seedIn
+                body
+                    ^. referenceInputsTxBodyL
+                    `shouldBe` Set.fromList [treasuryRef, permissionsRef]
+                toList (body ^. certsTxBodyL)
+                    `shouldBe` [ ConwayTxCertDeleg $
+                                    ConwayRegDelegCert
+                                        treasuryCredential
+                                        (DelegVote DRepAlwaysAbstain)
+                                        stakeDeposit
+                               ]
 
         it
             "renders stake-reward-init summary, accounts, provenance, and success lines"
@@ -87,10 +159,12 @@ spec =
                                     .= accountValue
                                         sampleTreasuryHash
                                         sampleTreasuryHash
+                                        True
                                 , "permissions"
                                     .= accountValue
                                         samplePermissionsHash
                                         samplePermissionsHash
+                                        False
                                 ]
                         ]
                 stakeRewardInitProvenanceValue
@@ -121,6 +195,7 @@ spec =
                 result <- sampleResult
                 dsrirDiagnostics result
                     `shouldBe` [ RewardAccountRegistrationInferredFromAcceptedTx
+                               , PermissionsRewardAccountAvailableForWithdrawZero
                                ]
 
 sampleRunDir :: FilePath
@@ -150,32 +225,54 @@ sampleResult = do
         DevnetStakeRewardInitResult
             { dsrirSetupTxId = setupTxId
             , dsrirTreasury =
-                sampleAccount sampleTreasuryHash sampleTreasuryHash
+                sampleAccount sampleTreasuryHash sampleTreasuryHash True
             , dsrirPermissions =
-                sampleAccount samplePermissionsHash samplePermissionsHash
+                sampleAccount samplePermissionsHash samplePermissionsHash False
             , dsrirDiagnostics =
-                [RewardAccountRegistrationInferredFromAcceptedTx]
+                [ RewardAccountRegistrationInferredFromAcceptedTx
+                , PermissionsRewardAccountAvailableForWithdrawZero
+                ]
             }
 
-sampleAccount :: T.Text -> T.Text -> DevnetStakeRewardAccount
-sampleAccount scriptHash rewardAccount =
+sampleAccount :: T.Text -> T.Text -> Bool -> DevnetStakeRewardAccount
+sampleAccount scriptHash rewardAccount registered =
     DevnetStakeRewardAccount
         { dsraScriptHash = scriptHash
         , dsraRewardAccount = rewardAccount
         , dsraLedgerNetwork = Testnet
-        , dsraRegistered = True
+        , dsraRegistered = registered
         , dsraRewardsLovelace = 0
         }
 
-accountValue :: T.Text -> T.Text -> Value
-accountValue scriptHash rewardAccount =
+accountValue :: T.Text -> T.Text -> Bool -> Value
+accountValue scriptHash rewardAccount registered =
     object
         [ "scriptHash" .= scriptHash
         , "rewardAccount" .= rewardAccount
         , "ledgerNetwork" .= ("Testnet" :: T.Text)
-        , "registered" .= True
+        , "registered" .= registered
         , "rewardsLovelace" .= (0 :: Integer)
         ]
+
+mkHash32 :: (HashAlgorithm h) => Word8 -> Hash h a
+mkHash32 n =
+    fromJust . hashFromBytes . BS.pack $
+        replicate 31 0 ++ [n]
+
+mkHash28 :: (HashAlgorithm h) => Word8 -> Hash h a
+mkHash28 n =
+    fromJust . hashFromBytes . BS.pack $
+        replicate 27 0 ++ [n]
+
+mkTxIn :: Word8 -> TxIn
+mkTxIn n =
+    TxIn
+        (TxId (unsafeMakeSafeHash (mkHash32 n)))
+        (mkTxIxPartial 0)
+
+scriptCredential :: Word8 -> Credential Staking
+scriptCredential n =
+    ScriptHashObj (ScriptHash (mkHash28 n))
 
 parseTxId :: T.Text -> IO TxId
 parseTxId txIdText = do

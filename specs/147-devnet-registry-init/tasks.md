@@ -100,10 +100,14 @@ evidence.
 
 ### Implementation For User Story 3
 
-- [ ] T028 [US3] Update `docs/local-devnet-smoke.md` with registry-init usage, artifact paths, and the verified run directory.
-- [ ] T029 [US3] Update `README.md` with registry-init command usage and clear boundaries for #148, #149, and #150.
+- [x] T028 [US3] Update `docs/local-devnet-smoke.md` with registry-init usage, artifact paths, and the verified run directory.
+- [x] T029 [US3] Update `README.md` with registry-init command usage and clear boundaries for #148, #149, and #150.
 - [ ] T030 [US3] Update PR #152 title/body with verified commands and run artifacts.
-- [ ] T031 [US3] Run `./llm/reviews/local-147-devnet-registry-init/gate.sh`.
+- [x] T031 [US3] Run `./llm/reviews/local-147-devnet-registry-init/gate.sh`.
+
+Evidence:
+
+- DOCS/GATE GREEN: `./llm/reviews/local-147-devnet-registry-init/gate.sh` passed with Spec Kit prerequisites, `git diff --check`, build, schema-check, 415 unit examples with 0 failures, 25 golden examples with 0 failures and 1 pending, format-check, hlint, smoke scripts, and release version check.
 - [ ] T032 [US3] Commit docs and PR metadata as `docs(devnet): document registry initiator`.
 
 ## Dependencies

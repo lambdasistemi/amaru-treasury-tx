@@ -85,6 +85,36 @@ Run the opt-in local devnet node smoke with:
 nix develop --quiet -c just devnet-smoke node
 ```
 
+Run the registry/reference-script initiator boundary check with:
+
+```bash
+nix develop --quiet -c just devnet-smoke registry-init
+```
+
+The registry-init phase publishes local seed-derived scopes and
+registry NFTs plus permissions and treasury reference scripts through
+production-backed code, then verifies the expected UTxOs on the local
+DevNet and writes `registry-init/summary.json`,
+`registry-init/registry.json`, and `registry-init/provenance.json`. The
+latest local evidence for this branch is
+`runs/devnet/20260516T184944Z`: seed split tx
+`f31917b80a3649c90bead84e5aea925d68945021a811f0dc68bd7dcce372a90b`,
+registry mint tx
+`8dbb8d18e1814ee733ace77c5c7e59e17bb70c22382c69637e6a154729ec3912`,
+reference-script tx
+`f730f2360b82a8a8fd0a4e071110bb78223d5c09eb2413d32eb48d5e54acb44c`,
+scopes anchor
+`8dbb8d18e1814ee733ace77c5c7e59e17bb70c22382c69637e6a154729ec3912#0`,
+registry anchor
+`8dbb8d18e1814ee733ace77c5c7e59e17bb70c22382c69637e6a154729ec3912#1`,
+permissions reference
+`f730f2360b82a8a8fd0a4e071110bb78223d5c09eb2413d32eb48d5e54acb44c#0`,
+and treasury reference
+`f730f2360b82a8a8fd0a4e071110bb78223d5c09eb2413d32eb48d5e54acb44c#1`.
+This is registry/reference-script publication evidence only; staking,
+reward setup, governance funding, treasury withdrawal setup, and
+disburse submission remain separate recovery slices.
+
 Run the governance slice boundary check with:
 
 ```bash
@@ -143,7 +173,18 @@ and local order address
 This is readiness evidence only; it does not build, fund, submit, or
 spend a swap order.
 
-The DevNet release experiment is tracked in slices: governance action
+The DevNet release experiment is tracked in slices. The current
+bootstrap initiator recovery is orchestrated by
+[#151](https://github.com/lambdasistemi/amaru-treasury-tx/issues/151):
+registry/reference-script publication
+[#147](https://github.com/lambdasistemi/amaru-treasury-tx/issues/147),
+staking and reward-account setup
+[#148](https://github.com/lambdasistemi/amaru-treasury-tx/issues/148),
+governance funding and treasury withdrawal setup
+[#149](https://github.com/lambdasistemi/amaru-treasury-tx/issues/149),
+and disburse action/beneficiary receipt
+[#150](https://github.com/lambdasistemi/amaru-treasury-tx/issues/150).
+Older evidence slices remain tracked as governance action
 [#82](https://github.com/lambdasistemi/amaru-treasury-tx/issues/82),
 withdrawal [#83](https://github.com/lambdasistemi/amaru-treasury-tx/issues/83),
 disburse [#86](https://github.com/lambdasistemi/amaru-treasury-tx/issues/86),

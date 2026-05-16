@@ -2,10 +2,11 @@
 
 The local DevNet smoke is an opt-in release check. It starts the
 `cardano-node-clients` DevNet, verifies the node socket with network
-magic `42`, can run the governance funding setup on a patched
-short-epoch genesis, records timing/action/reward evidence, and writes
-artifacts under a fresh run directory. The withdrawal phase proves the
-live reward-to-materialized-ADA boundary by writing a withdrawal intent,
+magic `42`, can publish registry/reference-script bootstrap state,
+can run the governance funding setup on a patched short-epoch genesis,
+records timing/action/reward evidence, and writes artifacts under a
+fresh run directory. The withdrawal phase proves the live
+reward-to-materialized-ADA boundary by writing a withdrawal intent,
 building unsigned CBOR, signing and submitting it inside the opt-in
 DevNet harness, and recording the treasury UTxO that materialized from
 the reward account. The swap readiness phase publishes the public
@@ -62,6 +63,67 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
 - `slotLengthSeconds`: `0.1`
 - `epochDurationSeconds`: `50`
 - `networkMagic`: `42`
+
+## Registry Initiator Boundary
+
+```bash
+just devnet-smoke registry-init
+```
+
+Expected output:
+
+```text
+devnet-smoke: run-dir runs/devnet/YYYYMMDDTHHMMSSZ
+devnet-smoke: network devnet magic 42
+devnet-smoke: phase registry-init passed
+devnet-smoke: registry-init-seed-split-tx-id f319...
+devnet-smoke: registry-init-registry-mint-tx-id 8dbb...
+devnet-smoke: registry-init-reference-scripts-tx-id f730...
+devnet-smoke: registry-init-summary runs/devnet/YYYYMMDDTHHMMSSZ/registry-init/summary.json
+devnet-smoke: registry-init-registry runs/devnet/YYYYMMDDTHHMMSSZ/registry-init/registry.json
+```
+
+The registry-init smoke invokes the production-backed registry
+initiator, publishes local seed-derived scopes and registry NFTs,
+publishes permissions and treasury reference scripts, then verifies the
+expected registry/reference-script UTxOs through the local provider
+before reporting success. The smoke layer owns orchestration and chain
+verification; reusable registry transaction construction lives in
+production code.
+
+The verified 2026-05-16 slice used run directory
+`runs/devnet/20260516T184944Z`. It submitted seed split tx
+`f31917b80a3649c90bead84e5aea925d68945021a811f0dc68bd7dcce372a90b`,
+registry mint tx
+`8dbb8d18e1814ee733ace77c5c7e59e17bb70c22382c69637e6a154729ec3912`,
+and reference-script tx
+`f730f2360b82a8a8fd0a4e071110bb78223d5c09eb2413d32eb48d5e54acb44c`.
+It observed scopes
+`8dbb8d18e1814ee733ace77c5c7e59e17bb70c22382c69637e6a154729ec3912#0`,
+registry
+`8dbb8d18e1814ee733ace77c5c7e59e17bb70c22382c69637e6a154729ec3912#1`,
+permissions reference
+`f730f2360b82a8a8fd0a4e071110bb78223d5c09eb2413d32eb48d5e54acb44c#0`,
+and treasury reference
+`f730f2360b82a8a8fd0a4e071110bb78223d5c09eb2413d32eb48d5e54acb44c#1`.
+
+The registry-init phase writes:
+
+```text
+runs/devnet/YYYYMMDDTHHMMSSZ/
+|-- node.log
+|-- summary.json
+|-- summary.log
+|-- timing.json
+`-- registry-init/
+    |-- provenance.json
+    |-- registry.json
+    `-- summary.json
+```
+
+This is registry/reference-script publication evidence only. It does
+not prove staking setup, reward-account funding, treasury withdrawal
+materialization, disburse submission, swap execution, or reorganize.
 
 ## Governance Boundary
 
@@ -242,7 +304,21 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
 
 ## DevNet Experiment Order
 
-The experiment is split into seven tickets:
+The original DevNet release experiment is now being recovered through
+the bootstrap initiator parent ticket
+[#151](https://github.com/lambdasistemi/amaru-treasury-tx/issues/151).
+The recovery child tickets run in this order:
+
+- [#147](https://github.com/lambdasistemi/amaru-treasury-tx/issues/147):
+  registry/reference-script publication from production-backed code.
+- [#148](https://github.com/lambdasistemi/amaru-treasury-tx/issues/148):
+  required staking and reward-account setup.
+- [#149](https://github.com/lambdasistemi/amaru-treasury-tx/issues/149):
+  governance funding and treasury withdrawal setup.
+- [#150](https://github.com/lambdasistemi/amaru-treasury-tx/issues/150):
+  disburse action submission and beneficiary receipt verification.
+
+The prior experiment is split into seven tickets:
 
 - [#82](https://github.com/lambdasistemi/amaru-treasury-tx/issues/82):
   governance action slice. This prepares and submits the local Conway
@@ -270,12 +346,14 @@ The experiment is split into seven tickets:
   reorganize slice. This consolidates live treasury UTxOs once the
   release-facing reorganize builder from #46 exists.
 
-The passing phases today are `node`, `governance`, `withdraw`, and
-`swap-ready`. `just devnet-smoke all` still runs only `node`,
+The passing phases today are `node`, `registry-init`, `governance`,
+`withdraw`, and `swap-ready`. `just devnet-smoke all` still runs only `node`,
 `governance`, and `withdraw` into separate
 subdirectories under one timestamped run directory.
 
 `node` proves only the local node boundary, network magic, and timing.
+`registry-init` proves only production-backed registry/reference-script
+publication and artifact handoff.
 `governance` proves the local setup path that funds the Amaru treasury
 script reward account. `withdraw` proves that the funded script reward
 account can be resolved into a schema-v1 intent, built into unsigned

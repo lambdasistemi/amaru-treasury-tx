@@ -123,6 +123,7 @@ library
     Amaru.Treasury.Cli
     Amaru.Treasury.Cli.AttachWitness
     Amaru.Treasury.Cli.Common
+    Amaru.Treasury.Cli.Devnet
     Amaru.Treasury.Cli.DisburseWizard
     Amaru.Treasury.Cli.Envelope
     Amaru.Treasury.Cli.Passphrase
@@ -367,6 +368,7 @@ test-suite unit-tests
   other-modules:
     Amaru.Treasury.AuxDataSpec
     Amaru.Treasury.BuildSpec
+    Amaru.Treasury.Cli.DevnetSpec
     Amaru.Treasury.Cli.EnvelopeSpec
     Amaru.Treasury.Cli.SwapCancelSpec
     Amaru.Treasury.Cli.VaultSpec

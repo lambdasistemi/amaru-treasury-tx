@@ -40,7 +40,11 @@ module Amaru.Treasury.Devnet.RegistryInit
     , registryInitRegistryValue
     , registryInitProvenanceValue
     , registryInitLines
+    , registryInitLinesWithPrefix
     , writeRegistryInitArtifacts
+    , writeRegistryInitArtifactsWithPrefix
+    , writeRegistryInitArtifactsWithLines
+    , verifyRegistryInitPublication
     , withdrawalRegistryPath
     , withdrawalRegistryValue
     , writeWithdrawalRegistryArtifacts
@@ -77,6 +81,7 @@ import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
 import Cardano.Ledger.Core (PParams, Script)
+import Cardano.Ledger.Core qualified as Core
 import Cardano.Ledger.Credential
     ( Credential (..)
     , StakeReference (..)
@@ -131,6 +136,7 @@ import Cardano.Tx.Ledger (ConwayTx)
 import Codec.Binary.Bech32 qualified as Bech32
 import Control.Concurrent (threadDelay)
 import Control.Exception (throwIO)
+import Control.Monad (unless)
 import Data.Aeson
     ( Value
     , encode
@@ -936,21 +942,33 @@ registryInitLines
     -> FilePath
     -> DevnetRegistryPublication
     -> [String]
-registryInitLines networkMagic runDir publication =
-    [ "devnet-smoke: run-dir " <> runDir
-    , "devnet-smoke: network devnet magic " <> show networkMagic
-    , "devnet-smoke: phase registry-init passed"
-    , "devnet-smoke: registry-init-seed-split-tx-id "
+registryInitLines =
+    registryInitLinesWithPrefix "devnet-smoke"
+
+-- | Human-readable success lines with a caller-specific command prefix.
+registryInitLinesWithPrefix
+    :: String
+    -> Int
+    -> FilePath
+    -> DevnetRegistryPublication
+    -> [String]
+registryInitLinesWithPrefix prefix networkMagic runDir publication =
+    [ line "run-dir " <> runDir
+    , line "network devnet magic " <> show networkMagic
+    , line "phase registry-init passed"
+    , line "registry-init-seed-split-tx-id "
         <> T.unpack (renderTxId (drpSeedSplitTxId publication))
-    , "devnet-smoke: registry-init-registry-mint-tx-id "
+    , line "registry-init-registry-mint-tx-id "
         <> T.unpack (renderTxId (drpRegistryMintTxId publication))
-    , "devnet-smoke: registry-init-reference-scripts-tx-id "
+    , line "registry-init-reference-scripts-tx-id "
         <> T.unpack (renderTxId (drpReferenceScriptsTxId publication))
-    , "devnet-smoke: registry-init-summary "
+    , line "registry-init-summary "
         <> registryInitSummaryPath runDir
-    , "devnet-smoke: registry-init-registry "
+    , line "registry-init-registry "
         <> registryInitRegistryPath runDir
     ]
+  where
+    line message = prefix <> ": " <> message
 
 -- | Write the registry-init artifact set under the run directory.
 writeRegistryInitArtifacts
@@ -959,6 +977,39 @@ writeRegistryInitArtifacts
     -> DevnetRegistryPublication
     -> IO ()
 writeRegistryInitArtifacts networkMagic runDir publication = do
+    writeRegistryInitArtifactsWithPrefix
+        "devnet-smoke"
+        networkMagic
+        runDir
+        publication
+
+-- | Write the registry-init artifact set with caller-specific log lines.
+writeRegistryInitArtifactsWithPrefix
+    :: String
+    -> Int
+    -> FilePath
+    -> DevnetRegistryPublication
+    -> IO ()
+writeRegistryInitArtifactsWithPrefix prefix networkMagic runDir publication = do
+    writeRegistryInitArtifactsWithLines
+        networkMagic
+        runDir
+        publication
+        ( registryInitLinesWithPrefix
+            prefix
+            networkMagic
+            runDir
+            publication
+        )
+
+-- | Write the registry-init artifact set with caller-supplied log lines.
+writeRegistryInitArtifactsWithLines
+    :: Int
+    -> FilePath
+    -> DevnetRegistryPublication
+    -> [String]
+    -> IO ()
+writeRegistryInitArtifactsWithLines networkMagic runDir publication linesOut = do
     let summary =
             registryInitSummaryValue networkMagic runDir publication
     createDirectoryIfMissing True (registryInitDirectory runDir)
@@ -972,7 +1023,74 @@ writeRegistryInitArtifacts networkMagic runDir publication = do
     BSL.writeFile (runDir </> "summary.json") (encode summary)
     writeFile
         (runDir </> "summary.log")
-        (unlines (registryInitLines networkMagic runDir publication))
+        (unlines linesOut)
+
+{- | Verify that all registry-init anchors exist and reference-script
+anchors carry the expected scripts.
+-}
+verifyRegistryInitPublication
+    :: Provider IO
+    -> DevnetRegistryPublication
+    -> IO ()
+verifyRegistryInitPublication provider publication = do
+    let registry =
+            drpAnchors publication
+        refs =
+            [ draScopesRef registry
+            , draRegistryRef registry
+            , draPermissionsRef registry
+            , draTreasuryRef registry
+            ]
+    found <- queryUTxOByTxIn provider (Set.fromList refs)
+    let missing =
+            filter (`Map.notMember` found) refs
+    unless (null missing) $
+        throwIO . userError $
+            "registry-init missing anchor UTxOs: "
+                <> show (txInToText <$> missing)
+    verifyRegistryReferenceScript
+        found
+        "permissions"
+        (draPermissionsRef registry)
+        (draPermissionsHash registry)
+    verifyRegistryReferenceScript
+        found
+        "treasury"
+        (draTreasuryRef registry)
+        (ttScriptHash (draTreasuryTarget registry))
+
+verifyRegistryReferenceScript
+    :: Map.Map TxIn (TxOut ConwayEra)
+    -> String
+    -> TxIn
+    -> ScriptHash
+    -> IO ()
+verifyRegistryReferenceScript found label ref expectedHash =
+    case Map.lookup ref found of
+        Nothing ->
+            throwIO . userError $
+                "registry-init missing "
+                    <> label
+                    <> " reference script UTxO "
+                    <> T.unpack (txInToText ref)
+        Just txOut ->
+            case txOut ^. referenceScriptTxOutL of
+                SJust script ->
+                    unless
+                        ( Core.hashScript @ConwayEra script
+                            == expectedHash
+                        )
+                        $ throwIO
+                        $ userError
+                            ( "registry-init "
+                                <> label
+                                <> " reference script hash mismatch"
+                            )
+                SNothing ->
+                    throwIO . userError $
+                        "registry-init "
+                            <> label
+                            <> " UTxO has no reference script"
 
 -- | Path of the withdraw registry artifact in a DevNet run directory.
 withdrawalRegistryPath :: FilePath -> FilePath

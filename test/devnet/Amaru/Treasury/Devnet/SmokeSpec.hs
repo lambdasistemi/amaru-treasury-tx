@@ -21,6 +21,7 @@ import Cardano.Crypto.DSIGN
     ( Ed25519DSIGN
     , SignKeyDSIGN
     , deriveVerKeyDSIGN
+    , rawSerialiseSignKeyDSIGN
     )
 import Cardano.Crypto.Hash
     ( Hash
@@ -158,6 +159,7 @@ import Data.Aeson
     , (.=)
     )
 import Data.ByteString qualified as BS
+import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Char8 qualified as BS8
 import Data.ByteString.Lazy qualified as BSL
 import Data.ByteString.Short qualified as SBS
@@ -210,6 +212,13 @@ import Test.Hspec
 
 import Amaru.Treasury.Backend.N2C
     ( probeNetworkMagic
+    )
+import Amaru.Treasury.Cli.Common
+    ( GlobalOpts (..)
+    )
+import Amaru.Treasury.Cli.Devnet
+    ( DevnetRegistryInitOpts (..)
+    , runDevnetRegistryInit
     )
 import Amaru.Treasury.Cli.TxBuild qualified as TxBuild
 import Amaru.Treasury.Devnet.RegistryInit
@@ -714,28 +723,19 @@ registryInitSmoke = do
 
         copyNodeLog socket runDir
         writeTiming runDir startMs socket timing
-        withGovernanceNode socket $ \provider submitter -> do
-            pp <- queryProtocolParams provider
-            utxos <- queryUTxOs provider genesisAddr
-            publication <-
-                RegistryInit.publishDevnetRegistryInit
-                    devnetRegistryInitConfig
-                    provider
-                    submitter
-                    pp
-                    utxos
-            verifyRegistryInitPublication provider publication
-            RegistryInit.writeRegistryInitArtifacts
-                (sgtNetworkMagic timing)
-                runDir
-                publication
-            mapM_
-                putStrLn
-                ( RegistryInit.registryInitLines
-                    (sgtNetworkMagic timing)
-                    runDir
-                    publication
-                )
+        signingKeyFile <- writeGenesisPaymentSigningKey runDir
+        runDevnetRegistryInit
+            GlobalOpts
+                { goSocketPath = Just socket
+                , goNetworkMagic = devnetMagic
+                , goNetworkName = Just "devnet"
+                }
+            DevnetRegistryInitOpts
+                { drioFundingAddress =
+                    T.unpack (renderAddr genesisAddr)
+                , drioSigningKeyFile = signingKeyFile
+                , drioRunDir = runDir
+                }
 
 swapReadySmoke :: IO ()
 swapReadySmoke = do
@@ -1091,61 +1091,31 @@ publishSwapReadiness provider submitter pp utxos = do
                 renderAddr orderAddress
             }
 
-verifyRegistryInitPublication
-    :: Provider IO
-    -> DevnetRegistryPublication
-    -> IO ()
-verifyRegistryInitPublication provider publication = do
-    let registry =
-            drpAnchors publication
-        refs =
-            [ draScopesRef registry
-            , draRegistryRef registry
-            , draPermissionsRef registry
-            , draTreasuryRef registry
-            ]
-    found <- queryUTxOByTxIn provider (Set.fromList refs)
-    let missing =
-            filter (`Map.notMember` found) refs
-    unless (null missing) $
-        expectationFailure $
-            "registry-init missing anchor UTxOs: "
-                <> show (txInToText <$> missing)
-    verifyRegistryReferenceScript
-        found
-        "permissions"
-        (draPermissionsRef registry)
-        (draPermissionsHash registry)
-    verifyRegistryReferenceScript
-        found
-        "treasury"
-        (draTreasuryRef registry)
-        (ttScriptHash (draTreasuryTarget registry))
-
-verifyRegistryReferenceScript
-    :: Map.Map TxIn (TxOut ConwayEra)
-    -> String
-    -> TxIn
-    -> ScriptHash
-    -> IO ()
-verifyRegistryReferenceScript found label ref expectedHash =
-    case Map.lookup ref found of
-        Nothing ->
-            expectationFailure $
-                "registry-init missing "
-                    <> label
-                    <> " reference script UTxO "
-                    <> T.unpack (txInToText ref)
-        Just txOut ->
-            case txOut ^. referenceScriptTxOutL of
-                SJust script ->
-                    scriptHashToHex (Core.hashScript @ConwayEra script)
-                        `shouldBe` scriptHashToHex expectedHash
-                SNothing ->
-                    expectationFailure $
-                        "registry-init "
-                            <> label
-                            <> " UTxO has no reference script"
+writeGenesisPaymentSigningKey :: FilePath -> IO FilePath
+writeGenesisPaymentSigningKey runDir = do
+    let path = runDir </> "registry-init-funding.skey"
+    BSL.writeFile
+        path
+        ( encode
+            ( object
+                [ "type"
+                    .= ( "PaymentSigningKeyShelley_ed25519"
+                            :: T.Text
+                       )
+                , "description" .= ("Payment Signing Key" :: T.Text)
+                , "cborHex"
+                    .= TE.decodeUtf8
+                        ( "5820"
+                            <> B16.encode
+                                ( rawSerialiseSignKeyDSIGN
+                                    genesisSignKey
+                                )
+                        )
+                ]
+            )
+        )
+    setFileMode path ownerReadMode
+    pure path
 
 buildSubmitAndWait
     :: String

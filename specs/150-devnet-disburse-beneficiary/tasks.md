@@ -47,30 +47,59 @@ artifacts.
 DevNet-only guard, prerequisite validation, artifact rendering, and
 failure projection. Focused builds prove executable/library compile.
 
-- [x] T017 (commit: 4f185f9) [US1] RED: add CLI parser coverage for
+- [x] T017 (commit: 8802a8e) [US1] RED: add CLI parser coverage for
   `devnet disburse-submit`.
-- [x] T018 (commit: 4f185f9) [US1] RED: add non-DevNet guard coverage that rejects before
+- [x] T018 (commit: 8802a8e) [US1] RED: add non-DevNet guard coverage that rejects before
   reading files, keys, or sockets.
-- [x] T019 (commit: 4f185f9) [US1] RED: add artifact path/value/failure projection tests.
-- [x] T020 (commit: 4f185f9) [US1] Add
+- [x] T019 (commit: 8802a8e) [US1] RED: add artifact path/value/failure projection tests.
+- [x] T020 (commit: 8802a8e) [US1] Add
   `lib/Amaru/Treasury/Devnet/DisburseSubmit.hs` with config,
   prerequisite readers, result/failure types, artifact paths, JSON
   rendering, and success lines.
-- [x] T021 (commit: 4f185f9) [US1] Validate #147 registry and #149 materialized artifact
+- [x] T021 (commit: 8802a8e) [US1] Validate #147 registry and #149 materialized artifact
   inputs, including DevNet address/network consistency.
-- [x] T022 (commit: 4f185f9) [US1] Build the ADA disburse intent through production
+- [x] T022 (commit: 8802a8e) [US1] Build the ADA disburse intent through production
   disburse resolver/translation or an equivalent production DevNet
   adapter.
-- [x] T023 (commit: 4f185f9) [US1] Build unsigned CBOR and report through the production
+- [x] T023 (commit: 8802a8e) [US1] Build unsigned CBOR and report through the production
   tx-build path.
-- [x] T024 (commit: 4f185f9) [US1] Sign, submit, and verify treasury/beneficiary chain
+- [x] T024 (commit: 8802a8e) [US1] Sign, submit, and verify treasury/beneficiary chain
   effects.
-- [x] T025 (commit: 4f185f9) [US1] Wire parser/runner through DevNet CLI, top-level CLI,
+- [x] T025 (commit: 8802a8e) [US1] Wire parser/runner through DevNet CLI, top-level CLI,
   main dispatch, and Cabal exposure.
-- [x] T026 (commit: 4f185f9) [US1] GREEN: run focused unit tests and lib/exe builds.
-- [x] T027 (commit: 4f185f9) [US1] Commit the command slice as
+- [x] T026 (commit: 8802a8e) [US1] GREEN: run focused unit tests and lib/exe builds.
+- [x] T027 (commit: 8802a8e) [US1] Commit the command slice as
   `feat(devnet): expose disburse submit command` with `Tasks:
   T017,T018,T019,T020,T021,T022,T023,T024,T025,T026,T027`.
+
+## Phase 3B: Command Live-Submit Blocker (Priority: P1)
+
+**Goal**: Repair the shipped command path so Phase 4 can prove it on a
+fresh DevNet without bypassing the production permissions validation.
+
+**Owner**: One implementation subagent after this blocker is recorded
+and reviewed by the orchestrator.
+
+**Independent Test**: Focused unit coverage must pin the permissions
+reward-account setup or command adapter behavior. Live proof must rerun
+`nix develop --quiet -c just devnet-smoke disburse-submit` and reach the
+beneficiary receipt checks instead of ledger rejection.
+
+- [x] T041 (commit: b102f64) [US1] RED: capture live rejection from
+  `just devnet-smoke disburse-submit`:
+  `WithdrawalsNotInRewardsCERTS` for the permissions reward account
+  with `Coin 0`, recorded at
+  `runs/devnet/20260517T001935Z/disburse-submit/failure.json`.
+- [ ] T042 [US1] RED: add focused regression coverage for the mismatch
+  between #148 permissions reward-account setup and #150 zero-withdrawal
+  permissions validation.
+- [ ] T043 [US1] Fix the DevNet setup or command adapter so the
+  production disburse path submits on live DevNet without removing the
+  permissions zero-withdrawal validation.
+- [ ] T044 [US1] GREEN: rerun focused tests/builds plus
+  `nix develop --quiet -c just devnet-smoke disburse-submit`, then
+  commit the blocker fix as one bisect-safe commit with `Tasks:
+  T042,T043,T044`.
 
 ## Phase 4: User Story 2 - Thin DevNet Smoke Proof (Priority: P1)
 

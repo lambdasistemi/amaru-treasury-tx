@@ -85,7 +85,7 @@ reward-account setup or command adapter behavior. Live proof must rerun
 `nix develop --quiet -c just devnet-smoke disburse-submit` and reach the
 beneficiary receipt checks instead of ledger rejection.
 
-- [x] T041 (commit: b102f64) [US1] RED: capture live rejection from
+- [x] T041 (commit: f23cee3) [US1] RED: capture live rejection from
   `just devnet-smoke disburse-submit`:
   `WithdrawalsNotInRewardsCERTS` for the permissions reward account
   with `Coin 0`, recorded at

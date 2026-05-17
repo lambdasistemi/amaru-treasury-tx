@@ -20,7 +20,7 @@ This check is not part of `just ci`: it starts a real local
 > <action>` supercommand is retired. The new shipped operator path
 > for the seven bootstrap sub-actions is
 > `amaru-treasury-tx tx-build --intent <bootstrap-intent.json>`
-> (see the bootstrap section in [README.md](../README.md) for the
+> (see the bootstrap section in [README.md](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/README.md#devnet-bootstrap-via-tx-build---intent) for the
 > per-sub-action tags). The library runners under
 > `lib/Amaru/Treasury/Devnet/` remain on disk and are consumed by
 > `Amaru.Treasury.Devnet.SmokeSpec` via `Amaru.Treasury.Devnet.Runner`
@@ -94,7 +94,7 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
 After #157 the shipped operator path for this boundary is the
 three-step `amaru-treasury-tx tx-build --intent
 <registry-init-{seed-split,mint,reference-scripts}.json>` chain (see
-the bootstrap section in [README.md](../README.md)). The local smoke
+the bootstrap section in [README.md](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/README.md#devnet-bootstrap-via-tx-build---intent)). The local smoke
 keeps driving the library function directly via `SmokeSpec`, which
 calls into `Amaru.Treasury.Devnet.Runner.runDevnetRegistryInit`:
 
@@ -161,7 +161,7 @@ materialization, disburse submission, swap execution, or reorganize.
 After #157 the shipped operator path for this boundary is the
 two-step `amaru-treasury-tx tx-build --intent
 <stake-reward-init-{script-account,plain-account}.json>` chain (see
-the bootstrap section in [README.md](../README.md)). The local smoke
+the bootstrap section in [README.md](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/README.md#devnet-bootstrap-via-tx-build---intent)). The local smoke
 keeps driving the library function directly via `SmokeSpec`, which
 calls into `Amaru.Treasury.Devnet.Runner.runDevnetStakeRewardInit`.
 
@@ -226,7 +226,7 @@ submission, swap execution, or reorganize transactions.
 After #157 the shipped operator path for this boundary is the
 two-step `amaru-treasury-tx tx-build --intent
 <governance-withdrawal-init-{proposal,materialization}.json>` chain
-(see the bootstrap section in [README.md](../README.md)). The local
+(see the bootstrap section in [README.md](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/README.md#devnet-bootstrap-via-tx-build---intent)). The local
 smoke keeps driving the library function directly via `SmokeSpec`,
 which calls into
 `Amaru.Treasury.Devnet.Runner.runDevnetGovernanceWithdrawalInit`.

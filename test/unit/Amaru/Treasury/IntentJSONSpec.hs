@@ -474,14 +474,25 @@ genRegistryInitMintIntent :: Gen SomeTreasuryIntent
 genRegistryInitMintIntent =
     genIntent
         SRegistryInitMint
-        (pure RegistryInitMintInputs)
+        ( pure
+            RegistryInitMintInputs
+                { rimiScopesSeedTxIn = "00#0"
+                , rimiRegistrySeedTxIn = "11#0"
+                , rimiOwnerKeyHash = T.replicate 56 "0"
+                }
+        )
 
 genRegistryInitReferenceScriptsIntent
     :: Gen SomeTreasuryIntent
 genRegistryInitReferenceScriptsIntent =
     genIntent
         SRegistryInitReferenceScripts
-        (pure RegistryInitReferenceScriptsInputs)
+        ( pure
+            RegistryInitReferenceScriptsInputs
+                { rirsiScopesSeedTxIn = "00#0"
+                , rirsiRegistrySeedTxIn = "11#0"
+                }
+        )
 
 genStakeRewardInitScriptAccountIntent
     :: Gen SomeTreasuryIntent

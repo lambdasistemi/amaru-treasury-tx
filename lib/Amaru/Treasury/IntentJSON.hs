@@ -50,6 +50,11 @@ module Amaru.Treasury.IntentJSON
     , GovernanceWithdrawalInitProposalInputs (..)
     , GovernanceWithdrawalInitMaterializationInputs (..)
 
+      -- * Per-action translated records (registry-init)
+    , RegistryInitSeedSplitTx (..)
+    , RegistryInitMintTx (..)
+    , RegistryInitReferenceScriptsTx (..)
+
       -- * Top-level intent
     , TreasuryIntent (..)
     , SomeTreasuryIntent (..)
@@ -102,14 +107,16 @@ import Data.Text qualified as T
 import Data.Word (Word64)
 
 import Cardano.Ledger.Address (Addr)
+import Cardano.Ledger.BaseTypes (Network (..))
 import Cardano.Ledger.Coin (Coin (..))
-import Cardano.Ledger.Hashes (ScriptHash (..))
+import Cardano.Ledger.Hashes (KeyHash (..), ScriptHash (..))
+import Cardano.Ledger.Keys (KeyRole (Payment))
 import Cardano.Ledger.Mary.Value
     ( AssetName (..)
     , MultiAsset (..)
     , PolicyID (..)
     )
-import Cardano.Ledger.Metadata (Metadatum)
+import Cardano.Ledger.Metadata (Metadatum (..))
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Slotting.Slot (SlotNo (..))
 
@@ -123,6 +130,7 @@ import Amaru.Treasury.IntentJSON.Common
     , mkHash28
     , parseAddr
     , parseGuardKeyHash
+    , parseNetwork
     , parseRewardAccount
     , parseRewardAccountForNetwork
     , parseTxIn
@@ -226,13 +234,15 @@ type family Translated (a :: Action) :: Type where
     Translated 'Disburse = DisburseIntent
     Translated 'Withdraw = WithdrawIntent
     Translated 'Reorganize = ReorganizeIntent
-    -- Slice 2 ships these as @()@ placeholders. Slices 3a / 3b /
-    -- 3c replace each with the typed input record consumed by the
-    -- extracted construction core in
-    -- @lib/Amaru/Treasury/Devnet/*Init.hs@.
-    Translated 'RegistryInitSeedSplit = ()
-    Translated 'RegistryInitMint = ()
-    Translated 'RegistryInitReferenceScripts = ()
+    -- Slice 3a ships the three @registry-init-*@ rows as the
+    -- typed input records consumed by the extracted construction
+    -- cores in @lib/Amaru/Treasury/Devnet/RegistryInit.hs@. The
+    -- remaining four rows stay as @()@ placeholders until slices
+    -- 3b / 3c land.
+    Translated 'RegistryInitSeedSplit = RegistryInitSeedSplitTx
+    Translated 'RegistryInitMint = RegistryInitMintTx
+    Translated 'RegistryInitReferenceScripts =
+        RegistryInitReferenceScriptsTx
     Translated 'StakeRewardInitScriptAccount = ()
     Translated 'StakeRewardInitPlainAccount = ()
     Translated 'GovernanceWithdrawalInitProposal = ()
@@ -518,16 +528,20 @@ instance ToJSON ReorganizeInputs where
 -- DevNet init sub-action payloads (slice 2 / #157)
 -- ----------------------------------------------------
 --
--- Slice 2 freezes the wire shape for the seven flat init
--- sub-actions extracted from the retired @devnet@
--- supercommand. Each record ships as an empty JSON
--- object: slices 3a / 3b / 3c populate fields as they
--- extract the construction cores from the corresponding
--- @lib/Amaru/Treasury/Devnet/*Init.hs@ runners. Adding a
--- field later is a non-breaking change at the JSON
--- layer because old empty objects keep parsing.
+-- The three @registry-init-*@ payloads are populated by
+-- slice 3a; the remaining four ship as empty placeholders
+-- until slices 3b / 3c extract their construction cores.
+-- Adding a field later is a non-breaking change at the
+-- JSON layer because old empty objects keep parsing.
 
--- | Registry-init seed-split sub-action payload (slice 3a fills).
+{- | Registry-init seed-split sub-action payload.
+
+The wallet block carries the funding seed TxIn and
+funding address; this payload is intentionally empty
+because the construction core reads everything else from
+the top-level fields (wallet, network,
+@validityUpperBoundSlot@).
+-}
 data RegistryInitSeedSplitInputs = RegistryInitSeedSplitInputs
     deriving stock (Eq, Show)
 
@@ -539,30 +553,119 @@ instance FromJSON RegistryInitSeedSplitInputs where
 instance ToJSON RegistryInitSeedSplitInputs where
     toJSON RegistryInitSeedSplitInputs = object []
 
--- | Registry-init mint sub-action payload (slice 3a fills).
+{- | Registry-init mint sub-action payload.
+
+The two seed TxIns are the outputs of the seed-split
+sub-transaction and double as the script-derivation
+parameters for the scopes and registry NFT policies.
+@ownerKeyHash@ is the scope owner baked into the scopes
+NFT datum.
+-}
 data RegistryInitMintInputs = RegistryInitMintInputs
+    { rimiScopesSeedTxIn :: !Text
+    -- ^ scopes seed TxIn (@\<txid hex\>#\<ix\>@); first
+    --     output of the seed-split sub-transaction
+    , rimiRegistrySeedTxIn :: !Text
+    -- ^ registry seed TxIn (@\<txid hex\>#\<ix\>@); second
+    --     output of the seed-split sub-transaction
+    , rimiOwnerKeyHash :: !Text
+    -- ^ 28-byte hex; scope owner key hash baked into the
+    --     scopes datum
+    }
     deriving stock (Eq, Show)
 
 instance FromJSON RegistryInitMintInputs where
     parseJSON =
-        withObject "RegistryInitMintInputs" $ \_ ->
-            pure RegistryInitMintInputs
+        withObject "RegistryInitMintInputs" $ \o ->
+            RegistryInitMintInputs
+                <$> o .: "scopesSeedTxIn"
+                <*> o .: "registrySeedTxIn"
+                <*> o .: "ownerKeyHash"
 
 instance ToJSON RegistryInitMintInputs where
-    toJSON RegistryInitMintInputs = object []
+    toJSON RegistryInitMintInputs{..} =
+        object
+            [ "scopesSeedTxIn" .= rimiScopesSeedTxIn
+            , "registrySeedTxIn" .= rimiRegistrySeedTxIn
+            , "ownerKeyHash" .= rimiOwnerKeyHash
+            ]
 
--- | Registry-init reference-scripts sub-action payload (slice 3a fills).
+{- | Registry-init reference-scripts sub-action payload.
+
+The two seed TxIns reproduce the script derivation that
+the mint sub-transaction performed; the wallet block
+carries the funding seed TxIn that this sub-transaction
+spends.
+-}
 data RegistryInitReferenceScriptsInputs
     = RegistryInitReferenceScriptsInputs
+    { rirsiScopesSeedTxIn :: !Text
+    -- ^ scopes seed TxIn (@\<txid hex\>#\<ix\>@) used for
+    --     script derivation
+    , rirsiRegistrySeedTxIn :: !Text
+    -- ^ registry seed TxIn (@\<txid hex\>#\<ix\>@) used for
+    --     script derivation
+    }
     deriving stock (Eq, Show)
 
 instance FromJSON RegistryInitReferenceScriptsInputs where
     parseJSON =
-        withObject "RegistryInitReferenceScriptsInputs" $ \_ ->
-            pure RegistryInitReferenceScriptsInputs
+        withObject "RegistryInitReferenceScriptsInputs" $ \o ->
+            RegistryInitReferenceScriptsInputs
+                <$> o .: "scopesSeedTxIn"
+                <*> o .: "registrySeedTxIn"
 
 instance ToJSON RegistryInitReferenceScriptsInputs where
-    toJSON RegistryInitReferenceScriptsInputs = object []
+    toJSON RegistryInitReferenceScriptsInputs{..} =
+        object
+            [ "scopesSeedTxIn" .= rirsiScopesSeedTxIn
+            , "registrySeedTxIn" .= rirsiRegistrySeedTxIn
+            ]
+
+-- ----------------------------------------------------
+-- Translated records (registry-init)
+-- ----------------------------------------------------
+
+{- | Typed seed-split inputs consumed by the construction
+core 'Amaru.Treasury.Devnet.RegistryInit.buildSeedSplitCore'.
+-}
+data RegistryInitSeedSplitTx = RegistryInitSeedSplitTx
+    { risstFundingAddress :: !Addr
+    , risstSeedTxIn :: !TxIn
+    , risstUpperBoundSlot :: !SlotNo
+    }
+    deriving stock (Eq, Show)
+
+{- | Typed registry-NFT mint inputs consumed by
+'Amaru.Treasury.Devnet.RegistryInit.buildRegistryNftsCore'.
+Carries the raw seed TxIns; script derivation runs at
+dispatch time so the same construction core sees the same
+'DevnetScriptSet' regardless of caller.
+-}
+data RegistryInitMintTx = RegistryInitMintTx
+    { rimtFundingAddress :: !Addr
+    , rimtNetwork :: !Network
+    , rimtOwnerKeyHash :: !(KeyHash Payment)
+    , rimtScopesSeedTxIn :: !TxIn
+    , rimtRegistrySeedTxIn :: !TxIn
+    , rimtUpperBoundSlot :: !SlotNo
+    }
+    deriving stock (Eq, Show)
+
+{- | Typed reference-script publication inputs consumed by
+'Amaru.Treasury.Devnet.RegistryInit.buildReferenceScriptsCore'.
+The two seed TxIns reproduce the script derivation that
+the mint sub-transaction performed.
+-}
+data RegistryInitReferenceScriptsTx = RegistryInitReferenceScriptsTx
+    { rirstFundingAddress :: !Addr
+    , rirstNetwork :: !Network
+    , rirstSeedTxIn :: !TxIn
+    , rirstScopesSeedTxIn :: !TxIn
+    , rirstRegistrySeedTxIn :: !TxIn
+    , rirstUpperBoundSlot :: !SlotNo
+    }
+    deriving stock (Eq, Show)
 
 -- | Stake-reward-init script-account sub-action payload (slice 3b fills).
 data StakeRewardInitScriptAccountInputs
@@ -1143,15 +1246,10 @@ translateIntent sa ti = case sa of
     SReorganize ->
         Left
             "translateIntent: 'reorganize' not yet shipped (#46)"
-    SRegistryInitSeedSplit ->
-        Left
-            "translateIntent: 'registry-init-seed-split' not yet shipped (T020/T030/T040)"
-    SRegistryInitMint ->
-        Left
-            "translateIntent: 'registry-init-mint' not yet shipped (T020/T030/T040)"
+    SRegistryInitSeedSplit -> translateRegistryInitSeedSplit ti
+    SRegistryInitMint -> translateRegistryInitMint ti
     SRegistryInitReferenceScripts ->
-        Left
-            "translateIntent: 'registry-init-reference-scripts' not yet shipped (T020/T030/T040)"
+        translateRegistryInitReferenceScripts ti
     SStakeRewardInitScriptAccount ->
         Left
             "translateIntent: 'stake-reward-init-script-account' not yet shipped (T020/T030/T040)"
@@ -1484,6 +1582,126 @@ translateWithdraw ti = do
                     rationaleMetadatum body registryPolicy
                 }
     pure (shared, intent)
+
+-- ----------------------------------------------------
+-- Registry-init translators (slice 3a / #157)
+-- ----------------------------------------------------
+
+{- | Shared translator boundary for the three
+@registry-init-*@ sub-actions.
+
+Bootstrap intents do not carry a CIP-1694 rationale tree —
+the construction cores never call @setMetadata@ — so
+'tsRationale' is filled with an empty 'Metadatum' map and
+the dispatcher arms ignore it. The other 'TranslatedShared'
+fields are pulled from the wallet block exactly as the swap
+/ disburse / withdraw translators do.
+-}
+translateRegistryInitShared
+    :: TreasuryIntent a
+    -> Either String (TranslatedShared, Addr, TxIn, SlotNo)
+translateRegistryInitShared ti = do
+    let wallet = tiWallet ti
+    walletAddr <- parseAddr (wjAddress wallet)
+    walletTxIn <- parseTxIn (wjTxIn wallet)
+    let shared =
+            TranslatedShared
+                { tsNetwork = tiNetwork ti
+                , tsWalletTxIn = walletTxIn
+                , tsWalletAddr = walletAddr
+                , tsRationale = emptyRationale
+                }
+    pure
+        ( shared
+        , walletAddr
+        , walletTxIn
+        , SlotNo (tiValidityUpperBoundSlot ti)
+        )
+
+-- | Empty rationale metadatum used by bootstrap init intents.
+emptyRationale :: Metadatum
+emptyRationale = Map []
+
+-- | Registry-init seed-split translator.
+translateRegistryInitSeedSplit
+    :: TreasuryIntent 'RegistryInitSeedSplit
+    -> Either
+        String
+        (TranslatedShared, RegistryInitSeedSplitTx)
+translateRegistryInitSeedSplit ti = do
+    (shared, fundingAddr, fundingTxIn, upperSlot) <-
+        translateRegistryInitShared ti
+    pure
+        ( shared
+        , RegistryInitSeedSplitTx
+            { risstFundingAddress = fundingAddr
+            , risstSeedTxIn = fundingTxIn
+            , risstUpperBoundSlot = upperSlot
+            }
+        )
+
+-- | Registry-init mint translator.
+translateRegistryInitMint
+    :: TreasuryIntent 'RegistryInitMint
+    -> Either
+        String
+        (TranslatedShared, RegistryInitMintTx)
+translateRegistryInitMint ti = do
+    (shared, fundingAddr, _walletTxIn, upperSlot) <-
+        translateRegistryInitShared ti
+    network <- parseNetwork (tiNetwork ti)
+    let payload = tiPayload ti
+    scopesSeedTxIn <- parseTxIn (rimiScopesSeedTxIn payload)
+    registrySeedTxIn <-
+        parseTxIn (rimiRegistrySeedTxIn payload)
+    ownerKeyHash <-
+        parsePaymentKeyHash (rimiOwnerKeyHash payload)
+    pure
+        ( shared
+        , RegistryInitMintTx
+            { rimtFundingAddress = fundingAddr
+            , rimtNetwork = network
+            , rimtOwnerKeyHash = ownerKeyHash
+            , rimtScopesSeedTxIn = scopesSeedTxIn
+            , rimtRegistrySeedTxIn = registrySeedTxIn
+            , rimtUpperBoundSlot = upperSlot
+            }
+        )
+
+-- | Registry-init reference-scripts translator.
+translateRegistryInitReferenceScripts
+    :: TreasuryIntent 'RegistryInitReferenceScripts
+    -> Either
+        String
+        ( TranslatedShared
+        , RegistryInitReferenceScriptsTx
+        )
+translateRegistryInitReferenceScripts ti = do
+    (shared, fundingAddr, fundingTxIn, upperSlot) <-
+        translateRegistryInitShared ti
+    network <- parseNetwork (tiNetwork ti)
+    let payload = tiPayload ti
+    scopesSeedTxIn <-
+        parseTxIn (rirsiScopesSeedTxIn payload)
+    registrySeedTxIn <-
+        parseTxIn (rirsiRegistrySeedTxIn payload)
+    pure
+        ( shared
+        , RegistryInitReferenceScriptsTx
+            { rirstFundingAddress = fundingAddr
+            , rirstNetwork = network
+            , rirstSeedTxIn = fundingTxIn
+            , rirstScopesSeedTxIn = scopesSeedTxIn
+            , rirstRegistrySeedTxIn = registrySeedTxIn
+            , rirstUpperBoundSlot = upperSlot
+            }
+        )
+
+-- | Parse a 28-byte hex into a payment-role 'KeyHash'.
+parsePaymentKeyHash :: Text -> Either String (KeyHash Payment)
+parsePaymentKeyHash t = do
+    bytes <- decodeHexBytes 28 t
+    Right (KeyHash (mkHash28 bytes))
 
 {- | Per-chunk lovelace values for a swap order. See #91.
 

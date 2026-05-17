@@ -13,6 +13,7 @@ module Amaru.Treasury.IntentJSON.Common
     , parseRewardAccount
     , parseRewardAccountForNetwork
     , parseGuardKeyHash
+    , parseNetwork
     , decodeHexBytes
     , decodeHexBytesAny
     , mkHash28

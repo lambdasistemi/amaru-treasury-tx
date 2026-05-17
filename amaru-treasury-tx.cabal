@@ -112,6 +112,7 @@ library
     Amaru.Treasury.Build.Error.Exception
     Amaru.Treasury.Build.Error.Render
     Amaru.Treasury.Build.Error.Types
+    Amaru.Treasury.Build.RegistryInit
     Amaru.Treasury.Build.ReportWriter
     Amaru.Treasury.Build.Result
     Amaru.Treasury.Build.Swap
@@ -432,6 +433,7 @@ test-suite unit-tests
     , cardano-ledger-allegra
     , cardano-ledger-alonzo
     , cardano-ledger-api
+    , cardano-ledger-binary
     , cardano-ledger-conway
     , cardano-ledger-core
     , cardano-ledger-mary
@@ -466,9 +468,11 @@ test-suite golden-tests
     AdaDisburseGoldenSpec
     EnvelopeOracleSpec
     PlaceholderSpec
+    RegistryInitIntentSpec
     RegistryWalkGoldenSpec
     ReportRenderActionGoldenSpec
     ReportRenderSwapGoldenSpec
+    Support.RegistryInitFixtures
     SwapGoldenSpec
     SwapQuoteAuditGoldenSpec
     TreasuryInspectGoldenSpec
@@ -479,9 +483,19 @@ test-suite golden-tests
     , aeson
     , aeson-pretty
     , amaru-treasury-tx
-    , base               <5
+    , base                   <5
     , base16-bytestring
+    , bech32
     , bytestring
+    , cardano-crypto-class
+    , cardano-ledger-alonzo
+    , cardano-ledger-api
+    , cardano-ledger-binary
+    , cardano-ledger-conway
+    , cardano-ledger-core
+    , cardano-ledger-mary
+    , cardano-slotting
+    , cardano-tx-tools
     , containers
     , directory
     , hspec

@@ -32,6 +32,21 @@ module Amaru.Treasury.Devnet.RegistryInit
     , deriveDevnetScripts
     , treasuryTargetFromBlob
 
+      -- * Construction cores
+
+    --
+    -- \^ Pure-IO transaction builders extracted from the
+    -- submitters so the @tx-build@ dispatcher and the live
+    -- submitters share one source of truth for the
+    -- per-sub-action 'TxBuild' programs. Each returns the
+    -- raw unsigned 'ConwayTx' produced by
+    -- 'Cardano.Tx.Build.build'; signing, submission, and
+    -- waiting remain in the submitters.
+    , CoreEvaluator
+    , buildSeedSplitCore
+    , buildRegistryNftsCore
+    , buildReferenceScriptsCore
+
       -- * Artifacts
     , registryInitSummaryPath
     , registryInitRegistryPath
@@ -132,6 +147,7 @@ import Cardano.Tx.Build
     , spend
     , validTo
     )
+import Cardano.Tx.Build qualified as TxBuild
 import Cardano.Tx.Ledger (ConwayTx)
 import Codec.Binary.Bech32 qualified as Bech32
 import Control.Concurrent (threadDelay)
@@ -343,36 +359,60 @@ submitSeedSplit
     -> PParams ConwayEra
     -> (TxIn, TxOut ConwayEra)
     -> IO (TxId, TxIn, TxIn)
-submitSeedSplit config provider submitter pp seed@(seedIn, _) = do
+submitSeedSplit config provider submitter pp seed = do
     snapshot <- queryLedgerSnapshot provider
-    let interpret :: InterpretIO NoCtx
-        interpret =
-            InterpretIO $ \case {}
-        eval tx =
-            fmap
-                (Map.map (either (Left . show) Right))
-                (evaluateTx provider tx)
-        upperSlot =
-            addSlots 20 (ledgerTipSlot snapshot)
-        prog :: TxBuild NoCtx Void ()
-        prog = do
-            _ <- spend seedIn
-            _ <- payTo (dricFundingAddress config) (inject devnetSeedCoin)
-            _ <- payTo (dricFundingAddress config) (inject devnetSeedCoin)
-            validTo upperSlot
+    let upperSlot = addSlots 20 (ledgerTipSlot snapshot)
+        eval = providerCoreEvaluator provider
     txId <-
-        buildSubmitAndWait
+        runCore
             config
             "split registry seed"
             provider
             submitter
-            pp
-            interpret
-            eval
-            [seed]
-            []
-            prog
+            ( buildSeedSplitCore
+                pp
+                (dricFundingAddress config)
+                upperSlot
+                seed
+                eval
+            )
     pure (txId, txOutRef txId 0, txOutRef txId 1)
+
+{- | Pure-IO construction core for the registry seed-split
+sub-transaction.
+
+Spends a single funding UTxO and pays two seed outputs back
+to the funding address. Returns the unsigned 'ConwayTx' as
+balanced by 'Cardano.Tx.Build.build'; the caller is
+responsible for signing, submission, and waiting.
+-}
+buildSeedSplitCore
+    :: PParams ConwayEra
+    -> Addr
+    -- ^ funding address (also the change address)
+    -> SlotNo
+    -- ^ validity upper bound
+    -> (TxIn, TxOut ConwayEra)
+    -- ^ funding seed UTxO (must be present in the input
+    --     set passed to 'build')
+    -> CoreEvaluator
+    -> IO (Either (TxBuild.BuildError Void) ConwayTx)
+buildSeedSplitCore pp fundingAddress upperSlot seed@(seedIn, _) eval =
+    build
+        (mkPParamsBound pp)
+        emptyInterpret
+        eval
+        [seed]
+        []
+        fundingAddress
+        prog
+  where
+    prog :: TxBuild NoCtx Void ()
+    prog = do
+        _ <- spend seedIn
+        _ <- payTo fundingAddress (inject devnetSeedCoin)
+        _ <- payTo fundingAddress (inject devnetSeedCoin)
+        validTo upperSlot
 
 submitRegistryNfts
     :: DevnetRegistryInitConfig
@@ -383,67 +423,110 @@ submitRegistryNfts
     -> [(TxIn, TxOut ConwayEra)]
     -> IO (TxId, TxIn, TxIn)
 submitRegistryNfts config provider submitter pp scripts seedOuts = do
-    (scopesSeed@(scopesSeedRef, _), registrySeed@(registrySeedRef, _)) <-
-        case seedOuts of
-            [scopesSeed, registrySeed] ->
-                pure (scopesSeed, registrySeed)
-            _ ->
-                fail "expected exactly two registry seed UTxOs"
-    let scopesOut =
-            nftTxOut
-                (scriptAddr (dricNetwork config) (dssScopesHash scripts))
-                (dssScopesHash scripts)
-                scopesTokenName
-                (ownersDatum (dricOwnerKeyHash config))
-        registryOut =
-            nftTxOut
-                (scriptAddr (dricNetwork config) (dssRegistryHash scripts))
-                (dssRegistryHash scripts)
-                registryTokenName
-                (registryDatum (ttScriptHash (dssTreasuryTarget scripts)))
     snapshot <- queryLedgerSnapshot provider
-    let interpret :: InterpretIO NoCtx
-        interpret =
-            InterpretIO $ \case {}
-        eval tx =
-            fmap
-                (Map.map (either (Left . show) Right))
-                (evaluateTx provider tx)
-        upperSlot =
-            addSlots 20 (ledgerTipSlot snapshot)
-        prog :: TxBuild NoCtx Void ()
-        prog = do
-            _ <- spend scopesSeedRef
-            _ <- spend registrySeedRef
-            collateral scopesSeedRef
-            attachScript (dssScopesScript scripts)
-            attachScript (dssRegistryScript scripts)
-            mint
-                (PolicyID (dssScopesHash scripts))
-                (Map.singleton (assetName scopesTokenName) 1)
-                (RawPlutusData emptyListRedeemer)
-            mint
-                (PolicyID (dssRegistryHash scripts))
-                (Map.singleton (assetName registryTokenName) 1)
-                (RawPlutusData emptyListRedeemer)
-            scopesIx <- output scopesOut
-            registryIx <- output registryOut
-            checkMinUtxo pp scopesIx
-            checkMinUtxo pp registryIx
-            validTo upperSlot
+    let upperSlot = addSlots 20 (ledgerTipSlot snapshot)
+        eval = providerCoreEvaluator provider
     txId <-
-        buildSubmitAndWait
+        runCore
             config
             "mint registry NFTs"
             provider
             submitter
-            pp
-            interpret
+            ( buildRegistryNftsCore
+                pp
+                (dricFundingAddress config)
+                (dricNetwork config)
+                (dricOwnerKeyHash config)
+                scripts
+                upperSlot
+                seedOuts
+                eval
+            )
+    pure (txId, txOutRef txId 0, txOutRef txId 1)
+
+{- | Pure-IO construction core for the registry-NFT mint
+sub-transaction.
+
+Spends the two seed outputs produced by 'buildSeedSplitCore',
+attaches the parameterised scopes and registry scripts, mints
+one NFT under each policy, and emits two anchored UTxOs
+(scopes-owners datum and registry datum). Returns the unsigned
+'ConwayTx' as balanced by 'Cardano.Tx.Build.build'.
+
+Fails when the seed list does not have exactly two entries.
+-}
+buildRegistryNftsCore
+    :: PParams ConwayEra
+    -> Addr
+    -- ^ funding/change address
+    -> Network
+    -- ^ ledger network used to derive the script address
+    --     for each NFT anchor
+    -> KeyHash Payment
+    -- ^ scope owner key hash baked into the scopes datum
+    -> DevnetScriptSet
+    -- ^ scripts derived from the two seed TxIns
+    -> SlotNo
+    -- ^ validity upper bound
+    -> [(TxIn, TxOut ConwayEra)]
+    -- ^ exactly two seed UTxOs: scopes seed then registry seed
+    -> CoreEvaluator
+    -> IO (Either (TxBuild.BuildError Void) ConwayTx)
+buildRegistryNftsCore
+    pp
+    fundingAddress
+    network
+    ownerKeyHash
+    scripts
+    upperSlot
+    seedOuts
+    eval = do
+        (scopesSeed@(scopesSeedRef, _), registrySeed@(registrySeedRef, _)) <-
+            case seedOuts of
+                [scopesSeed, registrySeed] ->
+                    pure (scopesSeed, registrySeed)
+                _ ->
+                    fail "expected exactly two registry seed UTxOs"
+        let scopesOut =
+                nftTxOut
+                    (scriptAddr network (dssScopesHash scripts))
+                    (dssScopesHash scripts)
+                    scopesTokenName
+                    (ownersDatum ownerKeyHash)
+            registryOut =
+                nftTxOut
+                    (scriptAddr network (dssRegistryHash scripts))
+                    (dssRegistryHash scripts)
+                    registryTokenName
+                    (registryDatum (ttScriptHash (dssTreasuryTarget scripts)))
+            prog :: TxBuild NoCtx Void ()
+            prog = do
+                _ <- spend scopesSeedRef
+                _ <- spend registrySeedRef
+                collateral scopesSeedRef
+                attachScript (dssScopesScript scripts)
+                attachScript (dssRegistryScript scripts)
+                mint
+                    (PolicyID (dssScopesHash scripts))
+                    (Map.singleton (assetName scopesTokenName) 1)
+                    (RawPlutusData emptyListRedeemer)
+                mint
+                    (PolicyID (dssRegistryHash scripts))
+                    (Map.singleton (assetName registryTokenName) 1)
+                    (RawPlutusData emptyListRedeemer)
+                scopesIx <- output scopesOut
+                registryIx <- output registryOut
+                checkMinUtxo pp scopesIx
+                checkMinUtxo pp registryIx
+                validTo upperSlot
+        build
+            (mkPParamsBound pp)
+            emptyInterpret
             eval
             [scopesSeed, registrySeed]
             []
+            fundingAddress
             prog
-    pure (txId, txOutRef txId 0, txOutRef txId 1)
 
 submitReferenceScripts
     :: DevnetRegistryInitConfig
@@ -453,104 +536,137 @@ submitReferenceScripts
     -> DevnetScriptSet
     -> (TxIn, TxOut ConwayEra)
     -> IO (TxId, TxIn, TxIn)
-submitReferenceScripts config provider submitter pp scripts seed@(seedIn, _) = do
+submitReferenceScripts config provider submitter pp scripts seed = do
     snapshot <- queryLedgerSnapshot provider
-    let refAddr =
-            ttAddress (dssTreasuryTarget scripts)
-        permissionsOut =
-            refScriptTxOut refAddr (dssPermissionsScript scripts)
-        treasuryOut =
-            refScriptTxOut refAddr (ttScript (dssTreasuryTarget scripts))
-        interpret :: InterpretIO NoCtx
-        interpret =
-            InterpretIO $ \case {}
-        eval tx =
-            fmap
-                (Map.map (either (Left . show) Right))
-                (evaluateTx provider tx)
-        upperSlot =
-            addSlots 20 (ledgerTipSlot snapshot)
-        prog :: TxBuild NoCtx Void ()
-        prog = do
-            _ <- spend seedIn
-            permissionsIx <- output permissionsOut
-            treasuryIx <- output treasuryOut
-            checkMinUtxo pp permissionsIx
-            checkMinUtxo pp treasuryIx
-            validTo upperSlot
+    let upperSlot = addSlots 20 (ledgerTipSlot snapshot)
+        eval = providerCoreEvaluator provider
     txId <-
-        buildSubmitAndWait
+        runCore
             config
             "publish reference scripts"
             provider
             submitter
-            pp
-            interpret
+            ( buildReferenceScriptsCore
+                pp
+                (dricFundingAddress config)
+                scripts
+                upperSlot
+                seed
+                eval
+            )
+    pure (txId, txOutRef txId 0, txOutRef txId 1)
+
+{- | Pure-IO construction core for the reference-script
+publication sub-transaction.
+
+Spends a single funding UTxO and publishes the permissions
+and treasury reference scripts at the derived treasury
+address. Returns the unsigned 'ConwayTx' as balanced by
+'Cardano.Tx.Build.build'.
+-}
+buildReferenceScriptsCore
+    :: PParams ConwayEra
+    -> Addr
+    -- ^ funding/change address
+    -> DevnetScriptSet
+    -- ^ scripts derived from the two seed TxIns; supplies
+    --     the permissions and treasury scripts plus the
+    --     target reference-script address
+    -> SlotNo
+    -- ^ validity upper bound
+    -> (TxIn, TxOut ConwayEra)
+    -- ^ funding seed UTxO
+    -> CoreEvaluator
+    -> IO (Either (TxBuild.BuildError Void) ConwayTx)
+buildReferenceScriptsCore
+    pp
+    fundingAddress
+    scripts
+    upperSlot
+    seed@(seedIn, _)
+    eval = do
+        let refAddr = ttAddress (dssTreasuryTarget scripts)
+            permissionsOut =
+                refScriptTxOut refAddr (dssPermissionsScript scripts)
+            treasuryOut =
+                refScriptTxOut refAddr (ttScript (dssTreasuryTarget scripts))
+            prog :: TxBuild NoCtx Void ()
+            prog = do
+                _ <- spend seedIn
+                permissionsIx <- output permissionsOut
+                treasuryIx <- output treasuryOut
+                checkMinUtxo pp permissionsIx
+                checkMinUtxo pp treasuryIx
+                validTo upperSlot
+        build
+            (mkPParamsBound pp)
+            emptyInterpret
             eval
             [seed]
             []
+            fundingAddress
             prog
-    pure (txId, txOutRef txId 0, txOutRef txId 1)
 
-buildSubmitAndWait
+{- | Shape of the script evaluator the construction cores
+hand to 'Cardano.Tx.Build.build'.
+
+The @tx-build@ infrastructure consumes a per-purpose map
+keyed by 'ConwayPlutusPurpose' 'AsIx' and producing either
+an error string or the evaluator's 'ExUnits'. The live
+'Provider' returns a richer error type ('TransactionScriptFailure');
+'providerCoreEvaluator' wraps that into the simpler shape.
+-}
+type CoreEvaluator =
+    ConwayTx
+    -> IO
+        ( Map.Map
+            (ConwayPlutusPurpose AsIx ConwayEra)
+            (Either String ExUnits)
+        )
+
+-- | Adapt a 'Provider' \'s 'evaluateTx' to the 'CoreEvaluator' shape.
+providerCoreEvaluator :: Provider IO -> CoreEvaluator
+providerCoreEvaluator provider tx =
+    fmap
+        (Map.map (either (Left . show) Right))
+        (evaluateTx provider tx)
+
+emptyInterpret :: InterpretIO NoCtx
+emptyInterpret = InterpretIO $ \case {}
+
+{- | Internal helper shared by the three submitters: invoke
+the construction core, then sign, submit, and wait. The
+returned 'TxId' is the signed-transaction id from the live
+submission.
+-}
+runCore
     :: DevnetRegistryInitConfig
     -> String
     -> Provider IO
     -> Submitter IO
-    -> PParams ConwayEra
-    -> InterpretIO NoCtx
-    -> ( ConwayTx
-         -> IO
-                ( Map.Map
-                    (ConwayPlutusPurpose AsIx ConwayEra)
-                    (Either String ExUnits)
-                )
-       )
-    -> [(TxIn, TxOut ConwayEra)]
-    -> [(TxIn, TxOut ConwayEra)]
-    -> TxBuild NoCtx Void ()
+    -> IO (Either (TxBuild.BuildError Void) ConwayTx)
     -> IO TxId
-buildSubmitAndWait
-    config
-    label
-    provider
-    submitter
-    pp
-    interpret
-    eval
-    inputs
-    refs
-    prog =
-        build
-            (mkPParamsBound pp)
-            interpret
-            eval
-            inputs
-            refs
-            (dricFundingAddress config)
-            prog
-            >>= \case
-                Left err ->
+runCore config label provider submitter buildIO =
+    buildIO >>= \case
+        Left err ->
+            throwIO . userError $
+                label <> ": " <> show err
+        Right tx -> do
+            let signed = dricSignTx config tx
+                txId = txIdTx signed
+            submitTx submitter signed >>= \case
+                Submitted _ -> pure ()
+                Rejected reason ->
                     throwIO . userError $
-                        label <> ": " <> show err
-                Right tx -> do
-                    let signed =
-                            dricSignTx config tx
-                        txId =
-                            txIdTx signed
-                    submitTx submitter signed >>= \case
-                        Submitted _ -> pure ()
-                        Rejected reason ->
-                            throwIO . userError $
-                                label
-                                    <> " rejected: "
-                                    <> BS8.unpack reason
-                    waitForTxChange
-                        provider
-                        txId
-                        (dricFundingAddress config)
-                        60
-                    pure txId
+                        label
+                            <> " rejected: "
+                            <> BS8.unpack reason
+            waitForTxChange
+                provider
+                txId
+                (dricFundingAddress config)
+                60
+            pure txId
 
 -- | Derive the parametrized DevNet scripts from seed references.
 deriveDevnetScripts :: Network -> TxIn -> TxIn -> IO DevnetScriptSet

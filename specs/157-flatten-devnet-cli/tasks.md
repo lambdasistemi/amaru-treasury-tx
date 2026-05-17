@@ -419,9 +419,9 @@ Report back:
 
 ### Orchestrator slice 5 — Documentation alignment (one commit, orchestrator-owned)
 
-- [ ] T070 [US4] Update `README.md`: replace any `amaru-treasury-tx devnet …` invocation with the `tx-build --intent <bootstrap-intent.json>` operator path; add a short forward reference to #158–#160 (wizards) and #161 (bash smoke). (`README.md`)
-- [ ] T071 [US4] Update `docs/local-devnet-smoke.md`: bootstrap section describes the intent → `tx-build` operator path; identify `SmokeSpec` as library proof and note `smoke.sh` arrives in #161; remove stale `devnet <action>` references. (`docs/local-devnet-smoke.md`)
-- [ ] T072 [US4] Update PR #162 body to mark the docs phase ready and refresh the status block.
+- [X] T070 (commit: b4d8a0c) [US4] Update `README.md`: replaced the four pre-#157 `amaru-treasury-tx … devnet <action> …` operator blocks with a single coherent "DevNet bootstrap via `tx-build --intent`" section listing the seven flat sub-action tags, the new operator chain (`tx-build → witness → submit` per sub-step), forward references to #158–#160 (wizards) and #161 (bash smoke), the dispatcher network policy, and a consolidated "recent live-DevNet evidence" trailer that preserves the historical tx ids / treasury-balance changes from the in-process runs (the same CBOR the new path now builds, proved byte-for-byte by the goldens). (`README.md`)
+- [X] T071 (commit: b4d8a0c) [US4] Update `docs/local-devnet-smoke.md`: added an upfront "Operator surface after #157" blockquote pointing at README + #158–#161; replaced the four pre-#157 `amaru-treasury-tx … devnet <action> …` boundary command blocks with notes that pin the operator path to README and describe the local smoke as continuing to drive `Amaru.Treasury.Devnet.Runner.runDevnet*` directly via `SmokeSpec`; rewrote the four prose mentions to refer to the library entry points (`runDevnet*Init`, `runDevnetDisburseSubmit`) rather than the retired CLI subcommands. (`docs/local-devnet-smoke.md`)
+- [ ] T072 [US4] Update PR #162 body to mark the docs phase ready and refresh the status block. *(Pending — landed as a `gh pr edit` after this commit pushes.)*
 
 **Fold rule**: T070 + T071 are one commit (`docs(157): update operator path for intent-driven bootstrap`). T072 is a `gh pr edit` action, not a commit.
 

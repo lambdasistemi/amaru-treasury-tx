@@ -42,7 +42,8 @@ dir) stay out of the intent because the operator's `tx-build` →
 - `fundingAddress` — bootstrap funding address (Bech32).
 - `seedCount` — number of seed UTxOs to split off.
 - `seedLovelace` — lovelace per seed UTxO.
-- `network` — must be `devnet` (decoder guard).
+- `network` — `Text` (typically `"devnet"`); the dispatcher rejects
+  non-DevNet networks at build time, the decoder does not.
 
 ### `RegistryInitMintInputs`
 
@@ -51,7 +52,7 @@ dir) stay out of the intent because the operator's `tx-build` →
 - `ownerKeyHash` — registry owner key hash.
 - `scriptSet` — derived from `seedTxIns` via the existing
   `deriveDevnetScripts` helper.
-- `network` — must be `devnet`.
+- `network` — `Text`; dispatcher rejects non-DevNet at build time.
 
 ### `RegistryInitReferenceScriptsInputs`
 
@@ -60,7 +61,7 @@ dir) stay out of the intent because the operator's `tx-build` →
 - `permissionsScript`, `treasuryScript` — derived from the
   registry mint via existing helpers.
 - `fundingTxIn` — funding UTxO for the publication tx.
-- `network` — must be `devnet`.
+- `network` — `Text`; dispatcher rejects non-DevNet at build time.
 
 ### `StakeRewardInitScriptAccountInputs`
 
@@ -70,14 +71,14 @@ dir) stay out of the intent because the operator's `tx-build` →
 - `scriptCredential` — script credential for the script reward
   account.
 - `fundingTxIn`, `fundingAddress` — funding UTxO + change address.
-- `network` — must be `devnet`.
+- `network` — `Text`; dispatcher rejects non-DevNet at build time.
 
 ### `StakeRewardInitPlainAccountInputs`
 
 - `plainStakeKeyHash` — verification-key hash for the plain reward
   account.
 - `fundingTxIn`, `fundingAddress` — funding UTxO + change address.
-- `network` — must be `devnet`.
+- `network` — `Text`; dispatcher rejects non-DevNet at build time.
 
 ### `GovernanceWithdrawalInitProposalInputs`
 
@@ -85,14 +86,14 @@ dir) stay out of the intent because the operator's `tx-build` →
 - `withdrawalAmount` — proposed lovelace amount.
 - `anchor` — governance anchor (URL + hash).
 - `fundingTxIn`, `fundingAddress` — funding UTxO + change address.
-- `network` — must be `devnet`.
+- `network` — `Text`; dispatcher rejects non-DevNet at build time.
 
 ### `GovernanceWithdrawalInitMaterializationInputs`
 
 - `proposalTxIn` — TxIn for the on-chain governance proposal output.
 - `withdrawalScriptCredential`.
 - `fundingTxIn`, `fundingAddress`.
-- `network` — must be `devnet`.
+- `network` — `Text`; dispatcher rejects non-DevNet at build time.
 
 *(Field names are illustrative; the implementing subagent's brief
 freezes the exact name + JSON-key mapping from each library
@@ -134,14 +135,20 @@ type family Translated (a :: Action) where
 
 ## Validation rules
 
-- Each `FromJSON` instance refuses to decode an intent whose
-  `network` field is not `devnet` (decoder guard).
 - Round-trip property:
   `decodeTreasuryIntent . encodeSomeTreasuryIntent ≡ Right`
-  for every new sub-action.
+  for every new sub-action, **independent of `network` value**.
 - The decoder rejects mismatched `action` ↔ `payload` shapes
   (e.g. `"registry-init-seed-split"` with a `RegistryInitMint`
-  payload) with a typed error.
+  payload) with a typed error. This is structural validation,
+  not policy.
+- Network policy ("the seven init sub-actions are DevNet-only
+  until #156 specifies mainnet/preprod semantics") lives in the
+  `Amaru.Treasury.Build.runBuildExcept` dispatcher arms, failing
+  closed before any N2C connection or transaction construction.
+  The decoder accepts any `network: Text` and leaves enforcement
+  to the dispatcher, consistent with how the existing `swap` /
+  `disburse` / `withdraw` paths work.
 
 ## State transitions
 

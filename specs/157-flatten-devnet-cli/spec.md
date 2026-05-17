@@ -76,8 +76,10 @@ generate the reference; only the CLI exposure goes away.
    shape).
 5. **Given** an `bootstrap-intent.json` with `network` set to
    `mainnet` or `preprod`, **When** an operator runs `tx-build` against
-   it, **Then** the build fails closed with a typed error before any
-   N2C connection or transaction construction.
+   it, **Then** the dispatcher fails closed with a typed
+   `BuildError` before any N2C connection or transaction
+   construction. (The decoder itself accepts the JSON; rejection
+   happens at the policy layer, not the parsing layer.)
 
 ---
 
@@ -166,7 +168,10 @@ forward-reference the wizard tickets (#158–#160) for the
 ### Edge Cases
 
 - A `bootstrap-intent.json` declaring a `network` other than DevNet
-  must fail closed before any N2C connection or build step.
+  must decode successfully (no decoder asymmetry vs. existing
+  intents), but the `Build.runBuildExcept` dispatcher arm for the
+  init sub-action must fail closed with a typed `BuildError`
+  before any N2C connection or build step.
 - A `bootstrap-intent.json` whose `action` discriminator names a
   known string but mismatches the payload shape (e.g.
   `"registry-init"` with a stake-reward payload) must fail at decode
@@ -213,9 +218,14 @@ forward-reference the wizard tickets (#158–#160) for the
   `runDevnet*` runner MUST be removed; the `Cmd` ADT,
   `devnetCmdP` subparser, and `Cli/Devnet.hs` module are removed
   with their direct dependents updated.
-- **FR-007**: Any new entry that touches DevNet bootstrap behavior
-  (intent decoders, `tx-build` dispatch arms) MUST fail closed for
-  non-DevNet networks before any build or N2C effect.
+- **FR-007**: The `Amaru.Treasury.Build.runBuildExcept` dispatcher
+  arms for the seven init sub-actions MUST fail closed for
+  non-DevNet networks before any build or N2C effect, surfacing a
+  typed `BuildError`. The intent decoders MUST NOT enforce this
+  policy — they accept any `network: Text`, consistent with the
+  existing `swap` / `disburse` / `withdraw` envelopes — so that
+  inspection / fixture / wizard tooling can still round-trip a
+  `bootstrap-intent.json` regardless of its network field.
 - **FR-008**: `docs/assets/intent-schema.json` MUST include the
   three new variants; `just schema-check` MUST pass.
 - **FR-009**: `README.md` and `docs/local-devnet-smoke.md` MUST

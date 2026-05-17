@@ -160,12 +160,14 @@ ranges in `tasks.md`.
    (RED + GREEN, one commit).** Extend `Action`, `SAction`,
    `Payload`, `Translated` with the seven sub-action variants;
    introduce input records per sub-action and their `FromJSON` /
-   `ToJSON` instances with the shared `network: devnet` guard from
-   Slice 4 inlined here; add `SomeTreasuryIntent` constructors and
-   the round-trip property. RED: a round-trip property test for
-   each new variant fails on `main`. GREEN: round-trip green; new
-   variants appear in `docs/assets/intent-schema.json` (regenerate);
-   `just schema-check` green. Owned files:
+   `ToJSON` instances (no decoder-level network guard — the
+   decoder accepts any `network: Text`, consistent with the
+   existing `swap` / `disburse` / `withdraw` envelopes). Add
+   `SomeTreasuryIntent` constructors and the round-trip property.
+   RED: a round-trip property test for each new variant fails on
+   `main`. GREEN: round-trip green; new variants appear in
+   `docs/assets/intent-schema.json` (regenerate); `just
+   schema-check` green. Owned files:
    `lib/Amaru/Treasury/IntentJSON.hs`,
    `lib/Amaru/Treasury/IntentJSON/Common.hs`,
    `lib/Amaru/Treasury/IntentJSON/Schema.hs`,
@@ -194,15 +196,22 @@ ranges in `tasks.md`.
    `governance-withdrawal-init-*` (RED + GREEN, one commit).** As
    Slice 3a for the two sub-txs in
    `lib/Amaru/Treasury/Devnet/GovernanceWithdrawalInit.hs`.
-6. **Slice 4 — Network-safety regression suite (RED + GREEN, one
-   commit).** A unit test that decodes a `bootstrap-intent.json`
-   with `network: mainnet` for every one of the seven sub-actions
-   and asserts a typed decode-or-build error before any effect.
-   GREEN: tests pass; no N2C connection is attempted. The decoder
-   guard itself ships in Slice 2; this slice is the dedicated
-   regression suite + any missed dispatcher-side guard. Owned files:
-   `test/unit/Amaru/Treasury/IntentJSON/NetworkGuardSpec.hs`,
-   plus any guard touch-ups in Slice 2 / 3 modules.
+6. **Slice 4 — Network policy in the dispatcher (RED + GREEN, one
+   commit).** Introduce a shared
+   `requireDevnet :: Text -> ExceptT BuildError IO ()` helper in
+   `Amaru.Treasury.Build` (or wherever the existing dispatcher
+   shares helpers); call it from all seven init sub-action arms
+   in `runBuildExcept` before any other work; surface a typed
+   `BuildError` on rejection. RED: a unit test that builds from a
+   `bootstrap-intent.json` with `network: mainnet` for every one
+   of the seven sub-actions and asserts a typed error **before**
+   any N2C connection is attempted. GREEN: tests pass; the
+   decoder still accepts any `network: Text` (no asymmetry vs.
+   existing `swap` / `disburse` / `withdraw` decoders). Owned
+   files: `lib/Amaru/Treasury/Build.hs`,
+   `test/unit/Amaru/Treasury/IntentJSON/NetworkGuardSpec.hs`
+   (rename to `BuildNetworkGuardSpec.hs` if better situated under
+   `test/unit/Amaru/Treasury/Build/`).
 7. **Slice 5 — Documentation alignment (orchestrator-owned,
    single commit).** Update `README.md` and
    `docs/local-devnet-smoke.md` to describe `tx-build --intent

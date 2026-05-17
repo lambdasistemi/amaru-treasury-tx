@@ -176,23 +176,45 @@ of the equivalence proof tied to one source of truth.
 - Generate fixtures from `SmokeSpec`'s live run output. Rejected —
   the golden suite must not require a live DevNet.
 
-## Decision: Network safety via shared decoder guard
+## Decision: Network safety in the `Build.hs` dispatcher arm
 
-**Decision**: The three new `FromJSON` instances refuse to decode an
-intent whose `network` field is not `devnet`, mirroring how the
-existing init **library** functions reject non-DevNet networks.
-The guard lives in the decoder so the rejection happens before any
-GADT construction or build attempt.
+**Decision**: The seven new `FromJSON` instances decode any
+`network` value the existing envelope accepts (currently any
+`Text`). The "must be devnet" policy for the seven init sub-actions
+lives in the corresponding `Amaru.Treasury.Build.runBuildExcept`
+dispatcher arms (or a shared `requireDevnet :: Text -> ExceptT
+BuildError IO ()` helper called from each arm), failing closed
+**before** any N2C connection or transaction construction.
 
-**Rationale**: Failing closed at decode is strictly stronger than
-failing at build time, matches parent #156's invariant, and is the
-cheapest path to test (one round-trip property per action).
+**Rationale (revised 2026-05-17, repo owner)**:
+
+- The decoder's job is parsing; network policy is a runtime
+  decision. Putting it at the decoder is the wrong layer.
+- The existing `swap` / `disburse` / `withdraw` decoders accept any
+  `network: Text` and leave enforcement to `Cli/TxBuild.hs`
+  (`magicFromIntent`, `assertSocketNetwork`). Asymmetric guards
+  on the init decoders would create a maintenance trap: future
+  relaxation (when #156 specifies mainnet/preprod semantics for an
+  init action) would force a JSON-layer change instead of a
+  policy-layer change.
+- Tooling that only wants to *inspect* or *forward* a
+  `bootstrap-intent.json` (a CI fixture, a wizard preview, a
+  diagnostic report) MUST still be able to decode it.
+- The underlying library entries already reject non-DevNet networks
+  internally; the dispatcher guard surfaces that rejection cleanly
+  before the runner is even consulted.
 
 **Alternatives considered**:
 
-- Guard only at `Build.hs` dispatch time. Rejected — leaves a small
-  window where an init intent could be partially translated before
-  rejection, and complicates round-trip properties.
+- Decoder-level guard. Rejected per the revised rationale above.
+- No guard at all; let the runner fail. Rejected — the runner does
+  fail, but only after some build setup. Failing at the dispatcher
+  arm gives a typed error before any work.
+
+**Test surface**: `test/unit/Amaru/Treasury/IntentJSON/NetworkGuardSpec.hs`
+covers the dispatcher rejection for all seven sub-actions; one round-trip
+property per sub-action still lives in `IntentJSONSpec` and is
+independent of network value.
 
 ## Decision: No new live-boundary smoke in `gate.sh` for #157
 

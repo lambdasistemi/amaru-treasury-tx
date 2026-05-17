@@ -28,14 +28,25 @@ Every other `action` value (including the bare `"registry-init"`,
 `"stake-reward-init"`, `"governance-withdrawal-init"`) is rejected
 by the decoder.
 
-## Network guard
+## Network policy
 
-`network` MUST equal `"devnet"`. Any other value (including
-`"mainnet"`, `"preprod"`, or absent) MUST cause the decoder to
-fail closed with a typed error before any GADT construction or
-build attempt. The decoder guard is shared across all seven
-sub-actions and lives in `lib/Amaru/Treasury/IntentJSON.hs` (or
-`IntentJSON/Common.hs`).
+`network` is `Text`. The **decoder** accepts any value
+(consistent with the existing `swap` / `disburse` / `withdraw`
+envelopes), so that inspection / fixture / wizard tooling can
+still round-trip a `bootstrap-intent.json` regardless of its
+network field.
+
+The **dispatcher** (`Amaru.Treasury.Build.runBuildExcept` arms for
+the seven init sub-actions, optionally via a shared
+`requireDevnet :: Text -> ExceptT BuildError IO ()` helper)
+rejects any value other than `"devnet"` with a typed
+`BuildError` **before** any N2C connection or transaction
+construction.
+
+This split keeps the wire format reusable and the policy in one
+place — when parent #156 specifies mainnet/preprod semantics for
+an init action, the change is a dispatcher widening, not a JSON
+edit.
 
 ## Per-sub-action `payload`
 

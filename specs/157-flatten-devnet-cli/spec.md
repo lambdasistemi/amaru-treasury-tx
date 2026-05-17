@@ -7,6 +7,31 @@
 **Parent Issue**: [#156](https://github.com/lambdasistemi/amaru-treasury-tx/issues/156)
 **Input**: Drop the nested `amaru-treasury-tx devnet <action>` supercommand from the shipped CLI surface, add `SomeTreasuryIntent` variants and JSON round-trip for the three init actions (`registry-init`, `stake-reward-init`, `governance-withdrawal-init`), and prove `tx-build --intent <bootstrap-intent.json>` builds the same unsigned tx CBOR hex the corresponding library function builds today. Relocate the end-to-end `lib/Amaru/Treasury/Devnet/*Init.hs` and `DisburseSubmit.hs` runners so they are no longer reachable from the shipped CLI; `SmokeSpec` keeps consuming them as library functions.
 
+> **Spec refinement (2026-05-17, repo owner)**: The three "init
+> actions" named by #157 each publish multiple transactions today
+> (registry-init: 3, stake-reward-init: ≥2,
+> governance-withdrawal-init: ≥2). The unified intent / `tx-build`
+> contract is one-intent → one-unsigned-tx. To honor both the
+> contract and the existing library behavior byte-for-byte, the
+> three init actions decompose into **seven CLI-visible sub-action
+> intents** at the intent layer. Operators chain `tx-build →
+> witness → submit` once per sub-step. The seven sub-action tags
+> are:
+>
+> ```text
+> registry-init-seed-split
+> registry-init-mint
+> registry-init-reference-scripts
+> stake-reward-init-script-account
+> stake-reward-init-plain-account
+> governance-withdrawal-init-proposal
+> governance-withdrawal-init-materialization
+> ```
+>
+> All "three init actions" wording below MUST be read as "seven
+> sub-action intents". Wizards (#158–#160) cluster these into
+> per-action questionnaires.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 — Build Each Init Tx From An Intent JSON Through `tx-build` (Priority: P1)
@@ -165,18 +190,19 @@ forward-reference the wizard tickets (#158–#160) for the
   `governance-withdrawal-init`, or `disburse-submit` as shipped CLI
   subcommands at any nesting level.
 - **FR-002**: `Amaru.Treasury.IntentJSON.SomeTreasuryIntent` MUST
-  gain three new constructors — one each for `registry-init`,
-  `stake-reward-init`, and `governance-withdrawal-init` — with
+  gain **seven** new constructors — one each for the seven
+  sub-action intents listed in the spec refinement above — with
   matching `Action` constructors, `SAction` witnesses, `Payload`
   family arms, and `Translated` family arms.
-- **FR-003**: For each new init variant, `FromJSON` /
+- **FR-003**: For each new sub-action variant, `FromJSON` /
   `ToJSON` instances MUST satisfy the round-trip invariant
   `decodeTreasuryIntent . encodeSomeTreasuryIntent ≡ Right`.
 - **FR-004**: `Cli/TxBuild.hs::runTxBuild` reading a
-  `bootstrap-intent.json` for any of the three init actions MUST
-  produce an unsigned tx CBOR hex byte-identical to the CBOR the
-  corresponding `lib/Amaru/Treasury/Devnet/*Init.hs` library function
-  builds for the same logical inputs (golden coverage per action).
+  `bootstrap-intent.json` for any of the seven sub-action intents
+  MUST produce an unsigned tx CBOR hex byte-identical to the CBOR
+  the corresponding sub-transaction in
+  `lib/Amaru/Treasury/Devnet/*Init.hs` builds for the same logical
+  inputs (golden coverage per sub-action — seven goldens total).
 - **FR-005**: `lib/Amaru/Treasury/Devnet/RegistryInit.hs`,
   `StakeRewardInit.hs`, `GovernanceWithdrawalInit.hs`, and
   `DisburseSubmit.hs` MUST remain consumable by
@@ -215,10 +241,16 @@ forward-reference the wizard tickets (#158–#160) for the
 ### Key Entities
 
 - **`Action`** — sum type indexed by `Action` kind via `-XDataKinds`;
-  gains `RegistryInit`, `StakeRewardInit`, `GovernanceWithdrawalInit`.
+  gains seven flat constructors:
+  `RegistryInitSeedSplit`, `RegistryInitMint`,
+  `RegistryInitReferenceScripts`,
+  `StakeRewardInitScriptAccount`,
+  `StakeRewardInitPlainAccount`,
+  `GovernanceWithdrawalInitProposal`,
+  `GovernanceWithdrawalInitMaterialization`.
 - **`SomeTreasuryIntent`** — existential wrapper around the
-  `Action`-indexed `TreasuryIntent`; gains constructors for the three
-  init variants.
+  `Action`-indexed `TreasuryIntent`; gains constructors for the
+  seven sub-action variants.
 - **`runFromIntentEither`** — dispatcher in `Amaru.Treasury.Build`;
   gains arms for the three new `SAction` witnesses.
 - **`runTxBuild`** — top-level intent driver in
@@ -238,13 +270,14 @@ forward-reference the wizard tickets (#158–#160) for the
   `amaru-treasury-tx devnet …` show no `devnet`, `registry-init`,
   `stake-reward-init`, `governance-withdrawal-init`, or
   `disburse-submit` subcommand at any nesting level (parser test).
-- **SC-002**: For each of the three init actions, a golden test
-  asserts that `runTxBuild` on the bootstrap intent JSON produces
-  CBOR bytes identical to the bytes produced by the corresponding
-  library function for the same logical inputs.
+- **SC-002**: For each of the seven sub-action intents, a golden
+  test asserts that `runTxBuild` on the bootstrap intent JSON
+  produces CBOR bytes identical to the bytes produced by the
+  corresponding sub-transaction in the library function for the
+  same logical inputs (seven goldens total).
 - **SC-003**: Round-trip property:
   `decodeTreasuryIntent . encodeSomeTreasuryIntent ≡ Right` for
-  each of the three init variants (unit / property test).
+  each of the seven sub-action variants (unit / property test).
 - **SC-004**: `nix build .#checks.unit`, `nix build .#checks.golden`,
   `just schema-check`, and `just format-check` / `just hlint` are
   green at every commit on the branch.

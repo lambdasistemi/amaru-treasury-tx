@@ -87,17 +87,27 @@ RED proof (write first, observe failing):
 - Add `test/unit/Amaru/Treasury/Cli/ParserSpec.hs` cases that exec
   `parseArgs ["devnet"]` and the four `devnet <sub>` variants and
   assert each returns an unrecognized-subcommand failure.
+- Tighten the help-text check: assert that the help body does NOT
+  contain a subcommand line beginning with `devnet` (regex
+  `^[[:space:]]+devnet([[:space:]]|$)` against the rendered help).
+  Do NOT assert the literal substring "devnet" is absent — flag
+  values and metavars elsewhere may legitimately contain the word.
 - Run: `nix develop --quiet -c just unit "ParserSpec"` — must fail on the current HEAD before edits.
 
 GREEN proof:
 - Run: `nix develop --quiet -c just unit "ParserSpec"` — passes.
 - Run: `./gate.sh` — passes.
 - `git ls-files lib/Amaru/Treasury/Devnet/ | sort` is unchanged.
+- `grep -RnE 'Amaru\.Treasury\.Cli\.Devnet' app/ lib/ test/` returns
+  nothing (no remaining importer of the deleted module).
+- `grep -RnE 'Amaru\.Treasury\.Devnet\.(RegistryInit|StakeRewardInit|GovernanceWithdrawalInit|DisburseSubmit)' app/`
+  returns nothing (no shipped executable still reaches the runners;
+  FR-005 coverage).
 
 Report back:
 - diff stat
 - RED evidence (failing run)
-- GREEN evidence (passing run + ./gate.sh tail)
+- GREEN evidence (passing run + ./gate.sh tail + the two greps)
 - confirmation that the four Devnet runners are untouched
 ```
 
@@ -152,9 +162,16 @@ Required orchestrator analysis already applied:
 - Decoders accept any `network: Text` today (IntentJSON.hs:619, 484).
 
 RED proof:
-- Add round-trip property per new variant — run
-  `nix develop --quiet -c just unit "IntentJSON"` — must fail on the
-  current HEAD before edits.
+- IMPORTANT: round-trip properties for the new variants reference
+  types that don't exist on `main`, so the test won't *fail* on
+  unmodified HEAD — it won't *compile*. The RED moment in this
+  slice is satisfied by either (a) committing a placeholder
+  property `it "round-trip <variant>" pendingWith "T011 not landed"`
+  first and observing pending, then replacing with the real
+  property in the same commit, or (b) showing the type-error
+  output from `cabal build` before the type extensions land.
+  Document whichever path is taken in the RED evidence section of
+  the report.
 
 GREEN proof:
 - `nix develop --quiet -c just unit "IntentJSON"` — passes.
@@ -223,8 +240,14 @@ RED proof:
   `brCborBytes (extractedCore ctx inputs)`. Both must be derived
   from the same logical inputs (test-support helper or shared
   fixture builder).
+- IMPORTANT: the goldens reference dispatch arms that don't exist
+  on `main`, so they won't compile until T021 lands. Same as
+  slice 2 RED: either ship a `pendingWith "T021 not landed"`
+  scaffold first and observe pending, then replace with the real
+  goldens in the same commit, or capture the type-error output
+  before T021 — pick one and report which.
 - Run: `nix develop --quiet -c just golden "RegistryInitIntent"` —
-  must fail on HEAD before edits.
+  must fail (or pend) on HEAD before edits.
 
 GREEN proof:
 - `nix develop --quiet -c just golden "RegistryInitIntent"` — passes.
@@ -247,7 +270,7 @@ Report back:
 
 **Fold rule**: T030 + T031 + T032 are one commit. As 3a.
 
-**Subagent brief**: mirror 3a's structure, swap `RegistryInit` for `StakeRewardInit`, two goldens not three, owned files as listed in T030/T031. Commit subject `feat(build): dispatch stake-reward-init sub-action intents (#157)`. Trailer `Tasks: T030, T031, T032`.
+**Subagent brief**: mirror 3a's structure (including the same RED-pending convention), swap `RegistryInit` for `StakeRewardInit`, two goldens not three, owned files as listed in T030/T031. Commit subject `feat(build): dispatch stake-reward-init sub-action intents (#157)`. Trailer `Tasks: T030, T031, T032`.
 
 ### Subagent slice 3c — Governance-withdrawal-init dispatch + 2 CBOR-equivalence goldens (one commit)
 
@@ -257,7 +280,7 @@ Report back:
 
 **Fold rule**: T040 + T041 + T042 are one commit. As 3a.
 
-**Subagent brief**: mirror 3a's structure, swap `RegistryInit` for `GovernanceWithdrawalInit`. Commit subject `feat(build): dispatch governance-withdrawal-init sub-action intents (#157)`. Trailer `Tasks: T040, T041, T042`.
+**Subagent brief**: mirror 3a's structure (including the same RED-pending convention), swap `RegistryInit` for `GovernanceWithdrawalInit`. Commit subject `feat(build): dispatch governance-withdrawal-init sub-action intents (#157)`. Trailer `Tasks: T040, T041, T042`.
 
 **Checkpoint:** All seven sub-action intents build byte-identical CBOR through `tx-build`. US1 is independently testable end-to-end on a live socket.
 
@@ -273,7 +296,7 @@ US3 has **no dedicated slice** — it is preserved as a side-effect invariant of
 
 ### Verification task (orchestrator-owned, no subagent)
 
-- [ ] T050 [US3] After slice 3c lands, run `nix develop --quiet -c grep -RnE 'amaru-treasury-tx[ ]+devnet' test/` and confirm zero matches; run `nix develop --quiet -c just unit` (covers SmokeSpec compile) and the live `just devnet-smoke` phases that exist for the four runners; record the verification output in the slice-3c review note (no new commit needed unless a regression appears).
+- [ ] T050 [US3] After slice 3c lands, verify SmokeSpec library-only consumption by running ALL of: (a) `grep -RnE 'amaru-treasury-tx[ ]+devnet' test/` returns zero matches (no CLI shelling), (b) `grep -RnE 'Amaru\.Treasury\.Cli\.Devnet' test/` returns zero matches (no import of the deleted CLI glue module), (c) `nix develop --quiet -c just unit` passes (SmokeSpec compiles), and (d) the live `just devnet-smoke` phases that exist for the four runners pass; record the verification output in the slice-3c review note (no new commit needed unless a regression appears).
 
 **Checkpoint:** SmokeSpec proven unchanged in behavior; library proof survives.
 
@@ -319,12 +342,22 @@ Required orchestrator analysis already applied:
 - Existing dispatch shape: runBuildExcept at lib/Amaru/Treasury/Build.hs:96
   cases by SAction. Add the call to requireDevnet before each init arm.
 - BuildError types live alongside; the guard surfaces a typed error.
-- A dummy ChainContext can be constructed by the test that throws on
-  any field access — this proves no N2C touch happens before rejection.
+  Pick a constructor that nests under `BuildActionXxx` for each
+  init arm or introduce a new `BuildPhaseNetwork` phase tag — note
+  which choice in the report.
+- "Dummy ChainContext that fails loudly if touched": the simplest
+  construction is `error "ChainContext touched before requireDevnet"`
+  per record field, OR a Show-only stub if `ChainContext` is
+  abstract. Inspect `Amaru.Treasury.Build` to confirm the
+  constructor visibility before writing the test; if construction
+  is non-trivial, prefer `runExceptT (requireDevnet "mainnet")`
+  unit-tested directly and a smaller end-to-end probe.
 
 RED proof:
 - The seven mainnet-intent test cases run runFromIntentEither against
-  the dummy context — must fail (no guard yet) before T061 lands.
+  the dummy/probe context — must fail (no guard yet) before T061
+  lands. Same RED-pending caveat as slices 2/3a/3b/3c applies if
+  the test file references symbols not yet present.
 - Run: `nix develop --quiet -c just unit "NetworkGuardSpec"` — must fail.
 
 GREEN proof:
@@ -367,7 +400,7 @@ Report back:
 ### Orchestrator slice 6 — Drop `gate.sh` & mark ready (one commit + one `gh` action)
 
 - [ ] T080 chore: `git rm gate.sh` and commit (`chore: drop gate.sh (ready for review) (#157)`). (`gate.sh`)
-- [ ] T081 `gh pr ready 162`; do not self-approve.
+- [ ] T081 `gh pr ready 162`; do not self-approve. Do NOT edit the PR body here — the docs-phase body refresh in T072 is the last body edit before merge.
 
 **Checkpoint:** `gate.sh` absent from HEAD; PR is ready for external review; orchestrator does NOT merge.
 

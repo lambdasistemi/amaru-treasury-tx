@@ -61,20 +61,23 @@ generate the reference; only the CLI exposure goes away.
 
 **Acceptance Scenarios**:
 
-1. **Given** a `registry-init` `bootstrap-intent.json` produced by
-   tooling that calls the relocated library code, **When** an operator
-   runs `amaru-treasury-tx tx-build --intent <bootstrap-intent.json>`
-   against a live DevNet socket, **Then** the produced unsigned tx
-   CBOR hex equals the CBOR the corresponding library function builds
-   for the same logical inputs, byte-for-byte.
-2. As (1), **for** `stake-reward-init`.
-3. As (1), **for** `governance-withdrawal-init`.
-4. **Given** any of the three init `bootstrap-intent.json`s, **When**
-   they are round-tripped through `encodeSomeTreasuryIntent` /
-   `decodeTreasuryIntent`, **Then** the decoded value is observationally
-   equal to the input (`encode . decode == decode . encode` on the JSON
-   shape).
-5. **Given** an `bootstrap-intent.json` with `network` set to
+1. **Given** any sub-action `bootstrap-intent.json` produced by
+   tooling that calls the relocated library code, **When** an
+   operator runs `amaru-treasury-tx tx-build --intent
+   <bootstrap-intent.json>` against a live DevNet socket, **Then**
+   the produced unsigned tx CBOR hex equals the CBOR the
+   corresponding sub-transaction in the library function builds for
+   the same logical inputs, byte-for-byte. *Applies independently
+   per sub-action of* `registry-init-{seed-split,mint,reference-scripts}`,
+   `stake-reward-init-{script-account,plain-account}`, and
+   `governance-withdrawal-init-{proposal,materialization}` —
+   seven independent acceptance scenarios.
+2. **Given** any of the seven sub-action `bootstrap-intent.json`s,
+   **When** they are round-tripped through `encodeSomeTreasuryIntent`
+   / `decodeTreasuryIntent`, **Then** the decoded value is
+   observationally equal to the input (`encode . decode == decode
+   . encode` on the JSON shape).
+3. **Given** an `bootstrap-intent.json` with `network` set to
    `mainnet` or `preprod`, **When** an operator runs `tx-build` against
    it, **Then** the dispatcher fails closed with a typed
    `BuildError` before any N2C connection or transaction
@@ -119,8 +122,10 @@ glue that constructs transactions out of band.
 
 As a maintainer of the DevNet proof harness, I need
 `Amaru.Treasury.Devnet.SmokeSpec` to keep compiling and passing while
-calling the relocated `runDevnet*Init` and `runDevnetDisburseSubmit`
-functions directly as library functions (no CLI shelling, no
+calling the relocated runners under `lib/Amaru/Treasury/Devnet/`
+(`publishDevnetRegistryInit`, `setupDevnetStakeRewards`, the
+governance-withdrawal init entry, and the disburse-submit entry)
+directly as library functions (no CLI shelling, no
 `amaru-treasury-tx devnet …` invocation), so the library-level DevNet
 proof keeps gating CI through `nix build .#checks.*`.
 
@@ -182,7 +187,7 @@ forward-reference the wizard tickets (#158–#160) for the
 - The relocated runners must not be exposed as Hackage public modules
   that an external consumer could mistake for an operator path.
 - Schema generators (`exe:amaru-treasury-intent-schema`) must include
-  the three new variants and the committed
+  the seven new sub-action variants and the committed
   `docs/assets/intent-schema.json` must stay in sync (`just
   schema-check` green).
 
@@ -227,7 +232,7 @@ forward-reference the wizard tickets (#158–#160) for the
   inspection / fixture / wizard tooling can still round-trip a
   `bootstrap-intent.json` regardless of its network field.
 - **FR-008**: `docs/assets/intent-schema.json` MUST include the
-  three new variants; `just schema-check` MUST pass.
+  seven new sub-action variants; `just schema-check` MUST pass.
 - **FR-009**: `README.md` and `docs/local-devnet-smoke.md` MUST
   describe the new operator path (`tx-build --intent <…>`), MUST
   remove references to the old `devnet <action>` invocation, and
@@ -238,8 +243,8 @@ forward-reference the wizard tickets (#158–#160) for the
 
 ### Non-Functional Requirements
 
-- **NFR-001**: The intent JSON envelope for the three init variants
-  follows the same schema conventions as the existing
+- **NFR-001**: The intent JSON envelope for the seven sub-action
+  variants follows the same schema conventions as the existing
   `swap` / `disburse` / `withdraw` variants (`action`,
   `schemaVersion`, `network`, `payload`).
 - **NFR-002**: No new public Hackage modules; relocated runners
@@ -262,15 +267,15 @@ forward-reference the wizard tickets (#158–#160) for the
   `Action`-indexed `TreasuryIntent`; gains constructors for the
   seven sub-action variants.
 - **`runFromIntentEither`** — dispatcher in `Amaru.Treasury.Build`;
-  gains arms for the three new `SAction` witnesses.
+  gains arms for the seven new `SAction` witnesses.
 - **`runTxBuild`** — top-level intent driver in
   `Amaru.Treasury.Cli.TxBuild`; unchanged in shape but exercises the
   new dispatch arms via the new variants.
-- **Relocated runners** — `runDevnetRegistryInit`,
-  `runDevnetStakeRewardInit`, `runDevnetGovernanceWithdrawalInit`,
-  `runDevnetDisburseSubmit` — kept under `lib/Amaru/Treasury/Devnet/`
+- **Relocated runners** — `publishDevnetRegistryInit`,
+  `setupDevnetStakeRewards`, the governance-withdrawal-init entry,
+  and the disburse-submit entry under `lib/Amaru/Treasury/Devnet/`
   per parent #156's "library proof survives" invariant; consumed
-  only by `SmokeSpec`.
+  only by `SmokeSpec`. Public surfaces are NOT renamed in this PR.
 
 ## Success Criteria *(mandatory)*
 

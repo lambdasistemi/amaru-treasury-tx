@@ -26,7 +26,8 @@ import Amaru.Treasury.Cli.Common
     , withSocket
     )
 import Amaru.Treasury.Cli.Devnet
-    ( runDevnetGovernanceWithdrawalInit
+    ( runDevnetDisburseSubmit
+    , runDevnetGovernanceWithdrawalInit
     , runDevnetRegistryInit
     , runDevnetStakeRewardInit
     )
@@ -96,6 +97,8 @@ main = withUtf8 . withUpdateCheckMain $ do
             runDevnetStakeRewardInit g sio
         CmdDevnetGovernanceWithdrawalInit gio ->
             runDevnetGovernanceWithdrawalInit g gio
+        CmdDevnetDisburseSubmit dso ->
+            runDevnetDisburseSubmit g dso
         CmdDisburseWizard dwo ->
             withSocket g $ \socket ->
                 runDisburseWizard g{goSocketPath = Just socket} dwo

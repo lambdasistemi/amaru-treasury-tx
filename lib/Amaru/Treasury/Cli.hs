@@ -41,9 +41,11 @@ import Amaru.Treasury.Cli.Common
     , globalOptsP
     )
 import Amaru.Treasury.Cli.Devnet
-    ( DevnetGovernanceWithdrawalInitOpts
+    ( DevnetDisburseSubmitOpts
+    , DevnetGovernanceWithdrawalInitOpts
     , DevnetRegistryInitOpts
     , DevnetStakeRewardInitOpts
+    , devnetDisburseSubmitOptsP
     , devnetGovernanceWithdrawalInitOptsP
     , devnetRegistryInitOptsP
     , devnetStakeRewardInitOptsP
@@ -102,6 +104,7 @@ data Cmd
     | CmdDevnetRegistryInit DevnetRegistryInitOpts
     | CmdDevnetStakeRewardInit DevnetStakeRewardInitOpts
     | CmdDevnetGovernanceWithdrawalInit DevnetGovernanceWithdrawalInitOpts
+    | CmdDevnetDisburseSubmit DevnetDisburseSubmitOpts
     | CmdDisburseWizard DisburseWizardOpts
     | CmdContingencyDisburse ContingencyDisburseOpts
     | CmdWithdrawWizard WithdrawOpts
@@ -308,6 +311,16 @@ devnetCmdP =
                     )
                     ( progDesc
                         "Fund DevNet treasury rewards through governance and materialize a treasury UTxO"
+                    )
+                )
+            <> command
+                "disburse-submit"
+                ( info
+                    ( CmdDevnetDisburseSubmit
+                        <$> devnetDisburseSubmitOptsP
+                    )
+                    ( progDesc
+                        "Build, sign, submit, and verify a DevNet ADA disbursement"
                     )
                 )
         )

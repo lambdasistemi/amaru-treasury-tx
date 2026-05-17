@@ -47,28 +47,28 @@ artifacts.
 DevNet-only guard, prerequisite validation, artifact rendering, and
 failure projection. Focused builds prove executable/library compile.
 
-- [ ] T017 [US1] RED: add CLI parser coverage for
+- [x] T017 (commit: 4f185f9) [US1] RED: add CLI parser coverage for
   `devnet disburse-submit`.
-- [ ] T018 [US1] RED: add non-DevNet guard coverage that rejects before
+- [x] T018 (commit: 4f185f9) [US1] RED: add non-DevNet guard coverage that rejects before
   reading files, keys, or sockets.
-- [ ] T019 [US1] RED: add artifact path/value/failure projection tests.
-- [ ] T020 [US1] Add
+- [x] T019 (commit: 4f185f9) [US1] RED: add artifact path/value/failure projection tests.
+- [x] T020 (commit: 4f185f9) [US1] Add
   `lib/Amaru/Treasury/Devnet/DisburseSubmit.hs` with config,
   prerequisite readers, result/failure types, artifact paths, JSON
   rendering, and success lines.
-- [ ] T021 [US1] Validate #147 registry and #149 materialized artifact
+- [x] T021 (commit: 4f185f9) [US1] Validate #147 registry and #149 materialized artifact
   inputs, including DevNet address/network consistency.
-- [ ] T022 [US1] Build the ADA disburse intent through production
+- [x] T022 (commit: 4f185f9) [US1] Build the ADA disburse intent through production
   disburse resolver/translation or an equivalent production DevNet
   adapter.
-- [ ] T023 [US1] Build unsigned CBOR and report through the production
+- [x] T023 (commit: 4f185f9) [US1] Build unsigned CBOR and report through the production
   tx-build path.
-- [ ] T024 [US1] Sign, submit, and verify treasury/beneficiary chain
+- [x] T024 (commit: 4f185f9) [US1] Sign, submit, and verify treasury/beneficiary chain
   effects.
-- [ ] T025 [US1] Wire parser/runner through DevNet CLI, top-level CLI,
+- [x] T025 (commit: 4f185f9) [US1] Wire parser/runner through DevNet CLI, top-level CLI,
   main dispatch, and Cabal exposure.
-- [ ] T026 [US1] GREEN: run focused unit tests and lib/exe builds.
-- [ ] T027 [US1] Commit the command slice as
+- [x] T026 (commit: 4f185f9) [US1] GREEN: run focused unit tests and lib/exe builds.
+- [x] T027 (commit: 4f185f9) [US1] Commit the command slice as
   `feat(devnet): expose disburse submit command` with `Tasks:
   T017,T018,T019,T020,T021,T022,T023,T024,T025,T026,T027`.
 

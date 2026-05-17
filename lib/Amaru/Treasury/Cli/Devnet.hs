@@ -12,16 +12,20 @@ are intentionally gated to the local @devnet@ network before any
 signing-key material is read or any node connection is opened.
 -}
 module Amaru.Treasury.Cli.Devnet
-    ( DevnetGovernanceWithdrawalInitOpts (..)
+    ( DevnetDisburseSubmitOpts (..)
+    , DevnetGovernanceWithdrawalInitOpts (..)
     , DevnetRegistryInitOpts (..)
     , DevnetStakeRewardInitOpts (..)
+    , devnetDisburseSubmitOptsP
     , devnetGovernanceWithdrawalInitOptsP
     , devnetRegistryInitOptsP
     , devnetStakeRewardInitOptsP
+    , requireDevnetDisburseSubmitNetwork
     , requireDevnetGovernanceWithdrawalInitNetwork
     , requireDevnetRegistryInitNetwork
     , requireDevnetStakeRewardInitNetwork
     , registryInitCommandLines
+    , runDevnetDisburseSubmit
     , runDevnetGovernanceWithdrawalInit
     , runDevnetRegistryInit
     , runDevnetStakeRewardInit
@@ -61,6 +65,10 @@ import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , resolveSocket
     )
+import Amaru.Treasury.Devnet.DisburseSubmit
+    ( DevnetDisburseSubmitConfig (..)
+    )
+import Amaru.Treasury.Devnet.DisburseSubmit qualified as DisburseSubmit
 import Amaru.Treasury.Devnet.GovernanceWithdrawalInit
     ( DevnetGovernanceWithdrawalInitConfig (..)
     )
@@ -112,6 +120,18 @@ data DevnetGovernanceWithdrawalInitOpts = DevnetGovernanceWithdrawalInitOpts
     , dgwioRunDir :: !FilePath
     , dgwioAmountLovelace :: !Integer
     , dgwioRewardTimeoutSeconds :: !Int
+    }
+    deriving stock (Eq, Show)
+
+-- | Options for @disburse-submit@.
+data DevnetDisburseSubmitOpts = DevnetDisburseSubmitOpts
+    { ddsioRegistryFile :: !FilePath
+    , ddsioMaterializedFile :: !FilePath
+    , ddsioFundingAddress :: !String
+    , ddsioSigningKeyFile :: !FilePath
+    , ddsioBeneficiaryAddress :: !String
+    , ddsioRunDir :: !FilePath
+    , ddsioAmountLovelace :: !Integer
     }
     deriving stock (Eq, Show)
 
@@ -208,6 +228,49 @@ devnetGovernanceWithdrawalInitOptsP =
                 <> help "Seconds to wait for treasury reward account funding"
             )
 
+-- | Parser for the @disburse-submit@ DevNet subcommand.
+devnetDisburseSubmitOptsP :: Parser DevnetDisburseSubmitOpts
+devnetDisburseSubmitOptsP =
+    DevnetDisburseSubmitOpts
+        <$> strOption
+            ( long "registry-file"
+                <> metavar "PATH"
+                <> help "registry-init registry.json artifact"
+            )
+        <*> strOption
+            ( long "materialized-file"
+                <> metavar "PATH"
+                <> help "governance-withdrawal-init materialized.json artifact"
+            )
+        <*> strOption
+            ( long "funding-address"
+                <> metavar "ADDR"
+                <> help "DevNet funding address that owns wallet UTxOs"
+            )
+        <*> strOption
+            ( long "signing-key-file"
+                <> metavar "PATH"
+                <> help "cardano-cli payment signing-key JSON for funding UTxOs"
+            )
+        <*> strOption
+            ( long "beneficiary-address"
+                <> metavar "ADDR"
+                <> help "DevNet beneficiary address receiving ADA"
+            )
+        <*> strOption
+            ( long "run-dir"
+                <> metavar "DIR"
+                <> help "Directory where disburse-submit artifacts are written"
+            )
+        <*> option
+            auto
+            ( long "amount-lovelace"
+                <> metavar "LOVELACE"
+                <> value 1_000_000
+                <> showDefault
+                <> help "Lovelace to disburse to the beneficiary"
+            )
+
 -- | Validate that the global network selection is exactly DevNet.
 requireDevnetRegistryInitNetwork :: GlobalOpts -> Either String ()
 requireDevnetRegistryInitNetwork GlobalOpts{..}
@@ -235,6 +298,15 @@ requireDevnetGovernanceWithdrawalInitNetwork GlobalOpts{..}
         Right ()
     | otherwise =
         Left "governance-withdrawal-init: --network must be devnet"
+
+-- | Validate that disburse submit is only run on DevNet.
+requireDevnetDisburseSubmitNetwork :: GlobalOpts -> Either String ()
+requireDevnetDisburseSubmitNetwork GlobalOpts{..}
+    | goNetworkName == Just "devnet"
+        && goNetworkMagic == NetworkMagic 42 =
+        Right ()
+    | otherwise =
+        Left "disburse-submit: --network must be devnet"
 
 -- | Run @devnet registry-init@ against a local DevNet node.
 runDevnetRegistryInit
@@ -471,6 +543,113 @@ runDevnetGovernanceWithdrawalInit
                                         result
                             mapM_ putStrLn linesOut
 
+-- | Run @devnet disburse-submit@ against a local DevNet node.
+runDevnetDisburseSubmit
+    :: GlobalOpts
+    -> DevnetDisburseSubmitOpts
+    -> IO ()
+runDevnetDisburseSubmit globals DevnetDisburseSubmitOpts{..} = do
+    case requireDevnetDisburseSubmitNetwork globals of
+        Left err -> abort err
+        Right () -> pure ()
+    case DisburseSubmit.validateDisburseSubmitInputs
+        ddsioAmountLovelace of
+        Left failure -> do
+            DisburseSubmit.writeDisburseSubmitFailure
+                ddsioRunDir
+                failure
+            mapM_
+                (hPutStrLn stderr)
+                ( DisburseSubmit.disburseSubmitFailureLines
+                    ddsioRunDir
+                    failure
+                )
+            exitFailure
+        Right () -> pure ()
+    registry <-
+        DisburseSubmit.readDevnetDisburseSubmitRegistry
+            ddsioRegistryFile
+            >>= \case
+                Left err ->
+                    abort $
+                        "disburse-submit: --registry-file: "
+                            <> err
+                Right ok -> pure ok
+    materialized <-
+        DisburseSubmit.readDevnetDisburseSubmitMaterialized
+            ddsioMaterializedFile
+            >>= \case
+                Left err ->
+                    abort $
+                        "disburse-submit: --materialized-file: "
+                            <> err
+                Right ok -> pure ok
+    prereqs <-
+        case DisburseSubmit.validateDisburseSubmitPrerequisites
+            ddsioRegistryFile
+            ddsioAmountLovelace
+            registry
+            materialized of
+            Left failure -> do
+                DisburseSubmit.writeDisburseSubmitFailure
+                    ddsioRunDir
+                    failure
+                mapM_
+                    (hPutStrLn stderr)
+                    ( DisburseSubmit.disburseSubmitFailureLines
+                        ddsioRunDir
+                        failure
+                    )
+                exitFailure
+            Right ok -> pure ok
+    fundingAddress <-
+        parseFundingAddress "disburse-submit" ddsioFundingAddress
+    beneficiaryAddress <-
+        parseTestnetAddress
+            "disburse-submit"
+            "--beneficiary-address"
+            ddsioBeneficiaryAddress
+    signingKey <-
+        readPaymentSigningKey "disburse-submit" ddsioSigningKeyFile
+    socket <- resolveSocket (goSocketPath globals)
+    let networkMagic =
+            fromIntegral (unNetworkMagic (goNetworkMagic globals))
+        config =
+            DevnetDisburseSubmitConfig
+                { ddsicNetworkMagic = networkMagic
+                , ddsicSocketPath = socket
+                , ddsicFundingAddress = fundingAddress
+                , ddsicSigningKey = signingKey
+                , ddsicBeneficiaryAddress = beneficiaryAddress
+                , ddsicRunDir = ddsioRunDir
+                , ddsicAmountLovelace = ddsioAmountLovelace
+                }
+    withLocalNodeClient (goNetworkMagic globals) socket $
+        \provider submitter ->
+            DisburseSubmit.runDevnetDisburseSubmit
+                config
+                ddsioRegistryFile
+                ddsioMaterializedFile
+                prereqs
+                provider
+                submitter
+                >>= \case
+                    Left failure -> do
+                        mapM_
+                            (hPutStrLn stderr)
+                            ( DisburseSubmit.disburseSubmitFailureLines
+                                ddsioRunDir
+                                failure
+                            )
+                        exitFailure
+                    Right result -> do
+                        let linesOut =
+                                DisburseSubmit.disburseSubmitCommandLines
+                                    networkMagic
+                                    ddsioRunDir
+                                    result
+                        mapM_ putStrLn linesOut
+
 -- | Human-readable success lines for the shipped registry-init command.
 registryInitCommandLines
     :: Int
@@ -499,16 +678,22 @@ registryInitCommandLines
         ]
 
 parseFundingAddress :: String -> String -> IO Addr
-parseFundingAddress prefix raw =
+parseFundingAddress prefix =
+    parseTestnetAddress prefix "--funding-address"
+
+parseTestnetAddress :: String -> String -> String -> IO Addr
+parseTestnetAddress prefix optionName raw =
     case parseAddr (T.pack raw) of
         Left err ->
             abort $
-                prefix <> ": --funding-address: " <> err
+                prefix <> ": " <> optionName <> ": " <> err
         Right addr -> do
             unless (getNetwork addr == Testnet) $
                 abort
                     ( prefix
-                        <> ": --funding-address must be a testnet address"
+                        <> ": "
+                        <> optionName
+                        <> " must be a testnet address"
                     )
             pure addr
 

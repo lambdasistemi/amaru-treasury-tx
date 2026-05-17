@@ -90,13 +90,13 @@ beneficiary receipt checks instead of ledger rejection.
   `WithdrawalsNotInRewardsCERTS` for the permissions reward account
   with `Coin 0`, recorded at
   `runs/devnet/20260517T001935Z/disburse-submit/failure.json`.
-- [x] T042 (commit: 6a2a5fc) [US1] RED: add focused regression coverage for the mismatch
+- [x] T042 (commit: 5e11fd2) [US1] RED: add focused regression coverage for the mismatch
   between #148 permissions reward-account setup and #150 zero-withdrawal
   permissions validation.
-- [x] T043 (commit: 6a2a5fc) [US1] Fix the DevNet setup or command adapter so the
+- [x] T043 (commit: 5e11fd2) [US1] Fix the DevNet setup or command adapter so the
   production disburse path submits on live DevNet without removing the
   permissions zero-withdrawal validation.
-- [x] T044 (commit: 6a2a5fc) [US1] GREEN: rerun focused tests/builds plus
+- [x] T044 (commit: 5e11fd2) [US1] GREEN: rerun focused tests/builds plus
   `nix develop --quiet -c just devnet-smoke disburse-submit`, then
   commit the blocker fix as one bisect-safe commit with `Tasks:
   T042,T043,T044`.

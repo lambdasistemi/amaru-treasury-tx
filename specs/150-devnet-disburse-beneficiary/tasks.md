@@ -128,11 +128,11 @@ runner on a fresh DevNet.
 
 **Owner**: Orchestrator.
 
-- [ ] T035 [US3] Update README with manual `devnet disburse-submit`
+- [x] T035 [US3] Update README with manual `devnet disburse-submit`
   usage, expected artifacts, and latest live evidence.
-- [ ] T036 [US3] Update `docs/local-devnet-smoke.md` and
+- [x] T036 [US3] Update `docs/local-devnet-smoke.md` and
   `docs/release.md`.
-- [ ] T037 [US3] Update quickstart, contract, tasks, and PR body with
+- [x] T037 [US3] Update quickstart, contract, tasks, and PR body with
   accepted live evidence.
 - [ ] T038 [US3] Run final prerequisites check, `git diff --check`, and
   `./gate.sh`.

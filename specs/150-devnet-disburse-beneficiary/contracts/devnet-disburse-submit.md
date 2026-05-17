@@ -47,6 +47,15 @@ The smoke may start a fresh DevNet and run `registry-init`,
 behavior MUST go through the same command runner used by the shipped
 CLI command.
 
+Accepted branch evidence is `runs/devnet/20260517T005034Z`. The proof
+submitted disburse tx
+`0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b`,
+observed beneficiary output
+`0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b#1`
+with `1000000` lovelace, consumed treasury input
+`309e28ed5b95de38258bcc130d6390800b0719f6410b0d5fe6f3c33cc1b70817#0`,
+and reduced treasury lovelace from `2000000` to `1000000`.
+
 ## Success Artifacts
 
 All command-owned success artifacts live under:

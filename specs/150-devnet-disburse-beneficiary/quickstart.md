@@ -10,6 +10,15 @@ The smoke starts a fresh DevNet, runs `registry-init`,
 `stake-reward-init`, `governance-withdrawal-init`, then invokes the
 shipped `devnet disburse-submit` command.
 
+Accepted live evidence for this branch is
+`runs/devnet/20260517T005034Z`. The proof submitted disburse tx
+`0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b`,
+observed beneficiary output
+`0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b#1`
+with `1000000` lovelace, consumed treasury input
+`309e28ed5b95de38258bcc130d6390800b0719f6410b0d5fe6f3c33cc1b70817#0`,
+and reduced treasury lovelace from `2000000` to `1000000`.
+
 ## Manual Command Shape
 
 Against an already running DevNet whose #147 and #149 artifacts exist:

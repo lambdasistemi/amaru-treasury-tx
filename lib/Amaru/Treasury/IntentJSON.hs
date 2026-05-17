@@ -55,6 +55,10 @@ module Amaru.Treasury.IntentJSON
     , RegistryInitMintTx (..)
     , RegistryInitReferenceScriptsTx (..)
 
+      -- * Per-action translated records (stake-reward-init)
+    , StakeRewardInitScriptAccountTx (..)
+    , StakeRewardInitPlainAccountTx (..)
+
       -- * Top-level intent
     , TreasuryIntent (..)
     , SomeTreasuryIntent (..)
@@ -109,8 +113,9 @@ import Data.Word (Word64)
 import Cardano.Ledger.Address (Addr)
 import Cardano.Ledger.BaseTypes (Network (..))
 import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Credential (Credential (..))
 import Cardano.Ledger.Hashes (KeyHash (..), ScriptHash (..))
-import Cardano.Ledger.Keys (KeyRole (Payment))
+import Cardano.Ledger.Keys (KeyRole (Payment, Staking))
 import Cardano.Ledger.Mary.Value
     ( AssetName (..)
     , MultiAsset (..)
@@ -234,17 +239,20 @@ type family Translated (a :: Action) :: Type where
     Translated 'Disburse = DisburseIntent
     Translated 'Withdraw = WithdrawIntent
     Translated 'Reorganize = ReorganizeIntent
-    -- Slice 3a ships the three @registry-init-*@ rows as the
-    -- typed input records consumed by the extracted construction
-    -- cores in @lib/Amaru/Treasury/Devnet/RegistryInit.hs@. The
-    -- remaining four rows stay as @()@ placeholders until slices
-    -- 3b / 3c land.
+    -- Slices 3a + 3b ship the three @registry-init-*@ and two
+    -- @stake-reward-init-*@ rows as the typed input records
+    -- consumed by the extracted construction cores under
+    -- @lib/Amaru/Treasury/Devnet/{RegistryInit,StakeRewardInit}.hs@.
+    -- The remaining two governance-withdrawal-init rows stay as
+    -- @()@ placeholders until slice 3c lands.
     Translated 'RegistryInitSeedSplit = RegistryInitSeedSplitTx
     Translated 'RegistryInitMint = RegistryInitMintTx
     Translated 'RegistryInitReferenceScripts =
         RegistryInitReferenceScriptsTx
-    Translated 'StakeRewardInitScriptAccount = ()
-    Translated 'StakeRewardInitPlainAccount = ()
+    Translated 'StakeRewardInitScriptAccount =
+        StakeRewardInitScriptAccountTx
+    Translated 'StakeRewardInitPlainAccount =
+        StakeRewardInitPlainAccountTx
     Translated 'GovernanceWithdrawalInitProposal = ()
     Translated 'GovernanceWithdrawalInitMaterialization = ()
 
@@ -667,31 +675,99 @@ data RegistryInitReferenceScriptsTx = RegistryInitReferenceScriptsTx
     }
     deriving stock (Eq, Show)
 
--- | Stake-reward-init script-account sub-action payload (slice 3b fills).
+-- ----------------------------------------------------
+-- Translated records (stake-reward-init)
+-- ----------------------------------------------------
+
+{- | Typed script-account inputs consumed by
+'Amaru.Treasury.Devnet.StakeRewardInit.buildStakeRewardScriptAccountCore'.
+-}
+data StakeRewardInitScriptAccountTx
+    = StakeRewardInitScriptAccountTx
+    { srisatFundingAddress :: !Addr
+    , srisatSeedTxIn :: !TxIn
+    , srisatTreasuryRefTxIn :: !TxIn
+    , srisatTreasuryCredential :: !(Credential Staking)
+    , srisatUpperBoundSlot :: !SlotNo
+    }
+    deriving stock (Eq, Show)
+
+{- | Typed plain-account inputs consumed by
+'Amaru.Treasury.Devnet.StakeRewardInit.buildStakeRewardPlainAccountCore'.
+-}
+data StakeRewardInitPlainAccountTx
+    = StakeRewardInitPlainAccountTx
+    { srispatFundingAddress :: !Addr
+    , srispatSeedTxIn :: !TxIn
+    , srispatPermissionsCredential :: !(Credential Staking)
+    , srispatUpperBoundSlot :: !SlotNo
+    }
+    deriving stock (Eq, Show)
+
+{- | Stake-reward-init script-account sub-action payload.
+
+The wallet block carries the funding seed TxIn (also used
+as collateral) and funding address. The payload supplies
+the treasury reference-script anchor and the treasury
+stake-script hash registered by this sub-transaction; the
+stake-key deposit is read from protocol parameters at
+build time.
+-}
 data StakeRewardInitScriptAccountInputs
     = StakeRewardInitScriptAccountInputs
+    { srisaiTreasuryRefTxIn :: !Text
+    -- ^ treasury reference-script TxIn
+    -- (@\<txid hex\>#\<ix\>@); published by the
+    -- @registry-init-reference-scripts@ sub-transaction
+    , srisaiTreasuryScriptHash :: !Text
+    -- ^ 28-byte hex; treasury stake-script hash whose
+    -- credential the registration certificate carries
+    }
     deriving stock (Eq, Show)
 
 instance FromJSON StakeRewardInitScriptAccountInputs where
     parseJSON =
-        withObject "StakeRewardInitScriptAccountInputs" $ \_ ->
-            pure StakeRewardInitScriptAccountInputs
+        withObject "StakeRewardInitScriptAccountInputs" $ \o ->
+            StakeRewardInitScriptAccountInputs
+                <$> o .: "treasuryRefTxIn"
+                <*> o .: "treasuryScriptHash"
 
 instance ToJSON StakeRewardInitScriptAccountInputs where
-    toJSON StakeRewardInitScriptAccountInputs = object []
+    toJSON StakeRewardInitScriptAccountInputs{..} =
+        object
+            [ "treasuryRefTxIn" .= srisaiTreasuryRefTxIn
+            , "treasuryScriptHash" .= srisaiTreasuryScriptHash
+            ]
 
--- | Stake-reward-init plain-account sub-action payload (slice 3b fills).
-data StakeRewardInitPlainAccountInputs
+{- | Stake-reward-init plain-account sub-action payload.
+
+The wallet block carries the funding seed TxIn and
+funding address. The payload supplies the permissions
+stake-script hash registered by this sub-transaction; the
+registration certificate is key-witnessed (@ConwayRegCert@
+with no deposit override) so no reference inputs or
+collateral are required.
+-}
+newtype StakeRewardInitPlainAccountInputs
     = StakeRewardInitPlainAccountInputs
+    { srispiPermissionsScriptHash :: Text
+    -- ^ 28-byte hex; permissions stake-script hash whose
+    -- credential the registration certificate carries
+    }
     deriving stock (Eq, Show)
 
 instance FromJSON StakeRewardInitPlainAccountInputs where
     parseJSON =
-        withObject "StakeRewardInitPlainAccountInputs" $ \_ ->
-            pure StakeRewardInitPlainAccountInputs
+        withObject "StakeRewardInitPlainAccountInputs" $ \o ->
+            StakeRewardInitPlainAccountInputs
+                <$> o .: "permissionsScriptHash"
 
 instance ToJSON StakeRewardInitPlainAccountInputs where
-    toJSON StakeRewardInitPlainAccountInputs = object []
+    toJSON StakeRewardInitPlainAccountInputs{..} =
+        object
+            [ "permissionsScriptHash"
+                .= srispiPermissionsScriptHash
+            ]
 
 -- | Governance-withdrawal-init proposal sub-action payload (slice 3c fills).
 data GovernanceWithdrawalInitProposalInputs
@@ -1251,11 +1327,9 @@ translateIntent sa ti = case sa of
     SRegistryInitReferenceScripts ->
         translateRegistryInitReferenceScripts ti
     SStakeRewardInitScriptAccount ->
-        Left
-            "translateIntent: 'stake-reward-init-script-account' not yet shipped (T020/T030/T040)"
+        translateStakeRewardInitScriptAccount ti
     SStakeRewardInitPlainAccount ->
-        Left
-            "translateIntent: 'stake-reward-init-plain-account' not yet shipped (T020/T030/T040)"
+        translateStakeRewardInitPlainAccount ti
     SGovernanceWithdrawalInitProposal ->
         Left
             "translateIntent: 'governance-withdrawal-init-proposal' not yet shipped (T020/T030/T040)"
@@ -1696,6 +1770,104 @@ translateRegistryInitReferenceScripts ti = do
             , rirstUpperBoundSlot = upperSlot
             }
         )
+
+-- ----------------------------------------------------
+-- Stake-reward-init translators (slice 3b / #157)
+-- ----------------------------------------------------
+
+{- | Shared translator boundary for the two
+@stake-reward-init-*@ sub-actions.
+
+Bootstrap intents do not carry a CIP-1694 rationale tree —
+the construction cores never call @setMetadata@ — so
+'tsRationale' is filled with an empty 'Metadatum' map and
+the dispatcher arms ignore it. The other 'TranslatedShared'
+fields are pulled from the wallet block exactly as the swap
+/ disburse / withdraw translators do.
+-}
+translateStakeRewardInitShared
+    :: TreasuryIntent a
+    -> Either String (TranslatedShared, Addr, TxIn, SlotNo)
+translateStakeRewardInitShared ti = do
+    let wallet = tiWallet ti
+    walletAddr <- parseAddr (wjAddress wallet)
+    walletTxIn <- parseTxIn (wjTxIn wallet)
+    let shared =
+            TranslatedShared
+                { tsNetwork = tiNetwork ti
+                , tsWalletTxIn = walletTxIn
+                , tsWalletAddr = walletAddr
+                , tsRationale = emptyRationale
+                }
+    pure
+        ( shared
+        , walletAddr
+        , walletTxIn
+        , SlotNo (tiValidityUpperBoundSlot ti)
+        )
+
+-- | Stake-reward-init script-account translator.
+translateStakeRewardInitScriptAccount
+    :: TreasuryIntent 'StakeRewardInitScriptAccount
+    -> Either
+        String
+        ( TranslatedShared
+        , StakeRewardInitScriptAccountTx
+        )
+translateStakeRewardInitScriptAccount ti = do
+    (shared, fundingAddr, fundingTxIn, upperSlot) <-
+        translateStakeRewardInitShared ti
+    let payload = tiPayload ti
+    treasuryRefTxIn <-
+        parseTxIn (srisaiTreasuryRefTxIn payload)
+    treasuryCredential <-
+        parseStakingScriptCredential
+            (srisaiTreasuryScriptHash payload)
+    pure
+        ( shared
+        , StakeRewardInitScriptAccountTx
+            { srisatFundingAddress = fundingAddr
+            , srisatSeedTxIn = fundingTxIn
+            , srisatTreasuryRefTxIn = treasuryRefTxIn
+            , srisatTreasuryCredential = treasuryCredential
+            , srisatUpperBoundSlot = upperSlot
+            }
+        )
+
+-- | Stake-reward-init plain-account translator.
+translateStakeRewardInitPlainAccount
+    :: TreasuryIntent 'StakeRewardInitPlainAccount
+    -> Either
+        String
+        ( TranslatedShared
+        , StakeRewardInitPlainAccountTx
+        )
+translateStakeRewardInitPlainAccount ti = do
+    (shared, fundingAddr, fundingTxIn, upperSlot) <-
+        translateStakeRewardInitShared ti
+    let payload = tiPayload ti
+    permissionsCredential <-
+        parseStakingScriptCredential
+            (srispiPermissionsScriptHash payload)
+    pure
+        ( shared
+        , StakeRewardInitPlainAccountTx
+            { srispatFundingAddress = fundingAddr
+            , srispatSeedTxIn = fundingTxIn
+            , srispatPermissionsCredential =
+                permissionsCredential
+            , srispatUpperBoundSlot = upperSlot
+            }
+        )
+
+{- | Parse a 28-byte hex into a stake-role script
+'Credential'.
+-}
+parseStakingScriptCredential
+    :: Text -> Either String (Credential Staking)
+parseStakingScriptCredential t = do
+    bytes <- decodeHexBytes 28 t
+    Right (ScriptHashObj (ScriptHash (mkHash28 bytes)))
 
 -- | Parse a 28-byte hex into a payment-role 'KeyHash'.
 parsePaymentKeyHash :: Text -> Either String (KeyHash Payment)

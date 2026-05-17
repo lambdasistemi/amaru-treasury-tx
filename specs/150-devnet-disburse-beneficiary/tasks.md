@@ -108,19 +108,19 @@ runner on a fresh DevNet.
 
 **Owner**: One implementation subagent after Phase 3 review.
 
-- [ ] T028 [US2] RED: prove the current smoke rejects
+- [x] T028 [US2] RED: prove the current smoke rejects
   `disburse-submit` as an unknown phase.
-- [ ] T029 [US2] RED: add diagnostics coverage for #150 artifacts.
-- [ ] T030 [US2] Add `disburse-submit` phase parsing to
+- [x] T029 [US2] RED: add diagnostics coverage for #150 artifacts.
+- [x] T030 [US2] Add `disburse-submit` phase parsing to
   `scripts/smoke/devnet-local` and `just devnet-smoke`.
-- [ ] T031 [US2] Update `SmokeSpec.hs` so the phase runs #147, #148,
+- [x] T031 [US2] Update `SmokeSpec.hs` so the phase runs #147, #148,
   #149, then invokes the #150 command runner.
-- [ ] T032 [US2] Assert disburse-submit artifacts and observed
+- [x] T032 [US2] Assert disburse-submit artifacts and observed
   treasury/beneficiary effects.
-- [ ] T033 [US2] GREEN: run `nix develop --quiet -c cabal build
+- [x] T033 [US2] GREEN: run `nix develop --quiet -c cabal build
   test:devnet-tests -O0` and `nix develop --quiet -c just devnet-smoke
   disburse-submit`.
-- [ ] T034 [US2] Commit the smoke proof slice as
+- [x] T034 [US2] Commit the smoke proof slice as
   `test(devnet): prove disburse submit` with `Tasks:
   T028,T029,T030,T031,T032,T033,T034`.
 

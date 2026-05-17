@@ -223,14 +223,30 @@
         },
         "stake-reward-init-plain-account": {
             "additionalProperties": false,
-            "properties": {},
-            "required": [],
+            "properties": {
+                "permissionsScriptHash": {
+                    "$ref": "#/$defs/hex28"
+                }
+            },
+            "required": [
+                "permissionsScriptHash"
+            ],
             "type": "object"
         },
         "stake-reward-init-script-account": {
             "additionalProperties": false,
-            "properties": {},
-            "required": [],
+            "properties": {
+                "treasuryRefTxIn": {
+                    "$ref": "#/$defs/txIn"
+                },
+                "treasuryScriptHash": {
+                    "$ref": "#/$defs/hex28"
+                }
+            },
+            "required": [
+                "treasuryRefTxIn",
+                "treasuryScriptHash"
+            ],
             "type": "object"
         },
         "swap": {

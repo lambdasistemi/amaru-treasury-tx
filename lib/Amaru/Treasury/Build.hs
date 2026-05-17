@@ -62,6 +62,10 @@ import Amaru.Treasury.Build.RegistryInit
     , runRegistryInitSeedSplitAction
     )
 import Amaru.Treasury.Build.Result
+import Amaru.Treasury.Build.StakeRewardInit
+    ( runStakeRewardInitPlainAccountAction
+    , runStakeRewardInitScriptAccountAction
+    )
 import Amaru.Treasury.Build.Swap
     ( runSwap
     , runSwapAction
@@ -153,21 +157,13 @@ runBuildExcept ctx shared sa translated = case sa of
             (nestActionBuildError BuildActionIntent)
             (runRegistryInitReferenceScriptsAction ctx translated)
     SStakeRewardInitScriptAccount ->
-        throwE $
-            buildError
-                BuildActionIntent
-                BuildPhaseUnsupported
-                ( DiagnosticUnsupportedAction
-                    "stake-reward-init-script-account"
-                )
+        withExceptT
+            (nestActionBuildError BuildActionIntent)
+            (runStakeRewardInitScriptAccountAction ctx translated)
     SStakeRewardInitPlainAccount ->
-        throwE $
-            buildError
-                BuildActionIntent
-                BuildPhaseUnsupported
-                ( DiagnosticUnsupportedAction
-                    "stake-reward-init-plain-account"
-                )
+        withExceptT
+            (nestActionBuildError BuildActionIntent)
+            (runStakeRewardInitPlainAccountAction ctx translated)
     SGovernanceWithdrawalInitProposal ->
         throwE $
             buildError

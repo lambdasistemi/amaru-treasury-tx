@@ -115,6 +115,7 @@ library
     Amaru.Treasury.Build.RegistryInit
     Amaru.Treasury.Build.ReportWriter
     Amaru.Treasury.Build.Result
+    Amaru.Treasury.Build.StakeRewardInit
     Amaru.Treasury.Build.Swap
     Amaru.Treasury.Build.SwapCancel
     Amaru.Treasury.Build.Trace
@@ -472,7 +473,9 @@ test-suite golden-tests
     RegistryWalkGoldenSpec
     ReportRenderActionGoldenSpec
     ReportRenderSwapGoldenSpec
+    StakeRewardInitIntentSpec
     Support.RegistryInitFixtures
+    Support.StakeRewardInitFixtures
     SwapGoldenSpec
     SwapQuoteAuditGoldenSpec
     TreasuryInspectGoldenSpec
@@ -499,6 +502,7 @@ test-suite golden-tests
     , containers
     , directory
     , hspec
+    , microlens
     , text
 
   build-tool-depends: hspec-discover:hspec-discover

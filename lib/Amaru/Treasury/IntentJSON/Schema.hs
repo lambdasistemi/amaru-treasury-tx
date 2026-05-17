@@ -99,9 +99,9 @@ intentJsonSchema =
                 , "registry-init-reference-scripts"
                     .= registryInitReferenceScriptsSchema
                 , "stake-reward-init-script-account"
-                    .= emptyPayloadSchema
+                    .= stakeRewardInitScriptAccountSchema
                 , "stake-reward-init-plain-account"
-                    .= emptyPayloadSchema
+                    .= stakeRewardInitPlainAccountSchema
                 , "governance-withdrawal-init-proposal"
                     .= emptyPayloadSchema
                 , "governance-withdrawal-init-materialization"
@@ -318,6 +318,24 @@ registryInitReferenceScriptsSchema =
         ]
         [ ("scopesSeedTxIn", ref "txIn")
         , ("registrySeedTxIn", ref "txIn")
+        ]
+
+stakeRewardInitScriptAccountSchema :: Value
+stakeRewardInitScriptAccountSchema =
+    objectSchema
+        [ "treasuryRefTxIn"
+        , "treasuryScriptHash"
+        ]
+        [ ("treasuryRefTxIn", ref "txIn")
+        , ("treasuryScriptHash", ref "hex28")
+        ]
+
+stakeRewardInitPlainAccountSchema :: Value
+stakeRewardInitPlainAccountSchema =
+    objectSchema
+        [ "permissionsScriptHash"
+        ]
+        [ ("permissionsScriptHash", ref "hex28")
         ]
 
 schemaVersionSchema :: Value

@@ -499,14 +499,25 @@ genStakeRewardInitScriptAccountIntent
 genStakeRewardInitScriptAccountIntent =
     genIntent
         SStakeRewardInitScriptAccount
-        (pure StakeRewardInitScriptAccountInputs)
+        ( pure
+            StakeRewardInitScriptAccountInputs
+                { srisaiTreasuryRefTxIn = "22#0"
+                , srisaiTreasuryScriptHash =
+                    T.replicate 56 "0"
+                }
+        )
 
 genStakeRewardInitPlainAccountIntent
     :: Gen SomeTreasuryIntent
 genStakeRewardInitPlainAccountIntent =
     genIntent
         SStakeRewardInitPlainAccount
-        (pure StakeRewardInitPlainAccountInputs)
+        ( pure
+            StakeRewardInitPlainAccountInputs
+                { srispiPermissionsScriptHash =
+                    T.replicate 56 "0"
+                }
+        )
 
 genGovernanceWithdrawalInitProposalIntent
     :: Gen SomeTreasuryIntent

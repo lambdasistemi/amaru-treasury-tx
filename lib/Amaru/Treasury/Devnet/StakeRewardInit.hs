@@ -1,4 +1,5 @@
 {-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 
@@ -30,6 +31,20 @@ module Amaru.Treasury.Devnet.StakeRewardInit
     , setupDevnetStakeRewards
     , stakeRewardSetupProgram
 
+      -- * Construction cores
+
+    --
+    -- \^ Pure-IO transaction builders extracted from the
+    -- composed @setupDevnetStakeRewards@ submitter so the
+    -- @tx-build@ dispatcher and the live submitter share one
+    -- source of truth for each per-sub-action 'TxBuild'
+    -- program. Each returns the raw unsigned 'ConwayTx'
+    -- produced by 'Cardano.Tx.Build.build'; signing,
+    -- submission, and waiting remain in the submitters.
+    , CoreEvaluator
+    , buildStakeRewardScriptAccountCore
+    , buildStakeRewardPlainAccountCore
+
       -- * Artifacts
     , stakeRewardInitSummaryPath
     , stakeRewardInitAccountsPath
@@ -49,6 +64,7 @@ import Cardano.Ledger.Address
     , AccountId (..)
     , Addr
     )
+import Cardano.Ledger.Alonzo.Scripts (AsIx)
 import Cardano.Ledger.Api.Tx (txIdTx)
 import Cardano.Ledger.Api.Tx.Out
     ( TxOut
@@ -61,12 +77,14 @@ import Cardano.Ledger.BaseTypes
     )
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
+import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
 import Cardano.Ledger.Core (PParams, ppKeyDepositL)
 import Cardano.Ledger.Core qualified as Core
 import Cardano.Ledger.Credential (Credential (..))
 import Cardano.Ledger.Hashes (ScriptHash)
 import Cardano.Ledger.Keys (KeyRole (Staking))
 import Cardano.Ledger.Mary.Value (MaryValue (..), MultiAsset (..))
+import Cardano.Ledger.Plutus.ExUnits (ExUnits)
 import Cardano.Ledger.TxIn (TxId, TxIn (..))
 import Cardano.Node.Client.Provider
     ( LedgerSnapshot (..)
@@ -93,6 +111,7 @@ import Cardano.Tx.Build
     , spend
     , validTo
     )
+import Cardano.Tx.Build qualified as TxBuild
 import Cardano.Tx.Ledger (ConwayTx)
 import Control.Concurrent (threadDelay)
 import Control.Exception (throwIO)
@@ -371,6 +390,134 @@ registerPlainRewardAccount credential = do
             )
             PubKeyCert
     pure ()
+
+{- | Shape of the script evaluator the construction cores
+hand to 'Cardano.Tx.Build.build'.
+
+The @tx-build@ infrastructure consumes a per-purpose map
+keyed by 'ConwayPlutusPurpose' 'AsIx' and producing either
+an error string or the evaluator's 'ExUnits'. The live
+'Provider' returns a richer error type; the @tx-build@
+dispatcher and the live submitter each wrap their
+'evaluateTx' into this simpler shape before calling the
+cores.
+-}
+type CoreEvaluator =
+    ConwayTx
+    -> IO
+        ( Map.Map
+            (ConwayPlutusPurpose AsIx ConwayEra)
+            (Either String ExUnits)
+        )
+
+{- | Pure-IO construction core for the
+@stake-reward-init-script-account@ sub-transaction.
+
+Spends a single funding UTxO that doubles as collateral,
+references the treasury script anchor, and registers the
+treasury reward account through a script-witnessed Conway
+delegation certificate (@ConwayRegDelegCert@) backed by an
+@AlwaysAbstain@ DRep delegation. The stake-key deposit is
+read from the supplied protocol parameters
+(@ppKeyDepositL@).
+
+Returns the unsigned 'ConwayTx' as balanced by
+'Cardano.Tx.Build.build'; the caller is responsible for
+signing, submission, and waiting.
+-}
+buildStakeRewardScriptAccountCore
+    :: PParams ConwayEra
+    -> Addr
+    -- ^ funding/change address
+    -> Credential Staking
+    -- ^ treasury stake-script credential
+    -> TxIn
+    -- ^ treasury reference-script TxIn
+    -> SlotNo
+    -- ^ validity upper bound
+    -> (TxIn, TxOut ConwayEra)
+    -- ^ funding seed UTxO (also collateral)
+    -> (TxIn, TxOut ConwayEra)
+    -- ^ treasury reference-script UTxO (must be present
+    --     in the @build@ call's reference-utxos list)
+    -> CoreEvaluator
+    -> IO (Either (TxBuild.BuildError Void) ConwayTx)
+buildStakeRewardScriptAccountCore
+    pp
+    fundingAddress
+    treasuryCredential
+    treasuryRef
+    upperSlot
+    seed@(seedIn, _)
+    treasuryRefUtxo
+    eval = do
+        let stakeDeposit = pp ^. ppKeyDepositL
+            prog :: TxBuild NoCtx Void ()
+            prog = do
+                _ <- spend seedIn
+                collateral seedIn
+                reference treasuryRef
+                registerScriptRewardAccount
+                    treasuryCredential
+                    stakeDeposit
+                validTo upperSlot
+        build
+            (mkPParamsBound pp)
+            emptyInterpret
+            eval
+            [seed]
+            [treasuryRefUtxo]
+            fundingAddress
+            prog
+
+{- | Pure-IO construction core for the
+@stake-reward-init-plain-account@ sub-transaction.
+
+Spends a single funding UTxO and registers the permissions
+reward account through a key-witnessed Conway registration
+certificate (@ConwayRegCert@ with no deposit override). No
+collateral, no reference scripts, no Plutus evaluator
+entries — this is a pubkey-only registration.
+
+Returns the unsigned 'ConwayTx' as balanced by
+'Cardano.Tx.Build.build'.
+-}
+buildStakeRewardPlainAccountCore
+    :: PParams ConwayEra
+    -> Addr
+    -- ^ funding/change address
+    -> Credential Staking
+    -- ^ permissions stake-script credential registered
+    --     by a pubkey-witnessed certificate
+    -> SlotNo
+    -- ^ validity upper bound
+    -> (TxIn, TxOut ConwayEra)
+    -- ^ funding seed UTxO
+    -> CoreEvaluator
+    -> IO (Either (TxBuild.BuildError Void) ConwayTx)
+buildStakeRewardPlainAccountCore
+    pp
+    fundingAddress
+    permissionsCredential
+    upperSlot
+    seed@(seedIn, _)
+    eval = do
+        let prog :: TxBuild NoCtx Void ()
+            prog = do
+                _ <- spend seedIn
+                registerPlainRewardAccount permissionsCredential
+                validTo upperSlot
+        build
+            (mkPParamsBound pp)
+            emptyInterpret
+            eval
+            [seed]
+            []
+            fundingAddress
+            prog
+
+emptyInterpret :: InterpretIO NoCtx
+emptyInterpret = InterpretIO $ \case {}
 
 verifyStakeRewardSetup
     :: DevnetStakeRewardInitConfig

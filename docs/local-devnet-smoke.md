@@ -4,17 +4,42 @@ The local DevNet smoke is an opt-in release check. It starts the
 `cardano-node-clients` DevNet, verifies the node socket with network
 magic `42`, can publish registry/reference-script bootstrap state, can
 register the treasury and permissions reward accounts, proves the
-shipped `devnet governance-withdrawal-init` command, and proves the
-shipped `devnet disburse-submit` command on a patched short-epoch
-genesis. The command proofs record governance proposal/vote evidence,
-reward funding, withdrawal build/submission, the materialized treasury
-UTxO, disburse submission, beneficiary receipt, and the reduced treasury
-output. The swap readiness phase publishes
-the public SundaeSwap V3 order validator as a local DevNet reference
-script and writes handoff metadata for the later order-build slice.
+governance proposal / withdrawal materialization flow, and proves the
+disburse submit flow on a patched short-epoch genesis. The command
+proofs record governance proposal/vote evidence, reward funding,
+withdrawal build/submission, the materialized treasury UTxO, disburse
+submission, beneficiary receipt, and the reduced treasury output. The
+swap readiness phase publishes the public SundaeSwap V3 order
+validator as a local DevNet reference script and writes handoff
+metadata for the later order-build slice.
 
 This check is not part of `just ci`: it starts a real local
 `cardano-node` and is meant as manual live evidence before a release.
+
+> **Operator surface after #157**: the `amaru-treasury-tx devnet
+> <action>` supercommand is retired. The new shipped operator path
+> for the seven bootstrap sub-actions is
+> `amaru-treasury-tx tx-build --intent <bootstrap-intent.json>`
+> (see the bootstrap section in [README.md](../README.md) for the
+> per-sub-action tags). The library runners under
+> `lib/Amaru/Treasury/Devnet/` remain on disk and are consumed by
+> `Amaru.Treasury.Devnet.SmokeSpec` via `Amaru.Treasury.Devnet.Runner`
+> — that is the **library proof** layer this document describes. The
+> **CLI proof** layer (a bash `smoke.sh` that drives the shipped CLI
+> chain end-to-end) ships in
+> [#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161).
+> The wizards that produce the per-sub-action `bootstrap-intent.json`
+> ship in
+> [#158](https://github.com/lambdasistemi/amaru-treasury-tx/issues/158)
+> /
+> [#159](https://github.com/lambdasistemi/amaru-treasury-tx/issues/159)
+> /
+> [#160](https://github.com/lambdasistemi/amaru-treasury-tx/issues/160).
+> Until those tickets merge, the command examples below show the
+> pre-#157 in-process runners SmokeSpec already drives — the same
+> CBOR is built byte-for-byte from the new `tx-build --intent` path
+> (proved by goldens
+> `test/golden/{RegistryInit,StakeRewardInit,GovernanceWithdrawalInit}IntentSpec.hs`).
 
 ## Prerequisites
 
@@ -66,18 +91,12 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
 
 ## Registry Initiator Boundary
 
-The shipped command for this boundary is:
-
-```bash
-amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
-  devnet registry-init \
-  --funding-address "$DEVNET_FUNDING_ADDRESS" \
-  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
-  --run-dir runs/devnet/manual-registry-init
-```
-
-The local smoke runs the same command runner against the
-`cardano-node-clients` DevNet:
+After #157 the shipped operator path for this boundary is the
+three-step `amaru-treasury-tx tx-build --intent
+<registry-init-{seed-split,mint,reference-scripts}.json>` chain (see
+the bootstrap section in [README.md](../README.md)). The local smoke
+keeps driving the library function directly via `SmokeSpec`, which
+calls into `Amaru.Treasury.Devnet.Runner.runDevnetRegistryInit`:
 
 ```bash
 just devnet-smoke registry-init
@@ -139,16 +158,12 @@ materialization, disburse submission, swap execution, or reorganize.
 
 ## Stake/Reward Initiator Boundary
 
-The shipped command for this boundary is:
-
-```bash
-amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
-  devnet stake-reward-init \
-  --registry-file runs/devnet/manual-registry-init/registry-init/registry.json \
-  --funding-address "$DEVNET_FUNDING_ADDRESS" \
-  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
-  --run-dir runs/devnet/manual-stake-reward-init
-```
+After #157 the shipped operator path for this boundary is the
+two-step `amaru-treasury-tx tx-build --intent
+<stake-reward-init-{script-account,plain-account}.json>` chain (see
+the bootstrap section in [README.md](../README.md)). The local smoke
+keeps driving the library function directly via `SmokeSpec`, which
+calls into `Amaru.Treasury.Devnet.Runner.runDevnetStakeRewardInit`.
 
 The local smoke runs registry-init first in the same fresh run, then
 invokes the same production command runner:
@@ -208,20 +223,16 @@ submission, swap execution, or reorganize transactions.
 
 ## Governance Withdrawal Init Boundary
 
-The shipped command for this boundary is:
+After #157 the shipped operator path for this boundary is the
+two-step `amaru-treasury-tx tx-build --intent
+<governance-withdrawal-init-{proposal,materialization}.json>` chain
+(see the bootstrap section in [README.md](../README.md)). The local
+smoke keeps driving the library function directly via `SmokeSpec`,
+which calls into
+`Amaru.Treasury.Devnet.Runner.runDevnetGovernanceWithdrawalInit`.
 
-```bash
-amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
-  devnet governance-withdrawal-init \
-  --registry-file runs/devnet/manual-registry-init/registry-init/registry.json \
-  --stake-reward-file runs/devnet/manual-stake-reward-init/stake-reward-init/accounts.json \
-  --funding-address "$DEVNET_FUNDING_ADDRESS" \
-  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
-  --run-dir runs/devnet/manual-governance-withdrawal-init
-```
-
-The live proof harness runs the prerequisite commands and then invokes
-the same production command runner:
+The live proof harness runs the prerequisite library entries and
+then invokes the same production runner:
 
 ```bash
 just devnet-smoke governance-withdrawal-init
@@ -247,13 +258,14 @@ governance-withdrawal-init: summary runs/devnet/YYYYMMDDTHHMMSSZ/governance-with
 governance-withdrawal-init: materialization runs/devnet/YYYYMMDDTHHMMSSZ/governance-withdrawal-init/materialized.json
 ```
 
-The proof copies and patches the DevNet genesis to a short epoch, runs
-`devnet registry-init`, runs `devnet stake-reward-init`, then calls
-`devnet governance-withdrawal-init`. Production code owns the Conway
-treasury-withdrawal proposal, vote, reward wait, withdrawal intent,
-tx-build, signing, submission, and materialization verification. The
-smoke layer only prepares the local node/prerequisites and asserts the
-observed artifacts and chain effects.
+The proof copies and patches the DevNet genesis to a short epoch,
+runs `runDevnetRegistryInit`, runs `runDevnetStakeRewardInit`, then
+calls `runDevnetGovernanceWithdrawalInit` (all reached via
+`Amaru.Treasury.Devnet.Runner` from `SmokeSpec`). Production code
+owns the Conway treasury-withdrawal proposal, vote, reward wait,
+withdrawal intent, tx-build, signing, submission, and materialization
+verification. The smoke layer only prepares the local node /
+prerequisites and asserts the observed artifacts and chain effects.
 
 The verified 2026-05-16 slice used run directory
 `runs/devnet/20260516T231003Z`. It submitted proposal tx
@@ -309,22 +321,18 @@ smoke-owned withdrawal implementation.
 
 ## Disburse Submit Boundary
 
-The shipped command for this boundary is:
+After #157 the shipped operator path for disburse is the existing
+`amaru-treasury-tx disburse-wizard` → `tx-build --intent` →
+`witness` → `submit` chain (unchanged by #157; disburse already had
+its intent encoding). The local smoke keeps driving the library
+function directly via `SmokeSpec`, which calls into
+`Amaru.Treasury.Devnet.Runner.runDevnetDisburseSubmit`. The bash
+CLI smoke that chains the full bootstrap + disburse flow against a
+real DevNet through the shipped CLI lands in
+[#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161).
 
-```bash
-amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
-  devnet disburse-submit \
-  --registry-file runs/devnet/manual-registry-init/registry-init/registry.json \
-  --materialized-file runs/devnet/manual-governance-withdrawal-init/governance-withdrawal-init/materialized.json \
-  --funding-address "$DEVNET_FUNDING_ADDRESS" \
-  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
-  --beneficiary-address "$DEVNET_BENEFICIARY_ADDRESS" \
-  --run-dir runs/devnet/manual-disburse-submit \
-  --amount-lovelace 1000000
-```
-
-The live proof harness runs the prerequisite commands and then invokes
-the same production command runner:
+The live proof harness runs the prerequisite library entries and
+then invokes the same production runner:
 
 ```bash
 just devnet-smoke disburse-submit
@@ -348,13 +356,14 @@ disburse-submit: submit-log runs/devnet/YYYYMMDDTHHMMSSZ/disburse-submit/submit.
 disburse-submit: summary runs/devnet/YYYYMMDDTHHMMSSZ/disburse-submit/summary.json
 ```
 
-The proof starts a fresh DevNet, runs `devnet registry-init`, runs
-`devnet stake-reward-init`, runs `devnet governance-withdrawal-init`,
-then calls `devnet disburse-submit`. Production code owns disburse
-intent construction, tx-build, signing, submission, beneficiary receipt
-verification, and treasury-output verification. The smoke layer only
-prepares the local node/prerequisites and asserts the observed artifacts
-and chain effects.
+The proof starts a fresh DevNet, runs `runDevnetRegistryInit`, runs
+`runDevnetStakeRewardInit`, runs `runDevnetGovernanceWithdrawalInit`,
+then calls `runDevnetDisburseSubmit` (all reached via
+`Amaru.Treasury.Devnet.Runner` from `SmokeSpec`). Production code
+owns disburse intent construction, tx-build, signing, submission,
+beneficiary receipt verification, and treasury-output verification.
+The smoke layer only prepares the local node / prerequisites and
+asserts the observed artifacts and chain effects.
 
 The verified 2026-05-17 slice used run directory
 `runs/devnet/20260517T005034Z`. It submitted disburse tx

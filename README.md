@@ -85,158 +85,126 @@ Run the opt-in local devnet node smoke with:
 nix develop --quiet -c just devnet-smoke node
 ```
 
-Run the shipped DevNet registry/reference-script initiator command
-against a running local DevNet with:
+### DevNet bootstrap via `tx-build --intent`
 
-```bash
-amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
-  devnet registry-init \
-  --funding-address "$DEVNET_FUNDING_ADDRESS" \
-  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
-  --run-dir runs/devnet/manual-registry-init
+After [#157](https://github.com/lambdasistemi/amaru-treasury-tx/issues/157)
+the `amaru-treasury-tx devnet <action>` supercommand is retired.
+The seven bootstrap sub-transactions previously orchestrated in
+process by `devnet {registry-init,stake-reward-init,
+governance-withdrawal-init,disburse-submit}` are now reachable
+through the same `wizard → tx-build → witness → submit` chain used
+by `swap`, `withdraw`, and `disburse`. Each multi-tx flow is split
+into per-sub-step intents at the JSON layer so each invocation of
+`tx-build` produces one unsigned tx:
+
+```text
+registry-init-seed-split           # 3 txs for the registry-init flow
+registry-init-mint
+registry-init-reference-scripts
+stake-reward-init-script-account   # 2 txs for the stake-reward flow
+stake-reward-init-plain-account
+governance-withdrawal-init-proposal          # 2 txs for the gov flow
+governance-withdrawal-init-materialization
 ```
 
-Run the matching live proof harness with:
+The operator path per sub-step is:
 
 ```bash
-nix develop --quiet -c just devnet-smoke registry-init
+amaru-treasury-tx tx-build \
+  --intent <bootstrap-intent.json> \
+  --out tx.cbor.hex
+amaru-treasury-tx witness --tx tx.cbor.hex …
+amaru-treasury-tx submit  --tx tx.cbor.hex …
 ```
 
-The registry-init command publishes local seed-derived scopes and
-registry NFTs plus permissions and treasury reference scripts through
-production-backed code, then verifies the expected UTxOs on the local
-DevNet and writes `registry-init/summary.json`,
-`registry-init/registry.json`, and `registry-init/provenance.json`. The
-latest local evidence for this branch is
-`runs/devnet/20260516T193404Z`: seed split tx
-`82b1f12f0ceeae86c50753a61528599c4d7b8ccef769a56accd3011c0e24084d`,
-registry mint tx
-`1f427e73979ee6150e69944fb384cbe0809148e64307a2a75221bacea8cb4ff9`,
-reference-script tx
-`5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44`,
-scopes anchor
-`1f427e73979ee6150e69944fb384cbe0809148e64307a2a75221bacea8cb4ff9#0`,
-registry anchor
-`1f427e73979ee6150e69944fb384cbe0809148e64307a2a75221bacea8cb4ff9#1`,
-permissions reference
-`5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44#0`,
-and treasury reference
-`5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44#1`.
-This is registry/reference-script publication evidence only; staking
-and reward setup, governance funding, treasury withdrawal setup, and
-disburse submission remain separate recovery slices.
+`bootstrap-intent.json` carries the same envelope as the existing
+`intent.json` (`action`, `schemaVersion`, `network`, `payload`); the
+`action` discriminator names one of the seven flat tags above. The
+JSON schema is in `docs/assets/intent-schema.json`; per-sub-action
+payload contracts are documented under
+`specs/157-flatten-devnet-cli/contracts/`. The dispatcher rejects any
+`network` other than `devnet` for these seven actions, before any
+N2C connection (slice 4 of #157).
 
-Run the shipped DevNet stake/reward setup command against a running
-local DevNet after registry-init with:
+The wizards that produce `bootstrap-intent.json` files ship in
+[#158](https://github.com/lambdasistemi/amaru-treasury-tx/issues/158)
+(`registry-init-wizard`),
+[#159](https://github.com/lambdasistemi/amaru-treasury-tx/issues/159)
+(`stake-reward-init-wizard`), and
+[#160](https://github.com/lambdasistemi/amaru-treasury-tx/issues/160)
+(`governance-withdrawal-init-wizard`). The bash CLI smoke that chains
+the full bootstrap + disburse flow against a real DevNet through the
+shipped CLI lands in
+[#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161).
+Until those tickets merge, the producer side of the intent JSON is
+the test-support helpers under `test/golden/Support/` (which also
+double as the source of truth for the byte-identical CBOR-equivalence
+goldens between `tx-build --intent` and the library construction
+core).
 
-```bash
-amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
-  devnet stake-reward-init \
-  --registry-file runs/devnet/manual-registry-init/registry-init/registry.json \
-  --funding-address "$DEVNET_FUNDING_ADDRESS" \
-  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
-  --run-dir runs/devnet/manual-stake-reward-init
-```
+The end-to-end DevNet runners under
+`lib/Amaru/Treasury/Devnet/{RegistryInit,StakeRewardInit,
+GovernanceWithdrawalInit,DisburseSubmit}.hs` are no longer exposed
+as a shipped CLI surface. They remain on disk as library functions
+consumed by `Amaru.Treasury.Devnet.SmokeSpec` (via
+`Amaru.Treasury.Devnet.Runner`), which keeps the library-level
+DevNet proof gating CI through `nix build .#checks.*`.
 
-Run the matching live proof harness with:
+#### Recent live-DevNet evidence (pre-#157 in-process runners)
 
-```bash
-nix develop --quiet -c just devnet-smoke stake-reward-init
-```
+The following runs were produced before the supercommand was
+retired; the same CBOR is now built byte-for-byte from
+`tx-build --intent` (proved by goldens
+`test/golden/{RegistryInit,StakeRewardInit,GovernanceWithdrawalInit}IntentSpec.hs`).
 
-The stake-reward-init command registers the DevNet treasury script
-reward account, verifies the registry handoff, and registers the
-permissions reward account so later withdraw-zero permission checks are
-accepted by the ledger. The permissions validator is still invoked by
-later disburse/swap transactions through the withdraw-zero pattern, not
-as a certificate-purpose validator. It writes
-`stake-reward-init/summary.json`, `stake-reward-init/accounts.json`,
-and `stake-reward-init/provenance.json`. The latest local evidence for
-this branch is `runs/devnet/20260517T005034Z`: setup tx
-`527c1b08fdfd1c41fe1237d4d5f1bc3572dee98a81b76b62257c958e50dc9cc8`,
-treasury reward account
-`b2b7201c62e43ae8e03b61c96931379ebbcdce61befc3f4e4b1f4be4`
-registered on `Testnet`, and permissions reward account
-`f9dc1d931a3f52eaf83891f8621cbba5ba64f6faa5792f1b00c17333`
-registered on `Testnet` for later withdraw-zero witnesses. This slice
-does not submit governance funding, treasury withdrawal
-materialization, or disburse transactions; those are recorded by the
-#149 and #150 command-proof slices.
+- Registry init (`runs/devnet/20260516T193404Z`): seed split tx
+  `82b1f12f0ceeae86c50753a61528599c4d7b8ccef769a56accd3011c0e24084d`,
+  registry mint tx
+  `1f427e73979ee6150e69944fb384cbe0809148e64307a2a75221bacea8cb4ff9`,
+  reference-script tx
+  `5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44`,
+  scopes anchor
+  `1f427e73979ee6150e69944fb384cbe0809148e64307a2a75221bacea8cb4ff9#0`,
+  registry anchor
+  `1f427e73979ee6150e69944fb384cbe0809148e64307a2a75221bacea8cb4ff9#1`,
+  permissions reference
+  `5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44#0`,
+  treasury reference
+  `5c3227fe8511632669b5383246e7ff92ccc2add2988ee90ac1a24ecda6a10a44#1`.
+- Stake-reward init (`runs/devnet/20260517T005034Z`): setup tx
+  `527c1b08fdfd1c41fe1237d4d5f1bc3572dee98a81b76b62257c958e50dc9cc8`,
+  treasury reward account
+  `b2b7201c62e43ae8e03b61c96931379ebbcdce61befc3f4e4b1f4be4`,
+  permissions reward account
+  `f9dc1d931a3f52eaf83891f8621cbba5ba64f6faa5792f1b00c17333`,
+  both registered on `Testnet`.
+- Governance / withdrawal init
+  (`runs/devnet/20260516T231003Z`): proposal tx
+  `baffa774b368b1da8c3ff80be399bcf6fa63b5cff658b6889fc00109da218e23`,
+  governance action
+  `baffa774b368b1da8c3ff80be399bcf6fa63b5cff658b6889fc00109da218e23#0`,
+  vote tx
+  `009801303fc5cc3c3dfe474c30cc4b7d31e99b5af29467cc317072ea6b728c45`,
+  treasury reward account
+  `b2b7201c62e43ae8e03b61c96931379ebbcdce61befc3f4e4b1f4be4`, reward
+  `0 → 2000000 → 0` lovelace, withdrawal tx
+  `4a87409b52b8104d51d41df7ee562196cf33621f64c4c40985b4aef5ff21e9bd`,
+  fee `456417` lovelace, materialized output
+  `4a87409b52b8104d51d41df7ee562196cf33621f64c4c40985b4aef5ff21e9bd#0`,
+  treasury ADA `200000000 → 202000000`.
+- Disburse submit (`runs/devnet/20260517T005034Z`): submitted tx
+  `0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b`,
+  beneficiary output
+  `0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b#1`
+  with `1000000` lovelace, treasury input
+  `309e28ed5b95de38258bcc130d6390800b0719f6410b0d5fe6f3c33cc1b70817#0`,
+  treasury lovelace `2000000 → 1000000`.
 
-Run the shipped DevNet governance/withdrawal setup command after
-registry-init and stake-reward-init with:
-
-```bash
-amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
-  devnet governance-withdrawal-init \
-  --registry-file runs/devnet/manual-registry-init/registry-init/registry.json \
-  --stake-reward-file runs/devnet/manual-stake-reward-init/stake-reward-init/accounts.json \
-  --funding-address "$DEVNET_FUNDING_ADDRESS" \
-  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
-  --run-dir runs/devnet/manual-governance-withdrawal-init
-```
-
-Run the matching live proof harness with:
-
-```bash
-nix develop --quiet -c just devnet-smoke governance-withdrawal-init
-```
-
-The command consumes #147 registry artifacts and #148 stake/reward
-artifacts, submits and votes through the Conway treasury-withdrawal
-governance action, waits for the treasury reward account to fund, builds
-the withdrawal through the production withdraw/tx-build path, signs and
-submits it, and writes
-`governance-withdrawal-init/materialized.json` for the #150 handoff. The
-latest local evidence for this branch is
-`runs/devnet/20260516T231003Z`: proposal tx
-`baffa774b368b1da8c3ff80be399bcf6fa63b5cff658b6889fc00109da218e23`,
-governance action
-`baffa774b368b1da8c3ff80be399bcf6fa63b5cff658b6889fc00109da218e23#0`,
-vote tx
-`009801303fc5cc3c3dfe474c30cc4b7d31e99b5af29467cc317072ea6b728c45`,
-treasury reward account
-`b2b7201c62e43ae8e03b61c96931379ebbcdce61befc3f4e4b1f4be4`, reward
-`0 -> 2000000 -> 0` lovelace, withdrawal tx
-`4a87409b52b8104d51d41df7ee562196cf33621f64c4c40985b4aef5ff21e9bd`,
-fee `456417` lovelace, materialized output
-`4a87409b52b8104d51d41df7ee562196cf33621f64c4c40985b4aef5ff21e9bd#0`,
-and treasury ADA `200000000 -> 202000000`. The legacy
-`just devnet-smoke withdraw` phase is a compatibility alias for the same
-production command proof.
-
-Run the shipped DevNet disburse submit command after registry-init and
-governance-withdrawal-init with:
-
-```bash
-amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
-  devnet disburse-submit \
-  --registry-file runs/devnet/manual-registry-init/registry-init/registry.json \
-  --materialized-file runs/devnet/manual-governance-withdrawal-init/governance-withdrawal-init/materialized.json \
-  --funding-address "$DEVNET_FUNDING_ADDRESS" \
-  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
-  --beneficiary-address "$DEVNET_BENEFICIARY_ADDRESS" \
-  --run-dir runs/devnet/manual-disburse-submit \
-  --amount-lovelace 1000000
-```
-
-Run the matching live proof harness with:
-
-```bash
-nix develop --quiet -c just devnet-smoke disburse-submit
-```
-
-The command consumes #147 registry artifacts and the #149 materialized
-treasury UTxO handoff, builds through the production disburse/tx-build
-path, signs and submits the transaction, then verifies beneficiary
-receipt and the reduced treasury output. The latest local evidence for
-this branch is `runs/devnet/20260517T005034Z`: submitted disburse tx
-`0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b`,
-beneficiary output
-`0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b#1`
-with `1000000` lovelace, treasury input
-`309e28ed5b95de38258bcc130d6390800b0719f6410b0d5fe6f3c33cc1b70817#0`,
-and treasury lovelace `2000000 -> 1000000`.
+The opt-in live-node smoke phases remain runnable
+(`just devnet-smoke {registry-init,stake-reward-init,
+governance-withdrawal-init,disburse-submit}` — these still drive the
+library functions via `SmokeSpec`; the equivalent CLI-driven proof
+ships in #161).
 
 Run the swap readiness boundary check with:
 

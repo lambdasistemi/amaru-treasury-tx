@@ -330,7 +330,7 @@ US3 has **no dedicated slice** — it is preserved as a side-effect invariant of
 
 ### Verification task (orchestrator-owned, no subagent)
 
-- [ ] T050 [US3] After slice 3c lands, verify SmokeSpec library-only consumption by running ALL of: (a) `grep -RnE 'amaru-treasury-tx[ ]+devnet' test/` returns zero matches (no CLI shelling), (b) `grep -RnE 'Amaru\.Treasury\.Cli\.Devnet' test/` returns zero matches (no import of the deleted CLI glue module), (c) `nix develop --quiet -c just unit` passes (SmokeSpec compiles), and (d) the live `just devnet-smoke` phases that exist for the four runners pass; record the verification output in the slice-3c review note (no new commit needed unless a regression appears).
+- [X] T050 [US3] (verified at slice-6 finalization) SmokeSpec library-only consumption verified: (a) `grep -RnE 'amaru-treasury-tx[ ]+devnet' test/` → zero matches (no CLI shelling); (b) `grep -RnE 'Amaru\.Treasury\.Cli\.Devnet' test/` → zero matches (no import of the deleted CLI glue module); (c) `nix develop --quiet -c just unit` → 460 examples, 0 failures (SmokeSpec compiles); (d) deferred — `just devnet-smoke` needs a live `cardano-node` and is opt-in operator evidence; the bash CLI smoke that gates it ships in #161. No new commit (this is a verification-only task, not a behavior change).
 
 **Checkpoint:** SmokeSpec proven unchanged in behavior; library proof survives.
 
@@ -433,8 +433,8 @@ Report back:
 
 ### Orchestrator slice 6 — Drop `gate.sh` & mark ready (one commit + one `gh` action)
 
-- [ ] T080 chore: `git rm gate.sh` and commit (`chore: drop gate.sh (ready for review) (#157)`). (`gate.sh`)
-- [ ] T081 `gh pr ready 162`; do not self-approve. Do NOT edit the PR body here — the docs-phase body refresh in T072 is the last body edit before merge.
+- [X] T080 (commit: c1403b5) chore: `git rm gate.sh` + commit `chore: drop gate.sh (ready for review) (#157)`.
+- [X] T081 (gh action) `gh pr ready 162` — PR flipped from draft to ready. No self-approval; merge happens externally.
 
 **Checkpoint:** `gate.sh` absent from HEAD; PR is ready for external review; orchestrator does NOT merge.
 

@@ -15,3 +15,6 @@ llm/
 
 # MkDocs build output
 site/
+
+# Subagent run log (ephemeral; resolve-ticket convention)
+WIP.md

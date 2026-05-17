@@ -143,19 +143,46 @@ Each slice is one bisect-safe commit, dispatched as one subagent
 run, with RED + GREEN in the same commit. Slice numbers map to task
 ranges in `tasks.md`.
 
-1. **Slice 1 — Parser retirement (RED + GREEN, one commit).**
-   Delete `lib/Amaru/Treasury/Cli/Devnet.hs`; drop the `devnet`
-   subparser, the four `CmdDevnet*` constructors, and their imports
-   from `lib/Amaru/Treasury/Cli.hs` and `app/amaru-treasury-tx/Main.hs`.
+1. **Slice 1 — Parser retirement + runner relocation (RED + GREEN, one commit).**
+   `Cli/Devnet.hs` is a mixed parser/runner module: it carries the
+   `optparse-applicative` parsers AND the four `runDevnet*` IO
+   drivers + `DevnetXxxOpts` records that `SmokeSpec` imports
+   directly. So slice 1 does two things in lock-step:
+
+   (a) Create new module `lib/Amaru/Treasury/Devnet/Runner.hs`
+       holding the four `runDevnet*` IO drivers and four
+       `DevnetXxxOpts` records (moved verbatim from
+       `Cli/Devnet.hs`; no behavior change). The new module has
+       NO `optparse-applicative` import.
+   (b) Delete `lib/Amaru/Treasury/Cli/Devnet.hs`.
+   (c) Drop the `devnet` subparser, the four `CmdDevnet*`
+       constructors, and the `Cli.Devnet` imports from
+       `lib/Amaru/Treasury/Cli.hs`; drop the four imports + four
+       dispatch cases from `app/amaru-treasury-tx/Main.hs`; update
+       `amaru-treasury-tx.cabal` to expose
+       `Amaru.Treasury.Devnet.Runner` and remove
+       `Amaru.Treasury.Cli.Devnet`.
+   (d) Retarget SmokeSpec's import from
+       `Amaru.Treasury.Cli.Devnet` to
+       `Amaru.Treasury.Devnet.Runner` — import line only; no
+       logic change.
+
    RED: a parser test asserting `amaru-treasury-tx devnet …` is
-   rejected. GREEN: parser test passes; `just ci` is green; the
-   four runners under `lib/Amaru/Treasury/Devnet/` remain
-   unmodified and reachable from `SmokeSpec`. Owned files:
+   rejected. GREEN: parser test passes; SmokeSpec compiles via
+   the new module; `just ci` and `./gate.sh` green; the four
+   library runners under `lib/Amaru/Treasury/Devnet/{RegistryInit,
+   StakeRewardInit, GovernanceWithdrawalInit, DisburseSubmit}.hs`
+   remain bit-identical.
+
+   Owned files:
    `lib/Amaru/Treasury/Cli.hs`,
    `lib/Amaru/Treasury/Cli/Devnet.hs` (delete),
+   `lib/Amaru/Treasury/Devnet/Runner.hs` (new),
    `app/amaru-treasury-tx/Main.hs`,
    `amaru-treasury-tx.cabal`,
-   `test/unit/Amaru/Treasury/Cli/ParserSpec.hs` (new or extended).
+   `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` (import-line retarget only — see brief),
+   `test/unit/Amaru/Treasury/Cli/ParserSpec.hs` (new),
+   `test/unit/Amaru/Treasury/Cli/DevnetSpec.hs` (delete).
 2. **Slice 2 — Intent JSON scaffolding for the seven sub-actions
    (RED + GREEN, one commit).** Extend `Action`, `SAction`,
    `Payload`, `Translated` with the seven sub-action variants;
@@ -247,12 +274,13 @@ lib/Amaru/Treasury/
 |-- Build.hs                       # +7 dispatch arms
 |-- Cli.hs                         # devnet branch removed
 |-- Cli/
-|   `-- Devnet.hs                  # DELETED
+|   `-- Devnet.hs                  # DELETED (runners moved to Devnet/Runner.hs)
 `-- Devnet/                        # runners RETAINED; SmokeSpec consumer
     |-- RegistryInit.hs
     |-- StakeRewardInit.hs
     |-- GovernanceWithdrawalInit.hs
-    `-- DisburseSubmit.hs
+    |-- DisburseSubmit.hs
+    `-- Runner.hs                  # NEW; runDevnet* IO drivers + DevnetXxxOpts records
 
 app/amaru-treasury-tx/Main.hs       # devnet imports + cases removed
 docs/assets/intent-schema.json      # regenerated

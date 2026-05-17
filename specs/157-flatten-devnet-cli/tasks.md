@@ -45,11 +45,20 @@ No foundational task. The dispatch infrastructure (`Amaru.Treasury.Build.runBuil
 
 **Done first** because the parser flatten removes a large block of code without depending on the new intent variants — keeps subsequent slices small.
 
-### Subagent slice 1 — Parser retirement (one commit)
+### Subagent slice 1 — Parser retirement + runner relocation (one commit)
 
-- [ ] T001 [US2] RED: extend `test/unit/Amaru/Treasury/Cli/ParserSpec.hs` with cases asserting that `amaru-treasury-tx devnet …`, `amaru-treasury-tx devnet registry-init …`, `amaru-treasury-tx devnet stake-reward-init …`, `amaru-treasury-tx devnet governance-withdrawal-init …`, and `amaru-treasury-tx devnet disburse-submit …` are rejected as unrecognized subcommands; assertion of help-text non-containment of the literal `"devnet"`. (`test/unit/Amaru/Treasury/Cli/ParserSpec.hs`)
-- [ ] T002 [US2] GREEN: in the same commit, drop the `"devnet"` subparser line (`lib/Amaru/Treasury/Cli.hs:167`), the `devnetCmdP` parser (`lib/Amaru/Treasury/Cli.hs:285-321`), the four `CmdDevnet*` constructors (`lib/Amaru/Treasury/Cli.hs:104-107`), the four `Amaru.Treasury.Cli.Devnet` imports (`lib/Amaru/Treasury/Cli.hs:43-51`), and the four `runDevnet*` imports + dispatch in `app/amaru-treasury-tx/Main.hs`; delete `lib/Amaru/Treasury/Cli/Devnet.hs`; remove the exposed-module entry from `amaru-treasury-tx.cabal`. (`lib/Amaru/Treasury/Cli.hs`, `lib/Amaru/Treasury/Cli/Devnet.hs`, `app/amaru-treasury-tx/Main.hs`, `amaru-treasury-tx.cabal`)
-- [ ] T003 [US2] Verify `./gate.sh` is green at HEAD; `lib/Amaru/Treasury/Devnet/{RegistryInit,StakeRewardInit,GovernanceWithdrawalInit,DisburseSubmit}.hs` remain on disk and reachable from `Amaru.Treasury.Devnet.SmokeSpec`. No diff to those four files.
+- [ ] T001 [US2] RED: extend `test/unit/Amaru/Treasury/Cli/ParserSpec.hs` with cases asserting that `amaru-treasury-tx devnet …`, `amaru-treasury-tx devnet registry-init …`, `amaru-treasury-tx devnet stake-reward-init …`, `amaru-treasury-tx devnet governance-withdrawal-init …`, and `amaru-treasury-tx devnet disburse-submit …` (and the bare `registry-init` / `stake-reward-init` / `governance-withdrawal-init` / `disburse-submit`) are rejected as unrecognized subcommands; tightened help-text check (per-line regex `^\s+devnet(\s|$)` matches nothing). (`test/unit/Amaru/Treasury/Cli/ParserSpec.hs`)
+- [ ] T002 [US2] GREEN: in the same commit, perform the lock-step parser-retirement + runner-relocation:
+  1. Create `lib/Amaru/Treasury/Devnet/Runner.hs` and move the four `runDevnet*` IO drivers + four `DevnetXxxOpts` records out of `Cli/Devnet.hs` verbatim (no behavior change; no `optparse-applicative` imports in the new module).
+  2. Delete `lib/Amaru/Treasury/Cli/Devnet.hs` (parser bits drop with it).
+  3. Drop the `"devnet"` subparser line, the `devnetCmdP` parser, the four `CmdDevnet*` constructors, and the four `Amaru.Treasury.Cli.Devnet` imports from `lib/Amaru/Treasury/Cli.hs`.
+  4. Drop the four `runDevnet*` imports + dispatch cases in `app/amaru-treasury-tx/Main.hs`.
+  5. Update `amaru-treasury-tx.cabal`: expose `Amaru.Treasury.Devnet.Runner`; remove `Amaru.Treasury.Cli.Devnet`.
+  6. Retarget `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`'s import block (lines 219–228) from `Amaru.Treasury.Cli.Devnet (...)` to `Amaru.Treasury.Devnet.Runner (...)` — same symbol list, import line only, NO body changes.
+  7. Delete `test/unit/Amaru/Treasury/Cli/DevnetSpec.hs`.
+
+  (`lib/Amaru/Treasury/Cli.hs`, `lib/Amaru/Treasury/Cli/Devnet.hs`, `lib/Amaru/Treasury/Devnet/Runner.hs`, `app/amaru-treasury-tx/Main.hs`, `amaru-treasury-tx.cabal`, `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`, `test/unit/Amaru/Treasury/Cli/ParserSpec.hs`, `test/unit/Amaru/Treasury/Cli/DevnetSpec.hs`)
+- [ ] T003 [US2] Verify `./gate.sh` is green at HEAD; `git diff origin/main -- lib/Amaru/Treasury/Devnet/{RegistryInit,StakeRewardInit,GovernanceWithdrawalInit,DisburseSubmit}.hs` is empty (those four library runners must stay bit-identical); `git diff origin/main -- test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` shows ONLY the import-line retarget (no body diff).
 
 **Fold rule**: T001 + T002 + T003 are one commit. T001 is RED before T002 lands; T003 is the GREEN verification.
 
@@ -66,22 +75,43 @@ Context:
 Owned files:
 - lib/Amaru/Treasury/Cli.hs
 - lib/Amaru/Treasury/Cli/Devnet.hs                  (delete)
+- lib/Amaru/Treasury/Devnet/Runner.hs               (new — moves runDevnet* + DevnetXxxOpts out of Cli/Devnet.hs)
 - app/amaru-treasury-tx/Main.hs
 - amaru-treasury-tx.cabal
-- test/unit/Amaru/Treasury/Cli/ParserSpec.hs        (new or extend)
+- test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs    (IMPORT LINE ONLY: retarget Amaru.Treasury.Cli.Devnet -> Amaru.Treasury.Devnet.Runner; same symbol list; no body change)
+- test/unit/Amaru/Treasury/Cli/ParserSpec.hs        (new)
+- test/unit/Amaru/Treasury/Cli/DevnetSpec.hs        (delete)
 
 Forbidden scope:
 - specs/, gate.sh, README, docs/, PR/issue metadata
 - lib/Amaru/Treasury/Devnet/{RegistryInit,StakeRewardInit,GovernanceWithdrawalInit,DisburseSubmit}.hs
   (must remain bit-identical; they are relocated *in place*, not modified)
-- Any change to SmokeSpec
+- Any change to SmokeSpec OTHER than the import-block retarget at lines 219-228 (same symbol list, no body change)
+- Any other test/devnet/ file
 
 Required orchestrator analysis already applied:
 - Cli.hs:104-107 has `CmdDevnetRegistryInit | CmdDevnetStakeRewardInit | CmdDevnetGovernanceWithdrawalInit | CmdDevnetDisburseSubmit`.
 - Cli.hs:167-169 binds "devnet" -> devnetCmdP.
 - Cli.hs:285-321 defines devnetCmdP with the four children.
 - app/Main.hs imports `Amaru.Treasury.Cli.Devnet (runDevnet*)`.
-- SmokeSpec consumes `lib/Amaru/Treasury/Devnet/*Init.hs` directly; no CLI shelling.
+- Cli/Devnet.hs is a mixed parser/runner module: it carries the
+  optparse-applicative parsers AND the four `runDevnet*` IO
+  drivers + four `DevnetXxxOpts` records that SmokeSpec imports.
+  After this slice the runners + opts records live in
+  `Amaru.Treasury.Devnet.Runner`; Cli/Devnet.hs is deleted; the
+  parser-only bits drop with it.
+- SmokeSpec imports (lines 219-228):
+    Amaru.Treasury.Cli.Devnet
+      ( DevnetDisburseSubmitOpts (..)
+      , DevnetGovernanceWithdrawalInitOpts (..)
+      , DevnetRegistryInitOpts (..)
+      , DevnetStakeRewardInitOpts (..)
+      , runDevnetDisburseSubmit
+      , runDevnetGovernanceWithdrawalInit
+      , runDevnetRegistryInit
+      , runDevnetStakeRewardInit
+      )
+  Retarget the module name only; same symbol list; no body diff in SmokeSpec.
 
 RED proof (write first, observe failing):
 - Add `test/unit/Amaru/Treasury/Cli/ParserSpec.hs` cases that exec
@@ -96,19 +126,23 @@ RED proof (write first, observe failing):
 
 GREEN proof:
 - Run: `nix develop --quiet -c just unit "ParserSpec"` — passes.
-- Run: `./gate.sh` — passes.
-- `git ls-files lib/Amaru/Treasury/Devnet/ | sort` is unchanged.
+- Run: `./gate.sh` — passes (covers the devnet test-suite via `just ci`).
+- `git diff origin/main -- lib/Amaru/Treasury/Devnet/{RegistryInit,StakeRewardInit,GovernanceWithdrawalInit,DisburseSubmit}.hs`
+  is empty (four library runners bit-identical).
+- `git diff origin/main -- test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`
+  shows ONLY the import-line retarget — no body diff. Confirm with
+  `git diff --stat` showing ~1-2 line changes.
 - `grep -RnE 'Amaru\.Treasury\.Cli\.Devnet' app/ lib/ test/` returns
   nothing (no remaining importer of the deleted module).
-- `grep -RnE 'Amaru\.Treasury\.Devnet\.(RegistryInit|StakeRewardInit|GovernanceWithdrawalInit|DisburseSubmit)' app/`
+- `grep -RnE 'Amaru\.Treasury\.Devnet\.(RegistryInit|StakeRewardInit|GovernanceWithdrawalInit|DisburseSubmit|Runner)' app/`
   returns nothing (no shipped executable still reaches the runners;
-  FR-005 coverage).
+  FR-005 coverage — `Devnet.Runner` is library-only).
 
 Report back:
 - diff stat
-- RED evidence (failing run)
-- GREEN evidence (passing run + ./gate.sh tail + the two greps)
-- confirmation that the four Devnet runners are untouched
+- RED evidence (failing or pending run)
+- GREEN evidence (passing run + ./gate.sh tail + the diff/grep checks)
+- confirmation that the four library runners are bit-identical and SmokeSpec body is unchanged
 ```
 
 **Checkpoint:** Parser flat; `Cli/Devnet.hs` gone; SmokeSpec still compiles; help text clean.

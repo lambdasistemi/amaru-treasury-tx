@@ -218,11 +218,22 @@ forward-reference the wizard tickets (#158–#160) for the
   `DisburseSubmit.hs` MUST remain consumable by
   `Amaru.Treasury.Devnet.SmokeSpec` as library functions and MUST
   NOT be reachable from the shipped CLI parser or any executable
-  exposed by the cabal package.
+  exposed by the cabal package. The four `runDevnet*` IO drivers
+  and four `DevnetXxxOpts` records currently exposed from
+  `Amaru.Treasury.Cli.Devnet` (which is a mixed parser/runner
+  module) MUST be relocated to a new module
+  `Amaru.Treasury.Devnet.Runner` under `lib/Amaru/Treasury/Devnet/`
+  so SmokeSpec can keep consuming them without importing a
+  `Cli.*` module that contains no live CLI surface.
 - **FR-006**: Every CLI entry that previously delegated to a
   `runDevnet*` runner MUST be removed; the `Cmd` ADT,
-  `devnetCmdP` subparser, and `Cli/Devnet.hs` module are removed
-  with their direct dependents updated.
+  `devnetCmdP` subparser, the four `devnetXxxOptsP` parsers, and
+  the parser-only contents of `Cli/Devnet.hs` are removed. The
+  file `lib/Amaru/Treasury/Cli/Devnet.hs` is deleted after the
+  IO drivers and option records have been relocated to
+  `Amaru.Treasury.Devnet.Runner` per FR-005. SmokeSpec's import
+  retargets from `Amaru.Treasury.Cli.Devnet` to
+  `Amaru.Treasury.Devnet.Runner` in lock-step.
 - **FR-007**: The `Amaru.Treasury.Build.runBuildExcept` dispatcher
   arms for the seven init sub-actions MUST fail closed for
   non-DevNet networks before any build or N2C effect, surfacing a
@@ -275,7 +286,13 @@ forward-reference the wizard tickets (#158–#160) for the
   `setupDevnetStakeRewards`, the governance-withdrawal-init entry,
   and the disburse-submit entry under `lib/Amaru/Treasury/Devnet/`
   per parent #156's "library proof survives" invariant; consumed
-  only by `SmokeSpec`. Public surfaces are NOT renamed in this PR.
+  only by `SmokeSpec`. Their public lib/ surfaces are NOT
+  renamed in this PR.
+- **`Amaru.Treasury.Devnet.Runner`** — NEW module under
+  `lib/Amaru/Treasury/Devnet/Runner.hs`. Carries the four
+  `runDevnet*` IO drivers and four `DevnetXxxOpts` records moved
+  out of `Amaru.Treasury.Cli.Devnet` (which is then deleted).
+  Sole consumer is `SmokeSpec`; no executable imports it.
 
 ## Success Criteria *(mandatory)*
 

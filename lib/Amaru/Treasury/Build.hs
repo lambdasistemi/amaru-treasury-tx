@@ -38,14 +38,19 @@ module Amaru.Treasury.Build
     , runSwap
     , runSwapCancel
     , runWithdraw
+
+      -- * Network guard
+    , requireDevnet
     ) where
 
+import Control.Monad (unless)
 import Control.Monad.Trans.Except
     ( ExceptT
     , runExceptT
     , throwE
     , withExceptT
     )
+import Data.Text (Text)
 import Data.Text qualified as T
 
 import Amaru.Treasury.Build.Disburse
@@ -148,40 +153,71 @@ runBuildExcept ctx shared sa translated = case sa of
                 BuildActionReorganize
                 BuildPhaseUnsupported
                 (DiagnosticUnsupportedAction "reorganize")
-    SRegistryInitSeedSplit ->
+    SRegistryInitSeedSplit -> do
+        requireDevnet (tsNetwork shared)
         withExceptT
             (nestActionBuildError BuildActionIntent)
             (runRegistryInitSeedSplitAction ctx translated)
-    SRegistryInitMint ->
+    SRegistryInitMint -> do
+        requireDevnet (tsNetwork shared)
         withExceptT
             (nestActionBuildError BuildActionIntent)
             (runRegistryInitMintAction ctx translated)
-    SRegistryInitReferenceScripts ->
+    SRegistryInitReferenceScripts -> do
+        requireDevnet (tsNetwork shared)
         withExceptT
             (nestActionBuildError BuildActionIntent)
             (runRegistryInitReferenceScriptsAction ctx translated)
-    SStakeRewardInitScriptAccount ->
+    SStakeRewardInitScriptAccount -> do
+        requireDevnet (tsNetwork shared)
         withExceptT
             (nestActionBuildError BuildActionIntent)
             (runStakeRewardInitScriptAccountAction ctx translated)
-    SStakeRewardInitPlainAccount ->
+    SStakeRewardInitPlainAccount -> do
+        requireDevnet (tsNetwork shared)
         withExceptT
             (nestActionBuildError BuildActionIntent)
             (runStakeRewardInitPlainAccountAction ctx translated)
-    SGovernanceWithdrawalInitProposal ->
+    SGovernanceWithdrawalInitProposal -> do
+        requireDevnet (tsNetwork shared)
         withExceptT
             (nestActionBuildError BuildActionIntent)
             ( runGovernanceWithdrawalInitProposalAction
                 ctx
                 translated
             )
-    SGovernanceWithdrawalInitMaterialization ->
+    SGovernanceWithdrawalInitMaterialization -> do
+        requireDevnet (tsNetwork shared)
         withExceptT
             (nestActionBuildError BuildActionIntent)
             ( runGovernanceWithdrawalInitMaterializationAction
                 ctx
                 translated
             )
+
+{- | Dispatcher-level network guard for the init sub-actions.
+
+The seven @registry-init-*@, @stake-reward-init-*@, and
+@governance-withdrawal-init-*@ intents are DevNet-only in the
+current rollout. The decoder still accepts any @network: Text@
+value (parsing is not the right layer for runtime policy), but
+'runBuildExcept' calls this helper first on every init arm so
+the dispatcher fails closed with a typed 'BuildError' before
+any N2C connection or transaction construction happens.
+
+The rejection carries 'BuildActionIntent' (the umbrella action
+shared by all init arms), 'BuildPhaseUnsupported' (this network
+is not supported in this phase of the #156 rollout), and
+'DiagnosticUnsupportedNetwork' with the offending text.
+-}
+requireDevnet :: Text -> ExceptT BuildError IO ()
+requireDevnet network =
+    unless (network == "devnet") $
+        throwE $
+            buildError
+                BuildActionIntent
+                BuildPhaseUnsupported
+                (DiagnosticUnsupportedNetwork network)
 
 {- | Caller-friendly wrapper for the parser's existential
 return type. Decodes-then-translates-then-builds.

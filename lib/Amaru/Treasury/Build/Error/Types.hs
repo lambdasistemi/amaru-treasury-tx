@@ -60,6 +60,13 @@ data BuildDiagnostic
     | DiagnosticFeeAlignmentFailed !Text
     | DiagnosticTranslateFailed !Text
     | DiagnosticUnsupportedAction !Text
+    | -- | Dispatcher-level network guard rejection. The
+      --     payload is the offending @network@ string from
+      --     the parsed intent (e.g. @\"mainnet\"@). Raised
+      --     by 'Amaru.Treasury.Build.requireDevnet' for the
+      --     seven init sub-actions, which are DevNet-only
+      --     in the current rollout.
+      DiagnosticUnsupportedNetwork !Text
     deriving stock (Eq, Show)
 
 -- | Expected treasury build failure with stable rendering.

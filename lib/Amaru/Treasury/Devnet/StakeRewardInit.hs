@@ -223,7 +223,7 @@ data StakeRewardInitFailure = StakeRewardInitFailure
     }
     deriving stock (Eq, Show)
 
--- | Submit one setup transaction for the treasury reward account.
+-- | Submit one setup transaction for the DevNet reward accounts.
 setupDevnetStakeRewards
     :: DevnetStakeRewardInitConfig
     -> DevnetStakeRewardRegistry
@@ -277,6 +277,8 @@ submitStakeRewardSetup
                 pp ^. ppKeyDepositL
             treasuryCredential =
                 ScriptHashObj (dsrrTreasuryScriptHash registry)
+            permissionsCredential =
+                ScriptHashObj (dsrrPermissionsScriptHash registry)
             prog :: TxBuild NoCtx Void ()
             prog =
                 stakeRewardSetupProgram
@@ -284,6 +286,7 @@ submitStakeRewardSetup
                     (dsrrTreasuryRef registry)
                     (dsrrPermissionsRef registry)
                     treasuryCredential
+                    permissionsCredential
                     stakeDeposit
                     upperSlot
         build
@@ -321,6 +324,7 @@ stakeRewardSetupProgram
     -> TxIn
     -> TxIn
     -> Credential Staking
+    -> Credential Staking
     -> Coin
     -> SlotNo
     -> TxBuild q e ()
@@ -329,6 +333,7 @@ stakeRewardSetupProgram
     treasuryRef
     permissionsRef
     treasuryCredential
+    permissionsCredential
     stakeDeposit
     upperSlot = do
         _ <- spend seedIn
@@ -338,6 +343,8 @@ stakeRewardSetupProgram
         registerScriptRewardAccount
             treasuryCredential
             stakeDeposit
+        registerPlainRewardAccount
+            permissionsCredential
         validTo upperSlot
 
 registerScriptRewardAccount
@@ -352,6 +359,17 @@ registerScriptRewardAccount credential deposit = do
                     deposit
             )
             (ScriptCert (RawPlutusData emptyListRedeemer))
+    pure ()
+
+registerPlainRewardAccount
+    :: Credential Staking -> TxBuild q e ()
+registerPlainRewardAccount credential = do
+    _ <-
+        certify
+            ( ConwayTxCertDeleg $
+                ConwayRegCert credential SNothing
+            )
+            PubKeyCert
     pure ()
 
 verifyStakeRewardSetup
@@ -384,7 +402,7 @@ verifyStakeRewardSetup config registry provider txId = do
                     rewards
             , dsrirPermissions =
                 accountProjection
-                    False
+                    True
                     permissionsAccount
                     (dsrrPermissionsScriptHash registry)
                     rewards

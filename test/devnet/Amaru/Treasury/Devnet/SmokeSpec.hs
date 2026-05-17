@@ -217,13 +217,16 @@ import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     )
 import Amaru.Treasury.Cli.Devnet
-    ( DevnetGovernanceWithdrawalInitOpts (..)
+    ( DevnetDisburseSubmitOpts (..)
+    , DevnetGovernanceWithdrawalInitOpts (..)
     , DevnetRegistryInitOpts (..)
     , DevnetStakeRewardInitOpts (..)
+    , runDevnetDisburseSubmit
     , runDevnetGovernanceWithdrawalInit
     , runDevnetRegistryInit
     , runDevnetStakeRewardInit
     )
+import Amaru.Treasury.Devnet.DisburseSubmit qualified as DisburseSubmit
 import Amaru.Treasury.Devnet.GovernanceWithdrawalInit qualified as GovernanceWithdrawalInit
 import Amaru.Treasury.Devnet.RegistryInit
     ( DevnetRegistryAnchors (..)
@@ -510,6 +513,135 @@ instance FromJSON GovernanceWithdrawalInitProvenance where
                 <*> o .: "parentIssue"
                 <*> o .: "dependsOnIssues"
 
+data DisburseSubmitSummary = DisburseSubmitSummary
+    { dsssPhase :: !T.Text
+    , dsssStatus :: !T.Text
+    , dsssNetwork :: !T.Text
+    , dsssNetworkMagic :: !Int
+    , dsssRunDirectory :: !FilePath
+    , dsssRegistryPath :: !FilePath
+    , dsssMaterializedPath :: !FilePath
+    , dsssAmountLovelace :: !Integer
+    , dsssDisbursePath :: !FilePath
+    , dsssBeneficiaryPath :: !FilePath
+    , dsssTreasuryPath :: !FilePath
+    , dsssProvenancePath :: !FilePath
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON DisburseSubmitSummary where
+    parseJSON =
+        withObject "DisburseSubmitSummary" $ \o ->
+            DisburseSubmitSummary
+                <$> o .: "phase"
+                <*> o .: "status"
+                <*> o .: "network"
+                <*> o .: "networkMagic"
+                <*> o .: "runDirectory"
+                <*> o .: "registryPath"
+                <*> o .: "materializedPath"
+                <*> o .: "amountLovelace"
+                <*> o .: "disbursePath"
+                <*> o .: "beneficiaryPath"
+                <*> o .: "treasuryPath"
+                <*> o .: "provenancePath"
+
+data DisburseSubmitDisburse = DisburseSubmitDisburse
+    { dssdPhase :: !T.Text
+    , dssdNetwork :: !T.Text
+    , dssdIntentPath :: !FilePath
+    , dssdTxBodyPath :: !FilePath
+    , dssdReportJsonPath :: !FilePath
+    , dssdReportMarkdownPath :: !FilePath
+    , dssdSignedTxPath :: !FilePath
+    , dssdSubmitLogPath :: !FilePath
+    , dssdTxId :: !T.Text
+    , dssdSubmittedTxId :: !T.Text
+    , dssdAmountLovelace :: !Integer
+    , dssdFeeLovelace :: !Integer
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON DisburseSubmitDisburse where
+    parseJSON =
+        withObject "DisburseSubmitDisburse" $ \o ->
+            DisburseSubmitDisburse
+                <$> o .: "phase"
+                <*> o .: "network"
+                <*> o .: "intentPath"
+                <*> o .: "txBodyPath"
+                <*> o .: "reportJsonPath"
+                <*> o .: "reportMarkdownPath"
+                <*> o .: "signedTxPath"
+                <*> o .: "submitLogPath"
+                <*> o .: "txId"
+                <*> o .: "submittedTxId"
+                <*> o .: "amountLovelace"
+                <*> o .: "feeLovelace"
+
+data DisburseSubmitBeneficiary = DisburseSubmitBeneficiary
+    { dsbPhase :: !T.Text
+    , dsbNetwork :: !T.Text
+    , dsbAddress :: !T.Text
+    , dsbTxIn :: !T.Text
+    , dsbLovelace :: !Integer
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON DisburseSubmitBeneficiary where
+    parseJSON =
+        withObject "DisburseSubmitBeneficiary" $ \o ->
+            DisburseSubmitBeneficiary
+                <$> o .: "phase"
+                <*> o .: "network"
+                <*> o .: "address"
+                <*> o .: "txIn"
+                <*> o .: "lovelace"
+
+data DisburseSubmitTreasury = DisburseSubmitTreasury
+    { dstPhase :: !T.Text
+    , dstNetwork :: !T.Text
+    , dstInput :: !T.Text
+    , dstOutput :: !T.Text
+    , dstAddress :: !T.Text
+    , dstLovelaceBefore :: !Integer
+    , dstLovelaceAfter :: !Integer
+    , dstConsumed :: !Bool
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON DisburseSubmitTreasury where
+    parseJSON =
+        withObject "DisburseSubmitTreasury" $ \o ->
+            DisburseSubmitTreasury
+                <$> o .: "phase"
+                <*> o .: "network"
+                <*> o .: "input"
+                <*> o .: "output"
+                <*> o .: "address"
+                <*> o .: "lovelaceBefore"
+                <*> o .: "lovelaceAfter"
+                <*> o .: "consumed"
+
+data DisburseSubmitProvenance = DisburseSubmitProvenance
+    { dspPhase :: !T.Text
+    , dspSource :: !T.Text
+    , dspIssue :: !Int
+    , dspParentIssue :: !Int
+    , dspDependsOnIssues :: ![Int]
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON DisburseSubmitProvenance where
+    parseJSON =
+        withObject "DisburseSubmitProvenance" $ \o ->
+            DisburseSubmitProvenance
+                <$> o .: "phase"
+                <*> o .: "source"
+                <*> o .: "issue"
+                <*> o .: "parentIssue"
+                <*> o .: "dependsOnIssues"
+
 spec :: Spec
 spec =
     describe "local devnet smoke" $ do
@@ -788,6 +920,90 @@ spec =
                         , "registryPath" .= sampleRegistryPath
                         , "stakeRewardPath" .= sampleStakeRewardPath
                         ]
+        describe "disburse-submit diagnostics" $ do
+            it "records command artifact fields and ledger effects" $ do
+                let result = sampleDisburseSubmitResult
+                DisburseSubmit.disburseSubmitSummaryValue
+                    (sgtNetworkMagic sampleTiming)
+                    sampleRunDir
+                    result
+                    `shouldBe` object
+                        [ "phase" .= ("disburse-submit" :: T.Text)
+                        , "status" .= ("passed" :: T.Text)
+                        , "network" .= ("devnet" :: T.Text)
+                        , "networkMagic" .= sgtNetworkMagic sampleTiming
+                        , "runDirectory" .= sampleRunDir
+                        , "registryPath" .= sampleRegistryPath
+                        , "materializedPath"
+                            .= sampleDisburseSubmitMaterializedPath
+                        , "amountLovelace" .= (1_000_000 :: Integer)
+                        , "disbursePath"
+                            .= DisburseSubmit.disburseSubmitDisbursePath
+                                sampleRunDir
+                        , "beneficiaryPath"
+                            .= DisburseSubmit.disburseSubmitBeneficiaryPath
+                                sampleRunDir
+                        , "treasuryPath"
+                            .= DisburseSubmit.disburseSubmitTreasuryPath
+                                sampleRunDir
+                        , "provenancePath"
+                            .= DisburseSubmit.disburseSubmitProvenancePath
+                                sampleRunDir
+                        ]
+                DisburseSubmit.disburseSubmitDisburseValue result
+                    `shouldBe` object
+                        [ "phase" .= ("disburse-submit" :: T.Text)
+                        , "network" .= ("devnet" :: T.Text)
+                        , "intentPath"
+                            .= DisburseSubmit.disburseSubmitIntentPath
+                                sampleRunDir
+                        , "txBodyPath"
+                            .= DisburseSubmit.disburseSubmitTxBodyPath
+                                sampleRunDir
+                        , "reportJsonPath"
+                            .= DisburseSubmit.disburseSubmitReportJsonPath
+                                sampleRunDir
+                        , "reportMarkdownPath"
+                            .= DisburseSubmit.disburseSubmitReportMarkdownPath
+                                sampleRunDir
+                        , "signedTxPath"
+                            .= DisburseSubmit.disburseSubmitSignedTxPath
+                                sampleRunDir
+                        , "submitLogPath"
+                            .= DisburseSubmit.disburseSubmitSubmitLogPath
+                                sampleRunDir
+                        , "txId" .= sampleDisburseSubmitTxId
+                        , "submittedTxId" .= sampleDisburseSubmitTxId
+                        , "amountLovelace" .= (1_000_000 :: Integer)
+                        , "feeLovelace" .= (171_000 :: Integer)
+                        ]
+                DisburseSubmit.disburseSubmitBeneficiaryValue result
+                    `shouldBe` object
+                        [ "phase" .= ("disburse-submit" :: T.Text)
+                        , "network" .= ("devnet" :: T.Text)
+                        , "address" .= sampleDisburseSubmitBeneficiaryAddress
+                        , "txIn" .= sampleDisburseSubmitBeneficiaryTxIn
+                        , "lovelace" .= (1_000_000 :: Integer)
+                        ]
+                DisburseSubmit.disburseSubmitTreasuryValue result
+                    `shouldBe` object
+                        [ "phase" .= ("disburse-submit" :: T.Text)
+                        , "network" .= ("devnet" :: T.Text)
+                        , "input" .= sampleGovernanceMaterializedTxIn
+                        , "output" .= sampleDisburseSubmitTreasuryOutput
+                        , "address" .= sampleGovernanceTreasuryAddress
+                        , "lovelaceBefore" .= (2_000_000 :: Integer)
+                        , "lovelaceAfter" .= (1_000_000 :: Integer)
+                        , "consumed" .= True
+                        ]
+                DisburseSubmit.disburseSubmitProvenanceValue
+                    `shouldBe` object
+                        [ "phase" .= ("disburse-submit" :: T.Text)
+                        , "source" .= ("amaru-treasury-tx" :: T.Text)
+                        , "issue" .= (150 :: Int)
+                        , "parentIssue" .= (151 :: Int)
+                        , "dependsOnIssues" .= ([147, 149] :: [Int])
+                        ]
         describe "withdraw diagnostics" $ do
             it "records submitted withdrawal materialization proof" $ do
                 let submitted =
@@ -993,6 +1209,9 @@ spec =
         it
             "stake-reward-init: prepares treasury and permissions reward accounts"
             (runForPhases ["stake-reward-init"] stakeRewardInitSmoke)
+        it
+            "disburse-submit: proves the shipped command runner"
+            (runForPhases ["disburse-submit"] disburseSubmitSmoke)
 
 runForPhases :: [String] -> IO () -> IO ()
 runForPhases accepted action = do
@@ -1095,6 +1314,95 @@ governanceWithdrawalInitSmoke = do
             runDir
             registryPath
             stakeRewardPath
+            timing
+
+disburseSubmitSmoke :: IO ()
+disburseSubmitSmoke = do
+    runDir <- resolveRunDir
+    prepareRunDir runDir
+
+    sourceGenesis <- genesisDir
+    assertGenesisDir sourceGenesis
+    let smokeGenesis = runDir </> "genesis"
+    copyGovernanceGenesis sourceGenesis smokeGenesis
+    patchGovernanceGenesis smokeGenesis
+    timing <- readShelleyTiming smokeGenesis
+    let epochDuration = epochDurationSeconds timing
+    sgtNetworkMagic timing `shouldBe` 42
+    epochDuration `shouldSatisfy` (<= 10)
+
+    rewardTimeoutSeconds <- resolveRewardTimeoutSeconds
+
+    withCardanoNode smokeGenesis $ \socket startMs -> do
+        accepted <- probeNetworkMagic devnetMagic socket
+        accepted `shouldBe` True
+
+        copyNodeLog socket runDir
+        writeTiming runDir startMs socket timing
+        signingKeyFile <- writeGenesisPaymentSigningKey runDir
+        let globals =
+                GlobalOpts
+                    { goSocketPath = Just socket
+                    , goNetworkMagic = devnetMagic
+                    , goNetworkName = Just "devnet"
+                    }
+            fundingAddress =
+                T.unpack (renderAddr genesisAddr)
+            registryPath =
+                RegistryInit.registryInitRegistryPath runDir
+            stakeRewardPath =
+                StakeRewardInit.stakeRewardInitAccountsPath runDir
+            materializedPath =
+                GovernanceWithdrawalInit.governanceWithdrawalInitMaterializationPath
+                    runDir
+        runDevnetRegistryInit
+            globals
+            DevnetRegistryInitOpts
+                { drioFundingAddress = fundingAddress
+                , drioSigningKeyFile = signingKeyFile
+                , drioRunDir = runDir
+                }
+        runDevnetStakeRewardInit
+            globals
+            DevnetStakeRewardInitOpts
+                { dsrioRegistryFile = registryPath
+                , dsrioFundingAddress = fundingAddress
+                , dsrioSigningKeyFile = signingKeyFile
+                , dsrioRunDir = runDir
+                }
+        assertStakeRewardInitArtifacts runDir registryPath timing
+        runDevnetGovernanceWithdrawalInit
+            globals
+            DevnetGovernanceWithdrawalInitOpts
+                { dgwioRegistryFile = registryPath
+                , dgwioStakeRewardFile = stakeRewardPath
+                , dgwioFundingAddress = fundingAddress
+                , dgwioSigningKeyFile = signingKeyFile
+                , dgwioRunDir = runDir
+                , dgwioAmountLovelace = coinLovelace withdrawalAmount
+                , dgwioRewardTimeoutSeconds = rewardTimeoutSeconds
+                }
+        assertGovernanceWithdrawalInitArtifacts
+            runDir
+            registryPath
+            stakeRewardPath
+            timing
+        runDevnetDisburseSubmit
+            globals
+            DevnetDisburseSubmitOpts
+                { ddsioRegistryFile = registryPath
+                , ddsioMaterializedFile = materializedPath
+                , ddsioFundingAddress = fundingAddress
+                , ddsioSigningKeyFile = signingKeyFile
+                , ddsioBeneficiaryAddress = fundingAddress
+                , ddsioRunDir = runDir
+                , ddsioAmountLovelace = 1_000_000
+                }
+        assertDisburseSubmitArtifacts
+            runDir
+            registryPath
+            materializedPath
+            (T.pack fundingAddress)
             timing
 
 withdrawSmoke :: IO ()
@@ -1502,6 +1810,84 @@ sampleGovernanceWithdrawalInitResult =
                     0
                 , GovernanceWithdrawalInit.gwmeTreasuryUtxoLovelaceAfter =
                     2_000_000
+                }
+        }
+
+sampleDisburseSubmitMaterializedPath :: FilePath
+sampleDisburseSubmitMaterializedPath =
+    GovernanceWithdrawalInit.governanceWithdrawalInitMaterializationPath
+        sampleRunDir
+
+sampleDisburseSubmitTxId :: T.Text
+sampleDisburseSubmitTxId =
+    "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+
+sampleDisburseSubmitBeneficiaryAddress :: T.Text
+sampleDisburseSubmitBeneficiaryAddress =
+    "addr_test1vzsamplebeneficiary"
+
+sampleDisburseSubmitBeneficiaryTxIn :: T.Text
+sampleDisburseSubmitBeneficiaryTxIn =
+    sampleDisburseSubmitTxId <> "#1"
+
+sampleDisburseSubmitTreasuryOutput :: T.Text
+sampleDisburseSubmitTreasuryOutput =
+    sampleDisburseSubmitTxId <> "#0"
+
+sampleDisburseSubmitResult :: DisburseSubmit.DisburseSubmitResult
+sampleDisburseSubmitResult =
+    DisburseSubmit.DisburseSubmitResult
+        { DisburseSubmit.dsrRegistryPath =
+            sampleRegistryPath
+        , DisburseSubmit.dsrMaterializedPath =
+            sampleDisburseSubmitMaterializedPath
+        , DisburseSubmit.dsrDisburse =
+            DisburseSubmit.DisburseSubmitDisburseEvidence
+                { DisburseSubmit.dsdeIntentPath =
+                    DisburseSubmit.disburseSubmitIntentPath sampleRunDir
+                , DisburseSubmit.dsdeTxBodyPath =
+                    DisburseSubmit.disburseSubmitTxBodyPath sampleRunDir
+                , DisburseSubmit.dsdeReportJsonPath =
+                    DisburseSubmit.disburseSubmitReportJsonPath sampleRunDir
+                , DisburseSubmit.dsdeReportMarkdownPath =
+                    DisburseSubmit.disburseSubmitReportMarkdownPath
+                        sampleRunDir
+                , DisburseSubmit.dsdeSignedTxPath =
+                    DisburseSubmit.disburseSubmitSignedTxPath sampleRunDir
+                , DisburseSubmit.dsdeSubmitLogPath =
+                    DisburseSubmit.disburseSubmitSubmitLogPath sampleRunDir
+                , DisburseSubmit.dsdeTxId =
+                    sampleDisburseSubmitTxId
+                , DisburseSubmit.dsdeSubmittedTxId =
+                    sampleDisburseSubmitTxId
+                , DisburseSubmit.dsdeAmountLovelace =
+                    1_000_000
+                , DisburseSubmit.dsdeFeeLovelace =
+                    171_000
+                }
+        , DisburseSubmit.dsrBeneficiary =
+            DisburseSubmit.DisburseSubmitBeneficiaryEvidence
+                { DisburseSubmit.dsbeAddress =
+                    sampleDisburseSubmitBeneficiaryAddress
+                , DisburseSubmit.dsbeTxIn =
+                    sampleDisburseSubmitBeneficiaryTxIn
+                , DisburseSubmit.dsbeLovelace =
+                    1_000_000
+                }
+        , DisburseSubmit.dsrTreasury =
+            DisburseSubmit.DisburseSubmitTreasuryEvidence
+                { DisburseSubmit.dsteInput =
+                    sampleGovernanceMaterializedTxIn
+                , DisburseSubmit.dsteOutput =
+                    sampleDisburseSubmitTreasuryOutput
+                , DisburseSubmit.dsteAddress =
+                    sampleGovernanceTreasuryAddress
+                , DisburseSubmit.dsteLovelaceBefore =
+                    2_000_000
+                , DisburseSubmit.dsteLovelaceAfter =
+                    1_000_000
+                , DisburseSubmit.dsteConsumed =
+                    True
                 }
         }
 
@@ -2998,7 +3384,7 @@ assertStakeRewardInitArtifacts runDir registryPath timing = do
     sriaPhase accounts `shouldBe` "stake-reward-init"
     sriaNetwork accounts `shouldBe` "devnet"
     assertPreparedStakeRewardAccount True (sriaTreasury accounts)
-    assertPreparedStakeRewardAccount False (sriaPermissions accounts)
+    assertPreparedStakeRewardAccount True (sriaPermissions accounts)
 
     provenance <-
         decodeJsonFile
@@ -3170,6 +3556,132 @@ assertGovernanceWithdrawalInitArtifacts
         gwipIssue provenance `shouldBe` 149
         gwipParentIssue provenance `shouldBe` 151
         gwipDependsOnIssues provenance `shouldBe` [147, 148]
+
+assertDisburseSubmitArtifacts
+    :: FilePath
+    -> FilePath
+    -> FilePath
+    -> T.Text
+    -> ShelleyGenesisTiming
+    -> IO ()
+assertDisburseSubmitArtifacts
+    runDir
+    registryPath
+    materializedPath
+    beneficiaryAddress
+    timing = do
+        let summaryPath =
+                DisburseSubmit.disburseSubmitSummaryPath runDir
+            disbursePath =
+                DisburseSubmit.disburseSubmitDisbursePath runDir
+            beneficiaryPath =
+                DisburseSubmit.disburseSubmitBeneficiaryPath runDir
+            treasuryPath =
+                DisburseSubmit.disburseSubmitTreasuryPath runDir
+            provenancePath =
+                DisburseSubmit.disburseSubmitProvenancePath runDir
+            intentPath =
+                DisburseSubmit.disburseSubmitIntentPath runDir
+            txBodyPath =
+                DisburseSubmit.disburseSubmitTxBodyPath runDir
+            reportJsonPath =
+                DisburseSubmit.disburseSubmitReportJsonPath runDir
+            reportMarkdownPath =
+                DisburseSubmit.disburseSubmitReportMarkdownPath runDir
+            signedTxPath =
+                DisburseSubmit.disburseSubmitSignedTxPath runDir
+            submitLogPath =
+                DisburseSubmit.disburseSubmitSubmitLogPath runDir
+        traverse_
+            assertDirectoryExists
+            [ runDir </> "registry-init"
+            , runDir </> "stake-reward-init"
+            , GovernanceWithdrawalInit.governanceWithdrawalInitDirectory runDir
+            , DisburseSubmit.disburseSubmitDirectory runDir
+            ]
+        traverse_
+            assertFileExists
+            [ summaryPath
+            , disbursePath
+            , beneficiaryPath
+            , treasuryPath
+            , provenancePath
+            , intentPath
+            , txBodyPath
+            , reportJsonPath
+            , reportMarkdownPath
+            , signedTxPath
+            , submitLogPath
+            ]
+
+        materialization <-
+            decodeJsonFile
+                "governance-withdrawal-init materialization"
+                materializedPath
+
+        summary <-
+            decodeJsonFile "disburse-submit summary" summaryPath
+        dsssPhase summary `shouldBe` "disburse-submit"
+        dsssStatus summary `shouldBe` "passed"
+        dsssNetwork summary `shouldBe` "devnet"
+        dsssNetworkMagic summary `shouldBe` sgtNetworkMagic timing
+        dsssRunDirectory summary `shouldBe` runDir
+        dsssRegistryPath summary `shouldBe` registryPath
+        dsssMaterializedPath summary `shouldBe` materializedPath
+        dsssAmountLovelace summary `shouldBe` 1_000_000
+        dsssDisbursePath summary `shouldBe` disbursePath
+        dsssBeneficiaryPath summary `shouldBe` beneficiaryPath
+        dsssTreasuryPath summary `shouldBe` treasuryPath
+        dsssProvenancePath summary `shouldBe` provenancePath
+
+        disburse <-
+            decodeJsonFile "disburse-submit disburse" disbursePath
+        dssdPhase disburse `shouldBe` "disburse-submit"
+        dssdNetwork disburse `shouldBe` "devnet"
+        dssdIntentPath disburse `shouldBe` intentPath
+        dssdTxBodyPath disburse `shouldBe` txBodyPath
+        dssdReportJsonPath disburse `shouldBe` reportJsonPath
+        dssdReportMarkdownPath disburse `shouldBe` reportMarkdownPath
+        dssdSignedTxPath disburse `shouldBe` signedTxPath
+        dssdSubmitLogPath disburse `shouldBe` submitLogPath
+        dssdTxId disburse `shouldBe` dssdSubmittedTxId disburse
+        dssdSubmittedTxId disburse `shouldSatisfy` (not . T.null)
+        dssdAmountLovelace disburse `shouldBe` 1_000_000
+        dssdFeeLovelace disburse `shouldSatisfy` (>= 0)
+
+        beneficiary <-
+            decodeJsonFile "disburse-submit beneficiary" beneficiaryPath
+        dsbPhase beneficiary `shouldBe` "disburse-submit"
+        dsbNetwork beneficiary `shouldBe` "devnet"
+        dsbAddress beneficiary `shouldBe` beneficiaryAddress
+        dsbTxIn beneficiary
+            `shouldBe` dssdSubmittedTxId disburse <> "#1"
+        dsbLovelace beneficiary `shouldBe` dssdAmountLovelace disburse
+
+        treasury <-
+            decodeJsonFile "disburse-submit treasury" treasuryPath
+        dstPhase treasury `shouldBe` "disburse-submit"
+        dstNetwork treasury `shouldBe` "devnet"
+        dstInput treasury
+            `shouldBe` gwimTreasuryMaterializedTxIn materialization
+        dstOutput treasury
+            `shouldBe` dssdSubmittedTxId disburse <> "#0"
+        dstAddress treasury `shouldBe` gwimTreasuryAddress materialization
+        dstLovelaceBefore treasury
+            `shouldBe` gwimMaterializedAdaLovelace materialization
+        dstLovelaceBefore treasury
+            - dstLovelaceAfter treasury
+            `shouldBe` dssdAmountLovelace disburse
+        dstLovelaceAfter treasury `shouldSatisfy` (> 0)
+        dstConsumed treasury `shouldBe` True
+
+        provenance <-
+            decodeJsonFile "disburse-submit provenance" provenancePath
+        dspPhase provenance `shouldBe` "disburse-submit"
+        dspSource provenance `shouldBe` "amaru-treasury-tx"
+        dspIssue provenance `shouldBe` 150
+        dspParentIssue provenance `shouldBe` 151
+        dspDependsOnIssues provenance `shouldBe` [147, 149]
 
 assertPreparedStakeRewardAccount
     :: Bool -> StakeRewardInitAccount -> IO ()

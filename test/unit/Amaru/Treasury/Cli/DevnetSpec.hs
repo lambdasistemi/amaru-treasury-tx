@@ -29,10 +29,12 @@ import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     )
 import Amaru.Treasury.Cli.Devnet
-    ( DevnetGovernanceWithdrawalInitOpts (..)
+    ( DevnetDisburseSubmitOpts (..)
+    , DevnetGovernanceWithdrawalInitOpts (..)
     , DevnetRegistryInitOpts (..)
     , DevnetStakeRewardInitOpts (..)
     , registryInitCommandLines
+    , requireDevnetDisburseSubmitNetwork
     , requireDevnetGovernanceWithdrawalInitNetwork
     , requireDevnetRegistryInitNetwork
     , requireDevnetStakeRewardInitNetwork
@@ -147,6 +149,40 @@ spec = describe "devnet commands" $ do
                 `shouldBe` Left
                     "governance-withdrawal-init: --network must be devnet"
 
+    describe "disburse-submit command" $ do
+        it "parses the nested devnet disburse-submit command" $
+            case parseCmd disburseSubmitArgs of
+                Right (g, CmdDevnetDisburseSubmit o) -> do
+                    goSocketPath g `shouldBe` Just "node.socket"
+                    goNetworkMagic g `shouldBe` NetworkMagic 42
+                    goNetworkName g `shouldBe` Just "devnet"
+                    o
+                        `shouldBe` DevnetDisburseSubmitOpts
+                            { ddsioRegistryFile =
+                                "runs/devnet/registry-init/registry.json"
+                            , ddsioMaterializedFile =
+                                "runs/devnet/governance-withdrawal-init/materialized.json"
+                            , ddsioFundingAddress = fundingAddress
+                            , ddsioSigningKeyFile = "payment.skey"
+                            , ddsioBeneficiaryAddress = beneficiaryAddress
+                            , ddsioRunDir = "runs/devnet"
+                            , ddsioAmountLovelace = 1_000_000
+                            }
+                Right _ ->
+                    expectationFailure
+                        "expected devnet disburse-submit command"
+                Left e -> expectationFailure e
+
+        it "rejects non-DevNet networks before disburse effects" $
+            requireDevnetDisburseSubmitNetwork
+                GlobalOpts
+                    { goSocketPath = Just "/does/not/exist/node.socket"
+                    , goNetworkMagic = NetworkMagic 1
+                    , goNetworkName = Just "preprod"
+                    }
+                `shouldBe` Left
+                    "disburse-submit: --network must be devnet"
+
 parseCmd :: [String] -> Either String (GlobalOpts, Cmd)
 parseCmd args =
     case execParserPure defaultPrefs opts args of
@@ -212,6 +248,32 @@ governanceWithdrawalInitArgs =
     , "180"
     ]
 
+disburseSubmitArgs :: [String]
+disburseSubmitArgs =
+    [ "--network"
+    , "devnet"
+    , "--node-socket"
+    , "node.socket"
+    , "devnet"
+    , "disburse-submit"
+    , "--registry-file"
+    , "runs/devnet/registry-init/registry.json"
+    , "--materialized-file"
+    , "runs/devnet/governance-withdrawal-init/materialized.json"
+    , "--funding-address"
+    , fundingAddress
+    , "--signing-key-file"
+    , "payment.skey"
+    , "--beneficiary-address"
+    , beneficiaryAddress
+    , "--run-dir"
+    , "runs/devnet"
+    ]
+
 fundingAddress :: String
 fundingAddress =
     "addr_test1vqg7qku3m5d8czwgh3p6hrq3r8qu9m7u"
+
+beneficiaryAddress :: String
+beneficiaryAddress =
+    "addr_test1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"

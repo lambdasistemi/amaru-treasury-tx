@@ -145,20 +145,23 @@ nix develop --quiet -c just devnet-smoke stake-reward-init
 ```
 
 The stake-reward-init command registers the DevNet treasury script
-reward account, verifies the registry handoff, and emits the
-permissions script hash as the later withdraw-zero reward account. It
-writes `stake-reward-init/summary.json`,
-`stake-reward-init/accounts.json`, and
-`stake-reward-init/provenance.json`. The latest local evidence for this
-branch is `runs/devnet/20260516T213258Z`: setup tx
-`89737f7b4439008d5aeca01789addbbbfeb2876cb4a0fab224f1c545e4076598`,
+reward account, verifies the registry handoff, and registers the
+permissions reward account so later withdraw-zero permission checks are
+accepted by the ledger. The permissions validator is still invoked by
+later disburse/swap transactions through the withdraw-zero pattern, not
+as a certificate-purpose validator. It writes
+`stake-reward-init/summary.json`, `stake-reward-init/accounts.json`,
+and `stake-reward-init/provenance.json`. The latest local evidence for
+this branch is `runs/devnet/20260517T005034Z`: setup tx
+`527c1b08fdfd1c41fe1237d4d5f1bc3572dee98a81b76b62257c958e50dc9cc8`,
 treasury reward account
 `b2b7201c62e43ae8e03b61c96931379ebbcdce61befc3f4e4b1f4be4`
 registered on `Testnet`, and permissions reward account
 `f9dc1d931a3f52eaf83891f8621cbba5ba64f6faa5792f1b00c17333`
-reported as `registered: false` for later withdraw-zero witnesses.
-This slice does not submit governance funding, treasury withdrawal
-materialization, or disburse transactions; those remain #149 and #150.
+registered on `Testnet` for later withdraw-zero witnesses. This slice
+does not submit governance funding, treasury withdrawal
+materialization, or disburse transactions; those are recorded by the
+#149 and #150 command-proof slices.
 
 Run the shipped DevNet governance/withdrawal setup command after
 registry-init and stake-reward-init with:
@@ -201,6 +204,39 @@ fee `456417` lovelace, materialized output
 and treasury ADA `200000000 -> 202000000`. The legacy
 `just devnet-smoke withdraw` phase is a compatibility alias for the same
 production command proof.
+
+Run the shipped DevNet disburse submit command after registry-init and
+governance-withdrawal-init with:
+
+```bash
+amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+  devnet disburse-submit \
+  --registry-file runs/devnet/manual-registry-init/registry-init/registry.json \
+  --materialized-file runs/devnet/manual-governance-withdrawal-init/governance-withdrawal-init/materialized.json \
+  --funding-address "$DEVNET_FUNDING_ADDRESS" \
+  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
+  --beneficiary-address "$DEVNET_BENEFICIARY_ADDRESS" \
+  --run-dir runs/devnet/manual-disburse-submit \
+  --amount-lovelace 1000000
+```
+
+Run the matching live proof harness with:
+
+```bash
+nix develop --quiet -c just devnet-smoke disburse-submit
+```
+
+The command consumes #147 registry artifacts and the #149 materialized
+treasury UTxO handoff, builds through the production disburse/tx-build
+path, signs and submits the transaction, then verifies beneficiary
+receipt and the reduced treasury output. The latest local evidence for
+this branch is `runs/devnet/20260517T005034Z`: submitted disburse tx
+`0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b`,
+beneficiary output
+`0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b#1`
+with `1000000` lovelace, treasury input
+`309e28ed5b95de38258bcc130d6390800b0719f6410b0d5fe6f3c33cc1b70817#0`,
+and treasury lovelace `2000000 -> 1000000`.
 
 Run the swap readiness boundary check with:
 

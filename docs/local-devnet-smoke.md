@@ -3,12 +3,13 @@
 The local DevNet smoke is an opt-in release check. It starts the
 `cardano-node-clients` DevNet, verifies the node socket with network
 magic `42`, can publish registry/reference-script bootstrap state, can
-register the treasury reward account and emit the permissions
-withdraw-zero reward account, and proves the shipped
-`devnet governance-withdrawal-init` command on a patched short-epoch
-genesis. The command proof records governance proposal/vote evidence,
-reward funding, withdrawal build/submission, and the treasury UTxO that
-materialized from the reward account. The swap readiness phase publishes
+register the treasury and permissions reward accounts, proves the
+shipped `devnet governance-withdrawal-init` command, and proves the
+shipped `devnet disburse-submit` command on a patched short-epoch
+genesis. The command proofs record governance proposal/vote evidence,
+reward funding, withdrawal build/submission, the materialized treasury
+UTxO, disburse submission, beneficiary receipt, and the reduced treasury
+output. The swap readiness phase publishes
 the public SundaeSwap V3 order validator as a local DevNet reference
 script and writes handoff metadata for the later order-build slice.
 
@@ -169,21 +170,19 @@ stake-reward-init: summary runs/devnet/YYYYMMDDTHHMMSSZ/stake-reward-init/summar
 stake-reward-init: accounts runs/devnet/YYYYMMDDTHHMMSSZ/stake-reward-init/accounts.json
 ```
 
-The stake-reward-init command registers only the treasury script reward
-account. The permissions script is not a certificate-purpose validator;
-it is invoked later by disburse/swap transactions through the
-withdraw-zero pattern. The command still emits the permissions reward
-account because later transactions need that script hash as their
-withdraw-zero target.
+The stake-reward-init command registers the treasury script reward
+account and the permissions reward account. The permissions script is
+still invoked later by disburse/swap transactions through the
+withdraw-zero pattern, not as a certificate-purpose validator.
 
-The verified 2026-05-16 slice used run directory
-`runs/devnet/20260516T213258Z`. It submitted setup tx
-`89737f7b4439008d5aeca01789addbbbfeb2876cb4a0fab224f1c545e4076598`,
+The verified 2026-05-17 slice used run directory
+`runs/devnet/20260517T005034Z`. It submitted setup tx
+`527c1b08fdfd1c41fe1237d4d5f1bc3572dee98a81b76b62257c958e50dc9cc8`,
 reported treasury reward account
 `b2b7201c62e43ae8e03b61c96931379ebbcdce61befc3f4e4b1f4be4` as
 `registered: true`, and reported permissions reward account
 `f9dc1d931a3f52eaf83891f8621cbba5ba64f6faa5792f1b00c17333` as
-`registered: false`, both on ledger network `Testnet`.
+`registered: true`, both on ledger network `Testnet`.
 
 The stake-reward-init command writes:
 
@@ -308,6 +307,85 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
 for this same production command proof. It is not a separate
 smoke-owned withdrawal implementation.
 
+## Disburse Submit Boundary
+
+The shipped command for this boundary is:
+
+```bash
+amaru-treasury-tx --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+  devnet disburse-submit \
+  --registry-file runs/devnet/manual-registry-init/registry-init/registry.json \
+  --materialized-file runs/devnet/manual-governance-withdrawal-init/governance-withdrawal-init/materialized.json \
+  --funding-address "$DEVNET_FUNDING_ADDRESS" \
+  --signing-key-file "$DEVNET_PAYMENT_SKEY" \
+  --beneficiary-address "$DEVNET_BENEFICIARY_ADDRESS" \
+  --run-dir runs/devnet/manual-disburse-submit \
+  --amount-lovelace 1000000
+```
+
+The live proof harness runs the prerequisite commands and then invokes
+the same production command runner:
+
+```bash
+just devnet-smoke disburse-submit
+```
+
+Expected command-prefixed output:
+
+```text
+disburse-submit: run-dir runs/devnet/YYYYMMDDTHHMMSSZ
+disburse-submit: network devnet magic 42
+disburse-submit: phase disburse-submit passed
+disburse-submit: submitted-tx-id <tx-id>
+disburse-submit: beneficiary-address <addr_test...>
+disburse-submit: beneficiary-tx-in <tx-id>#1
+disburse-submit: beneficiary-lovelace 1000000
+disburse-submit: treasury-input <tx-id>#0
+disburse-submit: treasury-lovelace-before 2000000
+disburse-submit: treasury-lovelace-after 1000000
+disburse-submit: signed-tx runs/devnet/YYYYMMDDTHHMMSSZ/disburse-submit/signed-tx.cbor.hex
+disburse-submit: submit-log runs/devnet/YYYYMMDDTHHMMSSZ/disburse-submit/submit.log
+disburse-submit: summary runs/devnet/YYYYMMDDTHHMMSSZ/disburse-submit/summary.json
+```
+
+The proof starts a fresh DevNet, runs `devnet registry-init`, runs
+`devnet stake-reward-init`, runs `devnet governance-withdrawal-init`,
+then calls `devnet disburse-submit`. Production code owns disburse
+intent construction, tx-build, signing, submission, beneficiary receipt
+verification, and treasury-output verification. The smoke layer only
+prepares the local node/prerequisites and asserts the observed artifacts
+and chain effects.
+
+The verified 2026-05-17 slice used run directory
+`runs/devnet/20260517T005034Z`. It submitted disburse tx
+`0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b`,
+observed beneficiary output
+`0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b#1`
+with `1000000` lovelace, consumed treasury input
+`309e28ed5b95de38258bcc130d6390800b0719f6410b0d5fe6f3c33cc1b70817#0`,
+and reduced treasury lovelace from `2000000` to `1000000`.
+
+The command proof writes:
+
+```text
+runs/devnet/YYYYMMDDTHHMMSSZ/
+|-- registry-init/
+|-- stake-reward-init/
+|-- governance-withdrawal-init/
+`-- disburse-submit/
+    |-- beneficiary.json
+    |-- disburse.json
+    |-- intent.json
+    |-- provenance.json
+    |-- report.json
+    |-- report.md
+    |-- signed-tx.cbor.hex
+    |-- submit.log
+    |-- summary.json
+    |-- treasury.json
+    `-- tx-body.cbor.hex
+```
+
 ## Swap Readiness Boundary
 
 ```bash
@@ -400,8 +478,9 @@ The prior experiment is split into seven tickets:
 
 The passing phases today are `node`, `registry-init`,
 `stake-reward-init`, `governance`, `governance-withdrawal-init`,
-`withdraw`, and `swap-ready`. `just devnet-smoke all` runs `node`,
-`governance`, and `governance-withdrawal-init` into separate
+`disburse-submit`, `withdraw`, and `swap-ready`. `just devnet-smoke all`
+runs `node`, `governance`, `governance-withdrawal-init`, and
+`disburse-submit` into separate
 subdirectories under one timestamped run directory.
 
 `node` proves only the local node boundary, network magic, and timing.
@@ -414,7 +493,10 @@ mechanics. `governance-withdrawal-init` is the #149 command proof: it
 consumes registry-init and stake-reward-init artifacts, runs the shipped
 production command runner, and observes ADA materialized at the treasury
 script address. `withdraw` is a compatibility alias for
-`governance-withdrawal-init`. It is not proof that disburse, SundaeSwap
+`governance-withdrawal-init`. `disburse-submit` is the #150 command
+proof: it consumes the #149 materialized treasury UTxO, runs the
+shipped production command runner, and observes beneficiary receipt plus
+the reduced treasury output. It is not proof that SundaeSwap
 order-build, SundaeSwap order-spend, or reorganize transactions have
 been built or observed on DevNet.
 `swap-ready` proves only that the public V3 order-validator reference is
@@ -487,6 +569,13 @@ log together. When diagnosing submission or materialization, inspect
 `governance-withdrawal-init/submit.log`,
 `governance-withdrawal-init/materialized.json`, and the node log.
 
+The disburse-submit phase may fail during prerequisite setup, disburse
+intent creation, `tx-build`, signing, submission, beneficiary lookup, or
+treasury-output verification. Inspect `disburse-submit/intent.json`,
+`disburse-submit/report.json`, `disburse-submit/signed-tx.cbor.hex`,
+`disburse-submit/submit.log`, `disburse-submit/beneficiary.json`,
+`disburse-submit/treasury.json`, and the node log together.
+
 The swap readiness phase may fail during artifact hashing, reference
 script publication, reference UTxO lookup, or observed reference-script
 hash verification. Inspect `swap-ready/registry.json`,
@@ -500,6 +589,9 @@ evidence. Use `registry-init/registry.json`,
 `governance-withdrawal-init/governance.json`,
 `governance-withdrawal-init/withdrawal.json`, and
 `governance-withdrawal-init/materialized.json` when recording #149
-command evidence. Use `swap-ready/registry.json`,
+command evidence. Use `disburse-submit/disburse.json`,
+`disburse-submit/beneficiary.json`, `disburse-submit/treasury.json`,
+and `disburse-submit/summary.json` when recording #150 command
+evidence. Use `swap-ready/registry.json`,
 `swap-ready/summary.json`, and `swap-ready/provenance.json` when
 recording swap readiness evidence.

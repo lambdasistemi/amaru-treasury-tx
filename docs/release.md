@@ -104,6 +104,7 @@ nix develop --quiet -c just devnet-smoke node
 nix develop --quiet -c just devnet-smoke registry-init
 nix develop --quiet -c just devnet-smoke stake-reward-init
 nix develop --quiet -c just devnet-smoke governance-withdrawal-init
+nix develop --quiet -c just devnet-smoke disburse-submit
 nix develop --quiet -c just devnet-smoke swap-ready
 ```
 
@@ -114,17 +115,17 @@ release notes when this check is used. The node phase proves the
 
 The registry-init phase proves the production-backed DevNet registry
 and reference-script publication command. The stake-reward-init phase
-then consumes the registry artifact, registers the treasury reward
-account, and emits the permissions reward account for later
+then consumes the registry artifact and registers both the treasury
+reward account and the permissions reward account needed by later
 withdraw-zero witnesses. Latest branch stake/reward evidence is
-`runs/devnet/20260516T213258Z`, setup tx
-`89737f7b4439008d5aeca01789addbbbfeb2876cb4a0fab224f1c545e4076598`,
+`runs/devnet/20260517T005034Z`, setup tx
+`527c1b08fdfd1c41fe1237d4d5f1bc3572dee98a81b76b62257c958e50dc9cc8`,
 treasury reward account
 `b2b7201c62e43ae8e03b61c96931379ebbcdce61befc3f4e4b1f4be4` with
 `registered: true`, and permissions reward account
 `f9dc1d931a3f52eaf83891f8621cbba5ba64f6faa5792f1b00c17333` with
-`registered: false`. This is prerequisite evidence only; governance
-funding and disburse remain separate slices.
+`registered: true`. This is prerequisite evidence only; governance
+funding and disburse are recorded by their own command-proof slices.
 
 The governance-withdrawal-init phase copies and patches a short-epoch
 genesis, runs registry-init and stake-reward-init prerequisites, then
@@ -149,6 +150,21 @@ fee `456417`, materialized output
 and treasury ADA `200000000 -> 202000000`. The legacy `withdraw`
 smoke phase remains a compatibility alias for the same command proof.
 
+The disburse-submit phase copies and patches a short-epoch genesis,
+runs registry-init, stake-reward-init, and governance-withdrawal-init
+prerequisites, then invokes the shipped `devnet disburse-submit`
+command. The production command consumes the #149 materialized treasury
+UTxO, builds through the production disburse/tx-build path,
+signs/submits the transaction, verifies the beneficiary output, and
+verifies the reduced treasury output. Latest branch evidence is
+`runs/devnet/20260517T005034Z`: submitted tx
+`0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b`,
+beneficiary output
+`0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b#1`
+with `1000000` lovelace, treasury input
+`309e28ed5b95de38258bcc130d6390800b0719f6410b0d5fe6f3c33cc1b70817#0`,
+and treasury lovelace `2000000 -> 1000000`.
+
 The swap readiness phase uses the checked-in public
 `SundaeSwap-finance/sundae-contracts@be33466b7dbe0f8e6c0e0f46ff23737897f45835`
 `order.spend` artifact, publishes it as a local DevNet reference
@@ -169,15 +185,29 @@ treasury withdrawal setup (#149), and disburse/beneficiary receipt
 (#150). Older evidence slices also track governance action (#82),
 withdrawal (#83), disburse (#86), SundaeSwap V3 contract readiness
 (#132), SundaeSwap V3 order build/funding (#84), SundaeSwap V3 order
-spend (#85), and reorganize (#87). Do not record #150 disburse,
-swap-order build/funding, swap-spend, or reorganize evidence until
-those slices land and their phase-specific smoke commands pass.
+spend (#85), and reorganize (#87). Do not record swap-order
+build/funding, swap-spend, or reorganize evidence until those slices
+land and their phase-specific smoke commands pass.
 SundaeSwap compatibility claims must be based on the public V3
 contracts/SDK, not on an Amaru-only toy validator.
 
 Release note wording for this slice:
 
 ```text
+Local DevNet disburse-submit evidence now proves #150: the smoke runs
+registry-init, stake-reward-init, and governance-withdrawal-init
+prerequisites, invokes the shipped `devnet disburse-submit` command,
+builds/signs/submits the disburse through the production disburse and
+tx-build path, verifies beneficiary receipt, and verifies the reduced
+treasury output. Evidence: runs/devnet/20260517T005034Z, submitted tx
+0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b,
+beneficiary output
+0008ab902b2f835624f453af0467d826b02519d7139ec8e84a04c8a9c000011b#1
+with 1000000 lovelace, treasury input
+309e28ed5b95de38258bcc130d6390800b0719f6410b0d5fe6f3c33cc1b70817#0,
+and treasury lovelace 2000000 -> 1000000. This is not SundaeSwap order
+or reorganize proof.
+
 Local DevNet governance-withdrawal-init evidence now proves #149: the
 smoke runs registry-init and stake-reward-init prerequisites, invokes
 the shipped `devnet governance-withdrawal-init` command, submits and

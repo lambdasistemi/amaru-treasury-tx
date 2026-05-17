@@ -13,18 +13,26 @@ import Cardano.Crypto.Hash.Class
     , HashAlgorithm
     , hashFromBytes
     )
+import Cardano.Ledger.Alonzo.Scripts (AsIx (..))
+import Cardano.Ledger.Alonzo.TxWits (Redeemers (..))
 import Cardano.Ledger.Api.PParams (emptyPParams)
+import Cardano.Ledger.Api.Tx (witsTxL)
 import Cardano.Ledger.Api.Tx.Body
     ( certsTxBodyL
     , collateralInputsTxBodyL
     , inputsTxBodyL
     , referenceInputsTxBodyL
     )
+import Cardano.Ledger.Api.Tx.Wits (rdmrsTxWitsL)
 import Cardano.Ledger.BaseTypes
     ( Network (..)
+    , StrictMaybe (..)
     , mkTxIxPartial
     )
 import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Conway.Scripts
+    ( ConwayPlutusPurpose (..)
+    )
 import Cardano.Ledger.Core (bodyTxL)
 import Cardano.Ledger.Credential (Credential (..))
 import Cardano.Ledger.Hashes
@@ -48,6 +56,7 @@ import Data.Aeson
     )
 import Data.ByteString qualified as BS
 import Data.Foldable (toList)
+import Data.Map.Strict qualified as Map
 import Data.Maybe (fromJust)
 import Data.Set qualified as Set
 import Data.Text qualified as T
@@ -97,12 +106,13 @@ spec =
                     </> "provenance.json"
 
         it
-            "drafts stake-reward-init setup certifying only the treasury reward account"
+            "drafts stake-reward-init setup for treasury and permissions reward accounts"
             $ do
                 let seedIn = mkTxIn 1
                     treasuryRef = mkTxIn 2
                     permissionsRef = mkTxIn 3
                     treasuryCredential = scriptCredential 10
+                    permissionsCredential = scriptCredential 11
                     stakeDeposit = Coin 2_000_000
                     tx =
                         draft emptyPParams $
@@ -111,9 +121,12 @@ spec =
                                 treasuryRef
                                 permissionsRef
                                 treasuryCredential
+                                permissionsCredential
                                 stakeDeposit
                                 (SlotNo 100)
                     body = tx ^. bodyTxL
+                    Redeemers redeemers =
+                        tx ^. witsTxL . rdmrsTxWitsL
                 body ^. inputsTxBodyL `shouldBe` Set.singleton seedIn
                 body
                     ^. collateralInputsTxBodyL
@@ -127,7 +140,13 @@ spec =
                                         treasuryCredential
                                         (DelegVote DRepAlwaysAbstain)
                                         stakeDeposit
+                               , ConwayTxCertDeleg $
+                                    ConwayRegCert
+                                        permissionsCredential
+                                        SNothing
                                ]
+                certifyingRedeemers redeemers
+                    `shouldBe` [ConwayCertifying (AsIx 0)]
 
         it
             "renders stake-reward-init summary, accounts, provenance, and success lines"
@@ -164,7 +183,7 @@ spec =
                                     .= accountValue
                                         samplePermissionsHash
                                         samplePermissionsHash
-                                        False
+                                        True
                                 ]
                         ]
                 stakeRewardInitProvenanceValue
@@ -227,7 +246,7 @@ sampleResult = do
             , dsrirTreasury =
                 sampleAccount sampleTreasuryHash sampleTreasuryHash True
             , dsrirPermissions =
-                sampleAccount samplePermissionsHash samplePermissionsHash False
+                sampleAccount samplePermissionsHash samplePermissionsHash True
             , dsrirDiagnostics =
                 [ RewardAccountRegistrationInferredFromAcceptedTx
                 , PermissionsRewardAccountAvailableForWithdrawZero
@@ -286,3 +305,11 @@ parse label parser input =
             expectationFailure (label <> ": " <> err)
                 *> error "unreachable"
         Right ok -> pure ok
+
+certifyingRedeemers
+    :: Map.Map
+        (ConwayPlutusPurpose AsIx era)
+        a
+    -> [ConwayPlutusPurpose AsIx era]
+certifyingRedeemers redeemers =
+    [purpose | purpose@(ConwayCertifying _) <- Map.keys redeemers]

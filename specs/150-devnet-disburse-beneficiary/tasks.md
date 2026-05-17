@@ -134,11 +134,11 @@ runner on a fresh DevNet.
   `docs/release.md`.
 - [x] T037 [US3] Update quickstart, contract, tasks, and PR body with
   accepted live evidence.
-- [ ] T038 [US3] Run final prerequisites check, `git diff --check`, and
+- [x] T038 [US3] Run final prerequisites check, `git diff --check`, and
   `./gate.sh`.
-- [ ] T039 [US3] Remove `gate.sh` in the final cleanup commit before
+- [x] T039 [US3] Remove `gate.sh` in the final cleanup commit before
   marking PR ready.
-- [ ] T040 [US3] Mark PR #155 ready only after docs, metadata, specs,
+- [x] T040 [US3] Mark PR #155 ready only after docs, metadata, specs,
   quickstart, tasks, and PR body align.
 
 ## Subagent Handoff Contract

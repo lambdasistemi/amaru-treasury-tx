@@ -53,6 +53,34 @@ intentJsonSchema =
                     "reorganize"
                     "reorganize"
                     (ref "reorganize")
+               , actionSchema
+                    "registry-init-seed-split"
+                    "registry-init-seed-split"
+                    (ref "registry-init-seed-split")
+               , actionSchema
+                    "registry-init-mint"
+                    "registry-init-mint"
+                    (ref "registry-init-mint")
+               , actionSchema
+                    "registry-init-reference-scripts"
+                    "registry-init-reference-scripts"
+                    (ref "registry-init-reference-scripts")
+               , actionSchema
+                    "stake-reward-init-script-account"
+                    "stake-reward-init-script-account"
+                    (ref "stake-reward-init-script-account")
+               , actionSchema
+                    "stake-reward-init-plain-account"
+                    "stake-reward-init-plain-account"
+                    (ref "stake-reward-init-plain-account")
+               , actionSchema
+                    "governance-withdrawal-init-proposal"
+                    "governance-withdrawal-init-proposal"
+                    (ref "governance-withdrawal-init-proposal")
+               , actionSchema
+                    "governance-withdrawal-init-materialization"
+                    "governance-withdrawal-init-materialization"
+                    (ref "governance-withdrawal-init-materialization")
                ]
         , "$defs"
             .= object
@@ -64,6 +92,19 @@ intentJsonSchema =
                 , "disburse" .= disburseSchema
                 , "withdraw" .= withdrawSchema
                 , "reorganize" .= emptyPayloadSchema
+                , "registry-init-seed-split"
+                    .= emptyPayloadSchema
+                , "registry-init-mint" .= emptyPayloadSchema
+                , "registry-init-reference-scripts"
+                    .= emptyPayloadSchema
+                , "stake-reward-init-script-account"
+                    .= emptyPayloadSchema
+                , "stake-reward-init-plain-account"
+                    .= emptyPayloadSchema
+                , "governance-withdrawal-init-proposal"
+                    .= emptyPayloadSchema
+                , "governance-withdrawal-init-materialization"
+                    .= emptyPayloadSchema
                 , "txIn" .= txInSchema
                 , "bech32Address" .= bech32AddressSchema
                 , "hex28" .= hexBytesSchema 28

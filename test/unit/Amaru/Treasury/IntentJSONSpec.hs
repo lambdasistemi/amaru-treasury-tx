@@ -53,12 +53,19 @@ import Cardano.Ledger.Coin (Coin (..))
 import Amaru.Treasury.IntentJSON
     ( Action (..)
     , DisburseInputs (..)
+    , GovernanceWithdrawalInitMaterializationInputs (..)
+    , GovernanceWithdrawalInitProposalInputs (..)
     , Payload
     , RationaleJSON (..)
+    , RegistryInitMintInputs (..)
+    , RegistryInitReferenceScriptsInputs (..)
+    , RegistryInitSeedSplitInputs (..)
     , ReorganizeInputs (..)
     , SAction (..)
     , ScopeJSON (..)
     , SomeTreasuryIntent (..)
+    , StakeRewardInitPlainAccountInputs (..)
+    , StakeRewardInitScriptAccountInputs (..)
     , SwapInputs (..)
     , TreasuryIntent (..)
     , WalletJSON (..)
@@ -88,6 +95,32 @@ spec = describe "Amaru.Treasury.IntentJSON" $ do
             roundTripProp genWithdrawIntent
         it "reorganize action: decode . encode = Right" $
             roundTripProp genReorganizeIntent
+        it
+            "registry-init-seed-split: decode . encode = Right"
+            $ roundTripProp genRegistryInitSeedSplitIntent
+        it
+            "registry-init-mint: decode . encode = Right"
+            $ roundTripProp genRegistryInitMintIntent
+        it
+            "registry-init-reference-scripts: decode . encode = Right"
+            $ roundTripProp
+                genRegistryInitReferenceScriptsIntent
+        it
+            "stake-reward-init-script-account: decode . encode = Right"
+            $ roundTripProp
+                genStakeRewardInitScriptAccountIntent
+        it
+            "stake-reward-init-plain-account: decode . encode = Right"
+            $ roundTripProp
+                genStakeRewardInitPlainAccountIntent
+        it
+            "governance-withdrawal-init-proposal: decode . encode = Right"
+            $ roundTripProp
+                genGovernanceWithdrawalInitProposalIntent
+        it
+            "governance-withdrawal-init-materialization: decode . encode = Right"
+            $ roundTripProp
+                genGovernanceWithdrawalInitMaterializationIntent
 
     describe "wjExtraTxIns generator" $ do
         it
@@ -430,6 +463,53 @@ genWithdrawIntent = genIntent SWithdraw genWithdrawInputs
 genReorganizeIntent :: Gen SomeTreasuryIntent
 genReorganizeIntent =
     genIntent SReorganize (pure ReorganizeInputs)
+
+genRegistryInitSeedSplitIntent :: Gen SomeTreasuryIntent
+genRegistryInitSeedSplitIntent =
+    genIntent
+        SRegistryInitSeedSplit
+        (pure RegistryInitSeedSplitInputs)
+
+genRegistryInitMintIntent :: Gen SomeTreasuryIntent
+genRegistryInitMintIntent =
+    genIntent
+        SRegistryInitMint
+        (pure RegistryInitMintInputs)
+
+genRegistryInitReferenceScriptsIntent
+    :: Gen SomeTreasuryIntent
+genRegistryInitReferenceScriptsIntent =
+    genIntent
+        SRegistryInitReferenceScripts
+        (pure RegistryInitReferenceScriptsInputs)
+
+genStakeRewardInitScriptAccountIntent
+    :: Gen SomeTreasuryIntent
+genStakeRewardInitScriptAccountIntent =
+    genIntent
+        SStakeRewardInitScriptAccount
+        (pure StakeRewardInitScriptAccountInputs)
+
+genStakeRewardInitPlainAccountIntent
+    :: Gen SomeTreasuryIntent
+genStakeRewardInitPlainAccountIntent =
+    genIntent
+        SStakeRewardInitPlainAccount
+        (pure StakeRewardInitPlainAccountInputs)
+
+genGovernanceWithdrawalInitProposalIntent
+    :: Gen SomeTreasuryIntent
+genGovernanceWithdrawalInitProposalIntent =
+    genIntent
+        SGovernanceWithdrawalInitProposal
+        (pure GovernanceWithdrawalInitProposalInputs)
+
+genGovernanceWithdrawalInitMaterializationIntent
+    :: Gen SomeTreasuryIntent
+genGovernanceWithdrawalInitMaterializationIntent =
+    genIntent
+        SGovernanceWithdrawalInitMaterialization
+        (pure GovernanceWithdrawalInitMaterializationInputs)
 
 -- ----------------------------------------------------
 -- Negative-case raw inputs

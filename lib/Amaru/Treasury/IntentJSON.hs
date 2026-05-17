@@ -42,6 +42,13 @@ module Amaru.Treasury.IntentJSON
     , DisburseInputs (..)
     , WithdrawInputs (..)
     , ReorganizeInputs (..)
+    , RegistryInitSeedSplitInputs (..)
+    , RegistryInitMintInputs (..)
+    , RegistryInitReferenceScriptsInputs (..)
+    , StakeRewardInitScriptAccountInputs (..)
+    , StakeRewardInitPlainAccountInputs (..)
+    , GovernanceWithdrawalInitProposalInputs (..)
+    , GovernanceWithdrawalInitMaterializationInputs (..)
 
       -- * Top-level intent
     , TreasuryIntent (..)
@@ -143,7 +150,18 @@ import Amaru.Treasury.Tx.Withdraw (WithdrawIntent (..))
 level via @-XDataKinds@ so it can index 'TreasuryIntent'
 in T007.
 -}
-data Action = Swap | Disburse | Withdraw | Reorganize
+data Action
+    = Swap
+    | Disburse
+    | Withdraw
+    | Reorganize
+    | RegistryInitSeedSplit
+    | RegistryInitMint
+    | RegistryInitReferenceScripts
+    | StakeRewardInitScriptAccount
+    | StakeRewardInitPlainAccount
+    | GovernanceWithdrawalInitProposal
+    | GovernanceWithdrawalInitMaterialization
     deriving stock (Eq, Show)
 
 {- | Runtime singleton witnessing the type-level action.
@@ -155,6 +173,18 @@ data SAction (a :: Action) where
     SDisburse :: SAction 'Disburse
     SWithdraw :: SAction 'Withdraw
     SReorganize :: SAction 'Reorganize
+    SRegistryInitSeedSplit :: SAction 'RegistryInitSeedSplit
+    SRegistryInitMint :: SAction 'RegistryInitMint
+    SRegistryInitReferenceScripts
+        :: SAction 'RegistryInitReferenceScripts
+    SStakeRewardInitScriptAccount
+        :: SAction 'StakeRewardInitScriptAccount
+    SStakeRewardInitPlainAccount
+        :: SAction 'StakeRewardInitPlainAccount
+    SGovernanceWithdrawalInitProposal
+        :: SAction 'GovernanceWithdrawalInitProposal
+    SGovernanceWithdrawalInitMaterialization
+        :: SAction 'GovernanceWithdrawalInitMaterialization
 
 deriving stock instance Show (SAction a)
 
@@ -173,6 +203,19 @@ type family Payload (a :: Action) :: Type where
     Payload 'Disburse = DisburseInputs
     Payload 'Withdraw = WithdrawInputs
     Payload 'Reorganize = ReorganizeInputs
+    Payload 'RegistryInitSeedSplit =
+        RegistryInitSeedSplitInputs
+    Payload 'RegistryInitMint = RegistryInitMintInputs
+    Payload 'RegistryInitReferenceScripts =
+        RegistryInitReferenceScriptsInputs
+    Payload 'StakeRewardInitScriptAccount =
+        StakeRewardInitScriptAccountInputs
+    Payload 'StakeRewardInitPlainAccount =
+        StakeRewardInitPlainAccountInputs
+    Payload 'GovernanceWithdrawalInitProposal =
+        GovernanceWithdrawalInitProposalInputs
+    Payload 'GovernanceWithdrawalInitMaterialization =
+        GovernanceWithdrawalInitMaterializationInputs
 
 {- | Per-action translated form — the typed lift consumed
 by the build path. Names the existing per-action typed
@@ -183,6 +226,17 @@ type family Translated (a :: Action) :: Type where
     Translated 'Disburse = DisburseIntent
     Translated 'Withdraw = WithdrawIntent
     Translated 'Reorganize = ReorganizeIntent
+    -- Slice 2 ships these as @()@ placeholders. Slices 3a / 3b /
+    -- 3c replace each with the typed input record consumed by the
+    -- extracted construction core in
+    -- @lib/Amaru/Treasury/Devnet/*Init.hs@.
+    Translated 'RegistryInitSeedSplit = ()
+    Translated 'RegistryInitMint = ()
+    Translated 'RegistryInitReferenceScripts = ()
+    Translated 'StakeRewardInitScriptAccount = ()
+    Translated 'StakeRewardInitPlainAccount = ()
+    Translated 'GovernanceWithdrawalInitProposal = ()
+    Translated 'GovernanceWithdrawalInitMaterialization = ()
 
 -- ----------------------------------------------------
 -- Shared structural blocks
@@ -461,6 +515,113 @@ instance ToJSON ReorganizeInputs where
     toJSON ReorganizeInputs = object []
 
 -- ----------------------------------------------------
+-- DevNet init sub-action payloads (slice 2 / #157)
+-- ----------------------------------------------------
+--
+-- Slice 2 freezes the wire shape for the seven flat init
+-- sub-actions extracted from the retired @devnet@
+-- supercommand. Each record ships as an empty JSON
+-- object: slices 3a / 3b / 3c populate fields as they
+-- extract the construction cores from the corresponding
+-- @lib/Amaru/Treasury/Devnet/*Init.hs@ runners. Adding a
+-- field later is a non-breaking change at the JSON
+-- layer because old empty objects keep parsing.
+
+-- | Registry-init seed-split sub-action payload (slice 3a fills).
+data RegistryInitSeedSplitInputs = RegistryInitSeedSplitInputs
+    deriving stock (Eq, Show)
+
+instance FromJSON RegistryInitSeedSplitInputs where
+    parseJSON =
+        withObject "RegistryInitSeedSplitInputs" $ \_ ->
+            pure RegistryInitSeedSplitInputs
+
+instance ToJSON RegistryInitSeedSplitInputs where
+    toJSON RegistryInitSeedSplitInputs = object []
+
+-- | Registry-init mint sub-action payload (slice 3a fills).
+data RegistryInitMintInputs = RegistryInitMintInputs
+    deriving stock (Eq, Show)
+
+instance FromJSON RegistryInitMintInputs where
+    parseJSON =
+        withObject "RegistryInitMintInputs" $ \_ ->
+            pure RegistryInitMintInputs
+
+instance ToJSON RegistryInitMintInputs where
+    toJSON RegistryInitMintInputs = object []
+
+-- | Registry-init reference-scripts sub-action payload (slice 3a fills).
+data RegistryInitReferenceScriptsInputs
+    = RegistryInitReferenceScriptsInputs
+    deriving stock (Eq, Show)
+
+instance FromJSON RegistryInitReferenceScriptsInputs where
+    parseJSON =
+        withObject "RegistryInitReferenceScriptsInputs" $ \_ ->
+            pure RegistryInitReferenceScriptsInputs
+
+instance ToJSON RegistryInitReferenceScriptsInputs where
+    toJSON RegistryInitReferenceScriptsInputs = object []
+
+-- | Stake-reward-init script-account sub-action payload (slice 3b fills).
+data StakeRewardInitScriptAccountInputs
+    = StakeRewardInitScriptAccountInputs
+    deriving stock (Eq, Show)
+
+instance FromJSON StakeRewardInitScriptAccountInputs where
+    parseJSON =
+        withObject "StakeRewardInitScriptAccountInputs" $ \_ ->
+            pure StakeRewardInitScriptAccountInputs
+
+instance ToJSON StakeRewardInitScriptAccountInputs where
+    toJSON StakeRewardInitScriptAccountInputs = object []
+
+-- | Stake-reward-init plain-account sub-action payload (slice 3b fills).
+data StakeRewardInitPlainAccountInputs
+    = StakeRewardInitPlainAccountInputs
+    deriving stock (Eq, Show)
+
+instance FromJSON StakeRewardInitPlainAccountInputs where
+    parseJSON =
+        withObject "StakeRewardInitPlainAccountInputs" $ \_ ->
+            pure StakeRewardInitPlainAccountInputs
+
+instance ToJSON StakeRewardInitPlainAccountInputs where
+    toJSON StakeRewardInitPlainAccountInputs = object []
+
+-- | Governance-withdrawal-init proposal sub-action payload (slice 3c fills).
+data GovernanceWithdrawalInitProposalInputs
+    = GovernanceWithdrawalInitProposalInputs
+    deriving stock (Eq, Show)
+
+instance FromJSON GovernanceWithdrawalInitProposalInputs where
+    parseJSON =
+        withObject
+            "GovernanceWithdrawalInitProposalInputs"
+            $ \_ -> pure GovernanceWithdrawalInitProposalInputs
+
+instance ToJSON GovernanceWithdrawalInitProposalInputs where
+    toJSON GovernanceWithdrawalInitProposalInputs = object []
+
+-- | Governance-withdrawal-init materialization sub-action payload (slice 3c fills).
+data GovernanceWithdrawalInitMaterializationInputs
+    = GovernanceWithdrawalInitMaterializationInputs
+    deriving stock (Eq, Show)
+
+instance FromJSON GovernanceWithdrawalInitMaterializationInputs where
+    parseJSON =
+        withObject
+            "GovernanceWithdrawalInitMaterializationInputs"
+            $ \_ ->
+                pure
+                    GovernanceWithdrawalInitMaterializationInputs
+
+instance ToJSON GovernanceWithdrawalInitMaterializationInputs where
+    toJSON GovernanceWithdrawalInitMaterializationInputs =
+        object []
+
+-- ----------------------------------------------------
 -- Top-level intent (GADT indexed by Action)
 -- ----------------------------------------------------
 
@@ -517,6 +678,18 @@ instance Show SomeTreasuryIntent where
                     SDisburse -> showsPrec 11 ti
                     SWithdraw -> showsPrec 11 ti
                     SReorganize -> showsPrec 11 ti
+                    SRegistryInitSeedSplit -> showsPrec 11 ti
+                    SRegistryInitMint -> showsPrec 11 ti
+                    SRegistryInitReferenceScripts ->
+                        showsPrec 11 ti
+                    SStakeRewardInitScriptAccount ->
+                        showsPrec 11 ti
+                    SStakeRewardInitPlainAccount ->
+                        showsPrec 11 ti
+                    SGovernanceWithdrawalInitProposal ->
+                        showsPrec 11 ti
+                    SGovernanceWithdrawalInitMaterialization ->
+                        showsPrec 11 ti
 
 instance Eq SomeTreasuryIntent where
     SomeTreasuryIntent sa ti == SomeTreasuryIntent sb tj =
@@ -525,6 +698,25 @@ instance Eq SomeTreasuryIntent where
             (SDisburse, SDisburse) -> ti == tj
             (SWithdraw, SWithdraw) -> ti == tj
             (SReorganize, SReorganize) -> ti == tj
+            (SRegistryInitSeedSplit, SRegistryInitSeedSplit) ->
+                ti == tj
+            (SRegistryInitMint, SRegistryInitMint) ->
+                ti == tj
+            ( SRegistryInitReferenceScripts
+                , SRegistryInitReferenceScripts
+                ) -> ti == tj
+            ( SStakeRewardInitScriptAccount
+                , SStakeRewardInitScriptAccount
+                ) -> ti == tj
+            ( SStakeRewardInitPlainAccount
+                , SStakeRewardInitPlainAccount
+                ) -> ti == tj
+            ( SGovernanceWithdrawalInitProposal
+                , SGovernanceWithdrawalInitProposal
+                ) -> ti == tj
+            ( SGovernanceWithdrawalInitMaterialization
+                , SGovernanceWithdrawalInitMaterialization
+                ) -> ti == tj
             _ -> False
 
 -- ----------------------------------------------------
@@ -579,6 +771,18 @@ actionToText = \case
     Disburse -> "disburse"
     Withdraw -> "withdraw"
     Reorganize -> "reorganize"
+    RegistryInitSeedSplit -> "registry-init-seed-split"
+    RegistryInitMint -> "registry-init-mint"
+    RegistryInitReferenceScripts ->
+        "registry-init-reference-scripts"
+    StakeRewardInitScriptAccount ->
+        "stake-reward-init-script-account"
+    StakeRewardInitPlainAccount ->
+        "stake-reward-init-plain-account"
+    GovernanceWithdrawalInitProposal ->
+        "governance-withdrawal-init-proposal"
+    GovernanceWithdrawalInitMaterialization ->
+        "governance-withdrawal-init-materialization"
 
 instance FromJSON Action where
     parseJSON = withText "Action" $ \t -> case T.toLower t of
@@ -586,12 +790,33 @@ instance FromJSON Action where
         "disburse" -> pure Disburse
         "withdraw" -> pure Withdraw
         "reorganize" -> pure Reorganize
+        "registry-init-seed-split" ->
+            pure RegistryInitSeedSplit
+        "registry-init-mint" -> pure RegistryInitMint
+        "registry-init-reference-scripts" ->
+            pure RegistryInitReferenceScripts
+        "stake-reward-init-script-account" ->
+            pure StakeRewardInitScriptAccount
+        "stake-reward-init-plain-account" ->
+            pure StakeRewardInitPlainAccount
+        "governance-withdrawal-init-proposal" ->
+            pure GovernanceWithdrawalInitProposal
+        "governance-withdrawal-init-materialization" ->
+            pure GovernanceWithdrawalInitMaterialization
         other ->
             fail $
                 "unknown action: "
                     <> T.unpack other
                     <> " (expected one of "
-                    <> "swap | disburse | withdraw | reorganize)"
+                    <> "swap | disburse | withdraw | reorganize"
+                    <> " | registry-init-seed-split"
+                    <> " | registry-init-mint"
+                    <> " | registry-init-reference-scripts"
+                    <> " | stake-reward-init-script-account"
+                    <> " | stake-reward-init-plain-account"
+                    <> " | governance-withdrawal-init-proposal"
+                    <> " | governance-withdrawal-init-materialization"
+                    <> ")"
 
 instance ToJSON Action where
     toJSON = toJSON . actionToText
@@ -679,6 +904,115 @@ instance FromJSON SomeTreasuryIntent where
                             ub
                             rationale
                             payload
+            RegistryInitSeedSplit -> do
+                payload <- o .: "registry-init-seed-split"
+                pure $
+                    SomeTreasuryIntent SRegistryInitSeedSplit $
+                        TreasuryIntent
+                            SRegistryInitSeedSplit
+                            schema
+                            network
+                            wallet
+                            scope
+                            signers
+                            ub
+                            rationale
+                            payload
+            RegistryInitMint -> do
+                payload <- o .: "registry-init-mint"
+                pure $
+                    SomeTreasuryIntent SRegistryInitMint $
+                        TreasuryIntent
+                            SRegistryInitMint
+                            schema
+                            network
+                            wallet
+                            scope
+                            signers
+                            ub
+                            rationale
+                            payload
+            RegistryInitReferenceScripts -> do
+                payload <-
+                    o .: "registry-init-reference-scripts"
+                pure
+                    $ SomeTreasuryIntent
+                        SRegistryInitReferenceScripts
+                    $ TreasuryIntent
+                        SRegistryInitReferenceScripts
+                        schema
+                        network
+                        wallet
+                        scope
+                        signers
+                        ub
+                        rationale
+                        payload
+            StakeRewardInitScriptAccount -> do
+                payload <-
+                    o .: "stake-reward-init-script-account"
+                pure
+                    $ SomeTreasuryIntent
+                        SStakeRewardInitScriptAccount
+                    $ TreasuryIntent
+                        SStakeRewardInitScriptAccount
+                        schema
+                        network
+                        wallet
+                        scope
+                        signers
+                        ub
+                        rationale
+                        payload
+            StakeRewardInitPlainAccount -> do
+                payload <-
+                    o .: "stake-reward-init-plain-account"
+                pure
+                    $ SomeTreasuryIntent
+                        SStakeRewardInitPlainAccount
+                    $ TreasuryIntent
+                        SStakeRewardInitPlainAccount
+                        schema
+                        network
+                        wallet
+                        scope
+                        signers
+                        ub
+                        rationale
+                        payload
+            GovernanceWithdrawalInitProposal -> do
+                payload <-
+                    o .: "governance-withdrawal-init-proposal"
+                pure
+                    $ SomeTreasuryIntent
+                        SGovernanceWithdrawalInitProposal
+                    $ TreasuryIntent
+                        SGovernanceWithdrawalInitProposal
+                        schema
+                        network
+                        wallet
+                        scope
+                        signers
+                        ub
+                        rationale
+                        payload
+            GovernanceWithdrawalInitMaterialization -> do
+                payload <-
+                    o
+                        .: "governance-withdrawal-init-materialization"
+                pure
+                    $ SomeTreasuryIntent
+                        SGovernanceWithdrawalInitMaterialization
+                    $ TreasuryIntent
+                        SGovernanceWithdrawalInitMaterialization
+                        schema
+                        network
+                        wallet
+                        scope
+                        signers
+                        ub
+                        rationale
+                        payload
 
 {- | Emit the unified intent as JSON. Action discriminator
 and the matching action-keyed payload object.
@@ -698,11 +1032,43 @@ toJSONIntent sa ti =
             SDisburse -> "disburse"
             SWithdraw -> "withdraw"
             SReorganize -> "reorganize"
+            SRegistryInitSeedSplit ->
+                "registry-init-seed-split"
+            SRegistryInitMint -> "registry-init-mint"
+            SRegistryInitReferenceScripts ->
+                "registry-init-reference-scripts"
+            SStakeRewardInitScriptAccount ->
+                "stake-reward-init-script-account"
+            SStakeRewardInitPlainAccount ->
+                "stake-reward-init-plain-account"
+            SGovernanceWithdrawalInitProposal ->
+                "governance-withdrawal-init-proposal"
+            SGovernanceWithdrawalInitMaterialization ->
+                "governance-withdrawal-init-materialization"
         payloadEntry = case sa of
             SSwap -> "swap" .= tiPayload ti
             SDisburse -> "disburse" .= tiPayload ti
             SWithdraw -> "withdraw" .= tiPayload ti
             SReorganize -> "reorganize" .= tiPayload ti
+            SRegistryInitSeedSplit ->
+                "registry-init-seed-split" .= tiPayload ti
+            SRegistryInitMint ->
+                "registry-init-mint" .= tiPayload ti
+            SRegistryInitReferenceScripts ->
+                "registry-init-reference-scripts"
+                    .= tiPayload ti
+            SStakeRewardInitScriptAccount ->
+                "stake-reward-init-script-account"
+                    .= tiPayload ti
+            SStakeRewardInitPlainAccount ->
+                "stake-reward-init-plain-account"
+                    .= tiPayload ti
+            SGovernanceWithdrawalInitProposal ->
+                "governance-withdrawal-init-proposal"
+                    .= tiPayload ti
+            SGovernanceWithdrawalInitMaterialization ->
+                "governance-withdrawal-init-materialization"
+                    .= tiPayload ti
     in  object
             [ "schema" .= tiSchema ti
             , "action" .= actionName
@@ -777,6 +1143,27 @@ translateIntent sa ti = case sa of
     SReorganize ->
         Left
             "translateIntent: 'reorganize' not yet shipped (#46)"
+    SRegistryInitSeedSplit ->
+        Left
+            "translateIntent: 'registry-init-seed-split' not yet shipped (T020/T030/T040)"
+    SRegistryInitMint ->
+        Left
+            "translateIntent: 'registry-init-mint' not yet shipped (T020/T030/T040)"
+    SRegistryInitReferenceScripts ->
+        Left
+            "translateIntent: 'registry-init-reference-scripts' not yet shipped (T020/T030/T040)"
+    SStakeRewardInitScriptAccount ->
+        Left
+            "translateIntent: 'stake-reward-init-script-account' not yet shipped (T020/T030/T040)"
+    SStakeRewardInitPlainAccount ->
+        Left
+            "translateIntent: 'stake-reward-init-plain-account' not yet shipped (T020/T030/T040)"
+    SGovernanceWithdrawalInitProposal ->
+        Left
+            "translateIntent: 'governance-withdrawal-init-proposal' not yet shipped (T020/T030/T040)"
+    SGovernanceWithdrawalInitMaterialization ->
+        Left
+            "translateIntent: 'governance-withdrawal-init-materialization' not yet shipped (T020/T030/T040)"
 
 {- | Swap-action translator. Body lifts the existing
 'Tx.SwapIntentJSON.translateIntent' verbatim, retyped

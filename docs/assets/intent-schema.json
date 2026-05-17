@@ -57,6 +57,18 @@
             ],
             "type": "object"
         },
+        "governance-withdrawal-init-materialization": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
+            "type": "object"
+        },
+        "governance-withdrawal-init-proposal": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
+            "type": "object"
+        },
         "hex28": {
             "pattern": "^([0-9a-fA-F]{56})$",
             "type": "string"
@@ -87,6 +99,24 @@
                 "justification",
                 "destinationLabel"
             ],
+            "type": "object"
+        },
+        "registry-init-mint": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
+            "type": "object"
+        },
+        "registry-init-reference-scripts": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
+            "type": "object"
+        },
+        "registry-init-seed-split": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
             "type": "object"
         },
         "reorganize": {
@@ -165,6 +195,18 @@
                 "registryDeployedAt",
                 "registryPolicyId"
             ],
+            "type": "object"
+        },
+        "stake-reward-init-plain-account": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
+            "type": "object"
+        },
+        "stake-reward-init-script-account": {
+            "additionalProperties": false,
+            "properties": {},
+            "required": [],
             "type": "object"
         },
         "swap": {
@@ -510,6 +552,405 @@
                 "validityUpperBoundSlot",
                 "rationale",
                 "reorganize"
+            ],
+            "type": "object"
+        },
+        {
+            "additionalProperties": false,
+            "properties": {
+                "action": {
+                    "const": "registry-init-seed-split",
+                    "type": "string"
+                },
+                "network": {
+                    "enum": [
+                        "mainnet",
+                        "preprod",
+                        "preview"
+                    ],
+                    "type": "string"
+                },
+                "rationale": {
+                    "$ref": "#/$defs/rationale"
+                },
+                "registry-init-seed-split": {
+                    "$ref": "#/$defs/registry-init-seed-split"
+                },
+                "schema": {
+                    "enum": [
+                        1
+                    ],
+                    "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/$defs/scope"
+                },
+                "signers": {
+                    "items": {
+                        "$ref": "#/$defs/hex28"
+                    },
+                    "type": "array"
+                },
+                "validityUpperBoundSlot": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "wallet": {
+                    "$ref": "#/$defs/wallet"
+                }
+            },
+            "required": [
+                "schema",
+                "action",
+                "network",
+                "wallet",
+                "scope",
+                "signers",
+                "validityUpperBoundSlot",
+                "rationale",
+                "registry-init-seed-split"
+            ],
+            "type": "object"
+        },
+        {
+            "additionalProperties": false,
+            "properties": {
+                "action": {
+                    "const": "registry-init-mint",
+                    "type": "string"
+                },
+                "network": {
+                    "enum": [
+                        "mainnet",
+                        "preprod",
+                        "preview"
+                    ],
+                    "type": "string"
+                },
+                "rationale": {
+                    "$ref": "#/$defs/rationale"
+                },
+                "registry-init-mint": {
+                    "$ref": "#/$defs/registry-init-mint"
+                },
+                "schema": {
+                    "enum": [
+                        1
+                    ],
+                    "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/$defs/scope"
+                },
+                "signers": {
+                    "items": {
+                        "$ref": "#/$defs/hex28"
+                    },
+                    "type": "array"
+                },
+                "validityUpperBoundSlot": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "wallet": {
+                    "$ref": "#/$defs/wallet"
+                }
+            },
+            "required": [
+                "schema",
+                "action",
+                "network",
+                "wallet",
+                "scope",
+                "signers",
+                "validityUpperBoundSlot",
+                "rationale",
+                "registry-init-mint"
+            ],
+            "type": "object"
+        },
+        {
+            "additionalProperties": false,
+            "properties": {
+                "action": {
+                    "const": "registry-init-reference-scripts",
+                    "type": "string"
+                },
+                "network": {
+                    "enum": [
+                        "mainnet",
+                        "preprod",
+                        "preview"
+                    ],
+                    "type": "string"
+                },
+                "rationale": {
+                    "$ref": "#/$defs/rationale"
+                },
+                "registry-init-reference-scripts": {
+                    "$ref": "#/$defs/registry-init-reference-scripts"
+                },
+                "schema": {
+                    "enum": [
+                        1
+                    ],
+                    "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/$defs/scope"
+                },
+                "signers": {
+                    "items": {
+                        "$ref": "#/$defs/hex28"
+                    },
+                    "type": "array"
+                },
+                "validityUpperBoundSlot": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "wallet": {
+                    "$ref": "#/$defs/wallet"
+                }
+            },
+            "required": [
+                "schema",
+                "action",
+                "network",
+                "wallet",
+                "scope",
+                "signers",
+                "validityUpperBoundSlot",
+                "rationale",
+                "registry-init-reference-scripts"
+            ],
+            "type": "object"
+        },
+        {
+            "additionalProperties": false,
+            "properties": {
+                "action": {
+                    "const": "stake-reward-init-script-account",
+                    "type": "string"
+                },
+                "network": {
+                    "enum": [
+                        "mainnet",
+                        "preprod",
+                        "preview"
+                    ],
+                    "type": "string"
+                },
+                "rationale": {
+                    "$ref": "#/$defs/rationale"
+                },
+                "schema": {
+                    "enum": [
+                        1
+                    ],
+                    "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/$defs/scope"
+                },
+                "signers": {
+                    "items": {
+                        "$ref": "#/$defs/hex28"
+                    },
+                    "type": "array"
+                },
+                "stake-reward-init-script-account": {
+                    "$ref": "#/$defs/stake-reward-init-script-account"
+                },
+                "validityUpperBoundSlot": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "wallet": {
+                    "$ref": "#/$defs/wallet"
+                }
+            },
+            "required": [
+                "schema",
+                "action",
+                "network",
+                "wallet",
+                "scope",
+                "signers",
+                "validityUpperBoundSlot",
+                "rationale",
+                "stake-reward-init-script-account"
+            ],
+            "type": "object"
+        },
+        {
+            "additionalProperties": false,
+            "properties": {
+                "action": {
+                    "const": "stake-reward-init-plain-account",
+                    "type": "string"
+                },
+                "network": {
+                    "enum": [
+                        "mainnet",
+                        "preprod",
+                        "preview"
+                    ],
+                    "type": "string"
+                },
+                "rationale": {
+                    "$ref": "#/$defs/rationale"
+                },
+                "schema": {
+                    "enum": [
+                        1
+                    ],
+                    "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/$defs/scope"
+                },
+                "signers": {
+                    "items": {
+                        "$ref": "#/$defs/hex28"
+                    },
+                    "type": "array"
+                },
+                "stake-reward-init-plain-account": {
+                    "$ref": "#/$defs/stake-reward-init-plain-account"
+                },
+                "validityUpperBoundSlot": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "wallet": {
+                    "$ref": "#/$defs/wallet"
+                }
+            },
+            "required": [
+                "schema",
+                "action",
+                "network",
+                "wallet",
+                "scope",
+                "signers",
+                "validityUpperBoundSlot",
+                "rationale",
+                "stake-reward-init-plain-account"
+            ],
+            "type": "object"
+        },
+        {
+            "additionalProperties": false,
+            "properties": {
+                "action": {
+                    "const": "governance-withdrawal-init-proposal",
+                    "type": "string"
+                },
+                "governance-withdrawal-init-proposal": {
+                    "$ref": "#/$defs/governance-withdrawal-init-proposal"
+                },
+                "network": {
+                    "enum": [
+                        "mainnet",
+                        "preprod",
+                        "preview"
+                    ],
+                    "type": "string"
+                },
+                "rationale": {
+                    "$ref": "#/$defs/rationale"
+                },
+                "schema": {
+                    "enum": [
+                        1
+                    ],
+                    "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/$defs/scope"
+                },
+                "signers": {
+                    "items": {
+                        "$ref": "#/$defs/hex28"
+                    },
+                    "type": "array"
+                },
+                "validityUpperBoundSlot": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "wallet": {
+                    "$ref": "#/$defs/wallet"
+                }
+            },
+            "required": [
+                "schema",
+                "action",
+                "network",
+                "wallet",
+                "scope",
+                "signers",
+                "validityUpperBoundSlot",
+                "rationale",
+                "governance-withdrawal-init-proposal"
+            ],
+            "type": "object"
+        },
+        {
+            "additionalProperties": false,
+            "properties": {
+                "action": {
+                    "const": "governance-withdrawal-init-materialization",
+                    "type": "string"
+                },
+                "governance-withdrawal-init-materialization": {
+                    "$ref": "#/$defs/governance-withdrawal-init-materialization"
+                },
+                "network": {
+                    "enum": [
+                        "mainnet",
+                        "preprod",
+                        "preview"
+                    ],
+                    "type": "string"
+                },
+                "rationale": {
+                    "$ref": "#/$defs/rationale"
+                },
+                "schema": {
+                    "enum": [
+                        1
+                    ],
+                    "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/$defs/scope"
+                },
+                "signers": {
+                    "items": {
+                        "$ref": "#/$defs/hex28"
+                    },
+                    "type": "array"
+                },
+                "validityUpperBoundSlot": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "wallet": {
+                    "$ref": "#/$defs/wallet"
+                }
+            },
+            "required": [
+                "schema",
+                "action",
+                "network",
+                "wallet",
+                "scope",
+                "signers",
+                "validityUpperBoundSlot",
+                "rationale",
+                "governance-withdrawal-init-materialization"
             ],
             "type": "object"
         }

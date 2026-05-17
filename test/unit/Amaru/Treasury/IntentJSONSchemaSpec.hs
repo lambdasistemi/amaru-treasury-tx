@@ -18,10 +18,12 @@ import Data.Aeson
     , Value (..)
     , eitherDecode
     , eitherDecodeFileStrict
+    , encode
     , toJSON
     )
 import Data.Aeson.Key (Key)
 import Data.Aeson.KeyMap qualified as KM
+import Data.ByteString.Lazy.Char8 qualified as BSL8
 import Data.JSON.JSONSchema (validateJSONSchema)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -31,6 +33,7 @@ import Test.Hspec
     , describe
     , it
     , shouldBe
+    , shouldSatisfy
     )
 
 import Amaru.Treasury.IntentJSON
@@ -62,6 +65,29 @@ spec = describe "Amaru.Treasury.IntentJSON.Schema" $ do
         asset <-
             decodeFile "docs/assets/intent-schema.json"
         asset `shouldBe` intentJsonSchema
+
+    describe "carries the seven flat init sub-action tags" $ do
+        let schemaBytes = encode intentJsonSchema
+            containsTag tag =
+                BSL8.unpack schemaBytes
+                    `shouldSatisfy` ( tag
+                                        `isInfixOf`
+                                    )
+        it "registry-init-seed-split" $
+            containsTag "registry-init-seed-split"
+        it "registry-init-mint" $
+            containsTag "registry-init-mint"
+        it "registry-init-reference-scripts" $
+            containsTag "registry-init-reference-scripts"
+        it "stake-reward-init-script-account" $
+            containsTag "stake-reward-init-script-account"
+        it "stake-reward-init-plain-account" $
+            containsTag "stake-reward-init-plain-account"
+        it "governance-withdrawal-init-proposal" $
+            containsTag "governance-withdrawal-init-proposal"
+        it "governance-withdrawal-init-materialization" $
+            containsTag
+                "governance-withdrawal-init-materialization"
 
     it "validates the tx-build swap fixture intent" $ do
         intent <- decodeFile "test/fixtures/swap/intent.json"
@@ -322,3 +348,15 @@ withdrawIntent =
             "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d"
             12_500_000_000
         )
+
+isInfixOf :: String -> String -> Bool
+isInfixOf needle haystack =
+    any (needle `prefixOf`) (tails haystack)
+  where
+    prefixOf [] _ = True
+    prefixOf _ [] = False
+    prefixOf (x : xs) (y : ys) = x == y && prefixOf xs ys
+
+    tails :: [a] -> [[a]]
+    tails [] = [[]]
+    tails xs@(_ : rest) = xs : tails rest

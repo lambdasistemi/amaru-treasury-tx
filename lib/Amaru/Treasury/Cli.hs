@@ -40,16 +40,6 @@ import Amaru.Treasury.Cli.Common
     ( GlobalOpts
     , globalOptsP
     )
-import Amaru.Treasury.Cli.Devnet
-    ( DevnetDisburseSubmitOpts
-    , DevnetGovernanceWithdrawalInitOpts
-    , DevnetRegistryInitOpts
-    , DevnetStakeRewardInitOpts
-    , devnetDisburseSubmitOptsP
-    , devnetGovernanceWithdrawalInitOptsP
-    , devnetRegistryInitOptsP
-    , devnetStakeRewardInitOptsP
-    )
 import Amaru.Treasury.Cli.DisburseWizard
     ( ContingencyDisburseOpts
     , DisburseWizardOpts
@@ -101,10 +91,6 @@ data Cmd
     = CmdSwapWizard WizardOpts
     | CmdSwapQuote SwapQuoteOpts
     | CmdSwapCancel SwapCancelOpts
-    | CmdDevnetRegistryInit DevnetRegistryInitOpts
-    | CmdDevnetStakeRewardInit DevnetStakeRewardInitOpts
-    | CmdDevnetGovernanceWithdrawalInit DevnetGovernanceWithdrawalInitOpts
-    | CmdDevnetDisburseSubmit DevnetDisburseSubmitOpts
     | CmdDisburseWizard DisburseWizardOpts
     | CmdContingencyDisburse ContingencyDisburseOpts
     | CmdWithdrawWizard WithdrawOpts
@@ -161,14 +147,6 @@ cmdP =
                     (CmdSwapCancel <$> swapCancelOptsP)
                     ( progDesc
                         "Build an unsigned transaction that cancels one pending SundaeSwap order"
-                    )
-                )
-            <> command
-                "devnet"
-                ( info
-                    devnetCmdP
-                    ( progDesc
-                        "Run local DevNet bootstrap commands"
                     )
                 )
             <> command
@@ -280,49 +258,6 @@ vaultCmdP =
                     "Create an age-encrypted witness vault from a signing key"
                 )
             )
-        )
-
-devnetCmdP :: Parser Cmd
-devnetCmdP =
-    hsubparser
-        ( command
-            "registry-init"
-            ( info
-                (CmdDevnetRegistryInit <$> devnetRegistryInitOptsP)
-                ( progDesc
-                    "Publish DevNet registry and reference-script anchors"
-                )
-            )
-            <> command
-                "stake-reward-init"
-                ( info
-                    ( CmdDevnetStakeRewardInit
-                        <$> devnetStakeRewardInitOptsP
-                    )
-                    ( progDesc
-                        "Register DevNet treasury reward account; report permissions withdraw-zero"
-                    )
-                )
-            <> command
-                "governance-withdrawal-init"
-                ( info
-                    ( CmdDevnetGovernanceWithdrawalInit
-                        <$> devnetGovernanceWithdrawalInitOptsP
-                    )
-                    ( progDesc
-                        "Fund DevNet treasury rewards through governance and materialize a treasury UTxO"
-                    )
-                )
-            <> command
-                "disburse-submit"
-                ( info
-                    ( CmdDevnetDisburseSubmit
-                        <$> devnetDisburseSubmitOptsP
-                    )
-                    ( progDesc
-                        "Build, sign, submit, and verify a DevNet ADA disbursement"
-                    )
-                )
         )
 
 versionOption :: Parser (a -> a)

@@ -2,28 +2,30 @@
 {-# LANGUAGE RecordWildCards #-}
 
 {- |
-Module      : Amaru.Treasury.Cli.Devnet
-Description : DevNet-only operator commands
+Module      : Amaru.Treasury.Devnet.Runner
+Description : DevNet bootstrap IO runners
 Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
-Parser and runner for local DevNet bootstrap commands. These commands
-are intentionally gated to the local @devnet@ network before any
-signing-key material is read or any node connection is opened.
+Relocation target for the four DevNet bootstrap IO drivers and
+their option records, originally hosted alongside the retired
+@devnet@ supercommand parser under the @Cli@ tree. The
+@optparse-applicative@ supercommand has been dropped (#157); the
+runners survive here as a library entry point for the DevNet smoke
+suite and any future direct caller. There is no
+@Options.Applicative@ dependency in this module — callers are
+expected to construct the @DevnetXxxOpts@ records directly.
+
+Each runner is still gated to @--network devnet@ via the
+preserved @requireDevnet*Network@ predicates, so accidental
+mainnet/preprod use aborts before any key material is read or
+any node connection is opened.
 -}
-module Amaru.Treasury.Cli.Devnet
+module Amaru.Treasury.Devnet.Runner
     ( DevnetDisburseSubmitOpts (..)
     , DevnetGovernanceWithdrawalInitOpts (..)
     , DevnetRegistryInitOpts (..)
     , DevnetStakeRewardInitOpts (..)
-    , devnetDisburseSubmitOptsP
-    , devnetGovernanceWithdrawalInitOptsP
-    , devnetRegistryInitOptsP
-    , devnetStakeRewardInitOptsP
-    , requireDevnetDisburseSubmitNetwork
-    , requireDevnetGovernanceWithdrawalInitNetwork
-    , requireDevnetRegistryInitNetwork
-    , requireDevnetStakeRewardInitNetwork
     , registryInitCommandLines
     , runDevnetDisburseSubmit
     , runDevnetGovernanceWithdrawalInit
@@ -37,17 +39,6 @@ import Data.Aeson
     , eitherDecodeFileStrict
     )
 import Data.Text qualified as T
-import Options.Applicative
-    ( Parser
-    , auto
-    , help
-    , long
-    , metavar
-    , option
-    , showDefault
-    , strOption
-    , value
-    )
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.Exit (exitFailure)
 import System.IO (hPutStrLn, stderr)
@@ -94,7 +85,7 @@ import Amaru.Treasury.Tx.Witness
     , renderTxWitnessError
     )
 
--- | Options for @devnet registry-init@.
+-- | Options for the DevNet @registry-init@ runner.
 data DevnetRegistryInitOpts = DevnetRegistryInitOpts
     { drioFundingAddress :: !String
     , drioSigningKeyFile :: !FilePath
@@ -102,7 +93,7 @@ data DevnetRegistryInitOpts = DevnetRegistryInitOpts
     }
     deriving stock (Eq, Show)
 
--- | Options for @devnet stake-reward-init@.
+-- | Options for the DevNet @stake-reward-init@ runner.
 data DevnetStakeRewardInitOpts = DevnetStakeRewardInitOpts
     { dsrioRegistryFile :: !FilePath
     , dsrioFundingAddress :: !String
@@ -111,7 +102,7 @@ data DevnetStakeRewardInitOpts = DevnetStakeRewardInitOpts
     }
     deriving stock (Eq, Show)
 
--- | Options for @devnet governance-withdrawal-init@.
+-- | Options for the DevNet @governance-withdrawal-init@ runner.
 data DevnetGovernanceWithdrawalInitOpts = DevnetGovernanceWithdrawalInitOpts
     { dgwioRegistryFile :: !FilePath
     , dgwioStakeRewardFile :: !FilePath
@@ -123,7 +114,7 @@ data DevnetGovernanceWithdrawalInitOpts = DevnetGovernanceWithdrawalInitOpts
     }
     deriving stock (Eq, Show)
 
--- | Options for @disburse-submit@.
+-- | Options for the DevNet @disburse-submit@ runner.
 data DevnetDisburseSubmitOpts = DevnetDisburseSubmitOpts
     { ddsioRegistryFile :: !FilePath
     , ddsioMaterializedFile :: !FilePath
@@ -134,142 +125,6 @@ data DevnetDisburseSubmitOpts = DevnetDisburseSubmitOpts
     , ddsioAmountLovelace :: !Integer
     }
     deriving stock (Eq, Show)
-
--- | Parser for the @registry-init@ DevNet subcommand.
-devnetRegistryInitOptsP :: Parser DevnetRegistryInitOpts
-devnetRegistryInitOptsP =
-    DevnetRegistryInitOpts
-        <$> strOption
-            ( long "funding-address"
-                <> metavar "ADDR"
-                <> help "DevNet funding address that owns bootstrap UTxOs"
-            )
-        <*> strOption
-            ( long "signing-key-file"
-                <> metavar "PATH"
-                <> help "cardano-cli payment signing-key JSON for funding UTxOs"
-            )
-        <*> strOption
-            ( long "run-dir"
-                <> metavar "DIR"
-                <> help "Directory where registry-init artifacts are written"
-            )
-
--- | Parser for the @stake-reward-init@ DevNet subcommand.
-devnetStakeRewardInitOptsP :: Parser DevnetStakeRewardInitOpts
-devnetStakeRewardInitOptsP =
-    DevnetStakeRewardInitOpts
-        <$> strOption
-            ( long "registry-file"
-                <> metavar "PATH"
-                <> help "registry-init registry.json artifact"
-            )
-        <*> strOption
-            ( long "funding-address"
-                <> metavar "ADDR"
-                <> help "DevNet funding address that owns bootstrap UTxOs"
-            )
-        <*> strOption
-            ( long "signing-key-file"
-                <> metavar "PATH"
-                <> help "cardano-cli payment signing-key JSON for funding UTxOs"
-            )
-        <*> strOption
-            ( long "run-dir"
-                <> metavar "DIR"
-                <> help "Directory where stake-reward-init artifacts are written"
-            )
-
--- | Parser for the @governance-withdrawal-init@ DevNet subcommand.
-devnetGovernanceWithdrawalInitOptsP
-    :: Parser DevnetGovernanceWithdrawalInitOpts
-devnetGovernanceWithdrawalInitOptsP =
-    DevnetGovernanceWithdrawalInitOpts
-        <$> strOption
-            ( long "registry-file"
-                <> metavar "PATH"
-                <> help "registry-init registry.json artifact"
-            )
-        <*> strOption
-            ( long "stake-reward-file"
-                <> metavar "PATH"
-                <> help "stake-reward-init accounts.json artifact"
-            )
-        <*> strOption
-            ( long "funding-address"
-                <> metavar "ADDR"
-                <> help "DevNet funding address that owns bootstrap UTxOs"
-            )
-        <*> strOption
-            ( long "signing-key-file"
-                <> metavar "PATH"
-                <> help "cardano-cli payment signing-key JSON for funding UTxOs"
-            )
-        <*> strOption
-            ( long "run-dir"
-                <> metavar "DIR"
-                <> help
-                    "Directory where governance-withdrawal-init artifacts are written"
-            )
-        <*> option
-            auto
-            ( long "amount-lovelace"
-                <> metavar "LOVELACE"
-                <> value 2_000_000
-                <> showDefault
-                <> help "Lovelace to withdraw from the DevNet treasury pot"
-            )
-        <*> option
-            auto
-            ( long "reward-timeout-seconds"
-                <> metavar "SECONDS"
-                <> value 180
-                <> showDefault
-                <> help "Seconds to wait for treasury reward account funding"
-            )
-
--- | Parser for the @disburse-submit@ DevNet subcommand.
-devnetDisburseSubmitOptsP :: Parser DevnetDisburseSubmitOpts
-devnetDisburseSubmitOptsP =
-    DevnetDisburseSubmitOpts
-        <$> strOption
-            ( long "registry-file"
-                <> metavar "PATH"
-                <> help "registry-init registry.json artifact"
-            )
-        <*> strOption
-            ( long "materialized-file"
-                <> metavar "PATH"
-                <> help "governance-withdrawal-init materialized.json artifact"
-            )
-        <*> strOption
-            ( long "funding-address"
-                <> metavar "ADDR"
-                <> help "DevNet funding address that owns wallet UTxOs"
-            )
-        <*> strOption
-            ( long "signing-key-file"
-                <> metavar "PATH"
-                <> help "cardano-cli payment signing-key JSON for funding UTxOs"
-            )
-        <*> strOption
-            ( long "beneficiary-address"
-                <> metavar "ADDR"
-                <> help "DevNet beneficiary address receiving ADA"
-            )
-        <*> strOption
-            ( long "run-dir"
-                <> metavar "DIR"
-                <> help "Directory where disburse-submit artifacts are written"
-            )
-        <*> option
-            auto
-            ( long "amount-lovelace"
-                <> metavar "LOVELACE"
-                <> value 1_000_000
-                <> showDefault
-                <> help "Lovelace to disburse to the beneficiary"
-            )
 
 -- | Validate that the global network selection is exactly DevNet.
 requireDevnetRegistryInitNetwork :: GlobalOpts -> Either String ()
@@ -308,7 +163,7 @@ requireDevnetDisburseSubmitNetwork GlobalOpts{..}
     | otherwise =
         Left "disburse-submit: --network must be devnet"
 
--- | Run @devnet registry-init@ against a local DevNet node.
+-- | Run the DevNet @registry-init@ flow against a local DevNet node.
 runDevnetRegistryInit
     :: GlobalOpts
     -> DevnetRegistryInitOpts
@@ -378,7 +233,7 @@ runDevnetRegistryInit globals DevnetRegistryInitOpts{..} = do
                 putStrLn
                 linesOut
 
--- | Run @devnet stake-reward-init@ against a local DevNet node.
+-- | Run the DevNet @stake-reward-init@ flow against a local DevNet node.
 runDevnetStakeRewardInit
     :: GlobalOpts
     -> DevnetStakeRewardInitOpts
@@ -435,7 +290,9 @@ runDevnetStakeRewardInit globals DevnetStakeRewardInitOpts{..} = do
                 linesOut
             mapM_ putStrLn linesOut
 
--- | Run @devnet governance-withdrawal-init@ against a local DevNet node.
+{- | Run the DevNet @governance-withdrawal-init@ flow against a local
+DevNet node.
+-}
 runDevnetGovernanceWithdrawalInit
     :: GlobalOpts
     -> DevnetGovernanceWithdrawalInitOpts
@@ -543,7 +400,7 @@ runDevnetGovernanceWithdrawalInit
                                         result
                             mapM_ putStrLn linesOut
 
--- | Run @devnet disburse-submit@ against a local DevNet node.
+-- | Run the DevNet @disburse-submit@ flow against a local DevNet node.
 runDevnetDisburseSubmit
     :: GlobalOpts
     -> DevnetDisburseSubmitOpts
@@ -650,7 +507,9 @@ runDevnetDisburseSubmit globals DevnetDisburseSubmitOpts{..} = do
                                     result
                         mapM_ putStrLn linesOut
 
--- | Human-readable success lines for the shipped registry-init command.
+{- | Human-readable success lines for the shipped @registry-init@
+runner.
+-}
 registryInitCommandLines
     :: Int
     -> FilePath
@@ -677,10 +536,14 @@ registryInitCommandLines
             <> RegistryInit.registryInitRegistryPath runDir
         ]
 
+-- | Parse a DevNet funding address (must be a testnet address).
 parseFundingAddress :: String -> String -> IO Addr
 parseFundingAddress prefix =
     parseTestnetAddress prefix "--funding-address"
 
+{- | Parse a testnet address from the given option, aborting on
+non-testnet input.
+-}
 parseTestnetAddress :: String -> String -> String -> IO Addr
 parseTestnetAddress prefix optionName raw =
     case parseAddr (T.pack raw) of
@@ -697,6 +560,7 @@ parseTestnetAddress prefix optionName raw =
                     )
             pure addr
 
+-- | Read and decode a @cardano-cli@ payment signing key JSON file.
 readPaymentSigningKey
     :: String
     -> FilePath
@@ -716,6 +580,7 @@ readPaymentSigningKey prefix path = do
                     <> T.unpack (renderTxWitnessError err)
         Right signingKey -> pure signingKey
 
+-- | Print an error message to stderr and exit with failure.
 abort :: String -> IO a
 abort message = do
     hPutStrLn stderr message

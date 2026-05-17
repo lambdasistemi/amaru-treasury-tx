@@ -135,6 +135,62 @@ runBuildExcept ctx shared sa translated = case sa of
                 BuildActionReorganize
                 BuildPhaseUnsupported
                 (DiagnosticUnsupportedAction "reorganize")
+    SRegistryInitSeedSplit ->
+        throwE $
+            buildError
+                BuildActionIntent
+                BuildPhaseUnsupported
+                ( DiagnosticUnsupportedAction
+                    "registry-init-seed-split"
+                )
+    SRegistryInitMint ->
+        throwE $
+            buildError
+                BuildActionIntent
+                BuildPhaseUnsupported
+                ( DiagnosticUnsupportedAction
+                    "registry-init-mint"
+                )
+    SRegistryInitReferenceScripts ->
+        throwE $
+            buildError
+                BuildActionIntent
+                BuildPhaseUnsupported
+                ( DiagnosticUnsupportedAction
+                    "registry-init-reference-scripts"
+                )
+    SStakeRewardInitScriptAccount ->
+        throwE $
+            buildError
+                BuildActionIntent
+                BuildPhaseUnsupported
+                ( DiagnosticUnsupportedAction
+                    "stake-reward-init-script-account"
+                )
+    SStakeRewardInitPlainAccount ->
+        throwE $
+            buildError
+                BuildActionIntent
+                BuildPhaseUnsupported
+                ( DiagnosticUnsupportedAction
+                    "stake-reward-init-plain-account"
+                )
+    SGovernanceWithdrawalInitProposal ->
+        throwE $
+            buildError
+                BuildActionIntent
+                BuildPhaseUnsupported
+                ( DiagnosticUnsupportedAction
+                    "governance-withdrawal-init-proposal"
+                )
+    SGovernanceWithdrawalInitMaterialization ->
+        throwE $
+            buildError
+                BuildActionIntent
+                BuildPhaseUnsupported
+                ( DiagnosticUnsupportedAction
+                    "governance-withdrawal-init-materialization"
+                )
 
 {- | Caller-friendly wrapper for the parser's existential
 return type. Decodes-then-translates-then-builds.

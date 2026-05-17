@@ -374,6 +374,7 @@ test-suite unit-tests
   autogen-modules:    Paths_amaru_treasury_tx
   other-modules:
     Amaru.Treasury.AuxDataSpec
+    Amaru.Treasury.Build.NetworkGuardSpec
     Amaru.Treasury.BuildSpec
     Amaru.Treasury.Cli.EnvelopeSpec
     Amaru.Treasury.Cli.ParserSpec

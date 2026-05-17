@@ -45,6 +45,8 @@ buildErrorCode err =
             "intent-translation-failed"
         DiagnosticUnsupportedAction{} ->
             "unsupported-action"
+        DiagnosticUnsupportedNetwork{} ->
+            "unsupported-network"
 
 renderBuildError :: BuildError -> Text
 renderBuildError err =
@@ -105,6 +107,10 @@ renderDiagnostic = \case
         "intent translation failed: " <> reason
     DiagnosticUnsupportedAction action ->
         action <> " is not implemented"
+    DiagnosticUnsupportedNetwork network ->
+        "network "
+            <> T.pack (show network)
+            <> " is not supported here; this action is DevNet-only"
 
 renderContexts :: [BuildErrorContext] -> Text
 renderContexts [] = ""

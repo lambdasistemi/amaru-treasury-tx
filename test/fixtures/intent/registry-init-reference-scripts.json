@@ -1,6 +1,6 @@
 {
     "action": "registry-init-reference-scripts",
-    "network": "preprod",
+    "network": "devnet",
     "rationale": {
         "description": "registry-init bootstrap fixture",
         "destinationLabel": "fixture",

@@ -432,6 +432,7 @@
                 },
                 "network": {
                     "enum": [
+                        "devnet",
                         "mainnet",
                         "preprod",
                         "preview"
@@ -492,6 +493,7 @@
                 },
                 "network": {
                     "enum": [
+                        "devnet",
                         "mainnet",
                         "preprod",
                         "preview"
@@ -546,6 +548,7 @@
                 },
                 "network": {
                     "enum": [
+                        "devnet",
                         "mainnet",
                         "preprod",
                         "preview"
@@ -603,6 +606,7 @@
                 },
                 "network": {
                     "enum": [
+                        "devnet",
                         "mainnet",
                         "preprod",
                         "preview"
@@ -660,6 +664,7 @@
                 },
                 "network": {
                     "enum": [
+                        "devnet",
                         "mainnet",
                         "preprod",
                         "preview"
@@ -717,6 +722,7 @@
                 },
                 "network": {
                     "enum": [
+                        "devnet",
                         "mainnet",
                         "preprod",
                         "preview"
@@ -774,6 +780,7 @@
                 },
                 "network": {
                     "enum": [
+                        "devnet",
                         "mainnet",
                         "preprod",
                         "preview"
@@ -831,6 +838,7 @@
                 },
                 "network": {
                     "enum": [
+                        "devnet",
                         "mainnet",
                         "preprod",
                         "preview"
@@ -888,6 +896,7 @@
                 },
                 "network": {
                     "enum": [
+                        "devnet",
                         "mainnet",
                         "preprod",
                         "preview"
@@ -948,6 +957,7 @@
                 },
                 "network": {
                     "enum": [
+                        "devnet",
                         "mainnet",
                         "preprod",
                         "preview"
@@ -1005,6 +1015,7 @@
                 },
                 "network": {
                     "enum": [
+                        "devnet",
                         "mainnet",
                         "preprod",
                         "preview"

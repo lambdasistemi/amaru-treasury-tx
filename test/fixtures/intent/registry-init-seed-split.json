@@ -1,6 +1,6 @@
 {
     "action": "registry-init-seed-split",
-    "network": "preprod",
+    "network": "devnet",
     "rationale": {
         "description": "registry-init bootstrap fixture",
         "destinationLabel": "fixture",

@@ -1,6 +1,6 @@
 {
     "action": "stake-reward-init-plain-account",
-    "network": "preprod",
+    "network": "devnet",
     "rationale": {
         "description": "stake-reward-init bootstrap fixture",
         "destinationLabel": "fixture",

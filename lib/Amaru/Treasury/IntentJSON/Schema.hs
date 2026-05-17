@@ -132,7 +132,11 @@ actionSchema actionName payloadKey payloadSchema =
         (commonRequired <> [payloadKey])
         ( [ ("schema", schemaVersionSchema)
           , ("action", constStringSchema actionName)
-          , ("network", enumTextSchema ["mainnet", "preprod", "preview"])
+          ,
+              ( "network"
+              , enumTextSchema
+                    ["devnet", "mainnet", "preprod", "preview"]
+              )
           , ("wallet", ref "wallet")
           , ("scope", ref "scope")
           , ("signers", arrayOf (ref "hex28"))

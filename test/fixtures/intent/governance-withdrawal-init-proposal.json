@@ -8,7 +8,7 @@
         "voterKeyHash": "44444444444444444444444444444444444444444444444444444444",
         "withdrawalAmountLovelace": 25000000
     },
-    "network": "preprod",
+    "network": "devnet",
     "rationale": {
         "description": "governance-withdrawal-init bootstrap fixture",
         "destinationLabel": "fixture",

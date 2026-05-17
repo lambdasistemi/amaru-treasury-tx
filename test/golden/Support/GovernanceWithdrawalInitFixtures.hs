@@ -191,7 +191,7 @@ fixtureNetwork :: Network
 fixtureNetwork = Testnet
 
 fixtureNetworkText :: Text
-fixtureNetworkText = "preprod"
+fixtureNetworkText = "devnet"
 
 -- | Sampled "now" slot for the frozen ChainContext used by goldens.
 sampledSlot :: SlotNo

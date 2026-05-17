@@ -59,6 +59,10 @@ module Amaru.Treasury.IntentJSON
     , StakeRewardInitScriptAccountTx (..)
     , StakeRewardInitPlainAccountTx (..)
 
+      -- * Per-action translated records (governance-withdrawal-init)
+    , GovernanceWithdrawalInitProposalTx (..)
+    , GovernanceWithdrawalInitMaterializationTx (..)
+
       -- * Top-level intent
     , TreasuryIntent (..)
     , SomeTreasuryIntent (..)
@@ -110,12 +114,24 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word64)
 
-import Cardano.Ledger.Address (Addr)
-import Cardano.Ledger.BaseTypes (Network (..))
+import Cardano.Ledger.Address
+    ( AccountAddress (..)
+    , AccountId (..)
+    , Addr (..)
+    )
+import Cardano.Ledger.BaseTypes (Network (..), textToUrl)
 import Cardano.Ledger.Coin (Coin (..))
-import Cardano.Ledger.Credential (Credential (..))
-import Cardano.Ledger.Hashes (KeyHash (..), ScriptHash (..))
-import Cardano.Ledger.Keys (KeyRole (Payment, Staking))
+import Cardano.Ledger.Conway.Governance (Anchor (..))
+import Cardano.Ledger.Credential
+    ( Credential (..)
+    , StakeReference (..)
+    )
+import Cardano.Ledger.Hashes
+    ( KeyHash (..)
+    , ScriptHash (..)
+    , unsafeMakeSafeHash
+    )
+import Cardano.Ledger.Keys (KeyRole (DRepRole, Payment, Staking))
 import Cardano.Ledger.Mary.Value
     ( AssetName (..)
     , MultiAsset (..)
@@ -239,12 +255,9 @@ type family Translated (a :: Action) :: Type where
     Translated 'Disburse = DisburseIntent
     Translated 'Withdraw = WithdrawIntent
     Translated 'Reorganize = ReorganizeIntent
-    -- Slices 3a + 3b ship the three @registry-init-*@ and two
-    -- @stake-reward-init-*@ rows as the typed input records
-    -- consumed by the extracted construction cores under
-    -- @lib/Amaru/Treasury/Devnet/{RegistryInit,StakeRewardInit}.hs@.
-    -- The remaining two governance-withdrawal-init rows stay as
-    -- @()@ placeholders until slice 3c lands.
+    -- Slices 3a–3c ship all seven init rows as the typed
+    -- input records consumed by the extracted construction
+    -- cores under @lib/Amaru/Treasury/Devnet/*Init.hs@.
     Translated 'RegistryInitSeedSplit = RegistryInitSeedSplitTx
     Translated 'RegistryInitMint = RegistryInitMintTx
     Translated 'RegistryInitReferenceScripts =
@@ -253,8 +266,10 @@ type family Translated (a :: Action) :: Type where
         StakeRewardInitScriptAccountTx
     Translated 'StakeRewardInitPlainAccount =
         StakeRewardInitPlainAccountTx
-    Translated 'GovernanceWithdrawalInitProposal = ()
-    Translated 'GovernanceWithdrawalInitMaterialization = ()
+    Translated 'GovernanceWithdrawalInitProposal =
+        GovernanceWithdrawalInitProposalTx
+    Translated 'GovernanceWithdrawalInitMaterialization =
+        GovernanceWithdrawalInitMaterializationTx
 
 -- ----------------------------------------------------
 -- Shared structural blocks
@@ -704,6 +719,46 @@ data StakeRewardInitPlainAccountTx
     }
     deriving stock (Eq, Show)
 
+-- ----------------------------------------------------
+-- Translated records (governance-withdrawal-init)
+-- ----------------------------------------------------
+
+{- | Typed proposal inputs consumed by
+'Amaru.Treasury.Devnet.GovernanceWithdrawalInit.buildGovernanceWithdrawalProposalCore'.
+-}
+data GovernanceWithdrawalInitProposalTx
+    = GovernanceWithdrawalInitProposalTx
+    { gwiptFundingAddress :: !Addr
+    , gwiptSeedTxIn :: !TxIn
+    , gwiptFundingCredential :: !(Credential Staking)
+    , gwiptVoterCredential :: !(Credential Staking)
+    , gwiptDrepCredential :: !(Credential DRepRole)
+    , gwiptDrepKey :: !(KeyHash DRepRole)
+    , gwiptVoterBaseAddr :: !Addr
+    , gwiptReturnAccount :: !AccountAddress
+    , gwiptTreasuryAccount :: !AccountAddress
+    , gwiptAmount :: !Coin
+    , gwiptUpperBoundSlot :: !SlotNo
+    , gwiptAnchor :: !Anchor
+    }
+    deriving stock (Eq, Show)
+
+{- | Typed materialization inputs consumed by
+'Amaru.Treasury.Devnet.GovernanceWithdrawalInit.buildGovernanceWithdrawalMaterializationCore'.
+-}
+data GovernanceWithdrawalInitMaterializationTx
+    = GovernanceWithdrawalInitMaterializationTx
+    { gwimtFundingAddress :: !Addr
+    , gwimtSeedTxIn :: !TxIn
+    , gwimtTreasuryRewardAccount :: !AccountAddress
+    , gwimtTreasuryAddress :: !Addr
+    , gwimtTreasuryRefTxIn :: !TxIn
+    , gwimtRegistryRefTxIn :: !TxIn
+    , gwimtRewardsAmount :: !Coin
+    , gwimtUpperBoundSlot :: !SlotNo
+    }
+    deriving stock (Eq, Show)
+
 {- | Stake-reward-init script-account sub-action payload.
 
 The wallet block carries the funding seed TxIn (also used
@@ -769,36 +824,127 @@ instance ToJSON StakeRewardInitPlainAccountInputs where
                 .= srispiPermissionsScriptHash
             ]
 
--- | Governance-withdrawal-init proposal sub-action payload (slice 3c fills).
+{- | Governance-withdrawal-init proposal sub-action
+payload.
+
+The wallet block carries the funding seed TxIn (also used
+as collateral) and funding address. The payload supplies
+the treasury stake-script hash whose reward account the
+proposal targets, the requested withdrawal amount, the
+funding stake key hash (used as the proposal's reward
+return account on rejection), the single voter signing
+key hash (the production submitter derives the voter
+staking, voter payment, and DRep key hashes from one
+@SignKeyDSIGN@; the JSON keeps a single field for the
+common case), and the CIP-1694 governance anchor URL +
+content hash. Per-cert stake / DRep / governance deposits
+are read from module-level constants matching the live
+DevNet submitter.
+-}
 data GovernanceWithdrawalInitProposalInputs
     = GovernanceWithdrawalInitProposalInputs
+    { gwipiTreasuryRewardAccountHash :: !Text
+    -- ^ 28-byte hex; treasury stake-script hash whose
+    -- reward account receives the withdrawal
+    , gwipiWithdrawalAmountLovelace :: !Integer
+    -- ^ strictly positive proposed withdrawal amount
+    , gwipiFundingStakeKeyHash :: !Text
+    -- ^ 28-byte hex; funding stake key hash —
+    -- registered and used as the proposal's reward
+    -- return account
+    , gwipiVoterKeyHash :: !Text
+    -- ^ 28-byte hex; voter signing key hash, reused for
+    -- voter stake credential, voter payment credential,
+    -- and DRep credential (matches the production
+    -- submitter's single-key derivation)
+    , gwipiAnchorUrl :: !Text
+    -- ^ CIP-1694 governance anchor URL (UTF-8, up to 128
+    -- bytes)
+    , gwipiAnchorHash :: !Text
+    -- ^ 32-byte hex; CIP-1694 governance anchor content
+    -- hash
+    }
     deriving stock (Eq, Show)
 
 instance FromJSON GovernanceWithdrawalInitProposalInputs where
     parseJSON =
         withObject
             "GovernanceWithdrawalInitProposalInputs"
-            $ \_ -> pure GovernanceWithdrawalInitProposalInputs
+            $ \o ->
+                GovernanceWithdrawalInitProposalInputs
+                    <$> o .: "treasuryRewardAccountHash"
+                    <*> o .: "withdrawalAmountLovelace"
+                    <*> o .: "fundingStakeKeyHash"
+                    <*> o .: "voterKeyHash"
+                    <*> o .: "anchorUrl"
+                    <*> o .: "anchorHash"
 
 instance ToJSON GovernanceWithdrawalInitProposalInputs where
-    toJSON GovernanceWithdrawalInitProposalInputs = object []
+    toJSON GovernanceWithdrawalInitProposalInputs{..} =
+        object
+            [ "treasuryRewardAccountHash"
+                .= gwipiTreasuryRewardAccountHash
+            , "withdrawalAmountLovelace"
+                .= gwipiWithdrawalAmountLovelace
+            , "fundingStakeKeyHash"
+                .= gwipiFundingStakeKeyHash
+            , "voterKeyHash" .= gwipiVoterKeyHash
+            , "anchorUrl" .= gwipiAnchorUrl
+            , "anchorHash" .= gwipiAnchorHash
+            ]
 
--- | Governance-withdrawal-init materialization sub-action payload (slice 3c fills).
+{- | Governance-withdrawal-init materialization
+sub-action payload.
+
+The wallet block carries the funding seed TxIn (also used
+as collateral) and funding address. The payload supplies
+the treasury stake-script hash that authorizes the
+withdrawal, the treasury contract address that receives
+the rewards, the two reference-script TxIns (treasury +
+registry) that resolve the witness scripts, and the
+already-observed reward balance to withdraw.
+-}
 data GovernanceWithdrawalInitMaterializationInputs
     = GovernanceWithdrawalInitMaterializationInputs
+    { gwimiTreasuryRewardAccountHash :: !Text
+    -- ^ 28-byte hex; treasury stake-script hash
+    , gwimiTreasuryAddress :: !Text
+    -- ^ Bech32 treasury contract address
+    , gwimiTreasuryRefTxIn :: !Text
+    -- ^ treasury reference-script TxIn
+    -- (@\<txid hex\>#\<ix\>@)
+    , gwimiRegistryRefTxIn :: !Text
+    -- ^ registry reference-script TxIn
+    , gwimiRewardsLovelace :: !Integer
+    -- ^ strictly positive observed rewards balance
+    }
     deriving stock (Eq, Show)
 
 instance FromJSON GovernanceWithdrawalInitMaterializationInputs where
     parseJSON =
         withObject
             "GovernanceWithdrawalInitMaterializationInputs"
-            $ \_ ->
-                pure
-                    GovernanceWithdrawalInitMaterializationInputs
+            $ \o ->
+                GovernanceWithdrawalInitMaterializationInputs
+                    <$> o .: "treasuryRewardAccountHash"
+                    <*> o .: "treasuryAddress"
+                    <*> o .: "treasuryRefTxIn"
+                    <*> o .: "registryRefTxIn"
+                    <*> o .: "rewardsLovelace"
 
 instance ToJSON GovernanceWithdrawalInitMaterializationInputs where
-    toJSON GovernanceWithdrawalInitMaterializationInputs =
-        object []
+    toJSON GovernanceWithdrawalInitMaterializationInputs{..} =
+        object
+            [ "treasuryRewardAccountHash"
+                .= gwimiTreasuryRewardAccountHash
+            , "treasuryAddress"
+                .= gwimiTreasuryAddress
+            , "treasuryRefTxIn"
+                .= gwimiTreasuryRefTxIn
+            , "registryRefTxIn"
+                .= gwimiRegistryRefTxIn
+            , "rewardsLovelace" .= gwimiRewardsLovelace
+            ]
 
 -- ----------------------------------------------------
 -- Top-level intent (GADT indexed by Action)
@@ -1331,11 +1477,9 @@ translateIntent sa ti = case sa of
     SStakeRewardInitPlainAccount ->
         translateStakeRewardInitPlainAccount ti
     SGovernanceWithdrawalInitProposal ->
-        Left
-            "translateIntent: 'governance-withdrawal-init-proposal' not yet shipped (T020/T030/T040)"
+        translateGovernanceWithdrawalInitProposal ti
     SGovernanceWithdrawalInitMaterialization ->
-        Left
-            "translateIntent: 'governance-withdrawal-init-materialization' not yet shipped (T020/T030/T040)"
+        translateGovernanceWithdrawalInitMaterialization ti
 
 {- | Swap-action translator. Body lifts the existing
 'Tx.SwapIntentJSON.translateIntent' verbatim, retyped
@@ -1859,6 +2003,198 @@ translateStakeRewardInitPlainAccount ti = do
             , srispatUpperBoundSlot = upperSlot
             }
         )
+
+-- ----------------------------------------------------
+-- Governance-withdrawal-init translators (slice 3c / #157)
+-- ----------------------------------------------------
+
+{- | Shared translator boundary for the two
+@governance-withdrawal-init-*@ sub-actions.
+
+Bootstrap intents do not carry a CIP-1694 rationale tree —
+the construction cores never call @setMetadata@ — so
+'tsRationale' is filled with an empty 'Metadatum' map and
+the dispatcher arms ignore it. The other 'TranslatedShared'
+fields are pulled from the wallet block exactly as the
+swap / disburse / withdraw translators do.
+-}
+translateGovernanceWithdrawalInitShared
+    :: TreasuryIntent a
+    -> Either String (TranslatedShared, Addr, TxIn, SlotNo)
+translateGovernanceWithdrawalInitShared ti = do
+    let wallet = tiWallet ti
+    walletAddr <- parseAddr (wjAddress wallet)
+    walletTxIn <- parseTxIn (wjTxIn wallet)
+    let shared =
+            TranslatedShared
+                { tsNetwork = tiNetwork ti
+                , tsWalletTxIn = walletTxIn
+                , tsWalletAddr = walletAddr
+                , tsRationale = emptyRationale
+                }
+    pure
+        ( shared
+        , walletAddr
+        , walletTxIn
+        , SlotNo (tiValidityUpperBoundSlot ti)
+        )
+
+{- | Governance-withdrawal-init proposal translator.
+
+Derives the typed ledger inputs the construction core
+needs from a compact JSON payload. The funding key hash
+becomes both the registered funding stake credential and
+the proposal's reward return account. The single voter
+key hash is reused for the voter stake credential, the
+voter payment credential (combined with the voter stake
+credential to form the voter base address), and the DRep
+credential — matching the production DevNet submitter's
+single-@SignKeyDSIGN@ derivation.
+-}
+translateGovernanceWithdrawalInitProposal
+    :: TreasuryIntent 'GovernanceWithdrawalInitProposal
+    -> Either
+        String
+        ( TranslatedShared
+        , GovernanceWithdrawalInitProposalTx
+        )
+translateGovernanceWithdrawalInitProposal ti = do
+    (shared, fundingAddr, fundingTxIn, upperSlot) <-
+        translateGovernanceWithdrawalInitShared ti
+    network <- parseNetwork (tiNetwork ti)
+    let payload = tiPayload ti
+    treasuryAccount <-
+        parseRewardAccountForNetwork
+            (tiNetwork ti)
+            (gwipiTreasuryRewardAccountHash payload)
+    fundingStakeKey <-
+        parseStakingPubKeyHash
+            (gwipiFundingStakeKeyHash payload)
+    voterKey <- parseStakingPubKeyHash (gwipiVoterKeyHash payload)
+    let fundingCredential = KeyHashObj fundingStakeKey
+        voterCredential = KeyHashObj voterKey
+        drepKey =
+            stakingToDRepKeyHash voterKey
+        drepCredential = KeyHashObj drepKey
+        voterPaymentKey =
+            stakingToPaymentKeyHash voterKey
+        voterBaseAddr =
+            Addr
+                network
+                (KeyHashObj voterPaymentKey)
+                (StakeRefBase voterCredential)
+        returnAccount =
+            AccountAddress
+                network
+                (AccountId fundingCredential)
+        amount = Coin (gwipiWithdrawalAmountLovelace payload)
+    anchor <-
+        parseGovernanceAnchor
+            (gwipiAnchorUrl payload)
+            (gwipiAnchorHash payload)
+    pure
+        ( shared
+        , GovernanceWithdrawalInitProposalTx
+            { gwiptFundingAddress = fundingAddr
+            , gwiptSeedTxIn = fundingTxIn
+            , gwiptFundingCredential = fundingCredential
+            , gwiptVoterCredential = voterCredential
+            , gwiptDrepCredential = drepCredential
+            , gwiptDrepKey = drepKey
+            , gwiptVoterBaseAddr = voterBaseAddr
+            , gwiptReturnAccount = returnAccount
+            , gwiptTreasuryAccount = treasuryAccount
+            , gwiptAmount = amount
+            , gwiptUpperBoundSlot = upperSlot
+            , gwiptAnchor = anchor
+            }
+        )
+
+-- | Governance-withdrawal-init materialization translator.
+translateGovernanceWithdrawalInitMaterialization
+    :: TreasuryIntent 'GovernanceWithdrawalInitMaterialization
+    -> Either
+        String
+        ( TranslatedShared
+        , GovernanceWithdrawalInitMaterializationTx
+        )
+translateGovernanceWithdrawalInitMaterialization ti = do
+    (shared, fundingAddr, fundingTxIn, upperSlot) <-
+        translateGovernanceWithdrawalInitShared ti
+    let payload = tiPayload ti
+    unless
+        (gwimiRewardsLovelace payload > 0)
+        ( Left
+            "governance-withdrawal-init-materialization rewardsLovelace must be positive"
+        )
+    treasuryRewardAccount <-
+        parseRewardAccountForNetwork
+            (tiNetwork ti)
+            (gwimiTreasuryRewardAccountHash payload)
+    treasuryAddress <-
+        parseAddr (gwimiTreasuryAddress payload)
+    treasuryRefTxIn <-
+        parseTxIn (gwimiTreasuryRefTxIn payload)
+    registryRefTxIn <-
+        parseTxIn (gwimiRegistryRefTxIn payload)
+    pure
+        ( shared
+        , GovernanceWithdrawalInitMaterializationTx
+            { gwimtFundingAddress = fundingAddr
+            , gwimtSeedTxIn = fundingTxIn
+            , gwimtTreasuryRewardAccount =
+                treasuryRewardAccount
+            , gwimtTreasuryAddress = treasuryAddress
+            , gwimtTreasuryRefTxIn = treasuryRefTxIn
+            , gwimtRegistryRefTxIn = registryRefTxIn
+            , gwimtRewardsAmount =
+                Coin (gwimiRewardsLovelace payload)
+            , gwimtUpperBoundSlot = upperSlot
+            }
+        )
+
+{- | Parse a 28-byte hex into a stake-role pubkey
+'KeyHash'.
+-}
+parseStakingPubKeyHash
+    :: Text -> Either String (KeyHash Staking)
+parseStakingPubKeyHash t = do
+    bytes <- decodeHexBytes 28 t
+    Right (KeyHash (mkHash28 bytes))
+
+{- | Reinterpret a 'KeyHash' 'Staking' as a 'KeyHash'
+'DRepRole' — the underlying 28-byte hash is role-free.
+The production DevNet submitter derives both the voter
+staking credential and the voter DRep credential from a
+single @SignKeyDSIGN@; this helper mirrors that derivation
+on the JSON path.
+-}
+stakingToDRepKeyHash :: KeyHash Staking -> KeyHash DRepRole
+stakingToDRepKeyHash (KeyHash h) = KeyHash h
+
+{- | Reinterpret a 'KeyHash' 'Staking' as a 'KeyHash'
+'Payment'. Used to derive the voter base address from the
+single voter signing key.
+-}
+stakingToPaymentKeyHash
+    :: KeyHash Staking -> KeyHash Payment
+stakingToPaymentKeyHash (KeyHash h) = KeyHash h
+
+{- | Parse a CIP-1694 governance 'Anchor' from a URL and
+a 32-byte hex content hash.
+-}
+parseGovernanceAnchor
+    :: Text -> Text -> Either String Anchor
+parseGovernanceAnchor urlText hashText = do
+    url <- case textToUrl 128 urlText of
+        Just u -> Right u
+        Nothing ->
+            Left
+                ( "governance anchor URL too long or invalid: "
+                    <> T.unpack urlText
+                )
+    bytes <- decodeHexBytes 32 hashText
+    Right (Anchor url (unsafeMakeSafeHash (mkHash28 bytes)))
 
 {- | Parse a 28-byte hex into a stake-role script
 'Credential'.

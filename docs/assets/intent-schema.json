@@ -59,18 +59,74 @@
         },
         "governance-withdrawal-init-materialization": {
             "additionalProperties": false,
-            "properties": {},
-            "required": [],
+            "properties": {
+                "registryRefTxIn": {
+                    "$ref": "#/$defs/txIn"
+                },
+                "rewardsLovelace": {
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "treasuryAddress": {
+                    "$ref": "#/$defs/bech32Address"
+                },
+                "treasuryRefTxIn": {
+                    "$ref": "#/$defs/txIn"
+                },
+                "treasuryRewardAccountHash": {
+                    "$ref": "#/$defs/hex28"
+                }
+            },
+            "required": [
+                "treasuryRewardAccountHash",
+                "treasuryAddress",
+                "treasuryRefTxIn",
+                "registryRefTxIn",
+                "rewardsLovelace"
+            ],
             "type": "object"
         },
         "governance-withdrawal-init-proposal": {
             "additionalProperties": false,
-            "properties": {},
-            "required": [],
+            "properties": {
+                "anchorHash": {
+                    "$ref": "#/$defs/hex32"
+                },
+                "anchorUrl": {
+                    "maxLength": 128,
+                    "minLength": 1,
+                    "type": "string"
+                },
+                "fundingStakeKeyHash": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "treasuryRewardAccountHash": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "voterKeyHash": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "withdrawalAmountLovelace": {
+                    "minimum": 1,
+                    "type": "integer"
+                }
+            },
+            "required": [
+                "treasuryRewardAccountHash",
+                "withdrawalAmountLovelace",
+                "fundingStakeKeyHash",
+                "voterKeyHash",
+                "anchorUrl",
+                "anchorHash"
+            ],
             "type": "object"
         },
         "hex28": {
             "pattern": "^([0-9a-fA-F]{56})$",
+            "type": "string"
+        },
+        "hex32": {
+            "pattern": "^([0-9a-fA-F]{64})$",
             "type": "string"
         },
         "rationale": {

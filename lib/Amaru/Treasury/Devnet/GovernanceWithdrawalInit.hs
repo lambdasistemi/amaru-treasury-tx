@@ -45,6 +45,21 @@ module Amaru.Treasury.Devnet.GovernanceWithdrawalInit
       -- * Runner
     , runDevnetGovernanceWithdrawalInit
 
+      -- * Construction cores
+
+    --
+    -- \^ Pure-IO transaction builders for the two flat
+    -- @governance-withdrawal-init-*@ sub-actions. Each
+    -- core mirrors the 'TxBuild' program a corresponding
+    -- step of @runDevnetGovernanceWithdrawalInit@ uses
+    -- under the hood, so the unified @tx-build@
+    -- dispatcher and the live DevNet submitter produce
+    -- byte-identical unsigned transactions for each
+    -- sub-action.
+    , GovernanceWithdrawalCoreEvaluator
+    , buildGovernanceWithdrawalProposalCore
+    , buildGovernanceWithdrawalMaterializationCore
+
       -- * Artifacts
     , governanceWithdrawalInitDirectory
     , governanceWithdrawalInitSummaryPath
@@ -97,8 +112,7 @@ import Cardano.Ledger.Api.Tx.Out
     , valueTxOutL
     )
 import Cardano.Ledger.BaseTypes
-    ( Inject (..)
-    , Network (..)
+    ( Network (..)
     , StrictMaybe (..)
     , mkTxIxPartial
     , textToUrl
@@ -138,26 +152,14 @@ import Cardano.Node.Client.Submitter
     )
 import Cardano.Slotting.Slot (SlotNo (..))
 import Cardano.Tx.Build
-    ( CertWitness (..)
-    , ConwayDelegCert (..)
-    , ConwayGovCert (..)
-    , ConwayTxCert (..)
-    , DRep (..)
-    , Delegatee (..)
-    , GovActionId (..)
+    ( GovActionId (..)
     , GovActionIx (..)
     , InterpretIO (..)
-    , ProposalWitness (..)
     , TxBuild
     , Vote (..)
     , Voter (..)
     , build
-    , certify
-    , collateral
     , mkPParamsBound
-    , payTo
-    , proposeTreasuryWithdrawal
-    , registerAndVoteAbstain
     , spend
     , validTo
     , vote
@@ -199,6 +201,13 @@ import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
 
 import Amaru.Treasury.Cli.TxBuild qualified as TxBuild
+import Amaru.Treasury.Devnet.GovernanceWithdrawalInit.Core
+    ( GovernanceWithdrawalCoreEvaluator
+    , NoCtx
+    , buildGovernanceWithdrawalMaterializationCore
+    , buildGovernanceWithdrawalProposalCore
+    , governanceWithdrawalProposalProgramAnchored
+    )
 import Amaru.Treasury.IntentJSON
     ( SAction (..)
     , SomeTreasuryIntent (..)
@@ -237,8 +246,6 @@ import Amaru.Treasury.Tx.WithdrawWizard qualified as Withdraw
 import Amaru.Treasury.Tx.Witness
     ( addCardanoCliPaymentKeyWitness
     )
-
-data NoCtx a
 
 -- | Live inputs supplied by the shipped CLI runner after DevNet gating.
 data DevnetGovernanceWithdrawalInitConfig = DevnetGovernanceWithdrawalInitConfig
@@ -866,6 +873,11 @@ submitGovernanceWithdrawal
                                                                             )
                                                                     }
 
+{- | Public surface wrapping
+'governanceWithdrawalProposalProgramAnchored' with the
+fixed module-level 'governanceAnchor' the production
+DevNet submitter uses.
+-}
 governanceWithdrawalProposalProgram
     :: TxIn
     -> Credential Staking
@@ -888,39 +900,19 @@ governanceWithdrawalProposalProgram
     returnAccount
     treasuryAccount
     amount
-    upperSlot = do
-        _ <- spend seedIn
-        collateral seedIn
-        _ <-
-            registerAndVoteAbstain
-                fundingCredential
-                stakeDeposit
-                PubKeyCert
-        _ <-
-            certify
-                ( ConwayTxCertGov $
-                    ConwayRegDRep drepCredential drepDeposit SNothing
-                )
-                PubKeyCert
-        _ <-
-            certify
-                ( ConwayTxCertDeleg $
-                    ConwayRegDelegCert
-                        voterCredential
-                        (DelegVote (DRepKeyHash drepKey))
-                        stakeDeposit
-                )
-                PubKeyCert
-        _ <- payTo voterBaseAddr (inject voteOutputCoin)
-        _ <-
-            proposeTreasuryWithdrawal
-                governanceDeposit
-                returnAccount
-                governanceAnchor
-                (Map.singleton treasuryAccount amount)
-                SNothing
-                NoProposalScript
-        validTo upperSlot
+    upperSlot =
+        governanceWithdrawalProposalProgramAnchored
+            seedIn
+            fundingCredential
+            voterCredential
+            drepCredential
+            drepKey
+            voterBaseAddr
+            returnAccount
+            treasuryAccount
+            amount
+            upperSlot
+            governanceAnchor
 
 submitVoteTx
     :: Provider IO
@@ -2415,18 +2407,6 @@ baseAddrFromSignKey sk stakeCredential =
         Testnet
         (KeyHashObj (paymentKeyHashFromSignKey sk))
         (StakeRefBase stakeCredential)
-
-stakeDeposit :: Coin
-stakeDeposit = Coin 400_000
-
-governanceDeposit :: Coin
-governanceDeposit = Coin 1_000_000
-
-drepDeposit :: Coin
-drepDeposit = Coin 500_000
-
-voteOutputCoin :: Coin
-voteOutputCoin = Coin 5_000_000
 
 txOutRef :: TxId -> Integer -> TxIn
 txOutRef txId ix =

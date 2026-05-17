@@ -103,12 +103,13 @@ intentJsonSchema =
                 , "stake-reward-init-plain-account"
                     .= stakeRewardInitPlainAccountSchema
                 , "governance-withdrawal-init-proposal"
-                    .= emptyPayloadSchema
+                    .= governanceWithdrawalInitProposalSchema
                 , "governance-withdrawal-init-materialization"
-                    .= emptyPayloadSchema
+                    .= governanceWithdrawalInitMaterializationSchema
                 , "txIn" .= txInSchema
                 , "bech32Address" .= bech32AddressSchema
                 , "hex28" .= hexBytesSchema 28
+                , "hex32" .= hexBytesSchema 32
                 , "assetNameHex" .= assetNameHexSchema
                 ]
         ]
@@ -336,6 +337,51 @@ stakeRewardInitPlainAccountSchema =
         [ "permissionsScriptHash"
         ]
         [ ("permissionsScriptHash", ref "hex28")
+        ]
+
+governanceWithdrawalInitProposalSchema :: Value
+governanceWithdrawalInitProposalSchema =
+    objectSchema
+        [ "treasuryRewardAccountHash"
+        , "withdrawalAmountLovelace"
+        , "fundingStakeKeyHash"
+        , "voterKeyHash"
+        , "anchorUrl"
+        , "anchorHash"
+        ]
+        [ ("treasuryRewardAccountHash", ref "hex28")
+        ,
+            ( "withdrawalAmountLovelace"
+            , positiveIntegerSchema
+            )
+        , ("fundingStakeKeyHash", ref "hex28")
+        , ("voterKeyHash", ref "hex28")
+        , ("anchorUrl", anchorUrlSchema)
+        , ("anchorHash", ref "hex32")
+        ]
+
+governanceWithdrawalInitMaterializationSchema :: Value
+governanceWithdrawalInitMaterializationSchema =
+    objectSchema
+        [ "treasuryRewardAccountHash"
+        , "treasuryAddress"
+        , "treasuryRefTxIn"
+        , "registryRefTxIn"
+        , "rewardsLovelace"
+        ]
+        [ ("treasuryRewardAccountHash", ref "hex28")
+        , ("treasuryAddress", ref "bech32Address")
+        , ("treasuryRefTxIn", ref "txIn")
+        , ("registryRefTxIn", ref "txIn")
+        , ("rewardsLovelace", positiveIntegerSchema)
+        ]
+
+anchorUrlSchema :: Value
+anchorUrlSchema =
+    object
+        [ "type" .= ("string" :: Text)
+        , "minLength" .= (1 :: Int)
+        , "maxLength" .= (128 :: Int)
         ]
 
 schemaVersionSchema :: Value

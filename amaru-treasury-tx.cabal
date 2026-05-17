@@ -112,6 +112,7 @@ library
     Amaru.Treasury.Build.Error.Exception
     Amaru.Treasury.Build.Error.Render
     Amaru.Treasury.Build.Error.Types
+    Amaru.Treasury.Build.GovernanceWithdrawalInit
     Amaru.Treasury.Build.RegistryInit
     Amaru.Treasury.Build.ReportWriter
     Amaru.Treasury.Build.Result
@@ -144,6 +145,7 @@ library
     Amaru.Treasury.Constants
     Amaru.Treasury.Devnet.DisburseSubmit
     Amaru.Treasury.Devnet.GovernanceWithdrawalInit
+    Amaru.Treasury.Devnet.GovernanceWithdrawalInit.Core
     Amaru.Treasury.Devnet.RegistryInit
     Amaru.Treasury.Devnet.Runner
     Amaru.Treasury.Devnet.StakeRewardInit
@@ -468,12 +470,14 @@ test-suite golden-tests
   other-modules:
     AdaDisburseGoldenSpec
     EnvelopeOracleSpec
+    GovernanceWithdrawalInitIntentSpec
     PlaceholderSpec
     RegistryInitIntentSpec
     RegistryWalkGoldenSpec
     ReportRenderActionGoldenSpec
     ReportRenderSwapGoldenSpec
     StakeRewardInitIntentSpec
+    Support.GovernanceWithdrawalInitFixtures
     Support.RegistryInitFixtures
     Support.StakeRewardInitFixtures
     SwapGoldenSpec

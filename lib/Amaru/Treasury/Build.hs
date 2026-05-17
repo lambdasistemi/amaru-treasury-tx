@@ -56,6 +56,10 @@ import Amaru.Treasury.Build.Error
 import Amaru.Treasury.Build.Error.Convert
     ( throwBuildException
     )
+import Amaru.Treasury.Build.GovernanceWithdrawalInit
+    ( runGovernanceWithdrawalInitMaterializationAction
+    , runGovernanceWithdrawalInitProposalAction
+    )
 import Amaru.Treasury.Build.RegistryInit
     ( runRegistryInitMintAction
     , runRegistryInitReferenceScriptsAction
@@ -165,21 +169,19 @@ runBuildExcept ctx shared sa translated = case sa of
             (nestActionBuildError BuildActionIntent)
             (runStakeRewardInitPlainAccountAction ctx translated)
     SGovernanceWithdrawalInitProposal ->
-        throwE $
-            buildError
-                BuildActionIntent
-                BuildPhaseUnsupported
-                ( DiagnosticUnsupportedAction
-                    "governance-withdrawal-init-proposal"
-                )
+        withExceptT
+            (nestActionBuildError BuildActionIntent)
+            ( runGovernanceWithdrawalInitProposalAction
+                ctx
+                translated
+            )
     SGovernanceWithdrawalInitMaterialization ->
-        throwE $
-            buildError
-                BuildActionIntent
-                BuildPhaseUnsupported
-                ( DiagnosticUnsupportedAction
-                    "governance-withdrawal-init-materialization"
-                )
+        withExceptT
+            (nestActionBuildError BuildActionIntent)
+            ( runGovernanceWithdrawalInitMaterializationAction
+                ctx
+                translated
+            )
 
 {- | Caller-friendly wrapper for the parser's existential
 return type. Decodes-then-translates-then-builds.

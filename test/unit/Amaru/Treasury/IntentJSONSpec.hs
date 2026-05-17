@@ -524,14 +524,37 @@ genGovernanceWithdrawalInitProposalIntent
 genGovernanceWithdrawalInitProposalIntent =
     genIntent
         SGovernanceWithdrawalInitProposal
-        (pure GovernanceWithdrawalInitProposalInputs)
+        ( pure
+            GovernanceWithdrawalInitProposalInputs
+                { gwipiTreasuryRewardAccountHash =
+                    T.replicate 56 "0"
+                , gwipiWithdrawalAmountLovelace = 100
+                , gwipiFundingStakeKeyHash =
+                    T.replicate 56 "1"
+                , gwipiVoterKeyHash =
+                    T.replicate 56 "2"
+                , gwipiAnchorUrl =
+                    "https://example.invalid/anchor.json"
+                , gwipiAnchorHash = T.replicate 64 "0"
+                }
+        )
 
 genGovernanceWithdrawalInitMaterializationIntent
     :: Gen SomeTreasuryIntent
 genGovernanceWithdrawalInitMaterializationIntent =
     genIntent
         SGovernanceWithdrawalInitMaterialization
-        (pure GovernanceWithdrawalInitMaterializationInputs)
+        ( pure
+            GovernanceWithdrawalInitMaterializationInputs
+                { gwimiTreasuryRewardAccountHash =
+                    T.replicate 56 "0"
+                , gwimiTreasuryAddress =
+                    "addr_test1vq3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygswahgq5"
+                , gwimiTreasuryRefTxIn = "33#1"
+                , gwimiRegistryRefTxIn = "44#2"
+                , gwimiRewardsLovelace = 100
+                }
+        )
 
 -- ----------------------------------------------------
 -- Negative-case raw inputs

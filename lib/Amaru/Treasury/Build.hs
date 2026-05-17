@@ -56,6 +56,11 @@ import Amaru.Treasury.Build.Error
 import Amaru.Treasury.Build.Error.Convert
     ( throwBuildException
     )
+import Amaru.Treasury.Build.RegistryInit
+    ( runRegistryInitMintAction
+    , runRegistryInitReferenceScriptsAction
+    , runRegistryInitSeedSplitAction
+    )
 import Amaru.Treasury.Build.Result
 import Amaru.Treasury.Build.Swap
     ( runSwap
@@ -136,29 +141,17 @@ runBuildExcept ctx shared sa translated = case sa of
                 BuildPhaseUnsupported
                 (DiagnosticUnsupportedAction "reorganize")
     SRegistryInitSeedSplit ->
-        throwE $
-            buildError
-                BuildActionIntent
-                BuildPhaseUnsupported
-                ( DiagnosticUnsupportedAction
-                    "registry-init-seed-split"
-                )
+        withExceptT
+            (nestActionBuildError BuildActionIntent)
+            (runRegistryInitSeedSplitAction ctx translated)
     SRegistryInitMint ->
-        throwE $
-            buildError
-                BuildActionIntent
-                BuildPhaseUnsupported
-                ( DiagnosticUnsupportedAction
-                    "registry-init-mint"
-                )
+        withExceptT
+            (nestActionBuildError BuildActionIntent)
+            (runRegistryInitMintAction ctx translated)
     SRegistryInitReferenceScripts ->
-        throwE $
-            buildError
-                BuildActionIntent
-                BuildPhaseUnsupported
-                ( DiagnosticUnsupportedAction
-                    "registry-init-reference-scripts"
-                )
+        withExceptT
+            (nestActionBuildError BuildActionIntent)
+            (runRegistryInitReferenceScriptsAction ctx translated)
     SStakeRewardInitScriptAccount ->
         throwE $
             buildError

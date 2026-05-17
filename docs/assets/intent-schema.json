@@ -103,14 +103,38 @@
         },
         "registry-init-mint": {
             "additionalProperties": false,
-            "properties": {},
-            "required": [],
+            "properties": {
+                "ownerKeyHash": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "registrySeedTxIn": {
+                    "$ref": "#/$defs/txIn"
+                },
+                "scopesSeedTxIn": {
+                    "$ref": "#/$defs/txIn"
+                }
+            },
+            "required": [
+                "scopesSeedTxIn",
+                "registrySeedTxIn",
+                "ownerKeyHash"
+            ],
             "type": "object"
         },
         "registry-init-reference-scripts": {
             "additionalProperties": false,
-            "properties": {},
-            "required": [],
+            "properties": {
+                "registrySeedTxIn": {
+                    "$ref": "#/$defs/txIn"
+                },
+                "scopesSeedTxIn": {
+                    "$ref": "#/$defs/txIn"
+                }
+            },
+            "required": [
+                "scopesSeedTxIn",
+                "registrySeedTxIn"
+            ],
             "type": "object"
         },
         "registry-init-seed-split": {

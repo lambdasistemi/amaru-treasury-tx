@@ -93,10 +93,11 @@ intentJsonSchema =
                 , "withdraw" .= withdrawSchema
                 , "reorganize" .= emptyPayloadSchema
                 , "registry-init-seed-split"
-                    .= emptyPayloadSchema
-                , "registry-init-mint" .= emptyPayloadSchema
+                    .= registryInitSeedSplitSchema
+                , "registry-init-mint"
+                    .= registryInitMintSchema
                 , "registry-init-reference-scripts"
-                    .= emptyPayloadSchema
+                    .= registryInitReferenceScriptsSchema
                 , "stake-reward-init-script-account"
                     .= emptyPayloadSchema
                 , "stake-reward-init-plain-account"
@@ -293,6 +294,31 @@ withdrawSchema =
 
 emptyPayloadSchema :: Value
 emptyPayloadSchema = objectSchema [] []
+
+registryInitSeedSplitSchema :: Value
+registryInitSeedSplitSchema = emptyPayloadSchema
+
+registryInitMintSchema :: Value
+registryInitMintSchema =
+    objectSchema
+        [ "scopesSeedTxIn"
+        , "registrySeedTxIn"
+        , "ownerKeyHash"
+        ]
+        [ ("scopesSeedTxIn", ref "txIn")
+        , ("registrySeedTxIn", ref "txIn")
+        , ("ownerKeyHash", ref "hex28")
+        ]
+
+registryInitReferenceScriptsSchema :: Value
+registryInitReferenceScriptsSchema =
+    objectSchema
+        [ "scopesSeedTxIn"
+        , "registrySeedTxIn"
+        ]
+        [ ("scopesSeedTxIn", ref "txIn")
+        , ("registrySeedTxIn", ref "txIn")
+        ]
 
 schemaVersionSchema :: Value
 schemaVersionSchema =

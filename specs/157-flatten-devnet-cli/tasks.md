@@ -47,8 +47,8 @@ No foundational task. The dispatch infrastructure (`Amaru.Treasury.Build.runBuil
 
 ### Subagent slice 1 — Parser retirement + runner relocation (one commit)
 
-- [ ] T001 [US2] RED: extend `test/unit/Amaru/Treasury/Cli/ParserSpec.hs` with cases asserting that `amaru-treasury-tx devnet …`, `amaru-treasury-tx devnet registry-init …`, `amaru-treasury-tx devnet stake-reward-init …`, `amaru-treasury-tx devnet governance-withdrawal-init …`, and `amaru-treasury-tx devnet disburse-submit …` (and the bare `registry-init` / `stake-reward-init` / `governance-withdrawal-init` / `disburse-submit`) are rejected as unrecognized subcommands; tightened help-text check (per-line regex `^\s+devnet(\s|$)` matches nothing). (`test/unit/Amaru/Treasury/Cli/ParserSpec.hs`)
-- [ ] T002 [US2] GREEN: in the same commit, perform the lock-step parser-retirement + runner-relocation:
+- [X] T001 (commit: 967ca96) [US2] RED: extend `test/unit/Amaru/Treasury/Cli/ParserSpec.hs` with cases asserting that `amaru-treasury-tx devnet …`, `amaru-treasury-tx devnet registry-init …`, `amaru-treasury-tx devnet stake-reward-init …`, `amaru-treasury-tx devnet governance-withdrawal-init …`, and `amaru-treasury-tx devnet disburse-submit …` (and the bare `registry-init` / `stake-reward-init` / `governance-withdrawal-init` / `disburse-submit`) are rejected as unrecognized subcommands; tightened help-text check (per-line regex `^\s+devnet(\s|$)` matches nothing). (`test/unit/Amaru/Treasury/Cli/ParserSpec.hs`)
+- [X] T002 (commit: 967ca96) [US2] GREEN: in the same commit, perform the lock-step parser-retirement + runner-relocation:
   1. Create `lib/Amaru/Treasury/Devnet/Runner.hs` and move the four `runDevnet*` IO drivers + four `DevnetXxxOpts` records out of `Cli/Devnet.hs` verbatim (no behavior change; no `optparse-applicative` imports in the new module).
   2. Delete `lib/Amaru/Treasury/Cli/Devnet.hs` (parser bits drop with it).
   3. Drop the `"devnet"` subparser line, the `devnetCmdP` parser, the four `CmdDevnet*` constructors, and the four `Amaru.Treasury.Cli.Devnet` imports from `lib/Amaru/Treasury/Cli.hs`.
@@ -58,7 +58,7 @@ No foundational task. The dispatch infrastructure (`Amaru.Treasury.Build.runBuil
   7. Delete `test/unit/Amaru/Treasury/Cli/DevnetSpec.hs`.
 
   (`lib/Amaru/Treasury/Cli.hs`, `lib/Amaru/Treasury/Cli/Devnet.hs`, `lib/Amaru/Treasury/Devnet/Runner.hs`, `app/amaru-treasury-tx/Main.hs`, `amaru-treasury-tx.cabal`, `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs`, `test/unit/Amaru/Treasury/Cli/ParserSpec.hs`, `test/unit/Amaru/Treasury/Cli/DevnetSpec.hs`)
-- [ ] T003 [US2] Verify `./gate.sh` is green at HEAD; `git diff origin/main -- lib/Amaru/Treasury/Devnet/{RegistryInit,StakeRewardInit,GovernanceWithdrawalInit,DisburseSubmit}.hs` is empty (those four library runners must stay bit-identical); `git diff origin/main -- test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` shows ONLY the import-line retarget (no body diff).
+- [X] T003 (commit: 967ca96) [US2] Verify `./gate.sh` is green at HEAD; `git diff origin/main -- lib/Amaru/Treasury/Devnet/{RegistryInit,StakeRewardInit,GovernanceWithdrawalInit,DisburseSubmit}.hs` is empty (those four library runners must stay bit-identical); `git diff origin/main -- test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` shows ONLY the import-line retarget (no body diff). *Reviewer note: two forced consequences accepted as bisect-safe mechanical fallout — `test/unit/Amaru/Treasury/Cli/EnvelopeSpec.hs` `cmdTag` dropped the three `CmdDevnet*` arms (type-system forced), and `SmokeSpec.hs` import block was alphabetically reordered by fourmolu when `Cli.Devnet` became `Devnet.Runner` (sort-only, body untouched).*
 
 **Fold rule**: T001 + T002 + T003 are one commit. T001 is RED before T002 lands; T003 is the GREEN verification.
 

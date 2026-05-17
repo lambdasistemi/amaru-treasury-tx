@@ -123,7 +123,6 @@ library
     Amaru.Treasury.Cli
     Amaru.Treasury.Cli.AttachWitness
     Amaru.Treasury.Cli.Common
-    Amaru.Treasury.Cli.Devnet
     Amaru.Treasury.Cli.DisburseWizard
     Amaru.Treasury.Cli.Envelope
     Amaru.Treasury.Cli.Passphrase
@@ -144,6 +143,7 @@ library
     Amaru.Treasury.Devnet.DisburseSubmit
     Amaru.Treasury.Devnet.GovernanceWithdrawalInit
     Amaru.Treasury.Devnet.RegistryInit
+    Amaru.Treasury.Devnet.Runner
     Amaru.Treasury.Devnet.StakeRewardInit
     Amaru.Treasury.Inspect
     Amaru.Treasury.Inspect.Render
@@ -371,8 +371,8 @@ test-suite unit-tests
   other-modules:
     Amaru.Treasury.AuxDataSpec
     Amaru.Treasury.BuildSpec
-    Amaru.Treasury.Cli.DevnetSpec
     Amaru.Treasury.Cli.EnvelopeSpec
+    Amaru.Treasury.Cli.ParserSpec
     Amaru.Treasury.Cli.SwapCancelSpec
     Amaru.Treasury.Cli.VaultSpec
     Amaru.Treasury.Cli.WitnessSpec

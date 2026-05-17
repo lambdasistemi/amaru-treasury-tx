@@ -216,7 +216,15 @@ import Amaru.Treasury.Backend.N2C
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     )
-import Amaru.Treasury.Cli.Devnet
+import Amaru.Treasury.Devnet.DisburseSubmit qualified as DisburseSubmit
+import Amaru.Treasury.Devnet.GovernanceWithdrawalInit qualified as GovernanceWithdrawalInit
+import Amaru.Treasury.Devnet.RegistryInit
+    ( DevnetRegistryAnchors (..)
+    , DevnetRegistryPublication (..)
+    , TreasuryTarget (..)
+    )
+import Amaru.Treasury.Devnet.RegistryInit qualified as RegistryInit
+import Amaru.Treasury.Devnet.Runner
     ( DevnetDisburseSubmitOpts (..)
     , DevnetGovernanceWithdrawalInitOpts (..)
     , DevnetRegistryInitOpts (..)
@@ -226,14 +234,6 @@ import Amaru.Treasury.Cli.Devnet
     , runDevnetRegistryInit
     , runDevnetStakeRewardInit
     )
-import Amaru.Treasury.Devnet.DisburseSubmit qualified as DisburseSubmit
-import Amaru.Treasury.Devnet.GovernanceWithdrawalInit qualified as GovernanceWithdrawalInit
-import Amaru.Treasury.Devnet.RegistryInit
-    ( DevnetRegistryAnchors (..)
-    , DevnetRegistryPublication (..)
-    , TreasuryTarget (..)
-    )
-import Amaru.Treasury.Devnet.RegistryInit qualified as RegistryInit
 import Amaru.Treasury.Devnet.StakeRewardInit qualified as StakeRewardInit
 import Amaru.Treasury.Redeemer
     ( RawPlutusData (..)

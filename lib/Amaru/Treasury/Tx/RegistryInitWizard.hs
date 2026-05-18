@@ -17,7 +17,12 @@ errors. Slice 2 adds the resolver layer for the @seed-split@
 sub-action, the devnet network guard (a new fail-fast UX
 that fires BEFORE any chain query), the pure translation
 to 'SomeTreasuryIntent', and the wallet-shortfall path.
-Slices 3 and 4 wire @mint@ and @reference-scripts@.
+Slice 3 adds the pure translation for the @mint@ sub-action;
+it shares the seed-split resolver (the chain-derived bits
+are identical) and bakes the operator-typed
+@--scopes-seed-txin@, @--registry-seed-txin@, and
+@--owner-key-hash@ values verbatim into the payload.
+Slice 4 wires @reference-scripts@.
 -}
 module Amaru.Treasury.Tx.RegistryInitWizard
     ( -- * Answers
@@ -38,22 +43,28 @@ module Amaru.Treasury.Tx.RegistryInitWizard
 
       -- * Pure translation
     , registryInitSeedSplitToIntent
+    , registryInitMintToIntent
     ) where
 
 import Data.Aeson (FromJSON (..), withObject, (.:), (.:?))
+import Data.ByteString.Base16 qualified as B16
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Text (Text)
+import Data.Text.Encoding qualified as TE
 import Data.Word (Word16, Word64)
 
-import Cardano.Ledger.Hashes (KeyHash (..))
+import Cardano.Crypto.Hash.Class (hashToBytes)
+import Cardano.Ledger.BaseTypes (txIxToInt)
+import Cardano.Ledger.Hashes (KeyHash (..), extractHash)
 import Cardano.Ledger.Keys (KeyRole (Witness))
-import Cardano.Ledger.TxIn (TxIn)
+import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 
 import Cardano.Node.Client.Validity qualified as Validity
 
 import Amaru.Treasury.IntentJSON
     ( RationaleJSON (..)
+    , RegistryInitMintInputs (..)
     , RegistryInitSeedSplitInputs (..)
     , SAction (..)
     , ScopeJSON (..)
@@ -69,6 +80,8 @@ import Amaru.Treasury.Tx.SwapWizard
     , WalletSelection (..)
     , selectWallet
     )
+
+import Data.Text qualified as T
 
 -- ----------------------------------------------------
 -- Answers
@@ -432,3 +445,121 @@ mkRationale ans =
                     (scopeName <> " seed-split")
                     (risDestinationLabel ans)
             }
+
+-- ----------------------------------------------------
+-- Pure translation (mint)
+-- ----------------------------------------------------
+
+{- | Translate the resolved @mint@ environment plus typed
+answers into a 'SomeTreasuryIntent'. Pure; reads only its
+arguments.
+
+The three operator-typed values from
+'RegistryInitMintAnswers' — @rimScopesSeedTxIn@,
+@rimRegistrySeedTxIn@, @rimOwnerKeyHash@ — are baked
+verbatim into the 'RegistryInitMintInputs' payload after
+text rendering. The shared 'RegistryInitEnv' (resolved from
+the same seed-split resolver) supplies the network, wallet
+block, scope projection, and validity upper bound.
+
+Constitutional constraint (SC-007 / NFR-006): this function
+MUST NOT call 'Amaru.Treasury.Devnet.RegistryInit.buildRegistryNftsCore'
+or any other 'Amaru.Treasury.Devnet.*' construction core; it
+only manipulates the JSON-shaped intent. The dispatcher in
+"Amaru.Treasury.Build" is the one that consumes the encoded
+intent and calls the core. Slice 5 ships a grep-based test
+that enforces this boundary on the wizard module.
+-}
+registryInitMintToIntent
+    :: RegistryInitEnv
+    -> RegistryInitMintAnswers
+    -> Either RegistryInitError SomeTreasuryIntent
+registryInitMintToIntent env ans = do
+    case rimValidityHours ans of
+        Just 0 -> Left RegistryInitValidityHoursZero
+        _ -> pure ()
+    let intent =
+            TreasuryIntent
+                { tiSAction = SRegistryInitMint
+                , tiSchema = 1
+                , tiNetwork = reNetwork env
+                , tiWallet = mkWallet (reWalletSelection env)
+                , tiScope = mkScopeMint env ans
+                , tiSigners = []
+                , tiValidityUpperBoundSlot = reUpperBoundSlot env
+                , tiRationale = mkRationaleMint ans
+                , tiPayload =
+                    RegistryInitMintInputs
+                        { rimiScopesSeedTxIn =
+                            txInText (rimScopesSeedTxIn ans)
+                        , rimiRegistrySeedTxIn =
+                            txInText (rimRegistrySeedTxIn ans)
+                        , rimiOwnerKeyHash =
+                            keyHashText (rimOwnerKeyHash ans)
+                        }
+                }
+    Right (SomeTreasuryIntent SRegistryInitMint intent)
+
+mkScopeMint
+    :: RegistryInitEnv -> RegistryInitMintAnswers -> ScopeJSON
+mkScopeMint env ans =
+    let r = reRegistry env
+        s = svRefs (reScopeView env)
+    in  ScopeJSON
+            { sjId = scopeText (rimScope ans)
+            , sjTreasuryAddress = trAddress s
+            , sjTreasuryUtxos = []
+            , sjTreasuryLeftoverLovelace = 0
+            , sjTreasuryLeftoverUsdm = 0
+            , sjTreasuryLeftoverOtherAssets = mempty
+            , sjTreasuryScriptHash = trScriptHash s
+            , sjPermissionsRewardAccount =
+                trPermissionsRewardAccount s
+            , sjScopesDeployedAt = rvScopesDeployedAt r
+            , sjPermissionsDeployedAt =
+                rvPermissionsDeployedAt r
+            , sjTreasuryDeployedAt = rvTreasuryDeployedAt r
+            , sjRegistryDeployedAt = rvRegistryDeployedAt r
+            , sjRegistryPolicyId = rvRegistryPolicyId r
+            }
+
+mkRationaleMint :: RegistryInitMintAnswers -> RationaleJSON
+mkRationaleMint ans =
+    let scopeName = scopeText (rimScope ans)
+    in  RationaleJSON
+            { rjEvent =
+                fromMaybe "registry-init" (rimEvent ans)
+            , rjLabel =
+                fromMaybe
+                    "Registry initialization mint"
+                    (rimLabel ans)
+            , rjDescription =
+                fromMaybe
+                    ( "Mint the scopes and registry NFTs for "
+                        <> scopeName
+                    )
+                    (rimDescription ans)
+            , rjJustification =
+                fromMaybe
+                    "Bootstrap the per-scope registry"
+                    (rimJustification ans)
+            , rjDestinationLabel =
+                fromMaybe
+                    (scopeName <> " mint")
+                    (rimDestinationLabel ans)
+            }
+
+-- ----------------------------------------------------
+-- Text rendering helpers
+-- ----------------------------------------------------
+
+txInText :: TxIn -> Text
+txInText (TxIn (TxId h) ix) =
+    TE.decodeUtf8Lenient
+        (B16.encode (hashToBytes (extractHash h)))
+        <> "#"
+        <> T.pack (show (txIxToInt ix))
+
+keyHashText :: KeyHash Witness -> Text
+keyHashText (KeyHash h) =
+    TE.decodeUtf8Lenient (B16.encode (hashToBytes h))

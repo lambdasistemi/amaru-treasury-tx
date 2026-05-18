@@ -5,16 +5,22 @@ Module      : Amaru.Treasury.Tx.RegistryInitWizardSpec
 Description : Unit tests for the registry-init-wizard
 License     : Apache-2.0
 
-Slice 2 of #158. Two assertions:
+Slice 2 of #158 shipped the seed-split round-trip and the
+wallet-shortfall path. Slice 3 extends with a mint
+round-trip on the same pattern. Slice 4 will add the
+reference-scripts round-trip.
 
-* JSON round-trip — @decodeTreasuryIntent
+Assertions:
+
+* JSON round-trip (seed-split) — @decodeTreasuryIntent
   . encodeSomeTreasuryIntent@ recovers the seed-split
   'SomeTreasuryIntent' the wizard emits.
+* JSON round-trip (mint) — same, for the mint translation
+  built by 'registryInitMintToIntent'.
 * Wallet shortfall — the resolver returns
   'Left RegistryInitWalletShortfall' when the wallet has no
   pure-ADA UTxOs (the mock 'wreQueryWalletUtxos' returns
-  @[]@). Slices 3 and 4 extend with mint and reference-scripts
-  round-trips.
+  @[]@).
 
 The unit test deliberately builds its inputs inline — the
 shared golden helper 'Support.RegistryInitWizardFixtures'
@@ -23,8 +29,11 @@ suite.
 -}
 module Amaru.Treasury.Tx.RegistryInitWizardSpec (spec) where
 
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as BS
 import Data.Functor.Identity (Identity (..))
 import Data.Map.Strict qualified as Map
+import Data.Maybe (fromJust)
 import Data.Text qualified as T
 import Test.Hspec
     ( Spec
@@ -34,6 +43,18 @@ import Test.Hspec
     , shouldSatisfy
     )
 
+import Cardano.Crypto.Hash.Class
+    ( Hash
+    , HashAlgorithm
+    , hashFromBytes
+    )
+import Cardano.Ledger.BaseTypes (mkTxIxPartial)
+import Cardano.Ledger.Hashes
+    ( KeyHash (..)
+    , unsafeMakeSafeHash
+    )
+import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
+
 import Amaru.Treasury.IntentJSON
     ( decodeTreasuryIntent
     , encodeSomeTreasuryIntent
@@ -42,9 +63,11 @@ import Amaru.Treasury.Scope (ScopeId (..))
 import Amaru.Treasury.Tx.RegistryInitWizard
     ( RegistryInitEnv (..)
     , RegistryInitError (..)
+    , RegistryInitMintAnswers (..)
     , RegistryInitResolverEnv (..)
     , RegistryInitResolverInput (..)
     , RegistryInitSeedSplitAnswers (..)
+    , registryInitMintToIntent
     , registryInitSeedSplitToIntent
     , resolveRegistryInitSeedSplit
     )
@@ -57,15 +80,21 @@ import Amaru.Treasury.Tx.SwapWizard
     )
 
 spec :: Spec
-spec = describe "registry-init-wizard seed-split" $ do
-    it
-        "encodes and decodes a seed-split SomeTreasuryIntent \
-        \without loss"
-        roundTripSeedSplit
-    it
-        "resolver returns RegistryInitWalletShortfall when \
-        \the wallet has no pure-ADA UTxOs"
-        walletShortfallSeedSplit
+spec = describe "registry-init-wizard" $ do
+    describe "seed-split" $ do
+        it
+            "encodes and decodes a seed-split SomeTreasuryIntent \
+            \without loss"
+            roundTripSeedSplit
+        it
+            "resolver returns RegistryInitWalletShortfall when \
+            \the wallet has no pure-ADA UTxOs"
+            walletShortfallSeedSplit
+    describe "mint" $
+        it
+            "encodes and decodes a mint SomeTreasuryIntent \
+            \without loss"
+            roundTripMint
 
 roundTripSeedSplit :: IO ()
 roundTripSeedSplit = do
@@ -84,6 +113,32 @@ roundTripSeedSplit = do
         Left e ->
             error
                 ( "registryInitSeedSplitToIntent failed: "
+                    <> show e
+                )
+        Right i -> pure i
+    let encoded = encodeSomeTreasuryIntent intent
+    decodeTreasuryIntent encoded `shouldBe` Right intent
+
+roundTripMint :: IO ()
+roundTripMint = do
+    let answers =
+            RegistryInitMintAnswers
+                { rimScope = CoreDevelopment
+                , rimValidityHours = Nothing
+                , rimDescription = Nothing
+                , rimJustification = Nothing
+                , rimDestinationLabel = Nothing
+                , rimEvent = Nothing
+                , rimLabel = Nothing
+                , rimScopesSeedTxIn = sampleScopesSeedTxIn
+                , rimRegistrySeedTxIn = sampleRegistrySeedTxIn
+                , rimOwnerKeyHash = sampleOwnerKeyHash
+                }
+        env = sampleEnv
+    intent <- case registryInitMintToIntent env answers of
+        Left e ->
+            error
+                ( "registryInitMintToIntent failed: "
                     <> show e
                 )
         Right i -> pure i
@@ -173,3 +228,25 @@ placeholderOwners =
         , soNetworkCompliance = T.replicate 56 "0"
         , soMiddleware = T.replicate 56 "0"
         }
+
+-- ----------------------------------------------------
+-- Mint sample data
+-- ----------------------------------------------------
+
+sampleScopesSeedTxIn :: TxIn
+sampleScopesSeedTxIn = mkTxIn (BS.replicate 32 0x44) 0
+
+sampleRegistrySeedTxIn :: TxIn
+sampleRegistrySeedTxIn = mkTxIn (BS.replicate 32 0x55) 1
+
+sampleOwnerKeyHash :: KeyHash kr
+sampleOwnerKeyHash = KeyHash (mkHash (BS.replicate 28 0x11))
+
+mkTxIn :: ByteString -> Integer -> TxIn
+mkTxIn bs ix =
+    TxIn
+        (TxId (unsafeMakeSafeHash (mkHash bs)))
+        (mkTxIxPartial ix)
+
+mkHash :: (HashAlgorithm h) => ByteString -> Hash h a
+mkHash = fromJust . hashFromBytes

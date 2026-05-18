@@ -1,0 +1,39 @@
+{
+    "action": "registry-init-mint",
+    "network": "devnet",
+    "rationale": {
+        "description": "registry-init bootstrap fixture",
+        "destinationLabel": "fixture",
+        "event": "registry-init",
+        "justification": "test",
+        "label": "registry-init"
+    },
+    "registry-init-mint": {
+        "ownerKeyHash": "11111111111111111111111111111111111111111111111111111111",
+        "registrySeedTxIn": "5555555555555555555555555555555555555555555555555555555555555555#1",
+        "scopesSeedTxIn": "4444444444444444444444444444444444444444444444444444444444444444#0"
+    },
+    "schema": 1,
+    "scope": {
+        "id": "core_development",
+        "permissionsDeployedAt": "3333333333333333333333333333333333333333333333333333333333333333#0",
+        "permissionsRewardAccount": "00000000000000000000000000000000000000000000000000000000",
+        "registryDeployedAt": "3333333333333333333333333333333333333333333333333333333333333333#0",
+        "registryPolicyId": "00000000000000000000000000000000000000000000000000000000",
+        "scopesDeployedAt": "3333333333333333333333333333333333333333333333333333333333333333#0",
+        "treasuryAddress": "addr_test1vq3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygswahgq5",
+        "treasuryDeployedAt": "3333333333333333333333333333333333333333333333333333333333333333#0",
+        "treasuryLeftoverLovelace": 0,
+        "treasuryLeftoverOtherAssets": {},
+        "treasuryLeftoverUsdm": 0,
+        "treasuryScriptHash": "00000000000000000000000000000000000000000000000000000000",
+        "treasuryUtxos": []
+    },
+    "signers": [],
+    "validityUpperBoundSlot": 1000100,
+    "wallet": {
+        "address": "addr_test1vq3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygswahgq5",
+        "extraTxIns": [],
+        "txIn": "3333333333333333333333333333333333333333333333333333333333333333#0"
+    }
+}

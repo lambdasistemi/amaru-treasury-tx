@@ -188,13 +188,13 @@ Translation:
 
 ### Tests for Slice 3 (RED — written first, observed failing) ⚠️
 
-- [ ] T016 [P] [US2] Extend `/code/amaru-treasury-tx-issue-158/test/golden/Support/RegistryInitWizardFixtures.hs` with `mintWizardFixture` and add hspec golden test in `/code/amaru-treasury-tx-issue-158/test/golden/Amaru/Treasury/Tx/RegistryInitWizardMintSpec.hs` asserting wizard mint intent → `tx-build` CBOR == `buildRegistryNftsCore` CBOR byte-for-byte
-- [ ] T017 [P] [US1] Extend `/code/amaru-treasury-tx-issue-158/test/unit/Amaru/Treasury/Tx/RegistryInitWizardSpec.hs` with a round-trip property for the mint `SomeTreasuryIntent`
-- [ ] T018 [P] [US3] Refine the mint network-guard case in `/code/amaru-treasury-tx-issue-158/test/unit/Amaru/Treasury/Tx/RegistryInitWizardNetworkGuardSpec.hs` from placeholder Answers (Slice 2 scaffold) to real Answers
+- [X] T016 (commit: 0453256f) [P] [US2] Extend `/code/amaru-treasury-tx-issue-158/test/golden/Support/RegistryInitWizardFixtures.hs` with `mintWizardFixture` and add hspec golden test in `/code/amaru-treasury-tx-issue-158/test/golden/Amaru/Treasury/Tx/RegistryInitWizardMintSpec.hs` asserting wizard mint intent → `tx-build` CBOR == `buildRegistryNftsCore` CBOR byte-for-byte
+- [X] T017 (commit: 0453256f) [P] [US1] Extend `/code/amaru-treasury-tx-issue-158/test/unit/Amaru/Treasury/Tx/RegistryInitWizardSpec.hs` with a round-trip property for the mint `SomeTreasuryIntent`
+- [X] T018 (commit: 0453256f) [P] [US3] Refine the mint network-guard case in `/code/amaru-treasury-tx-issue-158/test/unit/Amaru/Treasury/Tx/RegistryInitWizardNetworkGuardSpec.hs` from placeholder Answers (Slice 2 scaffold) to real Answers
 
 ### Implementation for Slice 3
 
-- [ ] T019 [US1] Implement `registryInitMintToIntent` (pure; bakes operator-typed inter-tx flags verbatim into `RegistryInitMintInputs`) in `/code/amaru-treasury-tx-issue-158/lib/Amaru/Treasury/Tx/RegistryInitWizard.hs` and wire the mint runner arm in `/code/amaru-treasury-tx-issue-158/lib/Amaru/Treasury/Cli/RegistryInitWizard.hs`
+- [X] T019 (commit: 0453256f) [US1] Implement `registryInitMintToIntent` (pure; bakes operator-typed inter-tx flags verbatim into `RegistryInitMintInputs`) in `/code/amaru-treasury-tx-issue-158/lib/Amaru/Treasury/Tx/RegistryInitWizard.hs` and wire the mint runner arm in `/code/amaru-treasury-tx-issue-158/lib/Amaru/Treasury/Cli/RegistryInitWizard.hs`
 
 **Checkpoint**: `mint` functional; goldens green; `./gate.sh` green.
 

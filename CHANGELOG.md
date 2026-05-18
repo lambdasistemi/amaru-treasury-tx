@@ -4,6 +4,27 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.12.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.11.0...v0.2.12.0) (2026-05-18)
+
+### Features
+
+* **intent:** add seven init sub-action variants (#157) ([1da56b5](https://github.com/lambdasistemi/amaru-treasury-tx/commit/1da56b5b420a2513d42b13deee2a31e10ad0fe75))
+* **build:** dispatch registry-init sub-action intents (#157) ([1f7bf03](https://github.com/lambdasistemi/amaru-treasury-tx/commit/1f7bf039c82a91294842e8f3d8d7d1630641e093))
+* **build:** dispatch stake-reward-init sub-action intents (#157) ([ec34840](https://github.com/lambdasistemi/amaru-treasury-tx/commit/ec3484041a48303aa3e39cafc1440d747bdc7d1d))
+* **build:** dispatch governance-withdrawal-init sub-action intents (#157) ([835cbcd](https://github.com/lambdasistemi/amaru-treasury-tx/commit/835cbcdb87791eaca73db144d9b26d6f565d581a))
+* **build:** reject non-devnet networks for init intents (#157) ([c4893a5](https://github.com/lambdasistemi/amaru-treasury-tx/commit/c4893a58d7b037ae4ed420fb12407e71728c4073))
+* **cli:** scaffold registry-init-wizard parser (#158) ([d42f723](https://github.com/lambdasistemi/amaru-treasury-tx/commit/d42f7230fe02e2e608d30b5066338c004ad4e336))
+* **tx:** registry-init-wizard seed-split + devnet guard (#158) ([0e75acf](https://github.com/lambdasistemi/amaru-treasury-tx/commit/0e75acf9f24c69da0b5e696f284c4ff2fb4dae57))
+* **tx:** registry-init-wizard mint (#158) ([425f12d](https://github.com/lambdasistemi/amaru-treasury-tx/commit/425f12d403dbfeb19f5ba746b2aee6bf52accd18))
+* **tx:** registry-init-wizard reference-scripts (#158) ([8079260](https://github.com/lambdasistemi/amaru-treasury-tx/commit/8079260f7b01cee7658e1fe4805715ed441f4c24))
+* **cli:** scaffold stake-reward-init-wizard parser (#159) ([2187032](https://github.com/lambdasistemi/amaru-treasury-tx/commit/2187032e3ce185b7f066a11462d60536c75ddd61))
+* **tx:** stake-reward-init-wizard script-account + devnet guard (#159) ([acdd2e2](https://github.com/lambdasistemi/amaru-treasury-tx/commit/acdd2e26e9f4e67986bfde58b7bb8384096b31b2))
+* **tx:** stake-reward-init-wizard plain-account (#159) ([61ce09e](https://github.com/lambdasistemi/amaru-treasury-tx/commit/61ce09efdb290fa1466d6d85ec6e29634e5a58c5))
+
+### Bug Fixes
+
+* **docs:** use absolute URL for README link from mkdocs page ([dfc9ae4](https://github.com/lambdasistemi/amaru-treasury-tx/commit/dfc9ae4b35fb49e182a4f18c2a98c33e7172d05e))
+
 ## [0.2.11.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.10.0...v0.2.11.0) (2026-05-16)
 
 ### Features

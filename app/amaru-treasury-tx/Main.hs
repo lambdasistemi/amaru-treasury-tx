@@ -39,6 +39,9 @@ import Amaru.Treasury.Cli.RegistryInitWizard
 import Amaru.Treasury.Cli.ReportRender
     ( runReportRender
     )
+import Amaru.Treasury.Cli.StakeRewardInitWizard
+    ( runStakeRewardInitWizard
+    )
 import Amaru.Treasury.Cli.Submit
     ( runSubmit
     )
@@ -99,6 +102,8 @@ main = withUtf8 . withUpdateCheckMain $ do
                 runWithdrawWizard g{goSocketPath = Just socket} wo
         CmdRegistryInitWizard rwo ->
             runRegistryInitWizard g rwo
+        CmdStakeRewardInitWizard swo ->
+            runStakeRewardInitWizard g swo
         CmdTxBuild to ->
             withSocket g $ \socket ->
                 runTxBuild socket to

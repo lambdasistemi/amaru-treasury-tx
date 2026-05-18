@@ -50,6 +50,10 @@ import Amaru.Treasury.Cli.RegistryInitWizard
     ( RegistryInitWizardOpts
     , registryInitWizardOptsP
     )
+import Amaru.Treasury.Cli.StakeRewardInitWizard
+    ( StakeRewardInitWizardOpts
+    , stakeRewardInitWizardOptsP
+    )
 import Amaru.Treasury.Cli.Submit
     ( SubmitOpts
     , submitOptsP
@@ -99,6 +103,7 @@ data Cmd
     | CmdContingencyDisburse ContingencyDisburseOpts
     | CmdWithdrawWizard WithdrawOpts
     | CmdRegistryInitWizard RegistryInitWizardOpts
+    | CmdStakeRewardInitWizard StakeRewardInitWizardOpts
     | CmdTxBuild TxBuildOpts
     | CmdReportRender ReportRenderOpts
     | CmdTreasuryInspect InspectOpts
@@ -184,6 +189,14 @@ cmdP =
                     (CmdRegistryInitWizard <$> registryInitWizardOptsP)
                     ( progDesc
                         "Produce registry-init intent.json files for seed-split | mint | reference-scripts (devnet only; Slice 1 stubs the live path)"
+                    )
+                )
+            <> command
+                "stake-reward-init-wizard"
+                ( info
+                    (CmdStakeRewardInitWizard <$> stakeRewardInitWizardOptsP)
+                    ( progDesc
+                        "Produce stake-reward-init intent.json files for script-account | plain-account (devnet only; Slice 1 stubs the live path)"
                     )
                 )
             <> command

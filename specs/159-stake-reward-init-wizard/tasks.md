@@ -297,8 +297,8 @@ observing the test fail, then reverting the patch before committing.
 
 **Orchestrator-owned** — no subagent. Commit subject: `docs(159): stake-reward-init-wizard operator path`. Commit body must include `Tasks: T022, T023`.
 
-- [ ] T022 [US4] Update `/code/amaru-treasury-tx-issue-159/README.md` stake-reward-init section with the two-subcommand invocation flow, operator-typed `--registry` and `--funding-seed-txin` visible at both `script-account` and `plain-account`, a "common mistakes" call-out (stale funding TxIn, wrong `--registry` path, registry from an unsubmitted bootstrap), and forward references to [#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161) and [#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163)
-- [ ] T023 [US4] Update `/code/amaru-treasury-tx-issue-159/docs/local-devnet-smoke.md` stake-reward-init section with the same two-subcommand flow, the unsafe inter-step carry warning (registry path + funding TxIn handed across the #158→#159 boundary by hand), and forward references to #161 and #163
+- [X] T022 (commit: 5813d9c6) [US4] Update `/code/amaru-treasury-tx-issue-159/README.md` stake-reward-init section with the two-subcommand invocation flow, operator-typed `--registry` and `--funding-seed-txin` visible at both `script-account` and `plain-account`, a "common mistakes" call-out (stale funding TxIn, wrong `--registry` path, registry from an unsubmitted bootstrap), and forward references to [#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161) and [#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163)
+- [X] T023 (commit: 5813d9c6) [US4] Update `/code/amaru-treasury-tx-issue-159/docs/local-devnet-smoke.md` stake-reward-init section with the same two-subcommand flow, the unsafe inter-step carry warning (registry path + funding TxIn handed across the #158→#159 boundary by hand), and forward references to #161 and #163
 
 **Checkpoint**: docs aligned with delivered behavior; `./gate.sh` green; PR body refreshed.
 

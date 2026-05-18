@@ -168,12 +168,26 @@ materialization, disburse submission, swap execution, or reorganize.
 
 ## Stake/Reward Initiator Boundary
 
-After #157 the shipped operator path for this boundary is the
-two-step `amaru-treasury-tx tx-build --intent
-<stake-reward-init-{script-account,plain-account}.json>` chain (see
-the bootstrap section in [README.md](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/README.md#devnet-bootstrap-via-tx-build---intent)). The local smoke
-keeps driving the library function directly via `SmokeSpec`, which
-calls into `Amaru.Treasury.Devnet.Runner.runDevnetStakeRewardInit`.
+After #157 and #159 the shipped operator path for this boundary is
+the two-subcommand `amaru-treasury-tx stake-reward-init-wizard
+{script-account | plain-account}` flow, each producing one intent
+JSON consumed by `amaru-treasury-tx tx-build --intent` (see the
+bootstrap section in [README.md](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/README.md#devnet-bootstrap-via-tx-build---intent)).
+The wizard is **explicitly inter-tx unsafe**: the operator hand-carries
+the `registry.json` artifact path (produced by `registry-init-wizard
+reference-scripts`) and a funding seed TxIn into each invocation; the
+wizard does no chain re-verification of the registry contents and no
+cross-step simulation. The two subcommands are independent — neither
+feeds into the other; ordering is the operator's choice. The
+resumable client state that will supersede this manual carry is
+parked in
+[#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163).
+The bash smoke that drives the full chain through the shipped CLI on
+a real DevNet lands in
+[#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161);
+until #161 merges, the local smoke below keeps driving the library
+function directly via `SmokeSpec`, which calls into
+`Amaru.Treasury.Devnet.Runner.runDevnetStakeRewardInit`.
 
 The local smoke runs registry-init first in the same fresh run, then
 invokes the same production command runner:

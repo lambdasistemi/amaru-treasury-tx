@@ -13,5 +13,8 @@ runs/
 .llm/
 llm/
 
+# Subagent run log (ephemeral, see resolve-ticket skill)
+WIP.md
+
 # MkDocs build output
 site/

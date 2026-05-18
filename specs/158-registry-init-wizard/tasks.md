@@ -268,7 +268,7 @@ then reverting the patch before committing.
 
 ### Tests for Slice 5 (RED — written first, observed failing) ⚠️
 
-- [ ] T024 [P] [US2] Create `/code/amaru-treasury-tx-issue-158/test/unit/Amaru/Treasury/Tx/RegistryInitWizardNoSimulationSpec.hs` with hspec tests reading each wizard source via `Data.Text.IO.readFile` and asserting `Data.Text.isInfixOf` returns False for each of `buildSeedSplitCore`, `buildRegistryNftsCore`, `buildReferenceScriptsCore`; subagent verifies RED by temporarily inserting one of the names as a comment, observing failure, then reverting before commit
+- [X] T024 (commit: acba3a02) [P] [US2] Create `/code/amaru-treasury-tx-issue-158/test/unit/Amaru/Treasury/Tx/RegistryInitWizardNoSimulationSpec.hs` with hspec tests reading each wizard source, stripping Haskell line and block comments, and asserting `Data.Text.isInfixOf` returns False for each of `buildSeedSplitCore`, `buildRegistryNftsCore`, `buildReferenceScriptsCore`. Comment-stripping is required because Slices 2–4 added Haddock prose that names the symbols on purpose to document the no-simulation contract. The CODE form is what matters.
 
 **Checkpoint**: grep test green; `./gate.sh` green.
 

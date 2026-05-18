@@ -420,6 +420,8 @@ test-suite unit-tests
     Amaru.Treasury.Tx.RegistryInitWizardNetworkGuardSpec
     Amaru.Treasury.Tx.RegistryInitWizardNoSimulationSpec
     Amaru.Treasury.Tx.RegistryInitWizardSpec
+    Amaru.Treasury.Tx.StakeRewardInitWizardNetworkGuardSpec
+    Amaru.Treasury.Tx.StakeRewardInitWizardSpec
     Amaru.Treasury.Tx.SubmitSpec
     Amaru.Treasury.Tx.SwapCancelSpec
     Amaru.Treasury.Tx.SwapQuoteSpec
@@ -468,6 +470,7 @@ test-suite unit-tests
     , plutus-core
     , QuickCheck
     , serialise
+    , temporary
     , text
 
   build-tool-depends: hspec-discover:hspec-discover
@@ -483,6 +486,7 @@ test-suite golden-tests
     Amaru.Treasury.Tx.RegistryInitWizardMintSpec
     Amaru.Treasury.Tx.RegistryInitWizardReferenceScriptsSpec
     Amaru.Treasury.Tx.RegistryInitWizardSeedSplitSpec
+    Amaru.Treasury.Tx.StakeRewardInitWizardScriptAccountSpec
     EnvelopeOracleSpec
     GovernanceWithdrawalInitIntentSpec
     PlaceholderSpec
@@ -495,6 +499,7 @@ test-suite golden-tests
     Support.RegistryInitFixtures
     Support.RegistryInitWizardFixtures
     Support.StakeRewardInitFixtures
+    Support.StakeRewardInitWizardFixtures
     SwapGoldenSpec
     SwapQuoteAuditGoldenSpec
     TreasuryInspectGoldenSpec

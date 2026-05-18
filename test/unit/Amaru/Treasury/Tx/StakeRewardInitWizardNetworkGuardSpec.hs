@@ -5,20 +5,22 @@ Module      : Amaru.Treasury.Tx.StakeRewardInitWizardNetworkGuardSpec
 Description : Devnet-only guard for the stake-reward-init-wizard
 License     : Apache-2.0
 
-Slice 2 of #159 wires the @script-account@ resolver. The
+Slice 2 of #159 wired the @script-account@ resolver. The
 devnet network guard fires BEFORE any chain query AND before
 the registry-file parse, so a non-devnet @--network@ never
 reads the registry, never queries the wallet, and never asks
 the chain for an upper-bound slot.
 
-The mock resolver env raises with 'error' from every
-backend hook; the tests pass iff the resolver short-circuits
-at the network guard. Both sub-actions exercise the same
-resolver (the plain-account arm in Slice 3 will reuse it
-unchanged); the @plain-account@ case here uses a
-placeholder 'StakeRewardInitScriptAccountAnswers' because
-Slice 3 has not yet refined its Answers shape into a
-separate resolver entry point.
+Slice 3 adds the @plain-account@ case: same guard, exercised
+via 'resolveStakeRewardInitPlainAccount' on real
+'StakeRewardInitPlainAccountAnswers'. The resolver pipeline
+is shared between the two sub-actions; the test pair pins
+the short-circuit behavior independently on both entry
+points so a future divergence would surface here.
+
+The mock resolver env raises with 'error' from every backend
+hook; the tests pass iff the resolver short-circuits at the
+network guard.
 -}
 module Amaru.Treasury.Tx.StakeRewardInitWizardNetworkGuardSpec
     ( spec
@@ -49,9 +51,11 @@ import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 
 import Amaru.Treasury.Tx.StakeRewardInitWizard
     ( StakeRewardInitError (..)
+    , StakeRewardInitPlainAccountAnswers (..)
     , StakeRewardInitResolverEnv (..)
     , StakeRewardInitResolverInput (..)
     , StakeRewardInitScriptAccountAnswers (..)
+    , resolveStakeRewardInitPlainAccount
     , resolveStakeRewardInitScriptAccount
     )
 
@@ -64,7 +68,7 @@ spec = describe "stake-reward-init-wizard devnet network guard" $ do
             scriptAccountRejects "preprod"
         it "rejects preview before any chain query" $
             scriptAccountRejects "preview"
-    describe "plain-account (placeholder Answers, Slice 3 refines)" $ do
+    describe "plain-account" $ do
         it "rejects mainnet before any chain query" $
             plainAccountRejects "mainnet"
         it "rejects preprod before any chain query" $
@@ -94,36 +98,33 @@ scriptAccountRejects network = do
                     (resolveStakeRewardInitScriptAccount renv input)
     result `shouldSatisfy` isNonDevnet network
 
-{- | Plain-account network-guard case: the placeholder
-'StakeRewardInitScriptAccountAnswers' value is computed
-strictly via @seq@ to defeat laziness pruning; the resolver
-is exercised with a non-devnet network so the guard fires
-before any chain query. Slice 3 will refine this case to
-use a real 'StakeRewardInitPlainAccountAnswers' value.
+{- | Plain-account network-guard case: exercises
+'resolveStakeRewardInitPlainAccount' on real
+'StakeRewardInitPlainAccountAnswers'; the resolver is fed a
+non-devnet network so the guard fires before any chain
+query. The strict mock env raises if any backend hook is
+called.
 -}
 plainAccountRejects :: Text -> IO ()
 plainAccountRejects network = do
     let answers =
-            -- Placeholder Answers — Slice 3 refines into
-            -- StakeRewardInitPlainAccountAnswers and points
-            -- at a plain-account resolver entry point.
-            StakeRewardInitScriptAccountAnswers
-                { sasaValidityHours = Nothing
-                , sasaFundingSeedTxIn = sampleSeedTxIn
+            StakeRewardInitPlainAccountAnswers
+                { spaaValidityHours = Nothing
+                , spaaFundingSeedTxIn = sampleSeedTxIn
                 }
         input =
             StakeRewardInitResolverInput
                 { sriNetwork = network
                 , sriWalletAddrBech32 = walletAddr
                 , sriRegistryPath = "(unused)"
-                , sriValidityHours = sasaValidityHours answers
+                , sriValidityHours = spaaValidityHours answers
                 }
         renv :: StakeRewardInitResolverEnv Identity
         renv = strictMockResolverEnv
         result =
             answers `seq`
                 runIdentity
-                    (resolveStakeRewardInitScriptAccount renv input)
+                    (resolveStakeRewardInitPlainAccount renv input)
     result `shouldSatisfy` isNonDevnet network
 
 strictMockResolverEnv :: StakeRewardInitResolverEnv Identity

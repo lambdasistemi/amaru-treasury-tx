@@ -47,9 +47,11 @@ module Amaru.Treasury.Tx.StakeRewardInitWizard
     , StakeRewardInitResolverInput (..)
     , StakeRewardInitResolverEnv (..)
     , resolveStakeRewardInitScriptAccount
+    , resolveStakeRewardInitPlainAccount
 
       -- * Pure translation
     , stakeRewardInitScriptAccountToIntent
+    , stakeRewardInitPlainAccountToIntent
     ) where
 
 import Data.Aeson (FromJSON (..), withObject, (.:), (.:?))
@@ -74,6 +76,7 @@ import Amaru.Treasury.IntentJSON
     , SAction (..)
     , ScopeJSON (..)
     , SomeTreasuryIntent (..)
+    , StakeRewardInitPlainAccountInputs (..)
     , StakeRewardInitScriptAccountInputs (..)
     , TreasuryIntent (..)
     , WalletJSON (..)
@@ -133,6 +136,20 @@ data StakeRewardInitPlainAccountAnswers
     , spaaFundingSeedTxIn :: !TxIn
     }
     deriving stock (Eq, Show)
+
+instance FromJSON StakeRewardInitPlainAccountAnswers where
+    parseJSON =
+        withObject "StakeRewardInitPlainAccountAnswers" $ \o -> do
+            hours <- o .:? "validityHours"
+            seedText <- o .: "fundingSeedTxIn"
+            seed <- case txInFromText seedText of
+                Left e -> fail ("fundingSeedTxIn: " <> e)
+                Right t -> pure t
+            pure
+                StakeRewardInitPlainAccountAnswers
+                    { spaaValidityHours = hours
+                    , spaaFundingSeedTxIn = seed
+                    }
 
 -- ----------------------------------------------------
 -- Errors
@@ -444,6 +461,155 @@ mkScopeStakeRewardInit env ans =
 
 mkRationaleScriptAccount :: RationaleJSON
 mkRationaleScriptAccount =
+    RationaleJSON
+        { rjEvent = "stake-reward-init"
+        , rjLabel = "stake-reward-init"
+        , rjDescription = "stake-reward-init bootstrap fixture"
+        , rjJustification = "test"
+        , rjDestinationLabel = "fixture"
+        }
+
+-- ----------------------------------------------------
+-- Plain-account resolver
+-- ----------------------------------------------------
+
+{- | Resolve the chain-derived plain-account environment.
+
+The resolver pipeline mirrors
+'resolveStakeRewardInitScriptAccount' exactly — the DEVNET
+guard is the first check, then registry parse, then wallet
+selection, then validity-window. The only downstream
+difference is which registry field the pure translator
+consumes ('dsrrPermissionsScriptHash' here vs
+'dsrrTreasuryRef' + 'dsrrTreasuryScriptHash' for
+script-account), so it is safe to share the env shape.
+
+NFR-007 (subcommand independence): the resolver does NOT
+query chain state for "is the treasury account already
+registered" or any sibling check; the plain-account path is
+fully independent of the script-account path.
+-}
+resolveStakeRewardInitPlainAccount
+    :: (Monad m)
+    => StakeRewardInitResolverEnv m
+    -> StakeRewardInitResolverInput
+    -> m (Either StakeRewardInitError StakeRewardInitEnv)
+resolveStakeRewardInitPlainAccount =
+    -- The plain-account resolver pipeline is identical to
+    -- the script-account one: every environmental check
+    -- (devnet guard, registry parse, wallet shortfall,
+    -- validity-window) is sub-action-agnostic. The pure
+    -- translator picks the right payload fields downstream.
+    resolveStakeRewardInitScriptAccount
+
+-- ----------------------------------------------------
+-- Pure translation (plain-account)
+-- ----------------------------------------------------
+
+{- | Translate the resolved @plain-account@ environment plus
+typed answers into a 'SomeTreasuryIntent'. Pure; reads only
+its arguments.
+
+The translator extracts @dsrrPermissionsScriptHash@ →
+@permissionsScriptHash@ from the parsed registry into the
+'StakeRewardInitPlainAccountInputs' payload, and bakes the
+operator-typed @spaaFundingSeedTxIn@ verbatim into the wallet
+block's @wjTxIn@ (overriding the env-supplied
+'WalletSelection.wsTxIn'), mirroring the script-account
+translator.
+
+Constitutional constraint (NFR-006): this function MUST NOT
+call 'Amaru.Treasury.Devnet.StakeRewardInit.buildStakeRewardPlainAccountCore'
+or any other 'Amaru.Treasury.Devnet.*' construction core; it
+only manipulates the JSON-shaped intent. The dispatcher in
+"Amaru.Treasury.Build" is the one that consumes the encoded
+intent and calls the core. Slice 4 ships a grep-based test
+that enforces this boundary on the wizard module.
+
+NFR-007 (subcommand independence): the translator reads only
+its 'StakeRewardInitEnv' + 'StakeRewardInitPlainAccountAnswers'
+arguments; it never branches on whether the sibling
+script-account sub-action has run.
+-}
+stakeRewardInitPlainAccountToIntent
+    :: StakeRewardInitEnv
+    -> StakeRewardInitPlainAccountAnswers
+    -> Either StakeRewardInitError SomeTreasuryIntent
+stakeRewardInitPlainAccountToIntent env ans = do
+    -- Defensive guards mirroring the resolver, for callers
+    -- that bypass the resolver and feed an arbitrary Env.
+    case spaaValidityHours ans of
+        Just 0 -> Left StakeRewardInitValidityHoursZero
+        _ -> pure ()
+    let registry = sreRegistry env
+        permissionsHashHex =
+            scriptHashToHex (dsrrPermissionsScriptHash registry)
+        intent =
+            TreasuryIntent
+                { tiSAction = SStakeRewardInitPlainAccount
+                , tiSchema = 1
+                , tiNetwork = sreNetwork env
+                , tiWallet =
+                    mkWalletPlainAccount
+                        (sreWalletSelection env)
+                        (spaaFundingSeedTxIn ans)
+                , tiScope = mkScopePlainAccount env
+                , tiSigners = []
+                , tiValidityUpperBoundSlot = sreUpperBoundSlot env
+                , tiRationale = mkRationalePlainAccount
+                , tiPayload =
+                    StakeRewardInitPlainAccountInputs
+                        { srispiPermissionsScriptHash =
+                            permissionsHashHex
+                        }
+                }
+    Right
+        ( SomeTreasuryIntent
+            SStakeRewardInitPlainAccount
+            intent
+        )
+
+mkWalletPlainAccount :: WalletSelection -> TxIn -> WalletJSON
+mkWalletPlainAccount ws fundingSeed =
+    WalletJSON
+        { wjTxIn = txInText fundingSeed
+        , wjAddress = wsAddress ws
+        , wjExtraTxIns = wsExtraTxIns ws
+        }
+
+{- | Same placeholder shape as the script-account scope; for
+the plain-account fixture the @*DeployedAt@ slots are sourced
+from the registry's @dsrrPermissionsRef@ (the bootstrap
+permissions-deployed anchor), which the wizard fixture lines
+up with the shared script-account seed TxIn so the wizard
+intent compares equal to the library-core fixture's
+@srifIntent@.
+-}
+mkScopePlainAccount
+    :: StakeRewardInitEnv
+    -> ScopeJSON
+mkScopePlainAccount env =
+    let wallet = sreWalletSelection env
+        registry = sreRegistry env
+        anchorText = txInText (dsrrPermissionsRef registry)
+    in  ScopeJSON
+            { sjId = "core_development"
+            , sjTreasuryAddress = wsAddress wallet
+            , sjTreasuryUtxos = []
+            , sjTreasuryLeftoverLovelace = 0
+            , sjTreasuryLeftoverUsdm = 0
+            , sjTreasuryLeftoverOtherAssets = mempty
+            , sjTreasuryScriptHash = T.replicate 56 "0"
+            , sjPermissionsRewardAccount = T.replicate 56 "0"
+            , sjScopesDeployedAt = anchorText
+            , sjPermissionsDeployedAt = anchorText
+            , sjTreasuryDeployedAt = anchorText
+            , sjRegistryDeployedAt = anchorText
+            , sjRegistryPolicyId = T.replicate 56 "0"
+            }
+
+mkRationalePlainAccount :: RationaleJSON
+mkRationalePlainAccount =
     RationaleJSON
         { rjEvent = "stake-reward-init"
         , rjLabel = "stake-reward-init"

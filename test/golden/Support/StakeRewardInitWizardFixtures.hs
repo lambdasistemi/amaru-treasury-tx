@@ -5,15 +5,39 @@ Module      : Support.StakeRewardInitWizardFixtures
 Description : Shared stake-reward-init-wizard test fixtures
 License     : Apache-2.0
 
-Slice 2 of #159. Materializes the wizard-side
-@(Answers, Env)@ from the same logical inputs the
-library-core fixtures in 'Support.StakeRewardInitFixtures'
-use. Both halves originate from one underlying
-'StakeRewardInitFixture' record so the CBOR-parity goldens
-cannot drift.
+Slice 2 of #159 introduced this helper to materialize the
+wizard-side @(Answers, Env)@ for the @script-account@
+sub-action from the same 'StakeRewardInitFixture' record
+'Support.StakeRewardInitFixtures' uses for the library-core
+golden, so the CBOR-parity proof anchors on one underlying
+fixture.
 
-Slice 3 of #159 extends this helper with
-@plainAccountWizardFixture@ on the same shape.
+Slice 3 extends the helper with @plainAccountWizardFixture@
+on the same shape and replaces the all-1s placeholder
+permissions hash baked into the shared @registry.json@ with
+the real @dssPermissionsHash@ derived from
+'Amaru.Treasury.Devnet.RegistryInit.deriveDevnetScripts' under
+the same synthetic @scopesSeedTxIn@ / @registrySeedTxIn@ that
+'Support.StakeRewardInitFixtures.fixtureScripts' feeds it.
+
+The hex is hardcoded here (one constant,
+'fixturePermissionsScriptHash') because both
+'scriptAccountWizardFixture' and
+'parsedRegistryFromScriptAccountFixture' are pure 1-arg
+helpers consumed by the frozen Slice 2 spec; promoting them
+to @IO@ would change the call shape on the script-account
+golden which is not in this slice's owned scope. The
+hardcoded value is documented to live in lockstep with
+'Support.StakeRewardInitFixtures.fixtureScripts'; a drift
+there breaks the registry round-trip assertion loudly.
+
+The script-account fixture only consumes
+@dsrrTreasuryRef@ + @dsrrTreasuryScriptHash@, so swapping the
+permissions hash does not affect the script-account CBOR
+parity proof. The plain-account parity requires the real
+value AND the shared on-disk @registry.json@ now matches
+both sub-actions (NFR-007: subcommand independence implies
+one registry).
 
 Co-derivation notes (registry.json):
 The shared @test/fixtures/stake-reward-init-wizard/registry.json@
@@ -21,19 +45,23 @@ fixture must round-trip through
 'Amaru.Treasury.Devnet.StakeRewardInit.readDevnetStakeRewardRegistry'.
 'Support.RegistryInitFixtures' does NOT expose a registry.json
 materializer (the live submitter writes it from the verified
-chain projection, not from a per-test helper), so the fixture is
-hand-rolled with the same anchor TxIns and script-hash bytes
+chain projection, not from a per-test helper), so the fixture
+is hand-rolled in the script-account and plain-account
+goldens with the same anchor TxIns and script-hash bytes
 'Support.StakeRewardInitFixtures.scriptAccountFixture' /
 'plainAccountFixture' derive. A round-trip assertion in
-@StakeRewardInitWizardSpec@ pins the fixture to the parser.
+both wizard goldens pins the fixture to the parser.
 -}
 module Support.StakeRewardInitWizardFixtures
     ( scriptAccountWizardFixture
+    , plainAccountWizardFixture
     , scriptAccountAnswersFixturePath
     , scriptAccountIntentFixturePath
+    , plainAccountAnswersFixturePath
+    , plainAccountIntentFixturePath
     , registryFixturePath
     , parsedRegistryFromScriptAccountFixture
-    , placeholderPermissionsScriptHash
+    , parsedRegistryFromPlainAccountFixture
     ) where
 
 import Data.Text (Text)
@@ -57,11 +85,13 @@ import Amaru.Treasury.Devnet.StakeRewardInit
     ( DevnetStakeRewardRegistry (..)
     )
 import Amaru.Treasury.IntentJSON
-    ( StakeRewardInitScriptAccountTx (..)
+    ( StakeRewardInitPlainAccountTx (..)
+    , StakeRewardInitScriptAccountTx (..)
     )
 import Amaru.Treasury.LedgerParse (scriptHashFromHex)
 import Amaru.Treasury.Tx.StakeRewardInitWizard
     ( StakeRewardInitEnv (..)
+    , StakeRewardInitPlainAccountAnswers (..)
     , StakeRewardInitScriptAccountAnswers (..)
     )
 import Amaru.Treasury.Tx.SwapWizard
@@ -83,6 +113,14 @@ scriptAccountAnswersFixturePath =
 scriptAccountIntentFixturePath :: FilePath
 scriptAccountIntentFixturePath =
     "test/fixtures/stake-reward-init-wizard/script-account-intent.json"
+
+plainAccountAnswersFixturePath :: FilePath
+plainAccountAnswersFixturePath =
+    "test/fixtures/stake-reward-init-wizard/plain-account-answers.json"
+
+plainAccountIntentFixturePath :: FilePath
+plainAccountIntentFixturePath =
+    "test/fixtures/stake-reward-init-wizard/plain-account-intent.json"
 
 registryFixturePath :: FilePath
 registryFixturePath =
@@ -109,6 +147,14 @@ the wizard's pure translator writes it into the wallet block.
 We align 'sreWalletSelection.wsTxIn' with the same TxIn so the
 'mkWallet' rendering produces a wallet block that compares
 equal to 'srifIntent fixture'.
+
+The registry projection carries 'fixturePermissionsScriptHash'
+(the real 'dssPermissionsHash' for the shared synthetic
+script-set seeds; see module-level haddock). Script-account
+CBOR parity does NOT consume the permissions hash, so the
+exact value is irrelevant for the script-account golden; it
+matters only for the registry round-trip (which also drives
+the plain-account golden under one shared on-disk file).
 -}
 scriptAccountWizardFixture
     :: StakeRewardInitFixture StakeRewardInitScriptAccountTx
@@ -134,7 +180,7 @@ scriptAccountWizardFixture fix =
                 { dsrrPermissionsRef = fundingSeed
                 , dsrrTreasuryRef = treasuryRef
                 , dsrrPermissionsScriptHash =
-                    placeholderPermissionsScriptHash
+                    fixturePermissionsScriptHash
                 , dsrrTreasuryScriptHash = treasuryScriptHash
                 }
         walletSel =
@@ -170,30 +216,134 @@ parsedRegistryFromScriptAccountFixture fix =
             { dsrrPermissionsRef = fundingSeed
             , dsrrTreasuryRef = treasuryRef
             , dsrrPermissionsScriptHash =
-                placeholderPermissionsScriptHash
+                fixturePermissionsScriptHash
             , dsrrTreasuryScriptHash = treasuryScriptHash
             }
 
-{- | Placeholder permissions script hash baked into the
-wizard registry projection. Slice 3 may replace this with the
-real 'dssPermissionsHash' from
-'Amaru.Treasury.Devnet.RegistryInit.deriveDevnetScripts'; for
-the script-account parity proof Slice 2 only needs the value
-to be stable across the in-memory env and the on-disk
-@registry.json@ fixture.
+-- ----------------------------------------------------
+-- Plain-account wizard fixture
+-- ----------------------------------------------------
 
-The hex bytes match the @permissionsScriptHash@ field in
-@test/fixtures/stake-reward-init-wizard/registry.json@.
+{- | Build the wizard-side @(Answers, Env)@ for the
+plain-account sub-action.
+
+The plain-account translator reads
+@dsrrPermissionsScriptHash@ from the parsed registry into the
+'StakeRewardInitPlainAccountInputs' payload; the
+operator-typed funding seed TxIn lands in the wallet block's
+@wjTxIn@. The treasury-side registry fields
+(@dsrrTreasuryRef@ / @dsrrTreasuryScriptHash@) are present
+for completeness — the parser carries them — but the
+plain-account translator does not consume them. We derive
+them from the script-account fixture so the shared
+@registry.json@ round-trips for both goldens.
+
+The funding address + seed come from the plain-account
+fixture's @StakeRewardInitPlainAccountTx@; the permissions
+hash carried by both the registry projection AND the
+plain-account translator's expected payload is the real
+'dssPermissionsHash' (sourced from the plain-account
+fixture's @srispatPermissionsCredential@, then compared
+against the hardcoded 'fixturePermissionsScriptHash' below to
+catch drift).
 -}
-placeholderPermissionsScriptHash :: ScriptHash
-placeholderPermissionsScriptHash =
+plainAccountWizardFixture
+    :: StakeRewardInitFixture StakeRewardInitScriptAccountTx
+    -- ^ script-account fixture — supplies the shared
+    --   on-disk registry projection (treasury ref + treasury
+    --   hash) the plain-account env must carry verbatim so
+    --   the round-trip equality on @registry.json@ holds
+    --   independent of which sub-action drives it.
+    -> StakeRewardInitFixture StakeRewardInitPlainAccountTx
+    -> ( StakeRewardInitPlainAccountAnswers
+       , StakeRewardInitEnv
+       )
+plainAccountWizardFixture sa pa =
+    let saTx = srifTranslated sa
+        paTx = srifTranslated pa
+        fundingSeed = srispatSeedTxIn paTx
+        SlotNo upper = srispatUpperBoundSlot paTx
+        addrText = renderAddr (srispatFundingAddress paTx)
+        fundingSeedText = renderTxIn fundingSeed
+        treasuryRef = srisatTreasuryRefTxIn saTx
+        treasuryScriptHash =
+            credentialScriptHash (srisatTreasuryCredential saTx)
+        answers =
+            StakeRewardInitPlainAccountAnswers
+                { spaaValidityHours = Nothing
+                , spaaFundingSeedTxIn = fundingSeed
+                }
+        registry =
+            DevnetStakeRewardRegistry
+                { dsrrPermissionsRef = srisatSeedTxIn saTx
+                , dsrrTreasuryRef = treasuryRef
+                , dsrrPermissionsScriptHash =
+                    fixturePermissionsScriptHash
+                , dsrrTreasuryScriptHash = treasuryScriptHash
+                }
+        walletSel =
+            WalletSelection
+                { wsTxIn = fundingSeedText
+                , wsAddress = addrText
+                , wsExtraTxIns = []
+                }
+        env =
+            StakeRewardInitEnv
+                { sreNetwork = "devnet"
+                , sreUpperBoundSlot = upper
+                , sreRegistry = registry
+                , sreWalletSelection = walletSel
+                }
+    in  (answers, env)
+
+{- | The parsed 'DevnetStakeRewardRegistry' the on-disk
+@registry.json@ fixture must decode to when the plain-account
+golden drives the round-trip. Equal to
+'parsedRegistryFromScriptAccountFixture sa' for the same
+underlying script-account fixture (the registry file is
+sub-action-independent; one file serves both sub-actions per
+NFR-007).
+-}
+parsedRegistryFromPlainAccountFixture
+    :: StakeRewardInitFixture StakeRewardInitScriptAccountTx
+    -> DevnetStakeRewardRegistry
+parsedRegistryFromPlainAccountFixture =
+    parsedRegistryFromScriptAccountFixture
+
+-- ----------------------------------------------------
+-- Permissions script hash (real, hardcoded)
+-- ----------------------------------------------------
+
+{- | The real 'dssPermissionsHash' produced by
+'Amaru.Treasury.Devnet.RegistryInit.deriveDevnetScripts' under
+the synthetic seed TxIns
+'Support.StakeRewardInitFixtures.scopesSeedTxIn' /
+'registrySeedTxIn' fed to
+'Support.StakeRewardInitFixtures.fixtureScripts'.
+
+Hardcoded because both 'scriptAccountWizardFixture' and
+'parsedRegistryFromScriptAccountFixture' are pure 1-arg
+helpers consumed by the frozen Slice 2 spec; promoting them
+to @IO@ would change the call shape on the script-account
+golden which is not in this slice's owned scope. A
+plain-account golden assertion compares this constant against
+the hash recovered from the plain-account fixture's
+@srispatPermissionsCredential@ so a drift in
+'deriveDevnetScripts' or the seed TxIns breaks loudly.
+
+This value supersedes Slice 2's all-1s placeholder so that the
+shared @registry.json@ now satisfies BOTH the script-account
+and plain-account round-trip assertions (NFR-007: one
+registry file for both sub-actions).
+-}
+fixturePermissionsScriptHash :: ScriptHash
+fixturePermissionsScriptHash =
     case scriptHashFromHex
-        "11111111111111111111111111111111111111111111111111111111" of
+        "57f9239df6e907c4f94edbc1235ceae83d3bd9c97a02a88d7302741f" of
         Right h -> h
         Left e ->
             error
-                ( "placeholderPermissionsScriptHash: "
-                    <> e
+                ( "fixturePermissionsScriptHash: " <> e
                 )
 
 -- ----------------------------------------------------
@@ -205,8 +355,8 @@ credentialScriptHash = \case
     ScriptHashObj h -> h
     KeyHashObj _ ->
         error
-            "scriptAccountWizardFixture: expected treasury credential\
-            \ to be a ScriptHashObj"
+            "StakeRewardInitWizardFixtures: expected ScriptHashObj\
+            \ credential"
 
 renderTxIn :: TxIn -> Text
 renderTxIn (TxIn (TxId sh) ix) =

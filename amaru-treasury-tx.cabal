@@ -486,6 +486,7 @@ test-suite golden-tests
     Amaru.Treasury.Tx.RegistryInitWizardMintSpec
     Amaru.Treasury.Tx.RegistryInitWizardReferenceScriptsSpec
     Amaru.Treasury.Tx.RegistryInitWizardSeedSplitSpec
+    Amaru.Treasury.Tx.StakeRewardInitWizardPlainAccountSpec
     Amaru.Treasury.Tx.StakeRewardInitWizardScriptAccountSpec
     EnvelopeOracleSpec
     GovernanceWithdrawalInitIntentSpec

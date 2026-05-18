@@ -1,0 +1,37 @@
+{
+    "action": "stake-reward-init-plain-account",
+    "network": "devnet",
+    "rationale": {
+        "description": "stake-reward-init bootstrap fixture",
+        "destinationLabel": "fixture",
+        "event": "stake-reward-init",
+        "justification": "test",
+        "label": "stake-reward-init"
+    },
+    "schema": 1,
+    "scope": {
+        "id": "core_development",
+        "permissionsDeployedAt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0",
+        "permissionsRewardAccount": "00000000000000000000000000000000000000000000000000000000",
+        "registryDeployedAt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0",
+        "registryPolicyId": "00000000000000000000000000000000000000000000000000000000",
+        "scopesDeployedAt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0",
+        "treasuryAddress": "addr_test1vq3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygswahgq5",
+        "treasuryDeployedAt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0",
+        "treasuryLeftoverLovelace": 0,
+        "treasuryLeftoverOtherAssets": {},
+        "treasuryLeftoverUsdm": 0,
+        "treasuryScriptHash": "00000000000000000000000000000000000000000000000000000000",
+        "treasuryUtxos": []
+    },
+    "signers": [],
+    "stake-reward-init-plain-account": {
+        "permissionsScriptHash": "57f9239df6e907c4f94edbc1235ceae83d3bd9c97a02a88d7302741f"
+    },
+    "validityUpperBoundSlot": 1000100,
+    "wallet": {
+        "address": "addr_test1vq3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygswahgq5",
+        "extraTxIns": [],
+        "txIn": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb#0"
+    }
+}

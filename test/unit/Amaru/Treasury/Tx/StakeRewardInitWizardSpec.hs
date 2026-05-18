@@ -70,10 +70,12 @@ import Amaru.Treasury.IntentJSON
 import Amaru.Treasury.Tx.StakeRewardInitWizard
     ( StakeRewardInitEnv (..)
     , StakeRewardInitError (..)
+    , StakeRewardInitPlainAccountAnswers (..)
     , StakeRewardInitResolverEnv (..)
     , StakeRewardInitResolverInput (..)
     , StakeRewardInitScriptAccountAnswers (..)
     , resolveStakeRewardInitScriptAccount
+    , stakeRewardInitPlainAccountToIntent
     , stakeRewardInitScriptAccountToIntent
     )
 import Amaru.Treasury.Tx.SwapWizard
@@ -91,6 +93,11 @@ spec = describe "stake-reward-init-wizard" $ do
             "resolver returns StakeRewardInitWalletShortfall when \
             \the wallet has no pure-ADA UTxOs"
             walletShortfallScriptAccount
+    describe "plain-account" $ do
+        it
+            "encodes and decodes a plain-account SomeTreasuryIntent \
+            \without loss"
+            roundTripPlainAccount
     describe "registry-file parse" $ do
         it "missing file surfaces as StakeRewardInitRegistryReadError" $
             withSystemTempDirectory "srw-missing" $ \dir ->
@@ -132,6 +139,26 @@ roundTripScriptAccount = do
             Left e ->
                 error
                     ( "stakeRewardInitScriptAccountToIntent \
+                      \failed: "
+                        <> show e
+                    )
+            Right i -> pure i
+    let encoded = encodeSomeTreasuryIntent intent
+    decodeTreasuryIntent encoded `shouldBe` Right intent
+
+roundTripPlainAccount :: IO ()
+roundTripPlainAccount = do
+    let answers =
+            StakeRewardInitPlainAccountAnswers
+                { spaaValidityHours = Nothing
+                , spaaFundingSeedTxIn = sampleSeedTxIn
+                }
+        env = sampleEnv
+    intent <-
+        case stakeRewardInitPlainAccountToIntent env answers of
+            Left e ->
+                error
+                    ( "stakeRewardInitPlainAccountToIntent \
                       \failed: "
                         <> show e
                     )

@@ -1,0 +1,11 @@
+{
+    "scope": "core_development",
+    "description": "registry-init bootstrap fixture",
+    "destinationLabel": "fixture",
+    "event": "registry-init",
+    "justification": "test",
+    "label": "registry-init",
+    "scopesSeedTxIn": "4444444444444444444444444444444444444444444444444444444444444444#0",
+    "registrySeedTxIn": "5555555555555555555555555555555555555555555555555555555555555555#1",
+    "ownerKeyHash": "11111111111111111111111111111111111111111111111111111111"
+}

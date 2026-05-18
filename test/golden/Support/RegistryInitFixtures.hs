@@ -26,6 +26,9 @@ module Support.RegistryInitFixtures
     , mintIntentPath
     , referenceScriptsIntentPath
     , writeIntentFile
+
+      -- * Internals exposed for the wizard helper
+    , mintWalletTxIn
     ) where
 
 import Data.ByteString.Lazy qualified as BSL
@@ -196,6 +199,21 @@ fundingAddressText = renderAddr fundingAddress
 
 fundingTxIn :: TxIn
 fundingTxIn = mkTxIn (BS.replicate 32 0x33) 0
+
+{- | The TxIn the mint fixture writes into its wallet block
+('walletJSON'). The seed-split funding TxIn doubles as the
+mint wallet block since the mint sub-transaction's wallet
+provides fees + collateral from the same address that funded
+seed-split; the actual seed UTxOs consumed by the mint
+program live in 'rimiScopesSeedTxIn' / 'rimiRegistrySeedTxIn'.
+
+Exposed so the wizard helper in
+'Support.RegistryInitWizardFixtures.mintWizardFixture' can
+build a 'RegistryInitEnv' whose 'reWalletSelection' lines up
+with the fixture intent's wallet block.
+-}
+mintWalletTxIn :: TxIn
+mintWalletTxIn = fundingTxIn
 
 scopesSeedTxIn :: TxIn
 scopesSeedTxIn = mkTxIn (BS.replicate 32 0x44) 0

@@ -13,8 +13,14 @@ runner: build a 'RegistryInitResolverInput' from CLI options,
 build a 'RegistryInitResolverEnv' from the provider (mirroring
 'Amaru.Treasury.Cli.WithdrawWizard.providerToWithdrawResolverEnv'),
 resolve the env, translate to 'SomeTreasuryIntent', and write
-the encoded JSON to @--out@. The @mint@ and @reference-scripts@
-arms remain TODO stubs for Slices 3 and 4.
+the encoded JSON to @--out@. Slice 3 wires the @mint@ arm on
+the same shape: the resolver is shared (the chain-derived
+seed-split env is exactly what the mint translation also
+needs), and the three operator-typed inter-tx values
+(@--scopes-seed-txin@, @--registry-seed-txin@,
+@--owner-key-hash@) are passed alongside via the typed
+'RegistryInitMintAnswers'. The @reference-scripts@ arm
+remains a TODO stub for Slice 4.
 
 The parser reuses 'Amaru.Treasury.LedgerParse.txInFromText' and
 'Amaru.Treasury.LedgerParse.keyHashFromHex' via
@@ -93,9 +99,11 @@ import Amaru.Treasury.Scope
     )
 import Amaru.Treasury.Tx.RegistryInitWizard
     ( RegistryInitError (..)
+    , RegistryInitMintAnswers (..)
     , RegistryInitResolverEnv (..)
     , RegistryInitResolverInput (..)
     , RegistryInitSeedSplitAnswers (..)
+    , registryInitMintToIntent
     , registryInitSeedSplitToIntent
     , resolveRegistryInitSeedSplit
     )
@@ -402,9 +410,9 @@ runRegistryInitWizard g cmd = case cmd of
     RegistryInitSeedSplitOpts (SeedSplitOpts cf) -> do
         guardOut (cfOut cf) (cfForce cf)
         runSeedSplit g cf
-    RegistryInitMintOpts MintOpts{..} -> do
-        guardOut (cfOut mCommon) (cfForce mCommon)
-        todoExit "mint" 3
+    RegistryInitMintOpts mintOpts -> do
+        guardOut (cfOut (mCommon mintOpts)) (cfForce (mCommon mintOpts))
+        runMint g mintOpts
     RegistryInitReferenceScriptsOpts ReferenceScriptsOpts{..} -> do
         guardOut (cfOut rsCommon) (cfForce rsCommon)
         todoExit "reference-scripts" 4
@@ -513,4 +521,99 @@ runSeedSplit g cf = do
 abortSeedSplit :: Text -> IO a
 abortSeedSplit msg = do
     hPutStrLn stderr ("registry-init-wizard seed-split: " <> T.unpack msg)
+    exitWith (ExitFailure 3)
+
+-- ----------------------------------------------------
+-- Live mint runner
+-- ----------------------------------------------------
+
+{- | Live @mint@ path: build a 'RegistryInitResolverInput'
+from the CLI options, reuse the seed-split resolver (the
+chain-derived environment is identical), and translate to a
+'SomeTreasuryIntent' via 'registryInitMintToIntent'. The
+three operator-typed values — @--scopes-seed-txin@,
+@--registry-seed-txin@, @--owner-key-hash@ — are baked
+verbatim into the intent's payload by the pure translator.
+
+The resolver fires the devnet network guard before any chain
+query; any 'RegistryInitError' from the resolver or the
+translation is printed to stderr with exit code 3.
+-}
+runMint :: GlobalOpts -> MintOpts -> IO ()
+runMint g mintOpts = do
+    let cf = mCommon mintOpts
+    networkName <- case resolveNetworkName g of
+        Right t -> pure t
+        Left e -> abortMint (T.pack e)
+    socket <- case goSocketPath g of
+        Just s -> pure s
+        Nothing ->
+            abortMint
+                "--node-socket / CARDANO_NODE_SOCKET_PATH is required"
+    let answers =
+            RegistryInitMintAnswers
+                { rimScope = cfScope cf
+                , rimValidityHours = cfValidityHours cf
+                , rimDescription = cfDescription cf
+                , rimJustification = cfJustification cf
+                , rimDestinationLabel = cfDestinationLabel cf
+                , rimEvent = cfEvent cf
+                , rimLabel = cfLabel cf
+                , rimScopesSeedTxIn = mScopesSeedTxIn mintOpts
+                , rimRegistrySeedTxIn = mRegistrySeedTxIn mintOpts
+                , rimOwnerKeyHash = mOwnerKeyHash mintOpts
+                }
+    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+        verified <-
+            verifyRegistry
+                backend
+                (cfMetadataPath cf)
+                (Set.singleton (cfScope cf))
+        rv <- case verified of
+            Left e ->
+                abortMint
+                    ("verify: " <> T.pack (show e))
+            Right registry ->
+                case registryViewFromVerified
+                    (cfScope cf)
+                    registry of
+                    Left e ->
+                        abortMint
+                            ("project: " <> T.pack (show e))
+                    Right view -> pure view
+        let input =
+                RegistryInitResolverInput
+                    { wriNetwork = networkName
+                    , wriWalletAddrBech32 = cfWalletAddr cf
+                    , wriScope = cfScope cf
+                    , wriRegistry = rv
+                    , wriValidityHours = cfValidityHours cf
+                    }
+            renv =
+                RegistryInitResolverEnv
+                    { wreQueryWalletUtxos = queryFlat backend
+                    , wreComputeUpperBound = \choice -> do
+                        r <- queryUpperBoundSlot backend choice
+                        pure (fmap unwrapSlot r)
+                    }
+        er <- resolveRegistryInitSeedSplit renv input
+        env <- case er of
+            Left e ->
+                abortMint
+                    ("resolve: " <> T.pack (show e))
+            Right e -> pure e
+        intent <-
+            case registryInitMintToIntent env answers of
+                Left te ->
+                    abortMint
+                        ("translate: " <> T.pack (show te))
+                Right i -> pure i
+        let bytes = encodeSomeTreasuryIntent intent
+        BSL.writeFile (cfOut cf) bytes
+  where
+    unwrapSlot (SlotNo s) = s
+
+abortMint :: Text -> IO a
+abortMint msg = do
+    hPutStrLn stderr ("registry-init-wizard mint: " <> T.unpack msg)
     exitWith (ExitFailure 3)

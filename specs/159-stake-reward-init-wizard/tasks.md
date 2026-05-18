@@ -283,7 +283,7 @@ observing the test fail, then reverting the patch before committing.
 
 ### Tests for Slice 4 (RED — written first, observed failing) ⚠️
 
-- [ ] T021 [P] [US2] Create `/code/amaru-treasury-tx-issue-159/test/unit/Amaru/Treasury/Tx/StakeRewardInitWizardNoSimulationSpec.hs` with hspec tests reading each wizard source, stripping Haskell line and block comments, and asserting `Data.Text.isInfixOf` returns False for each of `buildStakeRewardScriptAccountCore`, `buildStakeRewardPlainAccountCore`. Pattern follows `test/unit/Amaru/Treasury/Tx/RegistryInitWizardNoSimulationSpec.hs`.
+- [X] T021 (commit: dd61ac39) [P] [US2] Create `/code/amaru-treasury-tx-issue-159/test/unit/Amaru/Treasury/Tx/StakeRewardInitWizardNoSimulationSpec.hs` with hspec tests reading each wizard source, stripping Haskell line and block comments, and asserting `Data.Text.isInfixOf` returns False for each of `buildStakeRewardScriptAccountCore`, `buildStakeRewardPlainAccountCore`. Pattern follows `test/unit/Amaru/Treasury/Tx/RegistryInitWizardNoSimulationSpec.hs`.
 
 **Checkpoint**: grep test green; `./gate.sh` green.
 

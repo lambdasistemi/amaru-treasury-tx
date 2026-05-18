@@ -3,27 +3,23 @@
 
 {- |
 Module      : Amaru.Treasury.Cli.RegistryInitWizard
-Description : CLI parser and runner stub for registry-init-wizard (Slice 1 of #158)
+Description : CLI parser and runner for the registry-init wizard family
 Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
-Slice 1 ships:
+Slice 1 of #158 shipped the discriminated parser and an
+@--out@ pre-flight check. Slice 2 wires the live @seed-split@
+runner: build a 'RegistryInitResolverInput' from CLI options,
+build a 'RegistryInitResolverEnv' from the provider (mirroring
+'Amaru.Treasury.Cli.WithdrawWizard.providerToWithdrawResolverEnv'),
+resolve the env, translate to 'SomeTreasuryIntent', and write
+the encoded JSON to @--out@. The @mint@ and @reference-scripts@
+arms remain TODO stubs for Slices 3 and 4.
 
-* 'RegistryInitWizardOpts' — the discriminated union of
-  per-sub-action option records ('SeedSplitOpts', 'MintOpts',
-  'ReferenceScriptsOpts').
-* 'registryInitWizardOptsP' — three optparse-applicative
-  subcommands wrapped under @registry-init-wizard@.
-* 'validateOutPath' — pure-ish @--out@ pre-flight: parent
-  directory must exist; existing file requires @--force@.
-* 'runRegistryInitWizard' — runs 'validateOutPath' then prints
-  a typed TODO and exits non-zero. Slices 2-4 replace each
-  TODO with the live resolve → translate → encode → write path.
-
-The parser reuses 'Amaru.Treasury.LedgerParse.txInFromText'
-and 'Amaru.Treasury.LedgerParse.keyHashFromHex' via
-'Options.Applicative.eitherReader'; there is no local hex-28
-or @txid#ix@ parser.
+The parser reuses 'Amaru.Treasury.LedgerParse.txInFromText' and
+'Amaru.Treasury.LedgerParse.keyHashFromHex' via
+'Options.Applicative.eitherReader'; there is no local hex-28 or
+@txid#ix@ parser.
 -}
 module Amaru.Treasury.Cli.RegistryInitWizard
     ( -- * Options
@@ -40,7 +36,9 @@ module Amaru.Treasury.Cli.RegistryInitWizard
     , validateOutPath
     ) where
 
+import Data.ByteString.Lazy qualified as BSL
 import Data.Char (toLower)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word16)
@@ -70,18 +68,39 @@ import System.IO (hPrint, hPutStrLn, stderr)
 import Cardano.Ledger.Hashes (KeyHash (..))
 import Cardano.Ledger.Keys (KeyRole (Witness))
 import Cardano.Ledger.TxIn (TxIn)
+import Cardano.Node.Client.Provider (queryUpperBoundSlot)
+import Cardano.Slotting.Slot (SlotNo (..))
 
-import Amaru.Treasury.Cli.Common (GlobalOpts)
+import Amaru.Treasury.Backend.N2C
+    ( withLocalNodeBackend
+    )
+import Amaru.Treasury.Cli.Common
+    ( GlobalOpts (..)
+    , queryFlat
+    , resolveNetworkName
+    )
+import Amaru.Treasury.IntentJSON
+    ( encodeSomeTreasuryIntent
+    )
 import Amaru.Treasury.LedgerParse
     ( keyHashFromHex
     , txInFromText
     )
+import Amaru.Treasury.Registry.Verify (verifyRegistry)
 import Amaru.Treasury.Scope
     ( ScopeId
     , scopeFromText
     )
 import Amaru.Treasury.Tx.RegistryInitWizard
     ( RegistryInitError (..)
+    , RegistryInitResolverEnv (..)
+    , RegistryInitResolverInput (..)
+    , RegistryInitSeedSplitAnswers (..)
+    , registryInitSeedSplitToIntent
+    , resolveRegistryInitSeedSplit
+    )
+import Amaru.Treasury.Tx.SwapWizard
+    ( registryViewFromVerified
     )
 
 -- ----------------------------------------------------
@@ -365,29 +384,24 @@ validateOutPath path force = do
                 else pure (Right ())
 
 -- ----------------------------------------------------
--- Runner (Slice 1: TODO stub after --out checks)
+-- Runner
 -- ----------------------------------------------------
 
-{- | Slice 1 runner.
+{- | Top-level dispatcher.
 
-Performs the @--out@ pre-flight check then exits with a
-typed TODO for the matching sub-action. Slices 2-4 replace
-each arm with the live resolve → translate → encode → write
-path.
-
-The exit codes distinguish two non-zero outcomes:
-
-* @2@ — @--out@ pre-flight failed (typed
-  'RegistryInitError' printed to stderr).
-* @3@ — pre-flight passed but the live path is not yet
-  wired (TODO).
+Performs the @--out@ pre-flight check first; on failure
+prints the typed 'RegistryInitError' to stderr and exits
+with code 2. For @seed-split@ continues into the live path
+(resolve → translate → encode → write). For @mint@ and
+@reference-scripts@ this remains a TODO stub for Slices 3
+and 4, exiting with code 3.
 -}
 runRegistryInitWizard
     :: GlobalOpts -> RegistryInitWizardOpts -> IO ()
-runRegistryInitWizard _g cmd = case cmd of
-    RegistryInitSeedSplitOpts SeedSplitOpts{..} -> do
-        guardOut (cfOut ssCommon) (cfForce ssCommon)
-        todoExit "seed-split" 2
+runRegistryInitWizard g cmd = case cmd of
+    RegistryInitSeedSplitOpts (SeedSplitOpts cf) -> do
+        guardOut (cfOut cf) (cfForce cf)
+        runSeedSplit g cf
     RegistryInitMintOpts MintOpts{..} -> do
         guardOut (cfOut mCommon) (cfForce mCommon)
         todoExit "mint" 3
@@ -411,3 +425,92 @@ runRegistryInitWizard _g cmd = case cmd of
                 <> name
             )
         exitWith (ExitFailure 3)
+
+-- ----------------------------------------------------
+-- Live seed-split runner
+-- ----------------------------------------------------
+
+{- | Live @seed-split@ path: resolve the chain-derived
+environment, translate to a 'SomeTreasuryIntent', encode
+and write to @--out@. Any 'RegistryInitError' is printed
+to stderr and produces exit code 3.
+
+Network mismatch surfaces twice: once via the resolver's
+'RegistryInitNonDevnetNetwork' guard for @--network@ values
+other than @"devnet"@, and once via the pure translation if
+the registry view ends up keyed for an unsupported network.
+-}
+runSeedSplit :: GlobalOpts -> CommonFlags -> IO ()
+runSeedSplit g cf = do
+    networkName <- case resolveNetworkName g of
+        Right t -> pure t
+        Left e -> abortSeedSplit (T.pack e)
+    socket <- case goSocketPath g of
+        Just s -> pure s
+        Nothing ->
+            abortSeedSplit
+                "--node-socket / CARDANO_NODE_SOCKET_PATH is required"
+    let answers =
+            RegistryInitSeedSplitAnswers
+                { risScope = cfScope cf
+                , risValidityHours = cfValidityHours cf
+                , risDescription = cfDescription cf
+                , risJustification = cfJustification cf
+                , risDestinationLabel = cfDestinationLabel cf
+                , risEvent = cfEvent cf
+                , risLabel = cfLabel cf
+                }
+    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+        verified <-
+            verifyRegistry
+                backend
+                (cfMetadataPath cf)
+                (Set.singleton (cfScope cf))
+        rv <- case verified of
+            Left e ->
+                abortSeedSplit
+                    ("verify: " <> T.pack (show e))
+            Right registry ->
+                case registryViewFromVerified
+                    (cfScope cf)
+                    registry of
+                    Left e ->
+                        abortSeedSplit
+                            ("project: " <> T.pack (show e))
+                    Right view -> pure view
+        let input =
+                RegistryInitResolverInput
+                    { wriNetwork = networkName
+                    , wriWalletAddrBech32 = cfWalletAddr cf
+                    , wriScope = cfScope cf
+                    , wriRegistry = rv
+                    , wriValidityHours = cfValidityHours cf
+                    }
+            renv =
+                RegistryInitResolverEnv
+                    { wreQueryWalletUtxos = queryFlat backend
+                    , wreComputeUpperBound = \choice -> do
+                        r <- queryUpperBoundSlot backend choice
+                        pure (fmap unwrapSlot r)
+                    }
+        er <- resolveRegistryInitSeedSplit renv input
+        env <- case er of
+            Left e ->
+                abortSeedSplit
+                    ("resolve: " <> T.pack (show e))
+            Right e -> pure e
+        intent <-
+            case registryInitSeedSplitToIntent env answers of
+                Left te ->
+                    abortSeedSplit
+                        ("translate: " <> T.pack (show te))
+                Right i -> pure i
+        let bytes = encodeSomeTreasuryIntent intent
+        BSL.writeFile (cfOut cf) bytes
+  where
+    unwrapSlot (SlotNo s) = s
+
+abortSeedSplit :: Text -> IO a
+abortSeedSplit msg = do
+    hPutStrLn stderr ("registry-init-wizard seed-split: " <> T.unpack msg)
+    exitWith (ExitFailure 3)

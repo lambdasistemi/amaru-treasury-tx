@@ -12,10 +12,12 @@ The registry-init wizard is split into three sub-actions
 'RegistryInitSeedSplit', 'RegistryInitMint', and
 'RegistryInitReferenceScripts'.
 
-Slice 1 of #158 ships only the typed Answers records and
-the 'RegistryInitError' surface used by the parser-layer
-checks. The resolver, the @RegistryInitEnv@ type, the pure
-translations, and the live runner paths land in Slices 2-4.
+Slice 1 shipped the typed Answers records and the parser-layer
+errors. Slice 2 adds the resolver layer for the @seed-split@
+sub-action, the devnet network guard (a new fail-fast UX
+that fires BEFORE any chain query), the pure translation
+to 'SomeTreasuryIntent', and the wallet-shortfall path.
+Slices 3 and 4 wire @mint@ and @reference-scripts@.
 -}
 module Amaru.Treasury.Tx.RegistryInitWizard
     ( -- * Answers
@@ -25,16 +27,48 @@ module Amaru.Treasury.Tx.RegistryInitWizard
 
       -- * Errors
     , RegistryInitError (..)
+
+      -- * Resolved environment
+    , RegistryInitEnv (..)
+
+      -- * Resolver
+    , RegistryInitResolverInput (..)
+    , RegistryInitResolverEnv (..)
+    , resolveRegistryInitSeedSplit
+
+      -- * Pure translation
+    , registryInitSeedSplitToIntent
     ) where
 
+import Data.Aeson (FromJSON (..), withObject, (.:), (.:?))
+import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
-import Data.Word (Word16)
+import Data.Word (Word16, Word64)
 
 import Cardano.Ledger.Hashes (KeyHash (..))
 import Cardano.Ledger.Keys (KeyRole (Witness))
 import Cardano.Ledger.TxIn (TxIn)
 
-import Amaru.Treasury.Scope (ScopeId)
+import Cardano.Node.Client.Validity qualified as Validity
+
+import Amaru.Treasury.IntentJSON
+    ( RationaleJSON (..)
+    , RegistryInitSeedSplitInputs (..)
+    , SAction (..)
+    , ScopeJSON (..)
+    , SomeTreasuryIntent (..)
+    , TreasuryIntent (..)
+    , WalletJSON (..)
+    )
+import Amaru.Treasury.Scope (ScopeId, scopeText)
+import Amaru.Treasury.Tx.SwapWizard
+    ( RegistryView (..)
+    , ScopeView (..)
+    , TreasuryRefs (..)
+    , WalletSelection (..)
+    , selectWallet
+    )
 
 -- ----------------------------------------------------
 -- Answers
@@ -56,6 +90,18 @@ data RegistryInitSeedSplitAnswers = RegistryInitSeedSplitAnswers
     , risLabel :: !(Maybe Text)
     }
     deriving stock (Eq, Show)
+
+instance FromJSON RegistryInitSeedSplitAnswers where
+    parseJSON =
+        withObject "RegistryInitSeedSplitAnswers" $ \o ->
+            RegistryInitSeedSplitAnswers
+                <$> o .: "scope"
+                <*> o .:? "validityHours"
+                <*> o .:? "description"
+                <*> o .:? "justification"
+                <*> o .:? "destinationLabel"
+                <*> o .:? "event"
+                <*> o .:? "label"
 
 {- | Typed operator answers for the @mint@ sub-action.
 
@@ -109,11 +155,10 @@ data RegistryInitReferenceScriptsAnswers
 -- ----------------------------------------------------
 
 {- | Typed errors the registry-init wizard surfaces to the
-operator. Slice 1 only ships the parent-directory and
+operator. Slice 1 shipped the parent-directory and
 collision variants used by the @--out@ pre-flight checks.
-Slices 2-4 extend with @RegistryInitNonDevnetNetwork@,
-@RegistryInitWalletShortfall@, and the per-sub-action
-translation errors.
+Slice 2 adds the devnet guard, the wallet-shortfall path,
+and the resolver validity-window errors.
 -}
 data RegistryInitError
     = -- | @--out@ pointed at a path whose parent directory
@@ -122,4 +167,268 @@ data RegistryInitError
     | -- | @--out@ pointed at an existing file and
       --   @--force@ was not passed.
       RegistryInitOutputExistsNoForce !FilePath
+    | -- | The supplied @--network@ (carried via
+      --   'wriNetwork') is not @"devnet"@. The seed-split
+      --   resolver fails fast at this guard BEFORE any
+      --   chain query.
+      RegistryInitNonDevnetNetwork !Text
+    | -- | The wallet has no pure-ADA UTxOs that satisfy
+      --   'selectWallet' for the funding seed.
+      RegistryInitWalletShortfall
+    | -- | The selected scope is missing from the
+      --   resolver's registry projection.
+      RegistryInitScopeMissing !ScopeId
+    | -- | @--validity-hours = Just 0@.
+      RegistryInitValidityHoursZero
+    | -- | @--validity-hours = Just n@ overshoots the chain
+      --   horizon. Payload from 'Validity.HorizonError'.
+      RegistryInitValidityOvershoot !Validity.HorizonError
     deriving stock (Eq, Show)
+
+-- ----------------------------------------------------
+-- Resolved environment
+-- ----------------------------------------------------
+
+{- | Everything the resolver hands the pure translation.
+The pure 'registryInitSeedSplitToIntent' reads only this
+record plus the typed 'RegistryInitSeedSplitAnswers'; it
+never performs IO.
+-}
+data RegistryInitEnv = RegistryInitEnv
+    { reNetwork :: !Text
+    -- ^ Always @"devnet"@ after the resolver guard.
+    , reUpperBoundSlot :: !Word64
+    -- ^ Resolver-supplied @invalid-hereafter@ slot. Already
+    --   horizon-validated; the pure translator just stamps it.
+    , reRegistry :: !RegistryView
+    , reScopeView :: !ScopeView
+    , reWalletSelection :: !WalletSelection
+    -- ^ The wallet selection's @wsTxIn@ doubles as the
+    --   funding seed UTxO rendered as @"<txid>#<ix>"@; the
+    --   construction core reads it from the wallet block, so
+    --   the pure translation does not duplicate the typed
+    --   TxIn alongside it.
+    }
+    deriving stock (Eq, Show)
+
+-- ----------------------------------------------------
+-- Resolver
+-- ----------------------------------------------------
+
+{- | Inputs the resolver pulls from the CLI before any chain
+query. The funding seed is selected from the wallet
+(@wreQueryWalletUtxos@), so it is not an operator-typed
+input.
+-}
+data RegistryInitResolverInput = RegistryInitResolverInput
+    { wriNetwork :: !Text
+    -- ^ CLI @--network@ value. Anything other than @"devnet"@
+    --   trips the devnet guard before any chain query.
+    , wriWalletAddrBech32 :: !Text
+    , wriScope :: !ScopeId
+    , wriRegistry :: !RegistryView
+    , wriValidityHours :: !(Maybe Word16)
+    }
+    deriving stock (Eq, Show)
+
+{- | Effects the seed-split resolver pulls from the backend.
+Keeping these as record fields lets tests inject mocks
+without depending on a live node.
+-}
+data RegistryInitResolverEnv m = RegistryInitResolverEnv
+    { wreQueryWalletUtxos
+        :: !(Text -> m [(Text, Integer, Bool)])
+    -- ^ @(txInRef, lovelace, hasNativeAssets)@ for the wallet.
+    , wreComputeUpperBound
+        :: !( Validity.ValidityChoice
+              -> m (Either Validity.HorizonError Word64)
+            )
+    }
+
+{- | Resolve the chain-derived seed-split environment.
+
+The DEVNET GUARD is the first check; on any non-@"devnet"@
+network the function returns 'RegistryInitNonDevnetNetwork'
+WITHOUT performing the wallet query, the upper-bound
+computation, or any other effect. The mock-driven tests
+rely on this short-circuit.
+
+The wallet shortfall is the second observable failure path:
+when 'selectWallet' returns @Left _@ or yields an empty
+selection, the function returns 'RegistryInitWalletShortfall'.
+-}
+resolveRegistryInitSeedSplit
+    :: (Monad m)
+    => RegistryInitResolverEnv m
+    -> RegistryInitResolverInput
+    -> m (Either RegistryInitError RegistryInitEnv)
+resolveRegistryInitSeedSplit renv input
+    | wriNetwork input /= "devnet" =
+        pure
+            ( Left
+                ( RegistryInitNonDevnetNetwork (wriNetwork input)
+                )
+            )
+    | otherwise =
+        case Map.lookup
+            (wriScope input)
+            (rvTreasuryByScope (wriRegistry input)) of
+            Nothing ->
+                pure
+                    ( Left
+                        (RegistryInitScopeMissing (wriScope input))
+                    )
+            Just refs -> do
+                walletUtxos <-
+                    wreQueryWalletUtxos
+                        renv
+                        (wriWalletAddrBech32 input)
+                case selectWallet 1 walletUtxos of
+                    Left _ ->
+                        pure (Left RegistryInitWalletShortfall)
+                    Right ([], _) ->
+                        pure (Left RegistryInitWalletShortfall)
+                    Right (walletRef : _, _) -> do
+                        upperE <-
+                            resolveUpperBound
+                                (wreComputeUpperBound renv)
+                                (wriValidityHours input)
+                        case upperE of
+                            Left e -> pure (Left e)
+                            Right upperBound ->
+                                pure $
+                                    Right
+                                        RegistryInitEnv
+                                            { reNetwork = wriNetwork input
+                                            , reUpperBoundSlot = upperBound
+                                            , reRegistry = wriRegistry input
+                                            , reScopeView =
+                                                ScopeView
+                                                    { svScope = wriScope input
+                                                    , svRefs = refs
+                                                    , svDefaultSigners = []
+                                                    }
+                                            , reWalletSelection =
+                                                WalletSelection
+                                                    { wsTxIn = walletRef
+                                                    , wsAddress =
+                                                        wriWalletAddrBech32
+                                                            input
+                                                    , wsExtraTxIns = []
+                                                    }
+                                            }
+
+resolveUpperBound
+    :: (Monad m)
+    => ( Validity.ValidityChoice
+         -> m (Either Validity.HorizonError Word64)
+       )
+    -> Maybe Word16
+    -> m (Either RegistryInitError Word64)
+resolveUpperBound askUpperBound hours = case hours of
+    Just 0 -> pure (Left RegistryInitValidityHoursZero)
+    other -> do
+        let choice =
+                maybe
+                    Validity.AutoLongest
+                    Validity.ExactlyHours
+                    other
+        result <- askUpperBound choice
+        pure $ case result of
+            Left horizonErr ->
+                Left (RegistryInitValidityOvershoot horizonErr)
+            Right slot -> Right slot
+
+-- ----------------------------------------------------
+-- Pure translation
+-- ----------------------------------------------------
+
+{- | Translate the resolved @seed-split@ environment plus
+typed answers into a 'SomeTreasuryIntent'. Pure; reads only
+its arguments. The construction core's seed-split path
+('Amaru.Treasury.Devnet.RegistryInit.buildSeedSplitCore')
+sees the funding address via the wallet block, the
+funding seed UTxO via @wallet.txIn@, the upper-bound slot
+via the top-level @validityUpperBoundSlot@, and an empty
+'RegistryInitSeedSplitInputs' payload.
+-}
+registryInitSeedSplitToIntent
+    :: RegistryInitEnv
+    -> RegistryInitSeedSplitAnswers
+    -> Either RegistryInitError SomeTreasuryIntent
+registryInitSeedSplitToIntent env ans = do
+    -- Defensive guards mirroring the resolver, for callers
+    -- that bypass the resolver and feed an arbitrary Env.
+    case risValidityHours ans of
+        Just 0 -> Left RegistryInitValidityHoursZero
+        _ -> pure ()
+    let intent =
+            TreasuryIntent
+                { tiSAction = SRegistryInitSeedSplit
+                , tiSchema = 1
+                , tiNetwork = reNetwork env
+                , tiWallet = mkWallet (reWalletSelection env)
+                , tiScope = mkScope env ans
+                , tiSigners = []
+                , tiValidityUpperBoundSlot = reUpperBoundSlot env
+                , tiRationale = mkRationale ans
+                , tiPayload = RegistryInitSeedSplitInputs
+                }
+    Right (SomeTreasuryIntent SRegistryInitSeedSplit intent)
+
+mkWallet :: WalletSelection -> WalletJSON
+mkWallet ws =
+    WalletJSON
+        { wjTxIn = wsTxIn ws
+        , wjAddress = wsAddress ws
+        , wjExtraTxIns = wsExtraTxIns ws
+        }
+
+mkScope
+    :: RegistryInitEnv -> RegistryInitSeedSplitAnswers -> ScopeJSON
+mkScope env ans =
+    let r = reRegistry env
+        s = svRefs (reScopeView env)
+    in  ScopeJSON
+            { sjId = scopeText (risScope ans)
+            , sjTreasuryAddress = trAddress s
+            , sjTreasuryUtxos = []
+            , sjTreasuryLeftoverLovelace = 0
+            , sjTreasuryLeftoverUsdm = 0
+            , sjTreasuryLeftoverOtherAssets = mempty
+            , sjTreasuryScriptHash = trScriptHash s
+            , sjPermissionsRewardAccount =
+                trPermissionsRewardAccount s
+            , sjScopesDeployedAt = rvScopesDeployedAt r
+            , sjPermissionsDeployedAt =
+                rvPermissionsDeployedAt r
+            , sjTreasuryDeployedAt = rvTreasuryDeployedAt r
+            , sjRegistryDeployedAt = rvRegistryDeployedAt r
+            , sjRegistryPolicyId = rvRegistryPolicyId r
+            }
+
+mkRationale :: RegistryInitSeedSplitAnswers -> RationaleJSON
+mkRationale ans =
+    let scopeName = scopeText (risScope ans)
+    in  RationaleJSON
+            { rjEvent =
+                fromMaybe "registry-init" (risEvent ans)
+            , rjLabel =
+                fromMaybe
+                    "Registry initialization seed-split"
+                    (risLabel ans)
+            , rjDescription =
+                fromMaybe
+                    ( "Split the funding seed UTxO for "
+                        <> scopeName
+                    )
+                    (risDescription ans)
+            , rjJustification =
+                fromMaybe
+                    "Bootstrap the per-scope registry"
+                    (risJustification ans)
+            , rjDestinationLabel =
+                fromMaybe
+                    (scopeName <> " seed-split")
+                    (risDestinationLabel ans)
+            }

@@ -48,6 +48,8 @@ module Amaru.Treasury.Cli.StakeRewardInitWizard
     , validateOutPath
     ) where
 
+import Control.Exception (IOException, try)
+import Data.ByteString.Lazy qualified as BSL
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word16)
@@ -72,18 +74,37 @@ import Options.Applicative
 import System.Directory (doesDirectoryExist, doesFileExist)
 import System.Exit (ExitCode (..), exitWith)
 import System.FilePath (takeDirectory)
-import System.IO (hPrint, stderr)
+import System.IO (hPrint, hPutStrLn, stderr)
 
 import Cardano.Ledger.TxIn (TxIn)
+import Cardano.Node.Client.Provider (queryUpperBoundSlot)
+import Cardano.Slotting.Slot (SlotNo (..))
 
+import Amaru.Treasury.Backend.N2C
+    ( withLocalNodeBackend
+    )
 import Amaru.Treasury.Cli.Common
-    ( GlobalOpts
+    ( GlobalOpts (..)
+    , queryFlat
+    , resolveNetworkName
+    )
+import Amaru.Treasury.Devnet.StakeRewardInit
+    ( DevnetStakeRewardRegistry
+    , readDevnetStakeRewardRegistry
+    )
+import Amaru.Treasury.IntentJSON
+    ( encodeSomeTreasuryIntent
     )
 import Amaru.Treasury.LedgerParse
     ( txInFromText
     )
 import Amaru.Treasury.Tx.StakeRewardInitWizard
     ( StakeRewardInitError (..)
+    , StakeRewardInitResolverEnv (..)
+    , StakeRewardInitResolverInput (..)
+    , StakeRewardInitScriptAccountAnswers (..)
+    , resolveStakeRewardInitScriptAccount
+    , stakeRewardInitScriptAccountToIntent
     )
 
 -- ----------------------------------------------------
@@ -267,10 +288,10 @@ wizard.
 -}
 runStakeRewardInitWizard
     :: GlobalOpts -> StakeRewardInitWizardOpts -> IO ()
-runStakeRewardInitWizard _g cmd = case cmd of
+runStakeRewardInitWizard g cmd = case cmd of
     StakeRewardInitScriptAccountOpts (ScriptAccountOpts cf) -> do
         guardOut (cfOut cf) (cfForce cf)
-        error "TODO Slice 2: stake-reward-init-wizard script-account"
+        runScriptAccount g cf
     StakeRewardInitPlainAccountOpts (PlainAccountOpts cf) -> do
         guardOut (cfOut cf) (cfForce cf)
         error "TODO Slice 3: stake-reward-init-wizard plain-account"
@@ -282,3 +303,90 @@ runStakeRewardInitWizard _g cmd = case cmd of
             Left e -> do
                 hPrint stderr e
                 exitWith (ExitFailure 2)
+
+-- ----------------------------------------------------
+-- Live script-account runner
+-- ----------------------------------------------------
+
+{- | Live @script-account@ path: build the resolver env from
+CLI options, run 'resolveStakeRewardInitScriptAccount',
+translate via 'stakeRewardInitScriptAccountToIntent', and
+write the encoded intent JSON to @--out@. Any
+'StakeRewardInitError' is printed to stderr with exit code
+3. The resolver fires the devnet network guard BEFORE any
+chain query.
+-}
+runScriptAccount :: GlobalOpts -> CommonFlags -> IO ()
+runScriptAccount g cf = do
+    networkName <- case resolveNetworkName g of
+        Right t -> pure t
+        Left e -> abortScriptAccount (T.pack e)
+    socket <- case goSocketPath g of
+        Just s -> pure s
+        Nothing ->
+            abortScriptAccount
+                "--node-socket / CARDANO_NODE_SOCKET_PATH is required"
+    let answers =
+            StakeRewardInitScriptAccountAnswers
+                { sasaValidityHours = cfValidityHours cf
+                , sasaFundingSeedTxIn = cfFundingSeedTxIn cf
+                }
+    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+        let input =
+                StakeRewardInitResolverInput
+                    { sriNetwork = networkName
+                    , sriWalletAddrBech32 = cfWalletAddr cf
+                    , sriRegistryPath = cfRegistry cf
+                    , sriValidityHours = cfValidityHours cf
+                    }
+            renv =
+                StakeRewardInitResolverEnv
+                    { sreQueryWalletUtxos = queryFlat backend
+                    , sreComputeUpperBound = \choice -> do
+                        r <- queryUpperBoundSlot backend choice
+                        pure (fmap unwrapSlot r)
+                    , sreReadRegistry = readRegistrySafely
+                    }
+        er <-
+            resolveStakeRewardInitScriptAccount renv input
+        env <- case er of
+            Left e ->
+                abortScriptAccount
+                    ("resolve: " <> T.pack (show e))
+            Right e -> pure e
+        intent <-
+            case stakeRewardInitScriptAccountToIntent env answers of
+                Left te ->
+                    abortScriptAccount
+                        ("translate: " <> T.pack (show te))
+                Right i -> pure i
+        let bytes = encodeSomeTreasuryIntent intent
+        BSL.writeFile (cfOut cf) bytes
+  where
+    unwrapSlot (SlotNo s) = s
+
+abortScriptAccount :: Text -> IO a
+abortScriptAccount msg = do
+    hPutStrLn
+        stderr
+        ( "stake-reward-init-wizard script-account: "
+            <> T.unpack msg
+        )
+    exitWith (ExitFailure 3)
+
+{- | 'readDevnetStakeRewardRegistry' is implemented as
+@eitherDecodeFileStrict@, which throws on missing files
+rather than returning @Left@. The resolver contract maps
+ANY underlying registry-file failure (missing, unparseable,
+wrong phase, wrong network) to a single
+'StakeRewardInitRegistryReadError', so the CLI bridge
+catches the IOException and surfaces its message via
+@Left@.
+-}
+readRegistrySafely
+    :: FilePath
+    -> IO (Either String DevnetStakeRewardRegistry)
+readRegistrySafely path =
+    try (readDevnetStakeRewardRegistry path) >>= \case
+        Left (ioe :: IOException) -> pure (Left (show ioe))
+        Right inner -> pure inner

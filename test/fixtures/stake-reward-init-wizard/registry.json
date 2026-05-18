@@ -1,0 +1,12 @@
+{
+  "phase": "registry-init",
+  "network": "devnet",
+  "anchors": {
+    "permissionsDeployedAt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0",
+    "treasuryDeployedAt": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc#1"
+  },
+  "scripts": {
+    "permissionsScriptHash": "11111111111111111111111111111111111111111111111111111111",
+    "treasuryScriptHash": "463226e30d8527800128ebc4321be6e378ce9292c42a729b0bd080ae"
+  }
+}

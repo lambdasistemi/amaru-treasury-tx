@@ -50,6 +50,7 @@ extra-source-files:
   test/fixtures/disburse/**/*.json
   test/fixtures/disburse/**/*.md
   test/fixtures/disburse-wizard/**/*.json
+  test/fixtures/registry-init-wizard/*.json
   test/fixtures/swap/**/*.cbor
   test/fixtures/swap/**/*.json
   test/fixtures/swap/**/*.md
@@ -413,6 +414,8 @@ test-suite unit-tests
     Amaru.Treasury.Tx.DisburseSpec
     Amaru.Treasury.Tx.DisburseWizardSpec
     Amaru.Treasury.Tx.EnvelopeSpec
+    Amaru.Treasury.Tx.RegistryInitWizardNetworkGuardSpec
+    Amaru.Treasury.Tx.RegistryInitWizardSpec
     Amaru.Treasury.Tx.SubmitSpec
     Amaru.Treasury.Tx.SwapCancelSpec
     Amaru.Treasury.Tx.SwapQuoteSpec
@@ -473,6 +476,7 @@ test-suite golden-tests
   default-language:   GHC2021
   other-modules:
     AdaDisburseGoldenSpec
+    Amaru.Treasury.Tx.RegistryInitWizardSeedSplitSpec
     EnvelopeOracleSpec
     GovernanceWithdrawalInitIntentSpec
     PlaceholderSpec
@@ -483,6 +487,7 @@ test-suite golden-tests
     StakeRewardInitIntentSpec
     Support.GovernanceWithdrawalInitFixtures
     Support.RegistryInitFixtures
+    Support.RegistryInitWizardFixtures
     Support.StakeRewardInitFixtures
     SwapGoldenSpec
     SwapQuoteAuditGoldenSpec

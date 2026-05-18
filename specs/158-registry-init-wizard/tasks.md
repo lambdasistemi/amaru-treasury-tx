@@ -295,8 +295,8 @@ then reverting the patch before committing.
 
 **Orchestrator-owned** — no subagent. Commit subject: `chore: drop gate.sh (ready for review) (#158)`.
 
-- [ ] T027 Run the finalization audit (`./gate.sh` green at HEAD, every previous slice commit carries `Tasks:` trailer, every `[ ]` in this file has become `[X] T### (commit: <sha>)`, README + docs + PR body aligned)
-- [ ] T028 `git rm /code/amaru-treasury-tx-issue-158/gate.sh` and commit; `gh pr ready 165 -R lambdasistemi/amaru-treasury-tx`
+- [X] T027 (commit: a690b2a9) Run the finalization audit (`./gate.sh` green at HEAD, every previous slice commit carries `Tasks:` trailer, every `[ ]` in this file has become `[X] T### (commit: <sha>)`, README + docs + PR body aligned)
+- [X] T028 (commit: a690b2a9) `git rm /code/amaru-treasury-tx-issue-158/gate.sh` and commit; `gh pr ready 165 -R lambdasistemi/amaru-treasury-tx`
 
 **Checkpoint**: PR ready; CI green; awaiting external review.
 

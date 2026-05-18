@@ -46,6 +46,10 @@ import Amaru.Treasury.Cli.DisburseWizard
     , contingencyDisburseOptsP
     , disburseWizardOptsP
     )
+import Amaru.Treasury.Cli.RegistryInitWizard
+    ( RegistryInitWizardOpts
+    , registryInitWizardOptsP
+    )
 import Amaru.Treasury.Cli.Submit
     ( SubmitOpts
     , submitOptsP
@@ -94,6 +98,7 @@ data Cmd
     | CmdDisburseWizard DisburseWizardOpts
     | CmdContingencyDisburse ContingencyDisburseOpts
     | CmdWithdrawWizard WithdrawOpts
+    | CmdRegistryInitWizard RegistryInitWizardOpts
     | CmdTxBuild TxBuildOpts
     | CmdReportRender ReportRenderOpts
     | CmdTreasuryInspect InspectOpts
@@ -171,6 +176,14 @@ cmdP =
                     (CmdWithdrawWizard <$> withdrawOptsP)
                     ( progDesc
                         "Produce a withdraw intent.json from registry and reward state"
+                    )
+                )
+            <> command
+                "registry-init-wizard"
+                ( info
+                    (CmdRegistryInitWizard <$> registryInitWizardOptsP)
+                    ( progDesc
+                        "Produce registry-init intent.json files for seed-split | mint | reference-scripts (devnet only; Slice 1 stubs the live path)"
                     )
                 )
             <> command

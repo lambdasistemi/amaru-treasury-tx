@@ -7,8 +7,8 @@ License     : Apache-2.0
 
 Slice 2 of #158 shipped the seed-split round-trip and the
 wallet-shortfall path. Slice 3 extends with a mint
-round-trip on the same pattern. Slice 4 will add the
-reference-scripts round-trip.
+round-trip on the same pattern. Slice 4 adds the
+reference-scripts round-trip on the same shape.
 
 Assertions:
 
@@ -17,6 +17,9 @@ Assertions:
   'SomeTreasuryIntent' the wizard emits.
 * JSON round-trip (mint) — same, for the mint translation
   built by 'registryInitMintToIntent'.
+* JSON round-trip (reference-scripts) — same, for the
+  reference-scripts translation built by
+  'registryInitReferenceScriptsToIntent'.
 * Wallet shortfall — the resolver returns
   'Left RegistryInitWalletShortfall' when the wallet has no
   pure-ADA UTxOs (the mock 'wreQueryWalletUtxos' returns
@@ -64,10 +67,12 @@ import Amaru.Treasury.Tx.RegistryInitWizard
     ( RegistryInitEnv (..)
     , RegistryInitError (..)
     , RegistryInitMintAnswers (..)
+    , RegistryInitReferenceScriptsAnswers (..)
     , RegistryInitResolverEnv (..)
     , RegistryInitResolverInput (..)
     , RegistryInitSeedSplitAnswers (..)
     , registryInitMintToIntent
+    , registryInitReferenceScriptsToIntent
     , registryInitSeedSplitToIntent
     , resolveRegistryInitSeedSplit
     )
@@ -95,6 +100,11 @@ spec = describe "registry-init-wizard" $ do
             "encodes and decodes a mint SomeTreasuryIntent \
             \without loss"
             roundTripMint
+    describe "reference-scripts" $
+        it
+            "encodes and decodes a reference-scripts \
+            \SomeTreasuryIntent without loss"
+            roundTripReferenceScripts
 
 roundTripSeedSplit :: IO ()
 roundTripSeedSplit = do
@@ -142,6 +152,33 @@ roundTripMint = do
                     <> show e
                 )
         Right i -> pure i
+    let encoded = encodeSomeTreasuryIntent intent
+    decodeTreasuryIntent encoded `shouldBe` Right intent
+
+roundTripReferenceScripts :: IO ()
+roundTripReferenceScripts = do
+    let answers =
+            RegistryInitReferenceScriptsAnswers
+                { rirScope = CoreDevelopment
+                , rirValidityHours = Nothing
+                , rirDescription = Nothing
+                , rirJustification = Nothing
+                , rirDestinationLabel = Nothing
+                , rirEvent = Nothing
+                , rirLabel = Nothing
+                , rirScopesSeedTxIn = sampleScopesSeedTxIn
+                , rirRegistrySeedTxIn = sampleRegistrySeedTxIn
+                , rirFundingSeedTxIn = sampleFundingSeedTxIn
+                }
+        env = sampleEnv
+    intent <-
+        case registryInitReferenceScriptsToIntent env answers of
+            Left e ->
+                error
+                    ( "registryInitReferenceScriptsToIntent failed: "
+                        <> show e
+                    )
+            Right i -> pure i
     let encoded = encodeSomeTreasuryIntent intent
     decodeTreasuryIntent encoded `shouldBe` Right intent
 
@@ -241,6 +278,13 @@ sampleRegistrySeedTxIn = mkTxIn (BS.replicate 32 0x55) 1
 
 sampleOwnerKeyHash :: KeyHash kr
 sampleOwnerKeyHash = KeyHash (mkHash (BS.replicate 28 0x11))
+
+-- ----------------------------------------------------
+-- Reference-scripts sample data
+-- ----------------------------------------------------
+
+sampleFundingSeedTxIn :: TxIn
+sampleFundingSeedTxIn = mkTxIn (BS.replicate 32 0x66) 2
 
 mkTxIn :: ByteString -> Integer -> TxIn
 mkTxIn bs ix =

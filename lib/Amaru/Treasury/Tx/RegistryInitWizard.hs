@@ -44,6 +44,7 @@ module Amaru.Treasury.Tx.RegistryInitWizard
       -- * Pure translation
     , registryInitSeedSplitToIntent
     , registryInitMintToIntent
+    , registryInitReferenceScriptsToIntent
     ) where
 
 import Data.Aeson (FromJSON (..), withObject, (.:), (.:?))
@@ -65,6 +66,7 @@ import Cardano.Node.Client.Validity qualified as Validity
 import Amaru.Treasury.IntentJSON
     ( RationaleJSON (..)
     , RegistryInitMintInputs (..)
+    , RegistryInitReferenceScriptsInputs (..)
     , RegistryInitSeedSplitInputs (..)
     , SAction (..)
     , ScopeJSON (..)
@@ -547,6 +549,132 @@ mkRationaleMint ans =
                 fromMaybe
                     (scopeName <> " mint")
                     (rimDestinationLabel ans)
+            }
+
+-- ----------------------------------------------------
+-- Pure translation (reference-scripts)
+-- ----------------------------------------------------
+
+{- | Translate the resolved @reference-scripts@ environment
+plus typed answers into a 'SomeTreasuryIntent'. Pure; reads
+only its arguments.
+
+The three operator-typed values from
+'RegistryInitReferenceScriptsAnswers' —
+@rirScopesSeedTxIn@, @rirRegistrySeedTxIn@,
+@rirFundingSeedTxIn@ — are baked verbatim into the intent.
+The two seed TxIns reproduce the script derivation that the
+mint sub-transaction performed; the funding seed TxIn lives
+in the wallet block (where the construction core reads it as
+@wallet.txIn@) and pays the reference-scripts deposits. The
+funding seed is operator-typed for this sub-action (the
+seed-split sub-tx materialized it), so the pure translator
+writes it directly into the wallet block, overriding the
+env-supplied 'WalletSelection.wsTxIn' for the rendering
+step.
+
+Constitutional constraint (SC-007 / NFR-006): this function
+MUST NOT call 'Amaru.Treasury.Devnet.RegistryInit.buildReferenceScriptsCore'
+or any other 'Amaru.Treasury.Devnet.*' construction core; it
+only manipulates the JSON-shaped intent. The dispatcher in
+"Amaru.Treasury.Build" is the one that consumes the encoded
+intent and calls the core. Slice 5 ships a grep-based test
+that enforces this boundary on the wizard module.
+-}
+registryInitReferenceScriptsToIntent
+    :: RegistryInitEnv
+    -> RegistryInitReferenceScriptsAnswers
+    -> Either RegistryInitError SomeTreasuryIntent
+registryInitReferenceScriptsToIntent env ans = do
+    case rirValidityHours ans of
+        Just 0 -> Left RegistryInitValidityHoursZero
+        _ -> pure ()
+    let intent =
+            TreasuryIntent
+                { tiSAction = SRegistryInitReferenceScripts
+                , tiSchema = 1
+                , tiNetwork = reNetwork env
+                , tiWallet =
+                    mkWalletReferenceScripts
+                        (reWalletSelection env)
+                        (rirFundingSeedTxIn ans)
+                , tiScope = mkScopeReferenceScripts env ans
+                , tiSigners = []
+                , tiValidityUpperBoundSlot = reUpperBoundSlot env
+                , tiRationale = mkRationaleReferenceScripts ans
+                , tiPayload =
+                    RegistryInitReferenceScriptsInputs
+                        { rirsiScopesSeedTxIn =
+                            txInText (rirScopesSeedTxIn ans)
+                        , rirsiRegistrySeedTxIn =
+                            txInText (rirRegistrySeedTxIn ans)
+                        }
+                }
+    Right
+        ( SomeTreasuryIntent
+            SRegistryInitReferenceScripts
+            intent
+        )
+
+mkWalletReferenceScripts
+    :: WalletSelection -> TxIn -> WalletJSON
+mkWalletReferenceScripts ws fundingSeed =
+    WalletJSON
+        { wjTxIn = txInText fundingSeed
+        , wjAddress = wsAddress ws
+        , wjExtraTxIns = wsExtraTxIns ws
+        }
+
+mkScopeReferenceScripts
+    :: RegistryInitEnv
+    -> RegistryInitReferenceScriptsAnswers
+    -> ScopeJSON
+mkScopeReferenceScripts env ans =
+    let r = reRegistry env
+        s = svRefs (reScopeView env)
+    in  ScopeJSON
+            { sjId = scopeText (rirScope ans)
+            , sjTreasuryAddress = trAddress s
+            , sjTreasuryUtxos = []
+            , sjTreasuryLeftoverLovelace = 0
+            , sjTreasuryLeftoverUsdm = 0
+            , sjTreasuryLeftoverOtherAssets = mempty
+            , sjTreasuryScriptHash = trScriptHash s
+            , sjPermissionsRewardAccount =
+                trPermissionsRewardAccount s
+            , sjScopesDeployedAt = rvScopesDeployedAt r
+            , sjPermissionsDeployedAt =
+                rvPermissionsDeployedAt r
+            , sjTreasuryDeployedAt = rvTreasuryDeployedAt r
+            , sjRegistryDeployedAt = rvRegistryDeployedAt r
+            , sjRegistryPolicyId = rvRegistryPolicyId r
+            }
+
+mkRationaleReferenceScripts
+    :: RegistryInitReferenceScriptsAnswers -> RationaleJSON
+mkRationaleReferenceScripts ans =
+    let scopeName = scopeText (rirScope ans)
+    in  RationaleJSON
+            { rjEvent =
+                fromMaybe "registry-init" (rirEvent ans)
+            , rjLabel =
+                fromMaybe
+                    "Registry initialization reference-scripts"
+                    (rirLabel ans)
+            , rjDescription =
+                fromMaybe
+                    ( "Publish the reference scripts for "
+                        <> scopeName
+                    )
+                    (rirDescription ans)
+            , rjJustification =
+                fromMaybe
+                    "Bootstrap the per-scope registry"
+                    (rirJustification ans)
+            , rjDestinationLabel =
+                fromMaybe
+                    (scopeName <> " reference-scripts")
+                    (rirDestinationLabel ans)
             }
 
 -- ----------------------------------------------------

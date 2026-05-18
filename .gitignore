@@ -1,4 +1,5 @@
-dist-newstyle/
+dist-newstyle
+.cabal-build/
 .ghc.environment.*
 *.tix
 .hpc/
@@ -6,7 +7,6 @@ result
 result-*
 .direnv/
 .envrc.local
-.llm/
 runs/
 
 # LLM investigation notes (local only)

@@ -100,10 +100,13 @@ import Amaru.Treasury.LedgerParse
     )
 import Amaru.Treasury.Tx.StakeRewardInitWizard
     ( StakeRewardInitError (..)
+    , StakeRewardInitPlainAccountAnswers (..)
     , StakeRewardInitResolverEnv (..)
     , StakeRewardInitResolverInput (..)
     , StakeRewardInitScriptAccountAnswers (..)
+    , resolveStakeRewardInitPlainAccount
     , resolveStakeRewardInitScriptAccount
+    , stakeRewardInitPlainAccountToIntent
     , stakeRewardInitScriptAccountToIntent
     )
 
@@ -294,7 +297,7 @@ runStakeRewardInitWizard g cmd = case cmd of
         runScriptAccount g cf
     StakeRewardInitPlainAccountOpts (PlainAccountOpts cf) -> do
         guardOut (cfOut cf) (cfForce cf)
-        error "TODO Slice 3: stake-reward-init-wizard plain-account"
+        runPlainAccount g cf
   where
     guardOut path force = do
         r <- validateOutPath path force
@@ -390,3 +393,73 @@ readRegistrySafely path =
     try (readDevnetStakeRewardRegistry path) >>= \case
         Left (ioe :: IOException) -> pure (Left (show ioe))
         Right inner -> pure inner
+
+-- ----------------------------------------------------
+-- Live plain-account runner
+-- ----------------------------------------------------
+
+{- | Live @plain-account@ path: build the resolver env from
+CLI options, run 'resolveStakeRewardInitPlainAccount',
+translate via 'stakeRewardInitPlainAccountToIntent', and
+write the encoded intent JSON to @--out@. Any
+'StakeRewardInitError' is printed to stderr with exit code
+3. The resolver fires the devnet network guard BEFORE any
+chain query, mirroring the script-account runner.
+-}
+runPlainAccount :: GlobalOpts -> CommonFlags -> IO ()
+runPlainAccount g cf = do
+    networkName <- case resolveNetworkName g of
+        Right t -> pure t
+        Left e -> abortPlainAccount (T.pack e)
+    socket <- case goSocketPath g of
+        Just s -> pure s
+        Nothing ->
+            abortPlainAccount
+                "--node-socket / CARDANO_NODE_SOCKET_PATH is required"
+    let answers =
+            StakeRewardInitPlainAccountAnswers
+                { spaaValidityHours = cfValidityHours cf
+                , spaaFundingSeedTxIn = cfFundingSeedTxIn cf
+                }
+    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+        let input =
+                StakeRewardInitResolverInput
+                    { sriNetwork = networkName
+                    , sriWalletAddrBech32 = cfWalletAddr cf
+                    , sriRegistryPath = cfRegistry cf
+                    , sriValidityHours = cfValidityHours cf
+                    }
+            renv =
+                StakeRewardInitResolverEnv
+                    { sreQueryWalletUtxos = queryFlat backend
+                    , sreComputeUpperBound = \choice -> do
+                        r <- queryUpperBoundSlot backend choice
+                        pure (fmap unwrapSlot r)
+                    , sreReadRegistry = readRegistrySafely
+                    }
+        er <-
+            resolveStakeRewardInitPlainAccount renv input
+        env <- case er of
+            Left e ->
+                abortPlainAccount
+                    ("resolve: " <> T.pack (show e))
+            Right e -> pure e
+        intent <-
+            case stakeRewardInitPlainAccountToIntent env answers of
+                Left te ->
+                    abortPlainAccount
+                        ("translate: " <> T.pack (show te))
+                Right i -> pure i
+        let bytes = encodeSomeTreasuryIntent intent
+        BSL.writeFile (cfOut cf) bytes
+  where
+    unwrapSlot (SlotNo s) = s
+
+abortPlainAccount :: Text -> IO a
+abortPlainAccount msg = do
+    hPutStrLn
+        stderr
+        ( "stake-reward-init-wizard plain-account: "
+            <> T.unpack msg
+        )
+    exitWith (ExitFailure 3)

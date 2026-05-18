@@ -241,13 +241,13 @@ Independence:
 
 ### Tests for Slice 3 (RED — written first, observed failing) ⚠️
 
-- [ ] T017 [P] [US2] Extend `/code/amaru-treasury-tx-issue-159/test/golden/Support/StakeRewardInitWizardFixtures.hs` with `plainAccountWizardFixture` and add hspec golden test in `/code/amaru-treasury-tx-issue-159/test/golden/Amaru/Treasury/Tx/StakeRewardInitWizardPlainAccountSpec.hs` asserting wizard plain-account intent → `tx-build` CBOR == `buildStakeRewardPlainAccountCore` CBOR byte-for-byte
-- [ ] T018 [P] [US1] Extend `/code/amaru-treasury-tx-issue-159/test/unit/Amaru/Treasury/Tx/StakeRewardInitWizardSpec.hs` with a round-trip property for the plain-account `SomeTreasuryIntent`
-- [ ] T019 [P] [US3] Refine the plain-account network-guard case in `/code/amaru-treasury-tx-issue-159/test/unit/Amaru/Treasury/Tx/StakeRewardInitWizardNetworkGuardSpec.hs` from placeholder Answers (Slice 2 scaffold) to real Answers
+- [X] T017 (commit: ffb9d881) [P] [US2] Extend `/code/amaru-treasury-tx-issue-159/test/golden/Support/StakeRewardInitWizardFixtures.hs` with `plainAccountWizardFixture` and add hspec golden test in `/code/amaru-treasury-tx-issue-159/test/golden/Amaru/Treasury/Tx/StakeRewardInitWizardPlainAccountSpec.hs` asserting wizard plain-account intent → `tx-build` CBOR == `buildStakeRewardPlainAccountCore` CBOR byte-for-byte
+- [X] T018 (commit: ffb9d881) [P] [US1] Extend `/code/amaru-treasury-tx-issue-159/test/unit/Amaru/Treasury/Tx/StakeRewardInitWizardSpec.hs` with a round-trip property for the plain-account `SomeTreasuryIntent`
+- [X] T019 (commit: ffb9d881) [P] [US3] Refine the plain-account network-guard case in `/code/amaru-treasury-tx-issue-159/test/unit/Amaru/Treasury/Tx/StakeRewardInitWizardNetworkGuardSpec.hs` from placeholder Answers (Slice 2 scaffold) to real Answers
 
 ### Implementation for Slice 3
 
-- [ ] T020 [US1] Implement `stakeRewardInitPlainAccountToIntent` (pure; extracts `dsrrPermissionsScriptHash` from the parsed registry into the payload; bakes `--funding-seed-txin` into the wallet block) in `/code/amaru-treasury-tx-issue-159/lib/Amaru/Treasury/Tx/StakeRewardInitWizard.hs` and wire the plain-account runner arm in `/code/amaru-treasury-tx-issue-159/lib/Amaru/Treasury/Cli/StakeRewardInitWizard.hs`
+- [X] T020 (commit: ffb9d881) [US1] Implement `stakeRewardInitPlainAccountToIntent` (pure; extracts `dsrrPermissionsScriptHash` from the parsed registry into the payload; bakes `--funding-seed-txin` into the wallet block) in `/code/amaru-treasury-tx-issue-159/lib/Amaru/Treasury/Tx/StakeRewardInitWizard.hs` and wire the plain-account runner arm in `/code/amaru-treasury-tx-issue-159/lib/Amaru/Treasury/Cli/StakeRewardInitWizard.hs`
 
 **Checkpoint**: both subcommands functional; goldens green; `./gate.sh` green.
 

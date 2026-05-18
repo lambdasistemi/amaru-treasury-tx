@@ -310,8 +310,8 @@ observing the test fail, then reverting the patch before committing.
 
 **Orchestrator-owned** — no subagent. Commit subject: `chore: drop gate.sh (ready for review) (#159)`.
 
-- [ ] T024 Run the finalization audit (`./gate.sh` green at HEAD, every previous slice commit carries `Tasks:` trailer, every `[ ]` in this file has become `[X] T### (commit: <sha>)`, README + docs + PR body aligned)
-- [ ] T025 `git rm /code/amaru-treasury-tx-issue-159/gate.sh` and commit; `gh pr ready 168 -R lambdasistemi/amaru-treasury-tx`
+- [X] T024 (commit: 98b26a73) Run the finalization audit (`./gate.sh` green at HEAD, every previous slice commit carries `Tasks:` trailer, every `[ ]` in this file has become `[X] T### (commit: <sha>)`, README + docs + PR body aligned)
+- [X] T025 (commit: 98b26a73) `git rm /code/amaru-treasury-tx-issue-159/gate.sh` and commit; `gh pr ready 168 -R lambdasistemi/amaru-treasury-tx`
 
 **Checkpoint**: PR ready; CI green; awaiting external review.
 

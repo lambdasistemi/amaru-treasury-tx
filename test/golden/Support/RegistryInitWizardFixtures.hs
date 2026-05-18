@@ -13,7 +13,10 @@ CBOR-parity goldens cannot drift.
 
 Slice 3 of #158 adds @mintWizardFixture@ alongside the
 seed-split helper. Slice 4 extends with
-@referenceScriptsWizardFixture@.
+@referenceScriptsWizardFixture@ — the funding seed TxIn is
+operator-typed for this sub-action so the wizard helper
+mirrors the underlying fixture's wallet block (which uses
+@rirstSeedTxIn@) verbatim.
 -}
 module Support.RegistryInitWizardFixtures
     ( seedSplitWizardFixture
@@ -22,6 +25,9 @@ module Support.RegistryInitWizardFixtures
     , mintWizardFixture
     , mintAnswersFixturePath
     , mintIntentFixturePath
+    , referenceScriptsWizardFixture
+    , referenceScriptsAnswersFixturePath
+    , referenceScriptsIntentFixturePath
     ) where
 
 import Data.Map.Strict qualified as Map
@@ -45,12 +51,14 @@ import Data.ByteString.Base16 qualified as B16
 
 import Amaru.Treasury.IntentJSON
     ( RegistryInitMintTx (..)
+    , RegistryInitReferenceScriptsTx (..)
     , RegistryInitSeedSplitTx (..)
     )
 import Amaru.Treasury.Scope (ScopeId (..))
 import Amaru.Treasury.Tx.RegistryInitWizard
     ( RegistryInitEnv (..)
     , RegistryInitMintAnswers (..)
+    , RegistryInitReferenceScriptsAnswers (..)
     , RegistryInitSeedSplitAnswers (..)
     )
 import Amaru.Treasury.Tx.SwapWizard
@@ -85,6 +93,14 @@ mintAnswersFixturePath =
 mintIntentFixturePath :: FilePath
 mintIntentFixturePath =
     "test/fixtures/registry-init-wizard/mint-intent.json"
+
+referenceScriptsAnswersFixturePath :: FilePath
+referenceScriptsAnswersFixturePath =
+    "test/fixtures/registry-init-wizard/reference-scripts-answers.json"
+
+referenceScriptsIntentFixturePath :: FilePath
+referenceScriptsIntentFixturePath =
+    "test/fixtures/registry-init-wizard/reference-scripts-intent.json"
 
 -- ----------------------------------------------------
 -- Seed-split wizard fixture
@@ -227,6 +243,101 @@ mintWizardFixture fix =
         walletSel =
             WalletSelection
                 { wsTxIn = walletTxInText
+                , wsAddress = addrText
+                , wsExtraTxIns = []
+                }
+        env =
+            RegistryInitEnv
+                { reNetwork = "devnet"
+                , reUpperBoundSlot = upper
+                , reRegistry = registry
+                , reScopeView = scopeView
+                , reWalletSelection = walletSel
+                }
+    in  (answers, env)
+
+-- ----------------------------------------------------
+-- Reference-scripts wizard fixture
+-- ----------------------------------------------------
+
+{- | Build the wizard-side @(Answers, Env)@ for the
+reference-scripts sub-action from the same
+'RegistryInitFixture' record that
+'Support.RegistryInitFixtures.referenceScriptsFixture'
+produces. The translated 'RegistryInitReferenceScriptsTx'
+supplies the funding address, the funding seed TxIn (which
+doubles as the wallet block's @wjTxIn@), the two seed TxIns
+used for script derivation, and the upper-bound slot — i.e.
+exactly the operator-typed values that
+'registryInitReferenceScriptsToIntent' bakes verbatim.
+
+The funding seed TxIn is operator-typed in this sub-action:
+the wizard's pure translator writes it into the wallet
+block. We align 'reWalletSelection.wsTxIn' with the same
+TxIn so that 'mkWallet' produces a wallet block that
+compares equal to 'rifIntent fixture' regardless of which
+construction path the translator chooses.
+-}
+referenceScriptsWizardFixture
+    :: RegistryInitFixture RegistryInitReferenceScriptsTx
+    -> (RegistryInitReferenceScriptsAnswers, RegistryInitEnv)
+referenceScriptsWizardFixture fix =
+    let tx = rifTranslated fix
+        addrText = renderAddr (rirstFundingAddress tx)
+        fundingSeed = rirstSeedTxIn tx
+        scopesSeed = rirstScopesSeedTxIn tx
+        registrySeed = rirstRegistrySeedTxIn tx
+        SlotNo upper = rirstUpperBoundSlot tx
+        scope = CoreDevelopment
+        fundingSeedText = renderTxIn fundingSeed
+        -- The registry-init fixture's 'placeholderScopeJSON'
+        -- pins the four deployed-at fields to the seed-split
+        -- funding TxIn (the canonical "where the registry
+        -- scripts were deployed" anchor), which we reach via
+        -- 'mintWalletTxIn'. The reference-scripts wallet
+        -- block uses a different TxIn ('rirstSeedTxIn').
+        registryDeployedAtText = renderTxIn mintWalletTxIn
+        answers =
+            RegistryInitReferenceScriptsAnswers
+                { rirScope = scope
+                , rirValidityHours = Nothing
+                , rirDescription =
+                    Just "registry-init bootstrap fixture"
+                , rirJustification = Just "test"
+                , rirDestinationLabel = Just "fixture"
+                , rirEvent = Just "registry-init"
+                , rirLabel = Just "registry-init"
+                , rirScopesSeedTxIn = scopesSeed
+                , rirRegistrySeedTxIn = registrySeed
+                , rirFundingSeedTxIn = fundingSeed
+                }
+        scopeRefs =
+            TreasuryRefs
+                { trAddress = addrText
+                , trScriptHash = T.replicate 56 "0"
+                , trPermissionsRewardAccount =
+                    T.replicate 56 "0"
+                }
+        registry =
+            RegistryView
+                { rvScopesDeployedAt = registryDeployedAtText
+                , rvPermissionsDeployedAt = registryDeployedAtText
+                , rvTreasuryDeployedAt = registryDeployedAtText
+                , rvRegistryDeployedAt = registryDeployedAtText
+                , rvRegistryPolicyId = T.replicate 56 "0"
+                , rvOwners = placeholderOwners
+                , rvTreasuryByScope =
+                    Map.singleton scope scopeRefs
+                }
+        scopeView =
+            ScopeView
+                { svScope = scope
+                , svRefs = scopeRefs
+                , svDefaultSigners = []
+                }
+        walletSel =
+            WalletSelection
+                { wsTxIn = fundingSeedText
                 , wsAddress = addrText
                 , wsExtraTxIns = []
                 }

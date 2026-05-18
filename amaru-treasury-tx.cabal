@@ -477,6 +477,7 @@ test-suite golden-tests
   other-modules:
     AdaDisburseGoldenSpec
     Amaru.Treasury.Tx.RegistryInitWizardMintSpec
+    Amaru.Treasury.Tx.RegistryInitWizardReferenceScriptsSpec
     Amaru.Treasury.Tx.RegistryInitWizardSeedSplitSpec
     EnvelopeOracleSpec
     GovernanceWithdrawalInitIntentSpec

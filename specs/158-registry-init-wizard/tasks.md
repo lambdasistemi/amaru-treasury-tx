@@ -231,13 +231,13 @@ Translation:
 
 ### Tests for Slice 4 (RED — written first, observed failing) ⚠️
 
-- [ ] T020 [P] [US2] Extend `/code/amaru-treasury-tx-issue-158/test/golden/Support/RegistryInitWizardFixtures.hs` with `referenceScriptsWizardFixture` and add hspec golden test in `/code/amaru-treasury-tx-issue-158/test/golden/Amaru/Treasury/Tx/RegistryInitWizardReferenceScriptsSpec.hs` asserting wizard ref-scripts intent → `tx-build` CBOR == `buildReferenceScriptsCore` CBOR byte-for-byte
-- [ ] T021 [P] [US1] Extend `/code/amaru-treasury-tx-issue-158/test/unit/Amaru/Treasury/Tx/RegistryInitWizardSpec.hs` with a round-trip property for the reference-scripts `SomeTreasuryIntent`
-- [ ] T022 [P] [US3] Refine the reference-scripts network-guard case in `/code/amaru-treasury-tx-issue-158/test/unit/Amaru/Treasury/Tx/RegistryInitWizardNetworkGuardSpec.hs` from placeholder Answers to real Answers
+- [X] T020 (commit: c54de054) [P] [US2] Extend `/code/amaru-treasury-tx-issue-158/test/golden/Support/RegistryInitWizardFixtures.hs` with `referenceScriptsWizardFixture` and add hspec golden test in `/code/amaru-treasury-tx-issue-158/test/golden/Amaru/Treasury/Tx/RegistryInitWizardReferenceScriptsSpec.hs` asserting wizard ref-scripts intent → `tx-build` CBOR == `buildReferenceScriptsCore` CBOR byte-for-byte
+- [X] T021 (commit: c54de054) [P] [US1] Extend `/code/amaru-treasury-tx-issue-158/test/unit/Amaru/Treasury/Tx/RegistryInitWizardSpec.hs` with a round-trip property for the reference-scripts `SomeTreasuryIntent`
+- [X] T022 (commit: c54de054) [P] [US3] Refine the reference-scripts network-guard case in `/code/amaru-treasury-tx-issue-158/test/unit/Amaru/Treasury/Tx/RegistryInitWizardNetworkGuardSpec.hs` from placeholder Answers to real Answers
 
 ### Implementation for Slice 4
 
-- [ ] T023 [US1] Implement `registryInitReferenceScriptsToIntent` (pure) in `/code/amaru-treasury-tx-issue-158/lib/Amaru/Treasury/Tx/RegistryInitWizard.hs` and wire the reference-scripts runner arm in `/code/amaru-treasury-tx-issue-158/lib/Amaru/Treasury/Cli/RegistryInitWizard.hs`
+- [X] T023 (commit: c54de054) [US1] Implement `registryInitReferenceScriptsToIntent` (pure; the operator-typed `--funding-seed-txin` is baked into the wallet block per ledger payload shape, not into `RegistryInitReferenceScriptsInputs`) in `/code/amaru-treasury-tx-issue-158/lib/Amaru/Treasury/Tx/RegistryInitWizard.hs` and wire the reference-scripts runner arm in `/code/amaru-treasury-tx-issue-158/lib/Amaru/Treasury/Cli/RegistryInitWizard.hs`
 
 **Checkpoint**: all three subcommands functional; goldens green; `./gate.sh` green.
 

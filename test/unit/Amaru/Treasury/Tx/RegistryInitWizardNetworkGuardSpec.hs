@@ -5,23 +5,25 @@ Module      : Amaru.Treasury.Tx.RegistryInitWizardNetworkGuardSpec
 Description : Devnet-only guard for the registry-init-wizard
 License     : Apache-2.0
 
-Slice 2 of #158 wired the seed-split arm. Slice 3 refines
-the mint arm from a placeholder to real Answers built via
-'Support.RegistryInitWizardFixtures.mintWizardFixture'-style
-inline data. The seed-split resolver MUST fire
+Slice 2 of #158 wired the seed-split arm. Slice 3 refined
+the mint arm from a placeholder to real Answers. Slice 4
+refines the reference-scripts arm on the same shape: real
+'RegistryInitReferenceScriptsAnswers' values are constructed
+and the resolver is exercised with each non-devnet network so
+the guard fires before any chain query.
+
+The seed-split resolver MUST fire
 'RegistryInitNonDevnetNetwork' for every non-devnet network
 (mainnet, preprod, preview) BEFORE any chain query happens.
 
 The mock resolver env's @wreQueryWalletUtxos@ raises with
 'error' if invoked — the tests pass iff the resolver
-short-circuits at the network guard. Both the seed-split
-and mint Answers shapes exercise the SAME resolver
+short-circuits at the network guard. All three Answers
+shapes exercise the SAME resolver
 ('resolveRegistryInitSeedSplit'), since the network guard
 fires in the resolver before the sub-action discriminator
-matters; the mint case proves the guard is reachable with
-real mint Answers in hand.
-
-Slice 4 will refine the reference-scripts case.
+matters; the mint and reference-scripts cases prove the
+guard is reachable with real Answers in hand.
 -}
 module Amaru.Treasury.Tx.RegistryInitWizardNetworkGuardSpec
     ( spec
@@ -57,6 +59,7 @@ import Amaru.Treasury.Scope (ScopeId (..))
 import Amaru.Treasury.Tx.RegistryInitWizard
     ( RegistryInitError (..)
     , RegistryInitMintAnswers (..)
+    , RegistryInitReferenceScriptsAnswers (..)
     , RegistryInitResolverEnv (..)
     , RegistryInitResolverInput (..)
     , resolveRegistryInitSeedSplit
@@ -83,9 +86,13 @@ spec = describe "registry-init-wizard devnet network guard" $ do
             mintRejects "preprod"
         it "rejects preview before any chain query" $
             mintRejects "preview"
-
--- TODO Slice 4: refine reference-scripts cases here from
--- placeholder Answers to real Answers.
+    describe "reference-scripts" $ do
+        it "rejects mainnet before any chain query" $
+            referenceScriptsRejects "mainnet"
+        it "rejects preprod before any chain query" $
+            referenceScriptsRejects "preprod"
+        it "rejects preview before any chain query" $
+            referenceScriptsRejects "preview"
 
 seedSplitRejects :: Text -> IO ()
 seedSplitRejects network = do
@@ -133,6 +140,44 @@ mintRejects network = do
                 , wriScope = rimScope answers
                 , wriRegistry = registry
                 , wriValidityHours = rimValidityHours answers
+                }
+        renv :: RegistryInitResolverEnv Identity
+        renv = strictMockResolverEnv
+        result =
+            answers `seq`
+                runIdentity (resolveRegistryInitSeedSplit renv input)
+    result `shouldSatisfy` isNonDevnet network
+
+{- | Reference-scripts network-guard case: real
+'RegistryInitReferenceScriptsAnswers' are constructed (and
+intentionally unused beyond proving they are inhabitable)
+and the same resolver is exercised with a non-devnet network
+so the guard fires before any chain query. The Answers value
+is computed strictly via @seq@ to defeat laziness pruning,
+mirroring Slice 3's mint case.
+-}
+referenceScriptsRejects :: Text -> IO ()
+referenceScriptsRejects network = do
+    let answers =
+            RegistryInitReferenceScriptsAnswers
+                { rirScope = CoreDevelopment
+                , rirValidityHours = Nothing
+                , rirDescription = Nothing
+                , rirJustification = Nothing
+                , rirDestinationLabel = Nothing
+                , rirEvent = Nothing
+                , rirLabel = Nothing
+                , rirScopesSeedTxIn = sampleScopesSeedTxIn
+                , rirRegistrySeedTxIn = sampleRegistrySeedTxIn
+                , rirFundingSeedTxIn = sampleFundingSeedTxIn
+                }
+        input =
+            RegistryInitResolverInput
+                { wriNetwork = network
+                , wriWalletAddrBech32 = walletAddr
+                , wriScope = rirScope answers
+                , wriRegistry = registry
+                , wriValidityHours = rirValidityHours answers
                 }
         renv :: RegistryInitResolverEnv Identity
         renv = strictMockResolverEnv
@@ -206,6 +251,9 @@ sampleRegistrySeedTxIn = mkTxIn (BS.replicate 32 0x55) 1
 
 sampleOwnerKeyHash :: KeyHash kr
 sampleOwnerKeyHash = KeyHash (mkHash (BS.replicate 28 0x11))
+
+sampleFundingSeedTxIn :: TxIn
+sampleFundingSeedTxIn = mkTxIn (BS.replicate 32 0x66) 2
 
 mkTxIn :: ByteString -> Integer -> TxIn
 mkTxIn bs ix =

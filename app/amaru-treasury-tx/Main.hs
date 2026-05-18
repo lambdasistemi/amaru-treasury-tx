@@ -33,6 +33,9 @@ import Amaru.Treasury.Cli.Envelope
     ( runDeEnvelope
     , runEnvelope
     )
+import Amaru.Treasury.Cli.RegistryInitWizard
+    ( runRegistryInitWizard
+    )
 import Amaru.Treasury.Cli.ReportRender
     ( runReportRender
     )
@@ -94,6 +97,8 @@ main = withUtf8 . withUpdateCheckMain $ do
         CmdWithdrawWizard wo ->
             withSocket g $ \socket ->
                 runWithdrawWizard g{goSocketPath = Just socket} wo
+        CmdRegistryInitWizard rwo ->
+            runRegistryInitWizard g rwo
         CmdTxBuild to ->
             withSocket g $ \socket ->
                 runTxBuild socket to

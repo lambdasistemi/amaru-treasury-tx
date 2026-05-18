@@ -132,6 +132,7 @@ library
     Amaru.Treasury.Cli.Passphrase
     Amaru.Treasury.Cli.RegistryInitWizard
     Amaru.Treasury.Cli.ReportRender
+    Amaru.Treasury.Cli.StakeRewardInitWizard
     Amaru.Treasury.Cli.Submit
     Amaru.Treasury.Cli.SwapCancel
     Amaru.Treasury.Cli.SwapCommon
@@ -192,6 +193,7 @@ library
     Amaru.Treasury.Tx.Envelope
     Amaru.Treasury.Tx.RegistryInitWizard
     Amaru.Treasury.Tx.Reorganize
+    Amaru.Treasury.Tx.StakeRewardInitWizard
     Amaru.Treasury.Tx.Submit
     Amaru.Treasury.Tx.Swap
     Amaru.Treasury.Tx.SwapCancel
@@ -382,6 +384,7 @@ test-suite unit-tests
     Amaru.Treasury.Cli.EnvelopeSpec
     Amaru.Treasury.Cli.ParserSpec
     Amaru.Treasury.Cli.RegistryInitWizardParserSpec
+    Amaru.Treasury.Cli.StakeRewardInitWizardParserSpec
     Amaru.Treasury.Cli.SwapCancelSpec
     Amaru.Treasury.Cli.VaultSpec
     Amaru.Treasury.Cli.WitnessSpec

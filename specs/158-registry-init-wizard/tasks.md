@@ -282,8 +282,8 @@ then reverting the patch before committing.
 
 **Orchestrator-owned** — no subagent. Commit subject: `docs(158): registry-init-wizard operator path`. Commit body must include `Tasks: T025, T026`.
 
-- [ ] T025 [US4] Update `/code/amaru-treasury-tx-issue-158/README.md` registry-init section with the three-subcommand invocation flow, operator-typed inter-tx flags visible at `mint` and `reference-scripts`, a "common mistakes" call-out (swapping `#0` and `#1`, stale txid, mismatched owner key hash), and forward references to [#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161) and [#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163)
-- [ ] T026 [US4] Update `/code/amaru-treasury-tx-issue-158/docs/local-devnet-smoke.md` registry-init section with the same three-subcommand flow, the unsafe inter-step carry warning, and forward references to #161 and #163
+- [X] T025 (commit: 9342bde5) [US4] Update `/code/amaru-treasury-tx-issue-158/README.md` registry-init section with the three-subcommand invocation flow, operator-typed inter-tx flags visible at `mint` and `reference-scripts`, a "common mistakes" call-out (swapping `#0` and `#1`, stale txid, mismatched owner key hash), and forward references to [#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161) and [#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163)
+- [X] T026 (commit: 9342bde5) [US4] Update `/code/amaru-treasury-tx-issue-158/docs/local-devnet-smoke.md` registry-init section with the same three-subcommand flow, the unsafe inter-step carry warning, and forward references to #161 and #163
 
 **Checkpoint**: docs aligned with delivered behavior; `./gate.sh` green; PR body refreshed.
 

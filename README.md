@@ -126,21 +126,69 @@ payload contracts are documented under
 `network` other than `devnet` for these seven actions, before any
 N2C connection (slice 4 of #157).
 
-The wizards that produce `bootstrap-intent.json` files ship in
+The wizards that produce `bootstrap-intent.json` files for the
+registry-init flow ship in
 [#158](https://github.com/lambdasistemi/amaru-treasury-tx/issues/158)
-(`registry-init-wizard`),
+as three subcommands of `amaru-treasury-tx registry-init-wizard`,
+one per sub-action shipped by #157:
+
+```bash
+# Step 1: seed-split (no inter-tx inputs).
+amaru-treasury-tx registry-init-wizard seed-split \
+    --wallet-addr <devnet-bech32> \
+    --metadata <metadata.json> \
+    --scope <scope-id> \
+    --out seed-split.intent.json
+amaru-treasury-tx tx-build --intent seed-split.intent.json --out seed-split.tx.cbor.hex
+amaru-treasury-tx witness ...
+amaru-treasury-tx submit  ...
+# Operator records seed-split's submitted txid.
+
+# Step 2: mint (operator hand-carries seed TxIns + owner key hash).
+amaru-treasury-tx registry-init-wizard mint \
+    --wallet-addr <devnet-bech32> \
+    --metadata <metadata.json> \
+    --scope <scope-id> \
+    --scopes-seed-txin   <seed-split-txid>#0 \
+    --registry-seed-txin <seed-split-txid>#1 \
+    --owner-key-hash     <hex28> \
+    --out mint.intent.json
+# ... tx-build → witness → submit; operator records the mint txid.
+
+# Step 3: reference-scripts (operator hand-carries seed TxIns + funding seed).
+amaru-treasury-tx registry-init-wizard reference-scripts \
+    --wallet-addr <devnet-bech32> \
+    --metadata <metadata.json> \
+    --scope <scope-id> \
+    --scopes-seed-txin   <seed-split-txid>#0 \
+    --registry-seed-txin <seed-split-txid>#1 \
+    --funding-seed-txin  <wallet-utxo>#N \
+    --out reference-scripts.intent.json
+# ... tx-build → witness → submit.
+```
+
+**Explicit inter-tx unsafe** — the wizard does not simulate cross-step
+tx bodies. The operator types every value that crosses a sub-step
+boundary (seed TxIns, owner key hash, funding seed UTxO). Mistyping
+any of them — swapping `#0` and `#1`, pasting a stale txid, or using
+the wrong key hash — yields invalid intents that fail at `tx-build`
+(best case) or at on-chain validation (worst case). This is deliberate;
+the resumable client state that supersedes this manual carry is
+parked in
+[#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163).
+
+The wizards for stake-reward-init and governance-withdrawal-init are
+tracked by
 [#159](https://github.com/lambdasistemi/amaru-treasury-tx/issues/159)
-(`stake-reward-init-wizard`), and
+and
 [#160](https://github.com/lambdasistemi/amaru-treasury-tx/issues/160)
-(`governance-withdrawal-init-wizard`). The bash CLI smoke that chains
-the full bootstrap + disburse flow against a real DevNet through the
-shipped CLI lands in
+respectively. The bash CLI smoke that chains the full bootstrap +
+disburse flow against a real DevNet through the shipped CLI lands in
 [#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161).
-Until those tickets merge, the producer side of the intent JSON is
-the test-support helpers under `test/golden/Support/` (which also
-double as the source of truth for the byte-identical CBOR-equivalence
-goldens between `tx-build --intent` and the library construction
-core).
+Until #161 merges, the bare-intent goldens under
+`test/golden/Support/` plus `test/golden/Support/RegistryInitWizardFixtures.hs`
+remain the byte-identical CBOR-equivalence source of truth between
+`tx-build --intent` and the library construction core.
 
 The end-to-end DevNet runners under
 `lib/Amaru/Treasury/Devnet/{RegistryInit,StakeRewardInit,

@@ -91,12 +91,22 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
 
 ## Registry Initiator Boundary
 
-After #157 the shipped operator path for this boundary is the
-three-step `amaru-treasury-tx tx-build --intent
-<registry-init-{seed-split,mint,reference-scripts}.json>` chain (see
-the bootstrap section in [README.md](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/README.md#devnet-bootstrap-via-tx-build---intent)). The local smoke
-keeps driving the library function directly via `SmokeSpec`, which
-calls into `Amaru.Treasury.Devnet.Runner.runDevnetRegistryInit`:
+After #157 and #158 the shipped operator path for this boundary is
+the three-subcommand `amaru-treasury-tx registry-init-wizard
+{seed-split | mint | reference-scripts}` flow, each producing one
+intent JSON consumed by `amaru-treasury-tx tx-build --intent` (see
+the bootstrap section in [README.md](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/README.md#devnet-bootstrap-via-tx-build---intent)).
+The wizard is **explicitly inter-tx unsafe**: the operator types every
+value that crosses a sub-step boundary (seed TxIns from `seed-split`,
+the owner key hash, the funding seed UTxO). The resumable client
+state that will supersede this manual carry is parked in
+[#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163).
+The bash smoke that drives the full chain through the shipped CLI on
+a real DevNet lands in
+[#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161);
+until #161 merges, the local smoke below keeps driving the library
+function directly via `SmokeSpec`, which calls into
+`Amaru.Treasury.Devnet.Runner.runDevnetRegistryInit`:
 
 ```bash
 just devnet-smoke registry-init

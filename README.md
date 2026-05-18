@@ -177,12 +177,53 @@ the resumable client state that supersedes this manual carry is
 parked in
 [#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163).
 
-The wizards for stake-reward-init and governance-withdrawal-init are
-tracked by
+The wizards that produce `bootstrap-intent.json` files for the
+stake-reward-init flow ship in
 [#159](https://github.com/lambdasistemi/amaru-treasury-tx/issues/159)
-and
-[#160](https://github.com/lambdasistemi/amaru-treasury-tx/issues/160)
-respectively. The bash CLI smoke that chains the full bootstrap +
+as two independent subcommands of
+`amaru-treasury-tx stake-reward-init-wizard`, one per sub-action
+shipped by #157. Both subcommands consume the `registry.json`
+artifact produced by `registry-init-wizard reference-scripts` plus
+an operator-typed funding seed:
+
+```bash
+# Pre-requisite: complete the registry-init bootstrap above; you
+# now have registry.json on disk.
+
+# Step 1: script-account (registers treasury reward account).
+amaru-treasury-tx stake-reward-init-wizard script-account \
+    --wallet-addr <devnet-bech32> \
+    --registry <path/registry.json> \
+    --funding-seed-txin <wallet-utxo-txid>#<ix> \
+    --out script-account.intent.json
+amaru-treasury-tx tx-build --intent script-account.intent.json --out script-account.tx.cbor.hex
+amaru-treasury-tx witness ...
+amaru-treasury-tx submit  ...
+
+# Step 2: plain-account (registers permissions reward account;
+#         independent of step 1 — order does not matter).
+amaru-treasury-tx stake-reward-init-wizard plain-account \
+    --wallet-addr <devnet-bech32> \
+    --registry <path/registry.json> \
+    --funding-seed-txin <wallet-utxo-txid>#<ix> \
+    --out plain-account.intent.json
+amaru-treasury-tx tx-build --intent plain-account.intent.json --out plain-account.tx.cbor.hex
+amaru-treasury-tx witness ...
+amaru-treasury-tx submit  ...
+```
+
+The two stake-reward sub-actions are **independent** at the wizard
+layer — neither feeds into the other; the operator may invoke them
+in either order. Common mistakes the wizard cannot detect: pointing
+`--registry` at a stale or never-submitted bootstrap; reusing a
+spent `--funding-seed-txin`; picking a registry from a different
+devnet boot. These yield invalid intents that fail at `tx-build`
+(best case) or at on-chain validation (worst case). The same
+resumable client state parked in #163 will supersede this manual
+carry.
+
+The wizard for governance-withdrawal-init is tracked by
+[#160](https://github.com/lambdasistemi/amaru-treasury-tx/issues/160). The bash CLI smoke that chains the full bootstrap +
 disburse flow against a real DevNet through the shipped CLI lands in
 [#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161).
 Until #161 merges, the bare-intent goldens under

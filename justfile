@@ -123,6 +123,11 @@ red match="":
 devnet-smoke phase="node":
     scripts/smoke/devnet-local --phase "{{ phase }}"
 
+# Drive the shipped CLI through the local DevNet bootstrap + disburse play (#161).
+# Forwards any extra arguments to scripts/smoke/smoke.sh.
+devnet-cli-smoke *args:
+    scripts/smoke/smoke.sh {{ args }}
+
 # Full CI pipeline (build, tests, lint, format-check)
 ci:
     just build

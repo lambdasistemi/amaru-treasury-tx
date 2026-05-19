@@ -32,11 +32,11 @@ description: "Task list for #161 - CLI DevNet smoke proof"
 
 **Independent Test**: Unit/static tests fail if `scripts/smoke/smoke.sh` or the host imports/calls forbidden library-runner surfaces.
 
-- [ ] T001 [P] [US2] Add `test/unit/Amaru/Treasury/Smoke/CliDevnetSmokeSpec.hs` with a RED test that scans `scripts/smoke/smoke.sh`, `app/devnet-cli-smoke-host/Main.hs` when present, and any smoke helper scripts for forbidden strings: `runDevnet`, `Amaru.Treasury.Devnet.Runner`, `cabal test devnet-tests`, and `DEVNET_SMOKE_PHASE`.
-- [ ] T002 [P] [US1] Add executable `scripts/smoke/smoke.sh` scaffold with `--run-dir`, `--inside-devnet`, `--phase`, `--timeout-seconds`, `--force`, and `--help`; it must preflight required tools and create the run-dir layout without starting DevNet yet.
-- [ ] T003 [US1] Add `just devnet-cli-smoke` to invoke `scripts/smoke/smoke.sh`.
-- [ ] T004 [US2] Add a governance reachability audit note in `specs/161-cli-devnet-smoke/plan.md` or a checked test fixture documenting that legacy `SmokeSpec` submits a separate vote tx while the shipped CLI currently has no vote action.
-- [ ] T005 [US2] Register the new static test in `amaru-treasury-tx.cabal` and make it pass without weakening the forbidden-string list.
+- [X] T001 (commit: c2cab920) [P] [US2] Add `test/unit/Amaru/Treasury/Smoke/CliDevnetSmokeSpec.hs` with a RED test that scans `scripts/smoke/smoke.sh`, `app/devnet-cli-smoke-host/Main.hs` when present, and any smoke helper scripts for forbidden strings: `runDevnet`, `Amaru.Treasury.Devnet.Runner`, `cabal test devnet-tests`, and `DEVNET_SMOKE_PHASE`.
+- [X] T002 (commit: c2cab920) [P] [US1] Add executable `scripts/smoke/smoke.sh` scaffold with `--run-dir`, `--inside-devnet`, `--phase`, `--timeout-seconds`, `--force`, and `--help`; it must preflight required tools and create the run-dir layout without starting DevNet yet.
+- [X] T003 (commit: c2cab920) [US1] Add `just devnet-cli-smoke` to invoke `scripts/smoke/smoke.sh`.
+- [X] T004 (commit: c2cab920) [US2] Add a governance reachability audit note in `specs/161-cli-devnet-smoke/plan.md` or a checked test fixture documenting that legacy `SmokeSpec` submits a separate vote tx while the shipped CLI currently has no vote action.
+- [X] T005 (commit: c2cab920) [US2] Register the new static test in `amaru-treasury-tx.cabal` and make it pass without weakening the forbidden-string list.
 
 Checkpoint: `./gate.sh` green; static no-fallback guard is active.
 

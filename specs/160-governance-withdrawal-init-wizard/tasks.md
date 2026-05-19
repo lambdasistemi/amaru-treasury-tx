@@ -35,8 +35,8 @@ No setup tasks. Branch, draft PR, and `gate.sh` already exist.
 
 These sidecars may run while Slice 1 is coding. They are deliberately no-edit lanes: they reduce uncertainty for Slices 2, 3, and 5 without racing the implementation branch.
 
-- [ ] T000A [P] Fixture/deposit scout. Inspect existing `test/golden/Support/GovernanceWithdrawalInitFixtures.hs`, `lib/Amaru/Treasury/Devnet/GovernanceWithdrawalInit.hs`, `lib/Amaru/Treasury/Devnet/GovernanceWithdrawalInit/Core.hs`, and the chain-context/pparams helpers. Output `/tmp/gov-init/sidecars/fixture-deposit.md` with: canonical fixture constructors to reuse, artifact loader names, cross-validator name, registry/accounts fixture derivation notes, pparams/deposit field names, and the conservative fee/headroom recommendation. No repository edits.
-- [ ] T000B [P] Docs scout. Inspect `README.md` and `docs/local-devnet-smoke.md`. Output `/tmp/gov-init/sidecars/docs-map.md` with exact insertion points for the two-subcommand operator path, witness contract, DRep-equals-proposer caveat, deposit-aware shortfall explanation, unsafe inter-step carry warning, and #161/#163 forward references. No repository edits.
+- [x] T000A [P] Fixture/deposit scout. Inspect existing `test/golden/Support/GovernanceWithdrawalInitFixtures.hs`, `lib/Amaru/Treasury/Devnet/GovernanceWithdrawalInit.hs`, `lib/Amaru/Treasury/Devnet/GovernanceWithdrawalInit/Core.hs`, and the chain-context/pparams helpers. Output `/tmp/gov-init/sidecars/fixture-deposit.md` with: canonical fixture constructors to reuse, artifact loader names, cross-validator name, registry/accounts fixture derivation notes, pparams/deposit field names, and the conservative fee/headroom recommendation. No repository edits. Completed as read-only sidecar output.
+- [x] T000B [P] Docs scout. Inspect `README.md` and `docs/local-devnet-smoke.md`. Output `/tmp/gov-init/sidecars/docs-map.md` with exact insertion points for the two-subcommand operator path, witness contract, DRep-equals-proposer caveat, deposit-aware shortfall explanation, unsafe inter-step carry warning, and #161/#163 forward references. No repository edits. Completed as read-only sidecar output.
 
 ## Phase 3: Slice 1 - Parser scaffold
 
@@ -164,8 +164,8 @@ Checkpoint: docs, PR body, and `./gate.sh` green.
 
 Tasks:
 
-- [ ] T029 Run finalization audit: every behavior commit has a `Tasks:` trailer, every task completed by code has a matching checked box with commit SHA, `README.md`/docs/PR body/spec/plan/tasks agree, CI is green or pending only for expected docs-preview cleanup.
-- [ ] T030 Remove `gate.sh` in `chore: drop gate.sh (ready for review) (#160)`, push, and mark PR #169 ready for review.
+- [x] T029 Run finalization audit: every behavior commit has a `Tasks:` trailer, every task completed by code has a matching checked box with commit SHA, `README.md`/docs/PR body/spec/plan/tasks agree, CI is green or pending only for expected docs-preview cleanup. Completed before final drop-gate commit.
+- [x] T030 Remove `gate.sh` in `chore: drop gate.sh (ready for review) (#160)`, push, and mark PR #169 ready for review. Completed in final drop-gate commit.
 
 ## Dependencies and Execution Order
 

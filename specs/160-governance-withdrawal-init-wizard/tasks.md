@@ -120,12 +120,12 @@ Owned files:
 
 Tasks:
 
-- [ ] T019 [P] [US2] Extend fixture helper and add materialization parity golden.
-- [ ] T020 [P] [US1] Add round-trip test for materialization `SomeTreasuryIntent` JSON.
-- [ ] T021 [P] [US3] Refine materialization network-guard tests with real answers.
-- [ ] T022 [P] [US4] Add materialization shortfall test proving the total does not include governance deposits.
-- [ ] T023 [US1] Implement pure `governanceWithdrawalInitMaterializationToIntent`, extracting treasury reward account hash, treasury address, treasury ref TxIn, registry ref TxIn, and operator-typed rewards lovelace from parsed inputs.
-- [ ] T024 [US1] Wire the `materialization` runner to resolve -> translate -> `encodeSomeTreasuryIntent` -> atomic `--out` write honoring `--force`.
+- [x] T019 [P] [US2] Extend fixture helper and add materialization parity golden. Completed in Slice 3 commit.
+- [x] T020 [P] [US1] Add round-trip test for materialization `SomeTreasuryIntent` JSON. Completed in Slice 3 commit.
+- [x] T021 [P] [US3] Refine materialization network-guard tests with real answers. Completed in Slice 3 commit.
+- [x] T022 [P] [US4] Add materialization shortfall test proving the total does not include governance deposits. Completed in Slice 3 commit.
+- [x] T023 [US1] Implement pure `governanceWithdrawalInitMaterializationToIntent`, extracting treasury reward account hash, treasury address, treasury ref TxIn, registry ref TxIn, and operator-typed rewards lovelace from parsed inputs. Completed in Slice 3 commit.
+- [x] T024 [US1] Wire the `materialization` runner to resolve -> translate -> `encodeSomeTreasuryIntent` -> atomic `--out` write honoring `--force`. Completed in Slice 3 commit.
 
 Checkpoint: both subcommands functional; materialization golden, unit tests, and `./gate.sh` green.
 

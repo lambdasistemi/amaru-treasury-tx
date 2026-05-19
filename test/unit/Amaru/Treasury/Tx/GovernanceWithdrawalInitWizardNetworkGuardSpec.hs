@@ -47,8 +47,10 @@ import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 
 import Amaru.Treasury.Tx.GovernanceWithdrawalInitWizard
     ( GovernanceWithdrawalInitError (..)
+    , GovernanceWithdrawalInitMaterializationResolverEnv (..)
     , GovernanceWithdrawalInitResolverEnv (..)
     , GovernanceWithdrawalInitResolverInput (..)
+    , resolveGovernanceWithdrawalInitMaterialization
     , resolveGovernanceWithdrawalInitProposal
     )
 
@@ -62,6 +64,13 @@ spec =
                 proposalRejects "preprod"
             it "rejects preview before any chain query or artifact parse" $
                 proposalRejects "preview"
+        describe "materialization" $ do
+            it "rejects mainnet before any chain query or artifact parse" $
+                materializationRejects "mainnet"
+            it "rejects preprod before any chain query or artifact parse" $
+                materializationRejects "preprod"
+            it "rejects preview before any chain query or artifact parse" $
+                materializationRejects "preview"
 
 proposalRejects :: Text -> IO ()
 proposalRejects network = do
@@ -107,6 +116,60 @@ strictMockResolverEnv =
         , gwireDepositComponents =
             error
                 "gwireDepositComponents must not be called \
+                \when the network guard fires"
+        }
+
+materializationRejects :: Text -> IO ()
+materializationRejects network = do
+    let input =
+            GovernanceWithdrawalInitResolverInput
+                { gwiriNetwork = network
+                , gwiriWalletAddrBech32 = walletAddr
+                , gwiriRegistryPath = "(unused)"
+                , gwiriAccountsPath = "(unused)"
+                , gwiriValidityHours = Nothing
+                }
+        renv :: GovernanceWithdrawalInitMaterializationResolverEnv Identity
+        renv = strictMockMaterializationResolverEnv
+        result =
+            runIdentity
+                ( resolveGovernanceWithdrawalInitMaterialization
+                    renv
+                    input
+                )
+    sampleSeedTxIn `seq`
+        result `shouldSatisfy` isNonDevnet network
+
+{- | Mirror of 'strictMockResolverEnv' for the
+materialization arm. Every backend hook raises so the
+network-guard test fails loudly the moment the resolver
+reaches any one of them. 'gwimreFloorComponents' is a pure
+field (not @m@-wrapped), so a benign value is fine — the
+guard fires before it is consumed.
+-}
+strictMockMaterializationResolverEnv
+    :: GovernanceWithdrawalInitMaterializationResolverEnv Identity
+strictMockMaterializationResolverEnv =
+    GovernanceWithdrawalInitMaterializationResolverEnv
+        { gwimreQueryWalletUtxos = \_ ->
+            error
+                "gwimreQueryWalletUtxos must not be called \
+                \when the network guard fires"
+        , gwimreComputeUpperBound = \_ ->
+            error
+                "gwimreComputeUpperBound must not be called \
+                \when the network guard fires"
+        , gwimreReadRegistry = \_ ->
+            error
+                "gwimreReadRegistry must not be called when \
+                \the network guard fires"
+        , gwimreReadAccounts = \_ ->
+            error
+                "gwimreReadAccounts must not be called when \
+                \the network guard fires"
+        , gwimreFloorComponents =
+            error
+                "gwimreFloorComponents must not be evaluated \
                 \when the network guard fires"
         }
 

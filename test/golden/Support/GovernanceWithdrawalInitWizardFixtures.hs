@@ -38,13 +38,23 @@ hand-rolled JSON is round-tripped through
 'readDevnetGovernanceWithdrawalRegistry'.
 -}
 module Support.GovernanceWithdrawalInitWizardFixtures
-    ( proposalWizardFixture
+    ( -- * Proposal arm
+      proposalWizardFixture
     , proposalAnswersFixturePath
     , proposalIntentFixturePath
     , registryFixturePath
     , accountsFixturePath
     , parsedRegistryFromProposalFixture
     , parsedAccountsFromProposalFixture
+
+      -- * Materialization arm
+    , materializationWizardFixture
+    , materializationAnswersFixturePath
+    , materializationIntentFixturePath
+    , parsedRegistryFromMaterializationFixture
+    , parsedAccountsFromMaterializationFixture
+
+      -- * On-disk JSON renderers (shared)
     , renderRegistryFixture
     , renderAccountsFixture
     ) where
@@ -75,6 +85,7 @@ import Cardano.Ledger.BaseTypes
     , mkTxIxPartial
     , txIxToInt
     )
+import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Credential (Credential (..))
 import Cardano.Ledger.Hashes
     ( ScriptHash (..)
@@ -94,13 +105,18 @@ import Amaru.Treasury.Devnet.GovernanceWithdrawalInit
     , validateGovernanceWithdrawalPrerequisites
     )
 import Amaru.Treasury.IntentJSON
-    ( GovernanceWithdrawalInitProposalTx (..)
+    ( GovernanceWithdrawalInitMaterializationTx (..)
+    , GovernanceWithdrawalInitProposalTx (..)
     )
 import Amaru.Treasury.Registry.Derive (scriptHashToHex)
 import Amaru.Treasury.Tx.GovernanceWithdrawalInitWizard
     ( DepositComponents (..)
     , GovernanceWithdrawalInitEnv (..)
+    , GovernanceWithdrawalInitMaterializationAnswers (..)
+    , GovernanceWithdrawalInitMaterializationEnv (..)
     , GovernanceWithdrawalInitProposalAnswers (..)
+    , MaterializationFloorComponents (..)
+    , defaultMaterializationFloorComponents
     )
 import Amaru.Treasury.Tx.SwapWizard
     ( WalletSelection (..)
@@ -129,6 +145,27 @@ registryFixturePath =
 accountsFixturePath :: FilePath
 accountsFixturePath =
     "test/fixtures/governance-withdrawal-init-wizard/accounts.json"
+
+materializationAnswersFixturePath :: FilePath
+materializationAnswersFixturePath =
+    "test/fixtures/governance-withdrawal-init-wizard/materialization-answers.json"
+
+materializationIntentFixturePath :: FilePath
+materializationIntentFixturePath =
+    "test/fixtures/governance-withdrawal-init-wizard/materialization-intent.json"
+
+{- | The materialization arm builds its
+@DevnetGovernanceWithdrawalRegistry@ /
+@DevnetGovernanceStakeRewardAccounts@ projections
+in-memory (no on-disk artifact pair). The proposal-arm
+fixtures @registry.json@ + @accounts.json@ encode the
+proposal placeholder for @treasuryAddress@ (the funding
+address); the materialization translator consumes the
+registry's @treasuryAddress@ verbatim so the two arms
+diverge on that field. Keeping the materialization
+projection in-memory avoids forking a second on-disk
+artifact pair owned outside this slice.
+-}
 
 -- ----------------------------------------------------
 -- Wizard fixture co-derivation
@@ -260,6 +297,159 @@ parsedAccountsFromProposalFixture fix =
     let treasuryHashHex =
             scriptHashToHex
                 (treasuryAccountScriptHash (gwifTranslated fix))
+        permissionsHashHex = T.replicate 56 "5"
+    in  DevnetGovernanceStakeRewardAccounts
+            { dgsrasTreasury =
+                DevnetGovernanceStakeRewardAccount
+                    { dgsraScriptHash = treasuryHashHex
+                    , dgsraRewardAccount = treasuryHashHex
+                    , dgsraLedgerNetwork = "Testnet"
+                    , dgsraRegistered = True
+                    , dgsraRewardsLovelace = 0
+                    }
+            , dgsrasPermissions =
+                DevnetGovernanceStakeRewardAccount
+                    { dgsraScriptHash = permissionsHashHex
+                    , dgsraRewardAccount = permissionsHashHex
+                    , dgsraLedgerNetwork = "Testnet"
+                    , dgsraRegistered = True
+                    , dgsraRewardsLovelace = 0
+                    }
+            }
+
+-- ----------------------------------------------------
+-- Materialization fixture co-derivation
+-- ----------------------------------------------------
+
+{- | Build the wizard-side @(Answers, Env)@ for the
+@materialization@ sub-action from the same
+'Support.GovernanceWithdrawalInitFixtures.materializationFixture'
+record that drives the library-core golden.
+
+The wizard translation
+('Amaru.Treasury.Tx.GovernanceWithdrawalInitWizard.governanceWithdrawalInitMaterializationToIntent')
+reads four fields from the parsed registry —
+@dgwrTreasuryScriptHashText@, @dgwrTreasuryAddressText@,
+@dgwrTreasuryRef@, @dgwrRegistryRef@ — and one operator-
+typed field (@gwimaRewardsLovelace@). The accounts
+projection is consumed only for cross-validation. The
+'MaterializationFloorComponents' carried in the Env is the
+default operator-facing shortfall floor (fee + min-UTxO +
+collateral headroom), with NO governance deposit terms
+(FR-008 for the materialization arm).
+-}
+materializationWizardFixture
+    :: GovernanceWithdrawalInitFixture
+        GovernanceWithdrawalInitMaterializationTx
+    -> ( GovernanceWithdrawalInitMaterializationAnswers
+       , GovernanceWithdrawalInitMaterializationEnv
+       )
+materializationWizardFixture fix =
+    let tx = gwifTranslated fix
+        fundingSeed = gwimtSeedTxIn tx
+        fundingAddr = gwimtFundingAddress tx
+        SlotNo upper = gwimtUpperBoundSlot tx
+        addrText = renderAddr fundingAddr
+        Coin rewards = gwimtRewardsAmount tx
+        registry = parsedRegistryFromMaterializationFixture fix
+        accounts = parsedAccountsFromMaterializationFixture fix
+        prereqs =
+            case validateGovernanceWithdrawalPrerequisites
+                registry
+                accounts of
+                Right p -> p
+                Left e ->
+                    error
+                        ( "materializationWizardFixture: \
+                          \cross-validator unexpectedly \
+                          \rejected the fixture: "
+                            <> show e
+                        )
+        walletSel =
+            WalletSelection
+                { wsTxIn = txInText fundingSeed
+                , wsAddress = addrText
+                , wsExtraTxIns = []
+                }
+        env =
+            GovernanceWithdrawalInitMaterializationEnv
+                { gwimeNetwork = "devnet"
+                , gwimeUpperBoundSlot = upper
+                , gwimeRegistry = registry
+                , gwimeAccounts = accounts
+                , gwimePrerequisites = prereqs
+                , gwimeWalletSelection = walletSel
+                , gwimeFloorComponents =
+                    defaultMaterializationFloorComponents
+                }
+        answers =
+            GovernanceWithdrawalInitMaterializationAnswers
+                { gwimaValidityHours = Nothing
+                , gwimaFundingSeedTxIn = fundingSeed
+                , gwimaRewardsLovelace = rewards
+                }
+    in  (answers, env)
+
+{- | The materialization-side 'DevnetGovernanceWithdrawalRegistry'
+projection. Differs from 'parsedRegistryFromProposalFixture'
+in two material ways:
+
+* @dgwrTreasuryAddressText@ is the treasury CONTRACT
+  address ('gwimtTreasuryAddress' / the @ttAddress@ of the
+  derived treasury target) — the destination the
+  materialization withdrawal pays into and the value the
+  wizard translator passes through verbatim.
+* @dgwrTreasuryRef@ + @dgwrRegistryRef@ match the
+  fixture's @gwimtTreasuryRefTxIn@ /
+  @gwimtRegistryRefTxIn@ so the wizard's translated
+  payload's @treasuryRefTxIn@ + @registryRefTxIn@ equal
+  the library-core's expectations and CBOR parity holds.
+-}
+parsedRegistryFromMaterializationFixture
+    :: GovernanceWithdrawalInitFixture
+        GovernanceWithdrawalInitMaterializationTx
+    -> DevnetGovernanceWithdrawalRegistry
+parsedRegistryFromMaterializationFixture fix =
+    let tx = gwifTranslated fix
+        treasuryScriptHash =
+            materializationTreasuryAccountScriptHash tx
+        treasuryHashHex = scriptHashToHex treasuryScriptHash
+        treasuryAddr = gwimtTreasuryAddress tx
+        treasuryAddrText = renderAddr treasuryAddr
+        -- Placeholders for the two refs not consumed by
+        -- the materialization translator.
+        anchorIn n = mkTxIn (BS.replicate 32 n) 0
+    in  DevnetGovernanceWithdrawalRegistry
+            { dgwrScopesRef = anchorIn 0x10
+            , dgwrRegistryRef = gwimtRegistryRefTxIn tx
+            , dgwrPermissionsRef = anchorIn 0x12
+            , dgwrTreasuryRef = gwimtTreasuryRefTxIn tx
+            , dgwrRegistryPolicyId = T.replicate 56 "0"
+            , dgwrPermissionsScriptHashText = T.replicate 56 "5"
+            , dgwrPermissionsScriptHash =
+                ScriptHash (mkHash (BS.replicate 28 0x55))
+            , dgwrTreasuryScriptHashText = treasuryHashHex
+            , dgwrTreasuryScriptHash = treasuryScriptHash
+            , dgwrTreasuryAddressText = treasuryAddrText
+            , dgwrTreasuryAddress = treasuryAddr
+            , dgwrOwnerKeyHash = T.replicate 56 "0"
+            }
+
+{- | The materialization-side
+'DevnetGovernanceStakeRewardAccounts' projection. Same
+shape as the proposal arm — the cross-validator's
+contract is identical across the two arms.
+-}
+parsedAccountsFromMaterializationFixture
+    :: GovernanceWithdrawalInitFixture
+        GovernanceWithdrawalInitMaterializationTx
+    -> DevnetGovernanceStakeRewardAccounts
+parsedAccountsFromMaterializationFixture fix =
+    let treasuryHashHex =
+            scriptHashToHex
+                ( materializationTreasuryAccountScriptHash
+                    (gwifTranslated fix)
+                )
         permissionsHashHex = T.replicate 56 "5"
     in  DevnetGovernanceStakeRewardAccounts
             { dgsrasTreasury =
@@ -442,6 +632,24 @@ treasuryAccountScriptHash tx =
                 \gwiptTreasuryAccount carries a KeyHashObj, \
                 \expected ScriptHashObj — fixture invariant \
                 \violated"
+
+{- | Same script-hash extraction pattern as
+'treasuryAccountScriptHash' but for the materialization tx
+record. The library fixture builds the materialization
+treasury account with the same shape (script-credentialled
+account), so the pattern-match is total in practice.
+-}
+materializationTreasuryAccountScriptHash
+    :: GovernanceWithdrawalInitMaterializationTx -> ScriptHash
+materializationTreasuryAccountScriptHash tx =
+    case gwimtTreasuryRewardAccount tx of
+        AccountAddress _ (AccountId (ScriptHashObj h)) -> h
+        AccountAddress _ (AccountId (KeyHashObj _)) ->
+            error
+                "materializationWizardFixture: \
+                \gwimtTreasuryRewardAccount carries a \
+                \KeyHashObj, expected ScriptHashObj — \
+                \fixture invariant violated"
 
 bytesToHex :: ByteString -> Text
 bytesToHex = TE.decodeUtf8 . B16.encode

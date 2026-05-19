@@ -88,6 +88,7 @@ import Amaru.Treasury.Devnet.GovernanceWithdrawalInit
     )
 import Amaru.Treasury.IntentJSON
     ( Action (..)
+    , GovernanceWithdrawalInitMaterializationInputs (..)
     , GovernanceWithdrawalInitProposalInputs (..)
     , RationaleJSON (..)
     , SAction (..)
@@ -102,9 +103,16 @@ import Amaru.Treasury.IntentJSON.Common (parseAddr)
 import Amaru.Treasury.Tx.GovernanceWithdrawalInitWizard
     ( DepositComponents (..)
     , GovernanceWithdrawalInitError (..)
+    , GovernanceWithdrawalInitMaterializationResolverEnv (..)
     , GovernanceWithdrawalInitResolverEnv (..)
     , GovernanceWithdrawalInitResolverInput (..)
+    , MaterializationFloorComponents (..)
+    , materializationCollateralHeadroomLovelace
+    , materializationEstimatedFeeLovelace
+    , materializationMinUtxoHeadroomLovelace
+    , materializationWalletFloorLovelace
     , proposalWalletFloorLovelace
+    , resolveGovernanceWithdrawalInitMaterialization
     , resolveGovernanceWithdrawalInitProposal
     )
 
@@ -114,6 +122,15 @@ spec = describe "governance-withdrawal-init-wizard" $ do
         it
             "encodes and decodes a proposal SomeTreasuryIntent without loss"
             roundTripProposal
+
+    describe "materialization" $ do
+        it
+            "encodes and decodes a materialization SomeTreasuryIntent without loss"
+            roundTripMaterialization
+        it
+            "wallet shortfall floor sums fee + min-utxo + collateral headroom \
+            \and does NOT include any governance/stake/drep deposit terms"
+            materializationShortfallExcludesDeposits
 
     describe "registry-file parse" $ do
         it
@@ -260,6 +277,128 @@ sampleRationale =
         , rjJustification = "test"
         , rjDestinationLabel = "fixture"
         }
+
+-- ----------------------------------------------------
+-- Materialization round-trip
+-- ----------------------------------------------------
+
+{- | Round-trip a hand-rolled materialization
+'SomeTreasuryIntent'. Pins the
+@TreasuryIntent 'GovernanceWithdrawalInitMaterialization@
+schema without needing a full resolver-Env construction.
+-}
+roundTripMaterialization :: IO ()
+roundTripMaterialization = do
+    let intent = sampleMaterializationIntent
+        some =
+            SomeTreasuryIntent
+                SGovernanceWithdrawalInitMaterialization
+                intent
+        encoded = encodeSomeTreasuryIntent some
+    decodeTreasuryIntent encoded `shouldBe` Right some
+
+sampleMaterializationIntent
+    :: TreasuryIntent 'GovernanceWithdrawalInitMaterialization
+sampleMaterializationIntent =
+    TreasuryIntent
+        { tiSAction = SGovernanceWithdrawalInitMaterialization
+        , tiSchema = 1
+        , tiNetwork = "devnet"
+        , tiWallet =
+            WalletJSON
+                { wjTxIn =
+                    "bb00000000000000000000000000000000000000000000000000000000000000#0"
+                , wjAddress = sampleAddrText
+                , wjExtraTxIns = []
+                }
+        , tiScope = sampleScope
+        , tiSigners = []
+        , tiValidityUpperBoundSlot = 1_000_100
+        , tiRationale = sampleRationale
+        , tiPayload =
+            GovernanceWithdrawalInitMaterializationInputs
+                { gwimiTreasuryRewardAccountHash = treasuryHashHex
+                , gwimiTreasuryAddress = sampleAddrText
+                , gwimiTreasuryRefTxIn =
+                    "cc00000000000000000000000000000000000000000000000000000000000000#1"
+                , gwimiRegistryRefTxIn =
+                    "dd00000000000000000000000000000000000000000000000000000000000000#2"
+                , gwimiRewardsLovelace = 25_000_000
+                }
+        }
+
+-- ----------------------------------------------------
+-- Materialization wallet-shortfall (FR-008, no deposits)
+-- ----------------------------------------------------
+
+{- | The materialization arm's wallet floor is operator-
+diagnostic: just fee + min-UTxO + collateral headroom. No
+@govActionDeposit@, no @stakeDeposit@, no @drepDeposit@,
+no @voteOutputCoin@. This test fails on two surfaces:
+
+* the typed 'MaterializationFloorComponents' record only
+  carries the three named non-deposit terms and the
+  'materializationWalletFloorLovelace' sum is exactly
+  those three;
+* the resolver, fed a wallet balance one lovelace below
+  the floor, returns the typed materialization shortfall
+  error carrying the same components.
+-}
+materializationShortfallExcludesDeposits :: IO ()
+materializationShortfallExcludesDeposits = do
+    let
+        mfc =
+            MaterializationFloorComponents
+                { mfcEstimatedFee = materializationEstimatedFeeLovelace
+                , mfcMinUtxoHeadroom =
+                    materializationMinUtxoHeadroomLovelace
+                , mfcCollateralHeadroom =
+                    materializationCollateralHeadroomLovelace
+                }
+        floorL = materializationWalletFloorLovelace mfc
+        observed = floorL - 1
+        walletUtxos = [(walletRef, observed, False)]
+        registry = sampleRegistry
+        accounts = sampleAccountsWith treasuryHashHex
+        input =
+            GovernanceWithdrawalInitResolverInput
+                { gwiriNetwork = "devnet"
+                , gwiriWalletAddrBech32 = sampleAddrText
+                , gwiriRegistryPath = "(unused-mock)"
+                , gwiriAccountsPath = "(unused-mock)"
+                , gwiriValidityHours = Nothing
+                }
+        renv :: GovernanceWithdrawalInitMaterializationResolverEnv Identity
+        renv =
+            GovernanceWithdrawalInitMaterializationResolverEnv
+                { gwimreQueryWalletUtxos = \_ -> Identity walletUtxos
+                , gwimreComputeUpperBound = \_ ->
+                    error
+                        "gwimreComputeUpperBound must not be \
+                        \called when shortfall fails"
+                , gwimreReadRegistry = \_ -> Identity (Right registry)
+                , gwimreReadAccounts = \_ -> Identity (Right accounts)
+                , gwimreFloorComponents = mfc
+                }
+        result =
+            runIdentity
+                (resolveGovernanceWithdrawalInitMaterialization renv input)
+    -- Floor formula is purely the three non-deposit terms.
+    floorL
+        `shouldBe` mfcEstimatedFee mfc
+            + mfcMinUtxoHeadroom mfc
+            + mfcCollateralHeadroom mfc
+    -- Conservative upper bound: per sidecar fixture-deposit
+    -- note, materialization headroom estimate is ~5 ADA;
+    -- defaults must stay at that order of magnitude so the
+    -- diagnostic remains operator-actionable.
+    floorL `shouldSatisfy` (\n -> n > 0 && n <= 10_000_000)
+    result
+        `shouldBe` Left
+            ( GovernanceWithdrawalInitMaterializationWalletShortfall
+                mfc
+                observed
+            )
 
 -- ----------------------------------------------------
 -- Registry parse-error scaffolding

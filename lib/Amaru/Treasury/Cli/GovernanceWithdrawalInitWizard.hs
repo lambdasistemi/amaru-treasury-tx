@@ -127,11 +127,16 @@ import Amaru.Treasury.LedgerParse
     )
 import Amaru.Treasury.Tx.GovernanceWithdrawalInitWizard
     ( GovernanceWithdrawalInitError (..)
+    , GovernanceWithdrawalInitMaterializationAnswers (..)
+    , GovernanceWithdrawalInitMaterializationResolverEnv (..)
     , GovernanceWithdrawalInitProposalAnswers (..)
     , GovernanceWithdrawalInitResolverEnv (..)
     , GovernanceWithdrawalInitResolverInput (..)
+    , defaultMaterializationFloorComponents
     , extractDepositComponents
+    , governanceWithdrawalInitMaterializationToIntent
     , governanceWithdrawalInitProposalToIntent
+    , resolveGovernanceWithdrawalInitMaterialization
     , resolveGovernanceWithdrawalInitProposal
     )
 
@@ -437,10 +442,10 @@ runGovernanceWithdrawalInitWizard g cmd = case cmd of
         let cf = poCommon po
         guardOut (cfOut cf) (cfForce cf)
         runProposal g po
-    GovernanceWithdrawalInitMaterializationOpts
-        (MaterializationOpts cf _) -> do
-            guardOut (cfOut cf) (cfForce cf)
-            abortMaterializationStub
+    GovernanceWithdrawalInitMaterializationOpts mo -> do
+        let cf = moCommon mo
+        guardOut (cfOut cf) (cfForce cf)
+        runMaterialization g mo
   where
     guardOut path force = do
         r <- validateOutPath path force
@@ -449,14 +454,6 @@ runGovernanceWithdrawalInitWizard g cmd = case cmd of
             Left e -> do
                 hPrint stderr e
                 exitWith (ExitFailure 2)
-
-abortMaterializationStub :: IO a
-abortMaterializationStub = do
-    hPutStrLn
-        stderr
-        "governance-withdrawal-init-wizard materialization: \
-        \Slice 1 stub — live path lands in Slice 3 of #160"
-    exitWith (ExitFailure 3)
 
 -- ----------------------------------------------------
 -- Live proposal runner
@@ -636,3 +633,92 @@ readAccountsSafely path =
     try (readDevnetGovernanceStakeRewardAccounts path) >>= \case
         Left (ioe :: IOException) -> pure (Left (show ioe))
         Right inner -> pure inner
+
+-- ----------------------------------------------------
+-- Live materialization runner
+-- ----------------------------------------------------
+
+{- | Live @materialization@ path. Mirrors 'runProposal'
+field-by-field except that:
+
+* the resolver consumes
+  'GovernanceWithdrawalInitMaterializationResolverEnv'
+  whose @gwimreFloorComponents@ is a pure value
+  ('defaultMaterializationFloorComponents') — no
+  pparams query is needed, because the materialization
+  floor is operator-diagnostic headroom, not a chain-
+  derived deposit set.
+* the translator is
+  'governanceWithdrawalInitMaterializationToIntent', which
+  extracts @treasuryRewardAccountHash@,
+  @treasuryAddress@, @treasuryRefTxIn@, @registryRefTxIn@
+  from the parsed registry and the operator-typed
+  @rewardsLovelace@ from the answers.
+
+Devnet network guard fires as the FIRST check (inside the
+resolver), before any artifact parse, before the wallet
+query, and before the upper-bound query.
+-}
+runMaterialization :: GlobalOpts -> MaterializationOpts -> IO ()
+runMaterialization g mo = do
+    let cf = moCommon mo
+    networkName <- case resolveNetworkName g of
+        Right t -> pure t
+        Left e -> abortMaterialization (T.pack e)
+    socket <- case goSocketPath g of
+        Just s -> pure s
+        Nothing ->
+            abortMaterialization
+                "--node-socket / CARDANO_NODE_SOCKET_PATH is required"
+    let answers =
+            GovernanceWithdrawalInitMaterializationAnswers
+                { gwimaValidityHours = cfValidityHours cf
+                , gwimaFundingSeedTxIn = cfFundingSeedTxIn cf
+                , gwimaRewardsLovelace = moRewardsLovelace mo
+                }
+    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+        let input =
+                GovernanceWithdrawalInitResolverInput
+                    { gwiriNetwork = networkName
+                    , gwiriWalletAddrBech32 = cfWalletAddr cf
+                    , gwiriRegistryPath = cfRegistry cf
+                    , gwiriAccountsPath = cfStakeRewardAccounts cf
+                    , gwiriValidityHours = cfValidityHours cf
+                    }
+            renv =
+                GovernanceWithdrawalInitMaterializationResolverEnv
+                    { gwimreQueryWalletUtxos = queryFlat backend
+                    , gwimreComputeUpperBound = \choice -> do
+                        r <- queryUpperBoundSlot backend choice
+                        pure (fmap unwrapSlot r)
+                    , gwimreReadRegistry = readRegistrySafely
+                    , gwimreReadAccounts = readAccountsSafely
+                    , gwimreFloorComponents =
+                        defaultMaterializationFloorComponents
+                    }
+        er <- resolveGovernanceWithdrawalInitMaterialization renv input
+        env <- case er of
+            Left e ->
+                abortMaterialization
+                    ("resolve: " <> T.pack (show e))
+            Right e -> pure e
+        intent <-
+            case governanceWithdrawalInitMaterializationToIntent
+                env
+                answers of
+                Left te ->
+                    abortMaterialization
+                        ("translate: " <> T.pack (show te))
+                Right i -> pure i
+        writeFileAtomic (cfOut cf) (encodeSomeTreasuryIntent intent)
+  where
+    unwrapSlot (SlotNo s) = s
+
+abortMaterialization :: Text -> IO a
+abortMaterialization msg = do
+    hPutStrLn
+        stderr
+        ( "governance-withdrawal-init-wizard materialization: "
+            <> T.unpack msg
+        )
+    exitWith (ExitFailure 3)

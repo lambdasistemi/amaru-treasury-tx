@@ -489,6 +489,7 @@ test-suite golden-tests
   default-language:   GHC2021
   other-modules:
     AdaDisburseGoldenSpec
+    Amaru.Treasury.Tx.GovernanceWithdrawalInitWizardMaterializationSpec
     Amaru.Treasury.Tx.GovernanceWithdrawalInitWizardProposalSpec
     Amaru.Treasury.Tx.RegistryInitWizardMintSpec
     Amaru.Treasury.Tx.RegistryInitWizardReferenceScriptsSpec

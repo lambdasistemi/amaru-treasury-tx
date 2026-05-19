@@ -56,23 +56,37 @@ module Amaru.Treasury.Tx.GovernanceWithdrawalInitWizard
       -- * Errors
     , GovernanceWithdrawalInitError (..)
 
-      -- * Resolved environment
+      -- * Resolved environments
     , GovernanceWithdrawalInitEnv (..)
+    , GovernanceWithdrawalInitMaterializationEnv (..)
 
       -- * Resolver (proposal)
     , GovernanceWithdrawalInitResolverInput (..)
     , GovernanceWithdrawalInitResolverEnv (..)
     , resolveGovernanceWithdrawalInitProposal
 
-      -- * Pure translation (proposal)
-    , governanceWithdrawalInitProposalToIntent
+      -- * Resolver (materialization)
+    , GovernanceWithdrawalInitMaterializationResolverEnv (..)
+    , resolveGovernanceWithdrawalInitMaterialization
 
-      -- * Deposit-aware wallet floor
+      -- * Pure translation
+    , governanceWithdrawalInitProposalToIntent
+    , governanceWithdrawalInitMaterializationToIntent
+
+      -- * Deposit-aware wallet floor (proposal)
     , DepositComponents (..)
     , proposalWalletFloorLovelace
     , proposalVoteOutputCoinLovelace
     , proposalEstimatedFeeLovelace
     , extractDepositComponents
+
+      -- * Materialization wallet floor (no deposits)
+    , MaterializationFloorComponents (..)
+    , materializationWalletFloorLovelace
+    , materializationEstimatedFeeLovelace
+    , materializationMinUtxoHeadroomLovelace
+    , materializationCollateralHeadroomLovelace
+    , defaultMaterializationFloorComponents
     ) where
 
 import Control.Monad (unless)
@@ -103,7 +117,8 @@ import Amaru.Treasury.Devnet.GovernanceWithdrawalInit
     , validateGovernanceWithdrawalPrerequisites
     )
 import Amaru.Treasury.IntentJSON
-    ( GovernanceWithdrawalInitProposalInputs (..)
+    ( GovernanceWithdrawalInitMaterializationInputs (..)
+    , GovernanceWithdrawalInitProposalInputs (..)
     , RationaleJSON (..)
     , SAction (..)
     , ScopeJSON (..)
@@ -291,6 +306,83 @@ extractDepositComponents pp =
         }
 
 -- ----------------------------------------------------
+-- Materialization wallet floor (FR-008, no deposits)
+-- ----------------------------------------------------
+
+{- | Named breakdown of the lovelace floor the funding
+wallet must clear for a @materialization@ tx to even
+build, before any balancing. UNLIKE
+'DepositComponents', this record carries ONLY the three
+non-deposit headroom terms (fee, min-UTxO change,
+collateral): the materialization program issues NO
+@ConwayRegDRep@, NO @registerAndVoteAbstain@, and NO
+@proposeTreasuryWithdrawal@; it is a single Plutus-
+witnessed treasury withdrawal that does not pay any
+governance/stake/DRep deposit. The diagnostic shape
+makes the absence of those terms explicit at the
+operator-facing error surface (FR-008, materialization
+arm) and at the test surface
+('materializationShortfallExcludesDeposits').
+
+The sidecar note
+(@/tmp/gov-init/sidecars/fixture-deposit.md@) estimates
+~5 ADA aggregate headroom for fixture coverage; the
+three defaults below sum to exactly that.
+-}
+data MaterializationFloorComponents = MaterializationFloorComponents
+    { mfcEstimatedFee :: !Integer
+    , mfcMinUtxoHeadroom :: !Integer
+    , mfcCollateralHeadroom :: !Integer
+    }
+    deriving stock (Eq, Show)
+
+-- | Sum the components into the lovelace floor.
+materializationWalletFloorLovelace
+    :: MaterializationFloorComponents -> Integer
+materializationWalletFloorLovelace mfc =
+    mfcEstimatedFee mfc
+        + mfcMinUtxoHeadroom mfc
+        + mfcCollateralHeadroom mfc
+
+{- | Conservative fee headroom for a materialization tx.
+Picked at 1.5 ADA: ~0.5 ADA fee under mainnet-shaped
+pparams plus ~1 ADA headroom for fee growth from the
+single Plutus rewarding redeemer's reference-script
+billing.
+-}
+materializationEstimatedFeeLovelace :: Integer
+materializationEstimatedFeeLovelace = 1_500_000
+
+{- | Conservative min-UTxO headroom for the change output
+the materialization tx emits back to the funding wallet.
+1.5 ADA is well above the per-Conway-output minimum even
+at the highest @utxoCostPerByte@ realistic on mainnet.
+-}
+materializationMinUtxoHeadroomLovelace :: Integer
+materializationMinUtxoHeadroomLovelace = 1_500_000
+
+{- | Conservative collateral headroom. The
+materialization tx carries one Plutus redeemer
+(@ConwayRewarding@) and Conway's
+@collateralPercentage@ is typically 150 %. 2 ADA covers
+the collateral requirement plus a margin while keeping
+the seed-UTxO sizing operator-actionable.
+-}
+materializationCollateralHeadroomLovelace :: Integer
+materializationCollateralHeadroomLovelace = 2_000_000
+
+-- | Default materialization wallet floor (~5 ADA total).
+defaultMaterializationFloorComponents
+    :: MaterializationFloorComponents
+defaultMaterializationFloorComponents =
+    MaterializationFloorComponents
+        { mfcEstimatedFee = materializationEstimatedFeeLovelace
+        , mfcMinUtxoHeadroom = materializationMinUtxoHeadroomLovelace
+        , mfcCollateralHeadroom =
+            materializationCollateralHeadroomLovelace
+        }
+
+-- ----------------------------------------------------
 -- Errors
 -- ----------------------------------------------------
 
@@ -344,6 +436,18 @@ data GovernanceWithdrawalInitError
         -- ^ deposit components the floor was computed from
         !Integer
         -- ^ observed pure-ADA wallet balance (lovelace)
+    | -- | The materialization funding wallet's pure-ADA
+      --   balance is below the materialization floor.
+      --   Payload carries the typed
+      --   'MaterializationFloorComponents' (fee +
+      --   min-UTxO + collateral headroom, no governance
+      --   deposits) AND the observed balance — so the
+      --   operator-facing diagnostic makes the ABSENCE
+      --   of @govActionDeposit@ / @stakeDeposit@ /
+      --   @drepDeposit@ / @voteOutputCoin@ explicit.
+      GovernanceWithdrawalInitMaterializationWalletShortfall
+        !MaterializationFloorComponents
+        !Integer
     | -- | @--validity-hours = Just 0@.
       GovernanceWithdrawalInitValidityHoursZero
     | -- | @--validity-hours = Just n@ overshoots the
@@ -793,3 +897,353 @@ rationaleProposal =
 -- Keeping the underlying crypto/Base16 primitives confined
 -- to that module lets the no-key-material grep (NFR-008 /
 -- Slice 4 SC-008) over this wizard source stay negative.
+
+-- ----------------------------------------------------
+-- Materialization resolved environment + resolver
+-- ----------------------------------------------------
+
+{- | The materialization-arm twin of
+'GovernanceWithdrawalInitEnv'. Carries the cross-validated
+registry/accounts pair plus the materialization-specific
+'MaterializationFloorComponents' (NO deposit terms; the
+materialization tx pays none).
+-}
+data GovernanceWithdrawalInitMaterializationEnv
+    = GovernanceWithdrawalInitMaterializationEnv
+    { gwimeNetwork :: !Text
+    , gwimeUpperBoundSlot :: !Word64
+    , gwimeRegistry :: !DevnetGovernanceWithdrawalRegistry
+    , gwimeAccounts :: !DevnetGovernanceStakeRewardAccounts
+    , gwimePrerequisites :: !GovernanceWithdrawalPrerequisites
+    , gwimeWalletSelection :: !WalletSelection
+    , gwimeFloorComponents :: !MaterializationFloorComponents
+    }
+    deriving stock (Eq, Show)
+
+{- | Effects the materialization resolver pulls from the
+backend. Mirrors 'GovernanceWithdrawalInitResolverEnv'
+field-by-field except that:
+
+* @gwimreFloorComponents@ is a pure value, not an @m@-
+  action: the three non-deposit headroom terms are
+  module-level constants, not pparams-derived, so no
+  chain query is needed to compute them.
+-}
+data GovernanceWithdrawalInitMaterializationResolverEnv m
+    = GovernanceWithdrawalInitMaterializationResolverEnv
+    { gwimreQueryWalletUtxos
+        :: !(Text -> m [(Text, Integer, Bool)])
+    , gwimreComputeUpperBound
+        :: !( Validity.ValidityChoice
+              -> m (Either Validity.HorizonError Word64)
+            )
+    , gwimreReadRegistry
+        :: !( FilePath
+              -> m
+                    ( Either
+                        String
+                        DevnetGovernanceWithdrawalRegistry
+                    )
+            )
+    , gwimreReadAccounts
+        :: !( FilePath
+              -> m
+                    ( Either
+                        String
+                        DevnetGovernanceStakeRewardAccounts
+                    )
+            )
+    , gwimreFloorComponents :: !MaterializationFloorComponents
+    }
+
+{- | Resolve the chain-derived materialization environment.
+
+The DEVNET GUARD is the first check; on any non-@"devnet"@
+network the function returns
+'GovernanceWithdrawalInitNonDevnetNetwork' WITHOUT touching
+any artifact, query, or other effect. The remaining
+short-circuits (in order) are:
+
+1. Registry parse → 'GovernanceWithdrawalInitRegistryReadError'.
+2. Accounts parse → 'GovernanceWithdrawalInitAccountsReadError'.
+3. Cross-validation →
+   'GovernanceWithdrawalInitCrossValidationMismatch'.
+4. Wallet shortfall → balance below
+   'materializationWalletFloorLovelace' surfaces
+   'GovernanceWithdrawalInitMaterializationWalletShortfall'
+   carrying the exact 'MaterializationFloorComponents' and
+   observed balance (no governance deposit terms).
+5. Validity-window → same handling as the proposal arm.
+-}
+resolveGovernanceWithdrawalInitMaterialization
+    :: (Monad m)
+    => GovernanceWithdrawalInitMaterializationResolverEnv m
+    -> GovernanceWithdrawalInitResolverInput
+    -> m
+        ( Either
+            GovernanceWithdrawalInitError
+            GovernanceWithdrawalInitMaterializationEnv
+        )
+resolveGovernanceWithdrawalInitMaterialization renv input
+    | gwiriNetwork input /= "devnet" =
+        pure
+            ( Left
+                ( GovernanceWithdrawalInitNonDevnetNetwork
+                    (gwiriNetwork input)
+                )
+            )
+    | otherwise = do
+        regE <- gwimreReadRegistry renv (gwiriRegistryPath input)
+        case regE of
+            Left e ->
+                pure
+                    ( Left
+                        ( GovernanceWithdrawalInitRegistryReadError e
+                        )
+                    )
+            Right registry -> do
+                accE <-
+                    gwimreReadAccounts renv (gwiriAccountsPath input)
+                case accE of
+                    Left e ->
+                        pure
+                            ( Left
+                                ( GovernanceWithdrawalInitAccountsReadError e
+                                )
+                            )
+                    Right accounts ->
+                        case validateGovernanceWithdrawalPrerequisites
+                            registry
+                            accounts of
+                            Left fl ->
+                                pure
+                                    ( Left
+                                        ( GovernanceWithdrawalInitCrossValidationMismatch
+                                            ( gwifCode fl
+                                                <> ": "
+                                                <> gwifMessage fl
+                                            )
+                                        )
+                                    )
+                            Right prereqs ->
+                                continueMaterializationAfterCrossValidation
+                                    renv
+                                    input
+                                    registry
+                                    accounts
+                                    prereqs
+
+continueMaterializationAfterCrossValidation
+    :: (Monad m)
+    => GovernanceWithdrawalInitMaterializationResolverEnv m
+    -> GovernanceWithdrawalInitResolverInput
+    -> DevnetGovernanceWithdrawalRegistry
+    -> DevnetGovernanceStakeRewardAccounts
+    -> GovernanceWithdrawalPrerequisites
+    -> m
+        ( Either
+            GovernanceWithdrawalInitError
+            GovernanceWithdrawalInitMaterializationEnv
+        )
+continueMaterializationAfterCrossValidation
+    renv
+    input
+    registry
+    accounts
+    prereqs = do
+        walletUtxos <-
+            gwimreQueryWalletUtxos
+                renv
+                (gwiriWalletAddrBech32 input)
+        let mfc = gwimreFloorComponents renv
+            pureAdaBalance =
+                sum
+                    [ lov
+                    | (_, lov, hasNa) <- walletUtxos
+                    , not hasNa
+                    ]
+            floor_ = materializationWalletFloorLovelace mfc
+        if pureAdaBalance < floor_
+            then
+                pure
+                    ( Left
+                        ( GovernanceWithdrawalInitMaterializationWalletShortfall
+                            mfc
+                            pureAdaBalance
+                        )
+                    )
+            else case firstPureAdaRef walletUtxos of
+                Nothing ->
+                    pure
+                        ( Left
+                            ( GovernanceWithdrawalInitMaterializationWalletShortfall
+                                mfc
+                                pureAdaBalance
+                            )
+                        )
+                Just walletRef -> do
+                    upperE <-
+                        resolveUpperBound
+                            (gwimreComputeUpperBound renv)
+                            (gwiriValidityHours input)
+                    case upperE of
+                        Left e -> pure (Left e)
+                        Right upper ->
+                            pure $
+                                Right
+                                    GovernanceWithdrawalInitMaterializationEnv
+                                        { gwimeNetwork = gwiriNetwork input
+                                        , gwimeUpperBoundSlot = upper
+                                        , gwimeRegistry = registry
+                                        , gwimeAccounts = accounts
+                                        , gwimePrerequisites = prereqs
+                                        , gwimeWalletSelection =
+                                            WalletSelection
+                                                { wsTxIn = walletRef
+                                                , wsAddress =
+                                                    gwiriWalletAddrBech32 input
+                                                , wsExtraTxIns = []
+                                                }
+                                        , gwimeFloorComponents = mfc
+                                        }
+
+-- ----------------------------------------------------
+-- Pure translation (materialization)
+-- ----------------------------------------------------
+
+{- | Translate the resolved @materialization@ environment
+plus typed answers into a 'SomeTreasuryIntent'. Pure; reads
+only its arguments.
+
+Extracts five fields:
+
+* @treasuryRewardAccountHash@ from
+  @gwimeRegistry@'s @dgwrTreasuryScriptHashText@.
+* @treasuryAddress@ from
+  @gwimeRegistry@'s @dgwrTreasuryAddressText@.
+* @treasuryRefTxIn@ from
+  @gwimeRegistry@'s @dgwrTreasuryRef@ (rendered).
+* @registryRefTxIn@ from
+  @gwimeRegistry@'s @dgwrRegistryRef@ (rendered).
+* @rewardsLovelace@ from the operator-typed
+  @gwimaRewardsLovelace@ in the answers — verbatim.
+
+Constitutional constraint (NFR-006): this function MUST
+NOT call
+'Amaru.Treasury.Devnet.GovernanceWithdrawalInit.Core.buildGovernanceWithdrawalMaterializationCore'
+or any other 'Amaru.Treasury.Devnet.*' construction core;
+it only manipulates the JSON-shaped intent. Slice 4 ships
+a grep-based test enforcing this boundary.
+-}
+governanceWithdrawalInitMaterializationToIntent
+    :: GovernanceWithdrawalInitMaterializationEnv
+    -> GovernanceWithdrawalInitMaterializationAnswers
+    -> Either GovernanceWithdrawalInitError SomeTreasuryIntent
+governanceWithdrawalInitMaterializationToIntent env ans = do
+    case gwimaValidityHours ans of
+        Just 0 -> Left GovernanceWithdrawalInitValidityHoursZero
+        _ -> pure ()
+    let registry = gwimeRegistry env
+        treasuryHashHex = dgwrTreasuryScriptHashText registry
+        intent =
+            TreasuryIntent
+                { tiSAction = SGovernanceWithdrawalInitMaterialization
+                , tiSchema = 1
+                , tiNetwork = gwimeNetwork env
+                , tiWallet =
+                    mkWalletMaterialization
+                        (gwimeWalletSelection env)
+                        (gwimaFundingSeedTxIn ans)
+                , tiScope = mkScopeMaterialization env ans
+                , tiSigners = []
+                , tiValidityUpperBoundSlot = gwimeUpperBoundSlot env
+                , tiRationale = rationaleMaterialization
+                , tiPayload =
+                    GovernanceWithdrawalInitMaterializationInputs
+                        { gwimiTreasuryRewardAccountHash =
+                            treasuryHashHex
+                        , gwimiTreasuryAddress =
+                            dgwrTreasuryAddressText registry
+                        , gwimiTreasuryRefTxIn =
+                            txInToText (dgwrTreasuryRef registry)
+                        , gwimiRegistryRefTxIn =
+                            txInToText (dgwrRegistryRef registry)
+                        , gwimiRewardsLovelace =
+                            gwimaRewardsLovelace ans
+                        }
+                }
+    -- Same resolver-carried invariant as the proposal arm:
+    -- the accounts treasury script hash matches the registry
+    -- treasury script hash. The resolver already enforced
+    -- this via 'validateGovernanceWithdrawalPrerequisites';
+    -- asserting it here keeps the dependency on the cross-
+    -- validation visible so a future refactor that bypasses
+    -- the resolver still tripwires.
+    unless
+        ( dgsraScriptHash
+            ( dgsrasTreasury
+                (gwpAccounts (gwimePrerequisites env))
+            )
+            == treasuryHashHex
+        )
+        ( Left
+            ( GovernanceWithdrawalInitCrossValidationMismatch
+                "translation: treasury script hash drift after cross-validation"
+            )
+        )
+    Right
+        ( SomeTreasuryIntent
+            SGovernanceWithdrawalInitMaterialization
+            intent
+        )
+
+mkWalletMaterialization :: WalletSelection -> TxIn -> WalletJSON
+mkWalletMaterialization ws fundingSeed =
+    WalletJSON
+        { wjTxIn = txInToText fundingSeed
+        , wjAddress = wsAddress ws
+        , wjExtraTxIns = wsExtraTxIns ws
+        }
+
+{- | Scope filler for the materialization intent. The
+materialization translator
+('Amaru.Treasury.IntentJSON.translateGovernanceWithdrawalInitMaterialization')
+does NOT consume @scope.*DeployedAt@ slots; the four
+slots here are operator-visible placeholders pointing at
+the materialization funding seed so a debug @--out@ trace
+self-identifies as a materialization intent rather than a
+generic one.
+-}
+mkScopeMaterialization
+    :: GovernanceWithdrawalInitMaterializationEnv
+    -> GovernanceWithdrawalInitMaterializationAnswers
+    -> ScopeJSON
+mkScopeMaterialization env ans =
+    let wallet = gwimeWalletSelection env
+        seedText = txInToText (gwimaFundingSeedTxIn ans)
+    in  ScopeJSON
+            { sjId = "core_development"
+            , sjTreasuryAddress = wsAddress wallet
+            , sjTreasuryUtxos = []
+            , sjTreasuryLeftoverLovelace = 0
+            , sjTreasuryLeftoverUsdm = 0
+            , sjTreasuryLeftoverOtherAssets = mempty
+            , sjTreasuryScriptHash = T.replicate 56 "0"
+            , sjPermissionsRewardAccount = T.replicate 56 "0"
+            , sjScopesDeployedAt = seedText
+            , sjPermissionsDeployedAt = seedText
+            , sjTreasuryDeployedAt = seedText
+            , sjRegistryDeployedAt = seedText
+            , sjRegistryPolicyId = T.replicate 56 "0"
+            }
+
+rationaleMaterialization :: RationaleJSON
+rationaleMaterialization =
+    RationaleJSON
+        { rjEvent = "governance-withdrawal-init"
+        , rjLabel = "governance-withdrawal-init"
+        , rjDescription =
+            "governance-withdrawal-init bootstrap fixture"
+        , rjJustification = "test"
+        , rjDestinationLabel = "fixture"
+        }

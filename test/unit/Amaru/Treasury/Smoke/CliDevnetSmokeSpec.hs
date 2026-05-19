@@ -91,6 +91,24 @@ guardedProductFiles =
     , hostMainPath
     ]
 
+{- | Transaction-runner Haskell modules the host must not import.
+
+The host is allowed to use Cardano.Node.Client.E2E.Devnet
+(@withCardanoNode@) for node lifecycle only. Anything
+that would let it construct, sign, or submit a bootstrap
+transaction in process is forbidden here.
+-}
+forbiddenHostImports :: [String]
+forbiddenHostImports =
+    [ "Amaru.Treasury.Devnet.Runner"
+    , "Amaru.Treasury.Devnet.RegistryInit"
+    , "Amaru.Treasury.Devnet.StakeRewardInit"
+    , "Amaru.Treasury.Devnet.GovernanceWithdrawalInit"
+    , "Amaru.Treasury.Devnet.DisburseSubmit"
+    , "runDevnet"
+    , "submitVoteTx"
+    ]
+
 spec :: Spec
 spec = describe "CLI DevNet smoke static guard (#161)" $ do
     describe "public entrypoint" $ do
@@ -123,6 +141,36 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
                         ]
                         $ \flag ->
                             src `shouldSatisfyContain` flag
+
+    describe "DevNet lifecycle host" $ do
+        it "app/devnet-cli-smoke-host/Main.hs exists" $ do
+            exists <- doesFileExist hostMainPath
+            exists `shouldBe` True
+
+        it "host imports the cardano-node-clients DevNet bring-up" $ do
+            src <- mustRead hostMainPath
+            src `shouldSatisfyContain` "Cardano.Node.Client.E2E.Devnet"
+            src `shouldSatisfyContain` "withCardanoNode"
+
+        it "host does not import any transaction-builder runner module" $ do
+            src <- mustRead hostMainPath
+            forM_ forbiddenHostImports $ \needle ->
+                src `shouldSatisfyNotContain` needle
+
+    describe "vault preflight surface in smoke.sh" $ do
+        it "smoke.sh names shipped CLI signing subcommands" $ do
+            src <- mustRead smokeScriptPath
+            forM_
+                [ "vault create"
+                , "witness"
+                , "attach-witness"
+                ]
+                $ \needle ->
+                    src `shouldSatisfyContain` needle
+
+        it "smoke.sh exposes a preflight or vault phase" $ do
+            src <- mustRead smokeScriptPath
+            src `shouldSatisfyContain` "vault-preflight"
 
     describe "no in-process runner fallback" $ do
         forM_ forbiddenRunnerStrings $ \needle ->

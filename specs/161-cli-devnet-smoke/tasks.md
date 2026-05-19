@@ -44,11 +44,11 @@ Checkpoint: `./gate.sh` green; static no-fallback guard is active.
 
 **Goal**: Start a real DevNet without using transaction runners, generate deterministic DevNet key fixtures, and prove the script can create vaults/sign via shipped CLI.
 
-- [ ] T006 [P] [US1] Add `app/devnet-cli-smoke-host/Main.hs` that copies the pinned genesis, applies the governance patch, calls `withCardanoNode`, exports socket/network/run-dir/key paths, and executes `scripts/smoke/smoke.sh --inside-devnet`.
-- [ ] T007 [P] [US1] Add deterministic DevNet key fixture generation for genesis funding and voter keys in the host; write cardano-cli payment signing-key envelopes with `0600` permissions and export their key hashes.
-- [ ] T008 [US1] Add vault preflight in `scripts/smoke/smoke.sh`: create DevNet-only vaults via `amaru-treasury-tx vault create --signing-key-file ... --vault-passphrase-fd ...`, then sign a harmless fixture unsigned tx through `witness` and `attach-witness`.
-- [ ] T009 [US2] Extend static guard tests so the host may import `Cardano.Node.Client.E2E.Devnet` but still fails on any transaction runner import/call.
-- [ ] T010 [US1] Add `jq` to the dev shell if the script uses it, and update preflight failure text to name the missing dependency.
+- [X] T006 (commit: 588f052c) [P] [US1] Add `app/devnet-cli-smoke-host/Main.hs` that copies the pinned genesis, applies the governance patch, calls `withCardanoNode`, exports socket/network/run-dir/key paths, and executes `scripts/smoke/smoke.sh --inside-devnet`.
+- [X] T007 (commit: 588f052c) [P] [US1] Add deterministic DevNet key fixture generation for genesis funding and voter keys in the host; write cardano-cli payment signing-key envelopes with `0600` permissions and export their key hashes.
+- [X] T008 (commit: 588f052c) [US1] Add vault preflight in `scripts/smoke/smoke.sh`: create DevNet-only vaults via `amaru-treasury-tx vault create --signing-key-file ... --vault-passphrase-fd ...`, then sign a harmless fixture unsigned tx through `witness` and `attach-witness`.
+- [X] T009 (commit: 588f052c) [US2] Extend static guard tests so the host may import `Cardano.Node.Client.E2E.Devnet` but still fails on any transaction runner import/call.
+- [X] T010 (commit: 588f052c) [US1] Add `jq` to the dev shell if the script uses it, and update preflight failure text to name the missing dependency.
 
 Checkpoint: `just devnet-cli-smoke --phase preflight` passes and `./gate.sh` green.
 

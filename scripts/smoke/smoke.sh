@@ -33,14 +33,15 @@ Options:
   --run-dir <path>           Run directory (default: runs/devnet-cli/<timestamp>).
   --inside-devnet            Mark that the script runs inside the DevNet host callback;
                              skips DevNet bring-up and trusts CARDANO_NODE_SOCKET_PATH.
-  --phase <name>             scaffold | preflight | host | registry-stake | governance |
-                             disburse | full (default: scaffold).
+  --phase <name>             scaffold | preflight | vault-preflight | registry-stake |
+                             governance | disburse | full (default: scaffold).
   --timeout-seconds <int>    Per-phase polling timeout in seconds (default: 900).
   --force                    Allow a non-empty existing --run-dir.
   --help                     Show this help and exit.
 
-Slice 1 implements scaffold and preflight only. Later slices wire host bring-up,
-vault preflight, and the full bootstrap + disburse CLI pipeline on the same flags.
+Slice 2 implements scaffold, preflight, and vault-preflight (the shipped
+vault create / witness / attach-witness round-trip). Later slices wire the
+full bootstrap + disburse CLI pipeline on the same flags.
 
 This script drives only shipped amaru-treasury-tx CLI commands. See
 specs/161-cli-devnet-smoke/ for the no-in-process-runner contract and the
@@ -69,7 +70,18 @@ preflight_for_phase() {
     case "$phase" in
         scaffold)
             ;;
-        preflight | host | registry-stake | governance | disburse | full)
+        preflight)
+            require_tool jq
+            require_tool cardano-cli
+            require_tool cardano-node
+            require_tool amaru-treasury-tx
+            ;;
+        vault-preflight)
+            require_tool jq
+            require_tool diff
+            require_tool amaru-treasury-tx
+            ;;
+        registry-stake | governance | disburse | full)
             require_tool jq
             require_tool cardano-cli
             require_tool cardano-node
@@ -79,6 +91,131 @@ preflight_for_phase() {
             die "unknown phase: $phase (try --help)"
             ;;
     esac
+}
+
+require_env() {
+    local name=$1
+    if [[ -z "${!name:-}" ]]; then
+        die "missing required environment variable: $name (the host owns this)"
+    fi
+}
+
+require_file() {
+    local label=$1
+    local path=$2
+    if [[ ! -e "$path" ]]; then
+        die "$label not found at: $path"
+    fi
+}
+
+vault_preflight() {
+    local run_dir=$1
+    local phase_dir="$run_dir/phases/vault-preflight"
+    mkdir -p "$phase_dir"
+
+    require_env CLI_SMOKE_FUNDING_SKEY
+    require_env CLI_SMOKE_VOTER_SKEY
+    require_file "funding signing key" "$CLI_SMOKE_FUNDING_SKEY"
+    require_file "voter signing key" "$CLI_SMOKE_VOTER_SKEY"
+
+    local fixture="test/fixtures/118-vault-witness"
+    require_file "vault-witness fixture payment.skey" \
+        "$fixture/payment.skey"
+    require_file "vault-witness fixture unsigned tx" \
+        "$fixture/unsigned.cbor.hex"
+    require_file "vault-witness fixture expected signed tx" \
+        "$fixture/signed.expected.cbor.hex"
+
+    local passphrase="cli-smoke-preflight-passphrase"
+    local funding_vault="$phase_dir/funding.vault.age"
+    local voter_vault="$phase_dir/voter.vault.age"
+    local fixture_vault="$phase_dir/fixture.vault.age"
+    local fixture_witness="$phase_dir/fixture.owner.witness.hex"
+    local fixture_signed="$phase_dir/fixture.signed.cbor.hex"
+
+    log "vault-preflight: vault create on funding key"
+    {
+        exec 9< <(printf '%s' "$passphrase")
+        amaru-treasury-tx --network devnet vault create \
+            --signing-key-file "$CLI_SMOKE_FUNDING_SKEY" \
+            --label devnet_funding \
+            --description "DevNet funding key (smoke)" \
+            --out "$funding_vault" \
+            --vault-work-factor 1 \
+            --vault-passphrase-fd 9
+        exec 9<&-
+    }
+    [[ -s "$funding_vault" ]] \
+        || die "vault create did not write funding vault"
+
+    log "vault-preflight: vault create on voter key"
+    {
+        exec 9< <(printf '%s' "$passphrase")
+        amaru-treasury-tx --network devnet vault create \
+            --signing-key-file "$CLI_SMOKE_VOTER_SKEY" \
+            --label devnet_voter \
+            --description "DevNet voter key (smoke)" \
+            --out "$voter_vault" \
+            --vault-work-factor 1 \
+            --vault-passphrase-fd 9
+        exec 9<&-
+    }
+    [[ -s "$voter_vault" ]] \
+        || die "vault create did not write voter vault"
+
+    log "vault-preflight: vault create on fixture key"
+    {
+        exec 9< <(printf '%s' "$passphrase")
+        amaru-treasury-tx --network preprod vault create \
+            --signing-key-file "$fixture/payment.skey" \
+            --label core_development \
+            --description "118 vault-witness fixture" \
+            --out "$fixture_vault" \
+            --vault-work-factor 1 \
+            --vault-passphrase-fd 9
+        exec 9<&-
+    }
+
+    log "vault-preflight: witness fixture unsigned tx"
+    {
+        exec 9< <(printf '%s' "$passphrase")
+        amaru-treasury-tx --network preprod witness \
+            --tx "$fixture/unsigned.cbor.hex" \
+            --vault "$fixture_vault" \
+            --identity core_development \
+            --out "$fixture_witness" \
+            --vault-passphrase-fd 9
+        exec 9<&-
+    }
+    [[ -s "$fixture_witness" ]] \
+        || die "witness did not write a witness hex"
+
+    log "vault-preflight: attach-witness fixture"
+    local witness_hex
+    witness_hex=$(tr -d '\n' <"$fixture_witness")
+    amaru-treasury-tx attach-witness \
+        --tx "$fixture/unsigned.cbor.hex" \
+        --witness "$witness_hex" \
+        --out "$fixture_signed"
+
+    diff -u "$fixture/signed.expected.cbor.hex" "$fixture_signed" \
+        || die "attach-witness output diverged from expected fixture"
+
+    cat >"$phase_dir/summary.json" <<JSON
+{
+  "phase": "vault-preflight",
+  "fundingVault": "$funding_vault",
+  "voterVault": "$voter_vault",
+  "fixtureVault": "$fixture_vault",
+  "fixtureWitness": "$fixture_witness",
+  "fixtureSigned": "$fixture_signed",
+  "fundingKeyHash": "${CLI_SMOKE_FUNDING_KEY_HASH:-}",
+  "voterKeyHash": "${CLI_SMOKE_VOTER_KEY_HASH:-}",
+  "networkMagic": "${CLI_SMOKE_NETWORK_MAGIC:-}",
+  "socket": "${CLI_SMOKE_SOCKET:-}"
+}
+JSON
+    log "vault-preflight: complete (summary in $phase_dir/summary.json)"
 }
 
 create_run_dir() {
@@ -184,10 +321,13 @@ main() {
             log "scaffold complete; live phases land in later #161 slices"
             ;;
         preflight)
-            log "preflight complete; host bring-up lands in slice 2"
+            log "preflight complete; tools are reachable"
             ;;
-        host | registry-stake | governance | disburse | full)
-            die "phase '$phase' not implemented yet in slice 1; see specs/161-cli-devnet-smoke/plan.md"
+        vault-preflight)
+            vault_preflight "$run_dir"
+            ;;
+        registry-stake | governance | disburse | full)
+            die "phase '$phase' not implemented yet in this slice; see specs/161-cli-devnet-smoke/plan.md"
             ;;
     esac
 }

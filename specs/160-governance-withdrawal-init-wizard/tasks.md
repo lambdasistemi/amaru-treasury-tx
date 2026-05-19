@@ -152,9 +152,9 @@ Checkpoint: boundary tests and `./gate.sh` green.
 
 Tasks:
 
-- [ ] T026 [US5] Update `README.md` with `governance-withdrawal-init-wizard proposal` and `materialization` examples, full flag set, witness contract, DRep-equals-proposer caveat, deposit-aware shortfall reasoning, unsafe inter-step carry warning, and #161/#163 references.
-- [ ] T027 [US5] Update `docs/local-devnet-smoke.md` with the same operator path and warnings, explicitly positioning `smoke.sh` as #161's CLI proof.
-- [ ] T028 [US5] Refresh PR #169 body so scope, status, delivered behavior, and remaining review notes match the implementation.
+- [x] T026 [US5] Update `README.md` with `governance-withdrawal-init-wizard proposal` and `materialization` examples, full flag set, witness contract, DRep-equals-proposer caveat, deposit-aware shortfall reasoning, unsafe inter-step carry warning, and #161/#163 references. Completed in Slice 5 commit.
+- [x] T027 [US5] Update `docs/local-devnet-smoke.md` with the same operator path and warnings, explicitly positioning `smoke.sh` as #161's CLI proof. Completed in Slice 5 commit.
+- [x] T028 [US5] Refresh PR #169 body so scope, status, delivered behavior, and remaining review notes match the implementation. Completed during Slice 5 finalization.
 
 Checkpoint: docs, PR body, and `./gate.sh` green.
 

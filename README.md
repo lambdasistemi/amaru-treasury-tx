@@ -222,14 +222,103 @@ devnet boot. These yield invalid intents that fail at `tx-build`
 resumable client state parked in #163 will supersede this manual
 carry.
 
-The wizard for governance-withdrawal-init is tracked by
-[#160](https://github.com/lambdasistemi/amaru-treasury-tx/issues/160). The bash CLI smoke that chains the full bootstrap +
-disburse flow against a real DevNet through the shipped CLI lands in
+The wizard that produces `bootstrap-intent.json` files for the
+governance-withdrawal-init flow ships in
+[#160](https://github.com/lambdasistemi/amaru-treasury-tx/issues/160)
+as two independent subcommands of
+`amaru-treasury-tx governance-withdrawal-init-wizard`. Both
+subcommands consume the `registry.json` artifact produced by
+[#158](https://github.com/lambdasistemi/amaru-treasury-tx/issues/158),
+the `accounts.json` artifact produced by
+[#159](https://github.com/lambdasistemi/amaru-treasury-tx/issues/159),
+and an operator-typed funding seed:
+
+```bash
+# Pre-requisite: complete registry-init and stake-reward-init; you now
+# have registry.json and accounts.json on disk. Your signing inventory
+# contains the funding payment key, funding stake key, and voter/DRep key.
+
+# Step 1: proposal (requests the treasury withdrawal, registers the
+# funding stake credential, and self-votes through the DevNet DRep key).
+amaru-treasury-tx governance-withdrawal-init-wizard proposal \
+    --wallet-addr <devnet-bech32> \
+    --registry <path/registry.json> \
+    --stake-reward-accounts <path/accounts.json> \
+    --funding-seed-txin <wallet-utxo-txid>#<ix> \
+    --funding-stake-key-hash <56-hex-char-funding-stake-vkey-hash> \
+    --voter-key-hash <56-hex-char-voter-vkey-hash> \
+    --withdrawal-amount-lovelace <N> \
+    --anchor-url <https://...> \
+    --anchor-hash <64-hex-char-anchor-content-hash> \
+    --validity-hours <hours> \
+    --log proposal.wizard.log \
+    --force \
+    --out proposal.intent.json
+amaru-treasury-tx tx-build --intent proposal.intent.json --out proposal.tx.cbor.hex
+amaru-treasury-tx witness ...   # funding payment
+amaru-treasury-tx witness ...   # funding stake (= --funding-stake-key-hash)
+amaru-treasury-tx witness ...   # voter/DRep (= --voter-key-hash)
+amaru-treasury-tx attach-witness ...
+amaru-treasury-tx submit ...
+# Wait for proposal enactment and observe the treasury reward balance.
+
+# Step 2: materialization (withdraws the observed rewards into the
+# treasury contract address).
+amaru-treasury-tx governance-withdrawal-init-wizard materialization \
+    --wallet-addr <devnet-bech32> \
+    --registry <path/registry.json> \
+    --stake-reward-accounts <path/accounts.json> \
+    --funding-seed-txin <wallet-utxo-txid>#<ix> \
+    --rewards-lovelace <observed-balance> \
+    --validity-hours <hours> \
+    --log materialization.wizard.log \
+    --force \
+    --out materialization.intent.json
+amaru-treasury-tx tx-build --intent materialization.intent.json --out materialization.tx.cbor.hex
+amaru-treasury-tx witness ...   # funding payment
+amaru-treasury-tx attach-witness ...
+amaru-treasury-tx submit ...
+```
+
+The proposal transaction requires three key witnesses: funding payment,
+funding stake (`--funding-stake-key-hash`), and voter/DRep
+(`--voter-key-hash`). The materialization transaction requires one key
+witness: funding payment. The materialization transaction also uses
+treasury and registry reference scripts from `registry.json`; those are
+script witnesses, not operator key witnesses.
+
+The DRep behavior is DevNet-specific. The proposal transaction bundles
+submit-and-self-vote because the closed DevNet bootstrap has no
+third-party DRep to wait for. On mainnet and preprod that bundling is
+not protocol-required, and the wizard refuses those networks. For this
+DevNet command the operator is the DRep voting on their own withdrawal
+proposal, so their vault must contain the key whose hash equals
+`--voter-key-hash`.
+
+The proposal resolver checks wallet shortfall before writing an intent:
+the wallet must cover `govActionDeposit + stakeDeposit + drepDeposit`
+plus the estimated fee. The 100k ADA governance-action deposit is a
+mainnet orientation point; DevNet values come from that network's
+protocol parameters. Materialization uses the smaller materialization
+floor and does not include governance deposits.
+
+**Explicit inter-tx unsafe** — the wizard does not simulate cross-step
+tx bodies. The operator hand-carries the registry path, accounts path,
+funding seed UTxO, declared key hashes, anchor URL/hash pair, observed
+post-enactment reward balance, and the real-world ordering that
+proposal enactment must precede materialization. Key-hash typos are not
+checked against vault identities by the wizard; they fail later at
+`witness` time. The resumable client state that supersedes this manual
+carry is parked in
+[#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163).
+
+The bash CLI smoke that chains the full bootstrap + disburse flow
+against a real DevNet through the shipped CLI lands in
 [#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161).
-Until #161 merges, the bare-intent goldens under
-`test/golden/Support/` plus `test/golden/Support/RegistryInitWizardFixtures.hs`
-remain the byte-identical CBOR-equivalence source of truth between
-`tx-build --intent` and the library construction core.
+Until #161 merges, the bare-intent goldens under `test/golden/Support/`
+plus the wizard parity goldens remain the byte-identical
+CBOR-equivalence source of truth between `tx-build --intent` and the
+library construction core.
 
 The end-to-end DevNet runners under
 `lib/Amaru/Treasury/Devnet/{RegistryInit,StakeRewardInit,

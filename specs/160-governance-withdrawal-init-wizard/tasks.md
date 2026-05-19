@@ -140,7 +140,7 @@ Owned file:
 
 Tasks:
 
-- [ ] T025 [P] [US2] Add hspec source-grep suite that strips Haskell comments and asserts: no `buildGovernanceWithdrawalProposalCore` or `buildGovernanceWithdrawalMaterializationCore`; no key-material APIs or string literals such as `readVaultPassphrase`, `decryptAgeVault`, `decodeWitnessVault`, `signingSourceKeyHash`, `Crypto.Age`, `.skey`, `.vkey`, `blake2b224`, `blake2b256`; no reward chain-query identifiers such as `queryRewardAccountBalance` or `getRewards`.
+- [x] T025 [P] [US2] Add hspec source-grep suite that strips Haskell comments and asserts: no `buildGovernanceWithdrawalProposalCore` or `buildGovernanceWithdrawalMaterializationCore`; no key-material APIs or string literals such as `readVaultPassphrase`, `decryptAgeVault`, `decodeWitnessVault`, `signingSourceKeyHash`, `Crypto.Age`, `.skey`, `.vkey`, `blake2b224`, `blake2b256`; no reward chain-query identifiers such as `queryRewardAccountBalance` or `getRewards`. Completed in Slice 4 commit.
 
 Checkpoint: boundary tests and `./gate.sh` green.
 

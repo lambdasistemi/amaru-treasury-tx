@@ -421,6 +421,7 @@ test-suite unit-tests
     Amaru.Treasury.Tx.DisburseWizardSpec
     Amaru.Treasury.Tx.EnvelopeSpec
     Amaru.Treasury.Tx.GovernanceWithdrawalInitWizardNetworkGuardSpec
+    Amaru.Treasury.Tx.GovernanceWithdrawalInitWizardPropertyEnforcementSpec
     Amaru.Treasury.Tx.GovernanceWithdrawalInitWizardSpec
     Amaru.Treasury.Tx.RegistryInitWizardNetworkGuardSpec
     Amaru.Treasury.Tx.RegistryInitWizardNoSimulationSpec

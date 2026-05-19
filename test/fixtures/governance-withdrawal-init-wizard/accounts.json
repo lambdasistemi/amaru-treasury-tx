@@ -1,0 +1,8 @@
+{
+  "phase": "stake-reward-init",
+  "network": "devnet",
+  "accounts": {
+    "treasury": { "scriptHash": "463226e30d8527800128ebc4321be6e378ce9292c42a729b0bd080ae", "rewardAccount": "463226e30d8527800128ebc4321be6e378ce9292c42a729b0bd080ae", "ledgerNetwork": "Testnet", "registered": true, "rewardsLovelace": 0 },
+    "permissions": { "scriptHash": "55555555555555555555555555555555555555555555555555555555", "rewardAccount": "55555555555555555555555555555555555555555555555555555555", "ledgerNetwork": "Testnet", "registered": true, "rewardsLovelace": 0 }
+  }
+}

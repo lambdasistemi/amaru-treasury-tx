@@ -46,6 +46,10 @@ import Amaru.Treasury.Cli.DisburseWizard
     , contingencyDisburseOptsP
     , disburseWizardOptsP
     )
+import Amaru.Treasury.Cli.GovernanceWithdrawalInitWizard
+    ( GovernanceWithdrawalInitWizardOpts
+    , governanceWithdrawalInitWizardOptsP
+    )
 import Amaru.Treasury.Cli.RegistryInitWizard
     ( RegistryInitWizardOpts
     , registryInitWizardOptsP
@@ -104,6 +108,7 @@ data Cmd
     | CmdWithdrawWizard WithdrawOpts
     | CmdRegistryInitWizard RegistryInitWizardOpts
     | CmdStakeRewardInitWizard StakeRewardInitWizardOpts
+    | CmdGovernanceWithdrawalInitWizard GovernanceWithdrawalInitWizardOpts
     | CmdTxBuild TxBuildOpts
     | CmdReportRender ReportRenderOpts
     | CmdTreasuryInspect InspectOpts
@@ -197,6 +202,16 @@ cmdP =
                     (CmdStakeRewardInitWizard <$> stakeRewardInitWizardOptsP)
                     ( progDesc
                         "Produce stake-reward-init intent.json files for script-account | plain-account (devnet only; Slice 1 stubs the live path)"
+                    )
+                )
+            <> command
+                "governance-withdrawal-init-wizard"
+                ( info
+                    ( CmdGovernanceWithdrawalInitWizard
+                        <$> governanceWithdrawalInitWizardOptsP
+                    )
+                    ( progDesc
+                        "Produce governance-withdrawal-init intent.json files for proposal | materialization (devnet only; Slice 1 stubs the live path)"
                     )
                 )
             <> command

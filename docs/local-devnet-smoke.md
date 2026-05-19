@@ -247,12 +247,83 @@ submission, swap execution, or reorganize transactions.
 
 ## Governance Withdrawal Init Boundary
 
-After #157 the shipped operator path for this boundary is the
-two-step `amaru-treasury-tx tx-build --intent
-<governance-withdrawal-init-{proposal,materialization}.json>` chain
-(see the bootstrap section in [README.md](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/README.md#devnet-bootstrap-via-tx-build---intent)). The local
-smoke keeps driving the library function directly via `SmokeSpec`,
-which calls into
+After #157 and #160 the shipped operator path for this boundary is the
+two-subcommand `amaru-treasury-tx governance-withdrawal-init-wizard
+{proposal | materialization}` flow (see the bootstrap section in
+[README.md](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/README.md#devnet-bootstrap-via-tx-build---intent)).
+Both subcommands consume the `registry.json` artifact produced by
+[#158](https://github.com/lambdasistemi/amaru-treasury-tx/issues/158),
+the `accounts.json` artifact produced by
+[#159](https://github.com/lambdasistemi/amaru-treasury-tx/issues/159),
+and an operator-typed funding seed. The proposal subcommand additionally
+takes the funding stake key hash, voter/DRep key hash, withdrawal
+amount, CIP-1694 anchor URL, and anchor content hash; materialization
+takes the operator-observed `--rewards-lovelace` after proposal
+enactment.
+
+The proposal command writes an intent that is then built with
+`tx-build --intent`, witnessed three times (funding payment, funding
+stake, voter/DRep), attached, and submitted. The materialization command
+writes an intent that is built the same way but needs one key witness:
+funding payment. The DRep behavior is a DevNet-bootstrap convenience:
+the operator is the DRep voting on their own withdrawal proposal, and
+mainnet/preprod remain fail-closed. Proposal shortfall errors are
+deposit-aware (`govActionDeposit + stakeDeposit + drepDeposit + fee`);
+materialization does not include governance deposits.
+
+```bash
+amaru-treasury-tx governance-withdrawal-init-wizard proposal \
+    --wallet-addr <devnet-bech32> \
+    --registry <path/registry.json> \
+    --stake-reward-accounts <path/accounts.json> \
+    --funding-seed-txin <wallet-utxo-txid>#<ix> \
+    --funding-stake-key-hash <56-hex-char-funding-stake-vkey-hash> \
+    --voter-key-hash <56-hex-char-voter-vkey-hash> \
+    --withdrawal-amount-lovelace <N> \
+    --anchor-url <https://...> \
+    --anchor-hash <64-hex-char-anchor-content-hash> \
+    --validity-hours <hours> \
+    --log proposal.wizard.log \
+    --force \
+    --out proposal.intent.json
+amaru-treasury-tx tx-build --intent proposal.intent.json --out proposal.tx.cbor.hex
+amaru-treasury-tx witness ...   # funding payment
+amaru-treasury-tx witness ...   # funding stake
+amaru-treasury-tx witness ...   # voter/DRep
+amaru-treasury-tx attach-witness ...
+amaru-treasury-tx submit ...
+
+# After proposal enactment, observe the treasury reward balance.
+amaru-treasury-tx governance-withdrawal-init-wizard materialization \
+    --wallet-addr <devnet-bech32> \
+    --registry <path/registry.json> \
+    --stake-reward-accounts <path/accounts.json> \
+    --funding-seed-txin <wallet-utxo-txid>#<ix> \
+    --rewards-lovelace <observed-balance> \
+    --validity-hours <hours> \
+    --log materialization.wizard.log \
+    --force \
+    --out materialization.intent.json
+amaru-treasury-tx tx-build --intent materialization.intent.json --out materialization.tx.cbor.hex
+amaru-treasury-tx witness ...   # funding payment
+amaru-treasury-tx attach-witness ...
+amaru-treasury-tx submit ...
+```
+
+This boundary is explicitly inter-tx unsafe. The wizard does not
+simulate the two transaction bodies together or check key hashes against
+vault identities. The operator hand-carries the registry path, accounts
+path, funding seed UTxO, key hashes, anchor URL/hash pair, observed
+post-enactment reward balance, and the real-world ordering that proposal
+enactment must precede materialization. The resumable client state that
+will supersede this manual carry is parked in
+[#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163).
+The bash smoke that drives this shipped CLI path end to end on a real
+DevNet lands in
+[#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161).
+
+The local smoke keeps driving the library function directly via
+`SmokeSpec`, which calls into
 `Amaru.Treasury.Devnet.Runner.runDevnetGovernanceWithdrawalInit`.
 
 The live proof harness runs the prerequisite library entries and

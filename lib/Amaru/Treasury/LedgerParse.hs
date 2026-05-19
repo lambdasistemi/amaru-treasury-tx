@@ -16,6 +16,7 @@ builders need:
 -}
 module Amaru.Treasury.LedgerParse
     ( txInFromText
+    , txInToText
     , keyHashFromHex
     , scriptHashFromHex
     , addrFromText
@@ -33,12 +34,14 @@ import Cardano.Crypto.Hash.Class
     ( Hash
     , HashAlgorithm
     , hashFromBytes
+    , hashToBytes
     )
 import Cardano.Ledger.Address (Addr, decodeAddrEither)
-import Cardano.Ledger.BaseTypes (mkTxIxPartial)
+import Cardano.Ledger.BaseTypes (mkTxIxPartial, txIxToInt)
 import Cardano.Ledger.Hashes
     ( KeyHash (..)
     , ScriptHash (..)
+    , extractHash
     , unsafeMakeSafeHash
     )
 import Cardano.Ledger.Keys (KeyRole (..))
@@ -57,6 +60,33 @@ txInFromText t = case T.splitOn "#" t of
                 (readMaybe (T.unpack ixT))
         Right $ TxIn (TxId (unsafeMakeSafeHash h)) (mkTxIxPartial ix)
     _ -> Left $ "expected 'txid#ix', got: " <> T.unpack t
+
+{- | Render a 'TxIn' back to the @"\<txid hex\>#\<ix\>"@
+shape 'txInFromText' parses, and the JSON payload fields
+of 'Amaru.Treasury.IntentJSON.WalletJSON' /
+'Amaru.Treasury.IntentJSON.GovernanceWithdrawalInitMaterializationInputs'
+expect.
+
+Round-trips with 'txInFromText' (proved by the focused
+spec).
+
+Kept in this module — alongside 'txInFromText' — so the
+crypto/Base16 primitives this rendering needs
+('hashToBytes', 'extractHash', 'B16.encode',
+'txIxToInt') stay confined to a single ledger-references
+helper. Wizard modules that need to render a 'TxIn' into
+their JSON payload import this function rather than the
+underlying primitives, so a wizard-source grep for
+@Cardano.Crypto.Hash.*@ remains negative (per NFR-008 /
+Slice 4 SC-008).
+-}
+txInToText :: TxIn -> Text
+txInToText (TxIn (TxId sh) ix) =
+    let hashHex =
+            T.decodeUtf8
+                (B16.encode (hashToBytes (extractHash sh)))
+        ixT = T.pack (show (txIxToInt ix))
+    in  hashHex <> "#" <> ixT
 
 {- | Parse a 28-byte verification-key hash (hex).
 

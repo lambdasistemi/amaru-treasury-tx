@@ -420,6 +420,8 @@ test-suite unit-tests
     Amaru.Treasury.Tx.DisburseSpec
     Amaru.Treasury.Tx.DisburseWizardSpec
     Amaru.Treasury.Tx.EnvelopeSpec
+    Amaru.Treasury.Tx.GovernanceWithdrawalInitWizardNetworkGuardSpec
+    Amaru.Treasury.Tx.GovernanceWithdrawalInitWizardSpec
     Amaru.Treasury.Tx.RegistryInitWizardNetworkGuardSpec
     Amaru.Treasury.Tx.RegistryInitWizardNoSimulationSpec
     Amaru.Treasury.Tx.RegistryInitWizardSpec
@@ -487,6 +489,7 @@ test-suite golden-tests
   default-language:   GHC2021
   other-modules:
     AdaDisburseGoldenSpec
+    Amaru.Treasury.Tx.GovernanceWithdrawalInitWizardProposalSpec
     Amaru.Treasury.Tx.RegistryInitWizardMintSpec
     Amaru.Treasury.Tx.RegistryInitWizardReferenceScriptsSpec
     Amaru.Treasury.Tx.RegistryInitWizardSeedSplitSpec
@@ -501,6 +504,7 @@ test-suite golden-tests
     ReportRenderSwapGoldenSpec
     StakeRewardInitIntentSpec
     Support.GovernanceWithdrawalInitFixtures
+    Support.GovernanceWithdrawalInitWizardFixtures
     Support.RegistryInitFixtures
     Support.RegistryInitWizardFixtures
     Support.StakeRewardInitFixtures

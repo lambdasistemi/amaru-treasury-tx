@@ -1,0 +1,42 @@
+{
+    "action": "governance-withdrawal-init-proposal",
+    "governance-withdrawal-init-proposal": {
+        "anchorHash": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a",
+        "anchorUrl": "https://example.invalid/amaru-devnet-governance.json",
+        "fundingStakeKeyHash": "33333333333333333333333333333333333333333333333333333333",
+        "treasuryRewardAccountHash": "463226e30d8527800128ebc4321be6e378ce9292c42a729b0bd080ae",
+        "voterKeyHash": "44444444444444444444444444444444444444444444444444444444",
+        "withdrawalAmountLovelace": 25000000
+    },
+    "network": "devnet",
+    "rationale": {
+        "description": "governance-withdrawal-init bootstrap fixture",
+        "destinationLabel": "fixture",
+        "event": "governance-withdrawal-init",
+        "justification": "test",
+        "label": "governance-withdrawal-init"
+    },
+    "schema": 1,
+    "scope": {
+        "id": "core_development",
+        "permissionsDeployedAt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0",
+        "permissionsRewardAccount": "00000000000000000000000000000000000000000000000000000000",
+        "registryDeployedAt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0",
+        "registryPolicyId": "00000000000000000000000000000000000000000000000000000000",
+        "scopesDeployedAt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0",
+        "treasuryAddress": "addr_test1vq3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygswahgq5",
+        "treasuryDeployedAt": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0",
+        "treasuryLeftoverLovelace": 0,
+        "treasuryLeftoverOtherAssets": {},
+        "treasuryLeftoverUsdm": 0,
+        "treasuryScriptHash": "00000000000000000000000000000000000000000000000000000000",
+        "treasuryUtxos": []
+    },
+    "signers": [],
+    "validityUpperBoundSlot": 1000100,
+    "wallet": {
+        "address": "addr_test1vq3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygswahgq5",
+        "extraTxIns": [],
+        "txIn": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0"
+    }
+}

@@ -90,15 +90,15 @@ Owned files:
 
 Tasks:
 
-- [ ] T010 [P] [US2] Add `Support.GovernanceWithdrawalInitWizardFixtures` and proposal parity golden co-derived from existing governance-withdrawal library fixtures.
-- [ ] T011 [P] [US1] Add round-trip test for proposal `SomeTreasuryIntent` JSON.
-- [ ] T012 [P] [US3] Add network-guard tests: `mainnet`, `preprod`, and `preview` fail with `GovernanceWithdrawalInitNonDevnetNetwork` before wallet/artifact work.
-- [ ] T013 [P] [US1] Add registry parse-error tests: missing file, unparseable JSON, wrong phase, wrong network.
-- [ ] T014 [P] [US1] Add stake-reward accounts parse-error tests: missing file, unparseable JSON, wrong phase, wrong network.
-- [ ] T015 [P] [US1] Add cross-validation mismatch test for `accounts.treasury.scriptHash != registry.treasuryScriptHash`.
-- [ ] T016 [P] [US4] Add deposit-aware wallet-shortfall test naming `govActionDeposit`, `stakeDeposit`, `drepDeposit`, estimated fee/headroom, and total.
-- [ ] T017 [US3] Implement `GovernanceWithdrawalInitEnv`, resolver environment, artifact parsing via `readDevnetGovernanceWithdrawalRegistry` and `readDevnetGovernanceStakeRewardAccounts`, cross-validation via `validateGovernanceWithdrawalPrerequisites`, devnet guard, wallet selection, upper-bound-slot sampling, and deposit-aware shortfall.
-- [ ] T018 [US1] Implement pure `governanceWithdrawalInitProposalToIntent` and wire the `proposal` runner to resolve -> translate -> `encodeSomeTreasuryIntent` -> atomic `--out` write honoring `--force`.
+- [x] T010 [P] [US2] Add `Support.GovernanceWithdrawalInitWizardFixtures` and proposal parity golden co-derived from existing governance-withdrawal library fixtures. Completed in Slice 2 commit.
+- [x] T011 [P] [US1] Add round-trip test for proposal `SomeTreasuryIntent` JSON. Completed in Slice 2 commit.
+- [x] T012 [P] [US3] Add network-guard tests: `mainnet`, `preprod`, and `preview` fail with `GovernanceWithdrawalInitNonDevnetNetwork` before wallet/artifact work. Completed in Slice 2 commit.
+- [x] T013 [P] [US1] Add registry parse-error tests: missing file, unparseable JSON, wrong phase, wrong network. Completed in Slice 2 commit.
+- [x] T014 [P] [US1] Add stake-reward accounts parse-error tests: missing file, unparseable JSON, wrong phase, wrong network. Completed in Slice 2 commit.
+- [x] T015 [P] [US1] Add cross-validation mismatch test for `accounts.treasury.scriptHash != registry.treasuryScriptHash`. Completed in Slice 2 commit.
+- [x] T016 [P] [US4] Add deposit-aware wallet-shortfall test naming `govActionDeposit`, `stakeDeposit`, `drepDeposit`, estimated fee/headroom, and total. Completed in Slice 2 commit.
+- [x] T017 [US3] Implement `GovernanceWithdrawalInitEnv`, resolver environment, artifact parsing via `readDevnetGovernanceWithdrawalRegistry` and `readDevnetGovernanceStakeRewardAccounts`, cross-validation via `validateGovernanceWithdrawalPrerequisites`, devnet guard, wallet selection, upper-bound-slot sampling, and deposit-aware shortfall. Completed in Slice 2 commit.
+- [x] T018 [US1] Implement pure `governanceWithdrawalInitProposalToIntent` and wire the `proposal` runner to resolve -> translate -> `encodeSomeTreasuryIntent` -> atomic `--out` write honoring `--force`. Completed in Slice 2 commit.
 
 Checkpoint: proposal subcommand functional; proposal golden, unit tests, and `./gate.sh` green.
 

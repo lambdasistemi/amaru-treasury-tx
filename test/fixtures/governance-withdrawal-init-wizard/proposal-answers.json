@@ -1,0 +1,8 @@
+{
+  "fundingSeedTxIn": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0",
+  "fundingStakeKeyHash": "33333333333333333333333333333333333333333333333333333333",
+  "voterKeyHash": "44444444444444444444444444444444444444444444444444444444",
+  "withdrawalAmountLovelace": 25000000,
+  "anchorUrl": "https://example.invalid/amaru-devnet-governance.json",
+  "anchorHash": "2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a"
+}

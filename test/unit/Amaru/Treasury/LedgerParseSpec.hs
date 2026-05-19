@@ -11,6 +11,7 @@ import Test.Hspec
     ( Spec
     , describe
     , it
+    , shouldBe
     , shouldSatisfy
     )
 
@@ -18,6 +19,7 @@ import Amaru.Treasury.LedgerParse
     ( keyHashFromHex
     , scriptHashFromHex
     , txInFromText
+    , txInToText
     )
 
 -- | Real values lifted from journal/2026/metadata.json.
@@ -77,3 +79,28 @@ spec = describe "Amaru.Treasury.LedgerParse" $ do
         it "rejects a too-short txid" $
             txInFromText "deadbeef#0"
                 `shouldSatisfy` isLeft
+
+    describe "txInToText" $ do
+        it "round-trips against txInFromText for a real reference" $ do
+            -- Parse → render → parse must be idempotent on the
+            -- payload (the rendered ix is the canonical decimal
+            -- form, which may differ from a zero-padded input
+            -- like "#00" — so we round-trip via parse first to
+            -- normalize, then assert render . parse-of-rendered
+            -- == render).
+            case txInFromText realDeployedAt of
+                Left e -> error ("txInFromText: " <> e)
+                Right txin -> do
+                    let rendered = txInToText txin
+                    case txInFromText rendered of
+                        Left e ->
+                            error
+                                ("txInFromText (round-trip): " <> e)
+                        Right txin' ->
+                            txInToText txin' `shouldBe` rendered
+        it "renders <64-hex-txid>#<ix> shape (no '#0' padding)" $ do
+            case txInFromText realDeployedAt of
+                Left e -> error ("txInFromText: " <> e)
+                Right txin ->
+                    txInToText txin
+                        `shouldBe` "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0"

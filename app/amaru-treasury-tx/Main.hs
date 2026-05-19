@@ -33,6 +33,9 @@ import Amaru.Treasury.Cli.Envelope
     ( runDeEnvelope
     , runEnvelope
     )
+import Amaru.Treasury.Cli.GovernanceWithdrawalInitWizard
+    ( runGovernanceWithdrawalInitWizard
+    )
 import Amaru.Treasury.Cli.RegistryInitWizard
     ( runRegistryInitWizard
     )
@@ -104,6 +107,8 @@ main = withUtf8 . withUpdateCheckMain $ do
             runRegistryInitWizard g rwo
         CmdStakeRewardInitWizard swo ->
             runStakeRewardInitWizard g swo
+        CmdGovernanceWithdrawalInitWizard gwo ->
+            runGovernanceWithdrawalInitWizard g gwo
         CmdTxBuild to ->
             withSocket g $ \socket ->
                 runTxBuild socket to

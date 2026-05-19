@@ -129,6 +129,7 @@ library
     Amaru.Treasury.Cli.Common
     Amaru.Treasury.Cli.DisburseWizard
     Amaru.Treasury.Cli.Envelope
+    Amaru.Treasury.Cli.GovernanceWithdrawalInitWizard
     Amaru.Treasury.Cli.Passphrase
     Amaru.Treasury.Cli.RegistryInitWizard
     Amaru.Treasury.Cli.ReportRender
@@ -191,6 +192,7 @@ library
     Amaru.Treasury.Tx.DisburseWizard
     Amaru.Treasury.Tx.DisburseWizard.Trace
     Amaru.Treasury.Tx.Envelope
+    Amaru.Treasury.Tx.GovernanceWithdrawalInitWizard
     Amaru.Treasury.Tx.RegistryInitWizard
     Amaru.Treasury.Tx.Reorganize
     Amaru.Treasury.Tx.StakeRewardInitWizard
@@ -382,6 +384,7 @@ test-suite unit-tests
     Amaru.Treasury.Build.NetworkGuardSpec
     Amaru.Treasury.BuildSpec
     Amaru.Treasury.Cli.EnvelopeSpec
+    Amaru.Treasury.Cli.GovernanceWithdrawalInitWizardParserSpec
     Amaru.Treasury.Cli.ParserSpec
     Amaru.Treasury.Cli.RegistryInitWizardParserSpec
     Amaru.Treasury.Cli.StakeRewardInitWizardParserSpec

@@ -56,15 +56,15 @@ Owned files:
 
 Tasks:
 
-- [ ] T001 [P] [US1] Add parser test: `governance-withdrawal-init-wizard --help` lists `proposal` and `materialization`.
-- [ ] T002 [P] [US1] Add parser tests: `proposal --help` lists shared flags plus `--funding-stake-key-hash`, `--voter-key-hash`, `--withdrawal-amount-lovelace`, `--anchor-url`, `--anchor-hash`.
-- [ ] T003 [P] [US1] Add parser tests: `materialization --help` lists shared flags plus `--rewards-lovelace`.
-- [ ] T004 [P] [US3] Add parser test: malformed `--funding-seed-txin` is rejected via `Amaru.Treasury.LedgerParse.txInFromText`.
-- [ ] T005 [P] [US3] Add parser tests: malformed `--funding-stake-key-hash` and `--voter-key-hash` are rejected unless exactly 56 hex characters.
-- [ ] T006 [P] [US3] Add parser test: malformed `--anchor-hash` is rejected unless exactly 64 hex characters.
-- [ ] T007 [P] [US3] Add parser tests: zero or negative `--withdrawal-amount-lovelace` and `--rewards-lovelace` are rejected.
-- [ ] T008 [P] [US3] Add parser/preflight tests: missing required flags, missing output parent directory, and existing `--out` without `--force` fail before any runner work.
-- [ ] T009 [US1] Implement `GovernanceWithdrawalInitProposalAnswers`, `GovernanceWithdrawalInitMaterializationAnswers`, `GovernanceWithdrawalInitError`, hex/amount readers, parser, runner stubs, cabal exposure, top-level CLI wiring, and executable dispatch wiring. Runner stubs must exit non-zero and must not query chain or write intent JSON.
+- [x] T001 [P] [US1] Add parser test: `governance-withdrawal-init-wizard --help` lists `proposal` and `materialization`. Completed in Slice 1 commit.
+- [x] T002 [P] [US1] Add parser tests: `proposal --help` lists shared flags plus `--funding-stake-key-hash`, `--voter-key-hash`, `--withdrawal-amount-lovelace`, `--anchor-url`, `--anchor-hash`. Completed in Slice 1 commit.
+- [x] T003 [P] [US1] Add parser tests: `materialization --help` lists shared flags plus `--rewards-lovelace`. Completed in Slice 1 commit.
+- [x] T004 [P] [US3] Add parser test: malformed `--funding-seed-txin` is rejected via `Amaru.Treasury.LedgerParse.txInFromText`. Completed in Slice 1 commit.
+- [x] T005 [P] [US3] Add parser tests: malformed `--funding-stake-key-hash` and `--voter-key-hash` are rejected unless exactly 56 hex characters. Completed in Slice 1 commit.
+- [x] T006 [P] [US3] Add parser test: malformed `--anchor-hash` is rejected unless exactly 64 hex characters. Completed in Slice 1 commit.
+- [x] T007 [P] [US3] Add parser tests: zero or negative `--withdrawal-amount-lovelace` and `--rewards-lovelace` are rejected. Completed in Slice 1 commit.
+- [x] T008 [P] [US3] Add parser/preflight tests: missing required flags, missing output parent directory, and existing `--out` without `--force` fail before any runner work. Completed in Slice 1 commit.
+- [x] T009 [US1] Implement `GovernanceWithdrawalInitProposalAnswers`, `GovernanceWithdrawalInitMaterializationAnswers`, `GovernanceWithdrawalInitError`, hex/amount readers, parser, runner stubs, cabal exposure, top-level CLI wiring, and executable dispatch wiring. Runner stubs must exit non-zero and must not query chain or write intent JSON. Completed in Slice 1 commit.
 
 Checkpoint: parser tests and `./gate.sh` green at HEAD.
 

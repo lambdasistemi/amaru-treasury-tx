@@ -127,25 +127,32 @@ payload contracts are documented under
 N2C connection (slice 4 of #157).
 
 The wizards that produce `bootstrap-intent.json` files for the
-registry-init flow ship in
-[#158](https://github.com/lambdasistemi/amaru-treasury-tx/issues/158)
-as three subcommands of `amaru-treasury-tx registry-init-wizard`,
-one per sub-action shipped by #157:
+registry-init flow ship as three subcommands of
+`amaru-treasury-tx registry-init-wizard`, one per sub-action shipped
+by #157. On a fresh DevNet, pass `--bootstrap` so the wizard does not
+look for registry anchors that do not exist yet. After the three
+submitted tx ids are known, run `write-artifacts` to materialize the
+same `registry-init/` handoff shape that the library smoke writes:
 
 ```bash
+COMMON=(--network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH")
+RUN_DIR=runs/devnet/$(date -u +%Y%m%dT%H%M%SZ)
+
 # Step 1: seed-split (no inter-tx inputs).
-amaru-treasury-tx registry-init-wizard seed-split \
+amaru-treasury-tx "${COMMON[@]}" registry-init-wizard seed-split \
+    --bootstrap \
     --wallet-addr <devnet-bech32> \
     --metadata <metadata.json> \
     --scope <scope-id> \
     --out seed-split.intent.json
-amaru-treasury-tx tx-build --intent seed-split.intent.json --out seed-split.tx.cbor.hex
+amaru-treasury-tx "${COMMON[@]}" tx-build --intent seed-split.intent.json --out seed-split.tx.cbor.hex
 amaru-treasury-tx witness ...
 amaru-treasury-tx submit  ...
-# Operator records seed-split's submitted txid.
+# Operator records seed-split's submitted txid as <seed-split-txid>.
 
 # Step 2: mint (operator hand-carries seed TxIns + owner key hash).
-amaru-treasury-tx registry-init-wizard mint \
+amaru-treasury-tx "${COMMON[@]}" registry-init-wizard mint \
+    --bootstrap \
     --wallet-addr <devnet-bech32> \
     --metadata <metadata.json> \
     --scope <scope-id> \
@@ -153,10 +160,14 @@ amaru-treasury-tx registry-init-wizard mint \
     --registry-seed-txin <seed-split-txid>#1 \
     --owner-key-hash     <hex28> \
     --out mint.intent.json
-# ... tx-build → witness → submit; operator records the mint txid.
+amaru-treasury-tx "${COMMON[@]}" tx-build --intent mint.intent.json --out mint.tx.cbor.hex
+amaru-treasury-tx witness ...
+amaru-treasury-tx submit  ...
+# Operator records the mint txid as <registry-mint-txid>.
 
 # Step 3: reference-scripts (operator hand-carries seed TxIns + funding seed).
-amaru-treasury-tx registry-init-wizard reference-scripts \
+amaru-treasury-tx "${COMMON[@]}" registry-init-wizard reference-scripts \
+    --bootstrap \
     --wallet-addr <devnet-bech32> \
     --metadata <metadata.json> \
     --scope <scope-id> \
@@ -164,18 +175,40 @@ amaru-treasury-tx registry-init-wizard reference-scripts \
     --registry-seed-txin <seed-split-txid>#1 \
     --funding-seed-txin  <wallet-utxo>#N \
     --out reference-scripts.intent.json
-# ... tx-build → witness → submit.
+amaru-treasury-tx "${COMMON[@]}" tx-build --intent reference-scripts.intent.json --out reference-scripts.tx.cbor.hex
+amaru-treasury-tx witness ...
+amaru-treasury-tx submit  ...
+# Operator records the submitted txid as <reference-scripts-txid>.
+
+# Step 4: write the registry-init handoff artifacts from real tx ids.
+amaru-treasury-tx "${COMMON[@]}" registry-init-wizard write-artifacts \
+    --run-dir "$RUN_DIR" \
+    --seed-split-txid <seed-split-txid> \
+    --registry-mint-txid <registry-mint-txid> \
+    --reference-scripts-txid <reference-scripts-txid> \
+    --scopes-seed-txin   <seed-split-txid>#0 \
+    --registry-seed-txin <seed-split-txid>#1 \
+    --owner-key-hash     <hex28>
 ```
 
 **Explicit inter-tx unsafe** — the wizard does not simulate cross-step
 tx bodies. The operator types every value that crosses a sub-step
-boundary (seed TxIns, owner key hash, funding seed UTxO). Mistyping
-any of them — swapping `#0` and `#1`, pasting a stale txid, or using
-the wrong key hash — yields invalid intents that fail at `tx-build`
-(best case) or at on-chain validation (worst case). This is deliberate;
-the resumable client state that supersedes this manual carry is
-parked in
+boundary (submitted tx ids, seed TxIns, owner key hash, funding seed
+UTxO). Mistyping any of them — swapping `#0` and `#1`, pasting a stale
+txid, or using the wrong key hash — yields invalid intents that fail at
+`tx-build` (best case), at on-chain validation (worst case), or in
+`write-artifacts` validation for malformed values. This is deliberate;
+the resumable client state that supersedes this manual carry is parked in
 [#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163).
+
+The shipped CLI smoke in
+[#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161)
+must hand-carry and persist: run directory, DevNet magic `42`,
+`seed-split-txid`, `registry-mint-txid`, `reference-scripts-txid`,
+`<seed-split-txid>#0`, `<seed-split-txid>#1`, the owner key hash, and
+the funding seed UTxO used by `reference-scripts`. The artifact writer
+uses the first seven values; the funding seed remains live-chain
+submission evidence for the reference-scripts transaction.
 
 The wizards that produce `bootstrap-intent.json` files for the
 stake-reward-init flow ship in

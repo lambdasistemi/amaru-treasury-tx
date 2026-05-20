@@ -10,15 +10,23 @@ import Cardano.Ledger.Address
     , getNetwork
     , serialiseAddr
     )
-import Cardano.Ledger.BaseTypes (Network (..))
+import Cardano.Ledger.BaseTypes (Network (..), txIxToInt)
 import Cardano.Ledger.TxIn (TxId, TxIn (..))
 import Codec.Binary.Bech32 qualified as Bech32
+import Control.Exception (bracket)
 import Data.Aeson
     ( object
     , (.=)
     )
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as T
+import System.Directory
+    ( createDirectory
+    , doesDirectoryExist
+    , doesFileExist
+    , getTemporaryDirectory
+    , removeDirectoryRecursive
+    )
 import System.FilePath ((</>))
 import Test.Hspec
     ( Spec
@@ -29,17 +37,23 @@ import Test.Hspec
     )
 
 import Amaru.Treasury.Devnet.RegistryInit
-    ( DevnetRegistryAnchors (..)
+    ( BootstrapArtifactArgs (..)
+    , DevnetBootstrapArtifactInputs (..)
+    , DevnetRegistryAnchors (..)
     , DevnetRegistryPublication (..)
     , TreasuryTarget (..)
+    , bootstrapDevnetPublication
     , devnetRegistryView
+    , registryInitDirectory
     , registryInitProvenancePath
     , registryInitProvenanceValue
     , registryInitRegistryPath
     , registryInitRegistryValue
     , registryInitSummaryPath
     , registryInitSummaryValue
+    , runBootstrapWriter
     , treasuryTargetFromBlob
+    , validateBootstrapArgs
     , withdrawalRegistryPath
     , withdrawalRegistryValue
     )
@@ -167,6 +181,128 @@ spec =
                         .= renderAddr
                             (ttAddress (draTreasuryTarget registry))
                     ]
+
+        describe "bootstrap artifact writer (#175 Slice 3)" $ do
+            it "validates good args into typed inputs" $ do
+                case validateBootstrapArgs sampleBootstrapArgs of
+                    Right ins -> do
+                        dbaiOwnerKeyHash ins
+                            `shouldBe` sampleOwnerKeyHash
+                        dbaiNetwork ins `shouldBe` Testnet
+                    Left e ->
+                        expectationFailure
+                            ("expected Right, got Left: " <> e)
+
+            it "rejects a malformed --seed-split-txid (short hex)" $ do
+                let args =
+                        sampleBootstrapArgs
+                            { baaSeedSplitTxId = "abcd"
+                            }
+                case validateBootstrapArgs args of
+                    Left _ -> pure ()
+                    Right _ ->
+                        expectationFailure
+                            "expected Left for short --seed-split-txid"
+
+            it "rejects a malformed --owner-key-hash (55 hex)" $ do
+                let args =
+                        sampleBootstrapArgs
+                            { baaOwnerKeyHash = T.replicate 55 "a"
+                            }
+                case validateBootstrapArgs args of
+                    Left _ -> pure ()
+                    Right _ ->
+                        expectationFailure
+                            "expected Left for short --owner-key-hash"
+
+            it "rejects a malformed --scopes-seed-txin" $ do
+                let args =
+                        sampleBootstrapArgs
+                            { baaScopesSeedTxIn = "not-a-ref"
+                            }
+                case validateBootstrapArgs args of
+                    Left _ -> pure ()
+                    Right _ ->
+                        expectationFailure
+                            "expected Left for malformed --scopes-seed-txin"
+
+            it
+                "maps registry-mint and reference-scripts tx ids to the four anchors"
+                $ do
+                    ins <-
+                        either
+                            (error . ("validateBootstrapArgs: " <>))
+                            pure
+                            (validateBootstrapArgs sampleBootstrapArgs)
+                    publication <- bootstrapDevnetPublication ins
+                    let anchors = drpAnchors publication
+                    txInOutputIx (draScopesRef anchors) `shouldBe` 0
+                    txIdOf (draScopesRef anchors)
+                        `shouldBe` dbaiRegistryMintTxId ins
+                    txInOutputIx (draRegistryRef anchors) `shouldBe` 1
+                    txIdOf (draRegistryRef anchors)
+                        `shouldBe` dbaiRegistryMintTxId ins
+                    txInOutputIx (draPermissionsRef anchors) `shouldBe` 0
+                    txIdOf (draPermissionsRef anchors)
+                        `shouldBe` dbaiReferenceScriptsTxId ins
+                    txInOutputIx (draTreasuryRef anchors) `shouldBe` 1
+                    txIdOf (draTreasuryRef anchors)
+                        `shouldBe` dbaiReferenceScriptsTxId ins
+                    draOwnerKeyHash anchors `shouldBe` sampleOwnerKeyHash
+
+            it
+                "writes summary/registry/provenance and a top-level summary on devnet"
+                $ withScratchDir "regwiz-write-ok-"
+                $ \dir -> do
+                    res <-
+                        runBootstrapWriter
+                            "devnet"
+                            42
+                            dir
+                            sampleBootstrapArgs
+                    res `shouldBe` Right ()
+                    doesFileExist (registryInitSummaryPath dir)
+                        >>= (`shouldBe` True)
+                    doesFileExist (registryInitRegistryPath dir)
+                        >>= (`shouldBe` True)
+                    doesFileExist (registryInitProvenancePath dir)
+                        >>= (`shouldBe` True)
+                    doesFileExist (dir </> "summary.json")
+                        >>= (`shouldBe` True)
+
+            it "refuses non-devnet networks and leaves no registry-init dir" $
+                withScratchDir "regwiz-write-mainnet-" $ \dir -> do
+                    res <-
+                        runBootstrapWriter
+                            "mainnet"
+                            764824073
+                            dir
+                            sampleBootstrapArgs
+                    case res of
+                        Left _ -> pure ()
+                        Right () ->
+                            expectationFailure
+                                "expected Left for non-devnet network"
+                    doesDirectoryExist (registryInitDirectory dir)
+                        >>= (`shouldBe` False)
+
+            it "refuses malformed inputs and leaves no registry-init dir" $
+                withScratchDir "regwiz-write-badargs-" $ \dir -> do
+                    res <-
+                        runBootstrapWriter
+                            "devnet"
+                            42
+                            dir
+                            sampleBootstrapArgs
+                                { baaOwnerKeyHash = "deadbeef"
+                                }
+                    case res of
+                        Left _ -> pure ()
+                        Right () ->
+                            expectationFailure
+                                "expected Left for malformed owner key hash"
+                    doesDirectoryExist (registryInitDirectory dir)
+                        >>= (`shouldBe` False)
 
         it "projects registry anchors into the withdraw registry view" $ do
             registry <- sampleRegistryAnchors
@@ -317,3 +453,63 @@ renderAddr addr =
         case getNetwork target of
             Mainnet -> "addr"
             Testnet -> "addr_test"
+
+-- ----------------------------------------------------
+-- Slice 3 (#175) — bootstrap artifact writer fixtures
+-- ----------------------------------------------------
+
+{- | Two distinct 64-hex tx ids used so the anchor mapping is
+  pin-tested per submitted transaction.
+-}
+sampleSeedSplitArtifactTxId :: T.Text
+sampleSeedSplitArtifactTxId = T.replicate 64 "1"
+
+sampleRegistryMintArtifactTxId :: T.Text
+sampleRegistryMintArtifactTxId = T.replicate 64 "2"
+
+sampleReferenceScriptsArtifactTxId :: T.Text
+sampleReferenceScriptsArtifactTxId = T.replicate 64 "3"
+
+sampleScopesSeedRefText :: T.Text
+sampleScopesSeedRefText =
+    T.replicate 64 "4" <> "#0"
+
+sampleRegistrySeedRefText :: T.Text
+sampleRegistrySeedRefText =
+    T.replicate 64 "5" <> "#1"
+
+sampleBootstrapArgs :: BootstrapArtifactArgs
+sampleBootstrapArgs =
+    BootstrapArtifactArgs
+        { baaSeedSplitTxId = sampleSeedSplitArtifactTxId
+        , baaRegistryMintTxId = sampleRegistryMintArtifactTxId
+        , baaReferenceScriptsTxId =
+            sampleReferenceScriptsArtifactTxId
+        , baaScopesSeedTxIn = sampleScopesSeedRefText
+        , baaRegistrySeedTxIn = sampleRegistrySeedRefText
+        , baaOwnerKeyHash = sampleOwnerKeyHash
+        , baaNetwork = Testnet
+        }
+
+txIdOf :: TxIn -> TxId
+txIdOf (TxIn tid _) = tid
+
+txInOutputIx :: TxIn -> Int
+txInOutputIx (TxIn _ ix) = txIxToInt ix
+
+withScratchDir :: String -> (FilePath -> IO a) -> IO a
+withScratchDir prefix action = do
+    sysTmp <- getTemporaryDirectory
+    let scratch = sysTmp </> (prefix <> "0")
+    bracket (mkFresh scratch) removeDirectoryRecursive action
+  where
+    mkFresh d = do
+        exists <- doesDirectoryExist d
+        if exists
+            then do
+                removeDirectoryRecursive d
+                createDirectory d
+                pure d
+            else do
+                createDirectory d
+                pure d

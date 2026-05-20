@@ -36,6 +36,7 @@ module Amaru.Treasury.Cli.RegistryInitWizard
     , SeedSplitOpts (..)
     , MintOpts (..)
     , ReferenceScriptsOpts (..)
+    , WriteArtifactsOpts (..)
 
       -- * Parser
     , registryInitWizardOptsP
@@ -74,11 +75,13 @@ import System.Exit (ExitCode (..), exitWith)
 import System.FilePath (takeDirectory)
 import System.IO (hPrint, hPutStrLn, stderr)
 
+import Cardano.Ledger.BaseTypes (Network (..))
 import Cardano.Ledger.Hashes (KeyHash (..))
 import Cardano.Ledger.Keys (KeyRole (Witness))
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Node.Client.Provider (queryUpperBoundSlot)
 import Cardano.Slotting.Slot (SlotNo (..))
+import Ouroboros.Network.Magic (NetworkMagic (..))
 
 import Amaru.Treasury.Backend.N2C
     ( withLocalNodeBackend
@@ -87,6 +90,10 @@ import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , queryFlat
     , resolveNetworkName
+    )
+import Amaru.Treasury.Devnet.RegistryInit
+    ( BootstrapArtifactArgs (..)
+    , runBootstrapWriter
     )
 import Amaru.Treasury.IntentJSON
     ( encodeSomeTreasuryIntent
@@ -101,7 +108,8 @@ import Amaru.Treasury.Scope
     , scopeFromText
     )
 import Amaru.Treasury.Tx.RegistryInitWizard
-    ( RegistryInitError (..)
+    ( RegistryInitBootstrapInput (..)
+    , RegistryInitError (..)
     , RegistryInitMintAnswers (..)
     , RegistryInitReferenceScriptsAnswers (..)
     , RegistryInitResolverEnv (..)
@@ -110,6 +118,7 @@ import Amaru.Treasury.Tx.RegistryInitWizard
     , registryInitMintToIntent
     , registryInitReferenceScriptsToIntent
     , registryInitSeedSplitToIntent
+    , resolveRegistryInitBootstrap
     , resolveRegistryInitSeedSplit
     )
 import Amaru.Treasury.Tx.SwapWizard
@@ -142,6 +151,12 @@ data CommonFlags = CommonFlags
     , cfEvent :: !(Maybe Text)
     , cfLabel :: !(Maybe Text)
     , cfForce :: !Bool
+    , cfBootstrap :: !Bool
+    -- ^ Slice 1 of #175: when 'True', dispatch to the bootstrap
+    -- runner branch (DevNet-only, no on-chain registry metadata
+    -- expected). When 'False', the existing verified path runs
+    -- and 'verifyRegistry' is called before any intent emission.
+    -- Bootstrap-mode intent emission lands in Slice 2.
     }
     deriving stock (Eq, Show)
 
@@ -169,11 +184,24 @@ data ReferenceScriptsOpts = ReferenceScriptsOpts
     }
     deriving stock (Eq, Show)
 
+-- | Options for the @write-artifacts@ sub-action.
+data WriteArtifactsOpts = WriteArtifactsOpts
+    { waRunDir :: !FilePath
+    , waSeedSplitTxId :: !Text
+    , waRegistryMintTxId :: !Text
+    , waReferenceScriptsTxId :: !Text
+    , waScopesSeedTxIn :: !Text
+    , waRegistrySeedTxIn :: !Text
+    , waOwnerKeyHash :: !Text
+    }
+    deriving stock (Eq, Show)
+
 -- | Discriminated union dispatched by the runner.
 data RegistryInitWizardOpts
     = RegistryInitSeedSplitOpts !SeedSplitOpts
     | RegistryInitMintOpts !MintOpts
     | RegistryInitReferenceScriptsOpts !ReferenceScriptsOpts
+    | RegistryInitWriteArtifactsOpts !WriteArtifactsOpts
     deriving stock (Eq, Show)
 
 -- ----------------------------------------------------
@@ -205,6 +233,14 @@ registryInitWizardOptsP =
                     (RegistryInitReferenceScriptsOpts <$> referenceScriptsOptsP)
                     ( progDesc
                         "Publish the reference scripts using the funding seed from seed-split"
+                    )
+                )
+            <> command
+                "write-artifacts"
+                ( info
+                    (RegistryInitWriteArtifactsOpts <$> writeArtifactsOptsP)
+                    ( progDesc
+                        "Write DevNet registry-init artifacts from submitted bootstrap transaction ids"
                     )
                 )
         )
@@ -262,6 +298,51 @@ referenceScriptsOptsP =
                 <> metavar "TXID#IX"
                 <> help
                     "Funding seed TxIn — third output of the seed-split sub-tx; pays reference-scripts deposits"
+            )
+
+writeArtifactsOptsP :: Parser WriteArtifactsOpts
+writeArtifactsOptsP =
+    WriteArtifactsOpts
+        <$> strOption
+            ( long "run-dir"
+                <> metavar "DIR"
+                <> help "DevNet run directory where registry-init artifacts are written"
+            )
+        <*> option
+            txIdTextReader
+            ( long "seed-split-txid"
+                <> metavar "TXID"
+                <> help "Submitted seed-split transaction id"
+            )
+        <*> option
+            txIdTextReader
+            ( long "registry-mint-txid"
+                <> metavar "TXID"
+                <> help "Submitted registry mint transaction id"
+            )
+        <*> option
+            txIdTextReader
+            ( long "reference-scripts-txid"
+                <> metavar "TXID"
+                <> help "Submitted reference-scripts transaction id"
+            )
+        <*> option
+            txInTextReader
+            ( long "scopes-seed-txin"
+                <> metavar "TXID#IX"
+                <> help "Scopes seed TxIn produced by seed-split"
+            )
+        <*> option
+            txInTextReader
+            ( long "registry-seed-txin"
+                <> metavar "TXID#IX"
+                <> help "Registry seed TxIn produced by seed-split"
+            )
+        <*> option
+            keyHashTextReader
+            ( long "owner-key-hash"
+                <> metavar "HEX28"
+                <> help "28-byte scope owner key hash"
             )
 
 commonFlagsP :: Parser CommonFlags
@@ -350,6 +431,14 @@ commonFlagsP =
                 <> help
                     "Overwrite the file at --out if it already exists"
             )
+        <*> flag
+            False
+            True
+            ( long "bootstrap"
+                <> help
+                    "DevNet-only: run in fresh-chain bootstrap mode \
+                    \(no on-chain registry metadata required)"
+            )
 
 -- ----------------------------------------------------
 -- ReadM helpers
@@ -367,6 +456,27 @@ txInReader =
 keyHashReader :: ReadM (KeyHash Witness)
 keyHashReader =
     eitherReader (keyHashFromHex . T.pack)
+
+txIdTextReader :: ReadM Text
+txIdTextReader =
+    eitherReader $ \raw -> do
+        let text = T.pack raw
+        _ <- txInFromText (text <> "#0")
+        pure text
+
+txInTextReader :: ReadM Text
+txInTextReader =
+    eitherReader $ \raw -> do
+        let text = T.pack raw
+        _ <- txInFromText text
+        pure text
+
+keyHashTextReader :: ReadM Text
+keyHashTextReader =
+    eitherReader $ \raw -> do
+        let text = T.pack raw
+        _ <- keyHashFromHex text
+        pure text
 
 -- ----------------------------------------------------
 -- --out pre-flight checks
@@ -412,13 +522,23 @@ runRegistryInitWizard
 runRegistryInitWizard g cmd = case cmd of
     RegistryInitSeedSplitOpts (SeedSplitOpts cf) -> do
         guardOut (cfOut cf) (cfForce cf)
-        runSeedSplit g cf
+        if cfBootstrap cf
+            then runSeedSplitBootstrap g cf
+            else runSeedSplitVerified g cf
     RegistryInitMintOpts mintOpts -> do
-        guardOut (cfOut (mCommon mintOpts)) (cfForce (mCommon mintOpts))
-        runMint g mintOpts
+        let cf = mCommon mintOpts
+        guardOut (cfOut cf) (cfForce cf)
+        if cfBootstrap cf
+            then runMintBootstrap g mintOpts
+            else runMintVerified g mintOpts
     RegistryInitReferenceScriptsOpts rsOpts -> do
-        guardOut (cfOut (rsCommon rsOpts)) (cfForce (rsCommon rsOpts))
-        runReferenceScripts g rsOpts
+        let cf = rsCommon rsOpts
+        guardOut (cfOut cf) (cfForce cf)
+        if cfBootstrap cf
+            then runReferenceScriptsBootstrap g rsOpts
+            else runReferenceScriptsVerified g rsOpts
+    RegistryInitWriteArtifactsOpts waOpts ->
+        runWriteArtifacts g waOpts
   where
     guardOut path force = do
         r <- validateOutPath path force
@@ -442,8 +562,8 @@ Network mismatch surfaces twice: once via the resolver's
 other than @"devnet"@, and once via the pure translation if
 the registry view ends up keyed for an unsupported network.
 -}
-runSeedSplit :: GlobalOpts -> CommonFlags -> IO ()
-runSeedSplit g cf = do
+runSeedSplitVerified :: GlobalOpts -> CommonFlags -> IO ()
+runSeedSplitVerified g cf = do
     networkName <- case resolveNetworkName g of
         Right t -> pure t
         Left e -> abortSeedSplit (T.pack e)
@@ -533,8 +653,8 @@ The resolver fires the devnet network guard before any chain
 query; any 'RegistryInitError' from the resolver or the
 translation is printed to stderr with exit code 3.
 -}
-runMint :: GlobalOpts -> MintOpts -> IO ()
-runMint g mintOpts = do
+runMintVerified :: GlobalOpts -> MintOpts -> IO ()
+runMintVerified g mintOpts = do
     let cf = mCommon mintOpts
     networkName <- case resolveNetworkName g of
         Right t -> pure t
@@ -631,8 +751,9 @@ The resolver fires the devnet network guard before any chain
 query; any 'RegistryInitError' from the resolver or the
 translation is printed to stderr with exit code 3.
 -}
-runReferenceScripts :: GlobalOpts -> ReferenceScriptsOpts -> IO ()
-runReferenceScripts g rsOpts = do
+runReferenceScriptsVerified
+    :: GlobalOpts -> ReferenceScriptsOpts -> IO ()
+runReferenceScriptsVerified g rsOpts = do
     let cf = rsCommon rsOpts
     networkName <- case resolveNetworkName g of
         Right t -> pure t
@@ -712,4 +833,254 @@ abortReferenceScripts msg = do
         ( "registry-init-wizard reference-scripts: "
             <> T.unpack msg
         )
+    exitWith (ExitFailure 3)
+
+-- ----------------------------------------------------
+-- Bootstrap runner branches (#175 Slice 2)
+-- ----------------------------------------------------
+
+{- | Bootstrap @seed-split@ branch (#175 Slice 2).
+
+DevNet-only: resolves the network first and fails closed for
+non-@devnet@ networks BEFORE opening the node backend,
+querying chain, or writing the @--out@ file. On devnet it
+queries the wallet UTxOs and upper-bound slot through the
+same backend helpers as verified mode but skips
+'verifyRegistry'. The resolved 'RegistryInitEnv' carries a
+skeleton registry projection; the pure translator stamps it
+into the intent for downstream encoding. The build-side
+translators do not consume those placeholder anchors. #175
+Slice 3 ships the artifact writer that records the REAL
+anchors from submitted tx ids.
+-}
+runSeedSplitBootstrap :: GlobalOpts -> CommonFlags -> IO ()
+runSeedSplitBootstrap g cf = do
+    networkName <- case resolveNetworkName g of
+        Right t -> pure t
+        Left e -> abortSeedSplit (T.pack e)
+    case networkName of
+        "devnet" -> pure ()
+        other ->
+            abortSeedSplit
+                ("bootstrap mode is devnet-only, got " <> other)
+    socket <- case goSocketPath g of
+        Just s -> pure s
+        Nothing ->
+            abortSeedSplit
+                "--node-socket / CARDANO_NODE_SOCKET_PATH is required"
+    let answers =
+            RegistryInitSeedSplitAnswers
+                { risScope = cfScope cf
+                , risValidityHours = cfValidityHours cf
+                , risDescription = cfDescription cf
+                , risJustification = cfJustification cf
+                , risDestinationLabel = cfDestinationLabel cf
+                , risEvent = cfEvent cf
+                , risLabel = cfLabel cf
+                }
+        input =
+            RegistryInitBootstrapInput
+                { wbiNetwork = networkName
+                , wbiWalletAddrBech32 = cfWalletAddr cf
+                , wbiScope = cfScope cf
+                , wbiValidityHours = cfValidityHours cf
+                }
+    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+        let renv =
+                RegistryInitResolverEnv
+                    { wreQueryWalletUtxos = queryFlat backend
+                    , wreComputeUpperBound = \choice -> do
+                        r <- queryUpperBoundSlot backend choice
+                        pure (fmap unwrapSlot r)
+                    }
+        er <- resolveRegistryInitBootstrap renv input
+        env <- case er of
+            Left e ->
+                abortSeedSplit
+                    ("resolve: " <> T.pack (show e))
+            Right e -> pure e
+        intent <-
+            case registryInitSeedSplitToIntent env answers of
+                Left te ->
+                    abortSeedSplit
+                        ("translate: " <> T.pack (show te))
+                Right i -> pure i
+        BSL.writeFile
+            (cfOut cf)
+            (encodeSomeTreasuryIntent intent)
+  where
+    unwrapSlot (SlotNo s) = s
+
+{- | Bootstrap @mint@ branch (#175 Slice 2). Reuses the
+bootstrap resolver; the three operator-typed values
+(@--scopes-seed-txin@, @--registry-seed-txin@,
+@--owner-key-hash@) are baked verbatim by the pure
+translator.
+-}
+runMintBootstrap :: GlobalOpts -> MintOpts -> IO ()
+runMintBootstrap g mintOpts = do
+    let cf = mCommon mintOpts
+    networkName <- case resolveNetworkName g of
+        Right t -> pure t
+        Left e -> abortMint (T.pack e)
+    case networkName of
+        "devnet" -> pure ()
+        other ->
+            abortMint
+                ("bootstrap mode is devnet-only, got " <> other)
+    socket <- case goSocketPath g of
+        Just s -> pure s
+        Nothing ->
+            abortMint
+                "--node-socket / CARDANO_NODE_SOCKET_PATH is required"
+    let answers =
+            RegistryInitMintAnswers
+                { rimScope = cfScope cf
+                , rimValidityHours = cfValidityHours cf
+                , rimDescription = cfDescription cf
+                , rimJustification = cfJustification cf
+                , rimDestinationLabel = cfDestinationLabel cf
+                , rimEvent = cfEvent cf
+                , rimLabel = cfLabel cf
+                , rimScopesSeedTxIn = mScopesSeedTxIn mintOpts
+                , rimRegistrySeedTxIn = mRegistrySeedTxIn mintOpts
+                , rimOwnerKeyHash = mOwnerKeyHash mintOpts
+                }
+        input =
+            RegistryInitBootstrapInput
+                { wbiNetwork = networkName
+                , wbiWalletAddrBech32 = cfWalletAddr cf
+                , wbiScope = cfScope cf
+                , wbiValidityHours = cfValidityHours cf
+                }
+    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+        let renv =
+                RegistryInitResolverEnv
+                    { wreQueryWalletUtxos = queryFlat backend
+                    , wreComputeUpperBound = \choice -> do
+                        r <- queryUpperBoundSlot backend choice
+                        pure (fmap unwrapSlot r)
+                    }
+        er <- resolveRegistryInitBootstrap renv input
+        env <- case er of
+            Left e ->
+                abortMint ("resolve: " <> T.pack (show e))
+            Right e -> pure e
+        intent <-
+            case registryInitMintToIntent env answers of
+                Left te ->
+                    abortMint
+                        ("translate: " <> T.pack (show te))
+                Right i -> pure i
+        BSL.writeFile
+            (cfOut cf)
+            (encodeSomeTreasuryIntent intent)
+  where
+    unwrapSlot (SlotNo s) = s
+
+{- | Bootstrap @reference-scripts@ branch (#175 Slice 2).
+Reuses the bootstrap resolver. The translator overrides the
+wallet block's @txIn@ with the operator-typed
+@--funding-seed-txin@ during JSON construction (same as the
+verified path).
+-}
+runReferenceScriptsBootstrap
+    :: GlobalOpts -> ReferenceScriptsOpts -> IO ()
+runReferenceScriptsBootstrap g rsOpts = do
+    let cf = rsCommon rsOpts
+    networkName <- case resolveNetworkName g of
+        Right t -> pure t
+        Left e -> abortReferenceScripts (T.pack e)
+    case networkName of
+        "devnet" -> pure ()
+        other ->
+            abortReferenceScripts
+                ("bootstrap mode is devnet-only, got " <> other)
+    socket <- case goSocketPath g of
+        Just s -> pure s
+        Nothing ->
+            abortReferenceScripts
+                "--node-socket / CARDANO_NODE_SOCKET_PATH is required"
+    let answers =
+            RegistryInitReferenceScriptsAnswers
+                { rirScope = cfScope cf
+                , rirValidityHours = cfValidityHours cf
+                , rirDescription = cfDescription cf
+                , rirJustification = cfJustification cf
+                , rirDestinationLabel = cfDestinationLabel cf
+                , rirEvent = cfEvent cf
+                , rirLabel = cfLabel cf
+                , rirScopesSeedTxIn = rsScopesSeedTxIn rsOpts
+                , rirRegistrySeedTxIn = rsRegistrySeedTxIn rsOpts
+                , rirFundingSeedTxIn = rsFundingSeedTxIn rsOpts
+                }
+        input =
+            RegistryInitBootstrapInput
+                { wbiNetwork = networkName
+                , wbiWalletAddrBech32 = cfWalletAddr cf
+                , wbiScope = cfScope cf
+                , wbiValidityHours = cfValidityHours cf
+                }
+    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+        let renv =
+                RegistryInitResolverEnv
+                    { wreQueryWalletUtxos = queryFlat backend
+                    , wreComputeUpperBound = \choice -> do
+                        r <- queryUpperBoundSlot backend choice
+                        pure (fmap unwrapSlot r)
+                    }
+        er <- resolveRegistryInitBootstrap renv input
+        env <- case er of
+            Left e ->
+                abortReferenceScripts
+                    ("resolve: " <> T.pack (show e))
+            Right e -> pure e
+        intent <-
+            case registryInitReferenceScriptsToIntent env answers of
+                Left te ->
+                    abortReferenceScripts
+                        ("translate: " <> T.pack (show te))
+                Right i -> pure i
+        BSL.writeFile
+            (cfOut cf)
+            (encodeSomeTreasuryIntent intent)
+  where
+    unwrapSlot (SlotNo s) = s
+
+-- ----------------------------------------------------
+-- Bootstrap artifact writer (#175 Slice 3)
+-- ----------------------------------------------------
+
+runWriteArtifacts :: GlobalOpts -> WriteArtifactsOpts -> IO ()
+runWriteArtifacts g waOpts = do
+    networkName <- case resolveNetworkName g of
+        Right t -> pure t
+        Left e -> abortWriteArtifacts (T.pack e)
+    let NetworkMagic magic =
+            goNetworkMagic g
+        args =
+            BootstrapArtifactArgs
+                { baaSeedSplitTxId = waSeedSplitTxId waOpts
+                , baaRegistryMintTxId = waRegistryMintTxId waOpts
+                , baaReferenceScriptsTxId =
+                    waReferenceScriptsTxId waOpts
+                , baaScopesSeedTxIn = waScopesSeedTxIn waOpts
+                , baaRegistrySeedTxIn = waRegistrySeedTxIn waOpts
+                , baaOwnerKeyHash = waOwnerKeyHash waOpts
+                , baaNetwork = Testnet
+                }
+    runBootstrapWriter
+        networkName
+        (fromIntegral magic)
+        (waRunDir waOpts)
+        args
+        >>= \case
+            Right () -> pure ()
+            Left e -> abortWriteArtifacts (T.pack e)
+
+abortWriteArtifacts :: Text -> IO a
+abortWriteArtifacts msg = do
+    hPutStrLn
+        stderr
+        ("registry-init-wizard write-artifacts: " <> T.unpack msg)
     exitWith (ExitFailure 3)

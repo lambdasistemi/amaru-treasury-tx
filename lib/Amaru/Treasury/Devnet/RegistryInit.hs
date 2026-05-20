@@ -32,6 +32,14 @@ module Amaru.Treasury.Devnet.RegistryInit
     , deriveDevnetScripts
     , treasuryTargetFromBlob
 
+      -- * Bootstrap artifact writer (#175 Slice 3)
+    , BootstrapArtifactArgs (..)
+    , DevnetBootstrapArtifactInputs (..)
+    , validateBootstrapArgs
+    , bootstrapDevnetPublication
+    , runBootstrapWriter
+    , registryInitDirectory
+
       -- * Construction cores
 
     --
@@ -179,6 +187,10 @@ import PlutusCore.Data (Data (..))
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 
+import Amaru.Treasury.LedgerParse
+    ( keyHashFromHex
+    , txInFromText
+    )
 import Amaru.Treasury.Redeemer
     ( RawPlutusData (..)
     , emptyListRedeemer
@@ -259,6 +271,145 @@ data DevnetRegistryPublication = DevnetRegistryPublication
     , drpReferenceScriptsTxId :: !TxId
     , drpAnchors :: !DevnetRegistryAnchors
     }
+
+{- | Raw operator inputs for materializing registry-init artifacts
+after the three bootstrap intent transactions have been submitted.
+-}
+data BootstrapArtifactArgs = BootstrapArtifactArgs
+    { baaSeedSplitTxId :: !T.Text
+    , baaRegistryMintTxId :: !T.Text
+    , baaReferenceScriptsTxId :: !T.Text
+    , baaScopesSeedTxIn :: !T.Text
+    , baaRegistrySeedTxIn :: !T.Text
+    , baaOwnerKeyHash :: !T.Text
+    , baaNetwork :: !Network
+    }
+    deriving stock (Eq, Show)
+
+-- | Validated bootstrap artifact inputs.
+data DevnetBootstrapArtifactInputs = DevnetBootstrapArtifactInputs
+    { dbaiSeedSplitTxId :: !TxId
+    , dbaiRegistryMintTxId :: !TxId
+    , dbaiReferenceScriptsTxId :: !TxId
+    , dbaiScopesSeedTxIn :: !TxIn
+    , dbaiRegistrySeedTxIn :: !TxIn
+    , dbaiOwnerKeyHash :: !T.Text
+    , dbaiNetwork :: !Network
+    }
+    deriving stock (Eq, Show)
+
+{- | Validate the textual write-artifacts arguments before any files
+are created.
+-}
+validateBootstrapArgs
+    :: BootstrapArtifactArgs
+    -> Either String DevnetBootstrapArtifactInputs
+validateBootstrapArgs args = do
+    seedSplitTxId <-
+        txIdText "seed-split-txid" (baaSeedSplitTxId args)
+    registryMintTxId <-
+        txIdText "registry-mint-txid" (baaRegistryMintTxId args)
+    referenceScriptsTxId <-
+        txIdText "reference-scripts-txid" (baaReferenceScriptsTxId args)
+    scopesSeedTxIn <-
+        parseText "scopes-seed-txin" txInFromText (baaScopesSeedTxIn args)
+    registrySeedTxIn <-
+        parseText
+            "registry-seed-txin"
+            txInFromText
+            (baaRegistrySeedTxIn args)
+    ownerKeyHash <-
+        parseText "owner-key-hash" keyHashFromHex (baaOwnerKeyHash args)
+    pure
+        DevnetBootstrapArtifactInputs
+            { dbaiSeedSplitTxId = seedSplitTxId
+            , dbaiRegistryMintTxId = registryMintTxId
+            , dbaiReferenceScriptsTxId = referenceScriptsTxId
+            , dbaiScopesSeedTxIn = scopesSeedTxIn
+            , dbaiRegistrySeedTxIn = registrySeedTxIn
+            , dbaiOwnerKeyHash = keyHashToText ownerKeyHash
+            , dbaiNetwork = baaNetwork args
+            }
+  where
+    txIdText label value = do
+        TxIn txId _ <- parseText label txInFromText (value <> "#0")
+        pure txId
+    parseText label parser value =
+        case parser value of
+            Left err -> Left (label <> ": " <> err)
+            Right ok -> Right ok
+
+{- | Build the registry-init publication projection from submitted tx ids
+and seed references. This does not query chain, sign, submit, or build
+transactions.
+-}
+bootstrapDevnetPublication
+    :: DevnetBootstrapArtifactInputs -> IO DevnetRegistryPublication
+bootstrapDevnetPublication inputs = do
+    scripts <-
+        deriveDevnetScripts
+            (dbaiNetwork inputs)
+            (dbaiScopesSeedTxIn inputs)
+            (dbaiRegistrySeedTxIn inputs)
+    let anchors =
+            DevnetRegistryAnchors
+                { draScopesRef =
+                    txOutRef (dbaiRegistryMintTxId inputs) 0
+                , draPermissionsRef =
+                    txOutRef (dbaiReferenceScriptsTxId inputs) 0
+                , draTreasuryRef =
+                    txOutRef (dbaiReferenceScriptsTxId inputs) 1
+                , draRegistryRef =
+                    txOutRef (dbaiRegistryMintTxId inputs) 1
+                , draScopesPolicyId =
+                    scriptHashToHex (dssScopesHash scripts)
+                , draRegistryPolicyId =
+                    scriptHashToHex (dssRegistryHash scripts)
+                , draPermissionsHash =
+                    dssPermissionsHash scripts
+                , draOwnerKeyHash =
+                    dbaiOwnerKeyHash inputs
+                , draTreasuryTarget =
+                    dssTreasuryTarget scripts
+                }
+    pure
+        DevnetRegistryPublication
+            { drpSeedSplitTxId = dbaiSeedSplitTxId inputs
+            , drpRegistryMintTxId = dbaiRegistryMintTxId inputs
+            , drpReferenceScriptsTxId =
+                dbaiReferenceScriptsTxId inputs
+            , drpAnchors = anchors
+            }
+
+{- | Validate, derive, and write the shipped registry-init artifact set.
+The DevNet guard and all validation happen before any filesystem write.
+-}
+runBootstrapWriter
+    :: T.Text
+    -> Int
+    -> FilePath
+    -> BootstrapArtifactArgs
+    -> IO (Either String ())
+runBootstrapWriter networkName networkMagic runDir args =
+    if networkName /= "devnet"
+        then
+            pure
+                ( Left
+                    ( "write-artifacts is devnet-only, got "
+                        <> T.unpack networkName
+                    )
+                )
+        else case validateBootstrapArgs args of
+            Left err ->
+                pure (Left err)
+            Right inputs -> do
+                publication <- bootstrapDevnetPublication inputs
+                Right
+                    <$> writeRegistryInitArtifactsWithPrefix
+                        "registry-init-wizard"
+                        networkMagic
+                        runDir
+                        publication
 
 -- | Publish the registry and return the treasury target plus anchors.
 prepareDevnetWithdrawalRegistry

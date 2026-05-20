@@ -35,11 +35,14 @@ This check is not part of `just ci`: it starts a real local
 > [#159](https://github.com/lambdasistemi/amaru-treasury-tx/issues/159)
 > /
 > [#160](https://github.com/lambdasistemi/amaru-treasury-tx/issues/160).
-> Until those tickets merge, the command examples below show the
-> pre-#157 in-process runners SmokeSpec already drives — the same
-> CBOR is built byte-for-byte from the new `tx-build --intent` path
-> (proved by goldens
-> `test/golden/{RegistryInit,StakeRewardInit,GovernanceWithdrawalInit}IntentSpec.hs`).
+> Fresh-chain registry bootstrap additionally uses the explicit
+> `--bootstrap` mode and `write-artifacts` command from
+> [#175](https://github.com/lambdasistemi/amaru-treasury-tx/issues/175).
+> The library proof examples below remain as the local SmokeSpec layer;
+> the shipped CLI proof layer in
+> [#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161)
+> should drive the documented wizard → tx-build → witness → submit →
+> write-artifacts sequence.
 
 ## Prerequisites
 
@@ -91,15 +94,15 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
 
 ## Registry Initiator Boundary
 
-After #157 and #158 the shipped operator path for this boundary is
-the three-subcommand `amaru-treasury-tx registry-init-wizard
-{seed-split | mint | reference-scripts}` flow, each producing one
-intent JSON consumed by `amaru-treasury-tx tx-build --intent` (see
+After #175 the shipped operator path for a fresh DevNet registry
+boundary is the three-subcommand `registry-init-wizard` bootstrap flow
+plus a post-submit artifact writer. Each bootstrap subcommand produces
+one intent JSON consumed by `amaru-treasury-tx tx-build --intent` (see
 the bootstrap section in [README.md](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/README.md#devnet-bootstrap-via-tx-build---intent)).
 The wizard is **explicitly inter-tx unsafe**: the operator types every
-value that crosses a sub-step boundary (seed TxIns from `seed-split`,
-the owner key hash, the funding seed UTxO). The resumable client
-state that will supersede this manual carry is parked in
+value that crosses a sub-step boundary (submitted tx ids, seed TxIns
+from `seed-split`, the owner key hash, and the funding seed UTxO). The
+resumable client state that will supersede this manual carry is parked in
 [#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163).
 The bash smoke that drives the full chain through the shipped CLI on
 a real DevNet lands in
@@ -107,6 +110,68 @@ a real DevNet lands in
 until #161 merges, the local smoke below keeps driving the library
 function directly via `SmokeSpec`, which calls into
 `Amaru.Treasury.Devnet.Runner.runDevnetRegistryInit`:
+
+```bash
+COMMON=(--network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH")
+RUN_DIR=runs/devnet/$(date -u +%Y%m%dT%H%M%SZ)
+
+amaru-treasury-tx "${COMMON[@]}" registry-init-wizard seed-split \
+  --bootstrap \
+  --wallet-addr <devnet-bech32> \
+  --metadata <metadata.json> \
+  --scope <scope-id> \
+  --out seed-split.intent.json
+amaru-treasury-tx "${COMMON[@]}" tx-build --intent seed-split.intent.json --out seed-split.tx.cbor.hex
+amaru-treasury-tx witness ...
+amaru-treasury-tx submit  ...
+# record <seed-split-txid>
+
+amaru-treasury-tx "${COMMON[@]}" registry-init-wizard mint \
+  --bootstrap \
+  --wallet-addr <devnet-bech32> \
+  --metadata <metadata.json> \
+  --scope <scope-id> \
+  --scopes-seed-txin <seed-split-txid>#0 \
+  --registry-seed-txin <seed-split-txid>#1 \
+  --owner-key-hash <hex28> \
+  --out mint.intent.json
+amaru-treasury-tx "${COMMON[@]}" tx-build --intent mint.intent.json --out mint.tx.cbor.hex
+amaru-treasury-tx witness ...
+amaru-treasury-tx submit  ...
+# record <registry-mint-txid>
+
+amaru-treasury-tx "${COMMON[@]}" registry-init-wizard reference-scripts \
+  --bootstrap \
+  --wallet-addr <devnet-bech32> \
+  --metadata <metadata.json> \
+  --scope <scope-id> \
+  --scopes-seed-txin <seed-split-txid>#0 \
+  --registry-seed-txin <seed-split-txid>#1 \
+  --funding-seed-txin <wallet-utxo>#N \
+  --out reference-scripts.intent.json
+amaru-treasury-tx "${COMMON[@]}" tx-build --intent reference-scripts.intent.json --out reference-scripts.tx.cbor.hex
+amaru-treasury-tx witness ...
+amaru-treasury-tx submit  ...
+# record <reference-scripts-txid>
+
+amaru-treasury-tx "${COMMON[@]}" registry-init-wizard write-artifacts \
+  --run-dir "$RUN_DIR" \
+  --seed-split-txid <seed-split-txid> \
+  --registry-mint-txid <registry-mint-txid> \
+  --reference-scripts-txid <reference-scripts-txid> \
+  --scopes-seed-txin <seed-split-txid>#0 \
+  --registry-seed-txin <seed-split-txid>#1 \
+  --owner-key-hash <hex28>
+```
+
+#161 must persist the handoff fields that make this sequence auditable:
+run directory, DevNet magic `42`, `seed-split-txid`,
+`registry-mint-txid`, `reference-scripts-txid`,
+`<seed-split-txid>#0`, `<seed-split-txid>#1`, owner key hash, and the
+funding seed UTxO used by `reference-scripts`. The artifact writer uses
+the submitted tx ids, seed refs, and owner key hash to write
+`registry-init/summary.json`, `registry-init/registry.json`,
+`registry-init/provenance.json`, and the top-level summary files.
 
 ```bash
 just devnet-smoke registry-init

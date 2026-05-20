@@ -172,6 +172,28 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
             src <- mustRead smokeScriptPath
             src `shouldSatisfyContain` "vault-preflight"
 
+    describe "registry-stake CLI surface" $ do
+        it "smoke.sh exposes a registry-stake phase" $ do
+            src <- mustRead smokeScriptPath
+            src `shouldSatisfyContain` "registry-stake"
+
+        it "smoke.sh names shipped registry/stake wizards and tx-pipeline" $ do
+            src <- mustRead smokeScriptPath
+            forM_
+                [ "registry-init-wizard"
+                , "stake-reward-init-wizard"
+                , "tx-build"
+                , "witness"
+                , "attach-witness"
+                , "submit"
+                ]
+                $ \needle ->
+                    src `shouldSatisfyContain` needle
+
+        it "smoke.sh routes non-inside live phases through the host" $ do
+            src <- mustRead smokeScriptPath
+            src `shouldSatisfyContain` "devnet-cli-smoke-host"
+
     describe "no in-process runner fallback" $ do
         forM_ forbiddenRunnerStrings $ \needle ->
             it ("no product smoke file contains " <> show needle) $ do

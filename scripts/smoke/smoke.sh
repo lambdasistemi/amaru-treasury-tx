@@ -21,6 +21,8 @@ set -euo pipefail
 PROG=cli-devnet-smoke
 DEFAULT_PHASE=scaffold
 DEFAULT_TIMEOUT_SECONDS=900
+AMARU_EXE=""
+CLI_SMOKE_REGISTRY_TIMEOUT_SECONDS="${CLI_SMOKE_REGISTRY_TIMEOUT_SECONDS:-60}"
 
 print_help() {
     cat <<'HELP'
@@ -81,7 +83,12 @@ preflight_for_phase() {
             require_tool diff
             require_tool amaru-treasury-tx
             ;;
-        registry-stake | governance | disburse | full)
+        registry-stake)
+            require_tool jq
+            require_tool cardano-cli
+            require_tool cabal
+            ;;
+        governance | disburse | full)
             require_tool jq
             require_tool cardano-cli
             require_tool cardano-node
@@ -218,6 +225,210 @@ JSON
     log "vault-preflight: complete (summary in $phase_dir/summary.json)"
 }
 
+resolve_amaru_exe() {
+    if [[ -n "${AMARU_TREASURY_TX_EXE:-}" ]]; then
+        printf '%s\n' "$AMARU_TREASURY_TX_EXE"
+        return 0
+    fi
+    if ! command -v cabal >/dev/null 2>&1; then
+        die "cannot resolve amaru-treasury-tx exe: cabal missing"
+    fi
+    cabal build exe:amaru-treasury-tx -O0 >/dev/null 2>&1 \
+        || die "cabal build exe:amaru-treasury-tx failed"
+    cabal list-bin exe:amaru-treasury-tx -O0
+}
+
+require_inside_devnet() {
+    local inside=$1
+    local phase=$2
+    local run_dir=$3
+    local timeout_seconds=$4
+    local force=$5
+    if [[ "$inside" -eq 1 ]]; then
+        return 0
+    fi
+    log "phase '$phase' requires a live DevNet; routing through devnet-cli-smoke-host"
+    if ! command -v cabal >/dev/null 2>&1; then
+        die "cabal missing; cannot run devnet-cli-smoke-host"
+    fi
+    cabal build exe:devnet-cli-smoke-host -O0 >/dev/null 2>&1 \
+        || die "cabal build exe:devnet-cli-smoke-host failed"
+    local host_exe
+    host_exe=$(cabal list-bin exe:devnet-cli-smoke-host -O0)
+    local host_args=(--run-dir "$run_dir" --phase "$phase" \
+        --timeout-seconds "$timeout_seconds")
+    [[ "$force" -eq 1 ]] && host_args+=(--force)
+    exec "$host_exe" "${host_args[@]}"
+}
+
+# Surface deferred behind missing-shipped-registry-bootstrap (#161 slice 3).
+#
+# The slice-3 gap recorded in
+#   <run-dir>/phases/registry-stake/missing-surface.json
+# blocks the rest of the bootstrap pipeline at the very first wizard
+# call (registry-init-wizard seed-split). Until parent epic #156
+# closes the bootstrap surface, the following shipped commands are
+# intentionally not invoked from the registry-stake phase:
+#
+#   - registry-init-wizard mint
+#   - registry-init-wizard reference-scripts
+#   - stake-reward-init-wizard script-account
+#   - stake-reward-init-wizard plain-account
+#   - tx-build / witness / attach-witness / submit
+#     (the shared shipped CLI build_sign_submit pipeline a later slice
+#     will reinstate once seed-split returns an intent)
+#
+# Naming them here keeps the no-fallback static guard meaningful
+# without committing an unverified pipeline as if it were live.
+
+derive_funding_wallet_addr() {
+    local skey=$1
+    local out_dir=$2
+    local vkey="$out_dir/funding.vkey"
+    cardano-cli conway key verification-key \
+        --signing-key-file "$skey" \
+        --verification-key-file "$vkey"
+    cardano-cli conway address build \
+        --payment-verification-key-file "$vkey" \
+        --testnet-magic "${CLI_SMOKE_NETWORK_MAGIC:-42}"
+}
+
+registry_stake_phase() {
+    local run_dir=$1
+    local phase_dir="$run_dir/phases/registry-stake"
+    mkdir -p "$phase_dir"
+
+    require_env CARDANO_NODE_SOCKET_PATH
+    require_env CLI_SMOKE_FUNDING_SKEY
+    require_env CLI_SMOKE_FUNDING_KEY_HASH
+    require_file "funding signing key" "$CLI_SMOKE_FUNDING_SKEY"
+
+    AMARU_EXE=$(resolve_amaru_exe)
+    log "registry-stake: using $AMARU_EXE"
+
+    local metadata="test/fixtures/metadata.json"
+    require_file "metadata fixture" "$metadata"
+
+    local wallet_addr
+    wallet_addr=$(derive_funding_wallet_addr \
+        "$CLI_SMOKE_FUNDING_SKEY" "$phase_dir")
+    log "registry-stake: funding wallet addr = $wallet_addr"
+
+    local passphrase_file="$phase_dir/funding.passphrase"
+    printf 'cli-smoke-registry-stake' >"$passphrase_file"
+    chmod 0600 "$passphrase_file"
+
+    local funding_vault="$phase_dir/funding.vault.age"
+    log "registry-stake: create funding vault"
+    {
+        exec 9<"$passphrase_file"
+        "$AMARU_EXE" --network devnet vault create \
+            --signing-key-file "$CLI_SMOKE_FUNDING_SKEY" \
+            --label devnet_funding \
+            --description "DevNet funding key (registry-stake)" \
+            --out "$funding_vault" \
+            --vault-work-factor 1 \
+            --vault-passphrase-fd 9
+        exec 9<&-
+    }
+
+    local scope="core_development"
+    local intents_dir="$phase_dir/intents"
+    local diag_dir="$phase_dir/diagnostics"
+    mkdir -p "$intents_dir" "$diag_dir"
+
+    # Attempt the shipped registry-init-wizard seed-split through the
+    # shipped CLI. The current shipped wizard verifies the registry
+    # metadata anchors against chain before producing an intent, so
+    # on a fresh DevNet it cannot bootstrap. The mint, reference-
+    # scripts, and stake-reward sub-actions all reuse the same
+    # resolver and would fail with the same error; ticket #156 owns
+    # the decision on whether to ship a bootstrap-aware path. The
+    # smoke records the wizard transcript and emits the structured
+    # missing-shipped-registry-bootstrap diagnostic instead of
+    # falling back to any in-process Devnet runner.
+    local seed_split_stdout="$diag_dir/seed-split.stdout"
+    local seed_split_stderr="$diag_dir/seed-split.stderr"
+    local seed_split_log="$intents_dir/seed-split.log"
+    local seed_split_intent="$intents_dir/seed-split.intent.json"
+    log "registry-stake: registry-init-wizard seed-split (shipped CLI attempt)"
+    local seed_split_status=0
+    "$AMARU_EXE" --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        registry-init-wizard seed-split \
+        --wallet-addr "$wallet_addr" \
+        --metadata "$metadata" \
+        --scope "$scope" \
+        --out "$seed_split_intent" \
+        --log "$seed_split_log" \
+        >"$seed_split_stdout" 2>"$seed_split_stderr" \
+        || seed_split_status=$?
+
+    if [[ "$seed_split_status" -eq 0 ]]; then
+        # The shipped wizard returned an intent without complaining
+        # about missing anchors. That would mean the bootstrap gap is
+        # gone and slice 3 needs to expand past the diagnostic; fail
+        # so the orchestrator notices the assumption shift.
+        die "missing-shipped-registry-bootstrap diagnostic stale: seed-split succeeded; reopen #156 plan"
+    fi
+
+    local gap_marker="missing-shipped-registry-bootstrap"
+    local raw_reason
+    raw_reason=$(tr -d '\n' <"$seed_split_stderr" | tr -d '\r')
+
+    local diagnostic="$phase_dir/missing-surface.json"
+    jq -n \
+        --arg gap "$gap_marker" \
+        --arg phase "registry-stake" \
+        --arg scope "$scope" \
+        --arg walletAddr "$wallet_addr" \
+        --arg metadata "$metadata" \
+        --arg shippedSurface "registry-init-wizard seed-split" \
+        --arg wizardStderr "$seed_split_stderr" \
+        --arg wizardStdout "$seed_split_stdout" \
+        --arg wizardLog "$seed_split_log" \
+        --argjson status "$seed_split_status" \
+        --arg reason "$raw_reason" \
+        --arg parentEpic "https://github.com/lambdasistemi/amaru-treasury-tx/issues/156" \
+        '{
+            gap: $gap,
+            phase: $phase,
+            scope: $scope,
+            walletAddr: $walletAddr,
+            metadataFixture: $metadata,
+            attemptedShippedSurface: $shippedSurface,
+            wizardExitStatus: $status,
+            wizardStderrPath: $wizardStderr,
+            wizardStdoutPath: $wizardStdout,
+            wizardLogPath: $wizardLog,
+            wizardStderrSummary: $reason,
+            parentEpic: $parentEpic,
+            note: "Shipped registry-init-wizard requires existing on-chain registry anchors via Amaru.Treasury.Registry.Verify.verifyRegistry; cannot bootstrap a fresh DevNet through shipped CLI. Slice 3 records the gap; #156 owns the bootstrap-surface decision."
+        }' >"$diagnostic"
+
+    log "registry-stake: shipped seed-split unreachable on fresh DevNet"
+    log "registry-stake: wizard stderr: $seed_split_stderr"
+    log "registry-stake: diagnostic:    $diagnostic"
+    log "registry-stake: gap: $gap_marker"
+    log "registry-stake: parent epic #156 owns the bootstrap-surface decision"
+
+    cat >"$phase_dir/summary.json" <<JSON
+{
+  "phase": "registry-stake",
+  "scope": "$scope",
+  "status": "missing-shipped-surface",
+  "gap": "$gap_marker",
+  "diagnostic": "$diagnostic",
+  "wizardStderr": "$seed_split_stderr",
+  "wizardStdout": "$seed_split_stdout",
+  "wizardLog": "$seed_split_log",
+  "parentEpic": "https://github.com/lambdasistemi/amaru-treasury-tx/issues/156"
+}
+JSON
+    # Exit non-zero so operators (and future CI) cannot ship a
+    # false-positive bootstrap proof from this slice.
+    die "$gap_marker (see $diagnostic)"
+}
+
 create_run_dir() {
     local run_dir=$1
     local force=$2
@@ -324,9 +535,16 @@ main() {
             log "preflight complete; tools are reachable"
             ;;
         vault-preflight)
+            require_inside_devnet "$inside_devnet" "$phase" \
+                "$run_dir" "$timeout_seconds" "$force"
             vault_preflight "$run_dir"
             ;;
-        registry-stake | governance | disburse | full)
+        registry-stake)
+            require_inside_devnet "$inside_devnet" "$phase" \
+                "$run_dir" "$timeout_seconds" "$force"
+            registry_stake_phase "$run_dir"
+            ;;
+        governance | disburse | full)
             die "phase '$phase' not implemented yet in this slice; see specs/161-cli-devnet-smoke/plan.md"
             ;;
     esac

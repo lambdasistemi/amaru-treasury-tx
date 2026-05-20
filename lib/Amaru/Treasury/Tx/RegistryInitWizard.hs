@@ -41,6 +41,10 @@ module Amaru.Treasury.Tx.RegistryInitWizard
     , RegistryInitResolverEnv (..)
     , resolveRegistryInitSeedSplit
 
+      -- * Bootstrap resolver (#175 Slice 2)
+    , RegistryInitBootstrapInput (..)
+    , resolveRegistryInitBootstrap
+
       -- * Pure translation
     , registryInitSeedSplitToIntent
     , registryInitMintToIntent
@@ -77,6 +81,7 @@ import Amaru.Treasury.IntentJSON
 import Amaru.Treasury.Scope (ScopeId, scopeText)
 import Amaru.Treasury.Tx.SwapWizard
     ( RegistryView (..)
+    , ScopeOwners (..)
     , ScopeView (..)
     , TreasuryRefs (..)
     , WalletSelection (..)
@@ -332,6 +337,154 @@ resolveRegistryInitSeedSplit renv input
                                                     , wsExtraTxIns = []
                                                     }
                                             }
+
+-- ----------------------------------------------------
+-- Bootstrap resolver (#175 Slice 2)
+-- ----------------------------------------------------
+
+{- | Inputs the bootstrap resolver pulls from the CLI before
+any chain query. Unlike 'RegistryInitResolverInput' this
+record carries no 'RegistryView' — on a fresh DevNet there
+are no on-chain registry anchors yet. The bootstrap resolver
+manufactures a skeleton 'RegistryView' for the pure
+translators to consume; runtime artifacts written from
+submitted tx ids land in #175 Slice 3 and are NOT derived
+from this skeleton.
+-}
+data RegistryInitBootstrapInput = RegistryInitBootstrapInput
+    { wbiNetwork :: !Text
+    -- ^ CLI @--network@ value. Anything other than @"devnet"@
+    --   trips the devnet guard before any chain query.
+    , wbiWalletAddrBech32 :: !Text
+    , wbiScope :: !ScopeId
+    , wbiValidityHours :: !(Maybe Word16)
+    }
+    deriving stock (Eq, Show)
+
+{- | Resolve a fresh-chain 'RegistryInitEnv' without calling
+'verifyRegistry'.
+
+The DEVNET GUARD is the first check; on any non-@"devnet"@
+network the function returns 'RegistryInitNonDevnetNetwork'
+WITHOUT performing the wallet query or the upper-bound
+computation.
+
+When the guard passes the resolver:
+
+* queries the wallet UTxOs via the resolver env and picks
+  the head pure-ADA selection (same 'selectWallet' contract
+  the verified resolver uses);
+* computes the upper-bound slot through the resolver env;
+* fabricates a skeleton 'RegistryView' / 'ScopeView' /
+  'TreasuryRefs' whose anchor fields are obvious DevNet
+  placeholders. The build-side translators
+  ('Amaru.Treasury.IntentJSON.translateRegistryInit*') only
+  read the wallet block, network, validity slot, and
+  registry-init payload fields, so the skeleton anchors
+  never reach a builder. Slice 3 ships the artifact writer
+  that records the REAL anchors from submitted tx ids.
+-}
+resolveRegistryInitBootstrap
+    :: (Monad m)
+    => RegistryInitResolverEnv m
+    -> RegistryInitBootstrapInput
+    -> m (Either RegistryInitError RegistryInitEnv)
+resolveRegistryInitBootstrap renv input
+    | wbiNetwork input /= "devnet" =
+        pure
+            ( Left
+                (RegistryInitNonDevnetNetwork (wbiNetwork input))
+            )
+    | otherwise = do
+        walletUtxos <-
+            wreQueryWalletUtxos renv (wbiWalletAddrBech32 input)
+        case selectWallet 1 walletUtxos of
+            Left _ -> pure (Left RegistryInitWalletShortfall)
+            Right ([], _) ->
+                pure (Left RegistryInitWalletShortfall)
+            Right (walletRef : _, _) -> do
+                upperE <-
+                    resolveUpperBound
+                        (wreComputeUpperBound renv)
+                        (wbiValidityHours input)
+                case upperE of
+                    Left e -> pure (Left e)
+                    Right upperBound ->
+                        pure $
+                            Right
+                                RegistryInitEnv
+                                    { reNetwork = wbiNetwork input
+                                    , reUpperBoundSlot = upperBound
+                                    , reRegistry =
+                                        bootstrapSkeletonRegistry
+                                            (wbiScope input)
+                                    , reScopeView =
+                                        ScopeView
+                                            { svScope = wbiScope input
+                                            , svRefs = bootstrapSkeletonRefs
+                                            , svDefaultSigners = []
+                                            }
+                                    , reWalletSelection =
+                                        WalletSelection
+                                            { wsTxIn = walletRef
+                                            , wsAddress =
+                                                wbiWalletAddrBech32 input
+                                            , wsExtraTxIns = []
+                                            }
+                                    }
+
+{- | Skeleton 'RegistryView' for bootstrap mode. The build
+translators do not read these fields; they are filled with
+recognizable placeholders that Slice 3's artifact writer
+overwrites with real submitted-tx-id-derived anchors.
+-}
+bootstrapSkeletonRegistry :: ScopeId -> RegistryView
+bootstrapSkeletonRegistry scope =
+    RegistryView
+        { rvScopesDeployedAt = bootstrapPlaceholderTxIn
+        , rvPermissionsDeployedAt = bootstrapPlaceholderTxIn
+        , rvTreasuryDeployedAt = bootstrapPlaceholderTxIn
+        , rvRegistryDeployedAt = bootstrapPlaceholderTxIn
+        , rvRegistryPolicyId = bootstrapPlaceholderHash
+        , rvOwners = bootstrapSkeletonOwners
+        , rvTreasuryByScope =
+            Map.singleton scope bootstrapSkeletonRefs
+        }
+
+bootstrapSkeletonRefs :: TreasuryRefs
+bootstrapSkeletonRefs =
+    TreasuryRefs
+        { trAddress = bootstrapPlaceholderAddress
+        , trScriptHash = bootstrapPlaceholderHash
+        , trPermissionsRewardAccount = bootstrapPlaceholderHash
+        }
+
+bootstrapSkeletonOwners :: ScopeOwners
+bootstrapSkeletonOwners =
+    ScopeOwners
+        { soCore = bootstrapPlaceholderHash
+        , soOps = bootstrapPlaceholderHash
+        , soNetworkCompliance = bootstrapPlaceholderHash
+        , soMiddleware = bootstrapPlaceholderHash
+        }
+
+-- 32 hex bytes + @#0@. Parsable by 'parseTxIn' so the JSON
+-- encoder and downstream tests stay byte-clean even though
+-- the build path never consumes this field.
+bootstrapPlaceholderTxIn :: Text
+bootstrapPlaceholderTxIn = T.replicate 64 "0" <> "#0"
+
+-- 28 hex bytes — fits both blake2b-224 hash fields and key
+-- hashes downstream.
+bootstrapPlaceholderHash :: Text
+bootstrapPlaceholderHash = T.replicate 56 "0"
+
+-- Skeleton bech32 address used for treasury/permissions
+-- references. Not used by the build translators; it sits in
+-- the encoded intent for symmetry with verified mode.
+bootstrapPlaceholderAddress :: Text
+bootstrapPlaceholderAddress =
+    "addr_test1vq3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygswahgq5"
 
 resolveUpperBound
     :: (Monad m)

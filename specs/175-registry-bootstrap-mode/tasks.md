@@ -42,19 +42,19 @@ Checkpoint: focused parser/unit tests green and `./gate.sh` green.
 **Goal**: Emit buildable registry-init intents on a fresh DevNet without
 existing registry anchors.
 
-- [ ] T005 [P] [US1] Add a DevNet-only bootstrap resolver in
+- [x] T005 [P] [US1] Add a DevNet-only bootstrap resolver in
   `lib/Amaru/Treasury/Tx/RegistryInitWizard.hs` that selects wallet UTxOs
   and validity upper bound without registry metadata verification.
-- [ ] T006 [P] [US1] Add tests proving bootstrap mode fails closed for
+- [x] T006 [P] [US1] Add tests proving bootstrap mode fails closed for
   non-DevNet networks before chain queries or file writes.
-- [ ] T007 [US1] Wire bootstrap seed-split intent emission through the
+- [x] T007 [US1] Wire bootstrap seed-split intent emission through the
   existing `registryInitSeedSplitToIntent`/`tx-build` path, using only
   resolver-selected wallet and validity data.
-- [ ] T008 [US1] Wire bootstrap mint intent emission with
+- [x] T008 [US1] Wire bootstrap mint intent emission with
   operator-supplied seed TxIns and owner key hash.
-- [ ] T009 [US1] Wire bootstrap reference-scripts intent emission with
+- [x] T009 [US1] Wire bootstrap reference-scripts intent emission with
   operator-supplied seed TxIns and funding seed TxIn.
-- [ ] T010 [US1] Add round-trip/golden coverage proving all three
+- [x] T010 [US1] Add round-trip/golden coverage proving all three
   bootstrap intents decode and build through existing registry-init
   translators.
 

@@ -101,7 +101,8 @@ import Amaru.Treasury.Scope
     , scopeFromText
     )
 import Amaru.Treasury.Tx.RegistryInitWizard
-    ( RegistryInitError (..)
+    ( RegistryInitBootstrapInput (..)
+    , RegistryInitError (..)
     , RegistryInitMintAnswers (..)
     , RegistryInitReferenceScriptsAnswers (..)
     , RegistryInitResolverEnv (..)
@@ -110,6 +111,7 @@ import Amaru.Treasury.Tx.RegistryInitWizard
     , registryInitMintToIntent
     , registryInitReferenceScriptsToIntent
     , registryInitSeedSplitToIntent
+    , resolveRegistryInitBootstrap
     , resolveRegistryInitSeedSplit
     )
 import Amaru.Treasury.Tx.SwapWizard
@@ -738,35 +740,213 @@ abortReferenceScripts msg = do
     exitWith (ExitFailure 3)
 
 -- ----------------------------------------------------
--- Bootstrap runner branches (#175 Slice 1)
+-- Bootstrap runner branches (#175 Slice 2)
 -- ----------------------------------------------------
 
-{- | Bootstrap @seed-split@ branch (#175 Slice 1).
+{- | Bootstrap @seed-split@ branch (#175 Slice 2).
 
-Slice 1 only establishes the explicit verified/bootstrap split:
-the bootstrap branches deliberately do not call 'verifyRegistry'
-and emit a clear not-implemented error pointing to Slice 2, where
-the DevNet-only bootstrap resolver and the three bootstrap intent
-emissions land.
+DevNet-only: resolves the network first and fails closed for
+non-@devnet@ networks BEFORE opening the node backend,
+querying chain, or writing the @--out@ file. On devnet it
+queries the wallet UTxOs and upper-bound slot through the
+same backend helpers as verified mode but skips
+'verifyRegistry'. The resolved 'RegistryInitEnv' carries a
+skeleton registry projection; the pure translator stamps it
+into the intent for downstream encoding. The build-side
+translators do not consume those placeholder anchors. #175
+Slice 3 ships the artifact writer that records the REAL
+anchors from submitted tx ids.
 -}
 runSeedSplitBootstrap :: GlobalOpts -> CommonFlags -> IO ()
-runSeedSplitBootstrap _g _cf =
-    abortSeedSplit
-        "bootstrap mode: intent emission is not implemented yet"
+runSeedSplitBootstrap g cf = do
+    networkName <- case resolveNetworkName g of
+        Right t -> pure t
+        Left e -> abortSeedSplit (T.pack e)
+    case networkName of
+        "devnet" -> pure ()
+        other ->
+            abortSeedSplit
+                ("bootstrap mode is devnet-only, got " <> other)
+    socket <- case goSocketPath g of
+        Just s -> pure s
+        Nothing ->
+            abortSeedSplit
+                "--node-socket / CARDANO_NODE_SOCKET_PATH is required"
+    let answers =
+            RegistryInitSeedSplitAnswers
+                { risScope = cfScope cf
+                , risValidityHours = cfValidityHours cf
+                , risDescription = cfDescription cf
+                , risJustification = cfJustification cf
+                , risDestinationLabel = cfDestinationLabel cf
+                , risEvent = cfEvent cf
+                , risLabel = cfLabel cf
+                }
+        input =
+            RegistryInitBootstrapInput
+                { wbiNetwork = networkName
+                , wbiWalletAddrBech32 = cfWalletAddr cf
+                , wbiScope = cfScope cf
+                , wbiValidityHours = cfValidityHours cf
+                }
+    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+        let renv =
+                RegistryInitResolverEnv
+                    { wreQueryWalletUtxos = queryFlat backend
+                    , wreComputeUpperBound = \choice -> do
+                        r <- queryUpperBoundSlot backend choice
+                        pure (fmap unwrapSlot r)
+                    }
+        er <- resolveRegistryInitBootstrap renv input
+        env <- case er of
+            Left e ->
+                abortSeedSplit
+                    ("resolve: " <> T.pack (show e))
+            Right e -> pure e
+        intent <-
+            case registryInitSeedSplitToIntent env answers of
+                Left te ->
+                    abortSeedSplit
+                        ("translate: " <> T.pack (show te))
+                Right i -> pure i
+        BSL.writeFile
+            (cfOut cf)
+            (encodeSomeTreasuryIntent intent)
+  where
+    unwrapSlot (SlotNo s) = s
 
-{- | Bootstrap @mint@ branch (#175 Slice 1). See
-'runSeedSplitBootstrap'.
+{- | Bootstrap @mint@ branch (#175 Slice 2). Reuses the
+bootstrap resolver; the three operator-typed values
+(@--scopes-seed-txin@, @--registry-seed-txin@,
+@--owner-key-hash@) are baked verbatim by the pure
+translator.
 -}
 runMintBootstrap :: GlobalOpts -> MintOpts -> IO ()
-runMintBootstrap _g _mintOpts =
-    abortMint
-        "bootstrap mode: intent emission is not implemented yet"
+runMintBootstrap g mintOpts = do
+    let cf = mCommon mintOpts
+    networkName <- case resolveNetworkName g of
+        Right t -> pure t
+        Left e -> abortMint (T.pack e)
+    case networkName of
+        "devnet" -> pure ()
+        other ->
+            abortMint
+                ("bootstrap mode is devnet-only, got " <> other)
+    socket <- case goSocketPath g of
+        Just s -> pure s
+        Nothing ->
+            abortMint
+                "--node-socket / CARDANO_NODE_SOCKET_PATH is required"
+    let answers =
+            RegistryInitMintAnswers
+                { rimScope = cfScope cf
+                , rimValidityHours = cfValidityHours cf
+                , rimDescription = cfDescription cf
+                , rimJustification = cfJustification cf
+                , rimDestinationLabel = cfDestinationLabel cf
+                , rimEvent = cfEvent cf
+                , rimLabel = cfLabel cf
+                , rimScopesSeedTxIn = mScopesSeedTxIn mintOpts
+                , rimRegistrySeedTxIn = mRegistrySeedTxIn mintOpts
+                , rimOwnerKeyHash = mOwnerKeyHash mintOpts
+                }
+        input =
+            RegistryInitBootstrapInput
+                { wbiNetwork = networkName
+                , wbiWalletAddrBech32 = cfWalletAddr cf
+                , wbiScope = cfScope cf
+                , wbiValidityHours = cfValidityHours cf
+                }
+    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+        let renv =
+                RegistryInitResolverEnv
+                    { wreQueryWalletUtxos = queryFlat backend
+                    , wreComputeUpperBound = \choice -> do
+                        r <- queryUpperBoundSlot backend choice
+                        pure (fmap unwrapSlot r)
+                    }
+        er <- resolveRegistryInitBootstrap renv input
+        env <- case er of
+            Left e ->
+                abortMint ("resolve: " <> T.pack (show e))
+            Right e -> pure e
+        intent <-
+            case registryInitMintToIntent env answers of
+                Left te ->
+                    abortMint
+                        ("translate: " <> T.pack (show te))
+                Right i -> pure i
+        BSL.writeFile
+            (cfOut cf)
+            (encodeSomeTreasuryIntent intent)
+  where
+    unwrapSlot (SlotNo s) = s
 
-{- | Bootstrap @reference-scripts@ branch (#175 Slice 1). See
-'runSeedSplitBootstrap'.
+{- | Bootstrap @reference-scripts@ branch (#175 Slice 2).
+Reuses the bootstrap resolver. The translator overrides the
+wallet block's @txIn@ with the operator-typed
+@--funding-seed-txin@ during JSON construction (same as the
+verified path).
 -}
 runReferenceScriptsBootstrap
     :: GlobalOpts -> ReferenceScriptsOpts -> IO ()
-runReferenceScriptsBootstrap _g _rsOpts =
-    abortReferenceScripts
-        "bootstrap mode: intent emission is not implemented yet"
+runReferenceScriptsBootstrap g rsOpts = do
+    let cf = rsCommon rsOpts
+    networkName <- case resolveNetworkName g of
+        Right t -> pure t
+        Left e -> abortReferenceScripts (T.pack e)
+    case networkName of
+        "devnet" -> pure ()
+        other ->
+            abortReferenceScripts
+                ("bootstrap mode is devnet-only, got " <> other)
+    socket <- case goSocketPath g of
+        Just s -> pure s
+        Nothing ->
+            abortReferenceScripts
+                "--node-socket / CARDANO_NODE_SOCKET_PATH is required"
+    let answers =
+            RegistryInitReferenceScriptsAnswers
+                { rirScope = cfScope cf
+                , rirValidityHours = cfValidityHours cf
+                , rirDescription = cfDescription cf
+                , rirJustification = cfJustification cf
+                , rirDestinationLabel = cfDestinationLabel cf
+                , rirEvent = cfEvent cf
+                , rirLabel = cfLabel cf
+                , rirScopesSeedTxIn = rsScopesSeedTxIn rsOpts
+                , rirRegistrySeedTxIn = rsRegistrySeedTxIn rsOpts
+                , rirFundingSeedTxIn = rsFundingSeedTxIn rsOpts
+                }
+        input =
+            RegistryInitBootstrapInput
+                { wbiNetwork = networkName
+                , wbiWalletAddrBech32 = cfWalletAddr cf
+                , wbiScope = cfScope cf
+                , wbiValidityHours = cfValidityHours cf
+                }
+    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+        let renv =
+                RegistryInitResolverEnv
+                    { wreQueryWalletUtxos = queryFlat backend
+                    , wreComputeUpperBound = \choice -> do
+                        r <- queryUpperBoundSlot backend choice
+                        pure (fmap unwrapSlot r)
+                    }
+        er <- resolveRegistryInitBootstrap renv input
+        env <- case er of
+            Left e ->
+                abortReferenceScripts
+                    ("resolve: " <> T.pack (show e))
+            Right e -> pure e
+        intent <-
+            case registryInitReferenceScriptsToIntent env answers of
+                Left te ->
+                    abortReferenceScripts
+                        ("translate: " <> T.pack (show te))
+                Right i -> pure i
+        BSL.writeFile
+            (cfOut cf)
+            (encodeSomeTreasuryIntent intent)
+  where
+    unwrapSlot (SlotNo s) = s

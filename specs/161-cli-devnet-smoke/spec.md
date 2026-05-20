@@ -57,7 +57,8 @@ As an operator, I need the README and local smoke docs to distinguish the Haskel
 
 ### Edge Cases
 
-- Missing `jq`, `cardano-cli`, `cardano-node`, or `amaru-treasury-tx` in `PATH` fails during preflight before starting DevNet.
+- Missing `jq`, `cabal`, or the shipped `amaru-treasury-tx` executable needed for the selected phase fails during preflight before starting DevNet.
+- `cardano-cli` is not an acceptable smoke dependency. If the smoke needs address derivation, key-hash derivation, tx id extraction, chain queries, or protocol inspection, that operation must be visible in Amaru-owned code or shipped `amaru-treasury-tx` commands instead of hidden behind `cardano-cli`.
 - A requested run directory that already exists and is non-empty fails unless the operator passes the documented force/clean option.
 - A tx-build report tx id that differs from `submit` output fails the phase immediately.
 - A `witness` identity whose key hash is not required by the unsigned tx fails the phase immediately; the script must not use `--allow-unlisted-key` for bootstrap txs.
@@ -78,6 +79,7 @@ As an operator, I need the README and local smoke docs to distinguish the Haskel
 - **FR-008**: If governance materialization requires a transaction that has no shipped CLI path, the smoke MUST fail with an explicit missing-shipped-surface diagnostic instead of falling back to the library runner.
 - **FR-009**: `SmokeSpec` MUST remain as the library proof layer; no body rewrite is allowed as part of this ticket.
 - **FR-010**: README and local DevNet smoke docs MUST identify the two proof layers and state whether the relocated DevNet runners remain.
+- **FR-011**: `scripts/smoke/smoke.sh` and its helper host MUST NOT call external `cardano-cli` for protocol work. Required setup/query/derivation steps must either be shipped as `amaru-treasury-tx` operator surface or implemented in narrow Amaru-owned Haskell helper code that records the observed protocol facts in the run directory.
 
 ### Key Entities
 
@@ -91,7 +93,7 @@ As an operator, I need the README and local smoke docs to distinguish the Haskel
 ### Measurable Outcomes
 
 - **SC-001**: `just devnet-cli-smoke` exits `0` on a fresh local run and writes a final summary naming all submitted tx ids and verified artifact paths.
-- **SC-002**: The no-fallback check exits `0` only when script/helper sources have zero forbidden runner calls/imports.
+- **SC-002**: The no-fallback check exits `0` only when script/helper sources have zero forbidden runner calls/imports and zero external `cardano-cli` protocol shortcuts.
 - **SC-003**: A failed phase exits non-zero and writes a diagnostic naming the failed command or missing CLI surface.
 - **SC-004**: Existing `just smoke`, `just devnet-smoke <phase>`, unit tests, and golden tests continue to pass.
 
@@ -99,5 +101,5 @@ As an operator, I need the README and local smoke docs to distinguish the Haskel
 
 - The local Nix dev shell is the supported environment for this live smoke.
 - The CLI smoke is opt-in and may be slower than `just ci`; `gate.sh` can include it for this PR because #161 is specifically a live-boundary ticket.
-- A Haskell host/helper is acceptable for DevNet lifecycle and assertions as long as the transaction pipeline is shelling out to shipped CLI commands.
+- A Haskell host/helper is acceptable for DevNet lifecycle, deterministic fixture export, and assertions as long as transaction construction/signing/submission stays on shipped CLI commands and no protocol step is hidden behind `cardano-cli`.
 - Under the patched governance genesis, proposal enactment may not require the legacy in-process follow-up vote. The first implementation slice must prove that assumption or surface the missing CLI vote gap.

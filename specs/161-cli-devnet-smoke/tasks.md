@@ -56,12 +56,12 @@ Checkpoint: `just devnet-cli-smoke --phase preflight` passes and `./gate.sh` gre
 
 **Goal**: Prove the first five bootstrap sub-transactions are reachable through shipped CLI commands.
 
-- [ ] T011 [P] [US1] Implement a shared shell function that runs `tx-build`, one or more `witness` calls with expected key hashes, `attach-witness`, `submit`, and tx-id/report consistency checks.
-- [ ] T012 [US1] Implement `registry-init-wizard seed-split` through CLI, submit it, and record seed-split tx id/output refs.
-- [ ] T013 [US1] Implement `registry-init-wizard mint` through CLI using seed-split output refs and funding owner key hash; submit it and record registry mint tx id/output refs.
-- [ ] T014 [US1] Implement `registry-init-wizard reference-scripts` through CLI using seed-split and funding refs; submit it and write/verify `registry.json`.
+- [ ] T011 [P] [US2] Extend the static guard so product smoke paths fail on external `cardano-cli` usage; the smoke must not hide address derivation, tx id extraction, chain queries, or protocol inspection behind `cardano-cli`.
+- [ ] T012 [US1] Replace the stale `cardano-cli` funding-address derivation in `registry-stake` with Amaru-owned output from the host or a shipped `amaru-treasury-tx` surface, and remove `cardano-cli` from phase preflight requirements.
+- [ ] T013 [US1] Implement a shared shell function that runs `tx-build`, one or more `witness` calls with expected key hashes, `attach-witness`, `submit`, and tx-id/report consistency checks using Amaru-owned outputs only.
+- [ ] T014 [US1] Implement `registry-init-wizard seed-split`, `mint`, and `reference-scripts` through the #175 `--bootstrap` CLI path; submit them, record tx ids/output refs, and run `registry-init-wizard write-artifacts`.
 - [ ] T015 [US1] Implement `stake-reward-init-wizard script-account` and `plain-account` through CLI; submit both and write/verify `accounts.json`.
-- [ ] T016 [US1] Add chain assertions for registry/reference-script anchors and treasury/permissions reward-account artifact fields.
+- [ ] T016 [US1] Add chain assertions for registry/reference-script anchors and treasury/permissions reward-account artifact fields without external `cardano-cli` queries.
 
 Checkpoint: `just devnet-cli-smoke --phase registry-stake` passes and `./gate.sh` green.
 

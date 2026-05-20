@@ -6,20 +6,20 @@
 
 ## Summary
 
-Add a bash `scripts/smoke/smoke.sh` entrypoint and `just devnet-cli-smoke` target that prove the full bootstrap + disburse operator path through shipped `amaru-treasury-tx` commands against a real local DevNet. A small Haskell host executable may own only DevNet lifecycle, governance genesis patching, deterministic smoke key generation, and chain assertions. The transaction pipeline itself must be shell commands: wizard, `tx-build`, `vault create`, `witness`, `attach-witness`, `submit`.
+Add a bash `scripts/smoke/smoke.sh` entrypoint and `just devnet-cli-smoke` target that prove the full bootstrap + disburse operator path through shipped `amaru-treasury-tx` commands against a real local DevNet. A small Haskell host executable may own only DevNet lifecycle, governance genesis patching, deterministic smoke key generation, and chain assertions. The transaction pipeline itself must be shell commands: wizard, `tx-build`, `vault create`, `witness`, `attach-witness`, `submit`. The smoke must not use external `cardano-cli` as a shortcut for address derivation, key-hash derivation, chain queries, tx inspection, tx id extraction, or any other protocol step; those facts must be visible in Amaru-owned code or shipped Amaru CLI output.
 
 The plan carries one explicit audit item: the existing library smoke submits a follow-up governance vote in process, while #157/#160 shipped only `governance-withdrawal-init-proposal` and `governance-withdrawal-init-materialization`. The CLI smoke must prove the patched DevNet genesis does not require a shipped vote tx, or it must fail with a missing-surface diagnostic and the PR stays draft until that surface is added or split into a new child.
 
 ## Technical Context
 
 **Language/Version**: Bash plus Haskell (GHC via repository Nix shell)  
-**Primary Dependencies**: `cardano-node-clients:devnet`, `cardano-node`, `cardano-cli`, `jq`, shipped `amaru-treasury-tx` executable  
+**Primary Dependencies**: `cardano-node-clients:devnet`, `cardano-node`, `jq`, `cabal`, shipped `amaru-treasury-tx` executable  
 **Storage**: Filesystem run directory under `runs/devnet-cli/<timestamp>` or an explicit `--run-dir`  
 **Testing**: Hspec unit tests for no-fallback/static script behavior, shell preflight checks, live `just devnet-cli-smoke` run  
 **Target Platform**: Linux Nix development shell  
 **Project Type**: Haskell CLI with shell smoke harness  
 **Performance Goals**: Complete within the same order of magnitude as the existing governance/disburse `SmokeSpec` phases; polling timeouts are explicit and configurable  
-**Constraints**: No `runDevnet*`, no `Amaru.Treasury.Devnet.Runner`, no `cabal test devnet-tests`; `SmokeSpec` preserved unchanged; every behavior commit passes `./gate.sh`  
+**Constraints**: No `runDevnet*`, no `Amaru.Treasury.Devnet.Runner`, no `cabal test devnet-tests`, no external `cardano-cli` protocol shortcuts; `SmokeSpec` preserved unchanged; every behavior commit passes `./gate.sh`  
 **Scale/Scope**: One live smoke entrypoint, one narrow DevNet host/helper, docs/just/gate wiring, and focused tests
 
 ## Constitution Check
@@ -38,7 +38,7 @@ Question: what system boundary does this exercise that unit/golden tests cannot?
 
 Answer: the shipped binary pipeline across a live node boundary: wizard chain queries, `tx-build` live context acquisition, vault-backed witness creation, witness attachment, node submission, governance reward accrual, materialized treasury UTxO observation, and disburse beneficiary receipt. This must be a live smoke, not an operator follow-up, because #161's acceptance target is exactly the live CLI proof.
 
-The smoke is allowed to use helper code for node lifecycle and assertions, but the proof fails unless every transaction is built, signed, and submitted by shipped CLI commands.
+The smoke is allowed to use helper code for node lifecycle and assertions, but the proof fails unless every transaction is built, signed, and submitted by shipped CLI commands. It also fails plan review if required protocol facts are obtained through `cardano-cli`; the point of the smoke is to expose the Amaru setup transactions and live queries in Amaru-owned code so the protocol can be learned and reviewed.
 
 ## Project Structure
 
@@ -78,10 +78,12 @@ Use a tiny host executable if direct bash node lifecycle becomes brittle. The ho
 - apply the governance short-epoch/deposit patch currently duplicated in `SmokeSpec`;
 - call `withCardanoNode`;
 - write deterministic DevNet signing-key envelopes for the genesis funding key and governance voter key;
-- export `CARDANO_NODE_SOCKET_PATH`, network magic/name, funding address, key hashes, run-dir paths, and timeout values;
+- derive and export `CARDANO_NODE_SOCKET_PATH`, network magic/name, fixture funding address, key hashes, run-dir paths, and timeout values using repository Haskell code, not external `cardano-cli`;
 - execute `scripts/smoke/smoke.sh --inside-devnet`.
 
 The host may not call `runDevnet*`, `Amaru.Treasury.Devnet.Runner`, `submitGovernanceWithdrawal`, `setupDevnetStakeRewards`, or any construction runner. It is infrastructure, not a transaction path.
+
+The host may also not call external `cardano-cli`. If a setup/query primitive is missing from the shipped `amaru-treasury-tx` surface and is needed for an operator-visible step, the worker must surface that as a missing Amaru surface rather than importing the step from `cardano-cli`.
 
 ### Shell Pipeline Shape
 
@@ -112,7 +114,7 @@ No implementation may hide this by calling `submitVoteTx` or `runDevnetGovernanc
 
 1. **Slice 1 - Static no-fallback guard + planning audit.** Add `scripts/smoke/smoke.sh` scaffold, `just devnet-cli-smoke`, and unit/static tests that reject forbidden runner calls. Include a source-level audit note/test for the governance vote reachability gap.
 2. **Slice 2 - DevNet host + key/vault preflight.** Add the narrow host, patched genesis preparation, deterministic key fixture export, dependency preflight, run-dir layout, vault creation, and a smoke dry-run mode that proves `vault create`/`witness` can sign a fixture tx without DevNet transaction construction.
-3. **Slice 3 - Registry + stake/reward CLI phases.** Implement seed-split, mint, reference-scripts, script-account, and plain-account through shipped CLI commands; record tx ids and verify registry/accounts artifacts and chain anchors.
+3. **Slice 3 - Registry + stake/reward CLI phases.** First remove the stale `cardano-cli` dependency from the smoke and extend the static guard to keep it out. Then implement seed-split, mint, reference-scripts, script-account, and plain-account through shipped CLI commands; record tx ids and verify registry/accounts artifacts and chain anchors.
 4. **Slice 4 - Governance materialization CLI phase.** Implement proposal, governance reward/enactment wait, materialization, and materialized treasury UTxO verification. This is the slice that either proves no shipped vote is required under patched genesis or returns the explicit missing-surface failure.
 5. **Slice 5 - Disburse CLI phase + final summary.** Run `disburse-wizard`, build/sign/submit, verify beneficiary receipt and treasury reduction, and write final summary.
 6. **Slice 6 - Docs, gate extension, and runner-retention decision.** Update README/local smoke docs, PR body, and `gate.sh`. Decide whether `lib/Amaru/Treasury/Devnet/*Init.hs` runners remain for `SmokeSpec`; default is to keep them and document why.
@@ -131,6 +133,9 @@ No implementation may hide this by calling `submitVoteTx` or `runDevnetGovernanc
 
 - **Risk**: Bash JSON parsing becomes fragile.  
   **Mitigation**: Add `jq` to the dev shell and use it for every JSON projection. Avoid `sed`/`awk` JSON parsing.
+
+- **Risk**: The smoke imports protocol knowledge from `cardano-cli` instead of exposing it in Amaru.  
+  **Mitigation**: Static guard rejects `cardano-cli` in product smoke paths. Workers must add or use Amaru-owned derivation/query surfaces and record their outputs in the run directory.
 
 ## Complexity Tracking
 

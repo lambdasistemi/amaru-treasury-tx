@@ -66,18 +66,18 @@ verified-mode tests still green; `./gate.sh` green.
 **Goal**: Produce registry-init handoff artifacts from real submitted tx
 ids after build/sign/submit has happened outside the wizard.
 
-- [ ] T011 [P] [US2] Add parser/tests for the artifact writer command
+- [x] T011 [P] [US2] Add parser/tests for the artifact writer command
   arguments: submitted tx ids, seed refs, owner key hash, network magic,
   and output/run directory.
-- [ ] T012 [US2] Implement artifact construction from submitted tx ids:
+- [x] T012 [US2] Implement artifact construction from submitted tx ids:
   registry mint `#0/#1` become scopes/registry anchors and
   reference-scripts `#0/#1` become permissions/treasury anchors.
-- [ ] T013 [US2] Derive policies, script hashes, and treasury target from
+- [x] T013 [US2] Derive policies, script hashes, and treasury target from
   `deriveDevnetScripts` using the operator-supplied seed TxIns.
-- [ ] T014 [US2] Write `registry-init/summary.json`,
+- [x] T014 [US2] Write `registry-init/summary.json`,
   `registry-init/registry.json`, `registry-init/provenance.json`, and the
   top-level summary paths using the existing registry-init artifact shape.
-- [ ] T015 [US2] Add negative tests for malformed tx ids/refs, malformed
+- [x] T015 [US2] Add negative tests for malformed tx ids/refs, malformed
   owner key hash, non-DevNet input, and no partial writes after failure.
 
 Checkpoint: artifact writer tests green and `./gate.sh` green.

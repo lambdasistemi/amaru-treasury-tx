@@ -54,7 +54,7 @@ spec :: Spec
 spec = describe "RegistryInitWizardParser (Slice 1 of #158)" $ do
     describe "registry-init-wizard top-level" $ do
         it
-            "recognizes seed-split, mint, reference-scripts as valid subcommands"
+            "recognizes seed-split, mint, reference-scripts, write-artifacts as valid subcommands"
             $ do
                 -- An unknown subcommand name lands in the failure body
                 -- as "Invalid argument `<name>'"; recognized names take
@@ -66,6 +66,8 @@ spec = describe "RegistryInitWizardParser (Slice 1 of #158)" $ do
                 parserHelpBody ["mint", "--help"]
                     `shouldSatisfy` not . isInvalidArg
                 parserHelpBody ["reference-scripts", "--help"]
+                    `shouldSatisfy` not . isInvalidArg
+                parserHelpBody ["write-artifacts", "--help"]
                     `shouldSatisfy` not . isInvalidArg
                 -- And an unknown name MUST fail, to keep the test honest.
                 parserHelpBody ["totally-not-a-subcommand", "--help"]
@@ -155,6 +157,47 @@ spec = describe "RegistryInitWizardParser (Slice 1 of #158)" $ do
         it "rejects non-hex characters" $ do
             let badHex = replicate 56 'z'
             isParseFailure (mintArgs ++ ["--owner-key-hash", badHex])
+                `shouldBe` True
+
+    describe "write-artifacts subcommand (#175 Slice 3)" $ do
+        it "write-artifacts --help lists every required flag" $ do
+            let body = parserHelpBody ["write-artifacts", "--help"]
+            body `shouldSatisfy` ("--run-dir" `isInfixOf`)
+            body `shouldSatisfy` ("--seed-split-txid" `isInfixOf`)
+            body `shouldSatisfy` ("--registry-mint-txid" `isInfixOf`)
+            body `shouldSatisfy` ("--reference-scripts-txid" `isInfixOf`)
+            body `shouldSatisfy` ("--scopes-seed-txin" `isInfixOf`)
+            body `shouldSatisfy` ("--registry-seed-txin" `isInfixOf`)
+            body `shouldSatisfy` ("--owner-key-hash" `isInfixOf`)
+        it "write-artifacts accepts a fully-formed arg vector" $
+            isParseFailure writeArtifactsArgs `shouldBe` False
+        it "write-artifacts rejects a short --seed-split-txid" $
+            isParseFailure
+                ( writeArtifactsArgsWith
+                    "--seed-split-txid"
+                    (replicate 60 'a')
+                )
+                `shouldBe` True
+        it "write-artifacts rejects non-hex --registry-mint-txid" $
+            isParseFailure
+                ( writeArtifactsArgsWith
+                    "--registry-mint-txid"
+                    (replicate 64 'z')
+                )
+                `shouldBe` True
+        it "write-artifacts rejects a malformed --owner-key-hash" $
+            isParseFailure
+                ( writeArtifactsArgsWith
+                    "--owner-key-hash"
+                    (replicate 55 'a')
+                )
+                `shouldBe` True
+        it "write-artifacts rejects a malformed --scopes-seed-txin" $
+            isParseFailure
+                ( writeArtifactsArgsWith
+                    "--scopes-seed-txin"
+                    "deadbeef"
+                )
                 `shouldBe` True
 
     describe "TxIn parsers reject malformed inputs" $ do
@@ -317,6 +360,42 @@ goodTxIdHex = replicate 64 'a'
 -- | 56-char hex — accepted by 'keyHashFromHex'.
 goodKeyHash :: String
 goodKeyHash = replicate 56 'b'
+
+-- | A fully-formed @write-artifacts@ arg vector.
+writeArtifactsArgs :: [String]
+writeArtifactsArgs =
+    [ "write-artifacts"
+    , "--run-dir"
+    , "/tmp/regwiz-run"
+    , "--seed-split-txid"
+    , goodTxIdHex
+    , "--registry-mint-txid"
+    , goodTxIdHex
+    , "--reference-scripts-txid"
+    , goodTxIdHex
+    , "--scopes-seed-txin"
+    , goodTxIn
+    , "--registry-seed-txin"
+    , goodTxIn
+    , "--owner-key-hash"
+    , goodKeyHash
+    ]
+
+{- | Replace the value of @flag@ inside the fully-formed
+  write-artifacts arg vector, so a single field can be
+  pin-tested for parser rejection. The leading
+  @"write-artifacts"@ subcommand token is preserved
+  verbatim; the remainder is walked in flag/value pairs.
+-}
+writeArtifactsArgsWith :: String -> String -> [String]
+writeArtifactsArgsWith flag value = case writeArtifactsArgs of
+    sub : rest -> sub : go rest
+    [] -> []
+  where
+    go (a : v : rest)
+        | a == flag = a : value : rest
+        | otherwise = a : v : go rest
+    go xs = xs
 
 {- | Create a fresh scratch directory under the system temp root,
 run the action, and recursively delete the directory afterwards.

@@ -36,6 +36,7 @@ module Amaru.Treasury.Cli.RegistryInitWizard
     , SeedSplitOpts (..)
     , MintOpts (..)
     , ReferenceScriptsOpts (..)
+    , WriteArtifactsOpts (..)
 
       -- * Parser
     , registryInitWizardOptsP
@@ -74,11 +75,13 @@ import System.Exit (ExitCode (..), exitWith)
 import System.FilePath (takeDirectory)
 import System.IO (hPrint, hPutStrLn, stderr)
 
+import Cardano.Ledger.BaseTypes (Network (..))
 import Cardano.Ledger.Hashes (KeyHash (..))
 import Cardano.Ledger.Keys (KeyRole (Witness))
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Node.Client.Provider (queryUpperBoundSlot)
 import Cardano.Slotting.Slot (SlotNo (..))
+import Ouroboros.Network.Magic (NetworkMagic (..))
 
 import Amaru.Treasury.Backend.N2C
     ( withLocalNodeBackend
@@ -87,6 +90,10 @@ import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , queryFlat
     , resolveNetworkName
+    )
+import Amaru.Treasury.Devnet.RegistryInit
+    ( BootstrapArtifactArgs (..)
+    , runBootstrapWriter
     )
 import Amaru.Treasury.IntentJSON
     ( encodeSomeTreasuryIntent
@@ -177,11 +184,24 @@ data ReferenceScriptsOpts = ReferenceScriptsOpts
     }
     deriving stock (Eq, Show)
 
+-- | Options for the @write-artifacts@ sub-action.
+data WriteArtifactsOpts = WriteArtifactsOpts
+    { waRunDir :: !FilePath
+    , waSeedSplitTxId :: !Text
+    , waRegistryMintTxId :: !Text
+    , waReferenceScriptsTxId :: !Text
+    , waScopesSeedTxIn :: !Text
+    , waRegistrySeedTxIn :: !Text
+    , waOwnerKeyHash :: !Text
+    }
+    deriving stock (Eq, Show)
+
 -- | Discriminated union dispatched by the runner.
 data RegistryInitWizardOpts
     = RegistryInitSeedSplitOpts !SeedSplitOpts
     | RegistryInitMintOpts !MintOpts
     | RegistryInitReferenceScriptsOpts !ReferenceScriptsOpts
+    | RegistryInitWriteArtifactsOpts !WriteArtifactsOpts
     deriving stock (Eq, Show)
 
 -- ----------------------------------------------------
@@ -213,6 +233,14 @@ registryInitWizardOptsP =
                     (RegistryInitReferenceScriptsOpts <$> referenceScriptsOptsP)
                     ( progDesc
                         "Publish the reference scripts using the funding seed from seed-split"
+                    )
+                )
+            <> command
+                "write-artifacts"
+                ( info
+                    (RegistryInitWriteArtifactsOpts <$> writeArtifactsOptsP)
+                    ( progDesc
+                        "Write DevNet registry-init artifacts from submitted bootstrap transaction ids"
                     )
                 )
         )
@@ -270,6 +298,51 @@ referenceScriptsOptsP =
                 <> metavar "TXID#IX"
                 <> help
                     "Funding seed TxIn — third output of the seed-split sub-tx; pays reference-scripts deposits"
+            )
+
+writeArtifactsOptsP :: Parser WriteArtifactsOpts
+writeArtifactsOptsP =
+    WriteArtifactsOpts
+        <$> strOption
+            ( long "run-dir"
+                <> metavar "DIR"
+                <> help "DevNet run directory where registry-init artifacts are written"
+            )
+        <*> option
+            txIdTextReader
+            ( long "seed-split-txid"
+                <> metavar "TXID"
+                <> help "Submitted seed-split transaction id"
+            )
+        <*> option
+            txIdTextReader
+            ( long "registry-mint-txid"
+                <> metavar "TXID"
+                <> help "Submitted registry mint transaction id"
+            )
+        <*> option
+            txIdTextReader
+            ( long "reference-scripts-txid"
+                <> metavar "TXID"
+                <> help "Submitted reference-scripts transaction id"
+            )
+        <*> option
+            txInTextReader
+            ( long "scopes-seed-txin"
+                <> metavar "TXID#IX"
+                <> help "Scopes seed TxIn produced by seed-split"
+            )
+        <*> option
+            txInTextReader
+            ( long "registry-seed-txin"
+                <> metavar "TXID#IX"
+                <> help "Registry seed TxIn produced by seed-split"
+            )
+        <*> option
+            keyHashTextReader
+            ( long "owner-key-hash"
+                <> metavar "HEX28"
+                <> help "28-byte scope owner key hash"
             )
 
 commonFlagsP :: Parser CommonFlags
@@ -384,6 +457,27 @@ keyHashReader :: ReadM (KeyHash Witness)
 keyHashReader =
     eitherReader (keyHashFromHex . T.pack)
 
+txIdTextReader :: ReadM Text
+txIdTextReader =
+    eitherReader $ \raw -> do
+        let text = T.pack raw
+        _ <- txInFromText (text <> "#0")
+        pure text
+
+txInTextReader :: ReadM Text
+txInTextReader =
+    eitherReader $ \raw -> do
+        let text = T.pack raw
+        _ <- txInFromText text
+        pure text
+
+keyHashTextReader :: ReadM Text
+keyHashTextReader =
+    eitherReader $ \raw -> do
+        let text = T.pack raw
+        _ <- keyHashFromHex text
+        pure text
+
 -- ----------------------------------------------------
 -- --out pre-flight checks
 -- ----------------------------------------------------
@@ -443,6 +537,8 @@ runRegistryInitWizard g cmd = case cmd of
         if cfBootstrap cf
             then runReferenceScriptsBootstrap g rsOpts
             else runReferenceScriptsVerified g rsOpts
+    RegistryInitWriteArtifactsOpts waOpts ->
+        runWriteArtifacts g waOpts
   where
     guardOut path force = do
         r <- validateOutPath path force
@@ -950,3 +1046,41 @@ runReferenceScriptsBootstrap g rsOpts = do
             (encodeSomeTreasuryIntent intent)
   where
     unwrapSlot (SlotNo s) = s
+
+-- ----------------------------------------------------
+-- Bootstrap artifact writer (#175 Slice 3)
+-- ----------------------------------------------------
+
+runWriteArtifacts :: GlobalOpts -> WriteArtifactsOpts -> IO ()
+runWriteArtifacts g waOpts = do
+    networkName <- case resolveNetworkName g of
+        Right t -> pure t
+        Left e -> abortWriteArtifacts (T.pack e)
+    let NetworkMagic magic =
+            goNetworkMagic g
+        args =
+            BootstrapArtifactArgs
+                { baaSeedSplitTxId = waSeedSplitTxId waOpts
+                , baaRegistryMintTxId = waRegistryMintTxId waOpts
+                , baaReferenceScriptsTxId =
+                    waReferenceScriptsTxId waOpts
+                , baaScopesSeedTxIn = waScopesSeedTxIn waOpts
+                , baaRegistrySeedTxIn = waRegistrySeedTxIn waOpts
+                , baaOwnerKeyHash = waOwnerKeyHash waOpts
+                , baaNetwork = Testnet
+                }
+    runBootstrapWriter
+        networkName
+        (fromIntegral magic)
+        (waRunDir waOpts)
+        args
+        >>= \case
+            Right () -> pure ()
+            Left e -> abortWriteArtifacts (T.pack e)
+
+abortWriteArtifacts :: Text -> IO a
+abortWriteArtifacts msg = do
+    hPutStrLn
+        stderr
+        ("registry-init-wizard write-artifacts: " <> T.unpack msg)
+    exitWith (ExitFailure 3)

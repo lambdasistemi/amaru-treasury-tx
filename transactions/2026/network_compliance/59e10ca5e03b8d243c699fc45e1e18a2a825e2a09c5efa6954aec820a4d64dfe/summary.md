@@ -16,7 +16,16 @@ Historical USDM-funding swap for the network_compliance treasury
   `tx.cbor` these CBORs let an auditor reconstruct the consumed
   UTxOs from cryptographically anchored bytes alone.
 
-## Missing
+## Recovery
 
-- `intent.json` — the original wizard intent for this swap is not
-  recoverable (pre-#172). Only the on-chain CBOR survives.
+- `intent.json` recovered from
+  `/tmp/amaru-treasury-tx-issue-127-all-ada-nc-wallet-minrate-026-20260515-100706/intent.json`
+  (lossless copy).
+- Match rationale: the intent's `swap.chunkSizeLovelace`
+  (52816580941) and `swap.amountLovelace` (52816580941, N=1) equal
+  the tx's per-chunk and total ADA-in to the SundaeSwap V3 order
+  escrow, and the intent's `swap.rateNumerator` (260000) matches
+  the min USDM out encoded in the order datum
+  (13732311045 / 52816580941 ≈ 0.260000). The intent's
+  `wallet.txIn` and `scope.treasuryUtxos[0]` are both consumed by
+  this tx.

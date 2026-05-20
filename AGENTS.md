@@ -48,4 +48,30 @@ specs/
   audit artifact, quote source abstraction, and offline proof strategy.
 
 <!-- MANUAL ADDITIONS START -->
+
+## Skills
+
+Activatable, vendor-neutral [Agent Skills](https://agentskills.io/home)
+live under `skills/`. Any compatible agent (Claude Code, OpenAI
+Codex, Cursor, GitHub Copilot, Gemini CLI, OpenCode, Goose, …) will
+discover them by name/description and load the body when triggered.
+
+- [`skills/amaru-treasury-tx-operator/`](skills/amaru-treasury-tx-operator/) —
+  end-to-end operator workflow: build → witness → assemble → inspect
+  → validate → submit → archive into `transactions/`. **The first
+  time this skill runs on a host it conducts a one-time interview
+  and writes the operator's answers to
+  `~/.config/amaru-treasury-tx/operator.json`**, then reuses them
+  for every subsequent run. Triggers: `amaru-treasury-tx`, any
+  `*-wizard` subcommand, `attach-witness`, `treasury-inspect`,
+  signing for the Amaru treasury, archiving a submitted tx.
+
+## First-run setup for new operators
+
+If you're an LLM agent loaded into this repo for the first time on
+a new host, before doing anything else check whether
+`~/.config/amaru-treasury-tx/operator.json` exists. If it doesn't,
+load `skills/amaru-treasury-tx-operator/SKILL.md` and walk through
+its first-run interview. Subsequent sessions read the file
+silently — no re-asking.
 <!-- MANUAL ADDITIONS END -->

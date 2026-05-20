@@ -98,10 +98,10 @@ Checkpoint: artifact writer tests green and `./gate.sh` green.
 
 **Orchestrator-owned**.
 
-- [ ] T019 Run full `./gate.sh` and record the evidence in PR #176.
-- [ ] T020 Run finalization audit: commit messages, `Tasks:` trailers,
+- [x] T019 Run full `./gate.sh` and record the evidence in PR #176.
+- [x] T020 Run finalization audit: commit messages, `Tasks:` trailers,
   tasks checked, docs/spec/plan/tasks/PR body agree.
-- [ ] T021 Drop `gate.sh` in the final commit and mark PR #176 ready.
+- [x] T021 Drop `gate.sh` in the final commit and mark PR #176 ready.
 
 ## Dependencies and Execution Order
 

@@ -41,6 +41,20 @@ The full operator and developer documentation lives at
 - [Local devnet smoke](https://lambdasistemi.github.io/amaru-treasury-tx/local-devnet-smoke/) — opt-in `cardano-node-clients` devnet check for live node boundary evidence.
 - [Parity report](https://lambdasistemi.github.io/amaru-treasury-tx/parity/) — byte-for-byte golden parity against bash/cardano-cli.
 
+## For LLM coding agents
+
+This repo ships a vendor-neutral [Agent Skill](https://agentskills.io/home)
+that walks you (a coding agent — Claude Code, OpenAI Codex,
+Cursor, GitHub Copilot, Gemini CLI, OpenCode, Goose, …) through
+the full operator pipeline:
+
+- [`AGENTS.md`](AGENTS.md) — root entry point per [agents.md](https://agents.md).
+- [`skills/amaru-treasury-tx-operator/`](skills/amaru-treasury-tx-operator/) —
+  end-to-end workflow with a one-time first-run interview that
+  caches operator-specific paths/identities to
+  `~/.config/amaru-treasury-tx/operator.json`.
+- [`skills/`](skills/) — index of all skills shipped with this repo.
+
 ## Install
 
 **macOS (Apple Silicon)**:

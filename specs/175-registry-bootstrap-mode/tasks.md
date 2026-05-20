@@ -24,14 +24,14 @@ one bisect-safe commit.
 **Goal**: Make bootstrap an explicit CLI mode without changing the
 default verified behavior.
 
-- [ ] T001 [P] [US1] Add parser tests showing
+- [x] T001 [P] [US1] Add parser tests showing
   `registry-init-wizard {seed-split,mint,reference-scripts} --bootstrap`
   is accepted and included in help output.
-- [ ] T002 [P] [US3] Add a source/runner test proving the default path
+- [x] T002 [P] [US3] Add a source/runner test proving the default path
   still calls `verifyRegistry` before emitting intents.
-- [ ] T003 [P] [US1] Add a source/runner test proving the bootstrap path
+- [x] T003 [P] [US1] Add a source/runner test proving the bootstrap path
   does not call `verifyRegistry`.
-- [ ] T004 [US1] Add explicit verified/bootstrap mode plumbing in
+- [x] T004 [US1] Add explicit verified/bootstrap mode plumbing in
   `lib/Amaru/Treasury/Cli/RegistryInitWizard.hs` while keeping existing
   verified behavior unchanged.
 

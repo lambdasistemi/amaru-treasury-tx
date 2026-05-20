@@ -109,6 +109,40 @@ spec = describe "RegistryInitWizardParser (Slice 1 of #158)" $ do
             body `shouldSatisfy` ("--registry-seed-txin" `isInfixOf`)
             body `shouldSatisfy` ("--funding-seed-txin" `isInfixOf`)
 
+    describe "--bootstrap mode flag (#175 Slice 1)" $ do
+        it "seed-split --help lists --bootstrap" $
+            parserHelpBody ["seed-split", "--help"]
+                `shouldSatisfy` ("--bootstrap" `isInfixOf`)
+        it "mint --help lists --bootstrap" $
+            parserHelpBody ["mint", "--help"]
+                `shouldSatisfy` ("--bootstrap" `isInfixOf`)
+        it "reference-scripts --help lists --bootstrap" $
+            parserHelpBody ["reference-scripts", "--help"]
+                `shouldSatisfy` ("--bootstrap" `isInfixOf`)
+        it "seed-split accepts --bootstrap" $
+            isParseFailure (("seed-split" : commonArgs) ++ ["--bootstrap"])
+                `shouldBe` False
+        it "seed-split parses without --bootstrap (verified default)" $
+            isParseFailure ("seed-split" : commonArgs)
+                `shouldBe` False
+        it "mint accepts --bootstrap" $
+            isParseFailure
+                (mintArgs ++ ["--owner-key-hash", goodKeyHash, "--bootstrap"])
+                `shouldBe` False
+        it "reference-scripts accepts --bootstrap" $
+            isParseFailure
+                ( refScriptsArgsNoTxIns
+                    ++ [ "--scopes-seed-txin"
+                       , goodTxIn
+                       , "--registry-seed-txin"
+                       , goodTxIn
+                       , "--funding-seed-txin"
+                       , goodTxIn
+                       , "--bootstrap"
+                       ]
+                )
+                `shouldBe` False
+
     describe "--owner-key-hash rejects malformed input" $ do
         it "rejects 55-hex-char string (one byte short)" $ do
             let badHex = replicate 55 'a'

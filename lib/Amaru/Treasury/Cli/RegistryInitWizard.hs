@@ -142,6 +142,12 @@ data CommonFlags = CommonFlags
     , cfEvent :: !(Maybe Text)
     , cfLabel :: !(Maybe Text)
     , cfForce :: !Bool
+    , cfBootstrap :: !Bool
+    -- ^ Slice 1 of #175: when 'True', dispatch to the bootstrap
+    -- runner branch (DevNet-only, no on-chain registry metadata
+    -- expected). When 'False', the existing verified path runs
+    -- and 'verifyRegistry' is called before any intent emission.
+    -- Bootstrap-mode intent emission lands in Slice 2.
     }
     deriving stock (Eq, Show)
 
@@ -350,6 +356,14 @@ commonFlagsP =
                 <> help
                     "Overwrite the file at --out if it already exists"
             )
+        <*> flag
+            False
+            True
+            ( long "bootstrap"
+                <> help
+                    "DevNet-only: run in fresh-chain bootstrap mode \
+                    \(no on-chain registry metadata required)"
+            )
 
 -- ----------------------------------------------------
 -- ReadM helpers
@@ -412,13 +426,21 @@ runRegistryInitWizard
 runRegistryInitWizard g cmd = case cmd of
     RegistryInitSeedSplitOpts (SeedSplitOpts cf) -> do
         guardOut (cfOut cf) (cfForce cf)
-        runSeedSplit g cf
+        if cfBootstrap cf
+            then runSeedSplitBootstrap g cf
+            else runSeedSplitVerified g cf
     RegistryInitMintOpts mintOpts -> do
-        guardOut (cfOut (mCommon mintOpts)) (cfForce (mCommon mintOpts))
-        runMint g mintOpts
+        let cf = mCommon mintOpts
+        guardOut (cfOut cf) (cfForce cf)
+        if cfBootstrap cf
+            then runMintBootstrap g mintOpts
+            else runMintVerified g mintOpts
     RegistryInitReferenceScriptsOpts rsOpts -> do
-        guardOut (cfOut (rsCommon rsOpts)) (cfForce (rsCommon rsOpts))
-        runReferenceScripts g rsOpts
+        let cf = rsCommon rsOpts
+        guardOut (cfOut cf) (cfForce cf)
+        if cfBootstrap cf
+            then runReferenceScriptsBootstrap g rsOpts
+            else runReferenceScriptsVerified g rsOpts
   where
     guardOut path force = do
         r <- validateOutPath path force
@@ -442,8 +464,8 @@ Network mismatch surfaces twice: once via the resolver's
 other than @"devnet"@, and once via the pure translation if
 the registry view ends up keyed for an unsupported network.
 -}
-runSeedSplit :: GlobalOpts -> CommonFlags -> IO ()
-runSeedSplit g cf = do
+runSeedSplitVerified :: GlobalOpts -> CommonFlags -> IO ()
+runSeedSplitVerified g cf = do
     networkName <- case resolveNetworkName g of
         Right t -> pure t
         Left e -> abortSeedSplit (T.pack e)
@@ -533,8 +555,8 @@ The resolver fires the devnet network guard before any chain
 query; any 'RegistryInitError' from the resolver or the
 translation is printed to stderr with exit code 3.
 -}
-runMint :: GlobalOpts -> MintOpts -> IO ()
-runMint g mintOpts = do
+runMintVerified :: GlobalOpts -> MintOpts -> IO ()
+runMintVerified g mintOpts = do
     let cf = mCommon mintOpts
     networkName <- case resolveNetworkName g of
         Right t -> pure t
@@ -631,8 +653,9 @@ The resolver fires the devnet network guard before any chain
 query; any 'RegistryInitError' from the resolver or the
 translation is printed to stderr with exit code 3.
 -}
-runReferenceScripts :: GlobalOpts -> ReferenceScriptsOpts -> IO ()
-runReferenceScripts g rsOpts = do
+runReferenceScriptsVerified
+    :: GlobalOpts -> ReferenceScriptsOpts -> IO ()
+runReferenceScriptsVerified g rsOpts = do
     let cf = rsCommon rsOpts
     networkName <- case resolveNetworkName g of
         Right t -> pure t
@@ -713,3 +736,37 @@ abortReferenceScripts msg = do
             <> T.unpack msg
         )
     exitWith (ExitFailure 3)
+
+-- ----------------------------------------------------
+-- Bootstrap runner branches (#175 Slice 1)
+-- ----------------------------------------------------
+
+{- | Bootstrap @seed-split@ branch (#175 Slice 1).
+
+Slice 1 only establishes the explicit verified/bootstrap split:
+the bootstrap branches deliberately do not call 'verifyRegistry'
+and emit a clear not-implemented error pointing to Slice 2, where
+the DevNet-only bootstrap resolver and the three bootstrap intent
+emissions land.
+-}
+runSeedSplitBootstrap :: GlobalOpts -> CommonFlags -> IO ()
+runSeedSplitBootstrap _g _cf =
+    abortSeedSplit
+        "bootstrap mode: intent emission is not implemented yet"
+
+{- | Bootstrap @mint@ branch (#175 Slice 1). See
+'runSeedSplitBootstrap'.
+-}
+runMintBootstrap :: GlobalOpts -> MintOpts -> IO ()
+runMintBootstrap _g _mintOpts =
+    abortMint
+        "bootstrap mode: intent emission is not implemented yet"
+
+{- | Bootstrap @reference-scripts@ branch (#175 Slice 1). See
+'runSeedSplitBootstrap'.
+-}
+runReferenceScriptsBootstrap
+    :: GlobalOpts -> ReferenceScriptsOpts -> IO ()
+runReferenceScriptsBootstrap _g _rsOpts =
+    abortReferenceScripts
+        "bootstrap mode: intent emission is not implemented yet"

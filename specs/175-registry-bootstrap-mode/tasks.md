@@ -86,12 +86,12 @@ Checkpoint: artifact writer tests green and `./gate.sh` green.
 
 **Orchestrator-owned**.
 
-- [ ] T016 [US4] Update `README.md` and `docs/local-devnet-smoke.md` with
+- [x] T016 [US4] Update `README.md` and `docs/local-devnet-smoke.md` with
   the fresh bootstrap command sequence and the explicit hand-carry fields
   #161 must record.
-- [ ] T017 [US4] Refresh PR #176 body with delivered behavior,
+- [x] T017 [US4] Refresh PR #176 body with delivered behavior,
   verification, and the #161 handoff command sequence.
-- [ ] T018 [US4] Comment on #175, #161, and #156 with the merged-surface
+- [x] T018 [US4] Comment on #175, #161, and #156 with the merged-surface
   handoff once local verification passes.
 
 ## Phase 5: Finalization

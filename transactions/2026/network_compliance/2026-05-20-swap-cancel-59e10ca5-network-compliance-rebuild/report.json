@@ -1,0 +1,20 @@
+{
+    "action": "swap-cancel",
+    "feeLovelace": 244261,
+    "nextSteps": [
+        "review",
+        "sign with required owners",
+        "submit signed transaction"
+    ],
+    "orderTxIn": "59e10ca5e03b8d243c699fc45e1e18a2a825e2a09c5efa6954aec820a4d64dfe#0",
+    "requiredSigners": [
+        "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+        "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+    ],
+    "returnedValue": {
+        "assets": {},
+        "lovelace": 52819860941
+    },
+    "treasuryDestination": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
+    "txId": "a8bab7bfe1e2ed9d3a5b40189c8de51c5974a6e05c71fc1000a6abd57500b365"
+}

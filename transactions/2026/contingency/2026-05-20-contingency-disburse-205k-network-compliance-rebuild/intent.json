@@ -1,0 +1,48 @@
+{
+    "action": "disburse",
+    "disburse": {
+        "amount": 205000000000,
+        "beneficiaryAddress": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
+        "unit": "ada",
+        "usdmPolicy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+        "usdmToken": "0014df105553444d"
+    },
+    "network": "mainnet",
+    "rationale": {
+        "description": "Contingency disburse to Network Compliance treasury",
+        "destinationLabel": "Network Compliance treasury",
+        "event": "disburse",
+        "justification": "Funding Network Compliance to reach 425k USDM target",
+        "label": "Contingency disburse"
+    },
+    "schema": 1,
+    "scope": {
+        "id": "contingency",
+        "permissionsDeployedAt": "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#4",
+        "permissionsRewardAccount": "2810b46b73cb27292cd8511274b6930188eee61b7d8635af6b1b626a",
+        "registryDeployedAt": "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#4",
+        "registryPolicyId": "7d275cf8c09fd91e73879993ef13cb73915196478d5e3777992f9888",
+        "scopesDeployedAt": "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0",
+        "treasuryAddress": "addr1x8ndhlcfy30t38z0tql64fpg8ply93r37xrgvdagfpsz5nhxm0lsjfz7hzwy7kpl42jzswr7gtz8ruvxscm6sjrq9f8qruq0ae",
+        "treasuryDeployedAt": "b25328336bbba240d5906952534e84bb8edf1a690f86a4160c38703396853c90#0",
+        "treasuryLeftoverLovelace": 3852000000000,
+        "treasuryLeftoverOtherAssets": {},
+        "treasuryLeftoverUsdm": 0,
+        "treasuryScriptHash": "e6dbff09245eb89c4f583faaa428387e42c471f1868637a848602a4e",
+        "treasuryUtxos": [
+            "46c11538f39bce1e6d3bf1f9273f30b75b4eb094bbb5d121b76083eab0113d71#0"
+        ]
+    },
+    "signers": [
+        "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb",
+        "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+        "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+        "97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2"
+    ],
+    "validityUpperBoundSlot": 187878776,
+    "wallet": {
+        "address": "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz",
+        "extraTxIns": [],
+        "txIn": "59e10ca5e03b8d243c699fc45e1e18a2a825e2a09c5efa6954aec820a4d64dfe#2"
+    }
+}

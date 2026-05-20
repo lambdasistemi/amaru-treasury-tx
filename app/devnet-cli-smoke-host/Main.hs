@@ -31,9 +31,19 @@ import Cardano.Crypto.DSIGN
     , rawSerialiseSignKeyDSIGN
     )
 import Cardano.Crypto.Hash (hashToBytes)
+import Cardano.Ledger.Address
+    ( Addr (..)
+    , serialiseAddr
+    )
+import Cardano.Ledger.BaseTypes (Network (..))
+import Cardano.Ledger.Credential
+    ( Credential (..)
+    , StakeReference (..)
+    )
 import Cardano.Ledger.Hashes (KeyHash (..))
 import Cardano.Ledger.Keys
-    ( VKey (..)
+    ( KeyRole (Payment)
+    , VKey (..)
     , hashKey
     )
 import Cardano.Node.Client.E2E.Devnet (withCardanoNode)
@@ -43,6 +53,7 @@ import Cardano.Node.Client.E2E.Setup
     , genesisSignKey
     , mkSignKey
     )
+import Codec.Binary.Bech32 qualified as Bech32
 import Control.Monad (unless, when)
 import Data.Aeson (encode, object, (.=))
 import Data.ByteString qualified as BS
@@ -203,6 +214,7 @@ main = do
                 , ("CLI_SMOKE_NETWORK_NAME", "devnet")
                 , ("CLI_SMOKE_GENESIS_DIR", smokeGenesis)
                 , ("CLI_SMOKE_FUNDING_SKEY", devnetFundingSkeyPath keys)
+                , ("CLI_SMOKE_FUNDING_ADDR", devnetFundingAddress keys)
                 , ("CLI_SMOKE_FUNDING_KEY_HASH", devnetFundingKeyHashHex keys)
                 , ("CLI_SMOKE_VOTER_SKEY", devnetVoterSkeyPath keys)
                 , ("CLI_SMOKE_VOTER_KEY_HASH", devnetVoterKeyHashHex keys)
@@ -340,11 +352,12 @@ replaceRequired needle replacement content =
 
 {- | The deterministic DevNet key bundle the host
 exports for the shell smoke. Both keys are written
-as cardano-cli payment signing-key JSON envelopes
-with @0600@ permissions.
+as Shelley payment signing-key JSON envelopes with
+@0600@ permissions.
 -}
 data DevnetKeys = DevnetKeys
     { devnetFundingSkeyPath :: !FilePath
+    , devnetFundingAddress :: !String
     , devnetFundingKeyHashHex :: !String
     , devnetVoterSkeyPath :: !FilePath
     , devnetVoterKeyHashHex :: !String
@@ -367,6 +380,7 @@ writeDevnetKeyFixtures runDir = do
     pure
         DevnetKeys
             { devnetFundingSkeyPath = fundingPath
+            , devnetFundingAddress = paymentAddressBech32 genesisSignKey
             , devnetFundingKeyHashHex = paymentKeyHashHex genesisSignKey
             , devnetVoterSkeyPath = voterPath
             , devnetVoterKeyHashHex = paymentKeyHashHex voterSignKey
@@ -405,9 +419,37 @@ writePaymentSkeyEnvelope path description sk = do
     setFileMode path ownerReadMode
     pure path
 
+paymentAddressBech32 :: SignKeyDSIGN Ed25519DSIGN -> String
+paymentAddressBech32 sk =
+    T.unpack $
+        renderAddr $
+            Addr
+                Testnet
+                (KeyHashObj (paymentKeyHash sk))
+                StakeRefNull
+
+renderAddr :: Addr -> T.Text
+renderAddr addr =
+    Bech32.encodeLenient hrp dat
+  where
+    hrp =
+        either
+            (error . ("renderAddr: " <>) . show)
+            id
+            ( Bech32.humanReadablePartFromText $
+                case addr of
+                    Addr Mainnet _ _ -> "addr"
+                    _ -> "addr_test"
+            )
+    dat = Bech32.dataPartFromBytes (serialiseAddr addr)
+
+paymentKeyHash :: SignKeyDSIGN Ed25519DSIGN -> KeyHash Payment
+paymentKeyHash sk =
+    hashKey (VKey (deriveVerKeyDSIGN sk))
+
 paymentKeyHashHex :: SignKeyDSIGN Ed25519DSIGN -> String
 paymentKeyHashHex sk =
-    case hashKey (VKey (deriveVerKeyDSIGN sk)) of
+    case paymentKeyHash sk of
         KeyHash kh ->
             BS8.unpack (B16.encode (hashToBytes kh))
                 :: String

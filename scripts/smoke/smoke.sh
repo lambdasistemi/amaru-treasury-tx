@@ -74,7 +74,6 @@ preflight_for_phase() {
             ;;
         preflight)
             require_tool jq
-            require_tool cardano-cli
             require_tool cardano-node
             require_tool amaru-treasury-tx
             ;;
@@ -85,12 +84,10 @@ preflight_for_phase() {
             ;;
         registry-stake)
             require_tool jq
-            require_tool cardano-cli
             require_tool cabal
             ;;
         governance | disburse | full)
             require_tool jq
-            require_tool cardano-cli
             require_tool cardano-node
             require_tool amaru-treasury-tx
             ;;
@@ -281,24 +278,13 @@ require_inside_devnet() {
 # Naming them here keeps the no-fallback static guard meaningful
 # without committing an unverified pipeline as if it were live.
 
-derive_funding_wallet_addr() {
-    local skey=$1
-    local out_dir=$2
-    local vkey="$out_dir/funding.vkey"
-    cardano-cli conway key verification-key \
-        --signing-key-file "$skey" \
-        --verification-key-file "$vkey"
-    cardano-cli conway address build \
-        --payment-verification-key-file "$vkey" \
-        --testnet-magic "${CLI_SMOKE_NETWORK_MAGIC:-42}"
-}
-
 registry_stake_phase() {
     local run_dir=$1
     local phase_dir="$run_dir/phases/registry-stake"
     mkdir -p "$phase_dir"
 
     require_env CARDANO_NODE_SOCKET_PATH
+    require_env CLI_SMOKE_FUNDING_ADDR
     require_env CLI_SMOKE_FUNDING_SKEY
     require_env CLI_SMOKE_FUNDING_KEY_HASH
     require_file "funding signing key" "$CLI_SMOKE_FUNDING_SKEY"
@@ -310,8 +296,7 @@ registry_stake_phase() {
     require_file "metadata fixture" "$metadata"
 
     local wallet_addr
-    wallet_addr=$(derive_funding_wallet_addr \
-        "$CLI_SMOKE_FUNDING_SKEY" "$phase_dir")
+    wallet_addr="$CLI_SMOKE_FUNDING_ADDR"
     log "registry-stake: funding wallet addr = $wallet_addr"
 
     local passphrase_file="$phase_dir/funding.passphrase"

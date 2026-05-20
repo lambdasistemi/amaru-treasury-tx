@@ -352,6 +352,7 @@ executable devnet-cli-smoke-host
     , aeson
     , base                         <5
     , base16-bytestring
+    , bech32
     , bytestring
     , cardano-crypto-class
     , cardano-ledger-api

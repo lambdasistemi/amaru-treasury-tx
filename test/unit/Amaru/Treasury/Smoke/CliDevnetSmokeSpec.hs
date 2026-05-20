@@ -76,6 +76,7 @@ forbiddenRunnerStrings =
     , "Amaru.Treasury.Devnet.Runner"
     , "cabal test devnet-tests"
     , "DEVNET_SMOKE_PHASE"
+    , "cardano-cli"
     ]
 
 {- | Product files that the static guard scans.
@@ -157,6 +158,11 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
             forM_ forbiddenHostImports $ \needle ->
                 src `shouldSatisfyNotContain` needle
 
+        it "host exports the funding address for the shell smoke" $ do
+            src <- mustRead hostMainPath
+            src `shouldSatisfyContain` "CLI_SMOKE_FUNDING_ADDR"
+            src `shouldSatisfyContain` "devnetFundingAddress"
+
     describe "vault preflight surface in smoke.sh" $ do
         it "smoke.sh names shipped CLI signing subcommands" $ do
             src <- mustRead smokeScriptPath
@@ -193,6 +199,12 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
         it "smoke.sh routes non-inside live phases through the host" $ do
             src <- mustRead smokeScriptPath
             src `shouldSatisfyContain` "devnet-cli-smoke-host"
+
+        it "registry-stake consumes the host funding address" $ do
+            src <- mustRead smokeScriptPath
+            src `shouldSatisfyContain` "require_env CLI_SMOKE_FUNDING_ADDR"
+            src
+                `shouldSatisfyContain` "wallet_addr=\"$CLI_SMOKE_FUNDING_ADDR\""
 
     describe "no in-process runner fallback" $ do
         forM_ forbiddenRunnerStrings $ \needle ->

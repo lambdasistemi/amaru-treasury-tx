@@ -1,0 +1,10 @@
+tx-build: intent <- /tmp/attx-172/contingency-205k-rebuild/intent.json
+tx-build: parsed action=Disburse network=mainnet
+tx-build: connecting to /code/cardano-mainnet/ipc/node.socket
+tx-build: required utxos: 6
+tx-build: handshake ok (magic 764824073 matches intent network=mainnet)
+tx-build: built 1333 bytes  fee=415814  total_collateral=623721
+tx-build: re-evaluated 2 redeemers, 0 failed
+tx-build: cbor -> /tmp/attx-172/contingency-205k-rebuild/unsigned-tx.hex
+tx-build: VALIDATION OK
+tx-build: report -> /tmp/attx-172/contingency-205k-rebuild/report.json

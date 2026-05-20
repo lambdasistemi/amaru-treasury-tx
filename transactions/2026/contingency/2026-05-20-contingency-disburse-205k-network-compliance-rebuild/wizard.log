@@ -1,0 +1,12 @@
+contingency-disburse-wizard: network mainnet (magic 764824073)
+contingency-disburse-wizard: metadata = /code/amaru-treasury/journal/2026/metadata.json
+contingency-disburse-wizard: VERIFIED scope=contingency treasury=addr1x8ndhlcfy30t38z0tql64fpg8ply93r37xrgvdagfpsz5nhxm0lsjfz7hzwy7kpl42jzswr7gtz8ruvxscm6sjrq9f8qruq0ae treasuryScriptHash=e6dbff09245eb89c4f583faaa428387e42c471f1868637a848602a4e registryPolicyId=7d275cf8c09fd91e73879993ef13cb73915196478d5e3777992f9888 permissionsRewardAccount=2810b46b73cb27292cd8511274b6930188eee61b7d8635af6b1b626a
+contingency-disburse-wizard: owners core=7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb ops=f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e network_compliance=8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1 middleware=97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2
+contingency-disburse-wizard: wallet utxos: 2
+contingency-disburse-wizard: treasury utxos: 1 (total 4057000000000 lovelace)
+contingency-disburse-wizard: upperBound slot 187878776 (from chain horizon helper)
+contingency-disburse-wizard: NetworkConstants usdmPolicy=c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad usdmToken=0014df105553444d
+contingency-disburse-wizard: wallet utxo selected 59e10ca5e03b8d243c699fc45e1e18a2a825e2a09c5efa6954aec820a4d64dfe#2
+contingency-disburse-wizard: treasury utxos selected 46c11538f39bce1e6d3bf1f9273f30b75b4eb094bbb5d121b76083eab0113d71#0 leftoverLov=3852000000000 leftoverUsdm=0
+contingency-disburse-wizard: upperBound slot 187878776 (from chain horizon helper)
+contingency-disburse-wizard: intent.json -> /tmp/attx-172/contingency-205k-rebuild/intent.json

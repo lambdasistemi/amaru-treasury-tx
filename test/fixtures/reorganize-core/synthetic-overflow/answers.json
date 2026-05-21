@@ -1,0 +1,8 @@
+{
+    "scope": "core_development",
+    "treasuryUtxos": [
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0",
+        "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb#1"
+    ],
+    "validityHours": 6
+}

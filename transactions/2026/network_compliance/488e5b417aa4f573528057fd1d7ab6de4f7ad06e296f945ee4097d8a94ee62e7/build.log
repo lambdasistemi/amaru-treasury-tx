@@ -1,0 +1,10 @@
+tx-build: intent <- /tmp/attx-172/swap-sweep-network-compliance/intent.json
+tx-build: parsed action=Swap network=mainnet
+tx-build: connecting to /code/cardano-mainnet/ipc/node.socket
+tx-build: required utxos: 7
+tx-build: handshake ok (magic 764824073 matches intent network=mainnet)
+tx-build: built 1665 bytes  fee=471179  total_collateral=706769
+tx-build: re-evaluated 3 redeemers, 0 failed
+tx-build: cbor -> /tmp/attx-172/swap-sweep-network-compliance/unsigned-tx.hex
+tx-build: VALIDATION OK
+tx-build: report -> /tmp/attx-172/swap-sweep-network-compliance/report.json

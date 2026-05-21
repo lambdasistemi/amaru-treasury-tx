@@ -1,0 +1,13 @@
+swap-wizard: network mainnet (magic 764824073)
+swap-wizard: metadata = /code/amaru-treasury/journal/2026/metadata.json
+swap-wizard: VERIFIED scope=network_compliance treasury=addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk treasuryScriptHash=32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d registryPolicyId=38c627d45835744a2d6c727124f2b5852e5564aeab3f608e0e84ea6d permissionsRewardAccount=a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094
+swap-wizard: owners core=7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb ops=f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e network_compliance=8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1 middleware=97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2
+swap-wizard: wallet utxos: 2
+swap-wizard: treasury utxos: 45 (total 32514444054 lovelace)
+swap-wizard: upperBound slot 187916017 (from chain horizon helper)
+swap-wizard: NetworkConstants swapOrder=addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n usdmPolicy=c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad usdmToken=0014df105553444d sundaeFee=1280000
+swap-wizard: wallet utxo selected 59e10ca5e03b8d243c699fc45e1e18a2a825e2a09c5efa6954aec820a4d64dfe#2
+swap-wizard: treasury utxos selected 7353059f0e0f59e974887b3f2405019e26c2a06673a9ce45d3cfdcbd814d5896#1 leftover=11996974411
+swap-wizard: upperBound slot 187916017 (from chain horizon helper)
+swap-wizard: chunks total=20408163265 chunkSize=20408163265 full=1 remainder=0
+swap-wizard: intent.json -> /tmp/attx-172/swap-5k-usdm-2/intent.json

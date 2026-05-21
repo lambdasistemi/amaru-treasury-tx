@@ -415,6 +415,7 @@ test-suite unit-tests
     Amaru.Treasury.AuxDataSpec
     Amaru.Treasury.Build.GovernanceWithdrawalInitSpec
     Amaru.Treasury.Build.NetworkGuardSpec
+    Amaru.Treasury.Build.WithdrawSpec
     Amaru.Treasury.BuildSpec
     Amaru.Treasury.Cli.EnvelopeSpec
     Amaru.Treasury.Cli.GovernanceWithdrawalInitWizardParserSpec

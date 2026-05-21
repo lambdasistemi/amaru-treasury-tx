@@ -184,10 +184,10 @@ Forbidden scope:
 
 Tasks:
 
-- [ ] T009 [US3] Investigate `governance materialization conservation` from `test/unit/Amaru/Treasury/Build/GovernanceWithdrawalInitSpec.hs` through `lib/Amaru/Treasury/Build/GovernanceWithdrawalInit.hs`, record the diagnosed ledger rule and root cause in `WIP.md`, and log `NOTE investigation-complete`.
-- [ ] T010 [US3] RED: add or update focused governance-withdrawal-init unit/golden coverage proving the diagnosed Phase-1 failure before changing production behavior.
-- [ ] T011 [US3] GREEN: fix the governance-withdrawal-init builder or fixture, and remove `materializeResultSkipPhase1` plus stale comments/call-site skip if its motivating residual rule is resolved.
-- [ ] T012 [US3] Run focused governance-withdrawal-init unit/golden commands plus `./gate.sh`, record RED/GREEN and disposition evidence in `WIP.md`, and create the single slice commit.
+- [X] T009 [US3] Investigate `governance materialization conservation` from `test/unit/Amaru/Treasury/Build/GovernanceWithdrawalInitSpec.hs` through `lib/Amaru/Treasury/Build/GovernanceWithdrawalInit.hs`, record the diagnosed ledger rule and root cause in `WIP.md`, and log `NOTE investigation-complete`.
+- [X] T010 [US3] RED: add or update focused governance-withdrawal-init unit/golden coverage proving the diagnosed Phase-1 failure before changing production behavior.
+- [X] T011 [US3] GREEN: fix the governance-withdrawal-init builder or fixture, and remove `materializeResultSkipPhase1` plus stale comments/call-site skip if its motivating residual rule is resolved.
+- [X] T012 [US3] Run focused governance-withdrawal-init unit/golden commands plus `./gate.sh`, record RED/GREEN and disposition evidence in `WIP.md`, and create the single slice commit.
 
 Checkpoint: governance-withdrawal-init no longer depends on the old
 Phase-1 skip unless a named residual rule is approved through Q/A, and

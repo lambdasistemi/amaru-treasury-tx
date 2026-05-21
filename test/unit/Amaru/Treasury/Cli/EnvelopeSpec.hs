@@ -28,12 +28,14 @@ import Amaru.Treasury.Cli
     )
 import Amaru.Treasury.Cli.DisburseWizard
     ( ContingencyDisburseOpts (..)
+    , DisburseWizardOpts (..)
     )
 import Amaru.Treasury.Cli.Envelope
     ( DeEnvelopeFilterResult (..)
     , runDeEnvelopeFilter
     , runEnvelopeFilter
     )
+import Amaru.Treasury.LedgerParse (txInToText)
 import Amaru.Treasury.Scope
     ( ScopeId (NetworkCompliance)
     )
@@ -72,6 +74,17 @@ spec =
 
         it "parses generic disburse-wizard for owned scopes only" $
             parseCmd disburseWizardArgs `shouldBe` Right "disburse-wizard"
+
+        it "parses repeatable disburse-wizard treasury TxIn selectors" $
+            parseDisburseTreasuryTxIns
+                ( disburseWizardArgs
+                    ++ [ "--treasury-txin"
+                       , goodTxIn1
+                       , "--treasury-utxo"
+                       , goodTxIn2
+                       ]
+                )
+                `shouldBe` Right [goodTxIn1, goodTxIn2]
 
         it "rejects contingency on generic disburse-wizard" $
             parseCmd
@@ -148,6 +161,15 @@ parseContingencyDisburse args =
         Failure{} -> Left "parse failure"
         CompletionInvoked{} -> Left "completion invoked"
 
+parseDisburseTreasuryTxIns :: [String] -> Either String [String]
+parseDisburseTreasuryTxIns args =
+    case execParserPure defaultPrefs opts args of
+        Success (_, CmdDisburseWizard o) ->
+            Right (T.unpack . txInToText <$> dwOptsTreasuryTxIns o)
+        Success{} -> Left "wrong command"
+        Failure{} -> Left "parse failure"
+        CompletionInvoked{} -> Left "completion invoked"
+
 cmdTag :: Cmd -> String
 cmdTag = \case
     CmdEnvelopeTx -> "envelope-tx"
@@ -205,6 +227,20 @@ disburseWizardArgs =
     , "--destination-label"
     , "Vendor"
     ]
+
+goodTxIdHex1 :: String
+goodTxIdHex1 =
+    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+goodTxIdHex2 :: String
+goodTxIdHex2 =
+    "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+
+goodTxIn1 :: String
+goodTxIn1 = goodTxIdHex1 <> "#0"
+
+goodTxIn2 :: String
+goodTxIn2 = goodTxIdHex2 <> "#1"
 
 replaceArg :: String -> String -> [String] -> [String]
 replaceArg old new =

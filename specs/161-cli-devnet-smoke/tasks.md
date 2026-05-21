@@ -81,10 +81,10 @@ Checkpoint: `just devnet-cli-smoke --phase governance` either passes with materi
 
 **Goal**: Spend the materialized treasury UTxO through the shipped disburse operator path and prove beneficiary receipt plus treasury reduction.
 
-- [ ] T022 [US1] Implement `disburse-wizard` through CLI against the materialized treasury artifact and a DevNet beneficiary address.
-- [ ] T023 [US1] Build/sign/submit the disburse tx through shipped CLI commands.
-- [ ] T024 [US1] Verify beneficiary output address/lovelace, consumed materialized input, and reduced treasury output; write `disburse-submit/beneficiary.json` and summary artifacts.
-- [ ] T025 [US1] Write final `summary.json` linking all phase summaries, artifact paths, tx ids, run-dir, socket path, and verification status.
+- [X] T022 [US1] Implement `disburse-wizard` through CLI against the materialized treasury artifact and a DevNet beneficiary address.
+- [X] T023 [US1] Build/sign/submit the disburse tx through shipped CLI commands.
+- [X] T024 [US1] Verify beneficiary output address/lovelace, consumed materialized input, and reduced treasury output; write `disburse-submit/beneficiary.json` and summary artifacts.
+- [X] T025 [US1] Write final `summary.json` linking all phase summaries, artifact paths, tx ids, run-dir, socket path, and verification status.
 
 Checkpoint: `just devnet-cli-smoke` full run passes and `./gate.sh` green.
 

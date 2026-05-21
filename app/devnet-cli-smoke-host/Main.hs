@@ -80,7 +80,7 @@ import Data.ByteString.Lazy qualified as BSL
 import Data.Foldable (traverse_)
 import Data.List (isPrefixOf)
 import Data.Map.Strict qualified as Map
-import Data.Maybe (isJust)
+import Data.Maybe (isJust, isNothing)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -250,6 +250,7 @@ main = do
                 , ("CLI_SMOKE_FUNDING_KEY_HASH", devnetFundingKeyHashHex keys)
                 , ("CLI_SMOKE_VOTER_SKEY", devnetVoterSkeyPath keys)
                 , ("CLI_SMOKE_VOTER_KEY_HASH", devnetVoterKeyHashHex keys)
+                , ("CLI_SMOKE_BENEFICIARY_ADDR", devnetBeneficiaryAddress keys)
                 ]
         smokeCode <- callSmokeScript opts runDir envEntries
         case hoPhase opts of
@@ -276,6 +277,28 @@ main = do
                     Nothing -> case smokeCode of
                         ExitSuccess -> exitSuccess
                         code -> exitWith code
+            "disburse" -> do
+                runChainAssertionsIfPresent runDir socket devnetMagic
+                runDisburseAssertionsIfPresent
+                    runDir
+                    socket
+                    devnetMagic
+                    (smokeCode == ExitSuccess)
+                case smokeCode of
+                    ExitSuccess -> exitSuccess
+                    code -> exitWith code
+            "full" -> do
+                runChainAssertionsIfPresent runDir socket devnetMagic
+                runDisburseAssertionsIfPresent
+                    runDir
+                    socket
+                    devnetMagic
+                    (smokeCode == ExitSuccess)
+                case smokeCode of
+                    ExitSuccess -> do
+                        markFullSummaryPassed runDir socket
+                        exitSuccess
+                    code -> exitWith code
             _ -> case smokeCode of
                 ExitSuccess -> exitSuccess
                 code -> exitWith code
@@ -420,6 +443,7 @@ data DevnetKeys = DevnetKeys
     , devnetFundingKeyHashHex :: !String
     , devnetVoterSkeyPath :: !FilePath
     , devnetVoterKeyHashHex :: !String
+    , devnetBeneficiaryAddress :: !String
     }
 
 writeDevnetKeyFixtures :: FilePath -> IO DevnetKeys
@@ -443,6 +467,8 @@ writeDevnetKeyFixtures runDir = do
             , devnetFundingKeyHashHex = paymentKeyHashHex genesisSignKey
             , devnetVoterSkeyPath = voterPath
             , devnetVoterKeyHashHex = paymentKeyHashHex voterSignKey
+            , devnetBeneficiaryAddress =
+                paymentAddressBech32 beneficiarySignKey
             }
 
 {- | Deterministic voter signing key, matching
@@ -452,6 +478,10 @@ directly.
 voterSignKey :: SignKeyDSIGN Ed25519DSIGN
 voterSignKey =
     mkSignKey "amaru-governance-voter-key-00001"
+
+beneficiarySignKey :: SignKeyDSIGN Ed25519DSIGN
+beneficiarySignKey =
+    mkSignKey "amaru-beneficiary-address-key001"
 
 writePaymentSkeyEnvelope
     :: FilePath
@@ -729,6 +759,96 @@ renderChainAssertionLog v =
     [ "chain-assertion: report"
     , T.unpack (TE.decodeUtf8 (BSL.toStrict (encode v)))
     ]
+
+-- ---------------------------------------------------------------------
+-- Full-phase summary finalization
+-- ---------------------------------------------------------------------
+
+markFullSummaryPassed :: FilePath -> FilePath -> IO ()
+markFullSummaryPassed runDir socket = do
+    let summaryPath = runDir </> "summary.json"
+        registrySummary = runDir </> "phases" </> "registry-stake" </> "summary.json"
+        governanceSummary = runDir </> "phases" </> "governance" </> "summary.json"
+        disburseSummary = runDir </> "disburse-submit" </> "summary.json"
+        chainAssertionsPath = runDir </> "chain" </> "assertions.json"
+        disburseAssertionsPath =
+            runDir </> "chain" </> "disburse.assertions.json"
+    traverse_
+        requireExistingFile
+        [ registrySummary
+        , governanceSummary
+        , disburseSummary
+        , chainAssertionsPath
+        , disburseAssertionsPath
+        ]
+    seedSplitTxId <- readSummaryText registrySummary "seedSplitTxId"
+    registryMintTxId <- readSummaryText registrySummary "registryMintTxId"
+    referenceScriptsTxId <-
+        readSummaryText registrySummary "referenceScriptsTxId"
+    stakeRewardScriptAccountTxId <-
+        readSummaryText registrySummary "stakeRewardScriptAccountTxId"
+    stakeRewardPlainAccountTxId <-
+        readSummaryText registrySummary "stakeRewardPlainAccountTxId"
+    proposalTxId <- readSummaryText governanceSummary "proposalTxId"
+    materializationTxId <-
+        readSummaryText governanceSummary "materializationTxId"
+    disburseTxId <- readSummaryText disburseSummary "disburseTxId"
+    BSL.writeFile summaryPath $
+        encode
+            ( object
+                [ "phase" .= ("full" :: Text)
+                , "status" .= ("passed" :: Text)
+                , "registrySummary" .= registrySummary
+                , "governanceSummary" .= governanceSummary
+                , "disburseSummary" .= disburseSummary
+                , "runDir" .= runDir
+                , "socketPath" .= socket
+                , "verificationStatus" .= ("passed" :: Text)
+                , "chainAssertions" .= chainAssertionsPath
+                , "disburseChainAssertions" .= disburseAssertionsPath
+                , "seedSplitTxId" .= seedSplitTxId
+                , "registryMintTxId" .= registryMintTxId
+                , "referenceScriptsTxId" .= referenceScriptsTxId
+                , "stakeRewardScriptAccountTxId"
+                    .= stakeRewardScriptAccountTxId
+                , "stakeRewardPlainAccountTxId"
+                    .= stakeRewardPlainAccountTxId
+                , "proposalTxId" .= proposalTxId
+                , "materializationTxId" .= materializationTxId
+                , "disburseTxId" .= disburseTxId
+                ]
+            )
+    hPutStrLn
+        stderr
+        ( "devnet-cli-smoke-host: full summary marked passed ("
+            <> summaryPath
+            <> ")"
+        )
+
+requireExistingFile :: FilePath -> IO ()
+requireExistingFile path = do
+    exists <- doesFileExist path
+    unless exists $
+        die ("full-summary: required artifact missing: " <> path)
+
+readSummaryText :: FilePath -> String -> IO Text
+readSummaryText path field = do
+    value <-
+        eitherDecodeFileStrict' path
+            >>= either
+                (die . (("full-summary: cannot parse " <> path <> ": ") <>))
+                pure
+    either
+        ( die
+            . (("full-summary: missing " <> field <> " in " <> path <> ": ") <>)
+        )
+        pure
+        ( parseEither
+            ( withObject "summary" $ \root ->
+                root .: Key.fromString field
+            )
+            value
+        )
 
 data AnchorResult = AnchorResult
     { arLabel :: !Text
@@ -1546,6 +1666,187 @@ governanceSnapshotValue snapshot =
         , "treasuryRewardLovelace"
             .= gcsTreasuryRewardLovelace snapshot
         ]
+
+-- ---------------------------------------------------------------------
+-- Disburse assertions
+-- ---------------------------------------------------------------------
+
+runDisburseAssertionsIfPresent
+    :: FilePath -> FilePath -> NetworkMagic -> Bool -> IO ()
+runDisburseAssertionsIfPresent runDir socket magic required = do
+    let requestPath =
+            runDir </> "chain" </> "disburse.assertions.request.json"
+    exists <- doesFileExist requestPath
+    if exists
+        then runDisburseAssertions runDir socket magic
+        else
+            when required $
+                die
+                    ( "disburse-assertion: missing request "
+                        <> requestPath
+                    )
+
+runDisburseAssertions
+    :: FilePath -> FilePath -> NetworkMagic -> IO ()
+runDisburseAssertions runDir socket magic = do
+    let requestPath =
+            runDir </> "chain" </> "disburse.assertions.request.json"
+        reportPath = runDir </> "chain" </> "disburse.assertions.json"
+        logPath = runDir </> "chain" </> "disburse.assertions.log"
+    raw <-
+        eitherDecodeFileStrict' requestPath
+            >>= either (die . badRequest) pure
+    request <-
+        either (die . badRequest) pure $
+            parseEither parseDisburseAssertionRequest raw
+    foundUtxos <-
+        withLocalNodeBackend magic socket $ \backend ->
+            Backend.singleShotWithAcquired backend $ \qh ->
+                Backend.queryUTxOByTxInH
+                    qh
+                    ( Set.fromList
+                        [ darMaterializedInput request
+                        , darTreasuryOutputTxIn request
+                        , darBeneficiaryTxIn request
+                        ]
+                    )
+    let materializedInput =
+            Map.lookup (darMaterializedInput request) foundUtxos
+        treasuryOutput =
+            Map.lookup (darTreasuryOutputTxIn request) foundUtxos
+        beneficiaryOutput =
+            Map.lookup (darBeneficiaryTxIn request) foundUtxos
+        consumedMaterializedInput = isNothing materializedInput
+        reducedTreasuryOutput =
+            maybe
+                False
+                ( \txOut ->
+                    txOutLovelace txOut == darExpectedTreasuryLovelace request
+                        && txOutAddressText txOut
+                            == darTreasuryAddress request
+                )
+                treasuryOutput
+        beneficiaryReceiptLovelace =
+            maybe 0 txOutLovelace beneficiaryOutput
+        beneficiaryReceiptOk =
+            maybe
+                False
+                ( \txOut ->
+                    txOutLovelace txOut
+                        == darExpectedBeneficiaryLovelace request
+                        && txOutAddressText txOut
+                            == darBeneficiaryAddress request
+                )
+                beneficiaryOutput
+        failures =
+            concat
+                [ expectBool
+                    "consumedMaterializedInput"
+                    True
+                    consumedMaterializedInput
+                , expectBool
+                    "reducedTreasuryOutput"
+                    True
+                    reducedTreasuryOutput
+                , expectBool
+                    "beneficiaryReceipt"
+                    True
+                    beneficiaryReceiptOk
+                ]
+        report =
+            object
+                [ "phase" .= ("disburse-submit" :: Text)
+                , "status"
+                    .= ( if null failures
+                            then "passed"
+                            else
+                                "failed"
+                                    :: Text
+                       )
+                , "disburseTxId" .= darDisburseTxId request
+                , "consumedMaterializedInput"
+                    .= consumedMaterializedInput
+                , "reducedTreasuryOutput" .= reducedTreasuryOutput
+                , "beneficiaryReceiptLovelace"
+                    .= beneficiaryReceiptLovelace
+                , "materializedInput"
+                    .= txInToText (darMaterializedInput request)
+                , "treasuryOutput"
+                    .= object
+                        [ "txIn" .= txInToText (darTreasuryOutputTxIn request)
+                        , "address" .= (txOutAddressText <$> treasuryOutput)
+                        , "lovelace" .= (txOutLovelace <$> treasuryOutput)
+                        , "expectedAddress" .= darTreasuryAddress request
+                        , "expectedLovelace"
+                            .= darExpectedTreasuryLovelace request
+                        ]
+                , "beneficiaryOutput"
+                    .= object
+                        [ "txIn" .= txInToText (darBeneficiaryTxIn request)
+                        , "address" .= (txOutAddressText <$> beneficiaryOutput)
+                        , "lovelace" .= beneficiaryReceiptLovelace
+                        , "expectedAddress" .= darBeneficiaryAddress request
+                        , "expectedLovelace"
+                            .= darExpectedBeneficiaryLovelace request
+                        ]
+                , "verificationErrors" .= failures
+                ]
+    BSL.writeFile reportPath (encode report)
+    writeFile logPath (unlines (renderChainAssertionLog report))
+    if null failures
+        then
+            hPutStrLn
+                stderr
+                ( "devnet-cli-smoke-host: disburse assertions passed ("
+                    <> reportPath
+                    <> ")"
+                )
+        else
+            die
+                ( "disburse-assertion: verification failed; see "
+                    <> reportPath
+                )
+  where
+    badRequest err =
+        "disburse-assertion: cannot parse request: " <> err
+
+data DisburseAssertionRequest = DisburseAssertionRequest
+    { darDisburseTxId :: !Text
+    , darMaterializedInput :: !TxIn
+    , darTreasuryOutputTxIn :: !TxIn
+    , darTreasuryAddress :: !Text
+    , darExpectedTreasuryLovelace :: !Integer
+    , darBeneficiaryTxIn :: !TxIn
+    , darBeneficiaryAddress :: !Text
+    , darExpectedBeneficiaryLovelace :: !Integer
+    }
+
+parseDisburseAssertionRequest
+    :: Value -> Parser DisburseAssertionRequest
+parseDisburseAssertionRequest =
+    withObject "DisburseAssertionRequest" $ \root -> do
+        disburseTxId <- root .: "disburseTxId"
+        treasuryInputText <- root .: "treasuryInput"
+        treasuryInput <- either fail pure (txInFromText treasuryInputText)
+        treasuryOutputText <- root .: "treasuryOutputTxIn"
+        treasuryOutput <- either fail pure (txInFromText treasuryOutputText)
+        treasuryAddress <- root .: "treasuryAddress"
+        treasuryLovelace <- root .: "treasuryOutputLovelace"
+        beneficiaryTxInText <- root .: "beneficiaryTxIn"
+        beneficiaryTxIn <- either fail pure (txInFromText beneficiaryTxInText)
+        beneficiaryAddress <- root .: "beneficiaryAddress"
+        beneficiaryLovelace <- root .: "beneficiaryLovelace"
+        pure
+            DisburseAssertionRequest
+                { darDisburseTxId = disburseTxId
+                , darMaterializedInput = treasuryInput
+                , darTreasuryOutputTxIn = treasuryOutput
+                , darTreasuryAddress = treasuryAddress
+                , darExpectedTreasuryLovelace = treasuryLovelace
+                , darBeneficiaryTxIn = beneficiaryTxIn
+                , darBeneficiaryAddress = beneficiaryAddress
+                , darExpectedBeneficiaryLovelace = beneficiaryLovelace
+                }
 
 -- ---------------------------------------------------------------------
 -- Diagnostics

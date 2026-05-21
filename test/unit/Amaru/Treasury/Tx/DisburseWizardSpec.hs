@@ -64,6 +64,7 @@ import Amaru.Treasury.Tx.DisburseWizard
 import Amaru.Treasury.Tx.SwapWizard
     ( WalletSelection (..)
     , txInToText
+    , walletFeeSlackLovelace
     )
 
 spec :: Spec
@@ -274,7 +275,7 @@ spec =
                                         && dtsLeftoverOtherAssets selection
                                             == otherAssets pickedOther
 
-        describe "resolveDisburseEnv" $
+        describe "resolveDisburseEnv" $ do
             it "rejects a beneficiary address on the wrong network" $ do
                 env <-
                     eitherDecodeStrict
@@ -299,6 +300,7 @@ spec =
                             , riAmount = 1
                             , riRegistry = deRegistry env
                             , riValidityHours = Nothing
+                            , riTreasuryTxIns = []
                             }
                 r <- resolveDisburseEnv stub ri
                 r
@@ -307,6 +309,64 @@ spec =
                             "mainnet"
                             "testnet"
                         )
+
+            it
+                "filters treasury UTxOs to requested TxIns before ADA selection"
+                $ do
+                    env <-
+                        eitherDecodeStrict
+                            "test/fixtures/disburse-wizard/env.ada.json"
+                    let requested = mkTxIn 1
+                        referenceScript = mkTxIn 2
+                        stub =
+                            ResolverEnv
+                                { reEnvQueryWalletUtxos =
+                                    \_ ->
+                                        pure
+                                            [
+                                                ( txInToText (mkTxIn 7)
+                                                , walletFeeSlackLovelace
+                                                , False
+                                                )
+                                            ]
+                                , reEnvQueryTreasuryUtxos =
+                                    \_ ->
+                                        pure
+                                            [
+                                                ( referenceScript
+                                                , mkValue 100_000_000 0 0
+                                                )
+                                            ,
+                                                ( requested
+                                                , mkValue 2_000_000 0 0
+                                                )
+                                            ]
+                                , reEnvComputeUpperBound =
+                                    \_ -> pure (Right 42)
+                                }
+                        ri =
+                            ResolverInput
+                                { riNetwork = "mainnet"
+                                , riWalletAddrBech32 =
+                                    wsAddress (deWalletSelection env)
+                                , riBeneficiaryAddrBech32 =
+                                    wsAddress (deWalletSelection env)
+                                , riScope = CoreDevelopment
+                                , riUnit = ADA
+                                , riAmount = 1_500_000
+                                , riRegistry = deRegistry env
+                                , riValidityHours = Nothing
+                                , riTreasuryTxIns = [requested]
+                                }
+                    r <- resolveDisburseEnv stub ri
+                    deTreasurySelection <$> r
+                        `shouldBe` Right
+                            DisburseTreasurySelection
+                                { dtsInputs = [txInToText requested]
+                                , dtsLeftoverLovelace = 500_000
+                                , dtsLeftoverUsdm = 0
+                                , dtsLeftoverOtherAssets = mempty
+                                }
 
 eitherDecodeStrict :: (Aeson.FromJSON a) => FilePath -> IO a
 eitherDecodeStrict p = do

@@ -278,6 +278,95 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
             src
                 `shouldSatisfyContain` "renderAddr (txOut ^. addrTxOutL)"
 
+    describe "disburse and full CLI surface" $ do
+        it "smoke.sh implements a disburse phase function" $ do
+            src <- mustRead smokeScriptPath
+            src `shouldSatisfyContain` "disburse_phase()"
+            src
+                `shouldSatisfyContain` "governance-withdrawal-init/materialized.json"
+            src
+                `shouldSatisfyContain` "require_env CLI_SMOKE_BENEFICIARY_ADDR"
+
+        it "disburse phase names the shipped wizard and tx-pipeline" $ do
+            src <- mustRead smokeScriptPath
+            forM_
+                [ "disburse-wizard"
+                , "--unit ada"
+                , "--treasury-txin \"$treasury_input\""
+                , "tx-build"
+                , "witness"
+                , "attach-witness"
+                , "submit"
+                ]
+                $ \needle ->
+                    src `shouldSatisfyContain` needle
+
+        it "disburse summary links expected artifacts and tx ids" $ do
+            src <- mustRead smokeScriptPath
+            forM_
+                [ "disburse-submit/summary.json"
+                , "disburseIntent"
+                , "disburseTxId"
+                , "beneficiaryTxIn"
+                , "walletChangeTxIn"
+                , "treasuryInput"
+                , "treasuryOutputTxIn"
+                , "expected 3 outputs (treasury + beneficiary + wallet change)"
+                , "chainAssertionsRequest"
+                ]
+                $ \needle ->
+                    src `shouldSatisfyContain` needle
+
+        it "full phase writes a top-level linked summary" $ do
+            src <- mustRead smokeScriptPath
+            src `shouldSatisfyContain` "full_phase()"
+            src `shouldSatisfyContain` "write_full_summary"
+            forM_
+                [ "registrySummary"
+                , "governanceSummary"
+                , "disburseSummary"
+                , "runDir"
+                , "socketPath"
+                , "verificationStatus"
+                ]
+                $ \needle ->
+                    src `shouldSatisfyContain` needle
+
+        it "host marks full summary passed after chain assertions" $ do
+            src <- mustRead hostMainPath
+            let fullBranch = sectionBetween "\"full\" -> do" "_ -> case" src
+            fullBranch `shouldSatisfyContain` "markFullSummaryPassed"
+            forM_
+                [ "markFullSummaryPassed"
+                , "verificationStatus\" .= (\"passed\""
+                , "chainAssertions\" .= chainAssertionsPath"
+                , "disburseChainAssertions\" .= disburseAssertionsPath"
+                , "seedSplitTxId"
+                , "registryMintTxId"
+                , "referenceScriptsTxId"
+                , "stakeRewardScriptAccountTxId"
+                , "stakeRewardPlainAccountTxId"
+                , "proposalTxId"
+                , "materializationTxId"
+                , "disburseTxId"
+                ]
+                $ \needle ->
+                    src `shouldSatisfyContain` needle
+
+        it "host exports deterministic beneficiary and verifies disburse" $ do
+            src <- mustRead hostMainPath
+            forM_
+                [ "CLI_SMOKE_BENEFICIARY_ADDR"
+                , "devnetBeneficiaryAddress"
+                , "runDisburseAssertionsIfPresent"
+                , "disburse.assertions.request.json"
+                , "beneficiaryReceiptLovelace"
+                , "consumedMaterializedInput"
+                , "reducedTreasuryOutput"
+                ]
+                $ \needle ->
+                    src `shouldSatisfyContain` needle
+
     describe "build_sign_submit error propagation" $ do
         it
             "smoke.sh has no `local <var>=$(build_sign_submit` \

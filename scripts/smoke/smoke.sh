@@ -24,6 +24,7 @@ DEFAULT_TIMEOUT_SECONDS=900
 AMARU_EXE=""
 CLI_SMOKE_REGISTRY_TIMEOUT_SECONDS="${CLI_SMOKE_REGISTRY_TIMEOUT_SECONDS:-60}"
 GOVERNANCE_WITHDRAWAL_LOVELACE=2000000
+DISBURSE_LOVELACE=1000000
 GOVERNANCE_ANCHOR_URL="https://example.invalid/amaru-devnet-governance.json"
 GOVERNANCE_ANCHOR_HASH="000000000000000000000000000000000000000000000000000000000000002a"
 
@@ -1180,6 +1181,345 @@ JSON
     log "governance: materialization submitted; host will verify chain state"
 }
 
+disburse_phase() {
+    local run_dir=$1
+    local timeout_seconds=$2
+    local phase_dir="$run_dir/phases/disburse"
+    mkdir -p "$phase_dir"
+
+    governance_phase "$run_dir" "$timeout_seconds"
+
+    require_env CARDANO_NODE_SOCKET_PATH
+    require_env CLI_SMOKE_FUNDING_ADDR
+    require_env CLI_SMOKE_FUNDING_SKEY
+    require_env CLI_SMOKE_FUNDING_KEY_HASH
+    require_env CLI_SMOKE_BENEFICIARY_ADDR
+    require_file "funding signing key" "$CLI_SMOKE_FUNDING_SKEY"
+
+    AMARU_EXE=$(resolve_amaru_exe)
+    log "disburse: using $AMARU_EXE"
+
+    local registry_json="$run_dir/registry-init/registry.json"
+    local materialized_json="$run_dir/governance-withdrawal-init/materialized.json"
+    local governance_summary="$run_dir/phases/governance/summary.json"
+    require_file "registry.json" "$registry_json"
+    require_file "governance materialization" "$materialized_json"
+    require_file "governance summary" "$governance_summary"
+
+    local materialized_lovelace
+    materialized_lovelace=$(jq -r '.materializedAdaLovelace' \
+        "$materialized_json") \
+        || die "disburse: cannot read materialized lovelace"
+    if [[ "$materialized_lovelace" -le "$DISBURSE_LOVELACE" ]]; then
+        die "disburse: materialized lovelace $materialized_lovelace must exceed disburse amount $DISBURSE_LOVELACE"
+    fi
+    local treasury_leftover_lovelace=$((materialized_lovelace - DISBURSE_LOVELACE))
+
+    local treasury_input
+    local treasury_address
+    treasury_input=$(jq -r '.treasuryMaterializedTxIn' \
+        "$materialized_json") \
+        || die "disburse: cannot read treasury input"
+    treasury_address=$(jq -r '.treasuryAddress' "$materialized_json") \
+        || die "disburse: cannot read treasury address"
+    if [[ -z "$treasury_input" || "$treasury_input" == "null" ]]; then
+        die "disburse: materialized.json missing treasuryMaterializedTxIn"
+    fi
+    if [[ -z "$treasury_address" || "$treasury_address" == "null" ]]; then
+        die "disburse: materialized.json missing treasuryAddress"
+    fi
+
+    local passphrase_file="$phase_dir/disburse.passphrase"
+    printf 'cli-smoke-disburse' >"$passphrase_file"
+    chmod 0600 "$passphrase_file"
+
+    local funding_vault="$phase_dir/funding.vault.age"
+    log "disburse: create funding vault"
+    create_devnet_vault \
+        "$CLI_SMOKE_FUNDING_SKEY" \
+        "devnet_funding" \
+        "DevNet funding key (disburse)" \
+        "$funding_vault" \
+        "$passphrase_file"
+
+    local intents_dir="$phase_dir/intents"
+    local diag_dir="$phase_dir/diagnostics"
+    mkdir -p "$intents_dir" "$diag_dir"
+
+    local disburse_submit_dir="$run_dir/disburse-submit"
+    mkdir -p "$disburse_submit_dir"
+    local metadata="$disburse_submit_dir/metadata.json"
+    jq -n \
+        --slurpfile reg "$registry_json" \
+        --argjson budget "$materialized_lovelace" \
+        '{
+            scope_owners: $reg[0].anchors.scopesDeployedAt,
+            treasuries: {
+                core_development: {
+                    owner: $reg[0].owners.scopeOwnerKeyHash,
+                    budget: $budget,
+                    address: $reg[0].addresses.treasuryAddress,
+                    treasury_script: {
+                        hash: $reg[0].scripts.treasuryScriptHash,
+                        deployed_at: $reg[0].anchors.treasuryDeployedAt
+                    },
+                    permissions_script: {
+                        hash: $reg[0].scripts.permissionsScriptHash,
+                        deployed_at: $reg[0].anchors.permissionsDeployedAt
+                    },
+                    registry_script: {
+                        hash: $reg[0].policies.registryPolicyId,
+                        deployed_at: $reg[0].anchors.registryDeployedAt
+                    }
+                }
+            }
+        }' >"$metadata"
+
+    local disburse_intent="$intents_dir/disburse.intent.json"
+    log "disburse: disburse-wizard"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        disburse-wizard \
+        --wallet-addr "$CLI_SMOKE_FUNDING_ADDR" \
+        --metadata "$metadata" \
+        --scope core_development \
+        --treasury-txin "$treasury_input" \
+        --unit ada \
+        --amount "$DISBURSE_LOVELACE" \
+        --beneficiary-addr "$CLI_SMOKE_BENEFICIARY_ADDR" \
+        --description "CLI DevNet smoke beneficiary payment" \
+        --justification "Issue 161 disburse-after-materialization proof" \
+        --destination-label "CLI smoke beneficiary" \
+        --log "$diag_dir/disburse.intent.log" \
+        --out "$disburse_intent"
+
+    local disburse_txid
+    disburse_txid=$(build_sign_submit \
+        "disburse-submit" \
+        "$disburse_intent" \
+        "$funding_vault" \
+        "devnet_funding" \
+        "$CLI_SMOKE_FUNDING_KEY_HASH" \
+        "$passphrase_file") \
+        || die "disburse-submit: build/sign/submit failed"
+
+    local disburse_report="$run_dir/diagnostics/disburse-submit.report.json"
+    local summary_json="$disburse_submit_dir/summary.json"
+    local disburse_json="$disburse_submit_dir/disburse.json"
+    local beneficiary_json="$disburse_submit_dir/beneficiary.json"
+    local treasury_json="$disburse_submit_dir/treasury.json"
+    local provenance_json="$disburse_submit_dir/provenance.json"
+    local tx_body="$run_dir/unsigned/disburse-submit.cbor.hex"
+    local signed_tx="$run_dir/signed/disburse-submit.signed.cbor.hex"
+    local submit_log="$run_dir/submits/disburse-submit.outcome"
+
+    local out_count
+    out_count=$(jq -r '.result.report.outputs | length' \
+        "$disburse_report") \
+        || die "disburse-submit: cannot read outputs"
+    if [[ "$out_count" != "3" ]]; then
+        die "disburse-submit: expected 3 outputs (treasury + beneficiary + wallet change), got $out_count"
+    fi
+
+    local treasury_output_txin="${disburse_txid}#0"
+    local beneficiary_txin="${disburse_txid}#1"
+    local wallet_change_txin="${disburse_txid}#2"
+    local observed_treasury_address
+    local observed_treasury_lovelace
+    local observed_beneficiary_address
+    local observed_beneficiary_lovelace
+    local fee_lovelace
+    observed_treasury_address=$(jq -r \
+        '.result.report.outputs[0].address' "$disburse_report") \
+        || die "disburse-submit: cannot read treasury output address"
+    observed_treasury_lovelace=$(jq -r \
+        '.result.report.outputs[0].value.lovelace' "$disburse_report") \
+        || die "disburse-submit: cannot read treasury output lovelace"
+    observed_beneficiary_address=$(jq -r \
+        '.result.report.outputs[1].address' "$disburse_report") \
+        || die "disburse-submit: cannot read beneficiary output address"
+    observed_beneficiary_lovelace=$(jq -r \
+        '.result.report.outputs[1].value.lovelace' "$disburse_report") \
+        || die "disburse-submit: cannot read beneficiary output lovelace"
+    fee_lovelace=$(jq -r '.result.report.identity.feeLovelace' \
+        "$disburse_report") \
+        || die "disburse-submit: cannot read fee"
+
+    if [[ "$observed_treasury_address" != "$treasury_address" ]]; then
+        die "disburse-submit: treasury output address mismatch"
+    fi
+    if [[ "$observed_treasury_lovelace" != "$treasury_leftover_lovelace" ]]; then
+        die "disburse-submit: expected treasury leftover $treasury_leftover_lovelace lovelace, got $observed_treasury_lovelace"
+    fi
+    if [[ "$observed_beneficiary_address" != "$CLI_SMOKE_BENEFICIARY_ADDR" ]]; then
+        die "disburse-submit: beneficiary output address mismatch"
+    fi
+    if [[ "$observed_beneficiary_lovelace" != "$DISBURSE_LOVELACE" ]]; then
+        die "disburse-submit: expected beneficiary $DISBURSE_LOVELACE lovelace, got $observed_beneficiary_lovelace"
+    fi
+
+    jq -n \
+        --arg intentPath "$disburse_intent" \
+        --arg txBodyPath "$tx_body" \
+        --arg reportJsonPath "$disburse_report" \
+        --arg reportMarkdownPath "" \
+        --arg signedTxPath "$signed_tx" \
+        --arg submitLogPath "$submit_log" \
+        --arg txId "$disburse_txid" \
+        --argjson amountLovelace "$DISBURSE_LOVELACE" \
+        --argjson feeLovelace "$fee_lovelace" \
+        '{
+            phase: "disburse-submit",
+            network: "devnet",
+            intentPath: $intentPath,
+            txBodyPath: $txBodyPath,
+            reportJsonPath: $reportJsonPath,
+            reportMarkdownPath: $reportMarkdownPath,
+            signedTxPath: $signedTxPath,
+            submitLogPath: $submitLogPath,
+            txId: $txId,
+            submittedTxId: $txId,
+            amountLovelace: $amountLovelace,
+            feeLovelace: $feeLovelace
+        }' >"$disburse_json"
+
+    jq -n \
+        --arg address "$CLI_SMOKE_BENEFICIARY_ADDR" \
+        --arg txIn "$beneficiary_txin" \
+        --argjson lovelace "$DISBURSE_LOVELACE" \
+        '{
+            phase: "disburse-submit",
+            network: "devnet",
+            address: $address,
+            txIn: $txIn,
+            lovelace: $lovelace
+        }' >"$beneficiary_json"
+
+    jq -n \
+        --arg input "$treasury_input" \
+        --arg output "$treasury_output_txin" \
+        --arg address "$treasury_address" \
+        --argjson lovelaceBefore "$materialized_lovelace" \
+        --argjson lovelaceAfter "$treasury_leftover_lovelace" \
+        '{
+            phase: "disburse-submit",
+            network: "devnet",
+            input: $input,
+            output: $output,
+            address: $address,
+            lovelaceBefore: $lovelaceBefore,
+            lovelaceAfter: $lovelaceAfter,
+            consumed: true
+        }' >"$treasury_json"
+
+    jq -n \
+        '{
+            phase: "disburse-submit",
+            source: "amaru-treasury-tx",
+            issue: 161,
+            dependsOnIssues: [147, 149, 150, 151]
+        }' >"$provenance_json"
+
+    local chain_dir="$run_dir/chain"
+    mkdir -p "$chain_dir"
+    local disburse_request="$chain_dir/disburse.assertions.request.json"
+    jq -n \
+        --arg disburseTxId "$disburse_txid" \
+        --arg treasuryInput "$treasury_input" \
+        --arg treasuryOutputTxIn "$treasury_output_txin" \
+        --arg treasuryAddress "$treasury_address" \
+        --argjson treasuryOutputLovelace "$treasury_leftover_lovelace" \
+        --arg beneficiaryTxIn "$beneficiary_txin" \
+        --arg beneficiaryAddress "$CLI_SMOKE_BENEFICIARY_ADDR" \
+        --argjson beneficiaryLovelace "$DISBURSE_LOVELACE" \
+        '{
+            phase: "disburse-submit",
+            disburseTxId: $disburseTxId,
+            treasuryInput: $treasuryInput,
+            treasuryOutputTxIn: $treasuryOutputTxIn,
+            treasuryAddress: $treasuryAddress,
+            treasuryOutputLovelace: $treasuryOutputLovelace,
+            beneficiaryTxIn: $beneficiaryTxIn,
+            beneficiaryAddress: $beneficiaryAddress,
+            beneficiaryLovelace: $beneficiaryLovelace
+        }' >"$disburse_request"
+
+    jq -n \
+        --arg runDirectory "$run_dir" \
+        --arg registryPath "$registry_json" \
+        --arg materializedPath "$materialized_json" \
+        --arg disbursePath "$disburse_json" \
+        --arg beneficiaryPath "$beneficiary_json" \
+        --arg treasuryPath "$treasury_json" \
+        --arg provenancePath "$provenance_json" \
+        --arg disburseIntent "$disburse_intent" \
+        --arg disburseTxId "$disburse_txid" \
+        --arg beneficiaryTxIn "$beneficiary_txin" \
+        --arg walletChangeTxIn "$wallet_change_txin" \
+        --arg treasuryInput "$treasury_input" \
+        --arg treasuryOutputTxIn "$treasury_output_txin" \
+        --arg chainAssertionsRequest "$disburse_request" \
+        --argjson amountLovelace "$DISBURSE_LOVELACE" \
+        '{
+            phase: "disburse-submit",
+            status: "passed",
+            network: "devnet",
+            runDirectory: $runDirectory,
+            registryPath: $registryPath,
+            materializedPath: $materializedPath,
+            amountLovelace: $amountLovelace,
+            disbursePath: $disbursePath,
+            beneficiaryPath: $beneficiaryPath,
+            treasuryPath: $treasuryPath,
+            provenancePath: $provenancePath,
+            disburseIntent: $disburseIntent,
+            disburseTxId: $disburseTxId,
+            beneficiaryTxIn: $beneficiaryTxIn,
+            walletChangeTxIn: $walletChangeTxIn,
+            treasuryInput: $treasuryInput,
+            treasuryOutputTxIn: $treasuryOutputTxIn,
+            chainAssertionsRequest: $chainAssertionsRequest
+        }' >"$summary_json"
+
+    cp "$summary_json" "$phase_dir/summary.json"
+    log "disburse: complete (summary in $summary_json)"
+}
+
+write_full_summary() {
+    local run_dir=$1
+    local summary_path="$run_dir/summary.json"
+    local registry_summary="$run_dir/phases/registry-stake/summary.json"
+    local governance_summary="$run_dir/phases/governance/summary.json"
+    local disburse_summary="$run_dir/disburse-submit/summary.json"
+    require_file "registry-stake summary" "$registry_summary"
+    require_file "governance summary" "$governance_summary"
+    require_file "disburse summary" "$disburse_summary"
+    jq -n \
+        --arg registrySummary "$registry_summary" \
+        --arg governanceSummary "$governance_summary" \
+        --arg disburseSummary "$disburse_summary" \
+        --arg runDir "$run_dir" \
+        --arg socketPath "${CARDANO_NODE_SOCKET_PATH:-}" \
+        '{
+            phase: "full",
+            status: "passed",
+            registrySummary: $registrySummary,
+            governanceSummary: $governanceSummary,
+            disburseSummary: $disburseSummary,
+            runDir: $runDir,
+            socketPath: $socketPath,
+            verificationStatus: "pending-host-assertions"
+        }' >"$summary_path"
+    log "full: summary written to $summary_path"
+}
+
+full_phase() {
+    local run_dir=$1
+    local timeout_seconds=$2
+    disburse_phase "$run_dir" "$timeout_seconds"
+    write_full_summary "$run_dir"
+}
+
 create_run_dir() {
     local run_dir=$1
     local force=$2
@@ -1300,8 +1640,15 @@ main() {
                 "$run_dir" "$timeout_seconds" "$force"
             governance_phase "$run_dir" "$timeout_seconds"
             ;;
-        disburse | full)
-            die "phase '$phase' not implemented yet in this slice; see specs/161-cli-devnet-smoke/plan.md"
+        disburse)
+            require_inside_devnet "$inside_devnet" "$phase" \
+                "$run_dir" "$timeout_seconds" "$force"
+            disburse_phase "$run_dir" "$timeout_seconds"
+            ;;
+        full)
+            require_inside_devnet "$inside_devnet" "$phase" \
+                "$run_dir" "$timeout_seconds" "$force"
+            full_phase "$run_dir" "$timeout_seconds"
             ;;
     esac
 }

@@ -7,14 +7,9 @@
 # witness, attach-witness, submit). It must never call
 # in-process Haskell runners.
 #
-# Slice 1 ships scaffold only:
-#   * argument parsing for the public flags;
-#   * dependency preflight for the chosen phase;
-#   * run-dir layout creation.
-#
-# Live DevNet lifecycle, key fixtures, vault preflight,
-# registry/stake/governance/disburse phases land in
-# later slices on this same entrypoint.
+# The default scaffold phase keeps argument parsing cheap for static
+# checks. Live phases route through the Haskell DevNet host unless the
+# script is already running inside that host callback.
 
 set -euo pipefail
 
@@ -45,9 +40,11 @@ Options:
   --force                    Allow a non-empty existing --run-dir.
   --help                     Show this help and exit.
 
-Slice 2 implements scaffold, preflight, and vault-preflight (the shipped
-vault create / witness / attach-witness round-trip). Later slices wire the
-full bootstrap + disburse CLI pipeline on the same flags.
+Live phases route through devnet-cli-smoke-host, bring up a patched local
+DevNet, create DevNet vaults, drive the shipped wizard -> tx-build ->
+witness -> attach-witness -> submit pipeline, and write run-dir artifacts
+plus host chain assertions. Use --phase full for the complete registry,
+stake/reward, governance materialization, and disburse proof.
 
 This script drives only shipped amaru-treasury-tx CLI commands. See
 specs/161-cli-devnet-smoke/ for the no-in-process-runner contract and the

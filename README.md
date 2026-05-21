@@ -38,7 +38,7 @@ The full operator and developer documentation lives at
 - [Swap recipe](https://lambdasistemi.github.io/amaru-treasury-tx/swap/) — building a swap from an existing `intent.json`.
 - [Disburse](https://lambdasistemi.github.io/amaru-treasury-tx/disburse/) — resolving ADA or USDM disbursements with `disburse-wizard`, or building an existing disburse intent.
 - [Withdraw](https://lambdasistemi.github.io/amaru-treasury-tx/withdraw/) — resolving rewards with `withdraw-wizard` or building an existing withdraw intent.
-- [Local devnet smoke](https://lambdasistemi.github.io/amaru-treasury-tx/local-devnet-smoke/) — opt-in `cardano-node-clients` devnet check for live node boundary evidence. Includes the **CLI DevNet smoke** (`just devnet-cli-smoke --phase registry-stake`) — a human-runnable operator tutorial that drives the shipped CLI (registry-init-wizard / stake-reward-init-wizard / tx-build / witness / submit) end to end. The governance CLI phase is expected to exit `0` on the patched DevNet after driving proposal plus materialization through shipped CLI commands and verifying the materialized treasury UTxO plus drained reward on chain; exit `78` is only the fallback when the reward never accrues.
+- [Local devnet smoke](https://lambdasistemi.github.io/amaru-treasury-tx/local-devnet-smoke/) — opt-in `cardano-node-clients` devnet checks for live node boundary evidence. Includes the **CLI DevNet smoke** (`just devnet-cli-smoke --phase full`) — a human-runnable operator proof that drives the shipped CLI (registry-init-wizard / stake-reward-init-wizard / governance-withdrawal-init-wizard / disburse-wizard / tx-build / witness / attach-witness / submit) through registry, stake/reward, governance materialization, and disburse. The existing `just devnet-smoke ...` phases remain the library proof layer consumed by `SmokeSpec`.
 - [Parity report](https://lambdasistemi.github.io/amaru-treasury-tx/parity/) — byte-for-byte golden parity against bash/cardano-cli.
 
 ## Install
@@ -83,6 +83,12 @@ Run the opt-in local devnet node smoke with:
 
 ```bash
 nix develop --quiet -c just devnet-smoke node
+```
+
+Run the full shipped-CLI DevNet proof with:
+
+```bash
+nix develop --quiet -c just devnet-cli-smoke --phase full --timeout-seconds 900
 ```
 
 ### DevNet bootstrap via `tx-build --intent`
@@ -345,13 +351,18 @@ checked against vault identities by the wizard; they fail later at
 carry is parked in
 [#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163).
 
-The bash CLI smoke that chains the full bootstrap + disburse flow
-against a real DevNet through the shipped CLI lands in
-[#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161).
-Until #161 merges, the bare-intent goldens under `test/golden/Support/`
-plus the wizard parity goldens remain the byte-identical
-CBOR-equivalence source of truth between `tx-build --intent` and the
-library construction core.
+The bash CLI smoke introduced by
+[#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161)
+chains the full bootstrap + disburse flow against a real DevNet through
+the shipped CLI:
+
+```bash
+nix develop --quiet -c just devnet-cli-smoke --phase full --timeout-seconds 900
+```
+
+Its final `summary.json` links registry/stake, governance, and disburse
+phase summaries, the host chain-assertion transcripts, the run
+directory, socket path, and every submitted tx id.
 
 The end-to-end DevNet runners under
 `lib/Amaru/Treasury/Devnet/{RegistryInit,StakeRewardInit,
@@ -411,11 +422,11 @@ retired; the same CBOR is now built byte-for-byte from
   `309e28ed5b95de38258bcc130d6390800b0719f6410b0d5fe6f3c33cc1b70817#0`,
   treasury lovelace `2000000 → 1000000`.
 
-The opt-in live-node smoke phases remain runnable
+The opt-in live-node smoke phases remain runnable as the library proof
+layer
 (`just devnet-smoke {registry-init,stake-reward-init,
 governance-withdrawal-init,disburse-submit}` — these still drive the
-library functions via `SmokeSpec`; the equivalent CLI-driven proof
-ships in #161).
+library functions via `SmokeSpec`).
 
 Run the swap readiness boundary check with:
 

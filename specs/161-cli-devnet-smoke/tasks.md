@@ -92,10 +92,10 @@ Checkpoint: `just devnet-cli-smoke` full run passes and `./gate.sh` green.
 
 **Orchestrator-owned**.
 
-- [ ] T026 [US3] Update `README.md` to show `just devnet-cli-smoke` as the CLI/operator proof and retain `just devnet-smoke` as the library proof command.
-- [ ] T027 [US3] Update `docs/local-devnet-smoke.md` with proof-layer split, expected run-dir artifacts, governance vote reachability behavior, and troubleshooting diagnostics.
-- [ ] T028 [US3] Decide and document whether `lib/Amaru/Treasury/Devnet/*Init.hs` runners remain; default is keep them because `SmokeSpec` is the library proof layer.
-- [ ] T029 Extend `gate.sh` with the no-fallback static test and the ticket-specific live CLI smoke command once the live run is reliable enough for branch verification.
+- [X] T026 [US3] Update `README.md` to show `just devnet-cli-smoke` as the CLI/operator proof and retain `just devnet-smoke` as the library proof command.
+- [X] T027 [US3] Update `docs/local-devnet-smoke.md` with proof-layer split, expected run-dir artifacts, governance vote reachability behavior, and troubleshooting diagnostics.
+- [X] T028 [US3] Decide and document whether `lib/Amaru/Treasury/Devnet/*Init.hs` runners remain; default is keep them because `SmokeSpec` is the library proof layer.
+- [X] T029 Extend `gate.sh` with the no-fallback static test and the ticket-specific live CLI smoke command once the live run is reliable enough for branch verification.
 - [ ] T030 Refresh PR #171 body and parent #156 comment with the delivered proof, any governance-vote finding, and verification evidence.
 
 ## Phase 7: Finalization

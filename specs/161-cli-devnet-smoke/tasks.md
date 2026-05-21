@@ -96,13 +96,13 @@ Checkpoint: `just devnet-cli-smoke` full run passes and `./gate.sh` green.
 - [X] T027 [US3] Update `docs/local-devnet-smoke.md` with proof-layer split, expected run-dir artifacts, governance vote reachability behavior, and troubleshooting diagnostics.
 - [X] T028 [US3] Decide and document whether `lib/Amaru/Treasury/Devnet/*Init.hs` runners remain; default is keep them because `SmokeSpec` is the library proof layer.
 - [X] T029 Extend `gate.sh` with the no-fallback static test and the ticket-specific live CLI smoke command once the live run is reliable enough for branch verification.
-- [ ] T030 Refresh PR #171 body and parent #156 comment with the delivered proof, any governance-vote finding, and verification evidence.
+- [X] T030 Refresh PR #171 body and parent #156 comment with the delivered proof, any governance-vote finding, and verification evidence.
 
 ## Phase 7: Finalization
 
 **Orchestrator-owned**.
 
-- [ ] T031 Run full `./gate.sh` and record the CLI smoke run directory and tx ids in the PR body.
+- [X] T031 Run full `./gate.sh` and record the CLI smoke run directory and tx ids in the PR body.
 - [ ] T032 Run finalization audit: every behavior commit has a `Tasks:` trailer, every task has a matching checked box, docs/spec/plan/tasks/PR body agree, and `gate.sh` is absent only in the final commit.
 - [ ] T033 Remove `gate.sh` in `chore: drop gate.sh (ready for review) (#161)`, push, and mark PR #171 ready for review.
 

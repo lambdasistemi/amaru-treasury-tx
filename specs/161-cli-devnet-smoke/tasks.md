@@ -103,8 +103,8 @@ Checkpoint: `just devnet-cli-smoke` full run passes and `./gate.sh` green.
 **Orchestrator-owned**.
 
 - [X] T031 Run full `./gate.sh` and record the CLI smoke run directory and tx ids in the PR body.
-- [ ] T032 Run finalization audit: every behavior commit has a `Tasks:` trailer, every task has a matching checked box, docs/spec/plan/tasks/PR body agree, and `gate.sh` is absent only in the final commit.
-- [ ] T033 Remove `gate.sh` in `chore: drop gate.sh (ready for review) (#161)`, push, and mark PR #171 ready for review.
+- [X] T032 Run finalization audit: every behavior commit has a `Tasks:` trailer, every task has a matching checked box, docs/spec/plan/tasks/PR body agree, and `gate.sh` is absent only in the final commit.
+- [X] T033 Remove `gate.sh` in `chore: drop gate.sh (ready for review) (#161)`, push, and mark PR #171 ready for review.
 
 ## Dependencies and Execution Order
 

@@ -1,13 +1,14 @@
 ---
 name: amaru-treasury-tx
-description: "Operator reference for driving `amaru-treasury-tx` on Paolo's NixOS mainnet box: build, witness, assemble, inspect, validate, submit, and archive with the project's own subcommands plus `cardano-tx-tools`. Load for `amaru-treasury-tx`, `attach-witness`, `treasury-inspect`, `disburse-wizard`, `contingency-disburse-wizard`, `withdraw-wizard`, `swap-wizard`, `swap-cancel`, submitted transaction archive checks, `submit.log` completeness checks, mainnet treasury signing/submission, `/code/cardano-mainnet/`, `journal/2026/metadata.json`, the `registry_script.hash` typo, or age-encrypted witness vaults. Prefer this over hand-rolling CBOR or cardano-cli for treasury work."
+description: "Operator reference for driving `amaru-treasury-tx` on mainnet: portable release install, build, witness, assemble, inspect, validate, submit, and archive with the project's own subcommands plus `cardano-tx-tools`. Load for `amaru-treasury-tx`, `attach-witness`, `treasury-inspect`, `disburse-wizard`, `contingency-disburse-wizard`, `withdraw-wizard`, `swap-wizard`, `swap-cancel`, submitted transaction archive checks, `submit.log` completeness checks, mainnet treasury signing/submission, `journal/2026/metadata.json`, the `registry_script.hash` typo, or age-encrypted witness vaults. Prefer this over hand-rolling CBOR or cardano-cli for treasury work."
 ---
 
 # amaru-treasury-tx operator workflow
 
-Tight reference for driving the treasury tx pipeline on **this machine**
-(Paolo's NixOS box). Paths and sockets below are local; on a different
-host substitute the equivalents.
+Tight reference for driving the treasury tx pipeline on a normal
+operator host. The portable release install path is the default; the
+Paolo-specific `/code/...` paths are shortcuts for his NixOS mainnet
+box only.
 
 ## Golden rule
 
@@ -18,68 +19,176 @@ CBOR risks subtle wire-format bugs (CBORTag 258 for sets, vkey-witness
 inner vs `[0, [vkey,sig]]` shape, body-bytes-preserve invariant). Linked
 memory: `[[use-repo-tool]]`.
 
-A submit is not complete when the CLI returns a txid. It is complete only
-after the on-chain txid is archived in `transactions/`, the signed tx and
+A submit is not complete when the CLI returns a txid, or when the archive
+commit merely exists on a local/PR branch. It is complete only after the
+on-chain txid is archived in `transactions/`, the signed tx and
 `submit.log` are copied in, `submitted.json` is written, parent inputs are
-fetched, and the submitted-log completeness check below reports zero
-missing archives.
+fetched, the submitted-log completeness check below reports zero missing
+archives, and the archive commit has been pushed through CI/review and
+merged to `main`.
 
-## Install & invoke
+## Install & invoke released tools
 
-The published `amaru-treasury-tx.AppImage` is actually a **statically
-linked self-extracting ELF** — it runs natively on NixOS without
-`appimage-run` or any wrapper. `file ~/bin/amaru-treasury-tx` reads as
-"ELF 64-bit LSB executable … statically linked". Just `chmod +x` and
-run.
+Do not assume the operator has Paolo's nicknames, clones, Nix profile,
+or `/code/...` layout. First install the released binaries for the
+host's OS/architecture into a normal PATH directory. Confirm versions
+before every operator run; we ship fast.
 
-Prefer in this order:
+### Detect the supported package target
 
-1. **PATH binary** — `~/bin/amaru-treasury-tx` (= `/home/paolino/bin/…`).
-   Just type `amaru-treasury-tx …`.
-2. **DEB / RPM** at the release page — only when installing system-wide.
-3. **Local `nix run` / `cabal run`** — last resort; long build path.
-
-Confirm the version with `amaru-treasury-tx --version` before each
-operator run; we ship fast.
-
-### Update the executable (canonical pattern)
-
-The user's standing idiom from bash history — pick the latest tag, drop
-straight into `~/bin/amaru-treasury-tx`, set the execute bit:
+Use the latest GitHub release, then select an asset by `uname`.
+If the target is unsupported, stop and say so; do not silently build
+from source unless the operator explicitly asks for a developer setup.
 
 ```bash
-LATEST=$(gh release view --repo lambdasistemi/amaru-treasury-tx \
-              --json tagName --jq .tagName)
-curl -fsSL -o ~/bin/amaru-treasury-tx \
-  "https://github.com/lambdasistemi/amaru-treasury-tx/releases/download/$LATEST/amaru-treasury-tx.AppImage"
-chmod +x ~/bin/amaru-treasury-tx
-amaru-treasury-tx --version   # sanity check
+set -euo pipefail
+
+BIN_DIR="${HOME}/.local/bin"
+DATA_DIR="${XDG_DATA_HOME:-${HOME}/.local/share}/amaru-treasury"
+mkdir -p "$BIN_DIR" "$DATA_DIR"
+
+latest_tag() {
+  curl -fsSLI -o /dev/null -w '%{url_effective}\n' \
+    "https://github.com/$1/releases/latest" | sed 's#.*/##'
+}
+
+case "$(uname -s):$(uname -m)" in
+  Linux:x86_64|Linux:amd64)
+    PLATFORM="x86_64-linux"
+    PACKAGE_KIND="appimage"
+    ;;
+  Darwin:arm64|Darwin:aarch64)
+    PLATFORM="aarch64-darwin"
+    PACKAGE_KIND="tar"
+    ;;
+  *)
+    echo "No released amaru-treasury-tx package for $(uname -s):$(uname -m)" >&2
+    exit 1
+    ;;
+esac
+
+case ":$PATH:" in
+  *":$BIN_DIR:"*) ;;
+  *) echo "Add $BIN_DIR to PATH before operating." >&2 ;;
+esac
 ```
 
-Pinning to a specific tag (e.g. when reproducing an earlier signing
-session):
+### Install `amaru-treasury-tx`
+
+Linux `x86_64` operators can use the AppImage without `appimage-run`;
+it is a statically linked self-extracting ELF. System package users may
+download the matching `.deb` or `.rpm` from the same release instead.
+Darwin `aarch64` operators use the release tarball.
 
 ```bash
-curl -fsSL -o ~/bin/amaru-treasury-tx \
-  https://github.com/lambdasistemi/amaru-treasury-tx/releases/download/v0.2.11.0/amaru-treasury-tx.AppImage
-chmod +x ~/bin/amaru-treasury-tx
+ATTX_TAG="$(latest_tag lambdasistemi/amaru-treasury-tx)"
+ATTX_VERSION="${ATTX_TAG#v}"
+
+case "$PACKAGE_KIND" in
+  appimage)
+    curl -fsSL -o "$BIN_DIR/amaru-treasury-tx" \
+      "https://github.com/lambdasistemi/amaru-treasury-tx/releases/download/$ATTX_TAG/amaru-treasury-tx-$ATTX_VERSION-$PLATFORM.AppImage"
+    chmod +x "$BIN_DIR/amaru-treasury-tx"
+    ;;
+  tar)
+    tmp="$(mktemp -d)"
+    curl -fsSL -o "$tmp/amaru-treasury-tx.tar.gz" \
+      "https://github.com/lambdasistemi/amaru-treasury-tx/releases/download/$ATTX_TAG/amaru-treasury-tx-$ATTX_VERSION-$PLATFORM.tar.gz"
+    tar -xzf "$tmp/amaru-treasury-tx.tar.gz" -C "$tmp"
+    install -m 0755 "$(find "$tmp" -type f -name amaru-treasury-tx | head -1)" \
+      "$BIN_DIR/amaru-treasury-tx"
+    rm -rf "$tmp"
+    ;;
+esac
+
+amaru-treasury-tx --version
 ```
 
-Two non-obvious bits:
+### Install the released skill
 
-- The file dropped at `~/bin/amaru-treasury-tx` keeps the *name* but
-  the `.AppImage` suffix is stripped — it's still the same artefact, but
-  it ends up on PATH as a single bare command, so completion and muscle
-  memory both work.
-- `curl -fsSL` is the right combo: `-f` fails on HTTP errors (saves you
-  from chmod-ing a "404 Not Found" HTML body), `-s` silences progress,
-  `-S` keeps real errors visible, `-L` follows the GitHub redirect.
+Install the skill from an immutable release tag or commit that already
+contains `.claude/skills/amaru-treasury-tx/SKILL.md`. If the latest
+published binary release predates the repo-scoped skill, use `main`
+only after the PR carrying the skill has merged, then pin the resulting
+commit for audit notes.
 
-Don't bother with `appimage-run` or `nix-shell -p appimage-run` for this
-binary — wasted ceremony; the static ELF inside will run from any path
-on this NixOS host.
+```bash
+SKILL_REF="${SKILL_REF:-main}"   # or a release tag / commit SHA
+mkdir -p "$HOME/.claude/skills/amaru-treasury-tx"
+curl -fsSL -o "$HOME/.claude/skills/amaru-treasury-tx/SKILL.md" \
+  "https://raw.githubusercontent.com/lambdasistemi/amaru-treasury-tx/$SKILL_REF/.claude/skills/amaru-treasury-tx/SKILL.md"
+```
 
-## Local fixed paths
+### Install `cardano-tx-tools`
+
+`tx-inspect`, `tx-validate`, `tx-sign`, and `cardano-tx-generator`
+ship from `lambdasistemi/cardano-tx-tools`, not from the
+`amaru-treasury-tx` release. Install the latest package for the same
+platform. `tx-diff` is optional and may not be packaged for every
+platform in a given release; if the asset is missing, report that and
+use it only from a source/Nix checkout when the operator explicitly
+needs a diff.
+
+```bash
+TOOLS_TAG="$(latest_tag lambdasistemi/cardano-tx-tools)"
+TOOLS_VERSION="${TOOLS_TAG#v}"
+
+install_tool_appimage() {
+  tool="$1"
+  url="https://github.com/lambdasistemi/cardano-tx-tools/releases/download/$TOOLS_TAG/$tool-$TOOLS_VERSION-$PLATFORM.AppImage"
+  curl -fsSL -o "$BIN_DIR/$tool" "$url"
+  chmod +x "$BIN_DIR/$tool"
+}
+
+install_tool_tar() {
+  tool="$1"
+  tmp="$(mktemp -d)"
+  curl -fsSL -o "$tmp/$tool.tar.gz" \
+    "https://github.com/lambdasistemi/cardano-tx-tools/releases/download/$TOOLS_TAG/$tool-$TOOLS_VERSION-$PLATFORM.tar.gz"
+  tar -xzf "$tmp/$tool.tar.gz" -C "$tmp"
+  install -m 0755 "$(find "$tmp" -type f -name "$tool" | head -1)" "$BIN_DIR/$tool"
+  rm -rf "$tmp"
+}
+
+case "$PACKAGE_KIND" in
+  appimage)
+    for tool in tx-inspect tx-validate tx-sign cardano-tx-generator; do
+      install_tool_appimage "$tool"
+    done
+    if curl -fsI \
+      "https://github.com/lambdasistemi/cardano-tx-tools/releases/download/$TOOLS_TAG/tx-diff-$TOOLS_VERSION-$PLATFORM.AppImage" \
+      >/dev/null 2>&1; then
+      install_tool_appimage tx-diff
+    else
+      echo "tx-diff is not packaged for $PLATFORM in $TOOLS_TAG; diff is optional."
+    fi
+    ;;
+  tar)
+    for tool in tx-inspect tx-validate tx-diff tx-sign cardano-tx-generator; do
+      install_tool_tar "$tool"
+    done
+    ;;
+esac
+
+tx-inspect --version
+tx-validate --version
+```
+
+Download the Amaru inspect rules and the treasury metadata as ordinary
+data files. The metadata is an untrusted hint that the CLI verifies
+against chain anchors; keep the local path explicit in commands.
+
+```bash
+curl -fsSL -o "$DATA_DIR/amaru-treasury.yaml" \
+  "https://raw.githubusercontent.com/lambdasistemi/cardano-tx-tools/$TOOLS_TAG/rules/amaru-treasury.yaml"
+curl -fsSL -o "$DATA_DIR/metadata.json" \
+  "https://raw.githubusercontent.com/pragma-org/amaru-treasury/main/journal/2026/metadata.json"
+```
+
+For reproducible audit work, record `ATTX_TAG`, `TOOLS_TAG`, the skill
+ref, and the SHA256 of downloaded binaries/rules in `summary.md`.
+
+## Paolo's local fixed paths
 
 | What | Where |
 | --- | --- |
@@ -90,7 +199,10 @@ on this NixOS host.
 | `cardano-tx-tools` repo | `/code/cardano-tx-tools/` |
 | Amaru-aware inspect rules | `/code/cardano-tx-tools/rules/amaru-treasury.yaml` |
 
-Always export the socket first:
+Use these only on Paolo's NixOS mainnet box. On any other host, use the
+portable install paths above and the actual local node socket.
+
+Export the socket before live inspect/build/submit:
 
 ```bash
 export CARDANO_NODE_SOCKET_PATH=/code/cardano-mainnet/ipc/node.socket
@@ -98,25 +210,15 @@ export CARDANO_NODE_SOCKET_PATH=/code/cardano-mainnet/ipc/node.socket
 
 `--network mainnet` is the global flag; magic 764824073.
 
-### `cardano-tx-tools` is a hard dependency — deployment strategies
+### Developer fallback: source clone + `nix run`
 
-`tx-inspect`, `tx-validate`, and `tx-diff` are companion executables
-that ship in their own repo (`lambdasistemi/cardano-tx-tools`), **not**
-inside the `amaru-treasury-tx` AppImage. Pick one strategy based on
-the host's profile:
-
-**1. Source clone + `nix run` (RECOMMENDED — required for full pipeline)**
+Use this only for development or for an optional tool that has no
+release asset for the host. It is not the default operator install path.
 
 ```bash
 git clone git@github.com:lambdasistemi/cardano-tx-tools.git /code/cardano-tx-tools
 # or HTTPS:  https://github.com/lambdasistemi/cardano-tx-tools.git
 ```
-
-This is the only strategy that exposes **`tx-validate`** (the Conway
-phase-1 pre-flight against the live node) — the release artefacts
-omit it. It also gives you the `rules/amaru-treasury.yaml` collapse
-file the skill references everywhere. On a host that's expected to
-build, sign, and submit Amaru txs, the clone is effectively mandatory.
 
 Bump on demand (stale clones surface a "newer release available"
 banner that line-splices into the inspect tree):
@@ -125,62 +227,6 @@ banner that line-splices into the inspect tree):
 git -C /code/cardano-tx-tools pull --ff-only origin main
 nix run /code/cardano-tx-tools#tx-inspect -- --version   # confirm
 ```
-
-**2. Remote `nix run` (no clone, no tx-validate)**
-
-```bash
-nix run github:lambdasistemi/cardano-tx-tools#tx-inspect -- <args>
-nix run github:lambdasistemi/cardano-tx-tools#tx-diff    -- <args>
-# tx-validate intentionally not shipped via this path — use clone.
-```
-
-Useful for inspect/diff on a host that doesn't have a clone yet, e.g.
-a fresh signer host that only needs to view a tx before witnessing.
-Pin to a tag for reproducibility: `…/cardano-tx-tools/v0.1.6.0#…`.
-
-**3. AppImage release (per-tool, no nix needed)**
-
-Each release publishes self-extracting static ELFs (same shape as
-`amaru-treasury-tx.AppImage`):
-
-```bash
-LATEST=$(gh release view --repo lambdasistemi/cardano-tx-tools \
-            --json tagName --jq .tagName)
-for tool in tx-inspect tx-diff tx-sign cardano-tx-generator; do
-  curl -fsSL -o ~/bin/$tool \
-    "https://github.com/lambdasistemi/cardano-tx-tools/releases/download/$LATEST/$tool-${LATEST#v}-x86_64-linux.AppImage"
-  chmod +x ~/bin/$tool
-done
-```
-
-Still no `tx-validate`. AppImages are the right pick for operator
-hosts that aren't dev machines (no nix, no toolchain).
-
-**4. DEB / RPM (system install)**
-
-Each release also publishes per-tool `.deb` and `.rpm` packages at the
-same path. Use when standing up a longer-lived service host where
-system packaging is preferred.
-
-```bash
-curl -fsSL -O https://github.com/lambdasistemi/cardano-tx-tools/releases/download/v0.1.6.0/tx-inspect-0.1.6.0-x86_64-linux.deb
-sudo dpkg -i tx-inspect-0.1.6.0-x86_64-linux.deb
-```
-
-Same caveat: **`tx-validate` is not in the release bundle**, only in
-the source clone.
-
-**5. Per-tool tag pinning for reproducibility**
-
-When archiving a signed tx for the audit trail, the tools' version
-goes into `summary.md` alongside the `amaru-treasury-tx` CLI version.
-Pin the clone to a tag (`git -C /code/cardano-tx-tools checkout
-v0.1.6.0`) or invoke the per-tag AppImage when rerendering historical
-inspect output.
-
-Cross-reference: the dedicated `cardano-tx-tools` skill covers the
-tools themselves; that skill assumes strategy (1) — the
-`/code/cardano-tx-tools/` clone location.
 
 ## Pre-flight: don't re-ask what prior runs already know
 
@@ -191,10 +237,15 @@ operator each time is a workflow gap, not a safety feature — placeholder
 strings like `<BECH32_FUEL_ADDR>` or `<rationale: ...>` in your proposed
 command mean you skipped this step.
 
+On a fresh external host there may be no history, nicknames, labels, or
+local vault conventions. In that case ask for explicit bech32 addresses,
+28-byte key hashes, vault file paths, and rationale text. Do not invent
+Paolo-local nicknames or assume labels such as `network-wallet` exist.
+
 ```bash
 # 1. Authoritative per-scope state (balances, UTxOs, pending orders):
 amaru-treasury-tx --network mainnet treasury-inspect \
-  --metadata /code/amaru-treasury/journal/2026/metadata.json
+  --metadata "${DATA_DIR:-$HOME/.local/share/amaru-treasury}/metadata.json"
 
 # 2. Most recent intent for any operation:
 ls -t /tmp/{swap-*,attx-*,amaru-treasury-tx-issue-*}/intent.json 2>/dev/null | head -10
@@ -265,7 +316,7 @@ don't ask):
 | --- | --- | --- |
 | `--wallet-addr` | `.wallet.address` of last intent for same scope | fuel wallet is rotated |
 | `signers` / `--extra-signer` | `.signers[]` of last intent of same op shape | co-signer roster changes |
-| `--metadata` | always `/code/amaru-treasury/journal/2026/metadata.json` on this box | never |
+| `--metadata` | `${DATA_DIR:-$HOME/.local/share/amaru-treasury}/metadata.json` on portable hosts; `/code/amaru-treasury/journal/2026/metadata.json` only on Paolo's box | local metadata path changes |
 | `--scope` | "network treasury" → `network_compliance`, etc. (operator phrasing maps unambiguously) | genuinely ambiguous phrasing |
 | `rationale.event` | `"disburse"` for swap / disburse / contingency-disburse flows | never on these flows |
 | `rationale.label` | `"Swap ADA<->USDM"` for swaps; flow-specific for others | never on canonical flows |
@@ -478,13 +529,15 @@ emitted them, not the prefix order above.
 
 ## Companion tools: cardano-tx-tools
 
-Invoke via `nix run /code/cardano-tx-tools#<app> -- …`.
+Invoke the released binaries installed on PATH. On Paolo's development
+box, `nix run /code/cardano-tx-tools#<app> -- ...` is also acceptable,
+but do not require that clone on an external operator host.
 
 - **tx-inspect** — render the tx body as a tree. Use the Amaru rules to
   collapse known addresses into labels:
   ```bash
-  nix run /code/cardano-tx-tools#tx-inspect -- \
-      --rules /code/cardano-tx-tools/rules/amaru-treasury.yaml \
+  tx-inspect \
+      --rules "${DATA_DIR:-$HOME/.local/share/amaru-treasury}/amaru-treasury.yaml" \
       /tmp/attx-172/.../signed-tx.tx
   ```
   Without `--rules`, you'll see raw script-hash bytes for treasury
@@ -492,7 +545,7 @@ Invoke via `nix run /code/cardano-tx-tools#<app> -- …`.
   etc.
 - **tx-validate** — Conway phase-1 pre-flight against the live node:
   ```bash
-  nix run /code/cardano-tx-tools#tx-validate -- \
+  tx-validate \
       --input signed-tx.hex \
       --n2c-socket "$CARDANO_NODE_SOCKET_PATH" \
       --network-magic 764824073 \
@@ -514,8 +567,8 @@ Invoke via `nix run /code/cardano-tx-tools#<app> -- …`.
 - **tx-diff** — compare two transactions; ideal for proving "I only
   refreshed TTL" between an expired build and its rebuild:
   ```bash
-  nix run /code/cardano-tx-tools#tx-diff -- \
-      --collapse-rules /code/cardano-tx-tools/rules/amaru-treasury.yaml \
+  tx-diff \
+      --collapse-rules "${DATA_DIR:-$HOME/.local/share/amaru-treasury}/amaru-treasury.yaml" \
       old.tx new.tx
   ```
   Both TextEnvelope or raw hex inputs are accepted.
@@ -599,10 +652,17 @@ Once the tx is on chain, promote the entry:
 6. Update the matching `## Unreleased` bullet — edit in place, or
    split it if the original bullet covered multiple pending txs
    (one ends up submitted, the other still pending).
+7. Commit the archive refresh, push it, open or update the PR, wait for
+   CI, and drive the PR to merge into `main`. If branch protection or
+   review policy requires another human, leave the session in a blocked
+   state with the PR link and the missing approval named; do not call the
+   submit complete.
 
 One bisect-safe commit per refresh. `submitted.json` is the marker
-that the entry is "done"; presence of only `tx.cbor`/`intent.json`
-without `submitted.json` means pre-submission.
+that the entry is archive-complete inside the branch; the operator
+session is durable only once that commit is merged to `main`. Presence
+of only `tx.cbor`/`intent.json` without `submitted.json` means
+pre-submission.
 
 ### Submitted-log completeness audit
 
@@ -629,6 +689,9 @@ claiming the archive is current:
    `signed-tx.hex` to Koios/Blockfrost tx CBOR for that txid.
 5. Only then say the submit archive is complete. Any missing txid gets
    archived in the same PR before review.
+6. Confirm the archive commit is merged to `main`, or explicitly report
+   the PR as blocked on review/merge. An open branch is not a completed
+   operator record.
 
 Do not classify address-touching but non-submitted transactions as
 missing operator archives unless there is a corresponding local
@@ -684,7 +747,7 @@ emits raw `[vkey, sig]` CBOR hex.
 amaru-treasury-tx --network mainnet \
     witness \
       --tx /tmp/.../pending.tx \
-      --vault /code/amaru-treasury-issue-128/treasury.vault.age \
+      --vault /path/to/treasury.vault.age \
       --identity 8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1 \
       --expected-key-hash 8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1 \
       --out /tmp/.../answers/A-003-witness-8bd03209.md
@@ -692,14 +755,16 @@ amaru-treasury-tx --network mainnet \
 
 - `--identity` accepts a label or a 28-byte hex hash. Passing the hash
   plus `--expected-key-hash` belt-and-braces against picking the wrong
-  identity from a multi-identity vault.
+  identity from a multi-identity vault. On external hosts, prefer the
+  explicit hash form; do not rely on local nicknames or labels unless
+  the operator has shown the vault index.
 - `--vault-passphrase-fd FD` lets you script the passphrase; without it
   the tool prompts on the tty.
 - Output is **raw** `[vkey (32), sig (64)]` CBOR hex — exactly what
   `attach-witness --witness HEX` expects (`envelope-witness` wraps it
   if you need a Conway `TxWitness ConwayEra` envelope instead).
 
-Vault discovery: `*.age` files. Candidates on this box have included
+Vault discovery on Paolo's box: `*.age` files. Candidates have included
 `/code/amaru-treasury-issue-128/treasury.vault.age` and per-epic funding
 vaults like `/tmp/epic-156-slice3-registry-stake/phases/registry-stake/funding.vault.age`.
 
@@ -869,5 +934,7 @@ expected workflow doesn't require this — `attach-witness` is trusted.
   broadcasting. Immediately after a successful submit, queue and finish
   the `transactions/` archive refresh (rename slug→txid, add inputs/,
   signed-tx, submit.log, submitted.json; refresh summary.md), then run
-  the submitted-log completeness audit above. Operators rely on this
-  happening in the same operator session as the submit; don't defer it.
+  the submitted-log completeness audit above, commit the refresh, push
+  the PR, and drive it to merge into `main`. Operators rely on this
+  happening in the same operator session as the submit; don't defer it
+  and don't treat an open branch as done.

@@ -23,8 +23,10 @@ one bisect-safe commit.
 | Slice | Worker | Primary story | Commit subject |
 |---|---|---|---|
 | 1 | `attx-191/slice-1-dep-pin` | US2 | `build(deps): bump cardano-tx-tools to v0.2.0.0 + mirror github-release-check companion (#191)` |
+| 2a | `attx-191/slice-2a-withdraw-fix` | US1 | `fix(build): repair withdraw Phase-1 construction (#191)` |
+| 2b | `attx-191/slice-2b-governance-fix` | US3 | `fix(build): repair governance withdrawal Phase-1 construction (#191)` |
+| 2c | `attx-191/slice-2c-report-fix` | US1 | `fix(report): account withdrawal rewards without Phase-1 regressions (#191)` |
 | 2 | `attx-191/slice-2-final-phase1` | US1 | `fix(build): validate withdrawal-bearing final transactions (#191)` |
-| 3 | `attx-191/slice-3-gov-init-disposition` | US3 | `fix(build): resolve governance withdrawal init phase1 skip (#191)` |
 | 4 | orchestrator | metadata/final gate | `docs(pr): record tx-tools bump disposition for #191` |
 
 ## Phase 1: Setup
@@ -82,20 +84,177 @@ Tasks:
 Checkpoint: `cabal.project` uses the commit SHA, the hash matches, no
 unapproved dependency changed, and `./gate.sh` passes at HEAD.
 
-## Phase 3: Slice 2 - Withdrawal-bearing final Phase-1 validation
+## Phase 3: Slice 2a - Withdraw Phase-1 construction fix
 
-**Goal**: Remove the shared withdrawal short-circuit so
-`validateFinalPhase1` validates every final transaction while preserving
-witness-completeness filtering.
+**Goal**: Fix the withdraw builder or fixture gap that the active
+withdrawal final Phase-1 path exposes before the shared
+`validateFinalPhase1` shortcut is removed.
+
+**Independent Test**: The existing failing example
+`Amaru.Treasury.Build.runWithdraw balances the reward withdrawal as value
+supplied by the transaction` is investigated from assertion to
+production builder, then a focused RED isolates the actual ledger rule
+(`PPViewHashesDontMatch`, `ExtraRedeemers (ConwayRewarding 0)`, or
+`MissingScriptWitnessesUTXOW`) before GREEN.
+
+**Worker brief**: New driver+navigator pair. One bisect-safe commit. Do
+not push. Investigation first: read the failing test, trace the
+production builder, write a three-paragraph diagnosis in `WIP.md`, log
+`NOTE investigation-complete`, then RED -> GREEN. The navigator vetoes
+the RED if it does not isolate the actual failing ledger rule. Commit
+body must include `Tasks: T005, T006, T007, T008`.
+
+Owned files:
+
+- `lib/Amaru/Treasury/Build/Withdraw.hs`
+- `test/unit/Amaru/Treasury/Build/WithdrawSpec.hs`
+- `test/fixtures/withdraw/` files directly implicated by the
+  investigation only if the production builder is proven correct
+- `amaru-treasury-tx.cabal`
+- `WIP.md` (ephemeral run log; do not commit)
+
+Read-only context:
+
+- `test/unit/Amaru/Treasury/BuildSpec.hs`
+
+Forbidden scope:
+
+- `cabal.project`
+- `lib/Amaru/Treasury/Build/Common.hs`
+- `lib/Amaru/Treasury/Build/GovernanceWithdrawalInit.hs`
+- `lib/Amaru/Treasury/Report.hs`
+- reorganize modules
+- unrelated fixtures
+- `specs/`
+- `gate.sh`
+- PR metadata
+
+Tasks:
+
+- [ ] T005 [US1] Investigate the failing `runWithdraw` unit example from `test/unit/Amaru/Treasury/BuildSpec.hs` through `lib/Amaru/Treasury/Build/Withdraw.hs`, identify whether the ledger complaint is caused by script integrity hash computation, a missing reference-input UTxO, or a stray `Rewarding 0` redeemer, record the diagnosis in `WIP.md`, and log `NOTE investigation-complete`.
+- [ ] T006 [US1] RED: add or update a focused withdraw regression in `test/unit/Amaru/Treasury/Build/WithdrawSpec.hs` with any required `amaru-treasury-tx.cabal` wiring, proving the isolated ledger rule before changing production behavior.
+- [ ] T007 [US1] GREEN: fix the withdraw builder or, if investigation proves the builder is correct, the incomplete fixture so the withdraw transaction is ledger-valid under active final Phase-1 validation.
+- [ ] T008 [US1] Run the focused withdraw command plus `./gate.sh`, record RED/GREEN and gate evidence in `WIP.md`, and create the single slice commit.
+
+Checkpoint: the withdraw fixture/build path no longer contributes
+residual script-withdrawal final Phase-1 failures, and `./gate.sh`
+passes at HEAD for this incremental commit.
+
+## Phase 4: Slice 2b - GovernanceWithdrawalInit Phase-1 construction fix
+
+**Goal**: Fix the governance-withdrawal-init construction or fixture gap
+and absorb the original Slice 3 skip disposition into this commit.
+
+**Independent Test**: The existing
+`governance materialization conservation` failure is investigated from
+assertion to builder. Proposal and materialization fixtures then run
+through the bumped active final Phase-1 path. If the motivating residual
+rule is resolved, `materializeResultSkipPhase1` is removed.
+
+**Worker brief**: New driver+navigator pair. One bisect-safe commit. Do
+not push. Investigation first, then RED -> GREEN. The navigator vetoes
+the RED if it does not isolate the actual failing ledger rule. If a
+third option appears that affects mainnet correctness and needs security
+review, write a Q-file before fixing. Commit body must include
+`Tasks: T009, T010, T011, T012`.
+
+Owned files:
+
+- `lib/Amaru/Treasury/Build/GovernanceWithdrawalInit.hs`
+- `test/unit/Amaru/Treasury/Build/GovernanceWithdrawalInitSpec.hs`
+- `test/golden/Amaru/Treasury/Tx/GovernanceWithdrawalInitWizardMaterializationSpec.hs`
+- `test/golden/Amaru/Treasury/Tx/GovernanceWithdrawalInitWizardProposalSpec.hs`
+- support fixture files directly implicated by the governance
+  investigation only if the production builder is proven correct
+- `amaru-treasury-tx.cabal`
+- `WIP.md` (ephemeral run log; do not commit)
+
+Forbidden scope:
+
+- `cabal.project`
+- `lib/Amaru/Treasury/Build/Common.hs`
+- `lib/Amaru/Treasury/Build/Withdraw.hs`
+- `lib/Amaru/Treasury/Devnet/GovernanceWithdrawalInit/Core.hs`
+- `lib/Amaru/Treasury/Report.hs`
+- reorganize modules
+- unrelated fixtures
+- `specs/`
+- `gate.sh`
+- PR metadata
+
+Tasks:
+
+- [ ] T009 [US3] Investigate `governance materialization conservation` from `test/unit/Amaru/Treasury/Build/GovernanceWithdrawalInitSpec.hs` through `lib/Amaru/Treasury/Build/GovernanceWithdrawalInit.hs`, record the diagnosed ledger rule and root cause in `WIP.md`, and log `NOTE investigation-complete`.
+- [ ] T010 [US3] RED: add or update focused governance-withdrawal-init unit/golden coverage proving the diagnosed Phase-1 failure before changing production behavior.
+- [ ] T011 [US3] GREEN: fix the governance-withdrawal-init builder or fixture, and remove `materializeResultSkipPhase1` plus stale comments/call-site skip if its motivating residual rule is resolved.
+- [ ] T012 [US3] Run focused governance-withdrawal-init unit/golden commands plus `./gate.sh`, record RED/GREEN and disposition evidence in `WIP.md`, and create the single slice commit.
+
+Checkpoint: governance-withdrawal-init no longer depends on the old
+Phase-1 skip unless a named residual rule is approved through Q/A, and
+`./gate.sh` passes at HEAD.
+
+## Phase 5: Slice 2c - Report withdrawal accounting fix
+
+**Goal**: Fix the report construction or accounting fixture gap exposed
+by active validation for withdrawal rewards.
+
+**Independent Test**: The existing
+`accounts for withdraw rewards as transaction supply, not wallet spend`
+example is investigated from assertion through report construction, then
+a focused RED isolates the report bug or fixture gap before GREEN.
+
+**Worker brief**: New driver+navigator pair. One bisect-safe commit. Do
+not push. Investigation first, then RED -> GREEN. The navigator vetoes
+the RED if it does not isolate the actual failing rule or accounting
+contract. Commit body must include `Tasks: T013, T014, T015, T016`.
+
+Owned files:
+
+- `lib/Amaru/Treasury/Report.hs`
+- `lib/Amaru/Treasury/Report/Accounting.hs`
+- `test/unit/Amaru/Treasury/ReportSpec.hs`
+- report or withdraw fixture files directly implicated by the
+  investigation only if the production report code is proven correct
+- `WIP.md` (ephemeral run log; do not commit)
+
+Forbidden scope:
+
+- `cabal.project`
+- `lib/Amaru/Treasury/Build/Common.hs`
+- `lib/Amaru/Treasury/Build/Withdraw.hs`
+- `lib/Amaru/Treasury/Build/GovernanceWithdrawalInit.hs`
+- reorganize modules
+- unrelated fixtures
+- `specs/`
+- `gate.sh`
+- PR metadata
+
+Tasks:
+
+- [ ] T013 [US1] Investigate the failing report example from `test/unit/Amaru/Treasury/ReportSpec.hs` through report construction/accounting code, record the diagnosed root cause in `WIP.md`, and log `NOTE investigation-complete`.
+- [ ] T014 [US1] RED: add or update focused report coverage that isolates the withdrawal reward accounting regression before changing production behavior.
+- [ ] T015 [US1] GREEN: fix the report construction/accounting code or, if investigation proves production code correct, the incomplete fixture so withdrawal rewards remain transaction supply and not wallet spend.
+- [ ] T016 [US1] Run focused report tests plus `./gate.sh`, record RED/GREEN and gate evidence in `WIP.md`, and create the single slice commit.
+
+Checkpoint: report accounting no longer contributes a residual
+withdrawal final Phase-1 failure, and `./gate.sh` passes at HEAD.
+
+## Phase 6: Slice 2 - Withdrawal-bearing final Phase-1 validation
+
+**Goal**: Remove the shared withdrawal short-circuit last, after 2a, 2b,
+and 2c have fixed the builders/fixtures that the active validation path
+exposes.
 
 **Independent Test**: A focused regression fails before removing the
-short-circuit and passes after `validateFinalPhase1` runs
-`validatePhase1` for withdrawal-bearing transactions.
+short-circuit and passes after `validateFinalPhase1` runs bumped
+tx-tools final Phase-1 validation for withdrawal-bearing transactions
+with reward accounts seeded, while preserving witness-completeness
+filtering.
 
-**Worker brief**: One bisect-safe commit. Do not push. You are not alone
-in the codebase; do not revert edits made by others. Write RED first and
-observe it failing before changing production code. Commit body must
-include `Tasks: T005, T006, T007, T008`.
+**Worker brief**: New driver+navigator pair or resumed stashed GREEN
+attempt after 2a-2c pass. One bisect-safe commit. Do not push. Write RED
+first and observe it failing before changing production code. Commit
+body must include `Tasks: T017, T018, T019, T020`.
 
 Owned files:
 
@@ -107,7 +266,9 @@ Owned files:
 Forbidden scope:
 
 - `cabal.project`
+- `lib/Amaru/Treasury/Build/Withdraw.hs`
 - `lib/Amaru/Treasury/Build/GovernanceWithdrawalInit.hs`
+- `lib/Amaru/Treasury/Report.hs`
 - reorganize modules
 - fixtures except assertion-only changes directly required by the RED
   proof
@@ -117,66 +278,16 @@ Forbidden scope:
 
 Tasks:
 
-- [ ] T005 [US1] RED: add `test/unit/Amaru/Treasury/Build/CommonSpec.hs` and `amaru-treasury-tx.cabal` test-suite wiring for a withdrawal-bearing final transaction regression that fails while `validateFinalPhase1` returns success solely because withdrawals are present.
-- [ ] T006 [US1] RED: in `test/unit/Amaru/Treasury/Build/CommonSpec.hs`, assert the unchanged contract that missing vkey witness failures remain accepted as signing-step noise and non-witness structural ledger failures are rejected.
-- [ ] T007 [US1] GREEN: remove the `hasWithdrawals` guard, obsolete reward-state workaround docstring, and now-unused withdrawal imports/helper from `lib/Amaru/Treasury/Build/Common.hs`.
-- [ ] T008 [US1] Run the focused `CommonSpec` command plus `./gate.sh`, record RED and GREEN evidence in `WIP.md`, and create the single slice commit.
+- [ ] T017 [US1] RED: add `test/unit/Amaru/Treasury/Build/CommonSpec.hs` and `amaru-treasury-tx.cabal` test-suite wiring for a withdrawal-bearing final transaction regression that fails while `validateFinalPhase1` returns success solely because withdrawals are present.
+- [ ] T018 [US1] RED: in `test/unit/Amaru/Treasury/Build/CommonSpec.hs`, assert the unchanged contract that missing vkey witness failures remain accepted as signing-step noise and non-witness structural ledger failures are rejected.
+- [ ] T019 [US1] GREEN: remove the `hasWithdrawals` guard, replace the obsolete reward-state workaround with reward-account seeding through bumped tx-tools as needed, and remove now-unused withdrawal imports/helper from `lib/Amaru/Treasury/Build/Common.hs`.
+- [ ] T020 [US1] Run the focused `CommonSpec` command plus `./gate.sh`, record RED and GREEN evidence in `WIP.md`, and create the single slice commit.
 
 Checkpoint: withdrawal-bearing transactions reach the final Phase-1
-path, witness-completeness noise is still filtered, and `./gate.sh`
-passes at HEAD.
+path, witness-completeness noise is still filtered, non-witness
+structural failures are rejected, and `./gate.sh` passes at HEAD.
 
-## Phase 4: Slice 3 - Governance-withdrawal-init disposition
-
-**Goal**: Explicitly resolve the governance-withdrawal-init Phase-1 skip:
-remove it if bumped validation passes, or retain only a narrow residual
-skip with a named ledger rule and upstream issue.
-
-**Independent Test**: Existing governance-withdrawal-init proposal and
-materialization fixtures run through the bumped final Phase-1 validation
-path.
-
-**Worker brief**: One bisect-safe commit unless the investigation
-discovers a residual rule outside #191's owned boundary. Do not push.
-You are not alone in the codebase; do not revert edits made by others.
-If a residual non-reward-state ledger rule appears, stop before broad
-edits, write a Q-file under
-`/tmp/epic-189/attx-191/questions/`, record the blocker in `WIP.md`, and
-wait for an orchestrator answer. Commit body must include
-`Tasks: T009, T010, T011, T012`.
-
-Owned files:
-
-- `lib/Amaru/Treasury/Build/GovernanceWithdrawalInit.hs`
-- `test/unit/Amaru/Treasury/Build/GovernanceWithdrawalInitSpec.hs`
-- `test/golden/Amaru/Treasury/Tx/GovernanceWithdrawalInitWizardMaterializationSpec.hs`
-- `test/golden/Amaru/Treasury/Tx/GovernanceWithdrawalInitWizardProposalSpec.hs`
-- `WIP.md` (ephemeral run log; do not commit)
-- `/tmp/epic-189/attx-191/questions/Q-00X-governance-residual-rule.md` only if a residual rule blocks the slice
-
-Forbidden scope:
-
-- `cabal.project`
-- `lib/Amaru/Treasury/Build/Common.hs`
-- reorganize modules
-- `lib/Amaru/Treasury/Devnet/GovernanceWithdrawalInit/Core.hs`
-- fixtures except assertion-only changes directly required by this
-  disposition
-- `specs/`
-- `gate.sh`
-- PR metadata
-
-Tasks:
-
-- [ ] T009 [US3] RED: run existing governance-withdrawal-init proposal and materialization fixtures after Slice 2 and record in `WIP.md` whether `lib/Amaru/Treasury/Build/GovernanceWithdrawalInit.hs` still needs a Phase-1 skip.
-- [ ] T010 [US3] If fixtures pass normal final Phase-1 validation, remove `materializeResultSkipPhase1`, its stale comments, and the proposal call-site skip from `lib/Amaru/Treasury/Build/GovernanceWithdrawalInit.hs`.
-- [ ] T011 [US3] If fixtures expose a residual ledger rule, write `/tmp/epic-189/attx-191/questions/Q-00X-governance-residual-rule.md` naming the exact failure and upstream issue before retaining any skip in `lib/Amaru/Treasury/Build/GovernanceWithdrawalInit.hs`.
-- [ ] T012 [US3] Run focused governance-withdrawal-init unit/golden commands plus `./gate.sh`, record the selected disposition and GREEN evidence in `WIP.md`, and create the single slice commit.
-
-Checkpoint: the skip is gone, or it is retained only for a named
-residual ledger rule approved through Q/A; `./gate.sh` passes at HEAD.
-
-## Phase 5: Slice 4 - PR metadata and full gate
+## Phase 7: Slice 4 - PR metadata and full gate
 
 **Goal**: Make reviewer-facing metadata match the delivered dependency
 bump and workaround disposition, then prove the full branch.
@@ -187,7 +298,7 @@ downstream workarounds. `nix flake check` and `./gate.sh` pass.
 
 **Orchestrator-owned**. This is not an implementation-worker slice
 unless the previous slices reveal a docs/code mismatch requiring a new
-behavior commit. Commit body must include `Tasks: T013, T014, T015`.
+behavior commit. Commit body must include `Tasks: T021, T022, T023`.
 
 Owned artifacts:
 
@@ -197,9 +308,9 @@ Owned artifacts:
 
 Tasks:
 
-- [ ] T013 Update PR #192 body with old commit `25d7ce349f826e9888fb8565eeb816babb06d922`, selected commit `9e77e90728729bdd22e3bfbe0cf7515b33d5ea13`, target release `v0.2.0.0`, regenerated hash proof, and workaround disposition.
-- [ ] T014 Run `nix flake check` and record the result in `/tmp/epic-189/attx-191/STATUS.md` or PR #192.
-- [ ] T015 Run final `./gate.sh`, record the result in `/tmp/epic-189/attx-191/STATUS.md` or PR #192, and keep PR #192 draft until the parent owner approves finalization.
+- [ ] T021 Update PR #192 body with old commit `25d7ce349f826e9888fb8565eeb816babb06d922`, selected commit `9e77e90728729bdd22e3bfbe0cf7515b33d5ea13`, target release `v0.2.0.0`, regenerated hash proof, and workaround disposition for 2a/2b/2c plus the final shared validation helper.
+- [ ] T022 Run `nix flake check` and record the result in `/tmp/epic-189/attx-191/STATUS.md` or PR #192.
+- [ ] T023 Run final `./gate.sh`, record the result in `/tmp/epic-189/attx-191/STATUS.md` or PR #192, and keep PR #192 draft until the parent owner approves finalization.
 
 Checkpoint: PR metadata and verification evidence agree with delivered
 behavior. #185 can be unparked only after #191 merges.
@@ -209,16 +320,20 @@ behavior. #185 can be unparked only after #191 merges.
 Behavior-changing slices are serial:
 
 ```text
-Slice 1 -> Slice 2 -> Slice 3 -> Slice 4
+Slice 1 -> Slice 2a -> Slice 2b -> Slice 2c -> Slice 2 -> Slice 4
 ```
 
 Reasons:
 
-- Slice 2 depends on the bumped `cardano-tx-tools` validation behavior
-  from Slice 1.
-- Slice 3 depends on the shared `validateFinalPhase1` behavior from
-  Slice 2.
-- Slice 4 must report the final workaround disposition from Slice 3.
+- Slices 2a, 2b, and 2c depend on the bumped `cardano-tx-tools`
+  validation behavior from Slice 1.
+- Slice 2b absorbs the original governance-withdrawal-init skip
+  disposition because the same residual Phase-1 rules are exposed by the
+  active validation path.
+- Final Slice 2 must run last so its shared `validateFinalPhase1`
+  change is bisect-safe and `./gate.sh` stays green at HEAD.
+- Slice 4 must report the final workaround disposition from 2a/2b/2c and
+  the final shared validator behavior.
 
 Within a slice, `[P]` tasks may be explored in parallel only when they
 do not edit the same file. The final slice commit must still contain
@@ -227,12 +342,14 @@ both RED and GREEN evidence and be bisect-safe.
 ## Implementation Strategy
 
 1. Complete Slice 1 and accept the dependency pin/hash commit.
-2. Complete Slice 2 and accept the shared final Phase-1 validation
+2. Complete Slice 2a and accept the withdraw construction/fixture fix.
+3. Complete Slice 2b and accept the governance-withdrawal-init
+   construction/fixture fix plus skip disposition.
+4. Complete Slice 2c and accept the report accounting fix.
+5. Complete final Slice 2 and accept the shared final Phase-1 validation
    commit.
-3. Complete Slice 3 and accept either the skip-removal commit or the
-   approved residual-rule commit.
-4. Complete Slice 4 metadata and full verification.
-5. After tasks are complete and reviewed, run finalization audit, drop
+6. Complete Slice 4 metadata and full verification.
+7. After tasks are complete and reviewed, run finalization audit, drop
    `gate.sh` in a dedicated final commit, and mark PR #192 ready only
    when authorized.
 

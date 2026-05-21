@@ -231,10 +231,10 @@ Forbidden scope:
 
 Tasks:
 
-- [ ] T013 [US1] Investigate the failing report example from `test/unit/Amaru/Treasury/ReportSpec.hs` through report construction/accounting code, record the diagnosed root cause in `WIP.md`, and log `NOTE investigation-complete`.
-- [ ] T014 [US1] RED: add or update focused report coverage that isolates the withdrawal reward accounting regression before changing production behavior.
-- [ ] T015 [US1] GREEN: fix the report construction/accounting code or, if investigation proves production code correct, the incomplete fixture so withdrawal rewards remain transaction supply and not wallet spend.
-- [ ] T016 [US1] Run focused report tests plus `./gate.sh`, record RED/GREEN and gate evidence in `WIP.md`, and create the single slice commit.
+- [X] T013 [US1] Investigate the failing report example from `test/unit/Amaru/Treasury/ReportSpec.hs` through report construction/accounting code, record the diagnosed root cause in `WIP.md`, and log `NOTE investigation-complete`.
+- [X] T014 [US1] RED: add or update focused report coverage that isolates the withdrawal reward accounting regression before changing production behavior.
+- [X] T015 [US1] GREEN: fix the report construction/accounting code or, if investigation proves production code correct, the incomplete fixture so withdrawal rewards remain transaction supply and not wallet spend.
+- [X] T016 [US1] Run focused report tests plus `./gate.sh`, record RED/GREEN and gate evidence in `WIP.md`, and create the single slice commit.
 
 Checkpoint: report accounting no longer contributes a residual
 withdrawal final Phase-1 failure, and `./gate.sh` passes at HEAD.

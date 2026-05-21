@@ -1,0 +1,10 @@
+{
+  "txid": "7353059f0e0f59e974887b3f2405019e26c2a06673a9ce45d3cfdcbd814d5896",
+  "block": "ad748f90638a137ec22e2251820714e8e52dc98bc41af15a6731a433052d651d",
+  "slot": 187735064,
+  "block_time": 1779301355,
+  "timestamp": "2026-05-20T18:22:35Z",
+  "submitter": "amaru-treasury-tx 0.2.11.0 (operator)",
+  "fee_lovelace": 417509,
+  "valid_contract": true
+}

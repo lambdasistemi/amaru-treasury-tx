@@ -1,0 +1,55 @@
+{
+    "action": "swap",
+    "network": "mainnet",
+    "rationale": {
+        "description": "Swap network_compliance ADA to USDM at floor 0.245",
+        "destinationLabel": "Network Compliance treasury",
+        "event": "disburse",
+        "justification": "Required to pay Antithesis as vendor",
+        "label": "Swap ADA<->USDM"
+    },
+    "schema": 1,
+    "scope": {
+        "id": "network_compliance",
+        "permissionsDeployedAt": "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+        "permissionsRewardAccount": "a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094",
+        "registryDeployedAt": "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2",
+        "registryPolicyId": "38c627d45835744a2d6c727124f2b5852e5564aeab3f608e0e84ea6d",
+        "scopesDeployedAt": "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0",
+        "treasuryAddress": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
+        "treasuryDeployedAt": "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+        "treasuryLeftoverLovelace": 164177113469,
+        "treasuryLeftoverOtherAssets": {},
+        "treasuryLeftoverUsdm": 0,
+        "treasuryScriptHash": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+        "treasuryUtxos": [
+            "18d57a4f104df4cc776104ce626958e2110122392e4c4c7671edc8861b48452e#1"
+        ]
+    },
+    "signers": [
+        "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+        "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+    ],
+    "swap": {
+        "amountLovelace": 40816326531,
+        "chunkSizeLovelace": 20408163265,
+        "coreOwner": "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb",
+        "extraPerChunkLovelace": 3280000,
+        "middlewareOwner": "97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2",
+        "networkComplianceOwner": "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+        "opsOwner": "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+        "poolId": "64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef",
+        "rateDenominator": 1000000,
+        "rateNumerator": 245000,
+        "sundaeProtocolFeeLovelace": 1280000,
+        "swapOrderAddress": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+        "usdmPolicy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+        "usdmToken": "0014df105553444d"
+    },
+    "validityUpperBoundSlot": 187982337,
+    "wallet": {
+        "address": "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz",
+        "extraTxIns": [],
+        "txIn": "18d57a4f104df4cc776104ce626958e2110122392e4c4c7671edc8861b48452e#2"
+    }
+}

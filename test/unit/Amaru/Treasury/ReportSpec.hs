@@ -27,7 +27,7 @@ import Test.Hspec
     , shouldSatisfy
     )
 
-import Amaru.Treasury.Build (runFromIntent)
+import Amaru.Treasury.Build (BuildResult (..), runFromIntent)
 import Amaru.Treasury.ChainContext.Fixture
     ( readSwapFixture
     , toFrozenContext
@@ -59,6 +59,7 @@ import Amaru.Treasury.Report
     , buildTransactionReport
     , encodeBuildOutput
     , encodeReport
+    , txCborHexFromBytes
     )
 import Amaru.Treasury.Report.Accounting
     ( addValueSummary
@@ -240,6 +241,14 @@ spec = describe "Amaru.Treasury.Report" $ do
             waWithdrawalLovelace wallet `shouldBe` 12_500_000_000
             waNetSpendLovelace wallet
                 `shouldBe` waFeeLovelace wallet
+
+    it
+        "keeps the checked-in withdraw report envelope aligned with report construction"
+        $ do
+            actual <- buildWithdrawFixtureOutput
+            expectedBytes <-
+                BSL8.readFile "test/fixtures/withdraw/report.golden.json"
+            eitherDecode expectedBytes `shouldBe` Right actual
 
     it
         "accounts for swap treasury inputs, orders, overhead, leftover, and net debit"
@@ -477,6 +486,14 @@ buildSwapFixtureReportWith reportContext = do
 
 buildWithdrawFixtureReport :: IO TransactionReport
 buildWithdrawFixtureReport = do
+    output <- buildWithdrawFixtureOutput
+    case txoResult output of
+        TxBuildOutputSuccess success -> pure (tbsReport success)
+        TxBuildOutputFailure failure ->
+            fail ("withdraw build failed: " <> show failure)
+
+buildWithdrawFixtureOutput :: IO TxBuildOutput
+buildWithdrawFixtureOutput = do
     si <-
         decodeTreasuryIntentFile
             "test/fixtures/withdraw/synthetic/intent.json"
@@ -487,9 +504,19 @@ buildWithdrawFixtureReport = do
     let ctx = toFrozenContext fixture
     tbr <- runFromIntent ctx some
     pure $
-        buildTransactionReport
-            emptyReportContext
-            tbr
+        TxBuildOutput
+            { txoIntent = some
+            , txoResult =
+                TxBuildOutputSuccess
+                    TxBuildSuccess
+                        { tbsTxCbor =
+                            txCborHexFromBytes (brCborBytes tbr)
+                        , tbsReport =
+                            buildTransactionReport
+                                emptyReportContext
+                                tbr
+                        }
+            }
 
 emptyReportContext :: ReportContext
 emptyReportContext =

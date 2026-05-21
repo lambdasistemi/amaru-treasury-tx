@@ -11,7 +11,7 @@ All notable changes to `amaru-treasury-tx` are documented here.
 * **transactions:** recover 1 wizard intent.json from /tmp scratch for backfilled swap (#174)
 * **transactions:** promote the 205k contingency disburse rebuild to submitted txid 18d57a4f... and archive 4 additional network_compliance swap submissions: 7353059f..., 36d57c1b..., 488e5b41..., 9f119393... (#174)
 * **transactions:** swap-cancel for the 59e10ca5 stale order submitted on-chain — txid a8bab7bf... — returning 52,819.86 ADA to network_compliance (#174)
-* **operator:** add the repo-scoped `amaru-treasury-tx` skill with submitted-log archive completeness checks (#174)
+* **operator:** add the repo-scoped `amaru-treasury-tx` skill with portable release install guidance, submitted-log archive completeness checks, and a requirement that submitted archives merge to `main` (#174)
 
 ## [0.2.11.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.10.0...v0.2.11.0) (2026-05-16)
 

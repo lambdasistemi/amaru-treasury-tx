@@ -233,11 +233,11 @@ real fields would silently lie about the wire format.
   carry a rationale field.
 - Building the candidate set's tx may exceed `pparams.maxTxExecutionUnits`
   if the operator picked too many treasury UTxOs. The library core
-  MUST surface this as a typed error variant
-  (`DiagnosticExecUnitsExceeded { used, max }` or equivalent) so the
-  wizard layer (#187) can iteratively drop one input and retry per its
-  "compress until full" policy. The library NEVER decides which input
-  to drop. See the "Operational model carry-forward" section below.
+  MUST surface this through the standard final phase-1 diagnostic path
+  so the wizard layer (#187) can iteratively drop one input and retry
+  per its "compress until full" policy. The library NEVER decides which
+  input to drop. See the "Operational model carry-forward" section
+  below.
 
 ## Requirements *(mandatory)*
 
@@ -350,18 +350,16 @@ real fields would silently lie about the wire format.
   finalization audit).
 - **FR-014**: `nix build .#checks.unit` and `nix build .#checks.golden`
   MUST pass at HEAD when the PR is marked ready.
-- **FR-015**: `runReorganizeBuild` MUST surface
-  `DiagnosticExecUnitsExceeded { used :: ExUnits, max :: ExUnits }`
-  (or the closest existing variant in
-  `Amaru.Treasury.Build.Error`) as a typed `ActionBuildError` when
-  the produced tx's redeemer execution units sum to more than
-  `ChainContext.ccPParams.maxTxExecutionUnits`. The library does
-  NOT silently truncate the candidate set, and does NOT decide
-  which input to drop — the wizard layer (#187) iterates per its
+- **FR-015**: `runReorganizeBuild` MUST surface a typed
+  `ActionBuildError` through the standard final phase-1 diagnostic
+  path when the produced tx's redeemer execution units sum to more
+  than `ChainContext.ccPParams.maxTxExecutionUnits`. After #191,
+  `validateFinalPhase1` covers withdrawal-bearing transactions
+  natively, so the library reuses the existing `DiagnosticChecksFailed`
+  path instead of adding a reorganize-specific overflow variant. The
+  library does NOT silently truncate the candidate set, and does NOT
+  decide which input to drop — the wizard layer (#187) iterates per its
   "compress until full" policy on receipt of this typed error.
-  The exact diagnostic variant (new vs. reuse existing
-  `DiagnosticChecksFailed`) is settled in plan after a survey of
-  `Amaru.Treasury.Build.Error.BuildDiagnostic`.
 
 ### Non-Functional Requirements
 
@@ -412,8 +410,8 @@ real fields would silently lie about the wire format.
   `ChainContext + ReorganizeIntent + Metadatum + Addr`, computes
   the preserved-total `MaryValue` by folding `ccUtxos` indexed by
   `treasuryUtxos`, and emits a `BuildResult`, mirroring
-  `runWithdrawAction` / `runWithdraw`. Surfaces
-  `DiagnosticExecUnitsExceeded` (FR-015) when exec units overflow.
+  `runWithdrawAction` / `runWithdraw`. Surfaces standard final
+  phase-1 diagnostics (FR-015) when exec units overflow.
 
 ## Deliverables
 
@@ -552,7 +550,7 @@ not "merge enough to clear a threshold". Upstream
 uses `<AMOUNT> <UNIT>` as a threshold because bash cannot probe
 exec-units mid-build. With a Haskell builder the wizard layer can
 — and should — drop the threshold and iterate against the typed
-`DiagnosticExecUnitsExceeded` (FR-015) the library surfaces.
+final phase-1 diagnostic (FR-015) the library surfaces.
 
 The wizard-side iteration policy (to be picked at #187 spec time;
 candidates: smallest-first / largest-first / oldest-first) is **out
@@ -560,7 +558,7 @@ of scope for #185**. This slice's library core MUST:
 
 - accept any non-empty candidate set the wizard hands it,
 - emit the deterministic build for that candidate set,
-- surface `DiagnosticExecUnitsExceeded` cleanly on overflow,
+- surface final phase-1 exec-units overflow cleanly,
 - never silently drop or reorder inputs,
 - never decide which input to drop.
 

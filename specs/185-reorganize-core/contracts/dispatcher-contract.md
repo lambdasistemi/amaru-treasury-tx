@@ -122,12 +122,11 @@ The dispatcher arm must surface the right action-namespaced error
 for each diagnostic:
 
 - `DiagnosticMissingUtxos` → `BuildActionReorganize` (not Intent).
-- `DiagnosticExecUnitsExceeded` → `BuildActionReorganize`.
 - `DiagnosticTranslateFailed` (from `translateReorganize`) →
   `BuildActionIntent` (matches the other arms' behaviour — the
   translate failure is a pre-action concern).
-- `DiagnosticChecksFailed` (from `validateFinalPhase1`) →
-  `BuildActionReorganize`.
+- `DiagnosticChecksFailed` (from `validateFinalPhase1`, including
+  exec-units overflow after #191) → `BuildActionReorganize`.
 
 The `nestActionBuildError BuildActionReorganize` wraps action
 errors; translate-time failures arrive via the `Left` from

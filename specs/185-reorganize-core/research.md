@@ -23,15 +23,16 @@ the schema regen. Rejected because:
   wiring it (the new module is untested except by the new
   golden), S3 wires + replaces the test call.
 
-**Alternative considered:** five slices, splitting "add JSON
-instances" from "real record" and "add exec-units check" from
+**Alternative considered:** four slices, splitting "add JSON
+instances" from "real record" and "phase-1 overflow proof" from
 "add runner". Rejected because:
 
 - The JSON instances and the real record are coupled — the
   instances reference the field names. Splitting them creates a
   commit with broken decoder.
-- The exec-units check (FR-015) is part of the runner's job; it
-  has no test of its own outside the runner.
+- The phase-1 overflow proof (FR-015) is part of the runner's
+  standard validation path; it has no test of its own outside the
+  runner.
 
 ## 2. Why amend the field set (B2) vs. carry resolved totals (B1)
 
@@ -41,7 +42,7 @@ deeper reasoning).
 
 The wizard #187 implements **"compress until full"** iteration: it
 starts with the full candidate UTxO set, builds the tx, and on
-`ExecUnitsExceeded` drops one UTxO and retries. Three implications
+exec-units overflow drops one UTxO and retries. Three implications
 for the library:
 
 1. **Intent stability.** If the intent JSON carried `acc_lovelace`
@@ -65,71 +66,12 @@ state, not the UTxO set), so it has no `ccUtxos` source to
 recompute from. Reorganize's totals come from `ccUtxos`, so the
 recompute path is available and is the cleaner choice.
 
-## 3. The `validateFinalPhase1` short-circuit (FR-015 path)
+## 3. The `validateFinalPhase1` withdrawal path (FR-015 path)
 
-`lib/Amaru/Treasury/Build/Common.hs:120` (read during plan
-research):
-
-```haskell
-validateFinalPhase1 :: ChainContext -> ConwayTx -> Either Text ()
-validateFinalPhase1 ctx tx
-    | hasWithdrawals tx = Right ()
-    | otherwise = case validatePhase1 ... of ...
-```
-
-The function returns `Right ()` unconditionally when
-`hasWithdrawals tx` is true. The module header explains the
-reason:
-
-> The current tx-tools validator seeds UTxO and protocol parameters,
-> but not reward-account state. Transactions with a @withdrawals@
-> field would therefore get false @WithdrawalsNotInRewardsCERTS@
-> failures; skip those until the upstream validation context grows
-> reward-state support.
-
-Because A1 wires permissions withdraw-zero, reorganize txs ALWAYS
-have a withdrawal entry. Phase-1 validation is therefore skipped,
-which means exec-units are NOT checked by the existing path.
-
-**Consequence:** S2 implements a separate exec-units check.
-
-**Design (the runner's exec-units check, S2):**
-
-```text
-after `runReorganizeBuild` evaluates scripts via `ccEvaluateTx`:
-  scriptMap <- ccEvaluateTx ctx tx
-  let totalMemory = sum (mem  | (_, Right (ExUnits mem _))   <- scriptMap)
-      totalSteps  = sum (st   | (_, Right (ExUnits _   st )) <- scriptMap)
-      ExUnits maxMem maxSteps = pparams.maxTxExecutionUnits
-  unless (totalMemory <= maxMem && totalSteps <= maxSteps) $
-    throwE $ actionBuildError BuildPhaseChecks $
-      DiagnosticExecUnitsExceeded (ExUnits totalMemory totalSteps) (pparams.maxTxExecutionUnits)
-```
-
-This runs **after** the script evaluator (which is already invoked
-to populate `BuildResult.brScriptResults`), so it adds no extra
-chain calls. It uses the existing `BuildResult.brScriptResults`
-data the other runners already build.
-
-**Alternative considered:** put the check inside `validateFinalPhase1`
-itself (special-case the `hasWithdrawals` short-circuit to still
-check exec-units). Rejected because:
-
-- It changes the contract of a shared helper; other operational
-  arms (disburse/withdraw/swap) would suddenly get exec-units
-  failures that currently slip through. That is arguably better,
-  but is **out of scope** for #185 (it would affect every action).
-  We'd file a follow-up issue and run a controlled migration.
-- For this slice, surgically adding the check inside `runReorganizeAction`
-  is the smaller, safer change.
-
-**Follow-up to file (NOT in this PR):** "Phase-1 short-circuits
-exec-units check when tx has withdrawals; we should plumb exec-units
-through a separate path or extend `validateFinalPhase1` to retain
-the exec-units check while still skipping the
-`WithdrawalsNotInRewardsCERTS` family." Reorganize gets it for free
-via this slice; disburse/withdraw/swap do not. Track as a separate
-issue rather than expanding this PR's scope.
+Resolved by #191: `validateFinalPhase1` now seeds withdrawal reward
+accounts and runs full ledger phase-1 validation for withdrawal-bearing
+transactions, including exec-units overflow, so S2 does not add a
+separate `ccEvaluateTx` side-path or a reorganize-specific diagnostic.
 
 ## 4. Choice of `MaryValue` vs. `(Coin, MultiAsset)` for the program signature
 
@@ -212,27 +154,18 @@ entry here would:
 The library-proof for #185 is the **golden CBOR + round-trip**
 combo; smoke parity is #87's job.
 
-## 9. Decision to put `DiagnosticExecUnitsExceeded` next to
-existing diagnostic variants
+## 9. Diagnostic surface for exec-units overflow
 
-`BuildDiagnostic` (in
-`lib/Amaru/Treasury/Build/Error/Types.hs:52–62`) is the central
-registry of typed build failures. Adding the new variant there
-(rather than in a `Reorganize`-specific error type) keeps the
-dispatcher's error shape uniform and means the wizard #187 can
-pattern-match on the same variant for the iteration loop.
+**Decision:** reuse the existing final phase-1 diagnostic surface.
+After #191, `validateFinalPhase1` covers withdrawal-bearing
+transactions natively, so an exec-units overflow arrives through the
+same `DiagnosticChecksFailed` / phase-1 failure path used by the
+other action runners.
 
-**Alternative considered:** a `Build/Reorganize/Error.hs` module
-with a sub-error type. Rejected because:
-
-- It fragments the diagnostic surface; every action would
-  eventually want its own; the central `BuildDiagnostic` exists
-  precisely to avoid that.
-- The wizard #187's iteration loop must pattern-match on a single
-  known variant; adding a per-action wrapper makes that brittle.
-
-The `Render` instance for the new variant follows the existing
-pattern (one short line per case).
+**Alternative considered:** add a new reorganize-specific
+exec-units overflow variant to `BuildDiagnostic`. Rejected because
+the new upstream reward-state path removed the need for a
+reorganize-only side-path.
 
 ## 10. Multi-scope rejection (edge case)
 

@@ -38,7 +38,7 @@ reorganizeProgram
 - Change output — appended by the balancer after the pure program
   emits its outputs.
 - Fee — alignment by `alignCardanoCliBuildFee` post-processing.
-- Phase-1 / exec-units checks — the runner's job.
+- Final phase-1 validation — the runner's job.
 
 ## Invariants the program REQUIRES of the runner
 
@@ -58,7 +58,7 @@ reorganizeProgram
 - It does not read chain state.
 - It does not call the script evaluator.
 - It does not produce a `BuildResult`.
-- It does not validate phase-1 or exec-units.
+- It does not validate final phase-1 checks.
 - It does not check the address parity of the inputs.
 - It does not decide signer order.
 

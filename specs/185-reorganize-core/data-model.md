@@ -150,14 +150,11 @@ runReorganizeAction
    (toList rgiTreasuryUtxos)`.
 4. Build evaluator + program; call `TxBuild.build`.
 5. Apply `alignCardanoCliBuildFee` post-processing.
-6. Run `validateFinalPhase1` (which short-circuits on the
-   withdrawals — research §3).
+6. Run `validateFinalPhase1` (after #191 this covers
+   withdrawal-bearing transactions, including exec-units overflow).
 7. Run `ccEvaluateTx` for the script-results map (mirrors
    `runWithdrawAction`).
-8. **Exec-units check (FR-015)** — sum the script-results
-   `ExUnits`; compare to `ccPParams.maxTxExecutionUnits`; surface
-   `DiagnosticExecUnitsExceeded` on overflow.
-9. Assemble `BuildResult` with the standard fields.
+8. Assemble `BuildResult` with the standard fields.
 
 ```haskell
 runReorganizeBuild
@@ -177,30 +174,18 @@ runReorganizeBuild ctx intent rationale walletAddr =
 
 - `DiagnosticMissingUtxos ![Text]` — for UTxOs not in `ccUtxos`.
 - `DiagnosticChecksFailed !Text` — for `validateFinalPhase1`
-  failures (rarely fires for reorganize because of the
-  withdrawals short-circuit).
+  failures, including exec-units overflow reported by ledger
+  phase-1 validation.
 - `DiagnosticFeeAlignmentFailed !Text` — for fee-alignment errors.
 
-**New variant added in S2:**
+**No new diagnostic variant is added in S2.** The standard phase-1
+diagnostic surface covers exec-units overflow after #191.
 
-```haskell
-| DiagnosticExecUnitsExceeded
-    { dxeUsed :: !ExUnits
-    , dxeMax  :: !ExUnits
-    }
-```
+**Action variant:**
 
-**Render line (in `Error/Render.hs`):**
-
-```text
-Built transaction exceeds maxTxExecutionUnits: used <mem,steps>, max <mem,steps>.
-```
-
-**Action variant — confirm or add in S2:**
-
-`BuildAction` in `Error/Types.hs` carries one constructor per
-action arm. If `BuildActionReorganize` is missing, S2 adds it; if
-present, S3 just uses it. Slice executor surveys before deciding.
+`BuildActionReorganize` already exists in `Error/Types.hs` because
+the pre-S3 dispatcher stub is namespaced under that action. S2 does
+not need an error-type edit for the action tag.
 
 ## 6. Fixture layout (in `test/fixtures/reorganize-core/synthetic/`)
 
@@ -224,14 +209,15 @@ meaningful N for a "merge" operation). Total values are chosen so:
 - `usdm_1 + usdm_2 > 0` (so the continuing output carries some USDM
   — exercises the non-empty `MultiAsset` path)
 - the resulting tx is well under `maxTxExecutionUnits` (so the
-  baseline golden does NOT surface `ExecUnitsExceeded`).
+  baseline golden does NOT fail final phase-1 validation).
 
 A second fixture variant, `test/fixtures/reorganize-core/synthetic-overflow/`,
 carries enough treasury UTxOs that the exec-units sum exceeds a
 deliberately small `maxTxExecutionUnits` in its `pparams.json`. The
 overflow fixture's test asserts that `runReorganizeBuild` returns
-`Left (… DiagnosticExecUnitsExceeded …)`. Same fixture layout, but
-`expected.cbor` is absent (the test should fail before serialization).
+`Left (… DiagnosticChecksFailed …)` through the standard phase-1
+diagnostic path. Same fixture layout, but `expected.cbor` is absent
+(the test should fail before serialization).
 
 ## 7. Schema delta — `docs/assets/intent-schema.json`
 

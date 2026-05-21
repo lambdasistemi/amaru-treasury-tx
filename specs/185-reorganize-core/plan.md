@@ -104,13 +104,8 @@ golden test calls `runReorganizeBuild` directly with a fixture
   [`contracts/reorganize-program-contract.md`](./contracts/reorganize-program-contract.md)).
 - `lib/Amaru/Treasury/Build/Reorganize.hs` — new module:
   `runReorganizeBuild`, `runReorganizeAction`, the
-  preserved-value fold helper, and the typed exec-units check
-  (FR-015; see [`research.md`](./research.md) §3).
-- `lib/Amaru/Treasury/Build/Error/Types.hs` — add the
-  `DiagnosticExecUnitsExceeded { used :: ExUnits, max :: ExUnits }`
-  variant to `BuildDiagnostic` (decision recorded in research).
-- `lib/Amaru/Treasury/Build/Error/Render.hs` — render the new
-  variant.
+  preserved-value fold helper, and the standard final phase-1
+  validation path.
 - `amaru-treasury-tx.cabal` — expose
   `Amaru.Treasury.Build.Reorganize` in the `library` stanza.
 - `test/fixtures/reorganize-core/synthetic/` — new fixture dir:
@@ -213,33 +208,22 @@ dispatch unit test asserting `Right _`; it also fails.
 | Edge: empty `treasuryUtxos` rejected at parser | S1 | property in `IntentJSONSpec` |
 | Edge: empty `treasuryUtxos` defensively rejected at translate | S3 | unit in `ReorganizeDispatchSpec` |
 | Edge: same TxIn twice → degenerate | S1 / S3 | settled in slice (likely `nub` at translate; if not, document) |
-| FR-015 ExecUnitsExceeded surface | S2 | unit in `ReorganizeGoldenSpec` with a "too many UTxOs" fixture variant |
+| FR-015 exec-units overflow surface | S2 | unit in `ReorganizeGoldenSpec` with a constrained-pparams fixture variant; asserts the standard phase-1 diagnostic |
 
 ## Risks + mitigations
 
-- **R1 — `validateFinalPhase1` short-circuits when the tx has
-  withdrawals.** `lib/Amaru/Treasury/Build/Common.hs:120` returns
-  `Right ()` unconditionally when `hasWithdrawals tx`. Because A1
-  wires permissions withdraw-zero, the existing path will NOT phase-1
-  validate the reorganize tx. **Mitigation:** S2 implements a
-  separate exec-units check (sum `ccEvaluateTx` results, compare to
-  `pparams.maxTxExecutionUnits`) and surfaces
-  `DiagnosticExecUnitsExceeded`. See [`research.md`](./research.md) §3.
-- **R2 — `tx-build --intent` becomes capable of producing real
+After #191 merge, `validateFinalPhase1` covers exec-units overflow
+natively for withdrawal-bearing reorganize txs. S2 therefore uses the
+same final phase-1 validation path as the other runners; it does not
+add a separate `ccEvaluateTx` overflow side-path.
+
+- **R1 — `tx-build --intent` becomes capable of producing real
   reorganize bytes once S3 lands.** This is a behavior change on
   the shipped CLI (no parser change). It is the intended effect of
   the slice. PR body and PR review must surface this so reviewers
   do not mistake it for an unintended CLI expansion. Captured in
   S3's commit message.
-- **R3 — `nestActionBuildError BuildActionReorganize` may not exist
-  yet.** The dispatcher's existing arms use
-  `nestActionBuildError BuildActionSwap/Disburse/Withdraw`. If
-  `BuildActionReorganize` is not a constructor of `BuildAction`,
-  S3 also adds it. **Mitigation:** slice executor surveys
-  `lib/Amaru/Treasury/Build/Error/Types.hs` first; if missing, adds
-  the constructor in S2 (with the diagnostic variant) so S3 stays
-  surgical.
-- **R4 — fixture forging.** Building a synthetic `ChainContext`
+- **R2 — fixture forging.** Building a synthetic `ChainContext`
   with valid Conway-era UTxOs, the deployed-script refs, the
   permissions reward account, and pparams is non-trivial. The
   withdraw fixture at `test/fixtures/withdraw/synthetic/` is the
@@ -247,12 +231,12 @@ dispatch unit test asserting `Right _`; it also fails.
   inputs instead of one). **Mitigation:** S2 fixture is hand-crafted
   per the withdraw template; provenance recorded in
   `provenance.md` (which envelope each UTxO came from).
-- **R5 — non-DevNet networks.** The library core is
+- **R3 — non-DevNet networks.** The library core is
   network-agnostic; the wizard #187 enforces DevNet. We must
   NOT add a `requireDevnet` arm for `SReorganize` (other operational
   arms — swap, disburse, withdraw — do NOT have one). **Mitigation:**
   spec is explicit; reviewer checks during S3 review.
-- **R6 — multi-scope reorganize.** Spec edge case: a `Reorganize`
+- **R4 — multi-scope reorganize.** Spec edge case: a `Reorganize`
   intent whose treasury UTxOs span more than one treasury address
   is structurally invalid. **Mitigation:** S3's `translateReorganize`
   inspects `ccUtxos` projections (resolves each `txin` to its
@@ -282,10 +266,10 @@ the same slice commit) applies — see the `gate-script` skill's
 **Answer: none, by design.** This slice is the library core. The
 live-system boundary (cardano-node N2C, real chain tip, real
 pparams, real exec-units evaluator) is the wizard #187's and the
-smoke #87's concern. The library's exec-units check (FR-015) runs
-against the *frozen* `ChainContext.ccPParams` and the
-`ChainContext.ccEvaluateTx` callback, both of which are mocked at
-fixture time — unit-testable, deterministic, no live boundary.
+smoke #87's concern. The library's final phase-1 validation,
+including exec-units overflow after #191, runs against the *frozen*
+`ChainContext` captured by the fixture — unit-testable,
+deterministic, no live boundary.
 
 This is explicitly acceptable per the `live-boundary-smoke` skill:
 the library has no boundary to smoke. Sibling tickets carry the

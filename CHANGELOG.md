@@ -4,14 +4,39 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.12.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.11.0...v0.2.12.0) (2026-05-21)
+
 ### Features
 
-* **transactions:** add historical log directory and format (#172)
-* **transactions:** backfill 55 historical network_compliance USDM swaps (#174)
-* **transactions:** recover 1 wizard intent.json from /tmp scratch for backfilled swap (#174)
-* **transactions:** promote the 205k contingency disburse rebuild to submitted txid 18d57a4f... and archive 4 additional network_compliance swap submissions: 7353059f..., 36d57c1b..., 488e5b41..., 9f119393... (#174)
-* **transactions:** swap-cancel for the 59e10ca5 stale order submitted on-chain — txid a8bab7bf... — returning 52,819.86 ADA to network_compliance (#174)
-* **operator:** add the repo-scoped `amaru-treasury-tx` skill with portable release install guidance, submitted-log archive completeness checks, and a requirement that submitted archives merge to `main` (#174)
+* **intent:** add seven init sub-action variants (#157) ([1da56b5](https://github.com/lambdasistemi/amaru-treasury-tx/commit/1da56b5b420a2513d42b13deee2a31e10ad0fe75))
+* **build:** dispatch registry-init sub-action intents (#157) ([1f7bf03](https://github.com/lambdasistemi/amaru-treasury-tx/commit/1f7bf039c82a91294842e8f3d8d7d1630641e093))
+* **build:** dispatch stake-reward-init sub-action intents (#157) ([ec34840](https://github.com/lambdasistemi/amaru-treasury-tx/commit/ec3484041a48303aa3e39cafc1440d747bdc7d1d))
+* **build:** dispatch governance-withdrawal-init sub-action intents (#157) ([835cbcd](https://github.com/lambdasistemi/amaru-treasury-tx/commit/835cbcdb87791eaca73db144d9b26d6f565d581a))
+* **build:** reject non-devnet networks for init intents (#157) ([c4893a5](https://github.com/lambdasistemi/amaru-treasury-tx/commit/c4893a58d7b037ae4ed420fb12407e71728c4073))
+* **cli:** scaffold registry-init-wizard parser (#158) ([d42f723](https://github.com/lambdasistemi/amaru-treasury-tx/commit/d42f7230fe02e2e608d30b5066338c004ad4e336))
+* **tx:** registry-init-wizard seed-split + devnet guard (#158) ([0e75acf](https://github.com/lambdasistemi/amaru-treasury-tx/commit/0e75acf9f24c69da0b5e696f284c4ff2fb4dae57))
+* **tx:** registry-init-wizard mint (#158) ([425f12d](https://github.com/lambdasistemi/amaru-treasury-tx/commit/425f12d403dbfeb19f5ba746b2aee6bf52accd18))
+* **tx:** registry-init-wizard reference-scripts (#158) ([8079260](https://github.com/lambdasistemi/amaru-treasury-tx/commit/8079260f7b01cee7658e1fe4805715ed441f4c24))
+* **cli:** scaffold stake-reward-init-wizard parser (#159) ([2187032](https://github.com/lambdasistemi/amaru-treasury-tx/commit/2187032e3ce185b7f066a11462d60536c75ddd61))
+* **tx:** stake-reward-init-wizard script-account + devnet guard (#159) ([acdd2e2](https://github.com/lambdasistemi/amaru-treasury-tx/commit/acdd2e26e9f4e67986bfde58b7bb8384096b31b2))
+* **tx:** stake-reward-init-wizard plain-account (#159) ([61ce09e](https://github.com/lambdasistemi/amaru-treasury-tx/commit/61ce09efdb290fa1466d6d85ec6e29634e5a58c5))
+* **cli:** governance-withdrawal-init-wizard (#160) (#169) ([02e56ef](https://github.com/lambdasistemi/amaru-treasury-tx/commit/02e56ef1a32850342b10be86dcc6720c1785c2ed))
+* **cli:** fresh DevNet registry bootstrap mode (#175) ([ae18b22](https://github.com/lambdasistemi/amaru-treasury-tx/commit/ae18b22606b8380f9a9cdb15a0fefb3511fc732a))
+* **smoke:** add DevNet CLI smoke host and vault preflight (#161) ([5ad2838](https://github.com/lambdasistemi/amaru-treasury-tx/commit/5ad28389befacdadd71936ee7944e285c7bf25d9))
+* **smoke:** drive registry and stake bootstrap via CLI (#161) ([aaccc34](https://github.com/lambdasistemi/amaru-treasury-tx/commit/aaccc343305d686dde70304edd911eb9b97522bd))
+* **smoke:** live CLI registry-stake bootstrap + chain assertions (#161) ([542d7c3](https://github.com/lambdasistemi/amaru-treasury-tx/commit/542d7c37d2b7ec2e4f59ba7ff9492c18cca57aae))
+* **smoke:** extend CLI devnet smoke through governance withdrawal ([ebc83c5](https://github.com/lambdasistemi/amaru-treasury-tx/commit/ebc83c5fffeee0e3c3de34cb3c2c291c45467322))
+* **smoke:** verify CLI disburse after materialization (#161) ([84b6cad](https://github.com/lambdasistemi/amaru-treasury-tx/commit/84b6cad3815f355f66a39614354240511a0a4c26))
+* **transactions:** historical log directory for wizard + tx-build artifacts (#172) ([d81e106](https://github.com/lambdasistemi/amaru-treasury-tx/commit/d81e1063be02d2040e2505358aa4987f196b1450))
+* **transactions:** backfill 55 historical network_compliance USDM swaps (#174) ([9ebef9f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/9ebef9f3b92c80c1fd4603a1f2bedbe154cad61f))
+* **transactions:** recover 1 intent.json from /tmp scratch (#174) ([415e7e6](https://github.com/lambdasistemi/amaru-treasury-tx/commit/415e7e6fc012221fcc1184044f5edf8cc73c7c94))
+* **transactions:** log 2 pending rebuilt txs awaiting signatures (#174) ([ed9c4bf](https://github.com/lambdasistemi/amaru-treasury-tx/commit/ed9c4bf47b7ff8ff0598513e6c466bf1c5b820aa))
+* **transactions:** swap-cancel a8bab7bf submitted on-chain (#174) ([7988acf](https://github.com/lambdasistemi/amaru-treasury-tx/commit/7988acfce1206a882565bd2e377f797efdaf0064))
+* **transactions:** archive submitted txs after 205k disburse (#174) ([26752c2](https://github.com/lambdasistemi/amaru-treasury-tx/commit/26752c271db743f2f71c0d44b42c501fb532db4a))
+
+### Bug Fixes
+
+* **docs:** use absolute URL for README link from mkdocs page ([dfc9ae4](https://github.com/lambdasistemi/amaru-treasury-tx/commit/dfc9ae4b35fb49e182a4f18c2a98c33e7172d05e))
 
 ## [0.2.11.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.10.0...v0.2.11.0) (2026-05-16)
 

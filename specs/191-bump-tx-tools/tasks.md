@@ -308,9 +308,9 @@ Owned artifacts:
 
 Tasks:
 
-- [ ] T021 Update PR #192 body with old commit `25d7ce349f826e9888fb8565eeb816babb06d922`, selected commit `9e77e90728729bdd22e3bfbe0cf7515b33d5ea13`, target release `v0.2.0.0`, regenerated hash proof, and workaround disposition for 2a/2b/2c plus the final shared validation helper.
-- [ ] T022 Run `nix flake check` and record the result in `/tmp/epic-189/attx-191/STATUS.md` or PR #192.
-- [ ] T023 Run final `./gate.sh`, record the result in `/tmp/epic-189/attx-191/STATUS.md` or PR #192, and keep PR #192 draft until the parent owner approves finalization.
+- [X] T021 Update PR #192 body with old commit `25d7ce349f826e9888fb8565eeb816babb06d922`, selected commit `9e77e90728729bdd22e3bfbe0cf7515b33d5ea13`, target release `v0.2.0.0`, regenerated hash proof, and workaround disposition for 2a/2b/2c plus the final shared validation helper.
+- [X] T022 Run `nix flake check` and record the result in `/tmp/epic-189/attx-191/STATUS.md` or PR #192.
+- [X] T023 Run final `./gate.sh`, record the result in `/tmp/epic-189/attx-191/STATUS.md` or PR #192, and keep PR #192 draft until the parent owner approves finalization.
 
 Checkpoint: PR metadata and verification evidence agree with delivered
 behavior. #185 can be unparked only after #191 merges.

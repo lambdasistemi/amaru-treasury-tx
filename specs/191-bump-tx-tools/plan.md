@@ -25,9 +25,14 @@ branch must not edit reorganize implementation modules.
 Bump the `cardano-tx-tools` source-repository-package pin from
 `25d7ce349f826e9888fb8565eeb816babb06d922` to
 `9e77e90728729bdd22e3bfbe0cf7515b33d5ea13`, regenerate the matching
-nix32 fixed-output hash, then remove downstream Phase-1 validation skips
-that only existed because the old tx-tools validator could not seed
-reward-account state. The primary code change is to make
+nix32 fixed-output hash, and mirror the companion `github-release-check`
+source-repository-package pin
+(`d90131112a4d6c048d1809adaffdefed92e8e841`, nix32
+`0ad6yi431w8h5i3x9x661b99frcgvd39gm4164y8cx1ihpsjixn3`) because the
+pinned `cardano-tx-tools` commit requires the newer `library optparse`
+exposed at that revision. Then remove downstream Phase-1 validation
+skips that only existed because the old tx-tools validator could not
+seed reward-account state. The primary code change is to make
 `validateFinalPhase1` call `validatePhase1` for withdrawal-bearing
 transactions again while still treating missing vkey witnesses as
 signing-step noise.
@@ -69,14 +74,18 @@ runner.
 **Performance Goals**: No measurable performance target; validation
 coverage increases by removing skips. Existing build/test runtime stays
 within the repository gate.
-**Constraints**: One dependency bump only; `cabal.project tag:` must be
+**Constraints**: One primary dependency bump only; `cardano-tx-tools`
+`cabal.project tag:` must be
 `9e77e90728729bdd22e3bfbe0cf7515b33d5ea13`; regenerate the matching
-`--sha256`; no reorganize module edits; no operator live-chain workflow;
-no fixture rewrites except assertion changes directly tied to Phase-1
-success; `ccEvaluateTx` exec-unit checks remain in place.
-**Scale/Scope**: One source-repository-package pin, one shared
-validation helper, one governance-withdrawal-init skip disposition, and
-focused regression tests.
+`--sha256`; mirror only upstream-companion source-repository-package
+pins required by that commit's own `cabal.project`; no reorganize module
+edits; no operator live-chain workflow; no fixture rewrites except
+assertion changes directly tied to Phase-1 success; `ccEvaluateTx`
+exec-unit checks remain in place.
+**Scale/Scope**: One primary source-repository-package pin, its required
+upstream-companion mirror, one shared validation helper, one
+governance-withdrawal-init skip disposition, and focused regression
+tests.
 
 ## Constitution Check
 
@@ -134,8 +143,11 @@ No extra live-boundary smoke is added to `gate.sh`. The full proof is:
 
 ## Deliverables And Surfaces
 
-- `cabal.project` dependency pin and `--sha256`: canonical surface is
-  `cabal.project`. Empirical release/docs scan
+- `cabal.project` dependency pins and `--sha256` values: canonical
+  surface is `cabal.project`. The primary pin is `cardano-tx-tools`;
+  required upstream-companion mirrors, currently `github-release-check`,
+  must match the pinned `cardano-tx-tools` commit's own `cabal.project`.
+  Empirical release/docs scan
   `git grep -l 'cardano-tx-tools' .github/ flake.nix nix/ docs/
   README.md CHANGELOG.md` returns no additional release, packaging, or
   docs surfaces that name this dependency directly.
@@ -160,10 +172,14 @@ diff, reruns `./gate.sh`, and pushes only accepted commits.
 1. **Slice 1 - Dependency pin and fetch proof.** Update
    `cabal.project` to pin `cardano-tx-tools` at
    `9e77e90728729bdd22e3bfbe0cf7515b33d5ea13` and replace the
-   `--sha256` with the nix32 hash for that exact commit. RED proof:
-   stale or wrong hash causes the Nix fixed-output fetch to fail. GREEN
-   proof: the focused Nix prefetch/fetch succeeds for the commit, and
-   `nix flake check` is started or run as the full dependency proof.
+   `--sha256` with the nix32 hash for that exact commit, then mirror
+   `github-release-check` at
+   `d90131112a4d6c048d1809adaffdefed92e8e841` /
+   `0ad6yi431w8h5i3x9x661b99frcgvd39gm4164y8cx1ihpsjixn3` because the
+   target tx-tools commit requires `github-release-check:optparse`. RED
+   proof: stale or wrong hash causes the Nix fixed-output fetch to fail.
+   GREEN proof: the focused Nix prefetch/fetch succeeds for the commit,
+   and `nix flake check` is started or run as the full dependency proof.
 
 2. **Slice 2 - Withdrawal-bearing final Phase-1 validation.** Remove
    `validateFinalPhase1`'s withdrawal short-circuit and obsolete
@@ -206,7 +222,7 @@ specs/191-bump-tx-tools/
 |   `-- final-phase1-validation.md
 `-- tasks.md                  # produced after plan review by /speckit.tasks
 
-cabal.project                 # cardano-tx-tools commit + nix32 hash
+cabal.project                 # cardano-tx-tools commit/hash + companion mirror
 lib/Amaru/Treasury/Build/Common.hs
 lib/Amaru/Treasury/Build/GovernanceWithdrawalInit.hs
 test/unit/Amaru/Treasury/Build/GovernanceWithdrawalInitSpec.hs
@@ -224,6 +240,7 @@ operator documentation surface is introduced.
 |------|------------|
 | The annotated tag object SHA is accidentally used in `cabal.project`. | Contracts and tasks must name only `9e77e90728729bdd22e3bfbe0cf7515b33d5ea13` as the `tag:` value. |
 | The regenerated hash is for the wrong revision. | Nix fixed-output fetch and `nix flake check` must fail loudly before acceptance. |
+| The primary bump needs a companion source-repository-package mirror. | Mirror only the pin required by upstream `cardano-tx-tools`'s own `cabal.project`, and verify tag/hash before acceptance. |
 | Removing the withdrawal skip exposes non-witness structural failures. | The regression must retain witness-completeness filtering while rejecting all other ledger failures. |
 | Governance-withdrawal-init still fails for a separate deposit or return-account rule. | Stop through Q-file before expanding scope; retain a narrow skip only if the residual ledger rule and upstream issue are named. |
 | Dependency bump changes APIs outside validation. | Worker stops for clarification before touching unrelated modules or adding compatibility refactors. |

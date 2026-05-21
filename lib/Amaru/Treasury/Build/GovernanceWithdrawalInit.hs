@@ -30,6 +30,7 @@ import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Except (ExceptT, throwE)
 import Data.Map.Strict qualified as Map
+import Data.Text qualified as T
 import Data.Void (Void, absurd)
 
 import Cardano.Ledger.Api.Era (eraProtVerLow)
@@ -50,7 +51,8 @@ import Cardano.Tx.Ledger (ConwayTx)
 import Lens.Micro ((^.))
 
 import Amaru.Treasury.Build.Common
-    ( collateralInputFrom
+    ( alignCardanoCliBuildFee
+    , collateralInputFrom
     , strictMaybe
     , txIdText
     , validateFinalPhase1
@@ -68,6 +70,9 @@ import Amaru.Treasury.Build.Error.Convert
 import Amaru.Treasury.Build.Result
     ( BuildResult (..)
     , ScriptResult (..)
+    )
+import Amaru.Treasury.Build.Withdraw
+    ( addWithdrawalToChange
     )
 import Amaru.Treasury.ChainContext (ChainContext (..))
 import Amaru.Treasury.Devnet.GovernanceWithdrawalInit.Core
@@ -146,7 +151,36 @@ runGovernanceWithdrawalInitMaterializationAction ctx tx = do
                 treasuryRefUtxo
                 registryRefUtxo
                 eval
-    materializeResult ctx walletInputUtxos txResult
+    case txResult of
+        Left{} ->
+            materializeResult ctx walletInputUtxos txResult
+        Right tx0 -> do
+            let changeOutputIndex = 1
+                refUtxos = [treasuryRefUtxo, registryRefUtxo]
+            txWithWithdrawal <-
+                case addWithdrawalToChange
+                    changeOutputIndex
+                    (gwimtRewardsAmount tx)
+                    tx0 of
+                    Left e ->
+                        throwE $
+                            actionBuildError
+                                BuildPhaseFeeAlignment
+                                (DiagnosticFeeAlignmentFailed (T.pack e))
+                    Right ok -> pure ok
+            alignedTx <-
+                case alignCardanoCliBuildFee
+                    (ccPParams ctx)
+                    refUtxos
+                    changeOutputIndex
+                    txWithWithdrawal of
+                    Left e ->
+                        throwE $
+                            actionBuildError
+                                BuildPhaseFeeAlignment
+                                (DiagnosticFeeAlignmentFailed (T.pack e))
+                    Right ok -> pure ok
+            materializeResult ctx walletInputUtxos (Right alignedTx)
 
 -- | Resolve a TxIn against the ChainContext UTxO map.
 requireUtxo

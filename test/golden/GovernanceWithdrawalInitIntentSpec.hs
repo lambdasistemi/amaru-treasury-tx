@@ -12,7 +12,10 @@ sub-actions the test compares the CBOR bytes produced by:
   ('Amaru.Treasury.Build.runFromIntent'); and
 * the construction core in
   "Amaru.Treasury.Devnet.GovernanceWithdrawalInit.Core"
-  called directly with the same logical inputs.
+  called directly with the same logical inputs. The
+  materialization-arm comparison applies the runner's
+  withdrawal-to-change and fee-alignment post-processing to the
+  raw core transaction before comparing bytes.
 
 Both halves originate from a single
 'GovernanceWithdrawalInitFixture' record built by
@@ -41,15 +44,23 @@ import Test.Hspec
 
 import Cardano.Ledger.Alonzo.Scripts (AsIx)
 import Cardano.Ledger.Api.Era (eraProtVerLow)
+import Cardano.Ledger.Api.Tx.Out (TxOut)
 import Cardano.Ledger.Binary (serialize)
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
 import Cardano.Ledger.Plutus.ExUnits (ExUnits)
+import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Tx.Ledger (ConwayTx)
 
 import Amaru.Treasury.Build
     ( BuildResult (..)
     , runFromIntent
+    )
+import Amaru.Treasury.Build.Common
+    ( alignCardanoCliBuildFee
+    )
+import Amaru.Treasury.Build.Withdraw
+    ( addWithdrawalToChange
     )
 import Amaru.Treasury.ChainContext (ChainContext (..))
 import Amaru.Treasury.Devnet.GovernanceWithdrawalInit.Core
@@ -82,7 +93,8 @@ spec =
             proposalEquivalence
         it
             "governance-withdrawal-init-materialization builds \
-            \CBOR identical to buildWithdrawalTransaction's core"
+            \CBOR identical to adjusted \
+            \buildGovernanceWithdrawalMaterializationCore"
             materializationEquivalence
 
 -- ----------------------------------------------------
@@ -152,11 +164,14 @@ materializationEquivalence = do
             treasuryRefUtxo
             registryRefUtxo
             (frozenEvaluator ctx)
-    coreCbor <-
-        expectCoreCbor
+    adjustedCoreCbor <-
+        expectAdjustedMaterializationCoreCbor
             "governance-withdrawal-materialization"
+            tx
+            ctx
+            [treasuryRefUtxo, registryRefUtxo]
             coreResult
-    intentCbor `shouldBe` coreCbor
+    intentCbor `shouldBe` adjustedCoreCbor
 
 -- ----------------------------------------------------
 -- Shared plumbing
@@ -205,6 +220,43 @@ expectCoreCbor label = \case
             ( serialize
                 (eraProtVerLow @ConwayEra)
                 (tx :: ConwayTx)
+            )
+
+expectAdjustedMaterializationCoreCbor
+    :: String
+    -> GovernanceWithdrawalInitMaterializationTx
+    -> ChainContext
+    -> [(TxIn, TxOut ConwayEra)]
+    -> Either e ConwayTx
+    -> IO BSL.ByteString
+expectAdjustedMaterializationCoreCbor label tx ctx refUtxos = \case
+    Left _ ->
+        expectationFailure
+            (label <> ": construction core returned Left")
+            >> pure BSL.empty
+    Right coreTx -> do
+        txWithWithdrawal <-
+            case addWithdrawalToChange 1 (gwimtRewardsAmount tx) coreTx of
+                Left e ->
+                    expectationFailure
+                        (label <> ": addWithdrawalToChange failed: " <> e)
+                        >> pure coreTx
+                Right ok -> pure ok
+        adjustedTx <-
+            case alignCardanoCliBuildFee
+                (ccPParams ctx)
+                refUtxos
+                1
+                txWithWithdrawal of
+                Left e ->
+                    expectationFailure
+                        (label <> ": fee alignment failed: " <> e)
+                        >> pure txWithWithdrawal
+                Right ok -> pure ok
+        pure
+            ( serialize
+                (eraProtVerLow @ConwayEra)
+                (adjustedTx :: ConwayTx)
             )
 
 {- | Lift a 'ChainContext' \'s evaluator into the

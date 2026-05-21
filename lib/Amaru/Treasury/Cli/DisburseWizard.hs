@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
 
 {- |
 Module      : Amaru.Treasury.Cli.DisburseWizard
@@ -25,7 +26,7 @@ import Control.Tracer (Tracer (..), traceWith)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Char (isDigit, toLower)
 import Data.Map.Strict qualified as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, listToMaybe, mapMaybe)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -53,6 +54,7 @@ import System.Exit (ExitCode (..), exitWith)
 
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Mary.Value (MaryValue (..))
+import Cardano.Ledger.TxIn (TxIn)
 
 import Amaru.Treasury.Backend (Provider)
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
@@ -70,8 +72,24 @@ import Amaru.Treasury.IntentJSON
     , encodeSomeTreasuryIntent
     , tiValidityUpperBoundSlot
     )
+import Amaru.Treasury.LedgerParse
+    ( addrFromText
+    , keyHashFromHex
+    , scriptHashFromHex
+    , txInFromText
+    )
+import Amaru.Treasury.Registry.Derive (derivedScopesNftPolicy)
+import Amaru.Treasury.Registry.Metadata
+    ( ScriptDeployment (..)
+    , TreasuryEntry (..)
+    , TxInRef (..)
+    , UpstreamMetadata (..)
+    , readUpstreamMetadataFile
+    )
 import Amaru.Treasury.Registry.Verify
-    ( VerifiedRegistry (..)
+    ( RegistryWalkError (..)
+    , VerifiedRegistry (..)
+    , VerifiedScope (..)
     , verifyRegistry
     )
 import Amaru.Treasury.Scope
@@ -107,6 +125,9 @@ data DisburseWizardOpts = DisburseWizardOpts
     , dwOptsSigners :: ![Text]
     -- ^ accumulated extra-signer flags; empty = selected
     --   scope owner only.
+    , dwOptsTreasuryTxIns :: ![TxIn]
+    -- ^ optional treasury TxIn allow-list applied after querying
+    --   the treasury address.
     }
     deriving stock (Eq, Show)
 
@@ -238,6 +259,16 @@ disburseWizardOptsP =
                         "Repeat for each extra signer (scope name/alias or 28-byte hex)"
                 )
             )
+        <*> many
+            ( option
+                txInReader
+                ( long "treasury-txin"
+                    <> long "treasury-utxo"
+                    <> metavar "TXIN"
+                    <> help
+                        "Restrict treasury selection to this TxIn. Repeatable."
+                )
+            )
 
 contingencyDisburseOptsP :: Parser ContingencyDisburseOpts
 contingencyDisburseOptsP =
@@ -326,6 +357,10 @@ adaReader :: ReadM Integer
 adaReader =
     eitherReader (parseAdaToLovelace . T.pack)
 
+txInReader :: ReadM TxIn
+txInReader =
+    eitherReader (txInFromText . T.pack)
+
 parseAdaToLovelace :: Text -> Either String Integer
 parseAdaToLovelace raw =
     case T.splitOn "." raw of
@@ -406,6 +441,8 @@ runDisburseWizard g DisburseWizardOpts{..} =
                         , Disburse.riRegistry = rv
                         , Disburse.riValidityHours =
                             dwOptsValidityHours
+                        , Disburse.riTreasuryTxIns =
+                            dwOptsTreasuryTxIns
                         }
             in  Right (answers, ri)
 
@@ -465,6 +502,7 @@ runContingencyDisburse g ContingencyDisburseOpts{..} =
                         , Disburse.riRegistry = rv
                         , Disburse.riValidityHours =
                             cdOptsValidityHours
+                        , Disburse.riTreasuryTxIns = []
                         }
             Right (answers, ri)
 
@@ -505,10 +543,11 @@ runDisburseCommand commandName g logPath metadataPath outPath verifyScopes sourc
         withLocalNodeBackend (goNetworkMagic g) socket $
             \backend -> do
                 verified <-
-                    verifyRegistry
+                    verifyDisburseRegistry
                         backend
                         metadataPath
                         verifyScopes
+                        networkName
                 (rv, registry) <- case verified of
                     Left e ->
                         abortDisburse
@@ -563,6 +602,128 @@ runDisburseCommand commandName g logPath metadataPath outPath verifyScopes sourc
                 case outPath of
                     Nothing -> BSL.putStr bytes
                     Just fp -> BSL.writeFile fp bytes
+
+verifyDisburseRegistry
+    :: Provider IO
+    -> FilePath
+    -> Set.Set ScopeId
+    -> Text
+    -> IO (Either RegistryWalkError VerifiedRegistry)
+verifyDisburseRegistry backend metadataPath verifyScopes networkName = do
+    verified <- verifyRegistry backend metadataPath verifyScopes
+    case verified of
+        Left err
+            | T.toLower networkName == "devnet"
+            , scopeOwnersAnchorSpent err ->
+                devnetRegistryFromMetadata metadataPath verifyScopes
+        _ -> pure verified
+
+scopeOwnersAnchorSpent :: RegistryWalkError -> Bool
+scopeOwnersAnchorSpent = \case
+    AnchorSpent "scope_owners" Nothing _ -> True
+    _ -> False
+
+devnetRegistryFromMetadata
+    :: FilePath
+    -> Set.Set ScopeId
+    -> IO (Either RegistryWalkError VerifiedRegistry)
+devnetRegistryFromMetadata metadataPath verifyScopes = do
+    decoded <- readUpstreamMetadataFile metadataPath
+    pure $ decoded >>= devnetRegistryFromUpstream verifyScopes
+
+devnetRegistryFromUpstream
+    :: Set.Set ScopeId
+    -> UpstreamMetadata
+    -> Either RegistryWalkError VerifiedRegistry
+devnetRegistryFromUpstream verifyScopes metadata = do
+    scopesNftUtxo <-
+        parseMetadataTxIn "scope_owners" (umScopeOwners metadata)
+    scopesNftPolicy <-
+        either
+            (Left . ChainQueryError . T.pack)
+            Right
+            derivedScopesNftPolicy
+    owner <-
+        maybe
+            (Left (ChainQueryError "devnet metadata contains no owner"))
+            (mapParseError "owner" . keyHashFromHex)
+            (listToMaybe (mapMaybe teOwner (Map.elems entries)))
+    scopes <- traverse parseScope (Map.toList entries)
+    pure
+        VerifiedRegistry
+            { vrScopesNftUtxo = scopesNftUtxo
+            , vrScopesNftPolicy = scopesNftPolicy
+            , vrOwners =
+                Map.fromList
+                    [ (CoreDevelopment, owner)
+                    , (OpsAndUseCases, owner)
+                    , (NetworkCompliance, owner)
+                    , (Middleware, owner)
+                    ]
+            , vrTreasuriesByScope = Map.fromList scopes
+            }
+  where
+    entries =
+        Map.restrictKeys (umTreasuries metadata) verifyScopes
+    parseScope (scope, entry) =
+        (scope,) <$> devnetScopeFromMetadata scope entry
+
+devnetScopeFromMetadata
+    :: ScopeId
+    -> TreasuryEntry
+    -> Either RegistryWalkError VerifiedScope
+devnetScopeFromMetadata scope entry = do
+    address <- mapParseError "address" (addrFromText (teAddress entry))
+    treasuryHash <-
+        parseDeploymentHash "treasury_script.hash" (teTreasuryScript entry)
+    registryHash <-
+        parseDeploymentHash "registry_script.hash" (teRegistryScript entry)
+    permissionsHash <-
+        parseDeploymentHash
+            "permissions_script.hash"
+            (tePermissionsScript entry)
+    registryTxIn <-
+        parseDeploymentTxIn
+            "registry_script.deployed_at"
+            (teRegistryScript entry)
+    treasuryTxIn <-
+        parseDeploymentTxIn
+            "treasury_script.deployed_at"
+            (teTreasuryScript entry)
+    permissionsTxIn <-
+        parseDeploymentTxIn
+            "permissions_script.deployed_at"
+            (tePermissionsScript entry)
+    pure
+        VerifiedScope
+            { vsAddress = address
+            , vsTreasuryScriptHash = treasuryHash
+            , vsRegistryScriptHash = registryHash
+            , vsPermissionsScriptHash = permissionsHash
+            , vsRegistryNftUtxo = registryTxIn
+            , vsTreasuryDeployedAt = treasuryTxIn
+            , vsPermissionsDeployedAt = permissionsTxIn
+            , vsRegistryDeployedAt = registryTxIn
+            }
+  where
+    scoped field = field <> " (" <> scopeText scope <> ")"
+    parseDeploymentHash field deployment =
+        mapParseError
+            (scoped field)
+            (scriptHashFromHex (sdHash deployment))
+    parseDeploymentTxIn field deployment =
+        parseMetadataTxIn (scoped field) (sdDeployedAt deployment)
+
+parseMetadataTxIn
+    :: Text -> TxInRef -> Either RegistryWalkError TxIn
+parseMetadataTxIn field =
+    mapParseError field . txInFromText . unTxInRef
+
+mapParseError :: Text -> Either String a -> Either RegistryWalkError a
+mapParseError field =
+    either
+        (Left . ChainQueryError . ((field <> ": ") <>) . T.pack)
+        Right
 
 destinationScopeAddress
     :: ScopeId -> VerifiedRegistry -> Either Text Text

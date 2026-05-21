@@ -80,6 +80,7 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Ord (Down (..))
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -577,6 +578,9 @@ data ResolverInput = ResolverInput
     , riValidityHours :: !(Maybe Word16)
     -- ^ Operator-supplied @--validity-hours@; 'Nothing' = use
     --   the chain horizon ('Validity.AutoLongest').
+    , riTreasuryTxIns :: ![TxIn]
+    -- ^ Optional treasury TxIn allow-list. Empty means select from
+    --   every UTxO currently found at the treasury address.
     }
     deriving stock (Eq, Show)
 
@@ -652,7 +656,7 @@ resolveDisburseEnv
     -> ResolverInput
     -> m (Either ResolverError DisburseEnv)
 resolveDisburseEnv ResolverEnv{..} ri =
-    case networkConstants (riNetwork ri) of
+    case disburseNetworkConstants (riNetwork ri) of
         Left _ ->
             pure (Left (ResolverNetworkUnsupported (riNetwork ri)))
         Right nc ->
@@ -674,7 +678,11 @@ resolveDisburseEnv ResolverEnv{..} ri =
                     then pure (Left ResolverEmptyWalletUtxos)
                     else do
                         treasuryUtxos <- reEnvQueryTreasuryUtxos (trAddress refs)
-                        if null treasuryUtxos
+                        let selectableTreasuryUtxos =
+                                filterRequestedTreasuryUtxos
+                                    (riTreasuryTxIns ri)
+                                    treasuryUtxos
+                        if null selectableTreasuryUtxos
                             then pure (Left ResolverEmptyTreasuryUtxos)
                             else
                                 selectAndAssemble
@@ -683,7 +691,7 @@ resolveDisburseEnv ResolverEnv{..} ri =
                                     usdmPolicy
                                     usdmAsset
                                     walletUtxos
-                                    treasuryUtxos
+                                    selectableTreasuryUtxos
 
     selectAndAssemble nc refs usdmPolicy usdmAsset walletUtxos treasuryUtxos =
         case selectTreasuryForUnit usdmPolicy usdmAsset treasuryUtxos of
@@ -788,6 +796,15 @@ resolveDisburseEnv ResolverEnv{..} ri =
                                 availableLovelace
                                 minUtxoDepositLovelace
 
+filterRequestedTreasuryUtxos
+    :: [TxIn] -> [(TxIn, MaryValue)] -> [(TxIn, MaryValue)]
+filterRequestedTreasuryUtxos requested utxos =
+    case requested of
+        [] -> utxos
+        _ ->
+            let requestedSet = Set.fromList requested
+            in  filter ((`Set.member` requestedSet) . fst) utxos
+
 validateResolverAddresses
     :: ResolverInput -> Either ResolverError ()
 validateResolverAddresses ri = do
@@ -828,6 +845,12 @@ networkText :: Network -> Text
 networkText = \case
     Mainnet -> "mainnet"
     Testnet -> "testnet"
+
+disburseNetworkConstants :: Text -> Either String NetworkConstants
+disburseNetworkConstants network =
+    case T.toLower network of
+        "devnet" -> networkConstants "mainnet"
+        _ -> networkConstants network
 
 resolveConstants
     :: NetworkConstants

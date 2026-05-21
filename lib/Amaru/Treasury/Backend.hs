@@ -27,6 +27,7 @@ module Amaru.Treasury.Backend
     , QueryHandle
     , queryUTxOsAtH
     , queryUTxOByTxInH
+    , queryRewardAccountsH
     , singleShotWithAcquired
     , EvaluateTxResult
     , SlotNo (..)
@@ -42,6 +43,7 @@ import Cardano.Node.Client.Provider
     , Provider (..)
     , QueryHandle
     , SlotNo (..)
+    , queryRewardAccountsH
     , queryUTxOByTxInH
     , queryUTxOsAtH
     , singleShotWithAcquired

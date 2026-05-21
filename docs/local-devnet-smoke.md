@@ -6,7 +6,7 @@ magic `42`, can publish registry/reference-script bootstrap state, can
 register the treasury and permissions reward accounts, proves the
 governance proposal / withdrawal materialization flow, and proves the
 disburse submit flow on a patched short-epoch genesis. The command
-proofs record governance proposal/vote evidence, reward funding,
+proofs record governance proposal/materialization evidence, reward funding,
 withdrawal build/submission, the materialized treasury UTxO, disburse
 submission, beneficiary receipt, and the reduced treasury output. The
 swap readiness phase publishes the public SundaeSwap V3 order
@@ -24,9 +24,10 @@ This check is not part of `just ci`: it starts a real local
 > per-sub-action tags). The library runners under
 > `lib/Amaru/Treasury/Devnet/` remain on disk and are consumed by
 > `Amaru.Treasury.Devnet.SmokeSpec` via `Amaru.Treasury.Devnet.Runner`
-> — that is the **library proof** layer this document describes. The
-> **CLI proof** layer (a bash `smoke.sh` that drives the shipped CLI
-> chain end-to-end) ships in
+> — that is the **library proof** layer. The **CLI proof** layer is
+> `just devnet-cli-smoke --phase full`, a bash `smoke.sh` plus narrow
+> DevNet host that drives the shipped CLI chain end-to-end for
+> registry/stake, governance materialization, and disburse in
 > [#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161).
 > The wizards that produce the per-sub-action `bootstrap-intent.json`
 > ship in
@@ -39,10 +40,8 @@ This check is not part of `just ci`: it starts a real local
 > `--bootstrap` mode and `write-artifacts` command from
 > [#175](https://github.com/lambdasistemi/amaru-treasury-tx/issues/175).
 > The library proof examples below remain as the local SmokeSpec layer;
-> the shipped CLI proof layer in
-> [#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161)
-> should drive the documented wizard → tx-build → witness → submit →
-> write-artifacts sequence.
+> the shipped CLI proof layer drives the documented wizard -> tx-build
+> -> witness -> attach-witness -> submit -> artifact/assertion sequence.
 
 ## Prerequisites
 
@@ -58,6 +57,292 @@ The dev shell provides:
 - `E2E_GENESIS_DIR`, pointing at the pinned
   `cardano-node-clients` DevNet genesis;
 - the Cabal dependencies for `cardano-node-clients:devnet`.
+
+## CLI DevNet Smoke (operator/CLI proof layer, #161)
+
+This is the **CLI proof** layer: a small operator tutorial that uses
+only the shipped `amaru-treasury-tx` CLI to drive registry bootstrap,
+stake/reward initialisation, governance materialization, and disburse
+on a fresh DevNet. It exists to let a human re-run the full bootstrap
+and payout proof on their workstation from a clean checkout, capture a
+transcript, and verify the chain assertions without reaching for the
+in-process library runners under
+`lib/Amaru/Treasury/Devnet/` (those remain the library proof layer,
+exercised by `Amaru.Treasury.Devnet.SmokeSpec`).
+
+### Run the full CLI proof from a clean checkout
+
+```bash
+nix develop --quiet
+just devnet-cli-smoke \
+  --phase full \
+  --timeout-seconds 900 \
+  --run-dir runs/devnet-cli/$(date -u +%Y%m%dT%H%M%SZ)
+```
+
+`--phase full` runs `registry-stake`, `governance`, and `disburse`
+serially on the same fresh DevNet. After the shell phase exits, the
+host checks the registry anchors, governance materialization, and
+disburse chain effects, then rewrites the top-level `summary.json`
+with `verificationStatus: "passed"` and all submitted tx ids.
+
+### Run only the registry-stake prerequisite phase
+
+```bash
+nix develop --quiet
+just devnet-cli-smoke \
+  --phase registry-stake \
+  --run-dir runs/devnet-cli/$(date -u +%Y%m%dT%H%M%SZ)
+```
+
+What this does, every step through the shipped CLI:
+
+1. `devnet-cli-smoke-host` brings up a real `cardano-node` on the
+   pinned DevNet genesis (patched short-epoch, committee single-key,
+   governance deposit knobs).
+2. The host emits deterministic DevNet funding/voter signing-key
+   envelopes under `<run-dir>/keys/` and exports their bech32 address
+   and key-hash hex via env vars.
+3. `scripts/smoke/smoke.sh --inside-devnet` resolves the branch-built
+   executable via `cabal list-bin exe:amaru-treasury-tx -O0`. It must
+   never call a PATH-resolved `amaru-treasury-tx` because that can
+   point at a stale binary (notably
+   `/home/paolino/bin/amaru-treasury-tx` on Paolo's box predates the
+   `registry-init-wizard --bootstrap` flag).
+4. The shell smoke creates an age-encrypted vault from the DevNet
+   funding key, then drives — in order — five bootstrap transactions
+   through the shipped CLI:
+   - `registry-init-wizard seed-split --bootstrap`
+   - `registry-init-wizard mint --bootstrap`
+   - `registry-init-wizard reference-scripts --bootstrap`
+   - `stake-reward-init-wizard script-account`
+   - `stake-reward-init-wizard plain-account`
+
+   Each transaction goes through the unified pipeline
+   `tx-build → witness → attach-witness → submit`. The shared
+   `build_sign_submit` shell function verifies that the pre-submission
+   `txId` reported by `tx-build` matches the post-submission `txId`
+   returned by `submit`.
+5. `registry-init-wizard write-artifacts` materialises the registry
+   handoff to `<run-dir>/registry-init/registry.json`. The smoke then
+   derives `<run-dir>/stake-reward-init/accounts.json` from that
+   registry plus the two submitted stake-reward tx ids.
+6. After the shell smoke exits successfully, the host re-acquires the
+   live DevNet via the Amaru-owned N2C surface
+   (`withLocalNodeBackend` + `Backend.singleShotWithAcquired`) and
+   verifies the four registry anchors are still unspent on chain, and
+   queries the two reward-account balances. The anchor check is the
+   hard gate; the reward-account observation is recorded as a
+   diagnostic alongside the authoritative
+   `stake-reward-script-account` / `stake-reward-plain-account` tx
+   ids captured in `<run-dir>/phases/registry-stake/summary.json`.
+
+### Run the governance materialization smoke from a clean checkout
+
+```bash
+nix develop --quiet
+just devnet-cli-smoke \
+  --phase governance \
+  --run-dir runs/devnet-cli/$(date -u +%Y%m%dT%H%M%SZ)
+```
+
+`--phase governance` currently starts from a fresh run directory,
+runs the full `registry-stake` prerequisite pipeline above, then uses
+only shipped CLI commands to prepare, submit, and materialize the
+governance withdrawal:
+
+1. `governance-withdrawal-init-wizard proposal`
+2. `tx-build`
+3. `witness` for `devnet_funding`
+4. `witness` for `devnet_voter`
+5. `attach-witness`
+6. `submit`
+7. `governance-withdrawal-init-wizard materialization`
+8. `tx-build`
+9. `witness` for `devnet_funding`
+10. `attach-witness`
+11. `submit`
+
+The proposal uses the fixed DevNet anchor
+`https://example.invalid/amaru-devnet-governance.json` with content
+hash
+`000000000000000000000000000000000000000000000000000000000000002a`.
+The funding stake key hash is the deterministic funding key hash; the
+voter/DRep key hash is the deterministic voter key hash, matching the
+legacy DevNet proof.
+
+There is still no shipped CLI vote action. On the patched DevNet used
+by this smoke, the genesis thresholds allow the proposal reward to
+accrue without that vote surface; the shell then drives the shipped
+materialization subcommand. The expected result is exit `0` with host
+verification that the materialized treasury UTxO exists on chain, has
+the expected address and lovelace amount, and that the treasury reward
+account drained to zero. Exit `78` is retained only for a no-reward
+DevNet, where the host records `missing-shipped-governance-vote`.
+
+Evidence files for the governance run are:
+
+```text
+<run-dir>/phases/governance/summary.json
+<run-dir>/governance-withdrawal-init/materialized.json
+<run-dir>/chain/governance.assertions.request.json
+<run-dir>/chain/governance.assertions.json
+<run-dir>/chain/governance.assertions.log
+```
+
+The governance phase also re-runs the registry-stake chain assertion
+handoff, so `<run-dir>/chain/assertions.json` and
+`<run-dir>/chain/assertions.log` remain the prerequisite anchor
+evidence for that same fresh DevNet.
+
+### Record a transcript
+
+The slice ships `scripts/smoke/record-cli-devnet-smoke` as a small
+wrapper that prefers `asciinema` and falls back to `script(1)` when
+asciinema is not installed. Run it before the smoke command to
+capture a real local artifact:
+
+```bash
+nix develop --quiet
+scripts/smoke/record-cli-devnet-smoke runs/devnet-cli-tutorial
+```
+
+The wrapper:
+
+- prints which recorder it chose (`asciinema rec` or `script -c`);
+- writes the cast/transcript next to the run-dir, e.g.
+  `runs/devnet-cli-tutorial.cast` or `runs/devnet-cli-tutorial.script`;
+- exits with the smoke's exit code so failures propagate.
+
+Do not commit fabricated casts. If no recorder is available, the
+wrapper exits non-zero with a precise diagnostic naming the missing
+tools so the operator can install one.
+
+### Expected artifacts
+
+Inside the run-dir after a successful `--phase registry-stake`:
+
+```text
+runs/devnet-cli/.../
+|-- chain/
+|   |-- assertions.json
+|   |-- assertions.log
+|   `-- assertions.request.json
+|-- diagnostics/
+|   |-- {seed-split,mint,reference-scripts}.{build.log,report.json}
+|   `-- stake-reward-{script,plain}-account.{build.log,report.json}
+|-- intents/                         # (not currently emitted -- intents
+|                                    # live under phases/registry-stake)
+|-- keys/{funding,voter}.skey
+|-- phases/registry-stake/
+|   |-- diagnostics/*.intent.log
+|   |-- funding.passphrase
+|   |-- funding.vault.age
+|   |-- intents/{seed-split,mint,reference-scripts,
+|   |             stake-reward-script-account,
+|   |             stake-reward-plain-account}.intent.json
+|   `-- summary.json
+|-- registry-init/{registry,summary,provenance}.json
+|-- signed/                          # signed CBOR hex per tx
+|-- stake-reward-init/accounts.json
+|-- submits/                         # tx ids + outcome lines per tx
+|-- unsigned/                        # unsigned CBOR hex per tx
+|-- witnesses/                       # per-tx detached witness hex
+`-- genesis/                         # smoke-local genesis copy
+```
+
+After `--phase governance` reaches the expected patched-DevNet exit
+`0`, the same run-dir also contains the materialization artifacts and
+the host's final on-chain verification summary:
+
+```text
+runs/devnet-cli/.../
+|-- chain/
+|   |-- governance.assertions.json
+|   |-- governance.assertions.log
+|   `-- governance.assertions.request.json
+|-- diagnostics/
+|   |-- governance-materialization.{build.log,report.json}
+|   `-- governance-proposal.{build.log,report.json}
+|-- governance-withdrawal-init/
+|   |-- materialized.json
+|   `-- summary.json
+|-- phases/governance/
+|   |-- diagnostics/materialization.intent.log
+|   |-- diagnostics/proposal.intent.log
+|   |-- funding.vault.age
+|   |-- governance.passphrase
+|   |-- intents/materialization.intent.json
+|   |-- intents/proposal.intent.json
+|   |-- summary.json
+|   `-- voter.vault.age
+|-- signed/governance-materialization.signed.cbor.hex
+|-- signed/governance-proposal.signed.cbor.hex
+|-- submits/governance-materialization.{outcome,txid}
+|-- submits/governance-proposal.{outcome,txid}
+|-- unsigned/governance-materialization.cbor.hex
+|-- unsigned/governance-proposal.cbor.hex
+|-- witnesses/governance-materialization.devnet_funding.witness.hex
+`-- witnesses/governance-proposal.{devnet_funding,devnet_voter}.witness.hex
+```
+
+If the patched DevNet does not accrue the governance reward, the same
+host assertion path exits `78` and records
+`missing-shipped-governance-vote` instead of the materialization
+success code.
+
+After `--phase disburse` or `--phase full`, the run-dir also contains
+the shipped disburse proof and the host's disburse chain assertions:
+
+```text
+runs/devnet-cli/.../
+|-- chain/
+|   |-- disburse.assertions.json
+|   |-- disburse.assertions.log
+|   `-- disburse.assertions.request.json
+|-- diagnostics/disburse-submit.{build.log,report.json}
+|-- disburse-submit/
+|   |-- beneficiary.json
+|   |-- disburse.json
+|   |-- provenance.json
+|   |-- summary.json
+|   `-- treasury.json
+|-- phases/disburse/
+|   |-- diagnostics/disburse.intent.log
+|   |-- funding.passphrase
+|   |-- funding.vault.age
+|   |-- intents/disburse.intent.json
+|   `-- summary.json
+|-- signed/disburse-submit.signed.cbor.hex
+|-- submits/disburse-submit.{outcome,txid}
+|-- unsigned/disburse-submit.cbor.hex
+`-- witnesses/disburse-submit.devnet_funding.witness.hex
+```
+
+On a full run, top-level `summary.json` links the registry, governance,
+and disburse phase summaries, both host assertion reports, the run
+directory, the node socket path, and every tx id. A successful full run
+must end with `verificationStatus: "passed"`.
+
+### Hard contract
+
+- No external `cardano-cli` anywhere on the smoke path.
+- No in-process DevNet runners (`runDevnet*`,
+  `Amaru.Treasury.Devnet.Runner`, `RegistryInit`, `StakeRewardInit`,
+  …) reachable from the host or the shell script.
+- The host may start DevNet, patch genesis, emit deterministic key
+  fixtures, and perform chain queries via the Amaru-owned
+  `Backend.QueryHandle`; it does not build/sign/submit transactions.
+
+### Scope of this proof
+
+`--phase registry-stake` proves the registry and stake/reward
+prerequisites. `--phase governance` adds proposal submission, reward
+observation, materialization submission, and host-backed
+materialization verification. `--phase disburse` spends the
+materialized treasury UTxO through `disburse-wizard` and proves
+beneficiary receipt plus treasury reduction. `--phase full` runs the
+whole sequence and writes the final linked summary.
 
 ## Node Boundary
 
@@ -105,9 +390,9 @@ from `seed-split`, the owner key hash, and the funding seed UTxO). The
 resumable client state that will supersede this manual carry is parked in
 [#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163).
 The bash smoke that drives the full chain through the shipped CLI on
-a real DevNet lands in
-[#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161);
-until #161 merges, the local smoke below keeps driving the library
+a real DevNet is `just devnet-cli-smoke --phase full` from
+[#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161).
+The local smoke below remains the library proof and drives the library
 function directly via `SmokeSpec`, which calls into
 `Amaru.Treasury.Devnet.Runner.runDevnetRegistryInit`:
 
@@ -248,9 +533,9 @@ resumable client state that will supersede this manual carry is
 parked in
 [#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163).
 The bash smoke that drives the full chain through the shipped CLI on
-a real DevNet lands in
-[#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161);
-until #161 merges, the local smoke below keeps driving the library
+a real DevNet is `just devnet-cli-smoke --phase full` from
+[#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161).
+The local smoke below remains the library proof and drives the library
 function directly via `SmokeSpec`, which calls into
 `Amaru.Treasury.Devnet.Runner.runDevnetStakeRewardInit`.
 
@@ -384,10 +669,12 @@ enactment must precede materialization. The resumable client state that
 will supersede this manual carry is parked in
 [#163](https://github.com/lambdasistemi/amaru-treasury-tx/issues/163).
 The bash smoke that drives this shipped CLI path end to end on a real
-DevNet lands in
+DevNet is `just devnet-cli-smoke --phase governance` or the complete
+`just devnet-cli-smoke --phase full` proof from
 [#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161).
 
-The local smoke keeps driving the library function directly via
+The local smoke remains the library proof and keeps driving the
+library function directly via
 `SmokeSpec`, which calls into
 `Amaru.Treasury.Devnet.Runner.runDevnetGovernanceWithdrawalInit`.
 
@@ -482,14 +769,16 @@ smoke-owned withdrawal implementation.
 ## Disburse Submit Boundary
 
 After #157 the shipped operator path for disburse is the existing
-`amaru-treasury-tx disburse-wizard` → `tx-build --intent` →
-`witness` → `submit` chain (unchanged by #157; disburse already had
-its intent encoding). The local smoke keeps driving the library
-function directly via `SmokeSpec`, which calls into
-`Amaru.Treasury.Devnet.Runner.runDevnetDisburseSubmit`. The bash
-CLI smoke that chains the full bootstrap + disburse flow against a
-real DevNet through the shipped CLI lands in
-[#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161).
+`amaru-treasury-tx disburse-wizard` -> `tx-build --intent` ->
+`witness` -> `attach-witness` -> `submit` chain (unchanged by #157;
+disburse already had its intent encoding). The CLI smoke from
+[#161](https://github.com/lambdasistemi/amaru-treasury-tx/issues/161)
+drives that path after governance materialization with
+`just devnet-cli-smoke --phase disburse` or the complete
+`just devnet-cli-smoke --phase full` proof. The local smoke remains
+the library proof and keeps driving the library function directly via
+`SmokeSpec`, which calls into
+`Amaru.Treasury.Devnet.Runner.runDevnetDisburseSubmit`.
 
 The live proof harness runs the prerequisite library entries and
 then invokes the same production runner:

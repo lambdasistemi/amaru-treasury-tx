@@ -28,6 +28,7 @@ extra-source-files:
   docs/assets/tx-report-schema.json
   scripts/smoke/cardano-cli-envelope-oracle
   scripts/smoke/devnet-local
+  scripts/smoke/smoke.sh
   scripts/smoke/swap-quote-docs
   scripts/smoke/swap-quote-override
   scripts/smoke/swap-wizard-signers
@@ -342,6 +343,37 @@ executable horizon-probe
 
   ghc-options:      -threaded -rtsopts -with-rtsopts=-N
 
+executable devnet-cli-smoke-host
+  import:           warnings
+  hs-source-dirs:   app/devnet-cli-smoke-host
+  main-is:          Main.hs
+  default-language: GHC2021
+  build-depends:
+    , aeson
+    , amaru-treasury-tx
+    , base                         <5
+    , base16-bytestring
+    , bech32
+    , bytestring
+    , cardano-crypto-class
+    , cardano-ledger-api
+    , cardano-ledger-conway
+    , cardano-ledger-core
+    , cardano-ledger-mary
+    , cardano-node-clients
+    , cardano-node-clients:devnet
+    , containers
+    , directory
+    , filepath
+    , microlens
+    , ouroboros-network:api
+    , process
+    , text
+    , time
+    , unix
+
+  ghc-options:      -threaded -rtsopts -with-rtsopts=-N
+
 executable amaru-treasury-inspect-schema
   import:           warnings
   hs-source-dirs:   app/amaru-treasury-inspect-schema
@@ -381,6 +413,7 @@ test-suite unit-tests
   autogen-modules:    Paths_amaru_treasury_tx
   other-modules:
     Amaru.Treasury.AuxDataSpec
+    Amaru.Treasury.Build.GovernanceWithdrawalInitSpec
     Amaru.Treasury.Build.NetworkGuardSpec
     Amaru.Treasury.BuildSpec
     Amaru.Treasury.Cli.EnvelopeSpec
@@ -390,6 +423,7 @@ test-suite unit-tests
     Amaru.Treasury.Cli.RegistryInitWizardParserSpec
     Amaru.Treasury.Cli.StakeRewardInitWizardParserSpec
     Amaru.Treasury.Cli.SwapCancelSpec
+    Amaru.Treasury.Cli.TxBuildRequiredUtxosSpec
     Amaru.Treasury.Cli.VaultSpec
     Amaru.Treasury.Cli.WitnessSpec
     Amaru.Treasury.ConstantsSpec
@@ -415,6 +449,7 @@ test-suite unit-tests
     Amaru.Treasury.ReportSchemaSpec
     Amaru.Treasury.ReportSpec
     Amaru.Treasury.ScopeSpec
+    Amaru.Treasury.Smoke.CliDevnetSmokeSpec
     Amaru.Treasury.SummarySpec
     Amaru.Treasury.Tx.AttachWitnessSpec
     Amaru.Treasury.Tx.DisburseBuildSpec

@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Record a real local transcript of the CLI DevNet smoke (#161).
+#
+# Prefers asciinema rec when available, falls back to script(1).
+# Fails loudly with a precise diagnostic if neither is installed —
+# never fabricates a cast.
+#
+# Usage:
+#   scripts/smoke/record-cli-devnet-smoke <run-dir-prefix> [extra smoke flags...]
+#
+# The run-dir-prefix is passed to the smoke as --run-dir; the cast or
+# script transcript is written next to it as <run-dir-prefix>.cast or
+# <run-dir-prefix>.script. Defaults the smoke phase to registry-stake.
+
+set -euo pipefail
+
+PROG=record-cli-devnet-smoke
+
+die() {
+    printf '%s: %s\n' "$PROG" "$*" >&2
+    exit 1
+}
+
+if [[ $# -lt 1 ]]; then
+    die "missing <run-dir-prefix> argument (try README or docs/local-devnet-smoke.md)"
+fi
+
+run_dir=$1
+shift
+extra_args=("$@")
+
+# Default to registry-stake unless caller already passed --phase.
+phase_set=0
+for arg in "${extra_args[@]}"; do
+    case "$arg" in
+        --phase | --phase=*)
+            phase_set=1
+            break
+            ;;
+    esac
+done
+if [[ "$phase_set" -eq 0 ]]; then
+    extra_args+=(--phase registry-stake)
+fi
+
+smoke_cmd=(just devnet-cli-smoke --run-dir "$run_dir" "${extra_args[@]}")
+
+if command -v asciinema >/dev/null 2>&1; then
+    cast_path="${run_dir}.cast"
+    printf '%s: recorder=asciinema cast=%s\n' "$PROG" "$cast_path" >&2
+    asciinema rec \
+        --overwrite \
+        --idle-time-limit 5 \
+        --title "amaru-treasury-tx CLI DevNet smoke (registry-stake)" \
+        --command "${smoke_cmd[*]}" \
+        "$cast_path"
+elif command -v script >/dev/null 2>&1; then
+    script_path="${run_dir}.script"
+    printf '%s: recorder=script(1) transcript=%s\n' \
+        "$PROG" "$script_path" >&2
+    # script(1) returns the child exit code via -e on util-linux.
+    script -e -q -c "${smoke_cmd[*]}" "$script_path"
+else
+    die "neither asciinema nor script(1) is installed; install one before recording"
+fi

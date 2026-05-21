@@ -29,7 +29,10 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
 
-import Cardano.Ledger.Address (Withdrawals (..))
+import Cardano.Ledger.Address
+    ( AccountAddress
+    , Withdrawals (..)
+    )
 import Cardano.Ledger.Alonzo.PParams (ppCollateralPercentageL)
 import Cardano.Ledger.Api.Tx (estimateMinFeeTx, txIdTx)
 import Cardano.Ledger.Api.Tx.Body
@@ -56,7 +59,7 @@ import Cardano.Tx.Build (mkPParamsBound)
 import Cardano.Tx.Ledger (ConwayTx)
 import Cardano.Tx.Validate
     ( isWitnessCompletenessFailure
-    , validatePhase1
+    , validatePhase1WithRewardAccounts
     )
 import Lens.Micro ((&), (.~), (^.))
 
@@ -111,45 +114,43 @@ failures are signing-step noise, so this helper accepts a tx when every
 ledger failure is witness-completeness noise and rejects only remaining
 structural failures.
 
-The current tx-tools validator seeds UTxO and protocol parameters, but
-not reward-account state. Transactions with a @withdrawals@ field would
-therefore get false @WithdrawalsNotInRewardsCERTS@ failures; skip those
-until the upstream validation context grows reward-state support.
+Reward-bearing transactions seed the withdrawn reward accounts into the
+tx-tools validation context so they take the same Phase-1 path as every
+other final transaction.
 -}
 validateFinalPhase1 :: ChainContext -> ConwayTx -> Either Text ()
-validateFinalPhase1 ctx tx
-    | hasWithdrawals tx = Right ()
-    | otherwise =
-        case validatePhase1
-            (ccNetwork ctx)
-            (mkPParamsBound (ccPParams ctx))
-            (Map.toList (ccUtxos ctx))
-            (ccTipSlot ctx)
-            tx of
-            Right () -> Right ()
-            Left err ->
-                let structural =
-                        filter
-                            (not . isWitnessCompletenessFailure)
-                            (phase1Failures err)
-                in  if null structural
-                        then Right ()
-                        else
-                            Left $
-                                "Phase-1 validation rejected final transaction at sampled slot "
-                                    <> renderSlot (ccTipSlot ctx)
-                                    <> ": "
-                                    <> T.pack (show structural)
+validateFinalPhase1 ctx tx =
+    case validatePhase1WithRewardAccounts
+        (ccNetwork ctx)
+        (mkPParamsBound (ccPParams ctx))
+        (Map.toList (ccUtxos ctx))
+        (withdrawalRewardAccounts tx)
+        (ccTipSlot ctx)
+        tx of
+        Right () -> Right ()
+        Left err ->
+            let structural =
+                    filter
+                        (not . isWitnessCompletenessFailure)
+                        (phase1Failures err)
+            in  if null structural
+                    then Right ()
+                    else
+                        Left $
+                            "Phase-1 validation rejected final transaction at sampled slot "
+                                <> renderSlot (ccTipSlot ctx)
+                                <> ": "
+                                <> T.pack (show structural)
 
 phase1Failures
     :: ApplyTxError ConwayEra
     -> [ConwayLedgerPredFailure ConwayEra]
 phase1Failures (ConwayApplyTxError errs) = toList errs
 
-hasWithdrawals :: ConwayTx -> Bool
-hasWithdrawals tx =
+withdrawalRewardAccounts :: ConwayTx -> Map.Map AccountAddress Coin
+withdrawalRewardAccounts tx =
     let Withdrawals withdrawals = tx ^. bodyTxL . withdrawalsTxBodyL
-    in  not (Map.null withdrawals)
+    in  withdrawals
 
 renderSlot :: SlotNo -> Text
 renderSlot (SlotNo slot) = T.pack (show slot)

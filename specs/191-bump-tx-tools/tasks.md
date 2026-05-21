@@ -278,10 +278,10 @@ Forbidden scope:
 
 Tasks:
 
-- [ ] T017 [US1] RED: add `test/unit/Amaru/Treasury/Build/CommonSpec.hs` and `amaru-treasury-tx.cabal` test-suite wiring for a withdrawal-bearing final transaction regression that fails while `validateFinalPhase1` returns success solely because withdrawals are present.
-- [ ] T018 [US1] RED: in `test/unit/Amaru/Treasury/Build/CommonSpec.hs`, assert the unchanged contract that missing vkey witness failures remain accepted as signing-step noise and non-witness structural ledger failures are rejected.
-- [ ] T019 [US1] GREEN: remove the `hasWithdrawals` guard, replace the obsolete reward-state workaround with reward-account seeding through bumped tx-tools as needed, and remove now-unused withdrawal imports/helper from `lib/Amaru/Treasury/Build/Common.hs`.
-- [ ] T020 [US1] Run the focused `CommonSpec` command plus `./gate.sh`, record RED and GREEN evidence in `WIP.md`, and create the single slice commit.
+- [X] T017 [US1] RED: add `test/unit/Amaru/Treasury/Build/CommonSpec.hs` and `amaru-treasury-tx.cabal` test-suite wiring for a withdrawal-bearing final transaction regression that fails while `validateFinalPhase1` returns success solely because withdrawals are present.
+- [X] T018 [US1] RED: in `test/unit/Amaru/Treasury/Build/CommonSpec.hs`, assert the unchanged contract that missing vkey witness failures remain accepted as signing-step noise and non-witness structural ledger failures are rejected.
+- [X] T019 [US1] GREEN: remove the `hasWithdrawals` guard, replace the obsolete reward-state workaround with reward-account seeding through bumped tx-tools as needed, and remove now-unused withdrawal imports/helper from `lib/Amaru/Treasury/Build/Common.hs`.
+- [X] T020 [US1] Run the focused `CommonSpec` command plus `./gate.sh`, record RED and GREEN evidence in `WIP.md`, and create the single slice commit.
 
 Checkpoint: withdrawal-bearing transactions reach the final Phase-1
 path, witness-completeness noise is still filtered, non-witness

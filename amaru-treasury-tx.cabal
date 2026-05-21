@@ -413,6 +413,7 @@ test-suite unit-tests
   autogen-modules:    Paths_amaru_treasury_tx
   other-modules:
     Amaru.Treasury.AuxDataSpec
+    Amaru.Treasury.Build.CommonSpec
     Amaru.Treasury.Build.GovernanceWithdrawalInitSpec
     Amaru.Treasury.Build.NetworkGuardSpec
     Amaru.Treasury.Build.WithdrawSpec

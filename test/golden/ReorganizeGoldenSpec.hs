@@ -8,9 +8,9 @@ Description : Offline golden harness for reorganize materialization
 License     : Apache-2.0
 
 Loads the synthetic frozen reorganize fixture under
-@test/fixtures/reorganize-core/synthetic/@ and calls the
-direct 'runReorganizeBuild' runner. Dispatcher wiring remains
-out of scope for this slice.
+@test/fixtures/reorganize-core/synthetic/@, decodes the unified
+@intent.json@, and builds a transaction via 'runFromIntent'
+against the resulting frozen 'ChainContext'.
 
 Set @UPDATE_GOLDENS=1@ to regenerate @expected.cbor@ from the
 checked-in fixture. Without that flag, missing or changed bytes
@@ -69,17 +69,17 @@ import Amaru.Treasury.AuxData
     ( RationaleBody (..)
     , rationaleMetadatum
     )
+import Amaru.Treasury.Build
+    ( BuildResult (..)
+    , ScriptResult (..)
+    , runFromIntent
+    )
 import Amaru.Treasury.Build.Error
     ( ActionBuildError (..)
     , BuildDiagnostic (..)
     )
 import Amaru.Treasury.Build.Reorganize
     ( runReorganizeAction
-    , runReorganizeBuild
-    )
-import Amaru.Treasury.Build.Result
-    ( BuildResult (..)
-    , ScriptResult (..)
     )
 import Amaru.Treasury.ChainContext
     ( ChainContext (..)
@@ -116,6 +116,7 @@ overflowDir = "test/fixtures/reorganize-core/synthetic-overflow"
 data ReorganizeCase = ReorganizeCase
     { rcContext :: !ChainContext
     , rcIntent :: !ReorganizeIntent
+    , rcSomeIntent :: !SomeTreasuryIntent
     , rcRationale :: !Metadatum
     , rcWalletAddress :: !Addr
     }
@@ -132,11 +133,9 @@ spec =
                 expectationFailure
                     "missing expected.cbor; run UPDATE_GOLDENS=1 just golden reorganize"
             result <-
-                runReorganizeBuild
+                runFromIntent
                     rcContext
-                    rcIntent
-                    rcRationale
-                    rcWalletAddress
+                    rcSomeIntent
             assertReorganizeShape rcContext rcIntent result
             let actualHex =
                     B16.encode
@@ -213,6 +212,7 @@ loadReorganizeCase dir = do
                     , rcIntent =
                         reorganizeIntentFromInputs
                             (tiPayload ti)
+                    , rcSomeIntent = some
                     , rcRationale = rationale
                     , rcWalletAddress = walletAddress
                     }

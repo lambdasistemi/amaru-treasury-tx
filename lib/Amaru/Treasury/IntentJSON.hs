@@ -181,7 +181,7 @@ import Amaru.Treasury.Tx.Disburse
     , DisburseIntentFields (..)
     , DisburseUsdmPayload (..)
     )
-import Amaru.Treasury.Tx.Reorganize (ReorganizeIntent)
+import Amaru.Treasury.Tx.Reorganize (ReorganizeIntent (..))
 import Amaru.Treasury.Tx.Swap
     ( SwapIntent (..)
     , SwapOrderDatumParams (..)
@@ -1644,9 +1644,7 @@ translateIntent sa ti = case sa of
     SSwap -> translateSwap ti
     SDisburse -> translateDisburse ti
     SWithdraw -> translateWithdraw ti
-    SReorganize ->
-        Left
-            "translateIntent: 'reorganize' not yet shipped (#46)"
+    SReorganize -> translateReorganize ti
     SRegistryInitSeedSplit -> translateRegistryInitSeedSplit ti
     SRegistryInitMint -> translateRegistryInitMint ti
     SRegistryInitReferenceScripts ->
@@ -1979,6 +1977,68 @@ translateWithdraw ti = do
                     rationaleMetadatum body registryPolicy
                 }
     pure (shared, intent)
+
+{- | Reorganize-action translator. The payload is already
+ledger-shaped, so translation mainly preserves the shared rationale
+metadata and rejects degenerate duplicate treasury inputs.
+-}
+translateReorganize
+    :: TreasuryIntent 'Reorganize
+    -> Either String (TranslatedShared, ReorganizeIntent)
+translateReorganize ti = do
+    let wallet = tiWallet ti
+        scope = tiScope ti
+        inputs = tiPayload ti
+        rat = tiRationale ti
+    walletAddr <- parseAddr (wjAddress wallet)
+    walletTxIn <- parseTxIn (wjTxIn wallet)
+    registryPolicy <-
+        decodeHexBytes 28 (sjRegistryPolicyId scope)
+    treasuryUtxos <-
+        uniqueReorganizeTreasuryUtxos
+            (riTreasuryUtxos inputs)
+    let body =
+            RationaleBody
+                { rbEvent = rjEvent rat
+                , rbLabel = rjLabel rat
+                , rbDescription = [rjDescription rat]
+                , rbDestinationLabel = rjDestinationLabel rat
+                , rbJustification = [rjJustification rat]
+                }
+        shared =
+            TranslatedShared
+                { tsNetwork = tiNetwork ti
+                , tsWalletTxIn = walletTxIn
+                , tsWalletAddr = walletAddr
+                , tsRationale =
+                    rationaleMetadatum body registryPolicy
+                }
+        intent =
+            ReorganizeIntent
+                { rgiWalletUtxo = riWalletUtxo inputs
+                , rgiTreasuryUtxos = treasuryUtxos
+                , rgiTreasuryAddress = riTreasuryAddress inputs
+                , rgiTreasuryDeployedAt =
+                    riTreasuryDeployedAt inputs
+                , rgiRegistryDeployedAt =
+                    riRegistryDeployedAt inputs
+                , rgiPermissionsRewardAccount =
+                    riPermissionsRewardAccount inputs
+                , rgiPermissionsDeployedAt =
+                    riPermissionsDeployedAt inputs
+                , rgiScopeOwnerSigner =
+                    riScopeOwnerSigner inputs
+                , rgiUpperBound = riUpperBound inputs
+                }
+    pure (shared, intent)
+
+uniqueReorganizeTreasuryUtxos
+    :: NonEmpty TxIn -> Either String (NonEmpty TxIn)
+uniqueReorganizeTreasuryUtxos utxos =
+    let deduped = NE.nub utxos
+    in  if length deduped == length utxos
+            then Right deduped
+            else Left "ReorganizeInputs.treasuryUtxos: duplicates"
 
 -- ----------------------------------------------------
 -- Registry-init translators (slice 3a / #157)

@@ -129,14 +129,14 @@ only if the multi-scope/address-parity check cannot live in translation,
 
 ### Tests for S3
 
-- [ ] T012 [US2] Convert `test/golden/ReorganizeGoldenSpec.hs` from direct `runReorganizeBuild` to `runFromIntent`, add RED dispatch coverage in `test/unit/Amaru/Treasury/Build/ReorganizeDispatchSpec.hs`, and record the `DiagnosticUnsupportedAction "reorganize"` RED failure.
+- [X] T012 [US2] Convert `test/golden/ReorganizeGoldenSpec.hs` from direct `runReorganizeBuild` to `runFromIntent`, add RED dispatch coverage in `test/unit/Amaru/Treasury/Build/ReorganizeDispatchSpec.hs`, and record the `DiagnosticUnsupportedAction "reorganize"` RED failure.
 
 ### Implementation for S3
 
-- [ ] T013 [US2] Implement `translateIntent SReorganize` and `translateReorganize` in `lib/Amaru/Treasury/IntentJSON.hs`, preserving shared rationale handling, rejecting duplicate `treasuryUtxos`, and applying the multi-scope/address-parity check at translate time; if translation cannot inspect the required `ChainContext` data, implement that parity check in `lib/Amaru/Treasury/Build/Reorganize.hs` instead.
-- [ ] T014 [US2] Wire the `SReorganize` arm in `lib/Amaru/Treasury/Build.hs` to `runReorganizeAction` through `nestActionBuildError BuildActionReorganize`, and export `runReorganizeBuild` from the dispatcher module.
-- [ ] T015 [US2] Update `amaru-treasury-tx.cabal` for `test/unit/Amaru/Treasury/Build/ReorganizeDispatchSpec.hs` and any dispatcher import/module changes required by `lib/Amaru/Treasury/Build.hs`.
-- [ ] T016 [US2] Verify S3 with `nix develop --quiet -c just unit`, `nix develop --quiet -c just golden`, `nix develop --quiet -c just ci`, `./gate.sh`, and an `rg` check that no `DiagnosticUnsupportedAction "reorganize"` rejection remains in `lib/`, recording evidence in `WIP.md`.
+- [X] T013 [US2] Implement `translateIntent SReorganize` and `translateReorganize` in `lib/Amaru/Treasury/IntentJSON.hs`, preserving shared rationale handling, rejecting duplicate `treasuryUtxos`, and applying the multi-scope/address-parity check at translate time; if translation cannot inspect the required `ChainContext` data, implement that parity check in `lib/Amaru/Treasury/Build/Reorganize.hs` instead.
+- [X] T014 [US2] Wire the `SReorganize` arm in `lib/Amaru/Treasury/Build.hs` to `runReorganizeAction` through `nestActionBuildError BuildActionReorganize`, and export `runReorganizeBuild` from the dispatcher module.
+- [X] T015 [US2] Update `amaru-treasury-tx.cabal` for `test/unit/Amaru/Treasury/Build/ReorganizeDispatchSpec.hs` and any dispatcher import/module changes required by `lib/Amaru/Treasury/Build.hs`.
+- [X] T016 [US2] Verify S3 with `nix develop --quiet -c just unit`, `nix develop --quiet -c just golden`, `nix develop --quiet -c just ci`, `./gate.sh`, and an `rg` check that no `DiagnosticUnsupportedAction "reorganize"` rejection remains in `lib/`, recording evidence in `WIP.md`.
 
 **Checkpoint**: S3 is complete when the library consumes a
 `SomeTreasuryIntent SReorganize` end to end, produces the same golden

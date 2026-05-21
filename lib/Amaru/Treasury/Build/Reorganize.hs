@@ -25,7 +25,7 @@ import Cardano.Ledger.Api.Tx.Body
     , feeTxBodyL
     , totalCollateralTxBodyL
     )
-import Cardano.Ledger.Api.Tx.Out (TxOut, valueTxOutL)
+import Cardano.Ledger.Api.Tx.Out (TxOut, addrTxOutL, valueTxOutL)
 import Cardano.Ledger.BaseTypes (StrictMaybe (..))
 import Cardano.Ledger.Binary (serialize)
 import Cardano.Ledger.Coin (Coin (..))
@@ -118,6 +118,17 @@ runReorganizeAction ctx intent rationale walletAddr = do
             [ (i, utxoMap Map.! i)
             | i <- treasuryInputs
             ]
+    unless
+        (allTreasuryInputsAtAddress intent treasuryInputUtxos)
+        ( throwE $
+            actionBuildError
+                BuildPhaseGatherInputs
+                ( DiagnosticChecksFailed $
+                    T.pack
+                        "reorganize treasuryUtxos must all live at treasuryAddress"
+                )
+        )
+    let
         inputUtxos = walletInputUtxos ++ treasuryInputUtxos
         refUtxos =
             [ (i, utxoMap Map.! i)
@@ -226,3 +237,8 @@ preservedTreasuryValue
     -> MaryValue
 preservedTreasuryValue =
     foldMap ((^. valueTxOutL) . snd)
+
+allTreasuryInputsAtAddress
+    :: ReorganizeIntent -> [(a, TxOut ConwayEra)] -> Bool
+allTreasuryInputsAtAddress intent =
+    all ((== rgiTreasuryAddress intent) . (^. addrTxOutL) . snd)

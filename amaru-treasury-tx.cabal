@@ -417,6 +417,7 @@ test-suite unit-tests
     Amaru.Treasury.Build.CommonSpec
     Amaru.Treasury.Build.GovernanceWithdrawalInitSpec
     Amaru.Treasury.Build.NetworkGuardSpec
+    Amaru.Treasury.Build.ReorganizeDispatchSpec
     Amaru.Treasury.Build.WithdrawSpec
     Amaru.Treasury.BuildSpec
     Amaru.Treasury.Cli.EnvelopeSpec

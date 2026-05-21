@@ -35,6 +35,7 @@ module Amaru.Treasury.Build
     , runFromIntent
     , runFromIntentEither
     , runDisburse
+    , runReorganizeBuild
     , runSwap
     , runSwapCancel
     , runWithdraw
@@ -69,6 +70,10 @@ import Amaru.Treasury.Build.RegistryInit
     ( runRegistryInitMintAction
     , runRegistryInitReferenceScriptsAction
     , runRegistryInitSeedSplitAction
+    )
+import Amaru.Treasury.Build.Reorganize
+    ( runReorganizeAction
+    , runReorganizeBuild
     )
 import Amaru.Treasury.Build.Result
 import Amaru.Treasury.Build.StakeRewardInit
@@ -148,11 +153,14 @@ runBuildExcept ctx shared sa translated = case sa of
                 (tsWalletAddr shared)
             )
     SReorganize ->
-        throwE $
-            buildError
-                BuildActionReorganize
-                BuildPhaseUnsupported
-                (DiagnosticUnsupportedAction "reorganize")
+        withExceptT
+            (nestActionBuildError BuildActionReorganize)
+            ( runReorganizeAction
+                ctx
+                translated
+                (tsRationale shared)
+                (tsWalletAddr shared)
+            )
     SRegistryInitSeedSplit -> do
         requireDevnet (tsNetwork shared)
         withExceptT

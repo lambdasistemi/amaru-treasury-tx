@@ -60,7 +60,8 @@ import Amaru.Treasury.ChainContext
     )
 import Amaru.Treasury.Cli.Common (withLogHandle)
 import Amaru.Treasury.IntentJSON
-    ( RegistryInitMintInputs (..)
+    ( GovernanceWithdrawalInitMaterializationInputs (..)
+    , RegistryInitMintInputs (..)
     , SAction (..)
     , ScopeJSON (..)
     , SomeTreasuryIntent (..)
@@ -422,10 +423,15 @@ spends exactly one wallet input. Including extras here would query
 for UTxOs the build runner never consumes, with the same false-miss
 hazard as the placeholder refs.
 
-Non-init actions (swap, disburse, withdraw, reorganize, both
-governance-withdrawal-init sub-actions) retain the legacy generic
-set in this slice: wallet + @wjExtraTxIns@ + treasury UTxOs + the
-four scope reference TxIns ('sjScopesDeployedAt',
+@governance-withdrawal-init-materialization@ is also explicit: its
+wizard intentionally writes placeholder scope refs while the build
+runner requires @wjTxIn@ plus the payload's treasury and registry
+reference TxIns.
+
+Other non-init actions (swap, disburse, withdraw, reorganize, and the
+governance-withdrawal-init proposal action) retain the legacy generic
+set in this slice: wallet + @wjExtraTxIns@ + treasury UTxOs + the four
+scope reference TxIns ('sjScopesDeployedAt',
 'sjPermissionsDeployedAt', 'sjTreasuryDeployedAt',
 'sjRegistryDeployedAt'). The generic set is at least a superset of
 what each non-init builder requires; tightening it to the exact
@@ -453,6 +459,14 @@ requiredUtxos (SomeTreasuryIntent sa intent) = case sa of
             parseTxIn (srisaiTreasuryRefTxIn payload)
         Right (Set.insert treasuryRef walletSet)
     SStakeRewardInitPlainAccount -> walletSeedOnly
+    SGovernanceWithdrawalInitMaterialization -> do
+        let payload = tiPayload intent
+        walletSet <- walletSeedOnly
+        treasuryRef <-
+            parseTxIn (gwimiTreasuryRefTxIn payload)
+        registryRef <-
+            parseTxIn (gwimiRegistryRefTxIn payload)
+        Right (Set.union walletSet (Set.fromList [treasuryRef, registryRef]))
     _ -> genericRequiredUtxos intent
   where
     -- Exactly @wjTxIn@. No @wjExtraTxIns@: the five init builders

@@ -13,7 +13,8 @@ from typed 'GovernanceWithdrawalInitMaterializationAnswers'
 — round-tripped through the @tx-build@ dispatcher
 ('Amaru.Treasury.Build.runFromIntent') — must produce CBOR
 byte-identical to what 'buildGovernanceWithdrawalMaterializationCore'
-emits from the same underlying fixture.
+emits from the same underlying fixture after the materialization
+runner's withdrawal-to-change and fee-alignment post-processing.
 
 Unlike the proposal arm, we do NOT compare the wizard's
 in-memory intent against 'gwifIntent fixture' byte-for-byte:
@@ -48,15 +49,23 @@ import Test.Hspec
 
 import Cardano.Ledger.Alonzo.Scripts (AsIx)
 import Cardano.Ledger.Api.Era (eraProtVerLow)
+import Cardano.Ledger.Api.Tx.Out (TxOut)
 import Cardano.Ledger.Binary (serialize)
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
 import Cardano.Ledger.Plutus.ExUnits (ExUnits)
+import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Tx.Ledger (ConwayTx)
 
 import Amaru.Treasury.Build
     ( BuildResult (..)
     , runFromIntent
+    )
+import Amaru.Treasury.Build.Common
+    ( alignCardanoCliBuildFee
+    )
+import Amaru.Treasury.Build.Withdraw
+    ( addWithdrawalToChange
     )
 import Amaru.Treasury.ChainContext (ChainContext (..))
 import Amaru.Treasury.Devnet.GovernanceWithdrawalInit.Core
@@ -88,7 +97,7 @@ spec =
         "governance-withdrawal-init-wizard materialization CBOR parity"
         $ it
             "wizard intent CBOR equals \
-            \buildGovernanceWithdrawalMaterializationCore CBOR"
+            \adjusted buildGovernanceWithdrawalMaterializationCore CBOR"
             materializationParity
 
 materializationParity :: IO ()
@@ -127,11 +136,14 @@ materializationParity = do
             treasuryRefUtxo
             registryRefUtxo
             (frozenEvaluator ctx)
-    coreCbor <-
-        expectCoreCbor
+    adjustedCoreCbor <-
+        expectAdjustedMaterializationCoreCbor
             "governance-withdrawal-init-materialization"
+            tx
+            ctx
+            [treasuryRefUtxo, registryRefUtxo]
             coreResult
-    intentCbor `shouldBe` coreCbor
+    intentCbor `shouldBe` adjustedCoreCbor
 
 materializeOrLoadIntent
     :: FilePath -> SomeTreasuryIntent -> IO ()
@@ -154,20 +166,41 @@ intentDrivenCbor path ctx = do
         Right ok -> pure ok
     brCborBytes <$> runFromIntent ctx some
 
-expectCoreCbor
+expectAdjustedMaterializationCoreCbor
     :: String
+    -> GovernanceWithdrawalInitMaterializationTx
+    -> ChainContext
+    -> [(TxIn, TxOut ConwayEra)]
     -> Either e ConwayTx
     -> IO BSL.ByteString
-expectCoreCbor label = \case
+expectAdjustedMaterializationCoreCbor label tx ctx refUtxos = \case
     Left _ ->
         expectationFailure
             (label <> ": construction core returned Left")
             >> pure BSL.empty
-    Right tx ->
+    Right coreTx -> do
+        txWithWithdrawal <-
+            case addWithdrawalToChange 1 (gwimtRewardsAmount tx) coreTx of
+                Left e ->
+                    expectationFailure
+                        (label <> ": addWithdrawalToChange failed: " <> e)
+                        >> pure coreTx
+                Right ok -> pure ok
+        adjustedTx <-
+            case alignCardanoCliBuildFee
+                (ccPParams ctx)
+                refUtxos
+                1
+                txWithWithdrawal of
+                Left e ->
+                    expectationFailure
+                        (label <> ": fee alignment failed: " <> e)
+                        >> pure txWithWithdrawal
+                Right ok -> pure ok
         pure
             ( serialize
                 (eraProtVerLow @ConwayEra)
-                (tx :: ConwayTx)
+                (adjustedTx :: ConwayTx)
             )
 
 frozenEvaluator

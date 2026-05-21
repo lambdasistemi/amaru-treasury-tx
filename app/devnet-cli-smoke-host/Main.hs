@@ -36,8 +36,14 @@ import Cardano.Ledger.Address
     , Addr (..)
     , serialiseAddr
     )
+import Cardano.Ledger.Api.Tx.Out
+    ( TxOut
+    , addrTxOutL
+    , valueTxOutL
+    )
 import Cardano.Ledger.BaseTypes (Network (..))
 import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Credential
     ( Credential (..)
     , StakeReference (..)
@@ -48,6 +54,7 @@ import Cardano.Ledger.Keys
     , VKey (..)
     , hashKey
     )
+import Cardano.Ledger.Mary.Value (MaryValue (..))
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Node.Client.E2E.Devnet (withCardanoNode)
 import Cardano.Node.Client.E2E.Setup
@@ -57,6 +64,7 @@ import Cardano.Node.Client.E2E.Setup
     , mkSignKey
     )
 import Codec.Binary.Bech32 qualified as Bech32
+import Control.Concurrent (threadDelay)
 import Control.Monad (unless, when)
 import Data.Aeson
     ( Value
@@ -72,6 +80,7 @@ import Data.ByteString.Lazy qualified as BSL
 import Data.Foldable (traverse_)
 import Data.List (isPrefixOf)
 import Data.Map.Strict qualified as Map
+import Data.Maybe (isJust)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -85,9 +94,10 @@ import Amaru.Treasury.LedgerParse
     , txInToText
     )
 import Data.Aeson.Key qualified as Key
-import Data.Aeson.Types (Parser, parseEither, withObject, (.:))
+import Data.Aeson.Types (Parser, parseEither, withObject, (.:), (.:?))
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
+import Lens.Micro ((^.))
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.Directory
     ( createDirectoryIfMissing
@@ -102,7 +112,7 @@ import System.Exit
     , exitSuccess
     , exitWith
     )
-import System.FilePath ((</>))
+import System.FilePath (takeDirectory, (</>))
 import System.IO (hPutStrLn, stderr)
 import System.Posix.Files (ownerReadMode, setFileMode)
 import System.Process
@@ -242,13 +252,33 @@ main = do
                 , ("CLI_SMOKE_VOTER_KEY_HASH", devnetVoterKeyHashHex keys)
                 ]
         smokeCode <- callSmokeScript opts runDir envEntries
-        case smokeCode of
-            ExitSuccess
-                | hoPhase opts == "registry-stake" -> do
+        case hoPhase opts of
+            "registry-stake" -> case smokeCode of
+                ExitSuccess -> do
                     runChainAssertions runDir socket devnetMagic
                     exitSuccess
-            ExitSuccess -> exitSuccess
-            code -> exitWith code
+                code -> exitWith code
+            "governance" -> do
+                runChainAssertionsIfPresent runDir socket devnetMagic
+                mOutcome <-
+                    runGovernanceAssertionsIfPresent
+                        runDir
+                        socket
+                        devnetMagic
+                        (smokeCode == ExitSuccess)
+                case mOutcome of
+                    Just GovernanceMaterialized ->
+                        exitSuccess
+                    Just GovernanceMissingVote ->
+                        exitWith (ExitFailure 78)
+                    Just GovernanceRewardObserved ->
+                        exitWith (ExitFailure 79)
+                    Nothing -> case smokeCode of
+                        ExitSuccess -> exitSuccess
+                        code -> exitWith code
+            _ -> case smokeCode of
+                ExitSuccess -> exitSuccess
+                code -> exitWith code
 
 resolveRunDir :: Maybe FilePath -> Bool -> IO FilePath
 resolveRunDir mRequested force = do
@@ -556,9 +586,9 @@ runChainAssertions runDir socket magic = do
     createDirectoryIfMissing True (runDir </> "chain")
     raw <-
         eitherDecodeFileStrict' requestPath
-            >>= either (die . badRequest) pure
+            >>= either (die . chainAssertionBadRequest) pure
     request <-
-        either (die . badRequest) pure $
+        either (die . chainAssertionBadRequest) pure $
             parseEither parseChainAssertionRequest raw
 
     let anchors = carAnchors request
@@ -593,7 +623,7 @@ runChainAssertions runDir socket magic = do
 
     let anchorTxIns = fmap snd anchors
         anchorSet = Set.fromList anchorTxIns
-        accountSet = Set.fromList (fmap thd rewardAccounts)
+        accountSet = Set.fromList (fmap third3 rewardAccounts)
 
     (foundUtxos, foundRewards) <-
         withLocalNodeBackend magic socket $ \backend ->
@@ -679,10 +709,20 @@ runChainAssertions runDir socket magic = do
                     <> "); see "
                     <> reportPath
                 )
-  where
-    badRequest err =
-        "chain-assertion: cannot parse assertions.request.json: " <> err
-    thd (_, _, x) = x
+
+runChainAssertionsIfPresent
+    :: FilePath -> FilePath -> NetworkMagic -> IO ()
+runChainAssertionsIfPresent runDir socket magic = do
+    let requestPath = runDir </> "chain" </> "assertions.request.json"
+    exists <- doesFileExist requestPath
+    when exists (runChainAssertions runDir socket magic)
+
+chainAssertionBadRequest :: String -> String
+chainAssertionBadRequest err =
+    "chain-assertion: cannot parse assertions.request.json: " <> err
+
+third3 :: (a, b, c) -> c
+third3 (_, _, x) = x
 
 renderChainAssertionLog :: Value -> [String]
 renderChainAssertionLog v =
@@ -739,6 +779,773 @@ parseChainAssertionRequest = withObject "ChainAssertionRequest" $ \root -> do
 
 coinLovelace :: Coin -> Integer
 coinLovelace (Coin n) = n
+
+txOutLovelace :: TxOut ConwayEra -> Integer
+txOutLovelace txOut =
+    let MaryValue (Coin lovelace) _ = txOut ^. valueTxOutL
+    in  lovelace
+
+txOutAddressText :: TxOut ConwayEra -> Text
+txOutAddressText txOut =
+    renderAddr (txOut ^. addrTxOutL)
+
+-- ---------------------------------------------------------------------
+-- Governance assertions and missing-vote diagnostic
+-- ---------------------------------------------------------------------
+
+data GovernanceAssertionOutcome
+    = GovernanceMissingVote
+    | GovernanceRewardObserved
+    | GovernanceMaterialized
+
+runGovernanceAssertionsIfPresent
+    :: FilePath
+    -> FilePath
+    -> NetworkMagic
+    -> Bool
+    -> IO (Maybe GovernanceAssertionOutcome)
+runGovernanceAssertionsIfPresent runDir socket magic required = do
+    let requestPath =
+            runDir </> "chain" </> "governance.assertions.request.json"
+    exists <- doesFileExist requestPath
+    if not exists
+        then do
+            when required $
+                die
+                    ( "governance-assertion: missing request "
+                        <> requestPath
+                    )
+            pure Nothing
+        else Just <$> runGovernanceAssertions runDir socket magic
+
+runGovernanceAssertions
+    :: FilePath -> FilePath -> NetworkMagic -> IO GovernanceAssertionOutcome
+runGovernanceAssertions runDir socket magic = do
+    let requestPath =
+            runDir </> "chain" </> "governance.assertions.request.json"
+        reportPath = runDir </> "chain" </> "governance.assertions.json"
+        logPath = runDir </> "chain" </> "governance.assertions.log"
+        phaseSummaryPath =
+            runDir </> "phases" </> "governance" </> "summary.json"
+    raw <-
+        eitherDecodeFileStrict' requestPath
+            >>= either (die . badRequest) pure
+    request <-
+        either (die . badRequest) pure $
+            parseEither parseGovernanceAssertionRequest raw
+    genesis <- readGovernanceGenesisDiagnostics runDir
+    case garMaterialization request of
+        Just materialization ->
+            runGovernanceMaterializationAssertions
+                phaseSummaryPath
+                socket
+                magic
+                reportPath
+                logPath
+                genesis
+                request
+                materialization
+        Nothing ->
+            runGovernanceProposalOnlyAssertions
+                socket
+                magic
+                reportPath
+                logPath
+                genesis
+                request
+  where
+    badRequest err =
+        "governance-assertion: cannot parse request: " <> err
+
+runGovernanceProposalOnlyAssertions
+    :: FilePath
+    -> NetworkMagic
+    -> FilePath
+    -> FilePath
+    -> Value
+    -> GovernanceAssertionRequest
+    -> IO GovernanceAssertionOutcome
+runGovernanceProposalOnlyAssertions
+    socket
+    magic
+    reportPath
+    logPath
+    genesis
+    request = do
+        firstSnapshot <- queryGovernanceSnapshot socket magic request
+        finalSnapshot <-
+            waitForGovernanceReward
+                socket
+                magic
+                request
+                firstSnapshot
+
+        let rewardObserved =
+                gcsTreasuryRewardLovelace finalSnapshot
+                    >= garExpectedRewardLovelace request
+            code =
+                if rewardObserved
+                    then "unexpected-governance-reward-observed"
+                    else "missing-shipped-governance-vote"
+            report =
+                object
+                    [ "phase" .= ("governance" :: Text)
+                    , "status" .= ("diagnostic" :: Text)
+                    , "code" .= (code :: Text)
+                    , "proposalTxId" .= garProposalTxId request
+                    , "governanceActionId" .= garGovernanceActionId request
+                    , "expectedRewardLovelace"
+                        .= garExpectedRewardLovelace request
+                    , "treasuryRewardAccount"
+                        .= garTreasuryRewardAccount request
+                    , "initial" .= governanceSnapshotValue firstSnapshot
+                    , "final" .= governanceSnapshotValue finalSnapshot
+                    , "genesis" .= genesis
+                    , "diagnostic"
+                        .= ( if rewardObserved
+                                then
+                                    ( "Reward accrued, but no materialization "
+                                        <> "evidence was supplied in the governance "
+                                        <> "assertion request."
+                                        :: Text
+                                    )
+                                else
+                                    ( "No treasury reward accrued after the proposal. "
+                                        <> "The shipped CLI has proposal and materialization surfaces, "
+                                        <> "but no governance vote surface."
+                                        :: Text
+                                    )
+                           )
+                    ]
+        BSL.writeFile reportPath (encode report)
+        writeFile logPath (unlines (renderChainAssertionLog report))
+        if rewardObserved
+            then do
+                hPutStrLn
+                    stderr
+                    ( "devnet-cli-smoke-host: governance reward observed but "
+                        <> "materialization evidence was not supplied ("
+                        <> reportPath
+                        <> ")"
+                    )
+                pure GovernanceRewardObserved
+            else do
+                hPutStrLn
+                    stderr
+                    ( "devnet-cli-smoke-host: missing-shipped-governance-vote; "
+                        <> "see "
+                        <> reportPath
+                    )
+                pure GovernanceMissingVote
+
+runGovernanceMaterializationAssertions
+    :: FilePath
+    -> FilePath
+    -> NetworkMagic
+    -> FilePath
+    -> FilePath
+    -> Value
+    -> GovernanceAssertionRequest
+    -> GovernanceMaterializationAssertion
+    -> IO GovernanceAssertionOutcome
+runGovernanceMaterializationAssertions
+    phaseSummaryPath
+    socket
+    magic
+    reportPath
+    logPath
+    genesis
+    request
+    materialization = do
+        snapshot <- queryGovernanceSnapshot socket magic request
+        materializedJsonErrors <- verifyMaterializedJson materialization
+        let failures =
+                materializationFailures request materialization snapshot
+                    <> materializedJsonErrors
+            success = null failures
+            code =
+                if success
+                    then "governance-materialization-verified"
+                    else "governance-materialization-verification-failed"
+            report =
+                object
+                    [ "phase" .= ("governance" :: Text)
+                    , "status"
+                        .= ( if success
+                                then "passed"
+                                else
+                                    "failed"
+                                        :: Text
+                           )
+                    , "code" .= (code :: Text)
+                    , "proposalTxId" .= garProposalTxId request
+                    , "governanceActionId" .= garGovernanceActionId request
+                    , "expectedRewardLovelace"
+                        .= garExpectedRewardLovelace request
+                    , "treasuryRewardAccount"
+                        .= garTreasuryRewardAccount request
+                    , "final" .= governanceSnapshotValue snapshot
+                    , "materialization"
+                        .= materializationAssertionValue materialization
+                    , "genesis" .= genesis
+                    , "verificationErrors" .= failures
+                    , "diagnostic"
+                        .= ( if success
+                                then
+                                    ( "Materialized treasury UTxO verified on-chain "
+                                        <> "and treasury reward account drained."
+                                        :: Text
+                                    )
+                                else
+                                    ( "Materialization evidence did not match live "
+                                        <> "chain state."
+                                        :: Text
+                                    )
+                           )
+                    ]
+        BSL.writeFile reportPath (encode report)
+        writeFile logPath (unlines (renderChainAssertionLog report))
+        if success
+            then do
+                writeGovernanceMaterializationSummary
+                    phaseSummaryPath
+                    reportPath
+                    logPath
+                    request
+                    materialization
+                    snapshot
+                hPutStrLn
+                    stderr
+                    ( "devnet-cli-smoke-host: governance materialization verified ("
+                        <> reportPath
+                        <> ")"
+                    )
+                pure GovernanceMaterialized
+            else
+                die
+                    ( "governance-assertion: materialization verification failed; see "
+                        <> reportPath
+                    )
+
+writeGovernanceMaterializationSummary
+    :: FilePath
+    -> FilePath
+    -> FilePath
+    -> GovernanceAssertionRequest
+    -> GovernanceMaterializationAssertion
+    -> GovernanceChainSnapshot
+    -> IO ()
+writeGovernanceMaterializationSummary
+    summaryPath
+    reportPath
+    logPath
+    request
+    materialization
+    snapshot = do
+        createDirectoryIfMissing True (takeDirectory summaryPath)
+        BSL.writeFile summaryPath $
+            encode
+                ( object
+                    [ "phase" .= ("governance" :: Text)
+                    , "status" .= ("passed" :: Text)
+                    , "code"
+                        .= ("governance-materialization-verified" :: Text)
+                    , "proposalTxId" .= garProposalTxId request
+                    , "governanceActionId"
+                        .= garGovernanceActionId request
+                    , "materializationTxId" .= gmaTxId materialization
+                    , "treasuryRewardAccount"
+                        .= garTreasuryRewardAccount request
+                    , "treasuryRewardLovelace"
+                        .= gcsTreasuryRewardLovelace snapshot
+                    , "treasuryMaterializedTxIn"
+                        .= gmaTreasuryMaterializedTxInText materialization
+                    , "treasuryMaterializedAddress"
+                        .= gmaTreasuryAddress materialization
+                    , "treasuryMaterializedLovelace"
+                        .= gmaMaterializedAdaLovelace materialization
+                    , "materializationChangeTxIn"
+                        .= txInToText
+                            (gmaMaterializationChangeTxIn materialization)
+                    , "materializationChangePresent"
+                        .= gcsMaterializationChangePresent snapshot
+                    , "materializationChangeLovelace"
+                        .= gcsMaterializationChangeLovelace snapshot
+                    , "materializedJson"
+                        .= gmaMaterializedJson materialization
+                    , "chainAssertions" .= reportPath
+                    , "chainAssertionsLog" .= logPath
+                    , "chainObserved"
+                        .= governanceSnapshotValue snapshot
+                    ]
+                )
+
+materializationFailures
+    :: GovernanceAssertionRequest
+    -> GovernanceMaterializationAssertion
+    -> GovernanceChainSnapshot
+    -> [Text]
+materializationFailures request materialization snapshot =
+    concat
+        [ expectBool
+            "voterBaseOutput.present"
+            True
+            (gcsVoterBasePresent snapshot)
+        , expectMaybeInteger
+            "voterBaseOutput.lovelace"
+            (garVoterBaseLovelace request)
+            (gcsVoterBaseLovelace snapshot)
+        , expectBool
+            "proposalChangeOutput.present"
+            False
+            (gcsProposalChangePresent snapshot)
+        , expectBool
+            "materialization.output.present"
+            True
+            (gcsMaterializedPresent snapshot)
+        , expectMaybeText
+            "materialization.output.address"
+            (gmaTreasuryAddress materialization)
+            (gcsMaterializedAddress snapshot)
+        , expectMaybeInteger
+            "materialization.output.lovelace"
+            (gmaMaterializedAdaLovelace materialization)
+            (gcsMaterializedLovelace snapshot)
+        , expectBool
+            "materialization.change.present"
+            True
+            (gcsMaterializationChangePresent snapshot)
+        , expectInteger
+            "treasuryRewardLovelace"
+            0
+            (gcsTreasuryRewardLovelace snapshot)
+        ]
+
+verifyMaterializedJson
+    :: GovernanceMaterializationAssertion -> IO [Text]
+verifyMaterializedJson materialization = do
+    exists <- doesFileExist (gmaMaterializedJson materialization)
+    if not exists
+        then
+            pure
+                [ "materializedJson missing: "
+                    <> T.pack (gmaMaterializedJson materialization)
+                ]
+        else do
+            decoded <-
+                eitherDecodeFileStrict' (gmaMaterializedJson materialization)
+            case decoded of
+                Left err ->
+                    pure
+                        [ "materializedJson decode failed: "
+                            <> T.pack err
+                        ]
+                Right raw ->
+                    either
+                        ( \err ->
+                            pure
+                                [ "materializedJson parse failed: "
+                                    <> T.pack err
+                                ]
+                        )
+                        pure
+                        (parseEither (parseMaterializedJsonMatches materialization) raw)
+
+parseMaterializedJsonMatches
+    :: GovernanceMaterializationAssertion -> Value -> Parser [Text]
+parseMaterializedJsonMatches materialization =
+    withObject "materialized.json" $ \o -> do
+        phase <- o .: "phase"
+        network <- o .: "network"
+        governanceActionId <- o .: "governanceActionId"
+        treasuryRewardAccount <- o .: "treasuryRewardAccount"
+        submittedTxId <- o .: "submittedTxId"
+        treasuryTxIn <- o .: "treasuryMaterializedTxIn"
+        treasuryAddress <- o .: "treasuryAddress"
+        materializedLovelace <- o .: "materializedAdaLovelace"
+        pure $
+            concat
+                [ expectText
+                    "materializedJson.phase"
+                    "governance-withdrawal-init"
+                    phase
+                , expectText "materializedJson.network" "devnet" network
+                , expectText
+                    "materializedJson.governanceActionId"
+                    (gmaGovernanceActionId materialization)
+                    governanceActionId
+                , expectText
+                    "materializedJson.treasuryRewardAccount"
+                    (gmaTreasuryRewardAccount materialization)
+                    treasuryRewardAccount
+                , expectText
+                    "materializedJson.submittedTxId"
+                    (gmaTxId materialization)
+                    submittedTxId
+                , expectText
+                    "materializedJson.treasuryMaterializedTxIn"
+                    (gmaTreasuryMaterializedTxInText materialization)
+                    treasuryTxIn
+                , expectText
+                    "materializedJson.treasuryAddress"
+                    (gmaTreasuryAddress materialization)
+                    treasuryAddress
+                , expectInteger
+                    "materializedJson.materializedAdaLovelace"
+                    (gmaMaterializedAdaLovelace materialization)
+                    materializedLovelace
+                ]
+
+materializationAssertionValue
+    :: GovernanceMaterializationAssertion -> Value
+materializationAssertionValue materialization =
+    object
+        [ "governanceActionId" .= gmaGovernanceActionId materialization
+        , "treasuryRewardAccount" .= gmaTreasuryRewardAccount materialization
+        , "txId" .= gmaTxId materialization
+        , "treasuryMaterializedTxIn"
+            .= gmaTreasuryMaterializedTxInText materialization
+        , "treasuryAddress" .= gmaTreasuryAddress materialization
+        , "materializedAdaLovelace"
+            .= gmaMaterializedAdaLovelace materialization
+        , "materializationChangeTxIn"
+            .= txInToText (gmaMaterializationChangeTxIn materialization)
+        , "materializedJson" .= gmaMaterializedJson materialization
+        ]
+
+expectText :: Text -> Text -> Text -> [Text]
+expectText field expected actual
+    | actual == expected = []
+    | otherwise =
+        [ field
+            <> " expected "
+            <> expected
+            <> " but observed "
+            <> actual
+        ]
+
+expectInteger :: Text -> Integer -> Integer -> [Text]
+expectInteger field expected actual
+    | actual == expected = []
+    | otherwise =
+        [ field
+            <> " expected "
+            <> T.pack (show expected)
+            <> " but observed "
+            <> T.pack (show actual)
+        ]
+
+expectBool :: Text -> Bool -> Bool -> [Text]
+expectBool field expected actual
+    | actual == expected = []
+    | otherwise =
+        [ field
+            <> " expected "
+            <> T.pack (show expected)
+            <> " but observed "
+            <> T.pack (show actual)
+        ]
+
+expectMaybeText :: Text -> Text -> Maybe Text -> [Text]
+expectMaybeText field expected actual =
+    case actual of
+        Just observed -> expectText field expected observed
+        Nothing -> [field <> " expected " <> expected <> " but was absent"]
+
+expectMaybeInteger :: Text -> Integer -> Maybe Integer -> [Text]
+expectMaybeInteger field expected actual =
+    case actual of
+        Just observed -> expectInteger field expected observed
+        Nothing ->
+            [ field
+                <> " expected "
+                <> T.pack (show expected)
+                <> " but was absent"
+            ]
+
+waitForGovernanceReward
+    :: FilePath
+    -> NetworkMagic
+    -> GovernanceAssertionRequest
+    -> GovernanceChainSnapshot
+    -> IO GovernanceChainSnapshot
+waitForGovernanceReward socket magic request =
+    go attempts
+  where
+    attempts =
+        max 1 (garRewardPollTimeoutSeconds request * 2)
+    go remaining lastSnapshot
+        | gcsTreasuryRewardLovelace lastSnapshot
+            >= garExpectedRewardLovelace request =
+            pure lastSnapshot
+        | remaining <= 0 = pure lastSnapshot
+        | otherwise = do
+            threadDelay 500_000
+            next <- queryGovernanceSnapshot socket magic request
+            go (remaining - 1) next
+
+queryGovernanceSnapshot
+    :: FilePath
+    -> NetworkMagic
+    -> GovernanceAssertionRequest
+    -> IO GovernanceChainSnapshot
+queryGovernanceSnapshot socket magic request = do
+    treasuryAccount <-
+        case scriptHashFromHex (garTreasuryRewardAccount request) of
+            Left e ->
+                die
+                    ( "governance-assertion: treasury reward account "
+                        <> "is not a script hash ("
+                        <> e
+                        <> ")"
+                    )
+            Right sh ->
+                pure (AccountAddress Testnet (AccountId (ScriptHashObj sh)))
+    let materializationTxIns = case garMaterialization request of
+            Nothing -> []
+            Just materialization ->
+                [ gmaTreasuryMaterializedTxIn materialization
+                , gmaMaterializationChangeTxIn materialization
+                ]
+        queriedTxIns =
+            Set.fromList
+                ( [ garVoterBaseTxIn request
+                  , garMaterializationFundingSeedTxIn request
+                  ]
+                    <> materializationTxIns
+                )
+    (foundUtxos, foundRewards) <-
+        withLocalNodeBackend magic socket $ \backend ->
+            Backend.singleShotWithAcquired backend $ \qh -> do
+                utxos <-
+                    Backend.queryUTxOByTxInH qh queriedTxIns
+                rewards <-
+                    Backend.queryRewardAccountsH
+                        qh
+                        (Set.singleton treasuryAccount)
+                pure (utxos, rewards)
+    let voterPresent =
+            Map.member (garVoterBaseTxIn request) foundUtxos
+        proposalChange =
+            Map.lookup (garMaterializationFundingSeedTxIn request) foundUtxos
+        materializedOutput =
+            garMaterialization request
+                >>= \materialization ->
+                    Map.lookup
+                        (gmaTreasuryMaterializedTxIn materialization)
+                        foundUtxos
+        materializationChange =
+            garMaterialization request
+                >>= \materialization ->
+                    Map.lookup
+                        (gmaMaterializationChangeTxIn materialization)
+                        foundUtxos
+        reward =
+            Map.findWithDefault (Coin 0) treasuryAccount foundRewards
+    pure
+        GovernanceChainSnapshot
+            { gcsVoterBasePresent = voterPresent
+            , gcsVoterBaseAddress =
+                if voterPresent
+                    then Just (garVoterBaseAddress request)
+                    else Nothing
+            , gcsVoterBaseLovelace =
+                if voterPresent
+                    then Just (garVoterBaseLovelace request)
+                    else Nothing
+            , gcsProposalChangePresent = isJust proposalChange
+            , gcsProposalChangeLovelace = txOutLovelace <$> proposalChange
+            , gcsMaterializedPresent = isJust materializedOutput
+            , gcsMaterializedAddress = txOutAddressText <$> materializedOutput
+            , gcsMaterializedLovelace = txOutLovelace <$> materializedOutput
+            , gcsMaterializationChangePresent =
+                isJust materializationChange
+            , gcsMaterializationChangeLovelace =
+                txOutLovelace <$> materializationChange
+            , gcsTreasuryRewardLovelace = coinLovelace reward
+            }
+
+readGovernanceGenesisDiagnostics :: FilePath -> IO Value
+readGovernanceGenesisDiagnostics runDir = do
+    let path = runDir </> "genesis" </> "conway-genesis.json"
+    raw <- eitherDecodeFileStrict' path >>= either die pure
+    either die pure $
+        parseEither parseGovernanceGenesisDiagnostics raw
+
+parseGovernanceGenesisDiagnostics :: Value -> Parser Value
+parseGovernanceGenesisDiagnostics =
+    withObject "ConwayGenesis" $ \o -> do
+        dRepVotingThresholds <- o .: "dRepVotingThresholds"
+        committee <- o .: "committee"
+        committeeMinSize <- o .: "committeeMinSize"
+        dRepDeposit <- o .: "dRepDeposit"
+        govActionDeposit <- o .: "govActionDeposit"
+        pure $
+            object
+                [ "dRepVotingThresholds" .= (dRepVotingThresholds :: Value)
+                , "committee" .= (committee :: Value)
+                , "committeeMinSize" .= (committeeMinSize :: Value)
+                , "dRepDeposit" .= (dRepDeposit :: Value)
+                , "govActionDeposit" .= (govActionDeposit :: Value)
+                ]
+
+data GovernanceAssertionRequest = GovernanceAssertionRequest
+    { garProposalTxId :: !Text
+    , garGovernanceActionId :: !Text
+    , garMaterializationFundingSeedTxIn :: !TxIn
+    , garVoterBaseTxIn :: !TxIn
+    , garVoterBaseAddress :: !Text
+    , garVoterBaseLovelace :: !Integer
+    , garTreasuryRewardAccount :: !Text
+    , garExpectedRewardLovelace :: !Integer
+    , garRewardPollTimeoutSeconds :: !Int
+    , garMaterialization :: !(Maybe GovernanceMaterializationAssertion)
+    }
+
+data GovernanceMaterializationAssertion = GovernanceMaterializationAssertion
+    { gmaGovernanceActionId :: !Text
+    , gmaTreasuryRewardAccount :: !Text
+    , gmaTxId :: !Text
+    , gmaTreasuryMaterializedTxInText :: !Text
+    , gmaTreasuryMaterializedTxIn :: !TxIn
+    , gmaTreasuryAddress :: !Text
+    , gmaMaterializedAdaLovelace :: !Integer
+    , gmaMaterializationChangeTxIn :: !TxIn
+    , gmaMaterializedJson :: !FilePath
+    }
+
+parseGovernanceAssertionRequest
+    :: Value -> Parser GovernanceAssertionRequest
+parseGovernanceAssertionRequest =
+    withObject "GovernanceAssertionRequest" $ \root -> do
+        proposalTxId <- root .: "proposalTxId"
+        governanceActionId <- root .: "governanceActionId"
+        materializationSeedText <-
+            root .: "materializationFundingSeedTxIn"
+        materializationSeed <-
+            either fail pure (txInFromText materializationSeedText)
+        voter <- root .: "voterBaseOutput"
+        voterTxInText <- voter .: Key.fromText "txIn"
+        voterTxIn <- either fail pure (txInFromText voterTxInText)
+        voterAddress <- voter .: Key.fromText "address"
+        voterLovelace <- voter .: Key.fromText "lovelace"
+        treasuryRewardAccount <- root .: "treasuryRewardAccount"
+        expectedReward <- root .: "expectedRewardLovelace"
+        timeoutSeconds <- root .: "rewardPollTimeoutSeconds"
+        materialization <-
+            root
+                .:? "materialization"
+                >>= traverse
+                    ( parseGovernanceMaterializationAssertion
+                        governanceActionId
+                        treasuryRewardAccount
+                    )
+        pure
+            GovernanceAssertionRequest
+                { garProposalTxId = proposalTxId
+                , garGovernanceActionId = governanceActionId
+                , garMaterializationFundingSeedTxIn =
+                    materializationSeed
+                , garVoterBaseTxIn = voterTxIn
+                , garVoterBaseAddress = voterAddress
+                , garVoterBaseLovelace = voterLovelace
+                , garTreasuryRewardAccount = treasuryRewardAccount
+                , garExpectedRewardLovelace = expectedReward
+                , garRewardPollTimeoutSeconds = timeoutSeconds
+                , garMaterialization = materialization
+                }
+
+parseGovernanceMaterializationAssertion
+    :: Text -> Text -> Value -> Parser GovernanceMaterializationAssertion
+parseGovernanceMaterializationAssertion rootActionId rootRewardAccount =
+    withObject "GovernanceMaterializationAssertion" $ \o -> do
+        actionId <-
+            optionalSame
+                "materialization.governanceActionId"
+                rootActionId
+                =<< o .:? "governanceActionId"
+        rewardAccount <-
+            optionalSame
+                "materialization.treasuryRewardAccount"
+                rootRewardAccount
+                =<< o .:? "treasuryRewardAccount"
+        txId <- o .: "txId"
+        treasuryTxInText <- o .: "treasuryMaterializedTxIn"
+        treasuryTxIn <-
+            either fail pure (txInFromText treasuryTxInText)
+        treasuryAddress <- o .: "treasuryAddress"
+        materializedLovelace <- o .: "materializedAdaLovelace"
+        materializationChangeText <- o .: "materializationChangeTxIn"
+        materializationChange <-
+            either fail pure (txInFromText materializationChangeText)
+        materializedJson <- o .: "materializedJson"
+        pure
+            GovernanceMaterializationAssertion
+                { gmaGovernanceActionId = actionId
+                , gmaTreasuryRewardAccount = rewardAccount
+                , gmaTxId = txId
+                , gmaTreasuryMaterializedTxInText = treasuryTxInText
+                , gmaTreasuryMaterializedTxIn = treasuryTxIn
+                , gmaTreasuryAddress = treasuryAddress
+                , gmaMaterializedAdaLovelace = materializedLovelace
+                , gmaMaterializationChangeTxIn = materializationChange
+                , gmaMaterializedJson = materializedJson
+                }
+  where
+    optionalSame field expected actual = case actual of
+        Nothing -> pure expected
+        Just observed
+            | observed == expected -> pure observed
+            | otherwise ->
+                fail $
+                    T.unpack field
+                        <> " expected "
+                        <> T.unpack expected
+                        <> " but observed "
+                        <> T.unpack observed
+
+data GovernanceChainSnapshot = GovernanceChainSnapshot
+    { gcsVoterBasePresent :: !Bool
+    , gcsVoterBaseAddress :: !(Maybe Text)
+    , gcsVoterBaseLovelace :: !(Maybe Integer)
+    , gcsProposalChangePresent :: !Bool
+    , gcsProposalChangeLovelace :: !(Maybe Integer)
+    , gcsMaterializedPresent :: !Bool
+    , gcsMaterializedAddress :: !(Maybe Text)
+    , gcsMaterializedLovelace :: !(Maybe Integer)
+    , gcsMaterializationChangePresent :: !Bool
+    , gcsMaterializationChangeLovelace :: !(Maybe Integer)
+    , gcsTreasuryRewardLovelace :: !Integer
+    }
+
+governanceSnapshotValue :: GovernanceChainSnapshot -> Value
+governanceSnapshotValue snapshot =
+    object
+        [ "voterBaseOutput"
+            .= object
+                [ "present" .= gcsVoterBasePresent snapshot
+                , "address" .= gcsVoterBaseAddress snapshot
+                , "lovelace" .= gcsVoterBaseLovelace snapshot
+                ]
+        , "proposalChangeOutput"
+            .= object
+                [ "present" .= gcsProposalChangePresent snapshot
+                , "lovelace" .= gcsProposalChangeLovelace snapshot
+                ]
+        , "materializedOutput"
+            .= object
+                [ "present" .= gcsMaterializedPresent snapshot
+                , "address" .= gcsMaterializedAddress snapshot
+                , "lovelace" .= gcsMaterializedLovelace snapshot
+                ]
+        , "materializationChangeOutput"
+            .= object
+                [ "present" .= gcsMaterializationChangePresent snapshot
+                , "lovelace" .= gcsMaterializationChangeLovelace snapshot
+                ]
+        , "treasuryRewardLovelace"
+            .= gcsTreasuryRewardLovelace snapshot
+        ]
 
 -- ---------------------------------------------------------------------
 -- Diagnostics

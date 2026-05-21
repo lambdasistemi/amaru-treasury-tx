@@ -357,12 +357,15 @@ executable devnet-cli-smoke-host
     , bytestring
     , cardano-crypto-class
     , cardano-ledger-api
+    , cardano-ledger-conway
     , cardano-ledger-core
+    , cardano-ledger-mary
     , cardano-node-clients
     , cardano-node-clients:devnet
     , containers
     , directory
     , filepath
+    , microlens
     , ouroboros-network:api
     , process
     , text
@@ -410,6 +413,7 @@ test-suite unit-tests
   autogen-modules:    Paths_amaru_treasury_tx
   other-modules:
     Amaru.Treasury.AuxDataSpec
+    Amaru.Treasury.Build.GovernanceWithdrawalInitSpec
     Amaru.Treasury.Build.NetworkGuardSpec
     Amaru.Treasury.BuildSpec
     Amaru.Treasury.Cli.EnvelopeSpec

@@ -26,13 +26,16 @@ This spec pins those exact required sets so the @tx-build@ boundary
 no longer fails with @liveContext: missing UTxOs@ against the
 deterministic @0000…000#0@ placeholders that #175 bootstrap intents
 carry in their scope reference fields. Non-init actions (swap,
-disburse, withdraw, reorganize, both governance-withdrawal-init
-sub-actions) keep the legacy generic /superset/ path in this slice;
-tightening it to the exact @requireUtxo@ surface for those actions
-is deliberately out of scope and tracked separately. The
-"non-init action retains the legacy generic set" regression below
-proves the disburse path still carries the scope refs, treasury
-UTxOs, and wallet extras it has always queried.
+disburse, withdraw, reorganize, and the governance-withdrawal-init
+proposal action) keep the legacy generic /superset/ path in this
+slice. The materialization action is special: its wizard intentionally
+writes placeholder scope refs while carrying the real treasury and
+registry reference TxIns in the payload, and the build runner requires
+those payload refs directly.
+
+The "non-init action retains the legacy generic set" regression below
+proves the disburse path still carries the scope refs, treasury UTxOs,
+and wallet extras it has always queried.
 -}
 module Amaru.Treasury.Cli.TxBuildRequiredUtxosSpec (spec) where
 
@@ -50,6 +53,7 @@ import Test.Hspec
 import Amaru.Treasury.Cli.TxBuild (requiredUtxos)
 import Amaru.Treasury.IntentJSON
     ( DisburseInputs (..)
+    , GovernanceWithdrawalInitMaterializationInputs (..)
     , RationaleJSON (..)
     , RegistryInitMintInputs (..)
     , RegistryInitReferenceScriptsInputs (..)
@@ -129,6 +133,36 @@ spec = describe "tx-build requiredUtxos boundary (#161)" $ do
         it "plain-account requires only the wallet seed" $ do
             requiredUtxos stakePlainAccountSome
                 `shouldBe` Right (Set.singleton walletSeedTxIn)
+
+    describe "governance-withdrawal-init intents" $ do
+        it
+            "materialization requires wallet seed plus payload \
+            \treasury and registry references"
+            $ do
+                requiredUtxos governanceMaterializationSome
+                    `shouldBe` Right
+                        ( Set.fromList
+                            [ walletSeedTxIn
+                            , treasuryRefTxIn
+                            , registryRefTxIn
+                            ]
+                        )
+
+        it
+            "materialization ignores placeholder scope refs and \
+            \wallet extras"
+            $ do
+                case requiredUtxos governanceMaterializationSome of
+                    Left e ->
+                        error
+                            ( "governanceMaterializationSome required: "
+                                <> e
+                            )
+                    Right required -> do
+                        Set.member placeholderTxIn required
+                            `shouldBe` False
+                        Set.member extraWalletTxIn required
+                            `shouldBe` False
 
     describe "non-init action retains the legacy generic set" $ do
         it
@@ -407,6 +441,32 @@ stakePlainAccountSome =
             , tiPayload =
                 StakeRewardInitPlainAccountInputs
                     { srispiPermissionsScriptHash = placeholderHash28
+                    }
+            }
+
+-- Governance materialization mirrors the live wizard shape: the
+-- scope block carries placeholders, while the payload carries the
+-- real treasury and registry reference TxIns consumed by the builder.
+governanceMaterializationSome :: SomeTreasuryIntent
+governanceMaterializationSome =
+    SomeTreasuryIntent SGovernanceWithdrawalInitMaterialization $
+        TreasuryIntent
+            { tiSAction = SGovernanceWithdrawalInitMaterialization
+            , tiSchema = 1
+            , tiNetwork = "devnet"
+            , tiScope = scopeBlock
+            , tiWallet = walletBlock walletSeedTxInText
+            , tiSigners = []
+            , tiRationale = emptyRationaleJson
+            , tiValidityUpperBoundSlot = 99
+            , tiPayload =
+                GovernanceWithdrawalInitMaterializationInputs
+                    { gwimiTreasuryRewardAccountHash =
+                        placeholderHash28
+                    , gwimiTreasuryAddress = scopeTreasuryAddrText
+                    , gwimiTreasuryRefTxIn = treasuryRefTxInText
+                    , gwimiRegistryRefTxIn = registryRefTxInText
+                    , gwimiRewardsLovelace = 2_000_000
                     }
             }
 

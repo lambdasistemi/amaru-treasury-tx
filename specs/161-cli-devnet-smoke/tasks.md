@@ -69,11 +69,11 @@ Checkpoint: `just devnet-cli-smoke --phase registry-stake` passes and `./gate.sh
 
 **Goal**: Prove governance withdrawal materialization is reachable through shipped CLI commands, or fail with the explicit missing-surface diagnostic.
 
-- [ ] T017 [US1] Implement `governance-withdrawal-init-wizard proposal` through CLI using `registry.json`, `accounts.json`, funding/voter key hashes, and the fixed DevNet governance anchor.
-- [ ] T018 [US1] Build/sign/submit the proposal tx through `tx-build`, `witness`, `attach-witness`, and `submit`; record proposal tx id and voter base output details.
-- [ ] T019 [US2] Add reward/enactment polling that does not call the legacy in-process vote path; if reward accrual does not happen under patched genesis, exit non-zero with `missing-shipped-governance-vote` and retain diagnostics.
-- [ ] T020 [US1] Implement `governance-withdrawal-init-wizard materialization` through CLI using observed rewards; build/sign/submit and verify the materialized treasury UTxO.
-- [ ] T021 [US1] Write `governance-withdrawal-init/materialized.json`, phase summary, and chain assertion transcripts in the run directory.
+- [X] T017 [US1] Implement `governance-withdrawal-init-wizard proposal` through CLI using `registry.json`, `accounts.json`, funding/voter key hashes, and the fixed DevNet governance anchor.
+- [X] T018 [US1] Build/sign/submit the proposal tx through `tx-build`, `witness`, `attach-witness`, and `submit`; record proposal tx id and voter base output details.
+- [X] T019 [US2] Add reward/enactment polling that does not call the legacy in-process vote path; if reward accrual does not happen under patched genesis, exit non-zero with `missing-shipped-governance-vote` and retain diagnostics.
+- [X] T020 [US1] Implement `governance-withdrawal-init-wizard materialization` through CLI using observed rewards; build/sign/submit and verify the materialized treasury UTxO.
+- [X] T021 [US1] Write `governance-withdrawal-init/materialized.json`, phase summary, and chain assertion transcripts in the run directory.
 
 Checkpoint: `just devnet-cli-smoke --phase governance` either passes with materialization evidence or fails with `missing-shipped-governance-vote`; the PR cannot be marked ready on the missing-surface path.
 

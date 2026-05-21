@@ -22,10 +22,10 @@ This spec mechanically pins three properties:
     the shipped CLI exposes proposal and
     materialization sub-actions only, while the
     legacy library source still carries a
-    @submitVoteTx@ path. Slice 4 is the live proof
-    that the patched DevNet genesis either does not
-    require a shipped vote tx, or fails loudly with
-    @missing-shipped-governance-vote@.
+    @submitVoteTx@ path. Slice 4 keeps the missing-vote
+    diagnostic for no-reward DevNets, and on the patched
+    DevNet drives the shipped materialization surface
+    after reward accrual.
 -}
 module Amaru.Treasury.Smoke.CliDevnetSmokeSpec (spec) where
 
@@ -211,6 +211,73 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
             src
                 `shouldSatisfyContain` "wallet_addr=\"$CLI_SMOKE_FUNDING_ADDR\""
 
+        it
+            "accounts.json uses devnet artifact network and Testnet ledger network"
+            $ do
+                src <- mustRead smokeScriptPath
+                src `shouldSatisfyContain` "network: \"devnet\""
+                src `shouldSatisfyContain` "ledgerNetwork: \"Testnet\""
+
+    describe "governance CLI surface" $ do
+        it "smoke.sh exposes the shipped governance proposal path" $ do
+            src <- mustRead smokeScriptPath
+            forM_
+                [ "governance-withdrawal-init-wizard proposal"
+                , "governance-proposal"
+                ]
+                $ \needle ->
+                    src `shouldSatisfyContain` needle
+
+        it "smoke.sh exposes the shipped governance materialization path" $ do
+            src <- mustRead smokeScriptPath
+            forM_
+                [ "governance-withdrawal-init-wizard materialization"
+                , "governance-materialization"
+                , "governance-withdrawal-init"
+                , "materialized.json"
+                , "treasuryMaterializedTxIn"
+                , "materializationChangeTxIn"
+                ]
+                $ \needle ->
+                    src `shouldSatisfyContain` needle
+
+        it "materialized.json does not hardcode reward observations" $ do
+            src <- mustRead smokeScriptPath
+            src `shouldSatisfyNotContain` "rewardBeforeSubmitLovelace"
+            src `shouldSatisfyNotContain` "rewardAfterSubmitLovelace"
+
+        it "proposal uses funding and voter key hashes for their own roles" $ do
+            src <- mustRead smokeScriptPath
+            src
+                `shouldSatisfyContain` "--funding-stake-key-hash \"$CLI_SMOKE_FUNDING_KEY_HASH\""
+            src
+                `shouldSatisfyContain` "--voter-key-hash \"$CLI_SMOKE_VOTER_KEY_HASH\""
+
+        it "proposal attaches both funding and voter witnesses" $ do
+            src <- mustRead smokeScriptPath
+            src `shouldSatisfyContain` "build_sign_submit_multi \\"
+            src `shouldSatisfyContain` "\"devnet_funding\""
+            src `shouldSatisfyContain` "\"devnet_voter\""
+
+        it "host runs governance assertions for the governance phase" $ do
+            src <- mustRead hostMainPath
+            src `shouldSatisfyContain` "\"governance\""
+            src `shouldSatisfyContain` "runGovernanceAssertionsIfPresent"
+            src `shouldSatisfyContain` "governance-materialization-verified"
+            src `shouldSatisfyContain` "missing-shipped-governance-vote"
+            src `shouldSatisfyContain` "runGovernanceMaterializationAssertions"
+            src `shouldSatisfyContain` "queryGovernanceSnapshot"
+            src `shouldSatisfyContain` "gcsMaterializedPresent"
+            src `shouldSatisfyContain` "gcsMaterializationChangePresent"
+            src `shouldSatisfyContain` "writeGovernanceMaterializationSummary"
+            src `shouldSatisfyContain` "materializedJson"
+
+        it "host address rendering uses Bech32 not raw UTF-8" $ do
+            src <- mustRead hostMainPath
+            src `shouldSatisfyNotContain` "decodeUtf8 (serialiseAddr"
+            src
+                `shouldSatisfyContain` "renderAddr (txOut ^. addrTxOutL)"
+
     describe "build_sign_submit error propagation" $ do
         it
             "smoke.sh has no `local <var>=$(build_sign_submit` \
@@ -240,6 +307,8 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
                             [ ()
                             | line <- lines src
                             , "build_sign_submit \\" `isInfixOf` line
+                                || "build_sign_submit_multi \\"
+                                    `isInfixOf` line
                             ]
                     diesOnFail =
                         length
@@ -248,7 +317,37 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
                             , "|| die" `isInfixOf` line
                             , "build/sign/submit failed" `isInfixOf` line
                             ]
-                diesOnFail `shouldBe` calls
+                    timeoutDies =
+                        length
+                            [ ()
+                            | line <- lines src
+                            , "build/sign/submit failed before timeout"
+                                `isInfixOf` line
+                            ]
+                diesOnFail + timeoutDies `shouldBe` calls
+
+        it
+            "witness commands inside build_sign_submit helpers pass \
+            \--force for retry idempotency"
+            $ do
+                src <- mustRead smokeScriptPath
+                let single =
+                        sectionBetween
+                            "build_sign_submit() {"
+                            "# Variant for governance proposal"
+                            src
+                    multi =
+                        sectionBetween
+                            "build_sign_submit_multi() {"
+                            "create_devnet_vault() {"
+                            src
+                    singleWitnesses = witnessCommandBlocks single
+                    multiWitnesses = witnessCommandBlocks multi
+                length singleWitnesses `shouldBe` 1
+                length multiWitnesses `shouldBe` 1
+                mapM_
+                    (`shouldSatisfyContain` "--force \\")
+                    (singleWitnesses <> multiWitnesses)
 
     describe "human-tutorial recording wrapper" $ do
         it "scripts/smoke/record-cli-devnet-smoke exists" $ do
@@ -336,3 +435,24 @@ shouldSatisfyNotContain haystack needle =
     when (needle `isInfixOf` haystack) $
         expectationFailure $
             "expected to NOT contain " <> show needle
+
+sectionBetween :: String -> String -> String -> String
+sectionBetween start end =
+    unlines
+        . takeWhile (not . (end `isInfixOf`))
+        . dropWhile (not . (start `isInfixOf`))
+        . lines
+
+witnessCommandBlocks :: String -> [String]
+witnessCommandBlocks = go . lines
+  where
+    go [] = []
+    go (line : rest)
+        | "\"$AMARU_EXE\" --network devnet witness \\"
+            `isInfixOf` line =
+            let (blockRest, afterBlock) =
+                    break ("|| witness_status=$?" `isInfixOf`) rest
+                block =
+                    line : blockRest <> take 1 afterBlock
+            in  unlines block : go (drop 1 afterBlock)
+        | otherwise = go rest

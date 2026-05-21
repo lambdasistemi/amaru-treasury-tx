@@ -6,7 +6,7 @@ magic `42`, can publish registry/reference-script bootstrap state, can
 register the treasury and permissions reward accounts, proves the
 governance proposal / withdrawal materialization flow, and proves the
 disburse submit flow on a patched short-epoch genesis. The command
-proofs record governance proposal/vote evidence, reward funding,
+proofs record governance proposal/materialization evidence, reward funding,
 withdrawal build/submission, the materialized treasury UTxO, disburse
 submission, beneficiary receipt, and the reduced treasury output. The
 swap readiness phase publishes the public SundaeSwap V3 order
@@ -121,6 +121,64 @@ What this does, every step through the shipped CLI:
    `stake-reward-script-account` / `stake-reward-plain-account` tx
    ids captured in `<run-dir>/phases/registry-stake/summary.json`.
 
+### Run the governance materialization smoke from a clean checkout
+
+```bash
+nix develop --quiet
+just devnet-cli-smoke \
+  --phase governance \
+  --run-dir runs/devnet-cli/$(date -u +%Y%m%dT%H%M%SZ)
+```
+
+`--phase governance` currently starts from a fresh run directory,
+runs the full `registry-stake` prerequisite pipeline above, then uses
+only shipped CLI commands to prepare, submit, and materialize the
+governance withdrawal:
+
+1. `governance-withdrawal-init-wizard proposal`
+2. `tx-build`
+3. `witness` for `devnet_funding`
+4. `witness` for `devnet_voter`
+5. `attach-witness`
+6. `submit`
+7. `governance-withdrawal-init-wizard materialization`
+8. `tx-build`
+9. `witness` for `devnet_funding`
+10. `attach-witness`
+11. `submit`
+
+The proposal uses the fixed DevNet anchor
+`https://example.invalid/amaru-devnet-governance.json` with content
+hash
+`000000000000000000000000000000000000000000000000000000000000002a`.
+The funding stake key hash is the deterministic funding key hash; the
+voter/DRep key hash is the deterministic voter key hash, matching the
+legacy DevNet proof.
+
+There is still no shipped CLI vote action. On the patched DevNet used
+by this smoke, the genesis thresholds allow the proposal reward to
+accrue without that vote surface; the shell then drives the shipped
+materialization subcommand. The expected result is exit `0` with host
+verification that the materialized treasury UTxO exists on chain, has
+the expected address and lovelace amount, and that the treasury reward
+account drained to zero. Exit `78` is retained only for a no-reward
+DevNet, where the host records `missing-shipped-governance-vote`.
+
+Evidence files for the governance run are:
+
+```text
+<run-dir>/phases/governance/summary.json
+<run-dir>/governance-withdrawal-init/materialized.json
+<run-dir>/chain/governance.assertions.request.json
+<run-dir>/chain/governance.assertions.json
+<run-dir>/chain/governance.assertions.log
+```
+
+The governance phase also re-runs the registry-stake chain assertion
+handoff, so `<run-dir>/chain/assertions.json` and
+`<run-dir>/chain/assertions.log` remain the prerequisite anchor
+evidence for that same fresh DevNet.
+
 ### Record a transcript
 
 The slice ships `scripts/smoke/record-cli-devnet-smoke` as a small
@@ -177,6 +235,46 @@ runs/devnet-cli/.../
 `-- genesis/                         # smoke-local genesis copy
 ```
 
+After `--phase governance` reaches the expected patched-DevNet exit
+`0`, the same run-dir also contains the materialization artifacts and
+the host's final on-chain verification summary:
+
+```text
+runs/devnet-cli/.../
+|-- chain/
+|   |-- governance.assertions.json
+|   |-- governance.assertions.log
+|   `-- governance.assertions.request.json
+|-- diagnostics/
+|   |-- governance-materialization.{build.log,report.json}
+|   `-- governance-proposal.{build.log,report.json}
+|-- governance-withdrawal-init/
+|   |-- materialized.json
+|   `-- summary.json
+|-- phases/governance/
+|   |-- diagnostics/materialization.intent.log
+|   |-- diagnostics/proposal.intent.log
+|   |-- funding.vault.age
+|   |-- governance.passphrase
+|   |-- intents/materialization.intent.json
+|   |-- intents/proposal.intent.json
+|   |-- summary.json
+|   `-- voter.vault.age
+|-- signed/governance-materialization.signed.cbor.hex
+|-- signed/governance-proposal.signed.cbor.hex
+|-- submits/governance-materialization.{outcome,txid}
+|-- submits/governance-proposal.{outcome,txid}
+|-- unsigned/governance-materialization.cbor.hex
+|-- unsigned/governance-proposal.cbor.hex
+|-- witnesses/governance-materialization.devnet_funding.witness.hex
+`-- witnesses/governance-proposal.{devnet_funding,devnet_voter}.witness.hex
+```
+
+If the patched DevNet does not accrue the governance reward, the same
+host assertion path exits `78` and records
+`missing-shipped-governance-vote` instead of the materialization
+success code.
+
 ### Hard contract
 
 - No external `cardano-cli` anywhere on the smoke path.
@@ -189,11 +287,11 @@ runs/devnet-cli/.../
 
 ### Scope of this slice
 
-`--phase registry-stake` is the only live phase wired in this slice.
-`--phase governance` and `--phase disburse` remain unimplemented and
-will be delivered in later #161 slices (T017-T025). Run-dir summaries
-for those phases do **not** exist yet, and the CLI smoke will fail
-loudly if you point it at them.
+`--phase registry-stake` is the green prerequisite phase.
+`--phase governance` is wired through proposal submission, reward
+observation, materialization submission, and host-backed
+materialization verification. `--phase disburse` remains
+unimplemented and will be delivered in a later #161 slice.
 
 ## Node Boundary
 

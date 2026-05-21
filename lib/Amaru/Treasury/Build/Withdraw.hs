@@ -9,6 +9,7 @@ License     : Apache-2.0
 module Amaru.Treasury.Build.Withdraw
     ( runWithdraw
     , runWithdrawAction
+    , addWithdrawalToChange
     ) where
 
 import Control.Monad (unless)

@@ -23,6 +23,9 @@ DEFAULT_PHASE=scaffold
 DEFAULT_TIMEOUT_SECONDS=900
 AMARU_EXE=""
 CLI_SMOKE_REGISTRY_TIMEOUT_SECONDS="${CLI_SMOKE_REGISTRY_TIMEOUT_SECONDS:-60}"
+GOVERNANCE_WITHDRAWAL_LOVELACE=2000000
+GOVERNANCE_ANCHOR_URL="https://example.invalid/amaru-devnet-governance.json"
+GOVERNANCE_ANCHOR_HASH="000000000000000000000000000000000000000000000000000000000000002a"
 
 print_help() {
     cat <<'HELP'
@@ -93,8 +96,8 @@ preflight_for_phase() {
             ;;
         governance | disburse | full)
             require_tool jq
-            require_tool cardano-node
-            require_tool amaru-treasury-tx
+            require_tool cabal
+            require_tool tr
             ;;
         *)
             die "unknown phase: $phase (try --help)"
@@ -318,6 +321,7 @@ build_sign_submit() {
             --identity "$identity" \
             --expected-key-hash "$expected_key_hash" \
             --allow-unlisted-key \
+            --force \
             --out "$witness_path" \
             --vault-passphrase-fd 9 \
             || witness_status=$?
@@ -376,6 +380,124 @@ build_sign_submit() {
 
     log "$label: tx-id $submitted_tx_id"
     printf '%s' "$submitted_tx_id"
+}
+
+# Variant for governance proposal transactions that require more than
+# one detached witness. Positional triples after passphrase_file are:
+# vault_path identity expected_key_hash. Echoes the submitted tx-id.
+build_sign_submit_multi() {
+    local label=$1
+    local intent_path=$2
+    local passphrase_file=$3
+    shift 3
+
+    if [[ "$#" -eq 0 || $(( $# % 3 )) -ne 0 ]]; then
+        log "$label: build_sign_submit_multi needs witness triples"
+        return 67
+    fi
+
+    local cbor_path="$run_dir/unsigned/${label}.cbor.hex"
+    local report_path="$run_dir/diagnostics/${label}.report.json"
+    local signed_path="$run_dir/signed/${label}.signed.cbor.hex"
+    local txid_path="$run_dir/submits/${label}.txid"
+    local outcome_path="$run_dir/submits/${label}.outcome"
+    local build_log="$run_dir/diagnostics/${label}.build.log"
+
+    log "$label: tx-build"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        tx-build \
+        -i "$intent_path" \
+        -o "$cbor_path" \
+        --log "$build_log" \
+        --report "$report_path" \
+        || return $?
+
+    local attach_args=(attach-witness --tx "$cbor_path" --out "$signed_path")
+    while [[ "$#" -gt 0 ]]; do
+        local vault_path=$1
+        local identity=$2
+        local expected_key_hash=$3
+        shift 3
+
+        local witness_path="$run_dir/witnesses/${label}.${identity}.witness.hex"
+        log "$label: witness (identity=$identity)"
+        {
+            exec 9<"$passphrase_file" || return $?
+            local witness_status=0
+            "$AMARU_EXE" --network devnet witness \
+                --tx "$cbor_path" \
+                --vault "$vault_path" \
+                --identity "$identity" \
+                --expected-key-hash "$expected_key_hash" \
+                --force \
+                --out "$witness_path" \
+                --vault-passphrase-fd 9 \
+                || witness_status=$?
+            exec 9<&-
+            if [[ "$witness_status" -ne 0 ]]; then
+                return "$witness_status"
+            fi
+        } || return $?
+
+        local witness_hex
+        witness_hex=$(tr -d '\n' <"$witness_path") || return $?
+        attach_args+=(--witness "$witness_hex")
+    done
+
+    log "$label: attach-witness"
+    "$AMARU_EXE" "${attach_args[@]}" || return $?
+
+    log "$label: submit"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        submit --tx "$signed_path" \
+        >"$txid_path" 2>"$outcome_path" \
+        || return $?
+
+    sleep 2
+
+    local submitted_tx_id
+    submitted_tx_id=$(tr -d '\n' <"$txid_path") || return $?
+    if [[ -z "$submitted_tx_id" ]]; then
+        log "$label: submit produced empty tx id (see $outcome_path)"
+        return 64
+    fi
+
+    local report_tx_id
+    report_tx_id=$(jq -r '.result.report.identity.txId' "$report_path") \
+        || return $?
+    if [[ -z "$report_tx_id" || "$report_tx_id" == "null" ]]; then
+        log "$label: tx-build report missing identity.txId (see $report_path)"
+        return 65
+    fi
+    if [[ "$submitted_tx_id" != "$report_tx_id" ]]; then
+        log "$label: tx-id mismatch (submit=$submitted_tx_id report=$report_tx_id)"
+        return 66
+    fi
+
+    log "$label: tx-id $submitted_tx_id"
+    printf '%s' "$submitted_tx_id"
+}
+
+create_devnet_vault() {
+    local signing_key=$1
+    local identity=$2
+    local description=$3
+    local out_path=$4
+    local passphrase_file=$5
+
+    {
+        exec 9<"$passphrase_file"
+        "$AMARU_EXE" --network devnet vault create \
+            --signing-key-file "$signing_key" \
+            --label "$identity" \
+            --description "$description" \
+            --out "$out_path" \
+            --vault-work-factor 1 \
+            --vault-passphrase-fd 9
+        exec 9<&-
+    }
 }
 
 registry_stake_phase() {
@@ -611,7 +733,9 @@ registry_stake_phase() {
     # no in-process runner. Both reward accounts are scripted on DevNet,
     # so the rewardAccount and scriptHash fields collapse to the same
     # hex under dsraScriptHash/dsraRewardAccount (mirrors the library
-    # accountValue projection).
+    # accountValue projection). The top-level artifact network stays as
+    # the operator label ("devnet"), while ledgerNetwork carries the
+    # ledger constructor text expected by the governance reader.
     local accounts_dir="$run_dir/stake-reward-init"
     mkdir -p "$accounts_dir"
     local accounts_json="$accounts_dir/accounts.json"
@@ -626,7 +750,7 @@ registry_stake_phase() {
                 treasury: {
                     scriptHash: $reg[0].scripts.treasuryScriptHash,
                     rewardAccount: $reg[0].scripts.treasuryScriptHash,
-                    ledgerNetwork: $reg[0].network,
+                    ledgerNetwork: "Testnet",
                     registered: true,
                     rewardsLovelace: 0,
                     setupTxId: $scriptAccountTxId
@@ -634,7 +758,7 @@ registry_stake_phase() {
                 permissions: {
                     scriptHash: $reg[0].scripts.permissionsScriptHash,
                     rewardAccount: $reg[0].scripts.permissionsScriptHash,
-                    ledgerNetwork: $reg[0].network,
+                    ledgerNetwork: "Testnet",
                     registered: true,
                     rewardsLovelace: 0,
                     setupTxId: $plainAccountTxId
@@ -702,6 +826,358 @@ registry_stake_phase() {
 }
 JSON
     log "registry-stake: complete (summary in $phase_dir/summary.json)"
+}
+
+governance_phase() {
+    local run_dir=$1
+    local timeout_seconds=$2
+    local phase_dir="$run_dir/phases/governance"
+    mkdir -p "$phase_dir"
+
+    registry_stake_phase "$run_dir"
+
+    require_env CARDANO_NODE_SOCKET_PATH
+    require_env CLI_SMOKE_FUNDING_ADDR
+    require_env CLI_SMOKE_FUNDING_SKEY
+    require_env CLI_SMOKE_FUNDING_KEY_HASH
+    require_env CLI_SMOKE_VOTER_SKEY
+    require_env CLI_SMOKE_VOTER_KEY_HASH
+    require_file "funding signing key" "$CLI_SMOKE_FUNDING_SKEY"
+    require_file "voter signing key" "$CLI_SMOKE_VOTER_SKEY"
+
+    AMARU_EXE=$(resolve_amaru_exe)
+    log "governance: using $AMARU_EXE"
+
+    local registry_json="$run_dir/registry-init/registry.json"
+    local accounts_json="$run_dir/stake-reward-init/accounts.json"
+    local registry_summary="$run_dir/phases/registry-stake/summary.json"
+    require_file "registry.json" "$registry_json"
+    require_file "accounts.json" "$accounts_json"
+    require_file "registry-stake summary" "$registry_summary"
+
+    local proposal_funding_seed_txin
+    proposal_funding_seed_txin="$(jq -r \
+        '.stakeRewardPlainAccountTxId + "#0"' "$registry_summary")" \
+        || die "governance: cannot read proposal funding seed"
+    if [[ "$proposal_funding_seed_txin" == "null#0" ]]; then
+        die "governance: registry-stake summary missing stakeRewardPlainAccountTxId"
+    fi
+
+    local passphrase_file="$phase_dir/governance.passphrase"
+    printf 'cli-smoke-governance' >"$passphrase_file"
+    chmod 0600 "$passphrase_file"
+
+    local funding_vault="$phase_dir/funding.vault.age"
+    local voter_vault="$phase_dir/voter.vault.age"
+    log "governance: create funding vault"
+    create_devnet_vault \
+        "$CLI_SMOKE_FUNDING_SKEY" \
+        "devnet_funding" \
+        "DevNet funding key (governance)" \
+        "$funding_vault" \
+        "$passphrase_file"
+    log "governance: create voter vault"
+    create_devnet_vault \
+        "$CLI_SMOKE_VOTER_SKEY" \
+        "devnet_voter" \
+        "DevNet voter key (governance)" \
+        "$voter_vault" \
+        "$passphrase_file"
+
+    local intents_dir="$phase_dir/intents"
+    local diag_dir="$phase_dir/diagnostics"
+    mkdir -p "$intents_dir" "$diag_dir"
+
+    local proposal_intent="$intents_dir/proposal.intent.json"
+    log "governance: governance-withdrawal-init-wizard proposal"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        governance-withdrawal-init-wizard proposal \
+        --wallet-addr "$CLI_SMOKE_FUNDING_ADDR" \
+        --registry "$registry_json" \
+        --stake-reward-accounts "$accounts_json" \
+        --funding-seed-txin "$proposal_funding_seed_txin" \
+        --funding-stake-key-hash "$CLI_SMOKE_FUNDING_KEY_HASH" \
+        --voter-key-hash "$CLI_SMOKE_VOTER_KEY_HASH" \
+        --withdrawal-amount-lovelace "$GOVERNANCE_WITHDRAWAL_LOVELACE" \
+        --anchor-url "$GOVERNANCE_ANCHOR_URL" \
+        --anchor-hash "$GOVERNANCE_ANCHOR_HASH" \
+        --log "$diag_dir/proposal.intent.log" \
+        --force \
+        --out "$proposal_intent"
+
+    local proposal_txid
+    proposal_txid=$(build_sign_submit_multi \
+        "governance-proposal" \
+        "$proposal_intent" \
+        "$passphrase_file" \
+        "$funding_vault" \
+        "devnet_funding" \
+        "$CLI_SMOKE_FUNDING_KEY_HASH" \
+        "$voter_vault" \
+        "devnet_voter" \
+        "$CLI_SMOKE_VOTER_KEY_HASH") \
+        || die "governance-proposal: build/sign/submit failed"
+
+    local proposal_report="$run_dir/diagnostics/governance-proposal.report.json"
+    local proposal_out_count
+    proposal_out_count=$(jq -r '.result.report.outputs | length' \
+        "$proposal_report") \
+        || die "governance-proposal: cannot read outputs"
+    if [[ "$proposal_out_count" != "2" ]]; then
+        die "governance-proposal: expected 2 outputs (voter + change), got $proposal_out_count"
+    fi
+
+    # Governance proposal output roles remain "unknown" in the
+    # tx-build report because the governance build runner does not
+    # currently tag brWalletChangeOutput. The underlying builder emits
+    # the declared payTo voterBaseAddr output first and appends wallet
+    # change last, so #0 is the voter base UTxO and #1 is the funding
+    # change carried forward for materialization. The output-count guard
+    # above catches layout drift before this convention can go stale.
+    local voter_base_txin="${proposal_txid}#0"
+    local materialization_funding_seed_txin="${proposal_txid}#1"
+    local voter_base_address
+    local voter_base_lovelace
+    voter_base_address=$(jq -r '.result.report.outputs[0].address' \
+        "$proposal_report") \
+        || die "governance-proposal: cannot read voter output address"
+    voter_base_lovelace=$(jq -r '.result.report.outputs[0].value.lovelace' \
+        "$proposal_report") \
+        || die "governance-proposal: cannot read voter output lovelace"
+
+    local treasury_reward_account
+    treasury_reward_account=$(jq -r '.accounts.treasury.rewardAccount' \
+        "$accounts_json") \
+        || die "governance: cannot read treasury reward account"
+    if [[ -z "$treasury_reward_account" || "$treasury_reward_account" == "null" ]]; then
+        die "governance: accounts.json missing treasury reward account"
+    fi
+
+    local governance_action_id="${proposal_txid}#0"
+    local chain_dir="$run_dir/chain"
+    mkdir -p "$chain_dir"
+    local gov_request="$chain_dir/governance.assertions.request.json"
+    jq -n \
+        --arg proposalTxId "$proposal_txid" \
+        --arg governanceActionId "$governance_action_id" \
+        --arg proposalFundingSeedTxIn "$proposal_funding_seed_txin" \
+        --arg materializationFundingSeedTxIn "$materialization_funding_seed_txin" \
+        --arg voterBaseTxIn "$voter_base_txin" \
+        --arg voterBaseAddress "$voter_base_address" \
+        --argjson voterBaseLovelace "$voter_base_lovelace" \
+        --arg treasuryRewardAccount "$treasury_reward_account" \
+        --argjson expectedRewardLovelace "$GOVERNANCE_WITHDRAWAL_LOVELACE" \
+        --argjson timeoutSeconds "$timeout_seconds" \
+        --arg anchorUrl "$GOVERNANCE_ANCHOR_URL" \
+        --arg anchorHash "$GOVERNANCE_ANCHOR_HASH" \
+        '{
+            phase: "governance",
+            status: "proposal-submitted",
+            proposalTxId: $proposalTxId,
+            governanceActionId: $governanceActionId,
+            proposalFundingSeedTxIn: $proposalFundingSeedTxIn,
+            materializationFundingSeedTxIn: $materializationFundingSeedTxIn,
+            voterBaseOutput: {
+                txIn: $voterBaseTxIn,
+                address: $voterBaseAddress,
+                lovelace: $voterBaseLovelace
+            },
+            treasuryRewardAccount: $treasuryRewardAccount,
+            expectedRewardLovelace: $expectedRewardLovelace,
+            rewardPollTimeoutSeconds: $timeoutSeconds,
+            anchor: {
+                url: $anchorUrl,
+                hash: $anchorHash
+            }
+        }' >"$gov_request"
+
+    local materialization_intent="$intents_dir/materialization.intent.json"
+    local materialization_txid=""
+    local materialization_deadline=$((SECONDS + timeout_seconds))
+    local materialization_attempt=1
+    while [[ -z "$materialization_txid" && "$SECONDS" -lt "$materialization_deadline" ]]; do
+        log "governance: governance-withdrawal-init-wizard materialization (attempt $materialization_attempt)"
+        "$AMARU_EXE" --network devnet \
+            --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+            governance-withdrawal-init-wizard materialization \
+            --wallet-addr "$CLI_SMOKE_FUNDING_ADDR" \
+            --registry "$registry_json" \
+            --stake-reward-accounts "$accounts_json" \
+            --funding-seed-txin "$materialization_funding_seed_txin" \
+            --rewards-lovelace "$GOVERNANCE_WITHDRAWAL_LOVELACE" \
+            --log "$diag_dir/materialization.intent.log" \
+            --force \
+            --out "$materialization_intent"
+
+        if materialization_txid=$(build_sign_submit \
+            "governance-materialization" \
+            "$materialization_intent" \
+            "$funding_vault" \
+            "devnet_funding" \
+            "$CLI_SMOKE_FUNDING_KEY_HASH" \
+            "$passphrase_file"); then
+            break
+        fi
+        log "governance-materialization: not accepted yet; retrying after reward settlement"
+        materialization_txid=""
+        materialization_attempt=$((materialization_attempt + 1))
+        sleep 2
+    done
+    if [[ -z "$materialization_txid" ]]; then
+        die "governance-materialization: build/sign/submit failed before timeout"
+    fi
+
+    local materialization_report="$run_dir/diagnostics/governance-materialization.report.json"
+    local materialization_out_count
+    materialization_out_count=$(jq -r '.result.report.outputs | length' \
+        "$materialization_report") \
+        || die "governance-materialization: cannot read outputs"
+    if [[ "$materialization_out_count" != "2" ]]; then
+        die "governance-materialization: expected 2 outputs (treasury + change), got $materialization_out_count"
+    fi
+
+    # Materialization mirrors the proposal output convention: the
+    # declared treasury payTo output is emitted first and wallet change
+    # is appended last. The build runner leaves roles as "unknown", so
+    # the count guard above protects the #0 treasury / #1 change split.
+    local treasury_materialized_txin="${materialization_txid}#0"
+    local materialization_change_txin="${materialization_txid}#1"
+    local treasury_materialized_address
+    local treasury_materialized_lovelace
+    treasury_materialized_address=$(jq -r '.result.report.outputs[0].address' \
+        "$materialization_report") \
+        || die "governance-materialization: cannot read treasury output address"
+    treasury_materialized_lovelace=$(jq -r \
+        '.result.report.outputs[0].value.lovelace' \
+        "$materialization_report") \
+        || die "governance-materialization: cannot read treasury output lovelace"
+    if [[ "$treasury_materialized_lovelace" != "$GOVERNANCE_WITHDRAWAL_LOVELACE" ]]; then
+        die "governance-materialization: expected treasury output $GOVERNANCE_WITHDRAWAL_LOVELACE lovelace, got $treasury_materialized_lovelace"
+    fi
+
+    local materialized_dir="$run_dir/governance-withdrawal-init"
+    mkdir -p "$materialized_dir"
+    local materialized_json="$materialized_dir/materialized.json"
+    jq -n \
+        --arg governanceActionId "$governance_action_id" \
+        --arg treasuryRewardAccount "$treasury_reward_account" \
+        --arg submittedTxId "$materialization_txid" \
+        --arg treasuryMaterializedTxIn "$treasury_materialized_txin" \
+        --arg treasuryAddress "$treasury_materialized_address" \
+        --argjson materializedAdaLovelace "$treasury_materialized_lovelace" \
+        --arg registryPath "$registry_json" \
+        --arg stakeRewardPath "$accounts_json" \
+        '{
+            phase: "governance-withdrawal-init",
+            network: "devnet",
+            governanceActionId: $governanceActionId,
+            treasuryRewardAccount: $treasuryRewardAccount,
+            submittedTxId: $submittedTxId,
+            treasuryMaterializedTxIn: $treasuryMaterializedTxIn,
+            treasuryAddress: $treasuryAddress,
+            materializedAdaLovelace: $materializedAdaLovelace,
+            registryPath: $registryPath,
+            stakeRewardPath: $stakeRewardPath
+        }' >"$materialized_json"
+
+    jq -n \
+        --arg proposalTxId "$proposal_txid" \
+        --arg governanceActionId "$governance_action_id" \
+        --arg proposalFundingSeedTxIn "$proposal_funding_seed_txin" \
+        --arg materializationFundingSeedTxIn "$materialization_funding_seed_txin" \
+        --arg voterBaseTxIn "$voter_base_txin" \
+        --arg voterBaseAddress "$voter_base_address" \
+        --argjson voterBaseLovelace "$voter_base_lovelace" \
+        --arg treasuryRewardAccount "$treasury_reward_account" \
+        --argjson expectedRewardLovelace "$GOVERNANCE_WITHDRAWAL_LOVELACE" \
+        --argjson timeoutSeconds "$timeout_seconds" \
+        --arg anchorUrl "$GOVERNANCE_ANCHOR_URL" \
+        --arg anchorHash "$GOVERNANCE_ANCHOR_HASH" \
+        --arg materializationTxId "$materialization_txid" \
+        --arg treasuryMaterializedTxIn "$treasury_materialized_txin" \
+        --arg treasuryAddress "$treasury_materialized_address" \
+        --argjson materializedAdaLovelace "$treasury_materialized_lovelace" \
+        --arg materializationChangeTxIn "$materialization_change_txin" \
+        --arg materializedJson "$materialized_json" \
+        '{
+            phase: "governance",
+            status: "materialization-submitted",
+            proposalTxId: $proposalTxId,
+            governanceActionId: $governanceActionId,
+            proposalFundingSeedTxIn: $proposalFundingSeedTxIn,
+            materializationFundingSeedTxIn: $materializationFundingSeedTxIn,
+            voterBaseOutput: {
+                txIn: $voterBaseTxIn,
+                address: $voterBaseAddress,
+                lovelace: $voterBaseLovelace
+            },
+            treasuryRewardAccount: $treasuryRewardAccount,
+            expectedRewardLovelace: $expectedRewardLovelace,
+            rewardPollTimeoutSeconds: $timeoutSeconds,
+            anchor: {
+                url: $anchorUrl,
+                hash: $anchorHash
+            },
+            materialization: {
+                txId: $materializationTxId,
+                treasuryMaterializedTxIn: $treasuryMaterializedTxIn,
+                treasuryAddress: $treasuryAddress,
+                materializedAdaLovelace: $materializedAdaLovelace,
+                materializationChangeTxIn: $materializationChangeTxIn,
+                materializedJson: $materializedJson
+            }
+        }' >"$gov_request"
+
+    jq -n \
+        --arg registryPath "$registry_json" \
+        --arg stakeRewardPath "$accounts_json" \
+        --arg governancePath "$materialized_dir/governance.json" \
+        --arg withdrawalPath "$materialized_dir/withdrawal.json" \
+        --arg materializationPath "$materialized_json" \
+        --arg proposalTxId "$proposal_txid" \
+        --arg governanceActionId "$governance_action_id" \
+        --arg materializationTxId "$materialization_txid" \
+        --argjson amountLovelace "$GOVERNANCE_WITHDRAWAL_LOVELACE" \
+        '{
+            phase: "governance-withdrawal-init",
+            status: "passed",
+            network: "devnet",
+            registryPath: $registryPath,
+            stakeRewardPath: $stakeRewardPath,
+            amountLovelace: $amountLovelace,
+            proposalTxId: $proposalTxId,
+            governanceActionId: $governanceActionId,
+            materializationTxId: $materializationTxId,
+            governancePath: $governancePath,
+            withdrawalPath: $withdrawalPath,
+            materializationPath: $materializationPath
+        }' >"$materialized_dir/summary.json"
+
+    cat >"$phase_dir/summary.json" <<JSON
+{
+  "phase": "governance",
+  "status": "materialization-submitted",
+  "proposalTxId": "$proposal_txid",
+  "governanceActionId": "$governance_action_id",
+  "proposalFundingSeedTxIn": "$proposal_funding_seed_txin",
+  "materializationFundingSeedTxIn": "$materialization_funding_seed_txin",
+  "voterBaseTxIn": "$voter_base_txin",
+  "voterBaseAddress": "$voter_base_address",
+  "voterBaseLovelace": $voter_base_lovelace,
+  "treasuryRewardAccount": "$treasury_reward_account",
+  "expectedRewardLovelace": $GOVERNANCE_WITHDRAWAL_LOVELACE,
+  "materializationTxId": "$materialization_txid",
+  "treasuryMaterializedTxIn": "$treasury_materialized_txin",
+  "treasuryMaterializedAddress": "$treasury_materialized_address",
+  "treasuryMaterializedLovelace": $treasury_materialized_lovelace,
+  "materializedJson": "$materialized_json",
+  "proposalIntent": "$proposal_intent",
+  "materializationIntent": "$materialization_intent",
+  "chainAssertionsRequest": "$gov_request"
+}
+JSON
+    log "governance: materialization submitted; host will verify chain state"
 }
 
 create_run_dir() {
@@ -819,7 +1295,12 @@ main() {
                 "$run_dir" "$timeout_seconds" "$force"
             registry_stake_phase "$run_dir"
             ;;
-        governance | disburse | full)
+        governance)
+            require_inside_devnet "$inside_devnet" "$phase" \
+                "$run_dir" "$timeout_seconds" "$force"
+            governance_phase "$run_dir" "$timeout_seconds"
+            ;;
+        disburse | full)
             die "phase '$phase' not implemented yet in this slice; see specs/161-cli-devnet-smoke/plan.md"
             ;;
     esac

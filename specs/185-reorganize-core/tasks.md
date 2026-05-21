@@ -92,15 +92,15 @@ entrypoint requires a direct edit.
 
 ### Tests for S2
 
-- [ ] T006 [US1] Add the RED direct-runner golden harness in `test/golden/ReorganizeGoldenSpec.hs` plus fixture skeletons under `test/fixtures/reorganize-core/synthetic/` and `test/fixtures/reorganize-core/synthetic-overflow/`; record the compile-time or missing-`expected.cbor` RED failure before implementing `lib/Amaru/Treasury/Build/Reorganize.hs`.
+- [X] T006 [US1] Add the RED direct-runner golden harness in `test/golden/ReorganizeGoldenSpec.hs` plus fixture skeletons under `test/fixtures/reorganize-core/synthetic/` and `test/fixtures/reorganize-core/synthetic-overflow/`; record the compile-time or missing-`expected.cbor` RED failure before implementing `lib/Amaru/Treasury/Build/Reorganize.hs`.
 
 ### Implementation for S2
 
-- [ ] T007 [US1] Add `reorganizeProgram` to `lib/Amaru/Treasury/Tx/Reorganize.hs`, following the exact spend, collateral, reference, withdraw-zero, continuing-output, signer, and validity sequence in `contracts/reorganize-program-contract.md`.
-- [ ] T008 [US1] Create `lib/Amaru/Treasury/Build/Reorganize.hs` with `runReorganizeAction`, `runReorganizeBuild`, required-UTxO checks via existing `missingUtxosError`, preserved-value folding from `ChainContext.ccUtxos`, fee alignment, `validateFinalPhase1`, and standard `ccEvaluateTx` script-result collection.
-- [ ] T009 [US1] Update `amaru-treasury-tx.cabal` to expose `Amaru.Treasury.Build.Reorganize` in the library stanza and list `ReorganizeGoldenSpec` under the `golden-tests` suite.
-- [ ] T010 [US1] Populate `test/fixtures/reorganize-core/synthetic/` with `answers.json`, `env.json`, `intent.json`, `utxos.json`, `pparams.json`, `exunits.json`, `provenance.md`, and generated `expected.cbor`; populate `test/fixtures/reorganize-core/synthetic-overflow/` for the constrained-pparams final phase-1 failure case.
-- [ ] T011 [US1] Verify S2 with `nix develop --quiet -c just unit "Reorganize"`, `nix develop --quiet -c just golden "reorganize"` or `nix develop --quiet -c just golden` if matching is not available, and `./gate.sh`, recording evidence in `WIP.md`.
+- [X] T007 [US1] Add `reorganizeProgram` to `lib/Amaru/Treasury/Tx/Reorganize.hs`, following the exact spend, collateral, reference, withdraw-zero, continuing-output, signer, and validity sequence in `contracts/reorganize-program-contract.md`.
+- [X] T008 [US1] Create `lib/Amaru/Treasury/Build/Reorganize.hs` with `runReorganizeAction`, `runReorganizeBuild`, required-UTxO checks via existing `missingUtxosError`, preserved-value folding from `ChainContext.ccUtxos`, fee alignment, `validateFinalPhase1`, and standard `ccEvaluateTx` script-result collection.
+- [X] T009 [US1] Update `amaru-treasury-tx.cabal` to expose `Amaru.Treasury.Build.Reorganize` in the library stanza and list `ReorganizeGoldenSpec` under the `golden-tests` suite.
+- [X] T010 [US1] Populate `test/fixtures/reorganize-core/synthetic/` with `answers.json`, `env.json`, `intent.json`, `utxos.json`, `pparams.json`, `exunits.json`, `provenance.md`, and generated `expected.cbor`; populate `test/fixtures/reorganize-core/synthetic-overflow/` for the constrained-pparams final phase-1 failure case.
+- [X] T011 [US1] Verify S2 with `nix develop --quiet -c just unit "Reorganize"`, `nix develop --quiet -c just golden "reorganize"` or `nix develop --quiet -c just golden` if matching is not available, and `./gate.sh`, recording evidence in `WIP.md`.
 
 **Checkpoint**: S2 is complete when `runReorganizeBuild` works directly,
 the golden is byte-stable, missing UTxOs fail closed, exec-units overflow

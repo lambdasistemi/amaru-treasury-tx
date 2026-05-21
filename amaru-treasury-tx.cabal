@@ -116,6 +116,7 @@ library
     Amaru.Treasury.Build.Error.Types
     Amaru.Treasury.Build.GovernanceWithdrawalInit
     Amaru.Treasury.Build.RegistryInit
+    Amaru.Treasury.Build.Reorganize
     Amaru.Treasury.Build.ReportWriter
     Amaru.Treasury.Build.Result
     Amaru.Treasury.Build.StakeRewardInit
@@ -541,6 +542,7 @@ test-suite golden-tests
     PlaceholderSpec
     RegistryInitIntentSpec
     RegistryWalkGoldenSpec
+    ReorganizeGoldenSpec
     ReportRenderActionGoldenSpec
     ReportRenderSwapGoldenSpec
     StakeRewardInitIntentSpec
@@ -560,11 +562,12 @@ test-suite golden-tests
     , aeson
     , aeson-pretty
     , amaru-treasury-tx
-    , base                   <5
+    , base                    <5
     , base16-bytestring
     , bech32
     , bytestring
     , cardano-crypto-class
+    , cardano-ledger-allegra
     , cardano-ledger-alonzo
     , cardano-ledger-api
     , cardano-ledger-binary
@@ -578,6 +581,7 @@ test-suite golden-tests
     , hspec
     , microlens
     , text
+    , transformers
 
   build-tool-depends: hspec-discover:hspec-discover
 

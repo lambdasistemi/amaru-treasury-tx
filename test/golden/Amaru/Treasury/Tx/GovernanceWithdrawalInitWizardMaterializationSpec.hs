@@ -120,8 +120,16 @@ materializationParity = do
             (gwifContext fixture)
     let tx = gwifTranslated fixture
         ctx = gwifContext fixture
-        [seedUtxo, treasuryRefUtxo, registryRefUtxo] =
-            gwifInputUtxos fixture
+    (seedUtxo, treasuryRefUtxo, registryRefUtxo) <-
+        case gwifInputUtxos fixture of
+            [seed, treasuryRef, registryRef] ->
+                pure (seed, treasuryRef, registryRef)
+            inputs ->
+                expectationFailure
+                    ( "expected three materialization input UTxOs, got "
+                        <> show (length inputs)
+                    )
+                    >> error "unreachable"
     coreResult <-
         buildGovernanceWithdrawalMaterializationCore
             (ccPParams ctx)

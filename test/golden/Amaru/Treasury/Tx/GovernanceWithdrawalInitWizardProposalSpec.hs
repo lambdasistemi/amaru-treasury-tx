@@ -1,3 +1,4 @@
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 {- |
@@ -13,7 +14,7 @@ through the @tx-build@ dispatcher
 byte-identical to what 'buildGovernanceWithdrawalProposalCore'
 emits from the same underlying fixture.
 
-Three assertions:
+Four checks:
 
 * @intent shouldBe gwifIntent fixture@ — the wizard pure
   translation produces the same in-memory intent the
@@ -27,6 +28,9 @@ Three assertions:
 * the wizard's intent → dispatcher CBOR equals the core's
   CBOR (modelled on
   'Amaru.Treasury.Tx.StakeRewardInitWizardScriptAccountSpec').
+* an invalid upper-bound slot is rejected through the final Phase-1
+  path, proving the proposal builder no longer skips structural
+  ledger validation.
 
 Set @UPDATE_GOLDENS=1@ to rewrite the canonical fixtures
 under @test/fixtures/governance-withdrawal-init-wizard/@.
@@ -38,6 +42,7 @@ module Amaru.Treasury.Tx.GovernanceWithdrawalInitWizardProposalSpec
 import Control.Monad (unless)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Map.Strict qualified as Map
+import Data.Text qualified as T
 import System.Directory (doesFileExist)
 import System.Environment (lookupEnv)
 
@@ -60,6 +65,11 @@ import Cardano.Tx.Ledger (ConwayTx)
 import Amaru.Treasury.Build
     ( BuildResult (..)
     , runFromIntent
+    , runFromIntentEither
+    )
+import Amaru.Treasury.Build.Error
+    ( BuildDiagnostic (..)
+    , BuildError (..)
     )
 import Amaru.Treasury.ChainContext (ChainContext (..))
 import Amaru.Treasury.Devnet.GovernanceWithdrawalInit
@@ -73,7 +83,9 @@ import Amaru.Treasury.Devnet.GovernanceWithdrawalInit.Core
     )
 import Amaru.Treasury.IntentJSON
     ( GovernanceWithdrawalInitProposalTx (..)
-    , SomeTreasuryIntent
+    , SAction (..)
+    , SomeTreasuryIntent (..)
+    , TreasuryIntent (..)
     , decodeTreasuryIntentFile
     , encodeSomeTreasuryIntent
     )
@@ -112,6 +124,9 @@ spec =
             "fixture accounts.json parses via \
             \readDevnetGovernanceStakeRewardAccounts"
             accountsFixtureParses
+        it
+            "proposal build rejects an invalid upper slot through Phase-1 validation"
+            proposalRejectsInvalidUpperSlot
 
 proposalParity :: IO ()
 proposalParity = do
@@ -137,7 +152,15 @@ proposalParity = do
             (gwifContext fixture)
     let tx = gwifTranslated fixture
         ctx = gwifContext fixture
-        [seedUtxo] = gwifInputUtxos fixture
+    seedUtxo <-
+        case gwifInputUtxos fixture of
+            [seed] -> pure seed
+            inputs ->
+                expectationFailure
+                    ( "expected one proposal input UTxO, got "
+                        <> show (length inputs)
+                    )
+                    >> error "unreachable"
     coreResult <-
         buildGovernanceWithdrawalProposalCore
             (ccPParams ctx)
@@ -183,6 +206,42 @@ accountsFixtureParses = do
                 ("accounts.json failed to parse: " <> e)
         Right parsed ->
             parsed `shouldBe` expected
+
+proposalRejectsInvalidUpperSlot :: IO ()
+proposalRejectsInvalidUpperSlot = do
+    fixture <- proposalFixture
+    invalidSome <-
+        case gwifIntent fixture of
+            SomeTreasuryIntent SGovernanceWithdrawalInitProposal intent ->
+                pure $
+                    SomeTreasuryIntent
+                        SGovernanceWithdrawalInitProposal
+                        intent{tiValidityUpperBoundSlot = 999_999}
+            _ -> do
+                expectationFailure "expected proposal intent fixture"
+                error "unreachable"
+    result <-
+        runFromIntentEither
+            (gwifContext fixture)
+            invalidSome
+    case result of
+        Left err ->
+            assertOutsideValidityInterval err
+        Right{} ->
+            expectationFailure
+                "expected OutsideValidityIntervalUTxO, \
+                \but proposal build skipped Phase-1 validation"
+
+assertOutsideValidityInterval :: BuildError -> IO ()
+assertOutsideValidityInterval err =
+    case beDiagnostic err of
+        DiagnosticChecksFailed msg
+            | "OutsideValidityIntervalUTxO" `T.isInfixOf` msg ->
+                pure ()
+        other ->
+            expectationFailure $
+                "expected OutsideValidityIntervalUTxO, got "
+                    <> show other
 
 materializeRegistryIfMissing
     :: FilePath -> DevnetGovernanceWithdrawalRegistry -> IO ()

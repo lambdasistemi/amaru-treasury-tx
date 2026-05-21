@@ -26,28 +26,38 @@ module Amaru.Treasury.Build.GovernanceWithdrawalInit
     , runGovernanceWithdrawalInitMaterializationAction
     ) where
 
-import Control.Monad (when)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Except (ExceptT, throwE)
+import Data.Foldable (toList)
 import Data.Map.Strict qualified as Map
 import Data.Text qualified as T
 import Data.Void (Void, absurd)
 
+import Cardano.Ledger.Address
+    ( AccountAddress
+    , Withdrawals (..)
+    )
 import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.Api.Tx.Body
     ( collateralReturnTxBodyL
     , feeTxBodyL
     , totalCollateralTxBodyL
+    , withdrawalsTxBodyL
     )
 import Cardano.Ledger.Api.Tx.Out (TxOut)
 import Cardano.Ledger.BaseTypes (StrictMaybe (..))
 import Cardano.Ledger.Binary (serialize)
 import Cardano.Ledger.Coin (Coin (..))
-import Cardano.Ledger.Conway (ConwayEra)
+import Cardano.Ledger.Conway (ApplyTxError (..), ConwayEra)
+import Cardano.Ledger.Conway.Rules (ConwayLedgerPredFailure)
 import Cardano.Ledger.Core (bodyTxL)
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Tx.Build qualified as TxBuild
 import Cardano.Tx.Ledger (ConwayTx)
+import Cardano.Tx.Validate
+    ( isWitnessCompletenessFailure
+    , validatePhase1WithRewardAccounts
+    )
 import Lens.Micro ((^.))
 
 import Amaru.Treasury.Build.Common
@@ -55,7 +65,6 @@ import Amaru.Treasury.Build.Common
     , collateralInputFrom
     , strictMaybe
     , txIdText
-    , validateFinalPhase1
     )
 import Amaru.Treasury.Build.Error
     ( ActionBuildError
@@ -111,17 +120,7 @@ runGovernanceWithdrawalInitProposalAction ctx tx = do
                 (gwiptAnchor tx)
                 seed
                 eval
-    -- The proposal tx carries a Conway treasury-withdrawal
-    -- proposal procedure whose phase-1 check
-    -- (@TreasuryWithdrawalReturnAccountsDoNotExist@)
-    -- requires the proposal's return account to be
-    -- registered on-chain. The frozen 'ChainContext' the
-    -- offline build runs against carries UTxOs and
-    -- pparams but no reward-account state, so the check
-    -- would always reject; skip phase-1 here for the
-    -- same reason 'validateFinalPhase1' already skips
-    -- transactions with @withdrawals@.
-    materializeResultSkipPhase1 ctx walletInputUtxos txResult
+    materializeProposalResult ctx tx walletInputUtxos txResult
 
 -- | Build a @governance-withdrawal-init-materialization@ transaction.
 runGovernanceWithdrawalInitMaterializationAction
@@ -214,28 +213,27 @@ materializeResult
     -> [(TxIn, TxOut ConwayEra)]
     -> Either (TxBuild.BuildError Void) ConwayTx
     -> ExceptT ActionBuildError IO BuildResult
-materializeResult = materializeResultImpl True
+materializeResult ctx =
+    materializeResultImpl (validateMaterializationPhase1 ctx) ctx
 
-{- | Variant of 'materializeResult' that skips the
-'validateFinalPhase1' pre-flight. Used by the proposal
-arm, whose @TreasuryWithdrawalReturnAccountsDoNotExist@
-check cannot be satisfied from offline 'ChainContext'
-state (the return account must be registered on-chain).
--}
-materializeResultSkipPhase1
+materializeProposalResult
     :: ChainContext
+    -> GovernanceWithdrawalInitProposalTx
     -> [(TxIn, TxOut ConwayEra)]
     -> Either (TxBuild.BuildError Void) ConwayTx
     -> ExceptT ActionBuildError IO BuildResult
-materializeResultSkipPhase1 = materializeResultImpl False
+materializeProposalResult ctx proposalTx =
+    materializeResultImpl
+        (validateProposalPhase1 ctx proposalTx)
+        ctx
 
 materializeResultImpl
-    :: Bool
+    :: (ConwayTx -> Either T.Text ())
     -> ChainContext
     -> [(TxIn, TxOut ConwayEra)]
     -> Either (TxBuild.BuildError Void) ConwayTx
     -> ExceptT ActionBuildError IO BuildResult
-materializeResultImpl runPhase1 ctx walletInputUtxos result =
+materializeResultImpl validatePhase1 ctx walletInputUtxos result =
     case result of
         Left e ->
             throwE $
@@ -243,14 +241,13 @@ materializeResultImpl runPhase1 ctx walletInputUtxos result =
                     BuildPhaseBuild
                     (diagnosticFromTxBuildErrorVoid e)
         Right tx -> do
-            when runPhase1 $
-                case validateFinalPhase1 ctx tx of
-                    Left e ->
-                        throwE $
-                            actionBuildError
-                                BuildPhaseBuild
-                                (DiagnosticChecksFailed e)
-                    Right () -> pure ()
+            case validatePhase1 tx of
+                Left e ->
+                    throwE $
+                        actionBuildError
+                            BuildPhaseBuild
+                            (DiagnosticChecksFailed e)
+                Right () -> pure ()
             let body = tx ^. bodyTxL
                 feeLov = body ^. feeTxBodyL
                 totalColl = case body
@@ -294,6 +291,75 @@ materializeResultImpl runPhase1 ctx walletInputUtxos result =
                         strictMaybe
                             (body ^. collateralReturnTxBodyL)
                     }
+
+validateProposalPhase1
+    :: ChainContext
+    -> GovernanceWithdrawalInitProposalTx
+    -> ConwayTx
+    -> Either T.Text ()
+validateProposalPhase1 ctx proposalTx =
+    validateRewardAwarePhase1
+        ctx
+        (proposalRewardAccounts proposalTx)
+
+validateMaterializationPhase1
+    :: ChainContext
+    -> ConwayTx
+    -> Either T.Text ()
+validateMaterializationPhase1 ctx tx =
+    validateRewardAwarePhase1
+        ctx
+        (withdrawalRewardAccounts tx)
+        tx
+
+validateRewardAwarePhase1
+    :: ChainContext
+    -> Map.Map AccountAddress Coin
+    -> ConwayTx
+    -> Either T.Text ()
+validateRewardAwarePhase1 ctx rewardAccounts tx =
+    case validatePhase1WithRewardAccounts
+        (ccNetwork ctx)
+        (TxBuild.mkPParamsBound (ccPParams ctx))
+        (Map.toList (ccUtxos ctx))
+        rewardAccounts
+        (ccTipSlot ctx)
+        tx of
+        Right () -> Right ()
+        Left err ->
+            let structural =
+                    filter
+                        (not . isWitnessCompletenessFailure)
+                        (phase1Failures err)
+            in  if null structural
+                    then Right ()
+                    else
+                        Left $
+                            "Phase-1 validation rejected final transaction at sampled slot "
+                                <> T.pack (show (ccTipSlot ctx))
+                                <> ": "
+                                <> T.pack (show structural)
+
+proposalRewardAccounts
+    :: GovernanceWithdrawalInitProposalTx
+    -> Map.Map AccountAddress Coin
+proposalRewardAccounts tx =
+    -- The proposal transaction registers its return account in
+    -- the same body, so only seed the pre-existing treasury
+    -- account state here.
+    Map.fromList
+        [ (gwiptTreasuryAccount tx, Coin 0)
+        ]
+
+withdrawalRewardAccounts :: ConwayTx -> Map.Map AccountAddress Coin
+withdrawalRewardAccounts tx =
+    let Withdrawals withdrawals = tx ^. bodyTxL . withdrawalsTxBodyL
+    in  withdrawals
+
+phase1Failures
+    :: ApplyTxError ConwayEra
+    -> [ConwayLedgerPredFailure ConwayEra]
+phase1Failures (ConwayApplyTxError errs) = toList errs
 
 {- | Lift a Void-error 'BuildError' from the construction
 core into the project's diagnostic ADT. The construction

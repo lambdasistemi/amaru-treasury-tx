@@ -78,10 +78,13 @@ on a frozen `ChainContext` plus a `ReorganizeIntent` produces a
 3. attaches the deployed treasury / registry references (and any
    additional reference inputs the upstream bash wires),
 4. wires the permissions withdraw-zero entry exactly as upstream bash
-   does (`[NEEDS CLARIFICATION: A]`),
+   does (Q-001 verdict **A1** — byte-for-byte parity),
 5. emits **one** continuing output at the same treasury address
    carrying the total preserved value (lovelace plus any preserved
-   native assets — USDM in the common case),
+   native assets — USDM in the common case) — total computed by the
+   library from `ChainContext.ccUtxos` indexed by the intent's
+   `treasuryUtxos` list (Q-001 verdict **B2** — totals are NOT on
+   the intent; see "Resolved clarifications" below),
 6. requires the scope-owner signer(s) via `requireSignature`,
 7. sets `invalid_hereafter` to the operator-typed validity-bound slot,
 8. attaches CIP-1694 rationale metadata under label 1694 (mirroring
@@ -178,20 +181,26 @@ real fields would silently lie about the wire format.
    committed `docs/assets/intent-schema.json`).
 2. **Given** the merged slice, **When** a consumer reads the
    `reorganize` arm of `docs/assets/intent-schema.json`, **Then** the
-   field names match `ReorganizeInputs`'s JSON shape (treasury UTxOs,
-   treasury address, deployed-script refs, validity bound, scope owner
-   key hash, optional preserved USDM accumulation — exact set settled
-   by `[NEEDS CLARIFICATION: B]`).
+   field set is exactly: `treasuryUtxos` (non-empty array of TxIns),
+   `treasuryAddress`, `walletUtxo` (wallet fuel + collateral),
+   `treasuryDeployedAt`, `registryDeployedAt`,
+   `permissionsRewardAccount`, `permissionsDeployedAt`,
+   `scopeOwnerSigner`, `upperBound` (slot). Q-001 verdict **B2**:
+   no `continuingLovelace`, no `continuingUsdm`, no `usdmPolicy` /
+   `usdmAsset` — the library recomputes totals from
+   `ChainContext.ccUtxos` at build time.
 
 ---
 
 ### Edge Cases
 
-- A `Reorganize` intent JSON that decodes to `ReorganizeInputs` with
-  an **empty** treasury-UTxO list must surface a typed translation
-  error (it is a degenerate tx: nothing to merge). Either the JSON
-  decoder rejects up front, or `translateIntent` does — settled in
-  plan.
+- A `Reorganize` intent JSON that decodes with an **empty**
+  treasury-UTxO list must be refused before any tx construction.
+  Per Q-001 verdict **B2**, the JSON shape uses `NonEmpty TxIn`
+  (the decoder rejects an empty array at the parser layer); a
+  defensive `translateIntent` arm also rejects an empty list as a
+  typed `Left _` for safety against hand-crafted JSON that bypassed
+  the array-non-empty check.
 - A `Reorganize` intent whose treasury UTxOs span more than one
   treasury address (i.e. caller passed UTxOs from two different
   scopes) is structurally invalid for upstream `reorganize.sh`
@@ -218,35 +227,51 @@ real fields would silently lie about the wire format.
   `requireDevnet` dispatcher arm for init sub-actions. The reorganize
   build path itself is network-agnostic at the library layer, matching
   swap / disburse / withdraw.
-- CIP-1694 rationale metadata: `runWithdraw` and `runDisburse`
-  already accept a `Metadatum` argument from `TranslatedShared.tsRationale`.
-  Reorganize MUST follow the same shape — the rationale is encoded
-  under label 1694 by `setMetadata label1694 rationale`. The plan
-  picks whether the rationale is a typed field on `ReorganizeInputs`
-  (operator-supplied) or pulled from the `tsRationale` shared block
-  the dispatcher already extracts (settled by
-  `[NEEDS CLARIFICATION: C]`).
+- CIP-1694 rationale metadata: per Q-001 verdict **C1**, the rationale
+  flows through `TranslatedShared.tsRationale` (the same shared block
+  disburse / withdraw / swap already use). `ReorganizeInputs` does NOT
+  carry a rationale field.
+- Building the candidate set's tx may exceed `pparams.maxTxExecutionUnits`
+  if the operator picked too many treasury UTxOs. The library core
+  MUST surface this as a typed error variant
+  (`DiagnosticExecUnitsExceeded { used, max }` or equivalent) so the
+  wizard layer (#187) can iteratively drop one input and retry per its
+  "compress until full" policy. The library NEVER decides which input
+  to drop. See the "Operational model carry-forward" section below.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
 - **FR-001**: `Amaru.Treasury.IntentJSON.ReorganizeInputs` MUST be
-  replaced with a real record. The record MUST be sufficient to
-  reconstruct everything `build_transaction.sh` needs for the
-  reorganize case **without** further chain queries: the wallet
-  fuel/collateral TxIn, the treasury UTxOs to merge (a non-empty list
-  of TxIns), the treasury address, the deployed-script reference
-  TxIns (treasury, registry, plus any others upstream wires), the
-  scope-owner signer key hash(es), the validity-bound slot, and any
-  resolved values needed to construct the continuing-output value
-  (lovelace and preserved native-asset accumulations).
+  replaced with a real record. Per Q-001 verdicts **A1** + **B2**,
+  the record carries exactly: `walletUtxo :: TxIn` (fuel +
+  collateral), `treasuryUtxos :: NonEmpty TxIn` (decoder rejects an
+  empty array — non-emptiness is a wire-format invariant),
+  `treasuryAddress :: Addr` (the same address every treasury UTxO
+  lives at — also the continuing-output destination),
+  `treasuryDeployedAt :: TxIn` (deployed treasury-script ref),
+  `registryDeployedAt :: TxIn` (registry NFT read-only ref),
+  `permissionsRewardAccount :: RewardAccount` (the Amaru permissions
+  reward account for withdraw-zero, **A1** parity with upstream
+  bash), `permissionsDeployedAt :: TxIn` (deployed permissions
+  withdrawal-script ref, **A1** parity), `scopeOwnerSigner ::
+  KeyHash Guard` (the single scope-owner key hash; reorganize.sh's
+  `build_signers` never appends witnesses, so this is one key, not
+  a list), `upperBound :: SlotNo` (`invalid_hereafter`). The
+  preserved-value totals (lovelace + native assets) are NOT on the
+  intent — the library recomputes them from `ChainContext.ccUtxos`
+  indexed by `treasuryUtxos` at build time.
 - **FR-002**: `Amaru.Treasury.Tx.Reorganize` MUST expose the real
   `ReorganizeIntent` record + the pure `reorganizeProgram :: ReorganizeIntent
-  -> TxBuild q e ()`, mirroring `Tx.Withdraw.withdrawProgram` /
+  -> MaryValue -> TxBuild q e ()`, mirroring `Tx.Withdraw.withdrawProgram` /
   `Tx.Disburse.disburseAdaProgram`. The intent record carries
-  already-resolved ledger types (`TxIn`, `Addr`, `Coin`,
-  `KeyHash Guard`, `SlotNo`, optional `MultiAsset`).
+  already-resolved ledger types (`TxIn`, `Addr`, `KeyHash Guard`,
+  `RewardAccount`, `SlotNo`). The `MaryValue` second argument is
+  the preserved-total value the runner computed from the
+  `ChainContext` (B2) — the pure program does not look at chain
+  state itself. (The exact arity of `reorganizeProgram` — single
+  combined value vs. (Coin, MultiAsset) tuple — is settled in plan.)
 - **FR-003**: `Amaru.Treasury.Build.Reorganize` MUST exist as a new
   module exposing `runReorganizeBuild` and `runReorganizeAction`,
   mirroring `Amaru.Treasury.Build.Withdraw`'s shape (high-level IO
@@ -260,34 +285,50 @@ real fields would silently lie about the wire format.
 - **FR-005**: `Amaru.Treasury.IntentJSON.translateIntent` MUST handle
   `SReorganize` properly: it returns
   `Right (shared, reorganizeIntent)` for well-formed inputs and a
-  typed `Left _` for ill-formed inputs (empty UTxO list, etc — exact
-  invariants picked in plan). The current stub
+  typed `Left _` for ill-formed inputs. The empty-`treasuryUtxos`
+  case is rejected at the parser layer by the `NonEmpty` decoder
+  (FR-001); `translateIntent` additionally treats it defensively
+  for safety against hand-crafted JSON. The current stub
   (`Left "translateIntent: 'reorganize' not yet shipped (#46)"`) MUST
   be removed.
-- **FR-006**: `runReorganizeAction` MUST validate the resolved
-  treasury UTxOs and reference inputs are present in the
-  `ChainContext` UTxO map via the shared `missingUtxosError` helper,
-  matching the disburse/withdraw arms.
-- **FR-007**: `reorganizeProgram` MUST issue, in this order:
-  (a) spend wallet fuel + collateral,
-  (b) `spendScript` each treasury UTxO with the Sundae
-  `reorganizeRedeemer`,
-  (c) attach deployed-script references (treasury, registry, and any
-  others upstream wires — exact set settled by
-  `[NEEDS CLARIFICATION: A]`),
-  (d) wire permissions withdraw-zero exactly as upstream
-  (`[NEEDS CLARIFICATION: A]`),
-  (e) emit one `payTo treasuryAddress <preservedValue>` continuing
-  output,
-  (f) `requireSignature` for each scope-owner signer (typically one
-  key hash; `build_signers` only appends witnesses for disburse, not
-  reorganize),
+- **FR-006**: `runReorganizeAction` MUST validate that the wallet
+  fuel UTxO, every treasury UTxO in `treasuryUtxos`, and every
+  reference UTxO (`treasuryDeployedAt`, `registryDeployedAt`,
+  `permissionsDeployedAt`) are present in the `ChainContext` UTxO
+  map via the shared `missingUtxosError` helper, matching the
+  disburse/withdraw arms.
+- **FR-007**: `reorganizeProgram` MUST issue, in this order
+  (Q-001 verdict **A1** — byte-for-byte parity with upstream
+  `build_transaction.sh`):
+  (a) spend wallet fuel + mark it as collateral,
+  (b) `spendScript` each `treasuryUtxo` with the Sundae
+  `Amaru.Treasury.Redeemer.reorganizeRedeemer`,
+  (c) attach deployed-script references: `treasuryDeployedAt`,
+  `registryDeployedAt`, `permissionsDeployedAt`,
+  (d) `withdrawScript permissionsRewardAccount (Coin 0)
+  (RawPlutusData emptyListRedeemer)` — the permissions
+  withdraw-zero entry (A1 parity),
+  (e) `payTo treasuryAddress <preservedValue>` — one continuing
+  output carrying the recomputed total (lovelace + native assets)
+  from `ChainContext.ccUtxos` over the spent `treasuryUtxos`,
+  (f) `requireSignature scopeOwnerSigner` (single key hash; never
+  the witness list disburse uses),
   (g) `validTo upperBound`.
 - **FR-008**: `runReorganizeBuild` MUST go through the standard
   finalisation path:
   `validateFinalPhase1` → `alignCardanoCliBuildFee` →
   `BuildResult` assembly, mirroring `runWithdraw`. CIP-1694 rationale
-  metadata is encoded under label 1694 via `setMetadata`.
+  metadata is encoded under label 1694 via
+  `setMetadata label1694 (tsRationale shared)` (Q-001 verdict
+  **C1** — rationale source is the shared block, never a field on
+  the intent).
+- **FR-008a**: `runReorganizeAction` MUST compute the
+  preserved-total `MaryValue` by folding `ChainContext.ccUtxos !
+  txin` for each `txin` in `treasuryUtxos`. Lovelace sums via the
+  ledger's `Coin` semigroup; native assets sum via `MultiAsset`'s
+  union-with-add. The library does NOT consult any USDM-policy
+  knowledge of its own; the asset map is opaque (it just preserves
+  everything seen).
 - **FR-009**: An intent JSON roundtrip golden MUST cover
   encode/decode of a `Reorganize` `SomeTreasuryIntent`:
   `decodeTreasuryIntent . encodeSomeTreasuryIntent ≡ Right` on a
@@ -309,6 +350,18 @@ real fields would silently lie about the wire format.
   finalization audit).
 - **FR-014**: `nix build .#checks.unit` and `nix build .#checks.golden`
   MUST pass at HEAD when the PR is marked ready.
+- **FR-015**: `runReorganizeBuild` MUST surface
+  `DiagnosticExecUnitsExceeded { used :: ExUnits, max :: ExUnits }`
+  (or the closest existing variant in
+  `Amaru.Treasury.Build.Error`) as a typed `ActionBuildError` when
+  the produced tx's redeemer execution units sum to more than
+  `ChainContext.ccPParams.maxTxExecutionUnits`. The library does
+  NOT silently truncate the candidate set, and does NOT decide
+  which input to drop — the wizard layer (#187) iterates per its
+  "compress until full" policy on receipt of this typed error.
+  The exact diagnostic variant (new vs. reuse existing
+  `DiagnosticChecksFailed`) is settled in plan after a survey of
+  `Amaru.Treasury.Build.Error.BuildDiagnostic`.
 
 ### Non-Functional Requirements
 
@@ -337,17 +390,30 @@ real fields would silently lie about the wire format.
 
 - **`ReorganizeInputs`** (in `Amaru.Treasury.IntentJSON`): the JSON
   payload shape for the `reorganize` arm of `SomeTreasuryIntent`.
-  Carries operator-typed / resolver-translated inputs. Mirrors how
-  `WithdrawInputs` / `DisburseInputs` carry their resolved data.
+  Per Q-001 **B2**, carries only the *identifiers* needed to look
+  values up in `ChainContext.ccUtxos`: wallet fuel, non-empty
+  `treasuryUtxos`, three deployed-script refs, the permissions
+  reward account (A1), the scope-owner key hash, and the validity
+  bound. No resolved totals.
 - **`ReorganizeIntent`** (in `Amaru.Treasury.Tx.Reorganize`): the
-  typed lift consumed by the build path. Resolved ledger values only.
-- **`reorganizeProgram :: ReorganizeIntent -> TxBuild q e ()`**:
+  typed lift `translateIntent` produces from `ReorganizeInputs`.
+  Same field set as the inputs (the translation is essentially the
+  identity at this slice — operator-typed values are already ledger
+  types). Mirrors how `WithdrawIntent` carries one record's worth
+  of resolved ledger values.
+- **`reorganizeProgram :: ReorganizeIntent -> MaryValue -> TxBuild q e ()`**:
   the pure `TxBuild` program — the Haskell port of the bash
-  `build_transaction` flow for the reorganize case.
+  `build_transaction` flow for the reorganize case. Takes the
+  preserved-total `MaryValue` as a separate argument because the
+  computation depends on `ChainContext.ccUtxos` and the pure
+  program must not look at chain state itself.
 - **`runReorganizeAction` /  `runReorganizeBuild`** (in
   `Amaru.Treasury.Build.Reorganize`): the IO runner that consumes a
-  `ChainContext + ReorganizeIntent + Metadatum + Addr` and emits a
-  `BuildResult`, mirroring `runWithdrawAction` / `runWithdraw`.
+  `ChainContext + ReorganizeIntent + Metadatum + Addr`, computes
+  the preserved-total `MaryValue` by folding `ccUtxos` indexed by
+  `treasuryUtxos`, and emits a `BuildResult`, mirroring
+  `runWithdrawAction` / `runWithdraw`. Surfaces
+  `DiagnosticExecUnitsExceeded` (FR-015) when exec units overflow.
 
 ## Deliverables
 
@@ -408,9 +474,12 @@ the cast and docs follow.
 - **SC-006**: The reorganize redeemer bytes emitted by the produced
   tx body match `Amaru.Treasury.Redeemer.reorganizeRedeemer`
   byte-for-byte (Constr 0 [], CBOR `d87980`).
-- **SC-007**: The continuing-output value on the built tx equals the
-  total lovelace of the spent treasury UTxOs plus the total preserved
-  USDM (when present), to the asset.
+- **SC-007**: The continuing-output `MaryValue` on the built tx
+  equals the elementwise sum of `MaryValue`s read from
+  `ChainContext.ccUtxos` for each `txin` in
+  `ReorganizeIntent.treasuryUtxos` — lovelace sum exactly preserved,
+  every native-asset entry summed and emitted (no asset dropped,
+  no asset added).
 - **SC-008**: The unified `Amaru.Treasury.Build` dispatcher tests
   (if any exist for the other arms) extend to cover the
   `SReorganize` arm; otherwise a focused test on
@@ -432,69 +501,73 @@ unchanged.
 
 ## Clarifications
 
-### Open clarifications (forwarded to epic owner via Q-001-spec-ready)
+### Resolved clarifications (Q-001-spec-ready, 2026-05-21)
 
-- **[NEEDS CLARIFICATION: A] — Permissions withdraw-zero parity**.
-  Upstream
+The epic owner answered all three open clarifications and added a
+fourth amendment (the operational-model paragraph below). Verdicts
+override the original recommendations; the spec text above already
+reflects them.
+
+- **A → A1 (chosen): Permissions withdraw-zero parity with upstream
+  bash.** `reorganizeProgram` wires the
+  `withdrawScript permissionsRewardAccount 0 (RawPlutusData emptyListRedeemer)`
+  entry plus the `permissionsDeployedAt` deployed-script reference
+  exactly as
   [`build_transaction.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/lib/build_transaction.sh)
-  is shared across `reorganize.sh` / `disburse.sh`, and includes
-  `--withdrawal $permissions_stake_address+0` plus the
-  `permissions_reference` read-only ref every call, including
-  reorganize. The Sundae validator's `Reorganize` arm does **not**
-  require permissions withdraw (only owner multisig on the spend).
-  Two viable choices:
-  - **(A1) Byte-for-byte parity**: wire permissions withdraw-zero in
-    `reorganizeProgram` (extra reference input + extra script
-    withdrawal + extra permissions reward-account field on
-    `ReorganizeIntent`). Matches upstream bash exactly. Strictly
-    larger tx (more script eval). Required if the smoke #87 will
-    diff against bash-built bytes.
-  - **(A2) Minimal validator-spec build**: skip permissions
-    withdraw-zero, mirroring the issue's "scope-owner-signed only"
-    framing. Smaller tx, fewer reference inputs. The intent JSON
-    payload shrinks by `permissionsRewardAccount` +
-    `permissionsDeployedAt`. Does not match bash byte-for-byte.
+  emits them. `ReorganizeInputs` therefore carries
+  `permissionsRewardAccount :: RewardAccount` and
+  `permissionsDeployedAt :: TxIn`. The Sundae validator's
+  `Reorganize` arm does not require permissions withdraw; the
+  parity choice is the safer default pending a separate
+  validator-semantics investigation (parked at
+  `/tmp/epic-189/staged-briefs/issue-reorganize-permissions-semantics.md`).
 
-  Recommend **A1** unless the epic owner explicitly opts for A2 —
-  byte-for-byte upstream parity is the safer default for the smoke
-  layer #87 and minimises validator surprises if Sundae tightens the
-  reorganize spec. (Plan locks once answered.)
+- **B → B2 (chosen, flipped from the spec's original B1
+  recommendation): Recompute totals from `ChainContext.ccUtxos` at
+  build time.** `ReorganizeInputs` carries `treasuryUtxos ::
+  NonEmpty TxIn` only — no `continuingLovelace`, no
+  `continuingUsdm`, no `usdmPolicy` / `usdmAsset`. The library
+  reads each `txin`'s output from `ccUtxos` and folds the
+  `MaryValue`s into the single continuing-output value at the
+  treasury address. This matches the operational-model paragraph
+  below ("compress until full" iteration), where the wizard tries
+  multiple subsets — if the intent carried totals, every iteration
+  would have to rewrite the intent, and the intent would stop being
+  a stable artifact.
 
-- **[NEEDS CLARIFICATION: B] — USDM in the intent payload**.
-  `reorganize.sh` accepts `<AMOUNT> <UNIT>` and `select_treasury_utxos`
-  accumulates `acc_lovelace` and `acc_usdm` from the picked treasury
-  UTxOs, then writes the continuing output as
-  `$treasury_address+$acc_lovelace[+$acc_usdm $USDM_POLICY.$USDM_TOKEN]`.
-  Two viable shapes for `ReorganizeInputs`:
-  - **(B1) Resolved totals carried explicitly**: `continuingLovelace
-    :: Coin`, `continuingUsdm :: Integer` (optional), `usdmPolicy ::
-    Maybe PolicyID`, `usdmAsset :: Maybe AssetName`. The wizard
-    accumulates and writes them in.
-  - **(B2) Recompute from frozen UTxO map**: only carry
-    `treasuryUtxos :: [TxIn]` and recompute the totals at build time
-    from `ChainContext.ccUtxos`. Smaller payload but couples build to
-    chain state shape.
+- **C → C1 (chosen): Rationale flows through `TranslatedShared.tsRationale`.**
+  No new field on `ReorganizeInputs`; the wizard layer #187 plumbs
+  rationale through the existing shared block exactly as disburse /
+  withdraw / swap already do.
 
-  Recommend **B1** (carries the operator-resolved totals exactly,
-  matches how `DisburseUsdmPayload` already represents
-  multi-asset payloads, and means the library core needs no
-  USDM-policy knowledge of its own). Open in case the epic owner
-  prefers B2 to keep the intent shape minimal.
+- **Side question → no.** `Amaru.Treasury.Devnet.SmokeSpec` is NOT
+  extended with a `Reorganize` entry. Smoke parity belongs to #87.
 
-- **[NEEDS CLARIFICATION: C] — Rationale source**.
-  `runWithdraw` / `runDisburse` take a `Metadatum` argument
-  (`tsRationale shared`). For the reorganize arm, does the rationale
-  come from `TranslatedShared` (operator-supplied at the intent JSON
-  layer, same as other actions) — **(C1)** — or from a dedicated
-  `reorganizeRationale` field on `ReorganizeInputs` — **(C2)**?
+### Operational model carry-forward — "compress until full"
 
-  Recommend **C1** (uniformity across all four shipped-CLI actions;
-  no new field on `ReorganizeInputs`; the wizard #187 plumbs
-  rationale through the existing shared block).
+The operational truth of reorganize is **"merge as many treasury
+UTxOs as possible until the tx execution-unit budget is reached"**,
+not "merge enough to clear a threshold". Upstream
+[`reorganize.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/bin/reorganize.sh)
+uses `<AMOUNT> <UNIT>` as a threshold because bash cannot probe
+exec-units mid-build. With a Haskell builder the wizard layer can
+— and should — drop the threshold and iterate against the typed
+`DiagnosticExecUnitsExceeded` (FR-015) the library surfaces.
 
-### Resolved (answered inline during interview)
+The wizard-side iteration policy (to be picked at #187 spec time;
+candidates: smallest-first / largest-first / oldest-first) is **out
+of scope for #185**. This slice's library core MUST:
 
-_(none yet — to be filled when Q-001-spec-ready answers come back)_
+- accept any non-empty candidate set the wizard hands it,
+- emit the deterministic build for that candidate set,
+- surface `DiagnosticExecUnitsExceeded` cleanly on overflow,
+- never silently drop or reorder inputs,
+- never decide which input to drop.
+
+The wizard's iteration loop is informational here — it explains
+*why* the library cannot carry resolved totals on the intent (the
+intent is rewritten per attempt, so totals would be wrong by
+construction). It does NOT mean the library iterates.
 
 ## Non-Goals
 

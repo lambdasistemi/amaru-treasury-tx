@@ -38,6 +38,12 @@ Frozen context:
   context.
 - `utxos.json` contains the wallet UTxO and reference UTxOs named by
   the synthetic withdraw intent.
+- `scope.permissionsDeployedAt` points at the reference script whose
+  hash is the permissions reward account
+  `a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094`.
+- `scope.treasuryDeployedAt` points at the reference script whose hash
+  is the withdraw reward account / treasury validator
+  `32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d`.
 - `exunits.json` contains a synthetic rewarding-purpose row so the
   offline `ChainContext` can evaluate the withdraw script without live
   node access.

@@ -131,10 +131,10 @@ Forbidden scope:
 
 Tasks:
 
-- [ ] T005 [US1] Investigate the failing `runWithdraw` unit example from `test/unit/Amaru/Treasury/BuildSpec.hs` through `lib/Amaru/Treasury/Build/Withdraw.hs`, identify whether the ledger complaint is caused by script integrity hash computation, a missing reference-input UTxO, or a stray `Rewarding 0` redeemer, record the diagnosis in `WIP.md`, and log `NOTE investigation-complete`.
-- [ ] T006 [US1] RED: add or update a focused withdraw regression in `test/unit/Amaru/Treasury/Build/WithdrawSpec.hs` with any required `amaru-treasury-tx.cabal` wiring, proving the isolated ledger rule before changing production behavior.
-- [ ] T007 [US1] GREEN: fix the withdraw builder or, if investigation proves the builder is correct, the incomplete fixture so the withdraw transaction is ledger-valid under active final Phase-1 validation.
-- [ ] T008 [US1] Run the focused withdraw command plus `./gate.sh`, record RED/GREEN and gate evidence in `WIP.md`, and create the single slice commit.
+- [X] T005 [US1] Investigate the failing `runWithdraw` unit example from `test/unit/Amaru/Treasury/BuildSpec.hs` through `lib/Amaru/Treasury/Build/Withdraw.hs`, identify whether the ledger complaint is caused by script integrity hash computation, a missing reference-input UTxO, or a stray `Rewarding 0` redeemer, record the diagnosis in `WIP.md`, and log `NOTE investigation-complete`.
+- [X] T006 [US1] RED: add or update a focused withdraw regression in `test/unit/Amaru/Treasury/Build/WithdrawSpec.hs` with any required `amaru-treasury-tx.cabal` wiring, proving the isolated ledger rule before changing production behavior.
+- [X] T007 [US1] GREEN: fix the withdraw builder or, if investigation proves the builder is correct, the incomplete fixture so the withdraw transaction is ledger-valid under active final Phase-1 validation.
+- [X] T008 [US1] Run the focused withdraw command plus `./gate.sh`, record RED/GREEN and gate evidence in `WIP.md`, and create the single slice commit.
 
 Checkpoint: the withdraw fixture/build path no longer contributes
 residual script-withdrawal final Phase-1 failures, and `./gate.sh`

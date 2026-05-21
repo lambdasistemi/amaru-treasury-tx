@@ -83,8 +83,13 @@ preflight_for_phase() {
             require_tool amaru-treasury-tx
             ;;
         registry-stake)
+            # Branch-built amaru-treasury-tx is resolved via cabal
+            # list-bin inside registry_stake_phase to avoid stale
+            # PATH binaries (#161 mandate). Only jq/cabal/tr are
+            # required here.
             require_tool jq
             require_tool cabal
+            require_tool tr
             ;;
         governance | disburse | full)
             require_tool jq
@@ -252,31 +257,126 @@ require_inside_devnet() {
         || die "cabal build exe:devnet-cli-smoke-host failed"
     local host_exe
     host_exe=$(cabal list-bin exe:devnet-cli-smoke-host -O0)
+    # Always pass --force to the host: the shell smoke has already
+    # gated on its own --force flag via create_run_dir, and the host
+    # would otherwise refuse to reuse the run-dir we just created.
     local host_args=(--run-dir "$run_dir" --phase "$phase" \
-        --timeout-seconds "$timeout_seconds")
-    [[ "$force" -eq 1 ]] && host_args+=(--force)
+        --timeout-seconds "$timeout_seconds" --force)
     exec "$host_exe" "${host_args[@]}"
 }
 
-# Surface deferred behind missing-shipped-registry-bootstrap (#161 slice 3).
+# Shared shipped-CLI tx pipeline used by every registry-stake build.
 #
-# The slice-3 gap recorded in
-#   <run-dir>/phases/registry-stake/missing-surface.json
-# blocks the rest of the bootstrap pipeline at the very first wizard
-# call (registry-init-wizard seed-split). Until parent epic #156
-# closes the bootstrap surface, the following shipped commands are
-# intentionally not invoked from the registry-stake phase:
+# Reads inputs from positional arguments; persists artifacts under the
+# run-dir's unsigned/, witnesses/, signed/, submits/, and diagnostics/
+# trees; checks pre-submission tx-id (from tx-build's --report) against
+# post-submission tx-id (from submit stdout). Echoes only the submitted
+# tx-id on stdout so callers can capture it via command substitution.
 #
-#   - registry-init-wizard mint
-#   - registry-init-wizard reference-scripts
-#   - stake-reward-init-wizard script-account
-#   - stake-reward-init-wizard plain-account
-#   - tx-build / witness / attach-witness / submit
-#     (the shared shipped CLI build_sign_submit pipeline a later slice
-#     will reinstate once seed-split returns an intent)
-#
-# Naming them here keeps the no-fallback static guard meaningful
-# without committing an unverified pipeline as if it were live.
+# Required global env: AMARU_EXE, CARDANO_NODE_SOCKET_PATH, run_dir.
+# Args: label intent_path vault_path identity expected_key_hash
+#       passphrase_file
+build_sign_submit() {
+    local label=$1
+    local intent_path=$2
+    local vault_path=$3
+    local identity=$4
+    local expected_key_hash=$5
+    local passphrase_file=$6
+
+    local cbor_path="$run_dir/unsigned/${label}.cbor.hex"
+    local report_path="$run_dir/diagnostics/${label}.report.json"
+    local witness_path="$run_dir/witnesses/${label}.${identity}.witness.hex"
+    local signed_path="$run_dir/signed/${label}.signed.cbor.hex"
+    local txid_path="$run_dir/submits/${label}.txid"
+    local outcome_path="$run_dir/submits/${label}.outcome"
+    local build_log="$run_dir/diagnostics/${label}.build.log"
+
+    # Every step uses `|| return $?` because this function is
+    # invoked under command substitution; bash's `set -e` is
+    # suppressed for assignment-from-command-substitution, so
+    # explicit propagation is what surfaces the failure to the
+    # caller and stops the cascade dead.
+
+    log "$label: tx-build"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        tx-build \
+        -i "$intent_path" \
+        -o "$cbor_path" \
+        --log "$build_log" \
+        --report "$report_path" \
+        || return $?
+
+    log "$label: witness (identity=$identity)"
+    {
+        exec 9<"$passphrase_file" || return $?
+        local witness_status=0
+        "$AMARU_EXE" --network devnet witness \
+            --tx "$cbor_path" \
+            --vault "$vault_path" \
+            --identity "$identity" \
+            --expected-key-hash "$expected_key_hash" \
+            --allow-unlisted-key \
+            --out "$witness_path" \
+            --vault-passphrase-fd 9 \
+            || witness_status=$?
+        # Close fd 9 unconditionally before propagating, so the
+        # original witness exit status is not overwritten by the
+        # `exec 9<&-` status.
+        exec 9<&-
+        if [[ "$witness_status" -ne 0 ]]; then
+            return "$witness_status"
+        fi
+    } || return $?
+
+    log "$label: attach-witness"
+    local witness_hex
+    witness_hex=$(tr -d '\n' <"$witness_path") || return $?
+    "$AMARU_EXE" attach-witness \
+        --tx "$cbor_path" \
+        --witness "$witness_hex" \
+        --out "$signed_path" \
+        || return $?
+
+    log "$label: submit"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        submit --tx "$signed_path" \
+        >"$txid_path" 2>"$outcome_path" \
+        || return $?
+
+    # The shipped `submit` returns SubmitAccepted as soon as the
+    # node enqueues the tx in its mempool. Downstream tx-build calls
+    # need the outputs visible in the acquired ledger snapshot, which
+    # only happens after block inclusion. DevNet's pinned genesis
+    # produces blocks every ~100ms; a 2-second settle is many block
+    # ticks of headroom and keeps the smoke determined without
+    # introducing a new shipped wait surface.
+    sleep 2
+
+    local submitted_tx_id
+    submitted_tx_id=$(tr -d '\n' <"$txid_path") || return $?
+    if [[ -z "$submitted_tx_id" ]]; then
+        log "$label: submit produced empty tx id (see $outcome_path)"
+        return 64
+    fi
+
+    local report_tx_id
+    report_tx_id=$(jq -r '.result.report.identity.txId' "$report_path") \
+        || return $?
+    if [[ -z "$report_tx_id" || "$report_tx_id" == "null" ]]; then
+        log "$label: tx-build report missing identity.txId (see $report_path)"
+        return 65
+    fi
+    if [[ "$submitted_tx_id" != "$report_tx_id" ]]; then
+        log "$label: tx-id mismatch (submit=$submitted_tx_id report=$report_tx_id)"
+        return 66
+    fi
+
+    log "$label: tx-id $submitted_tx_id"
+    printf '%s' "$submitted_tx_id"
+}
 
 registry_stake_phase() {
     local run_dir=$1
@@ -295,8 +395,7 @@ registry_stake_phase() {
     local metadata="test/fixtures/metadata.json"
     require_file "metadata fixture" "$metadata"
 
-    local wallet_addr
-    wallet_addr="$CLI_SMOKE_FUNDING_ADDR"
+    local wallet_addr="$CLI_SMOKE_FUNDING_ADDR"
     log "registry-stake: funding wallet addr = $wallet_addr"
 
     local passphrase_file="$phase_dir/funding.passphrase"
@@ -322,96 +421,287 @@ registry_stake_phase() {
     local diag_dir="$phase_dir/diagnostics"
     mkdir -p "$intents_dir" "$diag_dir"
 
-    # Attempt the shipped registry-init-wizard seed-split through the
-    # shipped CLI. The current shipped wizard verifies the registry
-    # metadata anchors against chain before producing an intent, so
-    # on a fresh DevNet it cannot bootstrap. The mint, reference-
-    # scripts, and stake-reward sub-actions all reuse the same
-    # resolver and would fail with the same error; ticket #156 owns
-    # the decision on whether to ship a bootstrap-aware path. The
-    # smoke records the wizard transcript and emits the structured
-    # missing-shipped-registry-bootstrap diagnostic instead of
-    # falling back to any in-process Devnet runner.
-    local seed_split_stdout="$diag_dir/seed-split.stdout"
-    local seed_split_stderr="$diag_dir/seed-split.stderr"
-    local seed_split_log="$intents_dir/seed-split.log"
+    # --- T014: registry-init-wizard --bootstrap pipeline ---
+
     local seed_split_intent="$intents_dir/seed-split.intent.json"
-    log "registry-stake: registry-init-wizard seed-split (shipped CLI attempt)"
-    local seed_split_status=0
-    "$AMARU_EXE" --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+    log "registry-stake: registry-init-wizard seed-split --bootstrap"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
         registry-init-wizard seed-split \
+        --bootstrap \
         --wallet-addr "$wallet_addr" \
         --metadata "$metadata" \
         --scope "$scope" \
-        --out "$seed_split_intent" \
-        --log "$seed_split_log" \
-        >"$seed_split_stdout" 2>"$seed_split_stderr" \
-        || seed_split_status=$?
+        --log "$diag_dir/seed-split.intent.log" \
+        --out "$seed_split_intent"
 
-    if [[ "$seed_split_status" -eq 0 ]]; then
-        # The shipped wizard returned an intent without complaining
-        # about missing anchors. That would mean the bootstrap gap is
-        # gone and slice 3 needs to expand past the diagnostic; fail
-        # so the orchestrator notices the assumption shift.
-        die "missing-shipped-registry-bootstrap diagnostic stale: seed-split succeeded; reopen #156 plan"
+    local seed_split_txid
+    seed_split_txid=$(build_sign_submit \
+        "seed-split" \
+        "$seed_split_intent" \
+        "$funding_vault" \
+        "devnet_funding" \
+        "$CLI_SMOKE_FUNDING_KEY_HASH" \
+        "$passphrase_file") \
+        || die "seed-split: build/sign/submit failed"
+
+    # Derive scopes/registry/funding seed TxIns from the seed-split
+    # tx-build report. Registry-init build runners do not currently
+    # tag their walletChange output in BuildResult (the change role
+    # comes out as "unknown" — see
+    # lib/Amaru/Treasury/Build/RegistryInit.hs:brWalletChangeOutput
+    # = Nothing). The contract of Cardano.Tx.Build.build appends the
+    # change output last, so the highest-index output is the change
+    # / funding seed and the remaining ones in declaration order are
+    # the two explicit payTo outputs (scopes seed, registry seed).
+    local seed_split_report="$run_dir/diagnostics/seed-split.report.json"
+    local out_count
+    out_count=$(jq -r '.result.report.outputs | length' \
+        "$seed_split_report") \
+        || die "seed-split: cannot read outputs from $seed_split_report"
+    if [[ "$out_count" != "3" ]]; then
+        die "seed-split: expected 3 outputs (2 seeds + change), got $out_count"
     fi
+    local scopes_seed_txin="${seed_split_txid}#0"
+    local registry_seed_txin="${seed_split_txid}#1"
+    local funding_seed_txin="${seed_split_txid}#2"
 
-    local gap_marker="missing-shipped-registry-bootstrap"
-    local raw_reason
-    raw_reason=$(tr -d '\n' <"$seed_split_stderr" | tr -d '\r')
+    local mint_intent="$intents_dir/mint.intent.json"
+    log "registry-stake: registry-init-wizard mint --bootstrap"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        registry-init-wizard mint \
+        --bootstrap \
+        --wallet-addr "$wallet_addr" \
+        --metadata "$metadata" \
+        --scope "$scope" \
+        --scopes-seed-txin "$scopes_seed_txin" \
+        --registry-seed-txin "$registry_seed_txin" \
+        --owner-key-hash "$CLI_SMOKE_FUNDING_KEY_HASH" \
+        --log "$diag_dir/mint.intent.log" \
+        --out "$mint_intent"
 
-    local diagnostic="$phase_dir/missing-surface.json"
+    local mint_txid
+    mint_txid=$(build_sign_submit \
+        "mint" \
+        "$mint_intent" \
+        "$funding_vault" \
+        "devnet_funding" \
+        "$CLI_SMOKE_FUNDING_KEY_HASH" \
+        "$passphrase_file") \
+        || die "mint: build/sign/submit failed"
+
+    local refscripts_intent="$intents_dir/reference-scripts.intent.json"
+    log "registry-stake: registry-init-wizard reference-scripts --bootstrap"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        registry-init-wizard reference-scripts \
+        --bootstrap \
+        --wallet-addr "$wallet_addr" \
+        --metadata "$metadata" \
+        --scope "$scope" \
+        --scopes-seed-txin "$scopes_seed_txin" \
+        --registry-seed-txin "$registry_seed_txin" \
+        --funding-seed-txin "$funding_seed_txin" \
+        --log "$diag_dir/reference-scripts.intent.log" \
+        --out "$refscripts_intent"
+
+    local refscripts_txid
+    refscripts_txid=$(build_sign_submit \
+        "reference-scripts" \
+        "$refscripts_intent" \
+        "$funding_vault" \
+        "devnet_funding" \
+        "$CLI_SMOKE_FUNDING_KEY_HASH" \
+        "$passphrase_file") \
+        || die "reference-scripts: build/sign/submit failed"
+
+    log "registry-stake: registry-init-wizard write-artifacts"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        registry-init-wizard write-artifacts \
+        --run-dir "$run_dir" \
+        --seed-split-txid "$seed_split_txid" \
+        --registry-mint-txid "$mint_txid" \
+        --reference-scripts-txid "$refscripts_txid" \
+        --scopes-seed-txin "$scopes_seed_txin" \
+        --registry-seed-txin "$registry_seed_txin" \
+        --owner-key-hash "$CLI_SMOKE_FUNDING_KEY_HASH"
+
+    local registry_json="$run_dir/registry-init/registry.json"
+    require_file "registry.json produced by write-artifacts" "$registry_json"
+
+    # --- T015: stake-reward-init-wizard pipeline ---
+
+    # The registry-init / stake-reward-init build runners do not tag
+    # their walletChange output in the tx-build report (see comment
+    # above the seed-split derivation). The change index is therefore
+    # taken from each builder's known output ordering:
+    #   - reference-scripts: permissions ref (#0), treasury ref (#1),
+    #     change (#2);
+    #   - script-account:    change only (#0);
+    #   - plain-account:     change only (#0).
+    # An output-count guard keeps the smoke honest if the builder
+    # layout ever shifts.
+    local refscripts_report="$run_dir/diagnostics/reference-scripts.report.json"
+    local refscripts_out_count
+    refscripts_out_count=$(jq -r \
+        '.result.report.outputs | length' "$refscripts_report") \
+        || die "reference-scripts: cannot read outputs"
+    if [[ "$refscripts_out_count" != "3" ]]; then
+        die "reference-scripts: expected 3 outputs (perms+treas+change), got $refscripts_out_count"
+    fi
+    local script_account_funding_txin="${refscripts_txid}#2"
+
+    local script_account_intent="$intents_dir/stake-reward-script-account.intent.json"
+    log "registry-stake: stake-reward-init-wizard script-account"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        stake-reward-init-wizard script-account \
+        --wallet-addr "$wallet_addr" \
+        --registry "$registry_json" \
+        --funding-seed-txin "$script_account_funding_txin" \
+        --log "$diag_dir/stake-reward-script-account.intent.log" \
+        --out "$script_account_intent"
+
+    local script_account_txid
+    script_account_txid=$(build_sign_submit \
+        "stake-reward-script-account" \
+        "$script_account_intent" \
+        "$funding_vault" \
+        "devnet_funding" \
+        "$CLI_SMOKE_FUNDING_KEY_HASH" \
+        "$passphrase_file") \
+        || die "stake-reward-script-account: build/sign/submit failed"
+
+    local script_account_report="$run_dir/diagnostics/stake-reward-script-account.report.json"
+    local script_account_out_count
+    script_account_out_count=$(jq -r \
+        '.result.report.outputs | length' "$script_account_report") \
+        || die "stake-reward-script-account: cannot read outputs"
+    if [[ "$script_account_out_count" != "1" ]]; then
+        die "stake-reward-script-account: expected 1 output (change), got $script_account_out_count"
+    fi
+    local plain_account_funding_txin="${script_account_txid}#0"
+
+    local plain_account_intent="$intents_dir/stake-reward-plain-account.intent.json"
+    log "registry-stake: stake-reward-init-wizard plain-account"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        stake-reward-init-wizard plain-account \
+        --wallet-addr "$wallet_addr" \
+        --registry "$registry_json" \
+        --funding-seed-txin "$plain_account_funding_txin" \
+        --log "$diag_dir/stake-reward-plain-account.intent.log" \
+        --out "$plain_account_intent"
+
+    local plain_account_txid
+    plain_account_txid=$(build_sign_submit \
+        "stake-reward-plain-account" \
+        "$plain_account_intent" \
+        "$funding_vault" \
+        "devnet_funding" \
+        "$CLI_SMOKE_FUNDING_KEY_HASH" \
+        "$passphrase_file") \
+        || die "stake-reward-plain-account: build/sign/submit failed"
+
+    # Derive accounts.json from the shipped registry.json plus the two
+    # submitted stake-reward tx ids. Input is Amaru-owned (registry.json
+    # is the write-artifacts output); no external node-CLI fallback and
+    # no in-process runner. Both reward accounts are scripted on DevNet,
+    # so the rewardAccount and scriptHash fields collapse to the same
+    # hex under dsraScriptHash/dsraRewardAccount (mirrors the library
+    # accountValue projection).
+    local accounts_dir="$run_dir/stake-reward-init"
+    mkdir -p "$accounts_dir"
+    local accounts_json="$accounts_dir/accounts.json"
     jq -n \
-        --arg gap "$gap_marker" \
-        --arg phase "registry-stake" \
-        --arg scope "$scope" \
-        --arg walletAddr "$wallet_addr" \
-        --arg metadata "$metadata" \
-        --arg shippedSurface "registry-init-wizard seed-split" \
-        --arg wizardStderr "$seed_split_stderr" \
-        --arg wizardStdout "$seed_split_stdout" \
-        --arg wizardLog "$seed_split_log" \
-        --argjson status "$seed_split_status" \
-        --arg reason "$raw_reason" \
-        --arg parentEpic "https://github.com/lambdasistemi/amaru-treasury-tx/issues/156" \
+        --slurpfile reg "$registry_json" \
+        --arg scriptAccountTxId "$script_account_txid" \
+        --arg plainAccountTxId "$plain_account_txid" \
         '{
-            gap: $gap,
-            phase: $phase,
-            scope: $scope,
-            walletAddr: $walletAddr,
-            metadataFixture: $metadata,
-            attemptedShippedSurface: $shippedSurface,
-            wizardExitStatus: $status,
-            wizardStderrPath: $wizardStderr,
-            wizardStdoutPath: $wizardStdout,
-            wizardLogPath: $wizardLog,
-            wizardStderrSummary: $reason,
-            parentEpic: $parentEpic,
-            note: "Shipped registry-init-wizard requires existing on-chain registry anchors via Amaru.Treasury.Registry.Verify.verifyRegistry; cannot bootstrap a fresh DevNet through shipped CLI. Slice 3 records the gap; #156 owns the bootstrap-surface decision."
-        }' >"$diagnostic"
+            phase: "stake-reward-init",
+            network: "devnet",
+            accounts: {
+                treasury: {
+                    scriptHash: $reg[0].scripts.treasuryScriptHash,
+                    rewardAccount: $reg[0].scripts.treasuryScriptHash,
+                    ledgerNetwork: $reg[0].network,
+                    registered: true,
+                    rewardsLovelace: 0,
+                    setupTxId: $scriptAccountTxId
+                },
+                permissions: {
+                    scriptHash: $reg[0].scripts.permissionsScriptHash,
+                    rewardAccount: $reg[0].scripts.permissionsScriptHash,
+                    ledgerNetwork: $reg[0].network,
+                    registered: true,
+                    rewardsLovelace: 0,
+                    setupTxId: $plainAccountTxId
+                }
+            }
+        }' >"$accounts_json"
 
-    log "registry-stake: shipped seed-split unreachable on fresh DevNet"
-    log "registry-stake: wizard stderr: $seed_split_stderr"
-    log "registry-stake: diagnostic:    $diagnostic"
-    log "registry-stake: gap: $gap_marker"
-    log "registry-stake: parent epic #156 owns the bootstrap-surface decision"
+    # --- T016: chain-assertion request handoff to the host ---
+    #
+    # The host owns chain queries (it already brought DevNet up). The
+    # smoke writes a request listing every anchor TxIn and reward
+    # account the host must verify; the host runs the assertions after
+    # this script exits successfully and writes
+    # chain/assertions.{json,log} under the run-dir.
+    local chain_dir="$run_dir/chain"
+    mkdir -p "$chain_dir"
+    local assert_request="$chain_dir/assertions.request.json"
+    jq -n \
+        --slurpfile reg "$registry_json" \
+        --slurpfile acc "$accounts_json" \
+        --arg seedSplitTxId "$seed_split_txid" \
+        --arg registryMintTxId "$mint_txid" \
+        --arg referenceScriptsTxId "$refscripts_txid" \
+        --arg scriptAccountTxId "$script_account_txid" \
+        --arg plainAccountTxId "$plain_account_txid" \
+        '{
+            phase: "registry-stake",
+            anchors: {
+                scopesDeployedAt:
+                    $reg[0].anchors.scopesDeployedAt,
+                registryDeployedAt:
+                    $reg[0].anchors.registryDeployedAt,
+                permissionsDeployedAt:
+                    $reg[0].anchors.permissionsDeployedAt,
+                treasuryDeployedAt:
+                    $reg[0].anchors.treasuryDeployedAt
+            },
+            rewardAccounts: {
+                treasury: $acc[0].accounts.treasury.rewardAccount,
+                permissions:
+                    $acc[0].accounts.permissions.rewardAccount
+            },
+            submittedTxIds: {
+                seedSplit: $seedSplitTxId,
+                registryMint: $registryMintTxId,
+                referenceScripts: $referenceScriptsTxId,
+                stakeRewardScriptAccount: $scriptAccountTxId,
+                stakeRewardPlainAccount: $plainAccountTxId
+            }
+        }' >"$assert_request"
 
     cat >"$phase_dir/summary.json" <<JSON
 {
   "phase": "registry-stake",
   "scope": "$scope",
-  "status": "missing-shipped-surface",
-  "gap": "$gap_marker",
-  "diagnostic": "$diagnostic",
-  "wizardStderr": "$seed_split_stderr",
-  "wizardStdout": "$seed_split_stdout",
-  "wizardLog": "$seed_split_log",
-  "parentEpic": "https://github.com/lambdasistemi/amaru-treasury-tx/issues/156"
+  "status": "ok",
+  "seedSplitTxId": "$seed_split_txid",
+  "registryMintTxId": "$mint_txid",
+  "referenceScriptsTxId": "$refscripts_txid",
+  "stakeRewardScriptAccountTxId": "$script_account_txid",
+  "stakeRewardPlainAccountTxId": "$plain_account_txid",
+  "registryJson": "$registry_json",
+  "accountsJson": "$accounts_json",
+  "chainAssertionsRequest": "$assert_request"
 }
 JSON
-    # Exit non-zero so operators (and future CI) cannot ship a
-    # false-positive bootstrap proof from this slice.
-    die "$gap_marker (see $diagnostic)"
+    log "registry-stake: complete (summary in $phase_dir/summary.json)"
 }
 
 create_run_dir() {

@@ -54,6 +54,10 @@ smokeScriptPath = "scripts/smoke/smoke.sh"
 hostMainPath :: FilePath
 hostMainPath = "app/devnet-cli-smoke-host/Main.hs"
 
+-- | Human-tutorial recording wrapper shipped alongside the smoke.
+recordWrapperPath :: FilePath
+recordWrapperPath = "scripts/smoke/record-cli-devnet-smoke"
+
 -- | Legacy library source that still carries an in-process governance vote.
 legacyGovernanceLibPath :: FilePath
 legacyGovernanceLibPath =
@@ -90,6 +94,7 @@ guardedProductFiles :: [FilePath]
 guardedProductFiles =
     [ smokeScriptPath
     , hostMainPath
+    , recordWrapperPath
     ]
 
 {- | Transaction-runner Haskell modules the host must not import.
@@ -205,6 +210,58 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
             src `shouldSatisfyContain` "require_env CLI_SMOKE_FUNDING_ADDR"
             src
                 `shouldSatisfyContain` "wallet_addr=\"$CLI_SMOKE_FUNDING_ADDR\""
+
+    describe "build_sign_submit error propagation" $ do
+        it
+            "smoke.sh has no `local <var>=$(build_sign_submit` \
+            \form (would swallow the function's exit code)"
+            $ do
+                src <- mustRead smokeScriptPath
+                let buggy = "local "
+                    needle = "=$(build_sign_submit"
+                    -- A simple two-step scan: find each call site
+                    -- and assert it is not preceded on the same line
+                    -- by `local `.
+                    offending =
+                        [ line
+                        | line <- lines src
+                        , needle `isInfixOf` line
+                        , buggy `isInfixOf` line
+                        ]
+                offending `shouldBe` []
+
+        it
+            "each `build_sign_submit` invocation is followed by an \
+            \explicit `|| die ...`"
+            $ do
+                src <- mustRead smokeScriptPath
+                let calls =
+                        length
+                            [ ()
+                            | line <- lines src
+                            , "build_sign_submit \\" `isInfixOf` line
+                            ]
+                    diesOnFail =
+                        length
+                            [ ()
+                            | line <- lines src
+                            , "|| die" `isInfixOf` line
+                            , "build/sign/submit failed" `isInfixOf` line
+                            ]
+                diesOnFail `shouldBe` calls
+
+    describe "human-tutorial recording wrapper" $ do
+        it "scripts/smoke/record-cli-devnet-smoke exists" $ do
+            exists <- doesFileExist recordWrapperPath
+            exists `shouldBe` True
+
+        it "scripts/smoke/record-cli-devnet-smoke is executable" $ do
+            exists <- doesFileExist recordWrapperPath
+            unless exists $
+                expectationFailure $
+                    "missing: " <> recordWrapperPath
+            perms <- getPermissions recordWrapperPath
+            perms `shouldSatisfy` executable
 
     describe "no in-process runner fallback" $ do
         forM_ forbiddenRunnerStrings $ \needle ->

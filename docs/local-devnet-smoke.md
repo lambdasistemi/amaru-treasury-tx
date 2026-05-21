@@ -59,6 +59,142 @@ The dev shell provides:
   `cardano-node-clients` DevNet genesis;
 - the Cabal dependencies for `cardano-node-clients:devnet`.
 
+## CLI DevNet Smoke (operator/CLI proof layer, #161)
+
+This is the **CLI proof** layer: a small operator tutorial that uses
+only the shipped `amaru-treasury-tx` CLI to drive the bootstrap and
+stake/reward initialisation on a fresh DevNet. It exists to let a
+human re-run the bootstrap on their workstation from a clean
+checkout, capture a transcript, and verify the chain assertions
+without reaching for the in-process library runners under
+`lib/Amaru/Treasury/Devnet/` (those remain the library proof layer,
+exercised by `Amaru.Treasury.Devnet.SmokeSpec`).
+
+### Run the registry-stake phase from a clean checkout
+
+```bash
+nix develop --quiet
+just devnet-cli-smoke \
+  --phase registry-stake \
+  --run-dir runs/devnet-cli/$(date -u +%Y%m%dT%H%M%SZ)
+```
+
+What this does, every step through the shipped CLI:
+
+1. `devnet-cli-smoke-host` brings up a real `cardano-node` on the
+   pinned DevNet genesis (patched short-epoch, committee single-key,
+   governance deposit knobs).
+2. The host emits deterministic DevNet funding/voter signing-key
+   envelopes under `<run-dir>/keys/` and exports their bech32 address
+   and key-hash hex via env vars.
+3. `scripts/smoke/smoke.sh --inside-devnet` resolves the branch-built
+   executable via `cabal list-bin exe:amaru-treasury-tx -O0`. It must
+   never call a PATH-resolved `amaru-treasury-tx` because that can
+   point at a stale binary (notably
+   `/home/paolino/bin/amaru-treasury-tx` on Paolo's box predates the
+   `registry-init-wizard --bootstrap` flag).
+4. The shell smoke creates an age-encrypted vault from the DevNet
+   funding key, then drives — in order — five bootstrap transactions
+   through the shipped CLI:
+   - `registry-init-wizard seed-split --bootstrap`
+   - `registry-init-wizard mint --bootstrap`
+   - `registry-init-wizard reference-scripts --bootstrap`
+   - `stake-reward-init-wizard script-account`
+   - `stake-reward-init-wizard plain-account`
+
+   Each transaction goes through the unified pipeline
+   `tx-build → witness → attach-witness → submit`. The shared
+   `build_sign_submit` shell function verifies that the pre-submission
+   `txId` reported by `tx-build` matches the post-submission `txId`
+   returned by `submit`.
+5. `registry-init-wizard write-artifacts` materialises the registry
+   handoff to `<run-dir>/registry-init/registry.json`. The smoke then
+   derives `<run-dir>/stake-reward-init/accounts.json` from that
+   registry plus the two submitted stake-reward tx ids.
+6. After the shell smoke exits successfully, the host re-acquires the
+   live DevNet via the Amaru-owned N2C surface
+   (`withLocalNodeBackend` + `Backend.singleShotWithAcquired`) and
+   verifies the four registry anchors are still unspent on chain, and
+   queries the two reward-account balances. The anchor check is the
+   hard gate; the reward-account observation is recorded as a
+   diagnostic alongside the authoritative
+   `stake-reward-script-account` / `stake-reward-plain-account` tx
+   ids captured in `<run-dir>/phases/registry-stake/summary.json`.
+
+### Record a transcript
+
+The slice ships `scripts/smoke/record-cli-devnet-smoke` as a small
+wrapper that prefers `asciinema` and falls back to `script(1)` when
+asciinema is not installed. Run it before the smoke command to
+capture a real local artifact:
+
+```bash
+nix develop --quiet
+scripts/smoke/record-cli-devnet-smoke runs/devnet-cli-tutorial
+```
+
+The wrapper:
+
+- prints which recorder it chose (`asciinema rec` or `script -c`);
+- writes the cast/transcript next to the run-dir, e.g.
+  `runs/devnet-cli-tutorial.cast` or `runs/devnet-cli-tutorial.script`;
+- exits with the smoke's exit code so failures propagate.
+
+Do not commit fabricated casts. If no recorder is available, the
+wrapper exits non-zero with a precise diagnostic naming the missing
+tools so the operator can install one.
+
+### Expected artifacts
+
+Inside the run-dir after a successful `--phase registry-stake`:
+
+```text
+runs/devnet-cli/.../
+|-- chain/
+|   |-- assertions.json
+|   |-- assertions.log
+|   `-- assertions.request.json
+|-- diagnostics/
+|   |-- {seed-split,mint,reference-scripts}.{build.log,report.json}
+|   `-- stake-reward-{script,plain}-account.{build.log,report.json}
+|-- intents/                         # (not currently emitted -- intents
+|                                    # live under phases/registry-stake)
+|-- keys/{funding,voter}.skey
+|-- phases/registry-stake/
+|   |-- diagnostics/*.intent.log
+|   |-- funding.passphrase
+|   |-- funding.vault.age
+|   |-- intents/{seed-split,mint,reference-scripts,
+|   |             stake-reward-script-account,
+|   |             stake-reward-plain-account}.intent.json
+|   `-- summary.json
+|-- registry-init/{registry,summary,provenance}.json
+|-- signed/                          # signed CBOR hex per tx
+|-- stake-reward-init/accounts.json
+|-- submits/                         # tx ids + outcome lines per tx
+|-- unsigned/                        # unsigned CBOR hex per tx
+|-- witnesses/                       # per-tx detached witness hex
+`-- genesis/                         # smoke-local genesis copy
+```
+
+### Hard contract
+
+- No external `cardano-cli` anywhere on the smoke path.
+- No in-process DevNet runners (`runDevnet*`,
+  `Amaru.Treasury.Devnet.Runner`, `RegistryInit`, `StakeRewardInit`,
+  …) reachable from the host or the shell script.
+- The host may start DevNet, patch genesis, emit deterministic key
+  fixtures, and perform chain queries via the Amaru-owned
+  `Backend.QueryHandle`; it does not build/sign/submit transactions.
+
+### Scope of this slice
+
+`--phase registry-stake` is the only live phase wired in this slice.
+`--phase governance` and `--phase disburse` remain unimplemented and
+will be delivered in later #161 slices (T017-T025). Run-dir summaries
+for those phases do **not** exist yet, and the CLI smoke will fail
+loudly if you point it at them.
+
 ## Node Boundary
 
 ```bash

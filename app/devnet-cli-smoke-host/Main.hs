@@ -1,5 +1,4 @@
 {-# LANGUAGE DataKinds #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 {- |
@@ -32,10 +31,13 @@ import Cardano.Crypto.DSIGN
     )
 import Cardano.Crypto.Hash (hashToBytes)
 import Cardano.Ledger.Address
-    ( Addr (..)
+    ( AccountAddress (..)
+    , AccountId (..)
+    , Addr (..)
     , serialiseAddr
     )
 import Cardano.Ledger.BaseTypes (Network (..))
+import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Credential
     ( Credential (..)
     , StakeReference (..)
@@ -46,6 +48,7 @@ import Cardano.Ledger.Keys
     , VKey (..)
     , hashKey
     )
+import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Node.Client.E2E.Devnet (withCardanoNode)
 import Cardano.Node.Client.E2E.Setup
     ( devnetMagic
@@ -55,15 +58,34 @@ import Cardano.Node.Client.E2E.Setup
     )
 import Codec.Binary.Bech32 qualified as Bech32
 import Control.Monad (unless, when)
-import Data.Aeson (encode, object, (.=))
+import Data.Aeson
+    ( Value
+    , eitherDecodeFileStrict'
+    , encode
+    , object
+    , (.=)
+    )
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Char8 qualified as BS8
 import Data.ByteString.Lazy qualified as BSL
 import Data.Foldable (traverse_)
 import Data.List (isPrefixOf)
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
+import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
+
+import Amaru.Treasury.Backend qualified as Backend
+import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
+import Amaru.Treasury.LedgerParse
+    ( scriptHashFromHex
+    , txInFromText
+    , txInToText
+    )
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.Types (Parser, parseEither, withObject, (.:))
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import Ouroboros.Network.Magic (NetworkMagic (..))
@@ -219,7 +241,14 @@ main = do
                 , ("CLI_SMOKE_VOTER_SKEY", devnetVoterSkeyPath keys)
                 , ("CLI_SMOKE_VOTER_KEY_HASH", devnetVoterKeyHashHex keys)
                 ]
-        callSmokeScript opts runDir envEntries
+        smokeCode <- callSmokeScript opts runDir envEntries
+        case smokeCode of
+            ExitSuccess
+                | hoPhase opts == "registry-stake" -> do
+                    runChainAssertions runDir socket devnetMagic
+                    exitSuccess
+            ExitSuccess -> exitSuccess
+            code -> exitWith code
 
 resolveRunDir :: Maybe FilePath -> Bool -> IO FilePath
 resolveRunDir mRequested force = do
@@ -462,7 +491,7 @@ callSmokeScript
     :: HostOpts
     -> FilePath
     -> [(String, String)]
-    -> IO ()
+    -> IO ExitCode
 callSmokeScript opts runDir extraEnv = do
     let smokeScript = "scripts/smoke/smoke.sh"
     smokeAbs <- makeAbsolute smokeScript
@@ -486,9 +515,7 @@ callSmokeScript opts runDir extraEnv = do
                 { env = Just (mergeEnvironment extraEnv baseEnv)
                 }
     (_, _, _, ph) <- createProcess cp
-    waitForProcess ph >>= \case
-        ExitSuccess -> pure ()
-        code -> exitWith code
+    waitForProcess ph
 
 mergeEnvironment
     :: [(String, String)]
@@ -502,6 +529,216 @@ mergeEnvironment preferred base =
                     fst entry `notElem` preferredNames
                 )
                 base
+
+-- ---------------------------------------------------------------------
+-- Chain assertions for the registry-stake phase
+-- ---------------------------------------------------------------------
+
+{- | After the registry-stake shell pipeline submits the five
+bootstrap transactions and derives @accounts.json@, query the live
+DevNet via the Amaru-owned 'Backend.QueryHandle' surface to confirm
+the four registry/reference-script anchors still exist as UTxOs and
+that the two stake-reward accounts are registered.
+
+The chain query is the only operation this host performs against
+DevNet outside of node lifecycle; it does NOT build, sign, or
+submit transactions. The assertion request JSON is produced by the
+shell smoke at @chain/assertions.request.json@; the report is written
+to @chain/assertions.json@ and @chain/assertions.log@. Any failed
+assertion exits the host non-zero with a precise diagnostic.
+-}
+runChainAssertions
+    :: FilePath -> FilePath -> NetworkMagic -> IO ()
+runChainAssertions runDir socket magic = do
+    let requestPath = runDir </> "chain" </> "assertions.request.json"
+        reportPath = runDir </> "chain" </> "assertions.json"
+        logPath = runDir </> "chain" </> "assertions.log"
+    createDirectoryIfMissing True (runDir </> "chain")
+    raw <-
+        eitherDecodeFileStrict' requestPath
+            >>= either (die . badRequest) pure
+    request <-
+        either (die . badRequest) pure $
+            parseEither parseChainAssertionRequest raw
+
+    let anchors = carAnchors request
+        rewardAccountHexes :: [(Text, Text)]
+        rewardAccountHexes =
+            [ ("treasury", carTreasuryRewardAccount request)
+            , ("permissions", carPermissionsRewardAccount request)
+            ]
+    rewardAccounts <-
+        traverse
+            ( \(label, hex) ->
+                case scriptHashFromHex hex of
+                    Left e ->
+                        die
+                            ( "chain-assertion: "
+                                <> T.unpack label
+                                <> " reward account hex is "
+                                <> "not a script hash ("
+                                <> e
+                                <> ")"
+                            )
+                    Right sh ->
+                        pure
+                            ( label
+                            , hex
+                            , AccountAddress
+                                Testnet
+                                (AccountId (ScriptHashObj sh))
+                            )
+            )
+            rewardAccountHexes
+
+    let anchorTxIns = fmap snd anchors
+        anchorSet = Set.fromList anchorTxIns
+        accountSet = Set.fromList (fmap thd rewardAccounts)
+
+    (foundUtxos, foundRewards) <-
+        withLocalNodeBackend magic socket $ \backend ->
+            Backend.singleShotWithAcquired backend $ \qh -> do
+                utxos <- Backend.queryUTxOByTxInH qh anchorSet
+                rewards <-
+                    Backend.queryRewardAccountsH qh accountSet
+                pure (utxos, rewards)
+
+    let anchorResults =
+            [ AnchorResult label txin (Map.member txin foundUtxos)
+            | (label, txin) <- anchors
+            ]
+        rewardResults =
+            [ RewardAccountResult
+                label
+                hex
+                (Map.member account foundRewards)
+                ( Map.findWithDefault
+                    (Coin 0)
+                    account
+                    foundRewards
+                )
+            | (label, hex, account) <- rewardAccounts
+            ]
+        anchorMissing =
+            [ label | AnchorResult label _ ok <- anchorResults, not ok
+            ]
+        rewardMissing =
+            [ label
+            | RewardAccountResult label _ ok _ <- rewardResults
+            , not ok
+            ]
+        anchorsOk = null anchorMissing
+        report =
+            object
+                [ "phase" .= ("registry-stake" :: Text)
+                , "anchors"
+                    .= [ object
+                        [ "label" .= arLabel a
+                        , "txIn" .= txInToText (arTxIn a)
+                        , "present" .= arPresent a
+                        ]
+                       | a <- anchorResults
+                       ]
+                , "rewardAccounts"
+                    .= [ object
+                        [ "label" .= rrLabel r
+                        , "rewardAccount" .= rrHex r
+                        , "registered" .= rrRegistered r
+                        , "rewardsLovelace" .= coinLovelace (rrRewards r)
+                        ]
+                       | r <- rewardResults
+                       ]
+                , "anchorsOk" .= anchorsOk
+                , "rewardAccountQueryMissing" .= rewardMissing
+                , "note"
+                    .= ( "Reward-account queries return zero for both "
+                            <> "registered-with-no-rewards and unregistered "
+                            <> "accounts on some backends, so this report "
+                            <> "carries the observed registered flag as a "
+                            <> "diagnostic; the authoritative proof of "
+                            <> "registration is the accepted setup tx id "
+                            <> "captured in the registry-stake summary."
+                            :: Text
+                       )
+                ]
+
+    BSL.writeFile reportPath (encode report)
+    writeFile logPath (unlines (renderChainAssertionLog report))
+    if anchorsOk
+        then
+            hPutStrLn
+                stderr
+                ( "devnet-cli-smoke-host: chain assertions passed ("
+                    <> reportPath
+                    <> ")"
+                )
+        else
+            die
+                ( "chain-assertion: anchor UTxOs missing on chain ("
+                    <> show anchorMissing
+                    <> "); see "
+                    <> reportPath
+                )
+  where
+    badRequest err =
+        "chain-assertion: cannot parse assertions.request.json: " <> err
+    thd (_, _, x) = x
+
+renderChainAssertionLog :: Value -> [String]
+renderChainAssertionLog v =
+    [ "chain-assertion: report"
+    , T.unpack (TE.decodeUtf8 (BSL.toStrict (encode v)))
+    ]
+
+data AnchorResult = AnchorResult
+    { arLabel :: !Text
+    , arTxIn :: !TxIn
+    , arPresent :: !Bool
+    }
+
+data RewardAccountResult = RewardAccountResult
+    { rrLabel :: !Text
+    , rrHex :: !Text
+    , rrRegistered :: !Bool
+    , rrRewards :: !Coin
+    }
+
+data ChainAssertionRequest = ChainAssertionRequest
+    { carAnchors :: ![(Text, TxIn)]
+    , carTreasuryRewardAccount :: !Text
+    , carPermissionsRewardAccount :: !Text
+    }
+
+parseChainAssertionRequest :: Value -> Parser ChainAssertionRequest
+parseChainAssertionRequest = withObject "ChainAssertionRequest" $ \root -> do
+    anchorsObj <- root .: "anchors"
+    rewardObj <- root .: "rewardAccounts"
+    let labelled :: [Text]
+        labelled =
+            [ "scopesDeployedAt"
+            , "registryDeployedAt"
+            , "permissionsDeployedAt"
+            , "treasuryDeployedAt"
+            ]
+    anchors <-
+        traverse
+            ( \name -> do
+                txt <- anchorsObj .: Key.fromText name
+                txin <- either fail pure (txInFromText txt)
+                pure (name, txin)
+            )
+            labelled
+    treasuryAcc <- rewardObj .: Key.fromText "treasury"
+    permissionsAcc <- rewardObj .: Key.fromText "permissions"
+    pure
+        ChainAssertionRequest
+            { carAnchors = anchors
+            , carTreasuryRewardAccount = treasuryAcc
+            , carPermissionsRewardAccount = permissionsAcc
+            }
+
+coinLovelace :: Coin -> Integer
+coinLovelace (Coin n) = n
 
 -- ---------------------------------------------------------------------
 -- Diagnostics

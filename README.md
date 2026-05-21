@@ -38,7 +38,7 @@ The full operator and developer documentation lives at
 - [Swap recipe](https://lambdasistemi.github.io/amaru-treasury-tx/swap/) — building a swap from an existing `intent.json`.
 - [Disburse](https://lambdasistemi.github.io/amaru-treasury-tx/disburse/) — resolving ADA or USDM disbursements with `disburse-wizard`, or building an existing disburse intent.
 - [Withdraw](https://lambdasistemi.github.io/amaru-treasury-tx/withdraw/) — resolving rewards with `withdraw-wizard` or building an existing withdraw intent.
-- [Local devnet smoke](https://lambdasistemi.github.io/amaru-treasury-tx/local-devnet-smoke/) — opt-in `cardano-node-clients` devnet check for live node boundary evidence.
+- [Local devnet smoke](https://lambdasistemi.github.io/amaru-treasury-tx/local-devnet-smoke/) — opt-in `cardano-node-clients` devnet check for live node boundary evidence. Includes the **CLI DevNet smoke** (`just devnet-cli-smoke --phase registry-stake`) — a human-runnable operator tutorial that drives the shipped CLI (registry-init-wizard / stake-reward-init-wizard / tx-build / witness / submit) end to end and records a real transcript via `scripts/smoke/record-cli-devnet-smoke`.
 - [Parity report](https://lambdasistemi.github.io/amaru-treasury-tx/parity/) — byte-for-byte golden parity against bash/cardano-cli.
 
 ## Install

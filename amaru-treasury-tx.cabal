@@ -350,6 +350,7 @@ executable devnet-cli-smoke-host
   default-language: GHC2021
   build-depends:
     , aeson
+    , amaru-treasury-tx
     , base                         <5
     , base16-bytestring
     , bech32
@@ -359,6 +360,7 @@ executable devnet-cli-smoke-host
     , cardano-ledger-core
     , cardano-node-clients
     , cardano-node-clients:devnet
+    , containers
     , directory
     , filepath
     , ouroboros-network:api
@@ -417,6 +419,7 @@ test-suite unit-tests
     Amaru.Treasury.Cli.RegistryInitWizardParserSpec
     Amaru.Treasury.Cli.StakeRewardInitWizardParserSpec
     Amaru.Treasury.Cli.SwapCancelSpec
+    Amaru.Treasury.Cli.TxBuildRequiredUtxosSpec
     Amaru.Treasury.Cli.VaultSpec
     Amaru.Treasury.Cli.WitnessSpec
     Amaru.Treasury.ConstantsSpec

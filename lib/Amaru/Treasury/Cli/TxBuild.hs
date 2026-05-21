@@ -5,6 +5,9 @@ module Amaru.Treasury.Cli.TxBuild
     ( TxBuildOpts (..)
     , txBuildOptsP
     , runTxBuild
+
+      -- * Internal — exported for focused tests
+    , requiredUtxos
     ) where
 
 import Control.Tracer (Tracer (..), traceWith)
@@ -57,8 +60,11 @@ import Amaru.Treasury.ChainContext
     )
 import Amaru.Treasury.Cli.Common (withLogHandle)
 import Amaru.Treasury.IntentJSON
-    ( ScopeJSON (..)
+    ( RegistryInitMintInputs (..)
+    , SAction (..)
+    , ScopeJSON (..)
     , SomeTreasuryIntent (..)
+    , StakeRewardInitScriptAccountInputs (..)
     , TreasuryIntent (..)
     , WalletJSON (..)
     , decodeTreasuryIntent
@@ -385,9 +391,80 @@ abortBuild tr msg = do
     traceWith tr (BuildEventAborted msg)
     exitWith (ExitFailure 3)
 
+{- | Required on-chain UTxOs for the live-context boundary.
+
+The set must contain every TxIn the per-action build runner under
+"Amaru.Treasury.Build.*" actually calls @requireUtxo@ on. The CLI
+'tx-build' runner queries the chain for exactly this set and fails
+fast if any element is missing; including TxIns the builder does
+not consume only inflates the query and (for bootstrap intents)
+fabricates false misses against deterministic placeholder refs.
+
+Init actions, mirroring the matching @run*Action@ in
+"Amaru.Treasury.Build.*":
+
+* @registry-init-seed-split@ requires only @wjTxIn@ (the wallet
+  seed; bound to @risstSeedTxIn@ by 'translateRegistryInitSeedSplit').
+* @registry-init-mint@ requires the two payload seed TxIns
+  ('rimtScopesSeedTxIn', 'rimtRegistrySeedTxIn'). The wallet block's
+  @txIn@ is not spent by the mint builder.
+* @registry-init-reference-scripts@ requires only @wjTxIn@
+  ('rirstSeedTxIn'). The payload's scopes/registry seed TxIns are
+  script-derivation parameters, not live inputs.
+* @stake-reward-init-script-account@ requires @wjTxIn@
+  ('srisatSeedTxIn') and the treasury reference-script TxIn
+  ('srisatTreasuryRefTxIn').
+* @stake-reward-init-plain-account@ requires only @wjTxIn@
+  ('srispatSeedTxIn').
+
+In all five init arms @wjExtraTxIns@ is NOT included: each builder
+spends exactly one wallet input. Including extras here would query
+for UTxOs the build runner never consumes, with the same false-miss
+hazard as the placeholder refs.
+
+Non-init actions (swap, disburse, withdraw, reorganize, both
+governance-withdrawal-init sub-actions) retain the legacy generic
+set in this slice: wallet + @wjExtraTxIns@ + treasury UTxOs + the
+four scope reference TxIns ('sjScopesDeployedAt',
+'sjPermissionsDeployedAt', 'sjTreasuryDeployedAt',
+'sjRegistryDeployedAt'). The generic set is at least a superset of
+what each non-init builder requires; tightening it to the exact
+@requireUtxo@ surface for those actions is out of scope here and
+tracked separately. 'Amaru.Treasury.Cli.TxBuildRequiredUtxosSpec'
+includes a regression on a disburse intent to prove the legacy set
+keeps the scope refs and treasury UTxOs.
+-}
 requiredUtxos
     :: SomeTreasuryIntent -> Either String (Set.Set TxIn)
-requiredUtxos (SomeTreasuryIntent _sa intent) = do
+requiredUtxos (SomeTreasuryIntent sa intent) = case sa of
+    SRegistryInitSeedSplit -> walletSeedOnly
+    SRegistryInitMint -> do
+        let payload = tiPayload intent
+        scopesSeed <-
+            parseTxIn (rimiScopesSeedTxIn payload)
+        registrySeed <-
+            parseTxIn (rimiRegistrySeedTxIn payload)
+        Right (Set.fromList [scopesSeed, registrySeed])
+    SRegistryInitReferenceScripts -> walletSeedOnly
+    SStakeRewardInitScriptAccount -> do
+        let payload = tiPayload intent
+        walletSet <- walletSeedOnly
+        treasuryRef <-
+            parseTxIn (srisaiTreasuryRefTxIn payload)
+        Right (Set.insert treasuryRef walletSet)
+    SStakeRewardInitPlainAccount -> walletSeedOnly
+    _ -> genericRequiredUtxos intent
+  where
+    -- Exactly @wjTxIn@. No @wjExtraTxIns@: the five init builders
+    -- spend a single seed.
+    walletSeedOnly :: Either String (Set.Set TxIn)
+    walletSeedOnly = do
+        walletTxIn <- parseTxIn (wjTxIn (tiWallet intent))
+        Right (Set.singleton walletTxIn)
+
+genericRequiredUtxos
+    :: TreasuryIntent a -> Either String (Set.Set TxIn)
+genericRequiredUtxos intent = do
     let wallet = tiWallet intent
         scope = tiScope intent
     walletTxIn <- parseTxIn (wjTxIn wallet)

@@ -201,9 +201,56 @@
         },
         "reorganize": {
             "additionalProperties": false,
-            "properties": {},
-            "required": [],
+            "properties": {
+                "permissionsDeployedAt": {
+                    "$ref": "#/$defs/txIn"
+                },
+                "permissionsRewardAccount": {
+                    "$ref": "#/$defs/rewardAccount"
+                },
+                "registryDeployedAt": {
+                    "$ref": "#/$defs/txIn"
+                },
+                "scopeOwnerSigner": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "treasuryAddress": {
+                    "$ref": "#/$defs/bech32Address"
+                },
+                "treasuryDeployedAt": {
+                    "$ref": "#/$defs/txIn"
+                },
+                "treasuryUtxos": {
+                    "items": {
+                        "$ref": "#/$defs/txIn"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                },
+                "upperBound": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "walletUtxo": {
+                    "$ref": "#/$defs/txIn"
+                }
+            },
+            "required": [
+                "walletUtxo",
+                "treasuryUtxos",
+                "treasuryAddress",
+                "treasuryDeployedAt",
+                "registryDeployedAt",
+                "permissionsRewardAccount",
+                "permissionsDeployedAt",
+                "scopeOwnerSigner",
+                "upperBound"
+            ],
             "type": "object"
+        },
+        "rewardAccount": {
+            "pattern": "^stake(_test)?1[0-9a-z]+$",
+            "type": "string"
         },
         "scope": {
             "additionalProperties": false,

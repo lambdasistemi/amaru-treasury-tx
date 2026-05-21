@@ -105,21 +105,36 @@ import Data.Aeson.Encode.Pretty
     , NumberFormat (..)
     , encodePretty'
     )
+import Data.Aeson.Types (Parser)
+import Data.ByteString qualified as BS
+import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Short qualified as SBS
 import Data.Kind (Type)
+import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.Word (Word64)
 
+import Cardano.Crypto.Hash.Class (hashToBytes)
 import Cardano.Ledger.Address
     ( AccountAddress (..)
     , AccountId (..)
     , Addr (..)
+    , deserialiseAccountAddress
+    , getNetwork
+    , serialiseAccountAddress
+    , serialiseAddr
     )
-import Cardano.Ledger.BaseTypes (Network (..), textToUrl)
+import Cardano.Ledger.BaseTypes
+    ( Network (..)
+    , textToUrl
+    , txIxToInt
+    )
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway.Governance (Anchor (..))
 import Cardano.Ledger.Credential
@@ -129,17 +144,21 @@ import Cardano.Ledger.Credential
 import Cardano.Ledger.Hashes
     ( KeyHash (..)
     , ScriptHash (..)
+    , extractHash
     , unsafeMakeSafeHash
     )
-import Cardano.Ledger.Keys (KeyRole (DRepRole, Payment, Staking))
+import Cardano.Ledger.Keys
+    ( KeyRole (DRepRole, Guard, Payment, Staking)
+    )
 import Cardano.Ledger.Mary.Value
     ( AssetName (..)
     , MultiAsset (..)
     , PolicyID (..)
     )
 import Cardano.Ledger.Metadata (Metadatum (..))
-import Cardano.Ledger.TxIn (TxIn)
+import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Slotting.Slot (SlotNo (..))
+import Codec.Binary.Bech32 qualified as Bech32
 
 import Amaru.Treasury.AuxData
     ( RationaleBody (..)
@@ -533,19 +552,179 @@ instance ToJSON WithdrawInputs where
             , "rewardsLovelace" .= wdiRewardsLovelace
             ]
 
-{- | Reorganize-action payload (placeholder until
-[#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46)
-ships).
+{- | Reorganize-action payload. Carries the ledger-shaped
+inputs needed to merge one or more treasury UTxOs into a
+single continuing treasury output.
 -}
 data ReorganizeInputs = ReorganizeInputs
+    { riWalletUtxo :: !TxIn
+    -- ^ wallet UTxO used as both fuel and collateral
+    , riTreasuryUtxos :: !(NonEmpty TxIn)
+    -- ^ treasury UTxOs to merge; parser rejects an empty array
+    , riTreasuryAddress :: !Addr
+    -- ^ destination treasury contract address
+    , riTreasuryDeployedAt :: !TxIn
+    -- ^ deployed treasury-script reference UTxO
+    , riRegistryDeployedAt :: !TxIn
+    -- ^ registry NFT reference UTxO
+    , riPermissionsRewardAccount :: !AccountAddress
+    -- ^ permissions reward account for the withdraw-zero entry
+    , riPermissionsDeployedAt :: !TxIn
+    -- ^ deployed permissions withdrawal-script reference UTxO
+    , riScopeOwnerSigner :: !(KeyHash Guard)
+    -- ^ scope-owner key hash required as signer
+    , riUpperBound :: !SlotNo
+    -- ^ @invalid_hereafter@ slot
+    }
     deriving stock (Eq, Show)
 
 instance FromJSON ReorganizeInputs where
-    parseJSON = withObject "ReorganizeInputs" $ \_ ->
-        pure ReorganizeInputs
+    parseJSON = withObject "ReorganizeInputs" $ \o -> do
+        walletUtxoText <- o .: "walletUtxo"
+        treasuryUtxoTexts <- o .: "treasuryUtxos"
+        treasuryUtxos <-
+            case NE.nonEmpty (treasuryUtxoTexts :: [Text]) of
+                Nothing -> fail "treasuryUtxos must be non-empty"
+                Just txIns ->
+                    traverse
+                        (parseLedgerField "treasuryUtxos" . parseTxIn)
+                        txIns
+        treasuryAddressText <- o .: "treasuryAddress"
+        treasuryDeployedAtText <- o .: "treasuryDeployedAt"
+        registryDeployedAtText <- o .: "registryDeployedAt"
+        permissionsRewardAccountText <-
+            o .: "permissionsRewardAccount"
+        permissionsDeployedAtText <- o .: "permissionsDeployedAt"
+        scopeOwnerSignerText <- o .: "scopeOwnerSigner"
+        upperBound <- o .: "upperBound"
+        ReorganizeInputs
+            <$> parseLedgerField
+                "walletUtxo"
+                (parseTxIn walletUtxoText)
+            <*> pure treasuryUtxos
+            <*> parseLedgerField
+                "treasuryAddress"
+                (parseAddr treasuryAddressText)
+            <*> parseLedgerField
+                "treasuryDeployedAt"
+                (parseTxIn treasuryDeployedAtText)
+            <*> parseLedgerField
+                "registryDeployedAt"
+                (parseTxIn registryDeployedAtText)
+            <*> parseLedgerField
+                "permissionsRewardAccount"
+                ( parseRewardAccountBech32
+                    permissionsRewardAccountText
+                )
+            <*> parseLedgerField
+                "permissionsDeployedAt"
+                (parseTxIn permissionsDeployedAtText)
+            <*> parseLedgerField
+                "scopeOwnerSigner"
+                (parseGuardKeyHash scopeOwnerSignerText)
+            <*> pure (SlotNo (upperBound :: Word64))
 
 instance ToJSON ReorganizeInputs where
-    toJSON ReorganizeInputs = object []
+    toJSON ReorganizeInputs{..} =
+        object
+            [ "walletUtxo" .= renderTxIn riWalletUtxo
+            , "treasuryUtxos"
+                .= fmap renderTxIn (NE.toList riTreasuryUtxos)
+            , "treasuryAddress" .= renderAddr riTreasuryAddress
+            , "treasuryDeployedAt"
+                .= renderTxIn riTreasuryDeployedAt
+            , "registryDeployedAt"
+                .= renderTxIn riRegistryDeployedAt
+            , "permissionsRewardAccount"
+                .= renderRewardAccount riPermissionsRewardAccount
+            , "permissionsDeployedAt"
+                .= renderTxIn riPermissionsDeployedAt
+            , "scopeOwnerSigner"
+                .= renderGuardKeyHash riScopeOwnerSigner
+            , "upperBound" .= renderSlotNo riUpperBound
+            ]
+
+parseLedgerField :: String -> Either String a -> Parser a
+parseLedgerField fieldName =
+    either
+        (fail . ((fieldName <> ": ") <>))
+        pure
+
+parseRewardAccountBech32 :: Text -> Either String AccountAddress
+parseRewardAccountBech32 t = do
+    (hrp, dataPart) <-
+        case Bech32.decodeLenient t of
+            Left e -> Left ("bech32: " <> show e)
+            Right decoded -> Right decoded
+    let hrpText = Bech32.humanReadablePartToText hrp
+    case hrpText of
+        "stake" -> pure ()
+        "stake_test" -> pure ()
+        _ ->
+            Left
+                "reward account must use stake or stake_test bech32 prefix"
+    raw <-
+        maybe
+            (Left "bech32 data-part decode")
+            Right
+            (Bech32.dataPartToBytes dataPart)
+    account <-
+        maybe
+            (Left "reward account: decode failed")
+            Right
+            (deserialiseAccountAddress raw)
+    case (hrpText, account) of
+        ("stake", AccountAddress Mainnet _) -> Right account
+        ("stake_test", AccountAddress Testnet _) -> Right account
+        _ -> Left "reward account bech32 prefix/network mismatch"
+
+renderTxIn :: TxIn -> Text
+renderTxIn (TxIn (TxId txIdHash) txIx) =
+    hexBytes (hashToBytes (extractHash txIdHash))
+        <> "#"
+        <> T.pack (show (txIxToInt txIx))
+
+renderAddr :: Addr -> Text
+renderAddr addr =
+    renderBech32 (addrPrefix addr) (serialiseAddr addr)
+
+addrPrefix :: Addr -> Text
+addrPrefix addr = case getNetwork addr of
+    Mainnet -> "addr"
+    Testnet -> "addr_test"
+
+renderRewardAccount :: AccountAddress -> Text
+renderRewardAccount account =
+    renderBech32
+        (rewardAccountPrefix account)
+        (serialiseAccountAddress account)
+
+rewardAccountPrefix :: AccountAddress -> Text
+rewardAccountPrefix (AccountAddress network _) = case network of
+    Mainnet -> "stake"
+    Testnet -> "stake_test"
+
+renderBech32 :: Text -> BS.ByteString -> Text
+renderBech32 prefix raw =
+    Bech32.encodeLenient hrp (Bech32.dataPartFromBytes raw)
+  where
+    hrp =
+        either
+            ( errorWithoutStackTrace
+                . ("renderBech32: " <>)
+                . show
+            )
+            id
+            (Bech32.humanReadablePartFromText prefix)
+
+renderGuardKeyHash :: KeyHash Guard -> Text
+renderGuardKeyHash (KeyHash h) = hexBytes (hashToBytes h)
+
+renderSlotNo :: SlotNo -> Word64
+renderSlotNo (SlotNo slot) = slot
+
+hexBytes :: BS.ByteString -> Text
+hexBytes = TE.decodeUtf8 . B16.encode
 
 -- ----------------------------------------------------
 -- DevNet init sub-action payloads (slice 2 / #157)

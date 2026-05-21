@@ -17,6 +17,7 @@ module Amaru.Treasury.IntentJSONSpec (spec) where
 import Data.Aeson (eitherDecode, encode)
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy.Char8 qualified as BSL8
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
@@ -46,9 +47,13 @@ import Test.QuickCheck
     , (===)
     )
 
-import Cardano.Ledger.Address (AccountAddress (..))
+import Cardano.Ledger.Address (AccountAddress (..), Addr)
 import Cardano.Ledger.BaseTypes (Network (..))
 import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Hashes (KeyHash)
+import Cardano.Ledger.Keys (KeyRole (Guard))
+import Cardano.Ledger.TxIn (TxIn)
+import Cardano.Slotting.Slot (SlotNo (..))
 
 import Amaru.Treasury.IntentJSON
     ( Action (..)
@@ -73,6 +78,12 @@ import Amaru.Treasury.IntentJSON
     , decodeTreasuryIntent
     , encodeSomeTreasuryIntent
     , translateIntent
+    )
+import Amaru.Treasury.IntentJSON.Common
+    ( parseAddr
+    , parseGuardKeyHash
+    , parseRewardAccountForNetwork
+    , parseTxIn
     )
 import Amaru.Treasury.Tx.Disburse
     ( DisburseIntent (..)
@@ -167,6 +178,10 @@ spec = describe "Amaru.Treasury.IntentJSON" $ do
             decodeTreasuryIntent rawSwapMissingNetwork
                 `shouldSatisfy` errorContains
                     "key \"network\" not found"
+        it "rejects reorganize with empty treasuryUtxos" $
+            decodeTreasuryIntent rawReorganizeEmptyTreasuryUtxos
+                `shouldSatisfy` errorContains
+                    "treasuryUtxos must be non-empty"
 
     describe "withdraw contract" $ do
         it "decodes a non-empty withdraw payload" $
@@ -428,6 +443,53 @@ genWithdrawInputs =
         <$> genHexN 28
         <*> chooseInteger (1, 10_000_000_000)
 
+genParsedTxIn :: Gen TxIn
+genParsedTxIn = mustParse . parseTxIn <$> genTxId
+
+genParsedGuardKeyHash :: Gen (KeyHash Guard)
+genParsedGuardKeyHash =
+    mustParse . parseGuardKeyHash <$> genHexN 28
+
+sampleTreasuryAddress :: Addr
+sampleTreasuryAddress =
+    mustParse $
+        parseAddr
+            "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk"
+
+samplePermissionsRewardAccount :: AccountAddress
+samplePermissionsRewardAccount =
+    mustParse $
+        parseRewardAccountForNetwork
+            "devnet"
+            "a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094"
+
+genReorganizeInputs :: Gen ReorganizeInputs
+genReorganizeInputs = do
+    walletUtxo <- genParsedTxIn
+    treasuryUtxo <- genParsedTxIn
+    extraTreasuryUtxos <-
+        chooseInt (0, 3) >>= \n ->
+            vectorOf n genParsedTxIn
+    treasuryDeployedAt <- genParsedTxIn
+    registryDeployedAt <- genParsedTxIn
+    permissionsDeployedAt <- genParsedTxIn
+    scopeOwnerSigner <- genParsedGuardKeyHash
+    upperBound <- SlotNo . fromIntegral <$> chooseInt (1, 200_000_000)
+    pure
+        ReorganizeInputs
+            { riWalletUtxo = walletUtxo
+            , riTreasuryUtxos =
+                treasuryUtxo :| extraTreasuryUtxos
+            , riTreasuryAddress = sampleTreasuryAddress
+            , riTreasuryDeployedAt = treasuryDeployedAt
+            , riRegistryDeployedAt = registryDeployedAt
+            , riPermissionsRewardAccount =
+                samplePermissionsRewardAccount
+            , riPermissionsDeployedAt = permissionsDeployedAt
+            , riScopeOwnerSigner = scopeOwnerSigner
+            , riUpperBound = upperBound
+            }
+
 genIntent
     :: SAction a -> Gen (Payload a) -> Gen SomeTreasuryIntent
 genIntent sa genPayload = do
@@ -462,7 +524,7 @@ genWithdrawIntent = genIntent SWithdraw genWithdrawInputs
 
 genReorganizeIntent :: Gen SomeTreasuryIntent
 genReorganizeIntent =
-    genIntent SReorganize (pure ReorganizeInputs)
+    genIntent SReorganize genReorganizeInputs
 
 genRegistryInitSeedSplitIntent :: Gen SomeTreasuryIntent
 genRegistryInitSeedSplitIntent =
@@ -659,6 +721,37 @@ rawSwapMissingNetwork =
         <> rawSwapBlock
         <> "}"
 
+{- | A reorganize intent whose action payload violates the
+parser-level non-empty treasury input invariant.
+-}
+rawReorganizeEmptyTreasuryUtxos :: ByteString
+rawReorganizeEmptyTreasuryUtxos =
+    "{\"schema\":1"
+        <> ",\"action\":\"reorganize\""
+        <> ",\"network\":\"devnet\""
+        <> ",\"wallet\":{\"txIn\":\"abc#0\",\"address\":\"addr1\"}"
+        <> ",\"scope\":"
+        <> rawScope
+        <> ",\"signers\":[]"
+        <> ",\"validityUpperBoundSlot\":1"
+        <> ",\"rationale\":"
+        <> rawRationale
+        <> ",\"reorganize\":"
+        <> rawReorganizeEmptyTreasuryUtxosBlock
+        <> "}"
+
+rawReorganizeEmptyTreasuryUtxosBlock :: ByteString
+rawReorganizeEmptyTreasuryUtxosBlock =
+    "{\"walletUtxo\":\"0000000000000000000000000000000000000000000000000000000000000000#0\""
+        <> ",\"treasuryUtxos\":[]"
+        <> ",\"treasuryAddress\":\"addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk\""
+        <> ",\"treasuryDeployedAt\":\"1111111111111111111111111111111111111111111111111111111111111111#1\""
+        <> ",\"registryDeployedAt\":\"2222222222222222222222222222222222222222222222222222222222222222#2\""
+        <> ",\"permissionsRewardAccount\":\"stake_test1uqnd6vjvvf\""
+        <> ",\"permissionsDeployedAt\":\"3333333333333333333333333333333333333333333333333333333333333333#3\""
+        <> ",\"scopeOwnerSigner\":\"44444444444444444444444444444444444444444444444444444444\""
+        <> ",\"upperBound\":1}"
+
 withdrawIntentMainnet :: TreasuryIntent 'Withdraw
 withdrawIntentMainnet = withdrawIntent "mainnet"
 
@@ -755,6 +848,12 @@ expectLeftContaining :: String -> Either String a -> IO ()
 expectLeftContaining needle = \case
     Left e -> e `shouldSatisfy` isInfixOf needle
     Right _ -> expectationFailure "expected Left, got Right"
+
+mustParse :: Either String a -> a
+mustParse =
+    either
+        (errorWithoutStackTrace . ("test fixture parse failed: " <>))
+        id
 
 {- | A pre-T010 legacy 'WalletJSON' that omits the
 @extraTxIns@ field. Decodes against the post-T010 schema

@@ -1,24 +1,45 @@
 {- |
 Module      : Amaru.Treasury.Tx.Reorganize
-Description : Placeholder typed intent for the reorganize action
+Description : Typed intent for the reorganize action
 Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
-Skeleton placeholder. The real 'ReorganizeIntent' shape — the
-typed lift consumed by the reorganize build path — lands with
-[#46](https://github.com/lambdasistemi/amaru-treasury-tx/issues/46).
-
-This module exists so the @Translated 'Reorganize@ row of the
-type family in
-[`Amaru.Treasury.IntentJSON`](Amaru.Treasury.IntentJSON.html)
-can name a concrete type on this branch. Mirrors the existing
-[`Amaru.Treasury.Tx.Withdraw`](Amaru.Treasury.Tx.Withdraw.html)
-which already exposes a typed @WithdrawIntent@.
+Resolved ledger inputs for the reorganize action. The pure build
+program lands in a later slice; this slice establishes the typed
+shape consumed by intent JSON translation once the dispatcher is
+wired.
 -}
 module Amaru.Treasury.Tx.Reorganize
     ( ReorganizeIntent (..)
     ) where
 
--- | Placeholder. Real shape lands with #46.
+import Cardano.Ledger.Address (AccountAddress, Addr)
+import Cardano.Ledger.Hashes (KeyHash)
+import Cardano.Ledger.Keys (KeyRole (Guard))
+import Cardano.Ledger.TxIn (TxIn)
+import Data.List.NonEmpty (NonEmpty)
+
+import Amaru.Treasury.Backend (SlotNo)
+
+-- | Resolved inputs for @reorganize@.
 data ReorganizeIntent = ReorganizeIntent
+    { rgiWalletUtxo :: !TxIn
+    -- ^ wallet UTxO used as both fuel and collateral
+    , rgiTreasuryUtxos :: !(NonEmpty TxIn)
+    -- ^ treasury UTxOs merged into one continuing output
+    , rgiTreasuryAddress :: !Addr
+    -- ^ destination contract address
+    , rgiTreasuryDeployedAt :: !TxIn
+    -- ^ deployed treasury-script reference UTxO
+    , rgiRegistryDeployedAt :: !TxIn
+    -- ^ registry NFT reference UTxO
+    , rgiPermissionsRewardAccount :: !AccountAddress
+    -- ^ Amaru permissions reward account
+    , rgiPermissionsDeployedAt :: !TxIn
+    -- ^ deployed permissions withdrawal-script reference UTxO
+    , rgiScopeOwnerSigner :: !(KeyHash Guard)
+    -- ^ scope-owner key hash required as signer
+    , rgiUpperBound :: !SlotNo
+    -- ^ @invalid_hereafter@ slot
+    }
     deriving stock (Eq, Show)

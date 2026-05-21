@@ -54,14 +54,14 @@ test/module stanza update.
 
 ### Tests for S1
 
-- [ ] T001 [US3] Replace the placeholder reorganize round-trip generator in `test/unit/Amaru/Treasury/IntentJSONSpec.hs` with a field-populated `ReorganizeInputs` generator, including non-empty `treasuryUtxos` and an empty-array rejection case; record the expected RED failure against `lib/Amaru/Treasury/IntentJSON.hs`.
+- [X] T001 [US3] Replace the placeholder reorganize round-trip generator in `test/unit/Amaru/Treasury/IntentJSONSpec.hs` with a field-populated `ReorganizeInputs` generator, including non-empty `treasuryUtxos` and an empty-array rejection case; record the expected RED failure against `lib/Amaru/Treasury/IntentJSON.hs`.
 
 ### Implementation for S1
 
-- [ ] T002 [US3] Replace the placeholder `ReorganizeIntent` in `lib/Amaru/Treasury/Tx/Reorganize.hs` with the `rgi*` record from `specs/185-reorganize-core/data-model.md`.
-- [ ] T003 [US3] Replace the placeholder `ReorganizeInputs` in `lib/Amaru/Treasury/IntentJSON.hs` with the `ri*` record, `FromJSON` parser, `ToJSON` encoder, and parser-level non-empty `treasuryUtxos` validation.
-- [ ] T004 [US3] Update schema generation for the reorganize arm in `lib/Amaru/Treasury/IntentJSON/Schema.hs` if needed, then regenerate `docs/assets/intent-schema.json` with the real `walletUtxo`, `treasuryUtxos`, `treasuryAddress`, `treasuryDeployedAt`, `registryDeployedAt`, `permissionsRewardAccount`, `permissionsDeployedAt`, `scopeOwnerSigner`, and `upperBound` fields.
-- [ ] T005 [US3] Verify S1 with `nix develop --quiet -c just unit "IntentJSON"`, `nix develop --quiet -c just schema-check`, and `./gate.sh`, recording evidence in `WIP.md`.
+- [X] T002 [US3] Replace the placeholder `ReorganizeIntent` in `lib/Amaru/Treasury/Tx/Reorganize.hs` with the `rgi*` record from `specs/185-reorganize-core/data-model.md`.
+- [X] T003 [US3] Replace the placeholder `ReorganizeInputs` in `lib/Amaru/Treasury/IntentJSON.hs` with the `ri*` record, `FromJSON` parser, `ToJSON` encoder, and parser-level non-empty `treasuryUtxos` validation.
+- [X] T004 [US3] Update schema generation for the reorganize arm in `lib/Amaru/Treasury/IntentJSON/Schema.hs` if needed, then regenerate `docs/assets/intent-schema.json` with the real `walletUtxo`, `treasuryUtxos`, `treasuryAddress`, `treasuryDeployedAt`, `registryDeployedAt`, `permissionsRewardAccount`, `permissionsDeployedAt`, `scopeOwnerSigner`, and `upperBound` fields.
+- [X] T005 [US3] Verify S1 with `nix develop --quiet -c just unit "IntentJSON"`, `nix develop --quiet -c just schema-check`, and `./gate.sh`, recording evidence in `WIP.md`.
 
 **Checkpoint**: S1 is complete when the schema diff matches
 `contracts/intent-schema-delta.md`, JSON round-trip tests pass, and the

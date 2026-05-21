@@ -22,7 +22,7 @@ one bisect-safe commit.
 
 | Slice | Worker | Primary story | Commit subject |
 |---|---|---|---|
-| 1 | `attx-191/slice-1-dep-pin` | US2 | `build(deps): bump cardano-tx-tools reward-state validator (#191)` |
+| 1 | `attx-191/slice-1-dep-pin` | US2 | `build(deps): bump cardano-tx-tools to v0.2.0.0 + mirror github-release-check companion (#191)` |
 | 2 | `attx-191/slice-2-final-phase1` | US1 | `fix(build): validate withdrawal-bearing final transactions (#191)` |
 | 3 | `attx-191/slice-3-gov-init-disposition` | US3 | `fix(build): resolve governance withdrawal init phase1 skip (#191)` |
 | 4 | orchestrator | metadata/final gate | `docs(pr): record tx-tools bump disposition for #191` |
@@ -35,42 +35,52 @@ No setup tasks. Branch, draft PR, accepted spec, accepted plan, and
 ## Phase 2: Slice 1 - Dependency pin and fixed-output hash
 
 **Goal**: Make Cabal and Nix fetch the same audited
-`cardano-tx-tools` revision at or past upstream PR #62.
+`cardano-tx-tools` revision at or past upstream PR #62 and the
+upstream-companion `github-release-check` mirror required by that
+revision.
 
 **Independent Test**: The old fixed-output hash fails for the new commit
 before the hash is regenerated; the corrected hash fetches
-`9e77e90728729bdd22e3bfbe0cf7515b33d5ea13`.
+`9e77e90728729bdd22e3bfbe0cf7515b33d5ea13`, and the companion
+`github-release-check` pin matches upstream `cardano-tx-tools`'s own
+`cabal.project`.
 
 **Worker brief**: One bisect-safe commit. Do not push. You are not alone
 in the codebase; do not revert edits made by others. Keep this slice to
-the dependency pin and hash proof only. Use the `cardano-deps` skill's
-source-repository-package hash workflow (`nix flake prefetch
-github:owner/repo/commit-sha` / nix32 conversion as needed). Commit body
-must include `Tasks: T001, T002, T003, T004`.
+the dependency pin and hash proof only, including only the approved
+upstream-companion mirror required by the pinned `cardano-tx-tools`
+commit. Use the `cardano-deps` skill's source-repository-package hash
+workflow (`nix flake prefetch github:owner/repo/commit-sha` / nix32
+conversion as needed). Commit body must include
+`Tasks: T001, T002, T003, T004`.
 
 Owned files:
 
 - `cabal.project`
+- `specs/191-bump-tx-tools/spec.md`
+- `specs/191-bump-tx-tools/plan.md`
+- `specs/191-bump-tx-tools/contracts/dependency-pin.md`
+- `specs/191-bump-tx-tools/tasks.md`
 - `WIP.md` (ephemeral run log; do not commit)
 
 Forbidden scope:
 
 - `lib/`
 - `test/`
-- `specs/`
 - `gate.sh`
 - PR metadata
-- any dependency other than `cardano-tx-tools`
+- any dependency other than `cardano-tx-tools` and the approved
+  upstream-companion `github-release-check` mirror
 
 Tasks:
 
-- [ ] T001 [P] [US2] Verify upstream provenance for `cardano-tx-tools` by recording in `WIP.md` that annotated tag object `d53943d842b740b313b6b67c7784f4308e5847f0` points to commit `9e77e90728729bdd22e3bfbe0cf7515b33d5ea13`, and that commit is a descendant of `6a7a7d424594e8d891dd2b7df5c4e9a7884e6779`.
-- [ ] T002 [US2] RED: temporarily set only `cabal.project` `cardano-tx-tools` `tag:` to `9e77e90728729bdd22e3bfbe0cf7515b33d5ea13` while leaving the old `--sha256`, then record the expected Nix fixed-output hash failure in `WIP.md`.
-- [ ] T003 [US2] GREEN: update `cabal.project` so `cardano-tx-tools` uses `tag: 9e77e90728729bdd22e3bfbe0cf7515b33d5ea13` and the regenerated nix32 `--sha256` for that exact commit.
-- [ ] T004 [US2] Run the focused Nix fetch/prefetch proof and `./gate.sh`, record both results in `WIP.md`, and create the single slice commit touching `cabal.project`.
+- [X] T001 [P] [US2] Verify upstream provenance for `cardano-tx-tools` by recording in `WIP.md` that annotated tag object `d53943d842b740b313b6b67c7784f4308e5847f0` points to commit `9e77e90728729bdd22e3bfbe0cf7515b33d5ea13`, and that commit is a descendant of `6a7a7d424594e8d891dd2b7df5c4e9a7884e6779`.
+- [X] T002 [US2] RED: temporarily set only `cabal.project` `cardano-tx-tools` `tag:` to `9e77e90728729bdd22e3bfbe0cf7515b33d5ea13` while leaving the old `--sha256`, then record the expected Nix fixed-output hash failure in `WIP.md`.
+- [X] T003 [US2] GREEN: update `cabal.project` so `cardano-tx-tools` uses `tag: 9e77e90728729bdd22e3bfbe0cf7515b33d5ea13` and regenerated nix32 `--sha256: 0vkrnf05jsy3mkc6kvgi5msc8j1a356zvr6sxnxxfwmysqjq5qv4`, and `github-release-check` uses `tag: d90131112a4d6c048d1809adaffdefed92e8e841` plus nix32 `--sha256: 0ad6yi431w8h5i3x9x661b99frcgvd39gm4164y8cx1ihpsjixn3` as the companion mirror exactly matching upstream's `cabal.project`.
+- [X] T004 [US2] Run the focused Nix fetch/prefetch proof and `./gate.sh`, record both results in `WIP.md`, and create the single slice commit touching `cabal.project` and the approved artifact amendments.
 
 Checkpoint: `cabal.project` uses the commit SHA, the hash matches, no
-other dependency changed, and `./gate.sh` passes at HEAD.
+unapproved dependency changed, and `./gate.sh` passes at HEAD.
 
 ## Phase 3: Slice 2 - Withdrawal-bearing final Phase-1 validation
 

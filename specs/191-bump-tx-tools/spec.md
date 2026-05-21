@@ -127,7 +127,10 @@ run through the bumped final Phase-1 validation path.
   tag `v0.2.0.0`.
 - **FR-002**: The fixed-output hash associated with the
   `cardano-tx-tools` source-repository-package MUST be regenerated for
-  the selected revision and committed with the pin.
+  the selected revision and committed with the pin. Any
+  upstream-companion source-repository-package mirror required by the
+  pinned `cardano-tx-tools` commit MUST match that commit's own
+  `cabal.project`.
 - **FR-003**: Final Phase-1 validation MUST no longer skip transactions
   solely because the transaction body contains withdrawals.
 - **FR-004**: The final Phase-1 validation helper MUST still accept
@@ -153,7 +156,9 @@ run through the bumped final Phase-1 validation path.
 ### Key Entities
 
 - **Dependency Pin**: The selected `cardano-tx-tools` git revision and
-  matching fixed-output hash consumed by Cabal and Nix.
+  matching fixed-output hash consumed by Cabal and Nix, plus required
+  upstream-companion source-repository-package mirrors from that
+  revision's own `cabal.project`.
 - **Final Phase-1 Validation**: The maintainer-visible pre-flight that
   runs on final unsigned treasury transactions and filters only
   witness-completeness noise.
@@ -165,7 +170,8 @@ run through the bumped final Phase-1 validation path.
 
 - `cabal.project` pin update for
   [`cardano-tx-tools`](https://github.com/lambdasistemi/cardano-tx-tools)
-  plus the regenerated fixed-output hash.
+  plus the regenerated fixed-output hash and required upstream companion
+  mirror for `github-release-check`.
 - Final Phase-1 validation behavior that covers withdrawal-bearing
   transactions instead of skipping them.
 - Governance-withdrawal-init Phase-1 skip disposition: removed if the
@@ -211,7 +217,10 @@ dependency bump.
 
 - Removing or weakening `ccEvaluateTx` execution-unit checks in other
   builders.
-- Bumping any dependency other than `cardano-tx-tools`.
+- Bumping any dependency other than `cardano-tx-tools` and
+  upstream-companion `source-repository-package` mirrors that the pinned
+  `cardano-tx-tools` commit itself requires, such as
+  `github-release-check` pinned in upstream's own `cabal.project`.
 - Editing reorganize modules or creating new reorganize modules.
 - Reworking transaction builders outside the validation-skip paths
   covered by this ticket.

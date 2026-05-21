@@ -23,8 +23,8 @@ repository cardano-haskell-packages
 source-repository-package
   type: git
   location: https://github.com/lambdasistemi/cardano-tx-tools
-  tag: 25d7ce349f826e9888fb8565eeb816babb06d922
-  --sha256: 1nhds5ihs1ywi7sl6i27q6zlphcmi5wiqgdhlbvhp0s1p170jjgm
+  tag: 9e77e90728729bdd22e3bfbe0cf7515b33d5ea13
+  --sha256: 0vkrnf05jsy3mkc6kvgi5msc8j1a356zvr6sxnxxfwmysqjq5qv4
 
 -- Provider, Submitter, N2C, and devnet helpers remain in cardano-node-clients.
 source-repository-package
@@ -78,15 +78,13 @@ source-repository-package
   tag: cuddle-1.1.1.0
   --sha256: 1f4wk3kgb68bg97gfb9wycv5zkv0dsghlkf9pj64z0bpcr0wkxrc
 
--- Update-banner library: prints a stderr notice when amaru-treasury-tx
--- is behind its latest GitHub release. Bumped from the initial commit
--- to the canary-bearing main tip; the canary is internal to the
--- github-release-check repo's CI, so the library API is unchanged.
+-- Companion mirror required by cardano-tx-tools v0.2.0.0 for the
+-- github-release-check:optparse sublibrary.
 source-repository-package
   type: git
   location: https://github.com/lambdasistemi/github-release-check
-  tag: fd6e0a083756596d30396efa98e7c88dad151871
-  --sha256: 1swmmwfg0q0kl1a74yzd4ibf5hn6k63s1rfggzqma6yn0llq4cgz
+  tag: d90131112a4d6c048d1809adaffdefed92e8e841
+  --sha256: 0ad6yi431w8h5i3x9x661b99frcgvd39gm4164y8cx1ihpsjixn3
 
 -- Pin Cardano and Ouroboros packages for the cardano-node 10.7.0 line
 -- (mirrored from cardano-node-clients).

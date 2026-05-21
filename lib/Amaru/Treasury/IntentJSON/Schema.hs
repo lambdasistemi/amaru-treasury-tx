@@ -91,7 +91,7 @@ intentJsonSchema =
                 , "swap" .= swapSchema
                 , "disburse" .= disburseSchema
                 , "withdraw" .= withdrawSchema
-                , "reorganize" .= emptyPayloadSchema
+                , "reorganize" .= reorganizeSchema
                 , "registry-init-seed-split"
                     .= registryInitSeedSplitSchema
                 , "registry-init-mint"
@@ -108,6 +108,7 @@ intentJsonSchema =
                     .= governanceWithdrawalInitMaterializationSchema
                 , "txIn" .= txInSchema
                 , "bech32Address" .= bech32AddressSchema
+                , "rewardAccount" .= rewardAccountSchema
                 , "hex28" .= hexBytesSchema 28
                 , "hex32" .= hexBytesSchema 32
                 , "assetNameHex" .= assetNameHexSchema
@@ -297,6 +298,30 @@ withdrawSchema =
         , ("rewardsLovelace", positiveIntegerSchema)
         ]
 
+reorganizeSchema :: Value
+reorganizeSchema =
+    objectSchema
+        [ "walletUtxo"
+        , "treasuryUtxos"
+        , "treasuryAddress"
+        , "treasuryDeployedAt"
+        , "registryDeployedAt"
+        , "permissionsRewardAccount"
+        , "permissionsDeployedAt"
+        , "scopeOwnerSigner"
+        , "upperBound"
+        ]
+        [ ("walletUtxo", ref "txIn")
+        , ("treasuryUtxos", nonEmptyArrayOf (ref "txIn"))
+        , ("treasuryAddress", ref "bech32Address")
+        , ("treasuryDeployedAt", ref "txIn")
+        , ("registryDeployedAt", ref "txIn")
+        , ("permissionsRewardAccount", ref "rewardAccount")
+        , ("permissionsDeployedAt", ref "txIn")
+        , ("scopeOwnerSigner", ref "hex28")
+        , ("upperBound", nonNegativeIntegerSchema)
+        ]
+
 emptyPayloadSchema :: Value
 emptyPayloadSchema = objectSchema [] []
 
@@ -409,6 +434,13 @@ bech32AddressSchema =
         , "pattern" .= ("^addr(_test)?1[0-9a-z]+$" :: Text)
         ]
 
+rewardAccountSchema :: Value
+rewardAccountSchema =
+    object
+        [ "type" .= ("string" :: Text)
+        , "pattern" .= ("^stake(_test)?1[0-9a-z]+$" :: Text)
+        ]
+
 assetNameHexSchema :: Value
 assetNameHexSchema =
     object
@@ -448,6 +480,14 @@ arrayOf :: Value -> Value
 arrayOf itemSchema =
     object
         [ "type" .= ("array" :: Text)
+        , "items" .= itemSchema
+        ]
+
+nonEmptyArrayOf :: Value -> Value
+nonEmptyArrayOf itemSchema =
+    object
+        [ "type" .= ("array" :: Text)
+        , "minItems" .= (1 :: Int)
         , "items" .= itemSchema
         ]
 

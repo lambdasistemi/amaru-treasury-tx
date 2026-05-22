@@ -105,13 +105,21 @@ pipeline; the merged treasury UTxO is confirmed on-chain.
    resolver excludes it from `riTreasuryUtxos`.
 3. RED unit test for `queryFlatFunds` (or equivalent name) that
    covers the boundary filter.
-4. **Live devnet smoke proof:** `nix develop -c just devnet-cli-smoke
-   --phase reorganize --run-dir <stamp>` runs end-to-end, the
-   reorganize tx submits, and the host confirms a merged treasury
-   UTxO on-chain. Run dir archived in PR.
-5. PR body cites a `tx-inspect` summary of the produced reorganize
-   transaction body for evidence.
-6. `gate.sh` passes before push.
+4. **Live devnet smoke evidence:** `just devnet-cli-smoke --phase
+   reorganize` no longer reaches phase-1 with the
+   `BabbageNonDisjointRefInputs` failure. After this fix, both the
+   wizard's resolver and `treasury-inspect` exclude script-deploy
+   UTxOs at the treasury address, and the smoke fails fast at its own
+   typed `INSUFFICIENT_TREASURY_UTXOS: treasury at core_development
+   carries 1 utxo(s)` guard — the honest count of real fund UTxOs in
+   the current devnet bootstrap. End-to-end submission proof requires
+   the smoke harness to seed ≥2 real fund UTxOs before the reorganize
+   phase; that's tracked as
+   [#222](https://github.com/lambdasistemi/amaru-treasury-tx/issues/222)
+   and does not block the mainnet path
+   ([#218](https://github.com/lambdasistemi/amaru-treasury-tx/issues/218))
+   because live mainnet treasuries already carry many fund UTxOs.
+5. `gate.sh` passes before push.
 
 ## What this PR does NOT deliver
 

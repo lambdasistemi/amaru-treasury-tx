@@ -40,7 +40,13 @@ prose for the orchestrator to commit.
 Blocker: T010 + T020 resolved.
 
 - [ ] **T200** Orchestrator: `treasury-inspect --scope
-      network_compliance` — capture USDM balance; assert ≥ 18 750.
+      network_compliance` — parse the USDM total out of the JSON
+      response and **assert it is ≥ 18 750 000 000 (smallest USDM
+      units, i.e. ≥ 18 750 USDM)**. Record the value, the source
+      UTxO count, and the largest single-UTxO USDM quantity in the
+      draft rundir's `summary.md`. If the parsed total is below the
+      threshold, S2 STOPS — see plan.md "USDM selection failure
+      modes" for the operator response (swap or reorganize).
 - [ ] **T210** Orchestrator: `scripts/build-may-cc-disburse.sh --exec`
       with operator-supplied `--wallet-addr`, `--extra-signer`,
       `--metadata journal-metadata.json`, `--validity-hours 48`.

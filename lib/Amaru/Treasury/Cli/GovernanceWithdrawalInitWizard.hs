@@ -42,6 +42,7 @@ parser surface is unchanged from Slice 1.
 module Amaru.Treasury.Cli.GovernanceWithdrawalInitWizard
     ( -- * Options
       GovernanceWithdrawalInitWizardOpts (..)
+    , CommonFlags (..)
     , ProposalOpts (..)
     , MaterializationOpts (..)
 
@@ -51,6 +52,9 @@ module Amaru.Treasury.Cli.GovernanceWithdrawalInitWizard
       -- * Runner + --out checks
     , runGovernanceWithdrawalInitWizard
     , validateOutPath
+
+      -- * Input control (#184 — Slice 7)
+    , validateGovernanceWithdrawalInitWizardInputControl
     ) where
 
 import Control.Exception (IOException, catch, onException, try)
@@ -132,12 +136,25 @@ import Amaru.Treasury.Tx.GovernanceWithdrawalInitWizard
     , GovernanceWithdrawalInitProposalAnswers (..)
     , GovernanceWithdrawalInitResolverEnv (..)
     , GovernanceWithdrawalInitResolverInput (..)
+    , InputControlOutcome (..)
     , defaultMaterializationFloorComponents
     , extractDepositComponents
     , governanceWithdrawalInitMaterializationToIntent
     , governanceWithdrawalInitProposalToIntent
-    , resolveGovernanceWithdrawalInitMaterialization
-    , resolveGovernanceWithdrawalInitProposal
+    , renderGovernanceWithdrawalInitExclusionLogLine
+    , renderGovernanceWithdrawalInitWalletShortfallWithExcludes
+    , resolveGovernanceWithdrawalInitMaterializationIC
+    , resolveGovernanceWithdrawalInitProposalIC
+    )
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    , InputControlError
+    , excludeUtxoP
+    , extraTxInP
+    , outRefText
+    , renderInputControlError
+    , validateInputControl
     )
 
 -- ----------------------------------------------------
@@ -163,6 +180,10 @@ data CommonFlags = CommonFlags
     , cfValidityHours :: !(Maybe Word16)
     , cfLog :: !(Maybe FilePath)
     , cfForce :: !Bool
+    , cfExcludeSet :: !ExclusionSet
+    -- ^ Operator-supplied @--exclude-utxo@ refs (#184).
+    , cfForcedSet :: !ForcedInclusionSet
+    -- ^ Operator-supplied @--extra-tx-in@ refs (#184).
     }
     deriving stock (Eq, Show)
 
@@ -343,6 +364,69 @@ commonFlagsP =
                 <> help
                     "Overwrite the file at --out if it already exists"
             )
+        <*> (ExclusionSet <$> excludeUtxoP)
+        <*> (ForcedInclusionSet <$> extraTxInP)
+
+-- ----------------------------------------------------
+-- Input-control helpers (#184 Slice 7)
+-- ----------------------------------------------------
+
+validateGovernanceWithdrawalInitWizardInputControl
+    :: CommonFlags -> Either InputControlError ()
+validateGovernanceWithdrawalInitWizardInputControl cf =
+    validateInputControl (cfExcludeSet cf) (cfForcedSet cf)
+
+renderGovernanceWithdrawalInitResolverError
+    :: GovernanceWithdrawalInitError -> Text
+renderGovernanceWithdrawalInitResolverError
+    (GovernanceWithdrawalInitResolverExtraTxInNotOnWallet refs) =
+        "extra input not found on wallet: "
+            <> T.intercalate ", " (map outRefText refs)
+renderGovernanceWithdrawalInitResolverError
+    ( GovernanceWithdrawalInitResolverWalletShortfallWithExcludes
+            avail
+            required
+            refs
+        ) =
+        renderGovernanceWithdrawalInitWalletShortfallWithExcludes
+            ( "wallet shortfall available="
+                <> T.pack (show avail)
+                <> " required="
+                <> T.pack (show required)
+            )
+            refs
+renderGovernanceWithdrawalInitResolverError e =
+    "resolve: " <> T.pack (show e)
+
+emitGovernanceWithdrawalInitExclusionLog
+    :: Text -> InputControlOutcome -> IO ()
+emitGovernanceWithdrawalInitExclusionLog prefix outcome = do
+    mapM_
+        ( \(ref, pool) ->
+            hPutStrLn
+                stderr
+                ( T.unpack
+                    ( renderGovernanceWithdrawalInitExclusionLogLine
+                        prefix
+                        ref
+                        pool
+                    )
+                )
+        )
+        (icoHits outcome)
+    mapM_
+        ( \ref ->
+            hPutStrLn
+                stderr
+                ( T.unpack
+                    ( prefix
+                        <> ": excluded utxo "
+                        <> outRefText ref
+                        <> " (operator-supplied) [absent]"
+                    )
+                )
+        )
+        (icoInert outcome)
 
 -- ----------------------------------------------------
 -- ReadM helpers
@@ -501,6 +585,10 @@ the two locally-named constants
 runProposal :: GlobalOpts -> ProposalOpts -> IO ()
 runProposal g po = do
     let cf = poCommon po
+    case validateGovernanceWithdrawalInitWizardInputControl cf of
+        Right () -> pure ()
+        Left ce ->
+            abortProposal (renderInputControlError ce)
     networkName <- case resolveNetworkName g of
         Right t -> pure t
         Left e -> abortProposal (T.pack e)
@@ -555,12 +643,21 @@ runProposal g po = do
                             Set.empty
                             (pure . extractDepositComponents . ccPParams)
                     }
-        er <- resolveGovernanceWithdrawalInitProposal renv input
+        er <-
+            resolveGovernanceWithdrawalInitProposalIC
+                renv
+                (cfExcludeSet cf)
+                (cfForcedSet cf)
+                input
         env <- case er of
             Left e ->
                 abortProposal
-                    ("resolve: " <> T.pack (show e))
-            Right e -> pure e
+                    (renderGovernanceWithdrawalInitResolverError e)
+            Right (e, outcome) -> do
+                emitGovernanceWithdrawalInitExclusionLog
+                    "governance-withdrawal-init-wizard proposal"
+                    outcome
+                pure e
         intent <-
             case governanceWithdrawalInitProposalToIntent
                 env
@@ -662,6 +759,10 @@ query, and before the upper-bound query.
 runMaterialization :: GlobalOpts -> MaterializationOpts -> IO ()
 runMaterialization g mo = do
     let cf = moCommon mo
+    case validateGovernanceWithdrawalInitWizardInputControl cf of
+        Right () -> pure ()
+        Left ce ->
+            abortMaterialization (renderInputControlError ce)
     networkName <- case resolveNetworkName g of
         Right t -> pure t
         Left e -> abortMaterialization (T.pack e)
@@ -696,12 +797,21 @@ runMaterialization g mo = do
                     , gwimreFloorComponents =
                         defaultMaterializationFloorComponents
                     }
-        er <- resolveGovernanceWithdrawalInitMaterialization renv input
+        er <-
+            resolveGovernanceWithdrawalInitMaterializationIC
+                renv
+                (cfExcludeSet cf)
+                (cfForcedSet cf)
+                input
         env <- case er of
             Left e ->
                 abortMaterialization
-                    ("resolve: " <> T.pack (show e))
-            Right e -> pure e
+                    (renderGovernanceWithdrawalInitResolverError e)
+            Right (e, outcome) -> do
+                emitGovernanceWithdrawalInitExclusionLog
+                    "governance-withdrawal-init-wizard materialization"
+                    outcome
+                pure e
         intent <-
             case governanceWithdrawalInitMaterializationToIntent
                 env

@@ -623,6 +623,99 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
                 src <- mustRead hostMainPath
                 src `shouldSatisfyContain` "ASSET_PRESERVATION_FAILED"
 
+    describe "reorganize exec-units assertion (#87 S3)" $ do
+        it
+            "reorganize_phase invokes tx-validate with --input \
+            \and --n2c-socket-path"
+            $ do
+                src <- mustRead smokeScriptPath
+                let body = reorganizePhaseFnBody src
+                body `shouldSatisfyContain` "tx-validate"
+                body `shouldSatisfyContain` "--input"
+                body `shouldSatisfyContain` "--n2c-socket-path"
+
+        it
+            "reorganize_phase captures tx-validate output to the \
+            \run-dir"
+            $ do
+                src <- mustRead smokeScriptPath
+                let body = reorganizePhaseFnBody src
+                body `shouldSatisfyContain` "phases/reorganize/tx-validate.json"
+
+        it
+            "host Main.hs carries the EXEC_UNITS_OVER_LIMIT \
+            \diagnostic literal"
+            $ do
+                src <- mustRead hostMainPath
+                src `shouldSatisfyContain` "EXEC_UNITS_OVER_LIMIT"
+
+        it
+            "host Main.hs carries the EXEC_UNITS_VALIDATOR_UNAVAILABLE \
+            \diagnostic literal"
+            $ do
+                src <- mustRead hostMainPath
+                src `shouldSatisfyContain` "EXEC_UNITS_VALIDATOR_UNAVAILABLE"
+
+        it
+            "host Main.hs writes the execUnitsVerdict key into \
+            \summary.json"
+            $ do
+                src <- mustRead hostMainPath
+                src `shouldSatisfyContain` "execUnitsVerdict"
+
+        it
+            "host Main.hs loads pparams.maxTxExecutionUnits via the \
+            \project's queryProtocolParams wrapper"
+            $ do
+                src <- mustRead hostMainPath
+                src `shouldSatisfyContain` "queryProtocolParamsH"
+                src `shouldSatisfyContain` "maxTxExecutionUnits"
+
+        it
+            "full_phase calls reorganize_phase before any direct \
+            \disburse_phase invocation, with at most one direct \
+            \disburse_phase call"
+            $ do
+                src <- mustRead smokeScriptPath
+                let body = fullPhaseFnBody src
+                    startsCall w l =
+                        let trimmed = dropWhile (== ' ') l
+                        in  (w <> " ") `isPrefixOf` trimmed
+                                || trimmed == w
+                    disburseCalls =
+                        length
+                            ( filter
+                                (startsCall "disburse_phase")
+                                (lines body)
+                            )
+                disburseCalls `shouldSatisfy` (<= 1)
+                let reorgOff =
+                        substringOffset "reorganize_phase" body
+                    disburseOff =
+                        substringOffset "disburse_phase" body
+                case (reorgOff, disburseOff) of
+                    (Nothing, _) ->
+                        expectationFailure
+                            "reorganize_phase absent from full_phase body"
+                    (Just _, Nothing) -> pure ()
+                    (Just r, Just d) ->
+                        unless (r < d) $
+                            expectationFailure $
+                                "reorganize_phase at offset "
+                                    <> show r
+                                    <> " should precede disburse_phase "
+                                    <> "at offset "
+                                    <> show d
+                                    <> " inside full_phase body"
+
+        it
+            "write_full_summary surfaces the reorganize exec-units \
+            \verdict in the unified summary"
+            $ do
+                src <- mustRead smokeScriptPath
+                let body = writeFullSummaryFnBody src
+                body `shouldSatisfyContain` "execUnitsVerdict"
+
 -- ---------------------------------------------------------------------
 -- Helpers
 -- ---------------------------------------------------------------------

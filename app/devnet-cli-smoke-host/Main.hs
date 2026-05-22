@@ -36,6 +36,7 @@ import Cardano.Ledger.Address
     , Addr (..)
     , serialiseAddr
     )
+import Cardano.Ledger.Api.PParams (ppMaxTxExUnitsL)
 import Cardano.Ledger.Api.Tx.Body
     ( feeTxBodyL
     , inputsTxBodyL
@@ -66,6 +67,11 @@ import Cardano.Ledger.Mary.Value
     , assetNameToTextAsHex
     , flattenMultiAsset
     )
+import Cardano.Ledger.Plutus.ExUnits
+    ( ExUnits (..)
+    , exUnitsMem
+    , exUnitsSteps
+    )
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Node.Client.E2E.Devnet (withCardanoNode)
 import Cardano.Node.Client.E2E.Setup
@@ -74,6 +80,7 @@ import Cardano.Node.Client.E2E.Setup
     , genesisSignKey
     , mkSignKey
     )
+import Cardano.Node.Client.Provider (queryProtocolParamsH)
 import Codec.Binary.Bech32 qualified as Bech32
 import Control.Concurrent (threadDelay)
 import Control.Monad (unless, when)
@@ -316,6 +323,11 @@ main = do
                     socket
                     devnetMagic
                     (smokeCode == ExitSuccess)
+                runReorganizeExecUnitsAssertionIfPresent
+                    runDir
+                    socket
+                    devnetMagic
+                    (smokeCode == ExitSuccess)
                 case smokeCode of
                     ExitSuccess -> do
                         markFullSummaryPassed runDir socket
@@ -323,6 +335,11 @@ main = do
                     code -> exitWith code
             "reorganize" -> do
                 runReorganizeAssertionsIfPresent
+                    runDir
+                    socket
+                    devnetMagic
+                    (smokeCode == ExitSuccess)
+                runReorganizeExecUnitsAssertionIfPresent
                     runDir
                     socket
                     devnetMagic
@@ -2209,6 +2226,258 @@ updateReorganizeSummaryVerdict
         badSummary err =
             "reorganize-assertion: cannot parse summary: "
                 <> err
+
+-- ---------------------------------------------------------------------
+-- Reorganize exec-units assertion (#87 S3, T013–T015)
+-- ---------------------------------------------------------------------
+
+{- | Sibling of 'runReorganizeAssertionsIfPresent'. Runs only when
+the smoke wrote the reorganize @summary.json@ (i.e. the phase
+got past @tx-build@); on missing summary it is a no-op unless
+@required@ is set.
+-}
+runReorganizeExecUnitsAssertionIfPresent
+    :: FilePath -> FilePath -> NetworkMagic -> Bool -> IO ()
+runReorganizeExecUnitsAssertionIfPresent
+    runDir
+    socket
+    magic
+    required = do
+        let summaryPath =
+                runDir
+                    </> "phases"
+                    </> "reorganize"
+                    </> "summary.json"
+        exists <- doesFileExist summaryPath
+        if exists
+            then runReorganizeExecUnitsAssertion runDir socket magic
+            else
+                when required $
+                    die
+                        ( "reorganize-exec-units-assertion: missing "
+                            <> "summary at "
+                            <> summaryPath
+                        )
+
+{- | Parse @\<run-dir\>\/phases\/reorganize\/tx-validate.json@,
+load @pparams.maxTxExecutionUnits.{memory,steps}@ from the live
+node via the project's 'queryProtocolParamsH' N2C wrapper, sum
+the per-redeemer execution units carried by the tx-validate
+payload, and write an @execUnitsVerdict@ block into the
+reorganize @summary.json@.
+
+Exit codes:
+
+  * @EXEC_UNITS_OVER_LIMIT@ — observed sum exceeds the live
+    pparams limit on memory or steps (verdict status =
+    @over-limit@).
+  * @EXEC_UNITS_VALIDATOR_UNAVAILABLE@ — @tx-validate.json@
+    missing, unparseable, or its schema does not carry the
+    expected @redeemers@ array (verdict status =
+    @unavailable@). This is the live outcome until
+    cardano-tx-tools adds per-redeemer exec units to the
+    JSON envelope (operator follow-up T016).
+
+The verdict object is the canonical evidence the live-boundary
+T016 surfaces in the PR body; the unit suite pins only the
+literal contract (diagnostics + key + wrapper).
+-}
+runReorganizeExecUnitsAssertion
+    :: FilePath -> FilePath -> NetworkMagic -> IO ()
+runReorganizeExecUnitsAssertion runDir socket magic = do
+    let phaseDir = runDir </> "phases" </> "reorganize"
+        validateJson = phaseDir </> "tx-validate.json"
+        summaryPath = phaseDir </> "summary.json"
+    pparams <-
+        withLocalNodeBackend magic socket $ \backend ->
+            Backend.singleShotWithAcquired backend $ \qh ->
+                queryProtocolParamsH qh
+    let maxTxExecutionUnits = pparams ^. ppMaxTxExUnitsL
+        ExUnits{exUnitsMem = limMemNat, exUnitsSteps = limStepsNat} =
+            maxTxExecutionUnits
+        limMem :: Integer
+        limMem = fromIntegral limMemNat
+        limSteps :: Integer
+        limSteps = fromIntegral limStepsNat
+        limitJson =
+            object
+                [ "memory" .= limMem
+                , "steps" .= limSteps
+                ]
+    available <- doesFileExist validateJson
+    if not available
+        then
+            emitUnavailable
+                summaryPath
+                limitJson
+                ( "tx-validate.json missing at "
+                    <> validateJson
+                )
+        else do
+            parsed <- eitherDecodeFileStrict' validateJson
+            case parsed of
+                Left err ->
+                    emitUnavailable
+                        summaryPath
+                        limitJson
+                        ( "tx-validate.json unparseable: "
+                            <> err
+                        )
+                Right val ->
+                    case parseEither parseRedeemerExUnits val of
+                        Left err ->
+                            emitUnavailable
+                                summaryPath
+                                limitJson
+                                ( "tx-validate.json schema "
+                                    <> "mismatch: "
+                                    <> err
+                                )
+                        Right perRedeemer -> do
+                            let (obsMem, obsSteps) =
+                                    sumExUnits perRedeemer
+                                overLimit =
+                                    obsMem > limMem
+                                        || obsSteps > limSteps
+                                statusText :: Text
+                                statusText
+                                    | overLimit = "over-limit"
+                                    | otherwise = "within-limits"
+                                observedJson =
+                                    object
+                                        [ "memory" .= obsMem
+                                        , "steps" .= obsSteps
+                                        ]
+                                verdict =
+                                    object
+                                        [ "status" .= statusText
+                                        , "observed" .= observedJson
+                                        , "limit" .= limitJson
+                                        , "perRedeemer"
+                                            .= fmap
+                                                renderRedeemerExUnits
+                                                perRedeemer
+                                        ]
+                            patchExecUnitsVerdict summaryPath verdict
+                            if overLimit
+                                then
+                                    die
+                                        ( "EXEC_UNITS_OVER_LIMIT: "
+                                            <> "redeemer execution "
+                                            <> "units exceed live "
+                                            <> "pparams.maxTxExecutionUnits"
+                                            <> " (observed memory="
+                                            <> show obsMem
+                                            <> ", steps="
+                                            <> show obsSteps
+                                            <> "; limit memory="
+                                            <> show limMem
+                                            <> ", steps="
+                                            <> show limSteps
+                                            <> ")"
+                                        )
+                                else
+                                    hPutStrLn
+                                        stderr
+                                        ( "devnet-cli-smoke-host: "
+                                            <> "reorganize exec "
+                                            <> "units within limits "
+                                            <> "("
+                                            <> validateJson
+                                            <> ")"
+                                        )
+  where
+    emitUnavailable summaryPath limitJson reason = do
+        let verdict =
+                object
+                    [ "status" .= ("unavailable" :: Text)
+                    , "reason" .= (reason :: String)
+                    , "limit" .= limitJson
+                    ]
+        patchExecUnitsVerdict summaryPath verdict
+        die ("EXEC_UNITS_VALIDATOR_UNAVAILABLE: " <> reason)
+
+{- | One redeemer's execution-unit footprint parsed out of
+@tx-validate.json@.
+-}
+data RedeemerExUnits = RedeemerExUnits
+    { ruTag :: !Text
+    , ruIndex :: !Integer
+    , ruMemory :: !Integer
+    , ruSteps :: !Integer
+    }
+
+{- | Parse the @redeemers@ array of @tx-validate.json@; each
+element must carry @{tag, index, exUnits: {memory, steps}}@.
+Schema drift triggers a 'Parser' failure which the caller
+surfaces as @EXEC_UNITS_VALIDATOR_UNAVAILABLE@.
+-}
+parseRedeemerExUnits :: Value -> Parser [RedeemerExUnits]
+parseRedeemerExUnits =
+    withObject "tx-validate.json" $ \obj -> do
+        rs <- obj .: "redeemers"
+        traverse parseOne rs
+  where
+    parseOne = withObject "redeemer" $ \r -> do
+        tag <- r .: "tag"
+        idx <- r .: "index"
+        unitsV <- r .: "exUnits"
+        let extract = withObject "exUnits" $ \u ->
+                (,)
+                    <$> u .: "memory"
+                    <*> u .: "steps"
+        (mem, st) <- extract unitsV
+        pure
+            RedeemerExUnits
+                { ruTag = tag
+                , ruIndex = idx
+                , ruMemory = mem
+                , ruSteps = st
+                }
+
+sumExUnits :: [RedeemerExUnits] -> (Integer, Integer)
+sumExUnits =
+    foldr
+        ( \r (m, s) ->
+            (m + ruMemory r, s + ruSteps r)
+        )
+        (0, 0)
+
+renderRedeemerExUnits :: RedeemerExUnits -> Value
+renderRedeemerExUnits r =
+    object
+        [ "tag" .= ruTag r
+        , "index" .= ruIndex r
+        , "memory" .= ruMemory r
+        , "steps" .= ruSteps r
+        ]
+
+{- | Overlay an @execUnitsVerdict@ key onto the reorganize
+@summary.json@ without touching other keys.
+-}
+patchExecUnitsVerdict :: FilePath -> Value -> IO ()
+patchExecUnitsVerdict summaryPath verdict = do
+    exists <- doesFileExist summaryPath
+    unless exists $
+        die
+            ( "exec-units-assertion: missing summary at "
+                <> summaryPath
+            )
+    raw <-
+        eitherDecodeFileStrict' summaryPath
+            >>= either (die . badSummary) pure
+    let baseObj = case raw of
+            Aeson.Object o -> o
+            _ -> KeyMap.empty
+        newPairs =
+            KeyMap.singleton
+                (Key.fromString "execUnitsVerdict")
+                verdict
+        updated = KeyMap.union newPairs baseObj
+    BSL.writeFile summaryPath (encode (Aeson.Object updated))
+  where
+    badSummary err =
+        "exec-units-assertion: cannot parse summary: " <> err
 
 -- ---------------------------------------------------------------------
 -- Diagnostics

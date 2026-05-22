@@ -1615,6 +1615,27 @@ reorganize_phase() {
         --log "$build_log" \
         || die "REORGANIZE_BUILD_FAILED: tx-build exited non-zero (see $build_log)"
 
+    # T013 — Drive cardano-tx-tools tx-validate against the unsigned
+    # Conway CBOR; capture the JSON verdict to
+    # <run-dir>/phases/reorganize/tx-validate.json so the host's
+    # exec-units assertion can parse it. tx-validate non-zero exit
+    # is NOT a smoke-level death: the host surfaces
+    # EXEC_UNITS_VALIDATOR_UNAVAILABLE if the JSON is missing or
+    # its schema does not carry the redeemer exec-units payload.
+    local tx_validate_json="$run_dir/phases/reorganize/tx-validate.json"
+    local tx_validate_stderr="$run_dir/phases/reorganize/tx-validate.stderr"
+    log "reorganize: tx-validate --input"
+    if tx-validate \
+        --input "$cbor_path" \
+        --n2c-socket-path "$CARDANO_NODE_SOCKET_PATH" \
+        --network-magic "$CLI_SMOKE_NETWORK_MAGIC" \
+        --output json \
+        >"$tx_validate_json" 2>"$tx_validate_stderr"; then
+        log "reorganize: tx-validate captured to $tx_validate_json"
+    else
+        log "reorganize: tx-validate exited non-zero (see $tx_validate_stderr); host will surface EXEC_UNITS_VALIDATOR_UNAVAILABLE"
+    fi
+
     local tip_slot
     tip_slot=$(jq -r '.tip.slot // .tip.slotNo // 0' \
         "$inspect_json" 2>/dev/null) \
@@ -1688,11 +1709,18 @@ write_full_summary() {
     require_file "governance summary" "$governance_summary"
     require_file "disburse summary" "$disburse_summary"
     require_file "reorganize summary" "$reorganize_summary"
+    # T013 — surface the reorganize execUnitsVerdict in the unified
+    # summary so operators can read the verdict without descending
+    # into the per-phase summary. `--slurpfile` returns a 1-element
+    # array of the reorganize summary JSON; `[0]` unwraps it. The
+    # `// null` falls back when the host has not yet written the
+    # verdict (e.g. tx-validate JSON missing).
     jq -n \
         --arg registrySummary "$registry_summary" \
         --arg governanceSummary "$governance_summary" \
         --arg disburseSummary "$disburse_summary" \
         --arg reorganizeSummary "$reorganize_summary" \
+        --slurpfile reorganizeData "$reorganize_summary" \
         --arg runDir "$run_dir" \
         --arg socketPath "${CARDANO_NODE_SOCKET_PATH:-}" \
         '{
@@ -1702,6 +1730,8 @@ write_full_summary() {
             governanceSummary: $governanceSummary,
             disburseSummary: $disburseSummary,
             reorganizeSummary: $reorganizeSummary,
+            execUnitsVerdict:
+                ($reorganizeData[0].execUnitsVerdict // null),
             runDir: $runDir,
             socketPath: $socketPath,
             verificationStatus: "pending-host-assertions"
@@ -1712,7 +1742,10 @@ write_full_summary() {
 full_phase() {
     local run_dir=$1
     local timeout_seconds=$2
-    disburse_phase "$run_dir" "$timeout_seconds"
+    # reorganize_phase transitively chains disburse_phase (which
+    # chains registry-stake, governance, vault-preflight). Calling
+    # disburse_phase explicitly here used to re-enter every
+    # upstream substep twice; #87 S3 drops the redundant call.
     reorganize_phase "$run_dir" "$timeout_seconds"
     write_full_summary "$run_dir"
 }

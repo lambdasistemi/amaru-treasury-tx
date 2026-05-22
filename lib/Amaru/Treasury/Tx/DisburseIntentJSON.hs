@@ -447,6 +447,7 @@ buildRationale DisburseIntentJSON{..} = do
             RationaleBody
                 { rbEvent = drjEvent dijRationale
                 , rbLabel = drjLabel dijRationale
+                , rbReferences = []
                 , rbDescription =
                     [drjDescription dijRationale]
                 , rbDestinationLabel =

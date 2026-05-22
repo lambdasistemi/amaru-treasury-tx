@@ -1767,6 +1767,7 @@ translateSwap ti = do
             RationaleBody
                 { rbEvent = rjEvent rat
                 , rbLabel = rjLabel rat
+                , rbReferences = []
                 , rbDescription = [rjDescription rat]
                 , rbDestinationLabel = rjDestinationLabel rat
                 , rbJustification = [rjJustification rat]
@@ -1851,6 +1852,7 @@ translateDisburse ti = do
             RationaleBody
                 { rbEvent = rjEvent rat
                 , rbLabel = rjLabel rat
+                , rbReferences = []
                 , rbDescription = [rjDescription rat]
                 , rbDestinationLabel = rjDestinationLabel rat
                 , rbJustification = [rjJustification rat]
@@ -1964,6 +1966,7 @@ translateWithdraw ti = do
             RationaleBody
                 { rbEvent = rjEvent rat
                 , rbLabel = rjLabel rat
+                , rbReferences = []
                 , rbDescription = [rjDescription rat]
                 , rbDestinationLabel = rjDestinationLabel rat
                 , rbJustification = [rjJustification rat]
@@ -2001,6 +2004,7 @@ translateReorganize ti = do
             RationaleBody
                 { rbEvent = rjEvent rat
                 , rbLabel = rjLabel rat
+                , rbReferences = []
                 , rbDescription = [rjDescription rat]
                 , rbDestinationLabel = rjDestinationLabel rat
                 , rbJustification = [rjJustification rat]

@@ -244,6 +244,7 @@ rationaleFor ti = do
             RationaleBody
                 { rbEvent = rjEvent
                 , rbLabel = rjLabel
+                , rbReferences = []
                 , rbDescription = [rjDescription]
                 , rbDestinationLabel = rjDestinationLabel
                 , rbJustification = [rjJustification]

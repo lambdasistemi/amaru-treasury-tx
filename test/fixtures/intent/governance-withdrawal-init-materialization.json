@@ -13,7 +13,8 @@
         "destinationLabel": "fixture",
         "event": "governance-withdrawal-init",
         "justification": "test",
-        "label": "governance-withdrawal-init"
+        "label": "governance-withdrawal-init",
+        "references": []
     },
     "schema": 1,
     "scope": {

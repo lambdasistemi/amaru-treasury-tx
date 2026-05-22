@@ -890,6 +890,7 @@ rationaleProposal =
             "governance-withdrawal-init bootstrap fixture"
         , rjJustification = "test"
         , rjDestinationLabel = "fixture"
+        , rjReferences = []
         }
 
 -- TxIn rendering for the wallet JSON block and the scope
@@ -1246,4 +1247,5 @@ rationaleMaterialization =
             "governance-withdrawal-init bootstrap fixture"
         , rjJustification = "test"
         , rjDestinationLabel = "fixture"
+        , rjReferences = []
         }

@@ -13,7 +13,8 @@
         "destinationLabel": "Antithesis Inc.",
         "event": "disburse",
         "justification": "Per network-compliance budget for vendor X",
-        "label": "Disburse USDM"
+        "label": "Disburse USDM",
+        "references": []
     },
     "schema": 1,
     "scope": {

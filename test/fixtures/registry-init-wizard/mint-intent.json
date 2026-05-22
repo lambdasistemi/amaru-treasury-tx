@@ -6,7 +6,8 @@
         "destinationLabel": "fixture",
         "event": "registry-init",
         "justification": "test",
-        "label": "registry-init"
+        "label": "registry-init",
+        "references": []
     },
     "registry-init-mint": {
         "ownerKeyHash": "11111111111111111111111111111111111111111111111111111111",

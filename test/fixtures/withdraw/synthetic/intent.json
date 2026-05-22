@@ -6,7 +6,8 @@
         "destinationLabel": "core_development treasury",
         "event": "withdraw",
         "justification": "Move rewards back under treasury contract control",
-        "label": "Withdraw treasury rewards"
+        "label": "Withdraw treasury rewards",
+        "references": []
     },
     "schema": 1,
     "scope": {

@@ -236,7 +236,57 @@ rationaleSchema =
         , ("description", stringSchema)
         , ("justification", stringSchema)
         , ("destinationLabel", stringSchema)
+        , ("references", referencesSchema)
         ]
+
+referencesSchema :: Value
+referencesSchema =
+    object
+        [ "type" .= ("array" :: Text)
+        , "default" .= ([] :: [Value])
+        , "items" .= referenceItemSchema
+        ]
+
+referenceItemSchema :: Value
+referenceItemSchema =
+    object
+        [ "type" .= ("object" :: Text)
+        , "required" .= (["uri", "label"] :: [Text])
+        , "properties"
+            .= object
+                [ "uri"
+                    .= boundedStringSchema
+                        1
+                        256
+                        Nothing
+                        "Full URI of the reference document (e.g. ipfs://<CID>, https://..., ar://...). Chunked per the metadatum 64-byte cap at serialisation time."
+                , "@type"
+                    .= boundedStringSchema
+                        1
+                        64
+                        (Just "Other")
+                        "SundaeSwap reference type. Default 'Other'."
+                , "label"
+                    .= boundedStringSchema
+                        1
+                        256
+                        Nothing
+                        "Human-readable label. Literal ' - ' marks the split for the on-chain Metadatum 3-chunk shape."
+                ]
+        , "additionalProperties" .= False
+        ]
+
+boundedStringSchema :: Int -> Int -> Maybe Text -> Text -> Value
+boundedStringSchema lo hi mDefault description =
+    object $
+        [ "type" .= ("string" :: Text)
+        , "minLength" .= lo
+        , "maxLength" .= hi
+        , "description" .= description
+        ]
+            <> case mDefault of
+                Just d -> ["default" .= d]
+                Nothing -> []
 
 swapSchema :: Value
 swapSchema =

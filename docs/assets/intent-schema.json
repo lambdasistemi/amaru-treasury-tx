@@ -146,6 +146,39 @@
                 },
                 "label": {
                     "type": "string"
+                },
+                "references": {
+                    "default": [],
+                    "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                            "@type": {
+                                "default": "Other",
+                                "description": "SundaeSwap reference type. Default 'Other'.",
+                                "maxLength": 64,
+                                "minLength": 1,
+                                "type": "string"
+                            },
+                            "label": {
+                                "description": "Human-readable label. Literal ' - ' marks the split for the on-chain Metadatum 3-chunk shape.",
+                                "maxLength": 256,
+                                "minLength": 1,
+                                "type": "string"
+                            },
+                            "uri": {
+                                "description": "Full URI of the reference document (e.g. ipfs://<CID>, https://..., ar://...). Chunked per the metadatum 64-byte cap at serialisation time.",
+                                "maxLength": 256,
+                                "minLength": 1,
+                                "type": "string"
+                            }
+                        },
+                        "required": [
+                            "uri",
+                            "label"
+                        ],
+                        "type": "object"
+                    },
+                    "type": "array"
                 }
             },
             "required": [

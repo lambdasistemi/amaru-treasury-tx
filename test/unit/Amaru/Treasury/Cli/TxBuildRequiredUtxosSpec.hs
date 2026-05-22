@@ -347,6 +347,7 @@ emptyRationaleJson =
         , rjDescription = ""
         , rjJustification = ""
         , rjDestinationLabel = ""
+        , rjReferences = []
         }
 
 -- ----------------------------------------------------

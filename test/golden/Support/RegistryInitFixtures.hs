@@ -255,6 +255,7 @@ emptyRationaleJSON =
         , rjDescription = "registry-init bootstrap fixture"
         , rjJustification = "test"
         , rjDestinationLabel = "fixture"
+        , rjReferences = []
         }
 
 placeholderScopeJSON :: ScopeJSON

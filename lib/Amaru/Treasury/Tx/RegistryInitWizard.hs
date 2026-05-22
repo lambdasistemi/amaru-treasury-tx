@@ -599,6 +599,7 @@ mkRationale ans =
                 fromMaybe
                     (scopeName <> " seed-split")
                     (risDestinationLabel ans)
+            , rjReferences = []
             }
 
 -- ----------------------------------------------------
@@ -702,6 +703,7 @@ mkRationaleMint ans =
                 fromMaybe
                     (scopeName <> " mint")
                     (rimDestinationLabel ans)
+            , rjReferences = []
             }
 
 -- ----------------------------------------------------
@@ -828,6 +830,7 @@ mkRationaleReferenceScripts ans =
                 fromMaybe
                     (scopeName <> " reference-scripts")
                     (rirDestinationLabel ans)
+            , rjReferences = []
             }
 
 -- ----------------------------------------------------

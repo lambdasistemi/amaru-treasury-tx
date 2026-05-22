@@ -58,7 +58,9 @@ import Data.Aeson
     , eitherDecodeFileStrict
     , object
     , withObject
+    , (.!=)
     , (.:)
+    , (.:?)
     , (.=)
     )
 import Data.Aeson qualified as A
@@ -82,6 +84,10 @@ import Data.Word (Word64)
 import Amaru.Treasury.AuxData
     ( RationaleBody (..)
     , rationaleMetadatum
+    )
+import Amaru.Treasury.IntentJSON
+    ( RationaleReferenceJSON (..)
+    , fromJSONReference
     )
 import Amaru.Treasury.IntentJSON.Common
     ( parseRewardAccountForNetwork
@@ -159,6 +165,9 @@ data DisburseRationaleJSON = DisburseRationaleJSON
     , drjDescription :: !Text
     , drjJustification :: !Text
     , drjDestinationLabel :: !Text
+    , drjReferences :: ![RationaleReferenceJSON]
+    -- ^ optional typed external references on the
+    --   rationale body; defaults to @[]@ on parse.
     }
     deriving stock (Eq, Show)
 
@@ -220,6 +229,7 @@ instance FromJSON DisburseRationaleJSON where
             <*> o .: "description"
             <*> o .: "justification"
             <*> o .: "destinationLabel"
+            <*> o .:? "references" .!= []
 
 instance FromJSON DisburseIntentJSON where
     parseJSON = withObject "DisburseIntentJSON" $ \o ->
@@ -284,6 +294,7 @@ instance ToJSON DisburseRationaleJSON where
             , "description" .= drjDescription
             , "justification" .= drjJustification
             , "destinationLabel" .= drjDestinationLabel
+            , "references" .= drjReferences
             ]
 
 instance ToJSON DisburseIntentJSON where
@@ -447,7 +458,10 @@ buildRationale DisburseIntentJSON{..} = do
             RationaleBody
                 { rbEvent = drjEvent dijRationale
                 , rbLabel = drjLabel dijRationale
-                , rbReferences = []
+                , rbReferences =
+                    map
+                        fromJSONReference
+                        (drjReferences dijRationale)
                 , rbDescription =
                     [drjDescription dijRationale]
                 , rbDestinationLabel =

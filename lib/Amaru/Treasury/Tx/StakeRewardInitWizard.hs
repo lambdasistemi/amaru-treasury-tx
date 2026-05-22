@@ -467,6 +467,7 @@ mkRationaleScriptAccount =
         , rjDescription = "stake-reward-init bootstrap fixture"
         , rjJustification = "test"
         , rjDestinationLabel = "fixture"
+        , rjReferences = []
         }
 
 -- ----------------------------------------------------
@@ -616,6 +617,7 @@ mkRationalePlainAccount =
         , rjDescription = "stake-reward-init bootstrap fixture"
         , rjJustification = "test"
         , rjDestinationLabel = "fixture"
+        , rjReferences = []
         }
 
 -- ----------------------------------------------------

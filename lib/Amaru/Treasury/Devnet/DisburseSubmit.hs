@@ -535,6 +535,7 @@ mkDisburseIntent
                         , rjJustification =
                             "Issue #150 command recovery proof"
                         , rjDestinationLabel = "DevNet beneficiary"
+                        , rjReferences = []
                         }
                 , tiPayload =
                     DisburseInputs

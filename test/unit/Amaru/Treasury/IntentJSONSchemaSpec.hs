@@ -343,6 +343,7 @@ withdrawIntent =
             "Pull accrued rewards"
             "Treasury accounting"
             "Network Compliance treasury"
+            []
         )
         ( WithdrawInputs
             "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d"

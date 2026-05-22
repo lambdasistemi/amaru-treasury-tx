@@ -14,7 +14,7 @@ the schema allow-list, and the missing-network failure.
 -}
 module Amaru.Treasury.IntentJSONSpec (spec) where
 
-import Data.Aeson (eitherDecode, encode)
+import Data.Aeson (decode, eitherDecode, encode)
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy.Char8 qualified as BSL8
 import Data.List.NonEmpty (NonEmpty ((:|)))
@@ -41,6 +41,7 @@ import Test.QuickCheck
     , cover
     , elements
     , forAll
+    , listOf
     , listOf1
     , property
     , vectorOf
@@ -62,6 +63,7 @@ import Amaru.Treasury.IntentJSON
     , GovernanceWithdrawalInitProposalInputs (..)
     , Payload
     , RationaleJSON (..)
+    , RationaleReferenceJSON (..)
     , RegistryInitMintInputs (..)
     , RegistryInitReferenceScriptsInputs (..)
     , RegistryInitSeedSplitInputs (..)
@@ -132,6 +134,23 @@ spec = describe "Amaru.Treasury.IntentJSON" $ do
             "governance-withdrawal-init-materialization: decode . encode = Right"
             $ roundTripProp
                 genGovernanceWithdrawalInitMaterializationIntent
+
+    describe "rationale references (S2)" $ do
+        it
+            "RationaleReferenceJSON: decode . encode = Just"
+            referenceRoundTripProp
+        it
+            "RationaleJSON with non-empty rjReferences round-trips"
+            rationaleWithReferencesRoundTrip
+        it
+            "RationaleJSON ToJSON emits empty references field"
+            rationaleEmitsEmptyReferencesField
+        it
+            "RationaleJSON FromJSON defaults missing references to []"
+            rationaleAcceptsMissingReferencesField
+        it
+            "RationaleReferenceJSON FromJSON defaults missing @type to Other"
+            referenceAcceptsMissingTypeField
 
     describe "wjExtraTxIns generator" $ do
         it
@@ -279,6 +298,138 @@ roundTripProp gen = forAll gen $ \some ->
     decodeTreasuryIntent (encodeSomeTreasuryIntent some)
         === Right some
 
+-- ----------------------------------------------------
+-- Rationale references (S2)
+-- ----------------------------------------------------
+
+{- | For every well-formed 'RationaleReferenceJSON',
+@decode (encode r) == Just r@.
+-}
+referenceRoundTripProp :: Property
+referenceRoundTripProp = forAll genRationaleReference $ \r ->
+    decode (encode r) === Just r
+
+{- | Hand-built 'RationaleJSON' carrying a non-empty
+@rjReferences@ (two entries, one with a literal @" - "@
+label) round-trips through @encode@/@eitherDecode@. This
+covers T018 under the Option-D resolution to Q-001 (no
+fixture file dependency).
+-}
+rationaleWithReferencesRoundTrip :: IO ()
+rationaleWithReferencesRoundTrip = do
+    let rat = sampleRationaleWithReferences
+    eitherDecode (encode rat) `shouldBe` Right rat
+
+{- | 'ToJSON' on a 'RationaleJSON' with empty
+@rjReferences@ MUST still emit the @"references"@ key
+(the schema and the emitted JSON are kept symmetric).
+-}
+rationaleEmitsEmptyReferencesField :: IO ()
+rationaleEmitsEmptyReferencesField =
+    BSL8.unpack (encode emptyReferencesRationale)
+        `shouldSatisfy` ( "\"references\":[]"
+                            `T.isInfixOf`
+                        )
+            . T.pack
+
+{- | 'FromJSON' on a JSON object missing the
+@"references"@ key MUST default to @[]@ (back-compat
+with pre-S2 intent files).
+-}
+rationaleAcceptsMissingReferencesField :: IO ()
+rationaleAcceptsMissingReferencesField =
+    case eitherDecode legacyRationaleJSON
+            :: Either String RationaleJSON of
+        Left e ->
+            errorWithoutStackTrace
+                ("legacy rationale decode: " <> e)
+        Right rat -> rjReferences rat `shouldBe` []
+
+{- | 'FromJSON' on a reference missing the @"@type"@ key
+MUST default to @"Other"@.
+-}
+referenceAcceptsMissingTypeField :: IO ()
+referenceAcceptsMissingTypeField =
+    eitherDecode referenceMissingTypeJSON
+        `shouldBe` Right
+            RationaleReferenceJSON
+                { rjrUri = "https://example.org/doc"
+                , rjrType = "Other"
+                , rjrLabel = "Reference without explicit type"
+                }
+
+-- | Pre-S2 rationale JSON (no @references@ field).
+legacyRationaleJSON :: ByteString
+legacyRationaleJSON =
+    "{\"event\":\"disburse\",\"label\":\"Pay USDM\""
+        <> ",\"description\":\"Some description\""
+        <> ",\"justification\":\"Some justification\""
+        <> ",\"destinationLabel\":\"Beneficiary X\"}"
+
+-- | Reference JSON with no @"@type"@ field.
+referenceMissingTypeJSON :: ByteString
+referenceMissingTypeJSON =
+    "{\"uri\":\"https://example.org/doc\""
+        <> ",\"label\":\"Reference without explicit type\"}"
+
+-- | A 'RationaleJSON' whose @rjReferences@ is @[]@.
+emptyReferencesRationale :: RationaleJSON
+emptyReferencesRationale =
+    RationaleJSON
+        { rjEvent = "disburse"
+        , rjLabel = "Pay USDM"
+        , rjDescription = "Some description"
+        , rjJustification = "Some justification"
+        , rjDestinationLabel = "Beneficiary X"
+        , rjReferences = []
+        }
+
+-- | A 'RationaleJSON' with two references.
+sampleRationaleWithReferences :: RationaleJSON
+sampleRationaleWithReferences =
+    RationaleJSON
+        { rjEvent = "disburse"
+        , rjLabel = "Pay USDM"
+        , rjDescription = "Disbursement description"
+        , rjJustification = "Approved budget"
+        , rjDestinationLabel = "Beneficiary X"
+        , rjReferences =
+            [ RationaleReferenceJSON
+                { rjrUri =
+                    "ipfs://bafybeiaqtexw2sfcknfcbqb463beqgfymtkiwl6qwuigjyenpx7dbls2l4"
+                , rjrType = "Other"
+                , rjrLabel =
+                    "Remunerated Contributor Agreement - Rust optimisations"
+                }
+            , RationaleReferenceJSON
+                { rjrUri = "https://example.org/invoice.pdf"
+                , rjrType = "Other"
+                , rjrLabel = "Plain HTTP reference"
+                }
+            ]
+        }
+
+{- | Generator for arbitrary well-formed
+'RationaleReferenceJSON' values. Mixes a few @ipfs@
+and @https@ URIs and labels with and without the
+@" - "@ separator.
+-}
+genRationaleReference :: Gen RationaleReferenceJSON
+genRationaleReference =
+    RationaleReferenceJSON
+        <$> elements
+            [ "ipfs://bafybeiaqtexw2sfcknfcbqb463beqgfymtkiwl6qwuigjyenpx7dbls2l4"
+            , "ipfs://bafkreigdixsutj7d7me25xmjajeb54pxtlg5ankto7aixozpapx43ytotu"
+            , "https://example.org/doc.pdf"
+            , "https://amaru.example/contract"
+            ]
+        <*> elements ["Other", "Contract", "Invoice"]
+        <*> elements
+            [ "RCA - Rust optimisations"
+            , "Invoice - January February March"
+            , "Plain label without separator"
+            ]
+
 {- | Guards against a regression where 'genWallet' silently
 collapses back to producing only the legacy empty
 'wjExtraTxIns' shape: 'checkCoverage' fails the test if
@@ -400,6 +551,7 @@ genRationale =
         <*> pure "A description"
         <*> pure "A justification"
         <*> pure "Beneficiary X"
+        <*> listOf genRationaleReference
 
 genSigners :: Gen [Text]
 genSigners = listOf1 (genHexN 28)
@@ -771,6 +923,7 @@ disburseIntent network =
             "Send vendor payment"
             "Approved budget line"
             "ACME Translations Ltd."
+            []
         )
         ( DisburseInputs
             "ada"
@@ -825,6 +978,7 @@ withdrawIntent network =
             "Pull accrued rewards"
             "Treasury accounting"
             "Network Compliance treasury"
+            []
         )
         (WithdrawInputs rewardAccountHex 12_500_000_000)
 

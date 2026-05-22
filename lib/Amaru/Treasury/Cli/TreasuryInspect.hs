@@ -17,6 +17,9 @@ module Amaru.Treasury.Cli.TreasuryInspect
     , Format (..)
     , inspectOptsP
     , runTreasuryInspect
+
+      -- * Re-usable runner (HTTP API consumer; see #239)
+    , runInspectFromBackend
     ) where
 
 import Control.Exception (SomeException, try)
@@ -235,6 +238,44 @@ runTreasuryInspect g InspectOpts{..} = do
     case result of
         Right () -> pure ()
         Left e -> abort 3 ("node: " <> T.pack (show e))
+
+{- | Re-usable inspect runner for callers that already have an
+open 'Provider IO' backend. Used by the @amaru-treasury-tx-api@
+binary's HTTP handler (#239) to amortise the N2C-session
+open-cost across many incoming requests instead of paying it
+per query.
+-}
+runInspectFromBackend
+    :: TreasuryMetadata
+    -- ^ pinned deployment metadata
+    -> DeploymentAnchor
+    -- ^ parsed scope-owners anchor
+    -> Addr
+    -- ^ swap-order address (defaults to
+    -- 'sundaeOrderAddressMainnet' when the caller has no
+    -- override)
+    -> Maybe ScopeId
+    -- ^ filter; 'Nothing' returns every registered scope
+    -> Provider IO
+    -- ^ live backend
+    -> IO InspectReport
+runInspectFromBackend metadata anchor swapAddr scope backend = do
+    slot <- nowTip backend
+    treasuryUtxos <- queryAllTreasuries backend metadata scope
+    pending <- queryPendingOrders backend swapAddr
+    let tip =
+            ChainTip
+                { ctSlot = slot
+                , ctBlockHash = Nothing
+                }
+    pure $
+        buildInspectReport
+            metadata
+            tip
+            anchor
+            treasuryUtxos
+            pending
+            scope
 
 -- ----------------------------------------------------
 -- Validation steps 2–4

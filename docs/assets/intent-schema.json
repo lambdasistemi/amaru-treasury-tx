@@ -133,7 +133,18 @@
             "additionalProperties": false,
             "properties": {
                 "description": {
-                    "type": "string"
+                    "oneOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "items": {
+                                "type": "string"
+                            },
+                            "minItems": 1,
+                            "type": "array"
+                        }
+                    ]
                 },
                 "destinationLabel": {
                     "type": "string"
@@ -142,7 +153,18 @@
                     "type": "string"
                 },
                 "justification": {
-                    "type": "string"
+                    "oneOf": [
+                        {
+                            "type": "string"
+                        },
+                        {
+                            "items": {
+                                "type": "string"
+                            },
+                            "minItems": 1,
+                            "type": "array"
+                        }
+                    ]
                 },
                 "label": {
                     "type": "string"

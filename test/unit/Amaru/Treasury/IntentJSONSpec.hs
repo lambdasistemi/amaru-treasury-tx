@@ -79,6 +79,8 @@ import Amaru.Treasury.IntentJSON
     , WithdrawInputs (..)
     , decodeTreasuryIntent
     , encodeSomeTreasuryIntent
+    , rationaleDescriptionLines
+    , rationaleJustificationLines
     , translateIntent
     )
 import Amaru.Treasury.IntentJSON.Common
@@ -148,6 +150,12 @@ spec = describe "Amaru.Treasury.IntentJSON" $ do
         it
             "RationaleJSON FromJSON defaults missing references to []"
             rationaleAcceptsMissingReferencesField
+        it
+            "RationaleJSON scalar text decodes as singleton rationale lines"
+            rationaleScalarTextLines
+        it
+            "RationaleJSON array text decodes and encodes as arrays"
+            rationaleArrayTextRoundTrip
         it
             "RationaleReferenceJSON FromJSON defaults missing @type to Other"
             referenceAcceptsMissingTypeField
@@ -345,6 +353,45 @@ rationaleAcceptsMissingReferencesField =
                 ("legacy rationale decode: " <> e)
         Right rat -> rjReferences rat `shouldBe` []
 
+{- | Legacy scalar rationale text stays compatible with
+the metadatum translation helpers.
+-}
+rationaleScalarTextLines :: IO ()
+rationaleScalarTextLines =
+    case eitherDecode legacyRationaleJSON
+            :: Either String RationaleJSON of
+        Left e ->
+            errorWithoutStackTrace
+                ("legacy rationale decode: " <> e)
+        Right rat -> do
+            rationaleDescriptionLines rat
+                `shouldBe` ["Some description"]
+            rationaleJustificationLines rat
+                `shouldBe` ["Some justification"]
+
+{- | Chain-shaped rationale text arrays decode to multiple
+metadatum lines and retain array shape on re-encode.
+-}
+rationaleArrayTextRoundTrip :: IO ()
+rationaleArrayTextRoundTrip =
+    case eitherDecode arrayRationaleJSON
+            :: Either String RationaleJSON of
+        Left e ->
+            errorWithoutStackTrace
+                ("array rationale decode: " <> e)
+        Right rat -> do
+            rationaleDescriptionLines rat
+                `shouldBe` ["First description", "Second description"]
+            rationaleJustificationLines rat
+                `shouldBe` ["First justification", "Second justification"]
+            let encodedText = T.pack (BSL8.unpack (encode rat))
+            encodedText
+                `shouldSatisfy` T.isInfixOf
+                    "\"description\":[\"First description\",\"Second description\"]"
+            encodedText
+                `shouldSatisfy` T.isInfixOf
+                    "\"justification\":[\"First justification\",\"Second justification\"]"
+
 {- | 'FromJSON' on a reference missing the @"@type"@ key
 MUST default to @"Other"@.
 -}
@@ -365,6 +412,15 @@ legacyRationaleJSON =
         <> ",\"description\":\"Some description\""
         <> ",\"justification\":\"Some justification\""
         <> ",\"destinationLabel\":\"Beneficiary X\"}"
+
+-- | Chain-shaped rationale JSON with multi-line text fields.
+arrayRationaleJSON :: ByteString
+arrayRationaleJSON =
+    "{\"event\":\"disburse\",\"label\":\"Pay USDM\""
+        <> ",\"description\":[\"First description\",\"Second description\"]"
+        <> ",\"justification\":[\"First justification\",\"Second justification\"]"
+        <> ",\"destinationLabel\":\"Beneficiary X\""
+        <> ",\"references\":[]}"
 
 -- | Reference JSON with no @"@type"@ field.
 referenceMissingTypeJSON :: ByteString

@@ -122,6 +122,13 @@ spec = describe "Amaru.Treasury.IntentJSON.Schema" $ do
         validateJSONSchema intentJsonSchema intent
             `shouldBe` True
 
+    it "validates the d6c14625 disburse references fixture intent" $ do
+        intent <-
+            decodeFile
+                "test/fixtures/disburse/d6c14625-references/intent.json"
+        validateJSONSchema intentJsonSchema intent
+            `shouldBe` True
+
     it "validates the tx-build withdraw fixture intent" $ do
         intent <-
             decodeFile "test/fixtures/withdraw/synthetic/intent.json"

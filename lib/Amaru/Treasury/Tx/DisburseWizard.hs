@@ -55,6 +55,14 @@ module Amaru.Treasury.Tx.DisburseWizard
     , registryViewFromVerified
     , resolveDisburseEnv
 
+      -- * Input control (#184 — Slice 3)
+    , PoolHit (..)
+    , InputControlOutcome (..)
+    , OutRef
+    , resolveDisburseEnvIC
+    , renderDisburseExclusionLogLine
+    , renderDisburseWalletShortfallWithExcludes
+
       -- * Pure translation
     , disburseToIntentJSON
     , disburseToTreasuryIntent
@@ -126,7 +134,9 @@ import Amaru.Treasury.Tx.DisburseIntentJSON
     , DisburseWalletJSON (..)
     )
 import Amaru.Treasury.Tx.SwapWizard
-    ( NetworkConstants (..)
+    ( InputControlOutcome (..)
+    , NetworkConstants (..)
+    , PoolHit (..)
     , RationaleAnswers (..)
     , RegistryView (..)
     , ScopeOwners (..)
@@ -141,6 +151,16 @@ import Amaru.Treasury.Tx.SwapWizard
     , txInToText
     , walletFeeSlackLovelace
     )
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    , OutRef
+    , filterPool
+    , outRefText
+    , parseOutRef
+    , renderShortfallWithExcludes
+    )
+import Data.Either (lefts, rights)
 
 -- ----------------------------------------------------
 -- Answers
@@ -630,6 +650,25 @@ data ResolverError
       ResolverValidityHoursZero
     | -- | @riValidityHours = Just n@ overshoots chain horizon.
       ResolverValidityOvershoot !Validity.HorizonError
+    | -- | One or more @--extra-tx-in@ refs were not returned
+      --   by the wallet-address query (FR-009).
+      ResolverExtraTxInNotOnWallet ![OutRef]
+    | -- | @ResolverWalletShortfallWithExcludes available
+      --   target refs@. Wallet-side shortfall after the
+      --   operator's @--exclude-utxo@ set was applied
+      --   (FR-008).
+      ResolverWalletShortfallWithExcludes
+        !Integer
+        !Integer
+        ![OutRef]
+    | -- | @ResolverTreasuryShortfallWithExcludes available
+      --   target refs@. Treasury-side shortfall after the
+      --   operator's @--exclude-utxo@ set was applied to
+      --   the per-unit treasury candidate pool (FR-008).
+      ResolverTreasuryShortfallWithExcludes
+        !Integer
+        !Integer
+        ![OutRef]
     deriving stock (Eq, Show)
 
 {- | Drive the resolver's @reEnvComputeUpperBound@ effect with
@@ -668,7 +707,29 @@ resolveDisburseEnv
     => ResolverEnv m
     -> ResolverInput
     -> m (Either ResolverError DisburseEnv)
-resolveDisburseEnv ResolverEnv{..} ri =
+resolveDisburseEnv renv ri = do
+    r <-
+        resolveDisburseEnvIC
+            renv
+            (ExclusionSet [])
+            (ForcedInclusionSet [])
+            ri
+    pure (fmap fst r)
+
+{- | Variant of 'resolveDisburseEnv' that threads the
+operator's @--exclude-utxo@ and @--extra-tx-in@ sets through
+the disburse resolver (#184 Slice 3). Returns the resolved
+'DisburseEnv' alongside the 'InputControlOutcome' the caller
+uses to emit per-ref log lines.
+-}
+resolveDisburseEnvIC
+    :: (Monad m)
+    => ResolverEnv m
+    -> ExclusionSet
+    -> ForcedInclusionSet
+    -> ResolverInput
+    -> m (Either ResolverError (DisburseEnv, InputControlOutcome))
+resolveDisburseEnvIC ResolverEnv{..} excl forced ri =
     case disburseNetworkConstants (riNetwork ri) of
         Left _ ->
             pure (Left (ResolverNetworkUnsupported (riNetwork ri)))
@@ -681,6 +742,9 @@ resolveDisburseEnv ResolverEnv{..} ri =
                         Right () ->
                             resolveWith nc usdmPolicy usdmAsset
   where
+    ExclusionSet exclRefs = excl
+    ForcedInclusionSet forcedRefs = forced
+
     resolveWith nc usdmPolicy usdmAsset =
         case Map.lookup (riScope ri) (rvTreasuryByScope (riRegistry ri)) of
             Nothing ->
@@ -689,44 +753,99 @@ resolveDisburseEnv ResolverEnv{..} ri =
                 walletUtxos <- reEnvQueryWalletUtxos (riWalletAddrBech32 ri)
                 if null walletUtxos
                     then pure (Left ResolverEmptyWalletUtxos)
-                    else do
-                        treasuryUtxos <- reEnvQueryTreasuryUtxos (trAddress refs)
-                        let selectableTreasuryUtxos =
-                                filterRequestedTreasuryUtxos
-                                    (riTreasuryTxIns ri)
-                                    treasuryUtxos
-                        if null selectableTreasuryUtxos
-                            then pure (Left ResolverEmptyTreasuryUtxos)
-                            else
-                                selectAndAssemble
-                                    nc
-                                    refs
-                                    usdmPolicy
-                                    usdmAsset
-                                    walletUtxos
-                                    selectableTreasuryUtxos
+                    else
+                        let walletRefSet =
+                                map walletCandidateRef walletUtxos
+                            missing =
+                                filter
+                                    (`notElem` walletRefSet)
+                                    forcedRefs
+                        in  if not (null missing)
+                                then
+                                    pure
+                                        ( Left
+                                            ( ResolverExtraTxInNotOnWallet
+                                                missing
+                                            )
+                                        )
+                                else
+                                    continueAfterWallet
+                                        nc
+                                        refs
+                                        usdmPolicy
+                                        usdmAsset
+                                        walletUtxos
+                                        walletRefSet
 
-    selectAndAssemble nc refs usdmPolicy usdmAsset walletUtxos treasuryUtxos =
+    continueAfterWallet nc refs usdmPolicy usdmAsset walletUtxos walletRefSet = do
+        treasuryUtxos <- reEnvQueryTreasuryUtxos (trAddress refs)
+        let selectableTreasuryUtxos =
+                filterRequestedTreasuryUtxos
+                    (riTreasuryTxIns ri)
+                    treasuryUtxos
+        if null selectableTreasuryUtxos
+            then pure (Left ResolverEmptyTreasuryUtxos)
+            else
+                let (filteredWallet, _, _, _) =
+                        filterPool
+                            walletCandidateRef
+                            excl
+                            forced
+                            walletUtxos
+                    (filteredTreasury, _, _, _) =
+                        filterPool
+                            treasuryCandidateRef
+                            excl
+                            (ForcedInclusionSet [])
+                            selectableTreasuryUtxos
+                    treasuryRefSet =
+                        map treasuryCandidateRef selectableTreasuryUtxos
+                    outcome =
+                        buildDisburseOutcome
+                            exclRefs
+                            walletRefSet
+                            treasuryRefSet
+                in  selectAndAssemble
+                        nc
+                        refs
+                        usdmPolicy
+                        usdmAsset
+                        filteredWallet
+                        filteredTreasury
+                        outcome
+
+    selectAndAssemble nc refs usdmPolicy usdmAsset walletUtxos treasuryUtxos outcome =
         case selectTreasuryForUnit usdmPolicy usdmAsset treasuryUtxos of
             Nothing ->
                 pure
                     ( Left
-                        (selectionShortfall usdmPolicy usdmAsset treasuryUtxos)
+                        ( treasuryShortfallError
+                            (selectionShortfall usdmPolicy usdmAsset treasuryUtxos)
+                        )
                     )
             Just treasurySelection ->
                 case selectWallet walletFeeSlackLovelace walletUtxos of
                     Left WalletNoPureAda ->
-                        pure (Left ResolverEmptyWalletUtxos)
+                        pure
+                            ( Left
+                                ( walletShortfallError
+                                    0
+                                    walletFeeSlackLovelace
+                                )
+                            )
                     Left (WalletShortfall available required) ->
                         pure
                             ( Left
-                                ( ResolverWalletShortfall
-                                    available
-                                    required
-                                )
+                                (walletShortfallError available required)
                             )
                     Right ([], _) ->
-                        pure (Left ResolverEmptyWalletUtxos)
+                        pure
+                            ( Left
+                                ( walletShortfallError
+                                    0
+                                    walletFeeSlackLovelace
+                                )
+                            )
                     Right (walletHead : walletTail, _) -> do
                         upper <-
                             resolveUpperBound
@@ -735,8 +854,9 @@ resolveDisburseEnv ResolverEnv{..} ri =
                         case upper of
                             Left e -> pure (Left e)
                             Right upperBound ->
-                                pure $
-                                    Right
+                                let forcedTexts =
+                                        map outRefText forcedRefs
+                                    env =
                                         DisburseEnv
                                             { deNetwork = riNetwork ri
                                             , deUpperBoundSlot = upperBound
@@ -762,11 +882,14 @@ resolveDisburseEnv ResolverEnv{..} ri =
                                                     { wsTxIn = walletHead
                                                     , wsAddress =
                                                         riWalletAddrBech32 ri
-                                                    , wsExtraTxIns = walletTail
+                                                    , wsExtraTxIns =
+                                                        forcedTexts
+                                                            <> walletTail
                                                     }
                                             , deBeneficiaryAddrBech32 =
                                                 riBeneficiaryAddrBech32 ri
                                             }
+                                in  pure (Right (env, outcome))
 
     selectTreasuryForUnit usdmPolicy usdmAsset treasuryUtxos =
         case riUnit ri of
@@ -808,6 +931,109 @@ resolveDisburseEnv ResolverEnv{..} ri =
                             ResolverShortfall
                                 availableLovelace
                                 minUtxoDepositLovelace
+
+    walletShortfallError avail target
+        | null exclRefs =
+            ResolverWalletShortfall avail target
+        | otherwise =
+            ResolverWalletShortfallWithExcludes
+                avail
+                target
+                exclRefs
+
+    treasuryShortfallError base
+        | null exclRefs = base
+        | otherwise = case base of
+            ResolverShortfall avail target ->
+                ResolverTreasuryShortfallWithExcludes
+                    avail
+                    target
+                    exclRefs
+            other -> other
+
+walletCandidateRef :: (Text, Integer, Bool) -> OutRef
+walletCandidateRef (ref, _, _) =
+    case parseOutRef ref of
+        Right r -> r
+        Left e ->
+            error
+                ( "disburse-wizard: wallet candidate ref not parseable: "
+                    <> T.unpack ref
+                    <> ": "
+                    <> T.unpack e
+                )
+
+treasuryCandidateRef :: (TxIn, MaryValue) -> OutRef
+treasuryCandidateRef (txin, _) =
+    case parseOutRef (txInToText txin) of
+        Right r -> r
+        Left e ->
+            error
+                ( "disburse-wizard: treasury candidate ref not parseable: "
+                    <> T.unpack (txInToText txin)
+                    <> ": "
+                    <> T.unpack e
+                )
+
+{- | Build the per-ref pool-attribution outcome from an
+exclusion list and the two candidate-pool reference sets.
+Preserves exclusion-set input order so the wizard's log
+lines stay deterministic.
+-}
+buildDisburseOutcome
+    :: [OutRef]
+    -> [OutRef]
+    -> [OutRef]
+    -> InputControlOutcome
+buildDisburseOutcome excluded walletRefs treasuryRefs =
+    let classify ref
+            | ref `elem` walletRefs
+            , ref `elem` treasuryRefs =
+                Right (ref, Both)
+            | ref `elem` walletRefs =
+                Right (ref, WalletOnly)
+            | ref `elem` treasuryRefs =
+                Right (ref, TreasuryOnly)
+            | otherwise = Left ref
+        classified = map classify excluded
+    in  InputControlOutcome
+            { icoHits = rights classified
+            , icoInert = lefts classified
+            }
+
+{- | Render the per-ref exclusion log line emitted by the
+disburse wizards when @--exclude-utxo@ matches at least one
+candidate. The prefix is wizard-specific
+(@disburse-wizard:@ or @contingency-disburse-wizard:@); pool
+attribution is rendered as @[wallet]@, @[treasury]@, or
+@[both]@.
+-}
+renderDisburseExclusionLogLine
+    :: Text -> OutRef -> PoolHit -> Text
+renderDisburseExclusionLogLine prefix ref pool =
+    prefix
+        <> ": excluded utxo "
+        <> outRefText ref
+        <> " (operator-supplied) ["
+        <> poolText
+        <> "]"
+  where
+    poolText = case pool of
+        WalletOnly -> "wallet"
+        TreasuryOnly -> "treasury"
+        Both -> "both"
+
+{- | Append the operator's excluded refs to a base
+shortfall message. Wizard-side shim that DELEGATES to the
+shared 'renderShortfallWithExcludes' from
+'Amaru.Treasury.Wizard.InputControl'; exposed so callers do
+not have to thread the shared module's import through
+every error site.
+-}
+renderDisburseWalletShortfallWithExcludes
+    :: Text -> [OutRef] -> Text
+renderDisburseWalletShortfallWithExcludes =
+    renderShortfallWithExcludes
 
 filterRequestedTreasuryUtxos
     :: [TxIn] -> [(TxIn, MaryValue)] -> [(TxIn, MaryValue)]
@@ -1064,7 +1290,7 @@ mkTreasuryWallet ws =
     WalletJSON
         { wjTxIn = wsTxIn ws
         , wjAddress = wsAddress ws
-        , wjExtraTxIns = []
+        , wjExtraTxIns = wsExtraTxIns ws
         }
 
 mkTreasuryScope :: DisburseEnv -> DisburseAnswers -> ScopeJSON

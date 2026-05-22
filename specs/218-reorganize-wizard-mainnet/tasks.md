@@ -40,7 +40,7 @@ feat(reorganize-wizard): admit any resolved network (mainnet, preprod, preview, 
 
 ## S3 — Finalize
 
-- [ ] T004 — `./gate.sh`, `git rm gate.sh`, push, `gh pr ready 223`,
+- [X] T004 — `./gate.sh`, `git rm gate.sh`, push, `gh pr ready 223`,
   merge.
 
 ## Cross-references

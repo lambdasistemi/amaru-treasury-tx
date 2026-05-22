@@ -10,6 +10,7 @@ module Amaru.Treasury.Cli.WithdrawWizard
     ( WithdrawOpts (..)
     , withdrawOptsP
     , runWithdrawWizard
+    , validateWithdrawWizardInputControl
     ) where
 
 import Control.Tracer (Tracer (..), traceWith)
@@ -22,6 +23,17 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
 import Data.Word (Word16)
+
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    , InputControlError
+    , excludeUtxoP
+    , extraTxInP
+    , outRefText
+    , renderInputControlError
+    , validateInputControl
+    )
 
 import Cardano.Node.Client.Provider (queryUpperBoundSlot)
 import Cardano.Slotting.Slot (SlotNo (..))
@@ -88,6 +100,12 @@ data WithdrawOpts = WithdrawOpts
     , wdOptsDestinationLabel :: !(Maybe Text)
     , wdOptsEvent :: !(Maybe Text)
     , wdOptsLabel :: !(Maybe Text)
+    , wdOptsExcludeSet :: !ExclusionSet
+    -- ^ Operator-supplied @--exclude-utxo@ refs, in flag
+    -- order (#184).
+    , wdOptsForcedSet :: !ForcedInclusionSet
+    -- ^ Operator-supplied @--extra-tx-in@ refs, in flag
+    -- order (#184).
     }
     deriving stock (Eq, Show)
 
@@ -177,6 +195,19 @@ withdrawOptsP =
                         "Rationale label override (defaults Withdraw treasury rewards)"
                 )
             )
+        <*> (ExclusionSet <$> excludeUtxoP)
+        <*> (ForcedInclusionSet <$> extraTxInP)
+
+{- | Pre-flight check for @--exclude-utxo@ / @--extra-tx-in@
+contradictions on the @withdraw-wizard@ subcommand.
+Returns 'Left' (Contradiction refs) when an outref appears
+in both flag sets on the same invocation; runs before any
+chain query so the wizard can fail fast.
+-}
+validateWithdrawWizardInputControl
+    :: WithdrawOpts -> Either InputControlError ()
+validateWithdrawWizardInputControl o =
+    validateInputControl (wdOptsExcludeSet o) (wdOptsForcedSet o)
 
 scopeReader :: ReadM ScopeId
 scopeReader =
@@ -184,11 +215,15 @@ scopeReader =
         scopeFromText . T.pack . map toLower
 
 runWithdrawWizard :: GlobalOpts -> WithdrawOpts -> IO ()
-runWithdrawWizard g WithdrawOpts{..} = do
+runWithdrawWizard g opts@WithdrawOpts{..} = do
     let socket = fromMaybe "(unset)" (goSocketPath g)
     withLogHandle wdOptsLog $ \logH -> do
         let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
             tr = WithdrawTrace.withdrawWizardEventTracer textTracer
+        case validateWithdrawWizardInputControl opts of
+            Right () -> pure ()
+            Left ce ->
+                abortWithdraw tr (renderInputControlError ce)
         networkName <- case resolveNetworkName g of
             Right t -> pure t
             Left e -> abortWithdraw tr (T.pack e)
@@ -254,13 +289,47 @@ runWithdrawWizard g WithdrawOpts{..} = do
                                 tr
                                 networkName
                                 backend
-                er <- Withdraw.resolveWithdrawEnv renv ri
+                er <-
+                    Withdraw.resolveWithdrawEnvIC
+                        renv
+                        wdOptsExcludeSet
+                        wdOptsForcedSet
+                        ri
                 env <- case er of
+                    Left
+                        ( Withdraw.WithdrawResolverExtraTxInNotOnWallet
+                                refs
+                            ) ->
+                            abortWithdraw
+                                tr
+                                ( "withdraw-wizard: extra input not found on wallet: "
+                                    <> T.intercalate
+                                        ", "
+                                        (map outRefText refs)
+                                )
+                    Left
+                        ( Withdraw.WithdrawResolverWalletShortfallWithExcludes
+                                avail
+                                required
+                                refs
+                            ) ->
+                            abortWithdraw
+                                tr
+                                ( Withdraw.renderWithdrawWalletShortfallWithExcludes
+                                    ( "wallet shortfall available="
+                                        <> T.pack (show avail)
+                                        <> " required="
+                                        <> T.pack (show required)
+                                    )
+                                    refs
+                                )
                     Left e ->
                         abortWithdraw
                             tr
                             ("resolve: " <> T.pack (show e))
-                    Right e -> pure e
+                    Right (e, outcome) -> do
+                        emitWithdrawExclusionLog textTracer outcome
+                        pure e
                 traceWithdrawEnv tr env
                 result <-
                     case Withdraw.withdrawToTreasuryResult env answers of
@@ -387,3 +456,28 @@ providerToWithdrawResolverEnv tr networkName p =
         }
   where
     unwrapSlot (SlotNo s) = s
+
+{- | Emit one log line per excluded ref that matched the
+wallet candidate pool, in exclusion-set input order. Refs
+that did not match ('icoInert') are still logged so the
+operator sees their @--exclude-utxo@ was applied.
+-}
+emitWithdrawExclusionLog
+    :: Tracer IO Text -> Withdraw.InputControlOutcome -> IO ()
+emitWithdrawExclusionLog textTracer outcome = do
+    mapM_
+        ( traceWith textTracer
+            . uncurry
+                (Withdraw.renderWithdrawExclusionLogLine "withdraw-wizard")
+        )
+        (Withdraw.icoHits outcome)
+    mapM_
+        ( \ref ->
+            traceWith
+                textTracer
+                ( "withdraw-wizard: excluded utxo "
+                    <> outRefText ref
+                    <> " (operator-supplied) [absent]"
+                )
+        )
+        (Withdraw.icoInert outcome)

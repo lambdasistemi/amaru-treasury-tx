@@ -30,6 +30,14 @@ module Amaru.Treasury.Tx.WithdrawWizard
     , registryViewFromVerified
     , resolveWithdrawEnv
 
+      -- * Input control (#184 — Slice 4)
+    , PoolHit (..)
+    , InputControlOutcome (..)
+    , OutRef
+    , resolveWithdrawEnvIC
+    , renderWithdrawExclusionLogLine
+    , renderWithdrawWalletShortfallWithExcludes
+
       -- * Pure translation
     , WithdrawError (..)
     , WithdrawResult (..)
@@ -59,7 +67,9 @@ import Amaru.Treasury.IntentJSON
     )
 import Amaru.Treasury.Scope (ScopeId, scopeText)
 import Amaru.Treasury.Tx.SwapWizard
-    ( RegistryView (..)
+    ( InputControlOutcome (..)
+    , PoolHit (..)
+    , RegistryView (..)
     , ScopeView (..)
     , TreasuryRefs (..)
     , WalletSelection (..)
@@ -67,6 +77,16 @@ import Amaru.Treasury.Tx.SwapWizard
     , registryViewFromVerified
     , selectWallet
     )
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    , OutRef
+    , filterPool
+    , outRefText
+    , parseOutRef
+    , renderShortfallWithExcludes
+    )
+import Data.Either (lefts, rights)
 
 -- ----------------------------------------------------
 -- Answers
@@ -364,6 +384,16 @@ data WithdrawResolverError
       WithdrawResolverValidityHoursZero
     | -- | @--validity-hours = Just n@ overshoots horizon.
       WithdrawResolverValidityOvershoot !Validity.HorizonError
+    | -- | One or more @--extra-tx-in@ refs were not returned
+      --   by the wallet-address query (FR-009).
+      WithdrawResolverExtraTxInNotOnWallet ![OutRef]
+    | -- | @WithdrawResolverWalletShortfallWithExcludes
+      --   available target refs@. Wallet pool emptied by the
+      --   operator's @--exclude-utxo@ set (FR-008).
+      WithdrawResolverWalletShortfallWithExcludes
+        !Integer
+        !Integer
+        ![OutRef]
     deriving stock (Eq, Show)
 
 {- | Drive the resolver's @wreComputeUpperBound@ effect with
@@ -396,7 +426,29 @@ resolveWithdrawEnv
     => WithdrawResolverEnv m
     -> WithdrawResolverInput
     -> m (Either WithdrawResolverError WithdrawEnv)
-resolveWithdrawEnv renv input =
+resolveWithdrawEnv renv input = do
+    r <-
+        resolveWithdrawEnvIC
+            renv
+            (ExclusionSet [])
+            (ForcedInclusionSet [])
+            input
+    pure (fmap fst r)
+
+{- | Variant of 'resolveWithdrawEnv' that threads the
+operator's @--exclude-utxo@ and @--extra-tx-in@ sets through
+the wallet candidate pool (#184 Slice 4). Returns the
+resolved 'WithdrawEnv' alongside the 'InputControlOutcome'
+the caller uses to emit per-ref log lines.
+-}
+resolveWithdrawEnvIC
+    :: (Monad m)
+    => WithdrawResolverEnv m
+    -> ExclusionSet
+    -> ForcedInclusionSet
+    -> WithdrawResolverInput
+    -> m (Either WithdrawResolverError (WithdrawEnv, InputControlOutcome))
+resolveWithdrawEnvIC renv excl forced input =
     case ( networkFamily (wriNetwork input)
          , addrNetwork (wriWalletAddrBech32 input)
          ) of
@@ -417,14 +469,16 @@ resolveWithdrawEnv renv input =
                         )
                     )
         _ ->
-            resolveWithScope renv input
+            resolveWithScope renv excl forced input
 
 resolveWithScope
     :: (Monad m)
     => WithdrawResolverEnv m
+    -> ExclusionSet
+    -> ForcedInclusionSet
     -> WithdrawResolverInput
-    -> m (Either WithdrawResolverError WithdrawEnv)
-resolveWithScope renv input =
+    -> m (Either WithdrawResolverError (WithdrawEnv, InputControlOutcome))
+resolveWithScope renv excl forced input =
     case Map.lookup
         (wriScope input)
         (rvTreasuryByScope (wriRegistry input)) of
@@ -438,47 +492,159 @@ resolveWithScope renv input =
         Just refs -> do
             walletUtxos <-
                 wreQueryWalletUtxos renv (wriWalletAddrBech32 input)
-            case selectWallet 1 walletUtxos of
-                Left _ ->
-                    pure (Left WithdrawResolverEmptyWalletUtxos)
-                Right ([], _) ->
-                    pure (Left WithdrawResolverEmptyWalletUtxos)
-                Right (walletRef : _, _) -> do
-                    let rewardAccount = trScriptHash refs
-                    rewards <-
-                        wreQueryRewardsLovelace renv rewardAccount
-                    upper <-
-                        resolveUpperBound
-                            (wreComputeUpperBound renv)
-                            (wriValidityHours input)
-                    case upper of
-                        Left e -> pure (Left e)
-                        Right upperBound ->
-                            pure $
-                                Right
-                                    WithdrawEnv
-                                        { weNetwork = wriNetwork input
-                                        , weUpperBoundSlot = upperBound
-                                        , weNetworkConstants =
-                                            withdrawNetworkConstants
-                                        , weRegistry = wriRegistry input
-                                        , weScopeView =
-                                            ScopeView
-                                                { svScope = wriScope input
-                                                , svRefs = refs
-                                                , svDefaultSigners = []
-                                                }
-                                        , weWalletSelection =
-                                            WalletSelection
-                                                { wsTxIn = walletRef
-                                                , wsAddress =
-                                                    wriWalletAddrBech32 input
-                                                , wsExtraTxIns = []
-                                                }
-                                        , weTreasuryRewardAccount =
-                                            rewardAccount
-                                        , weRewardsLovelace = rewards
-                                        }
+            let ExclusionSet exclRefs = excl
+                ForcedInclusionSet forcedRefs = forced
+                walletRefSet = map walletCandidateRef walletUtxos
+                missing =
+                    filter (`notElem` walletRefSet) forcedRefs
+            if not (null missing)
+                then
+                    pure
+                        ( Left
+                            ( WithdrawResolverExtraTxInNotOnWallet
+                                missing
+                            )
+                        )
+                else
+                    let (filteredWallet, _, _, _) =
+                            filterPool
+                                walletCandidateRef
+                                excl
+                                forced
+                                walletUtxos
+                        outcome =
+                            buildWithdrawOutcome
+                                exclRefs
+                                walletRefSet
+                    in  case selectWallet 1 filteredWallet of
+                            Left _ ->
+                                pure
+                                    ( Left
+                                        ( walletShortfallError
+                                            exclRefs
+                                            0
+                                            1
+                                        )
+                                    )
+                            Right ([], _) ->
+                                pure
+                                    ( Left
+                                        ( walletShortfallError
+                                            exclRefs
+                                            0
+                                            1
+                                        )
+                                    )
+                            Right (walletRef : _, _) -> do
+                                let rewardAccount = trScriptHash refs
+                                rewards <-
+                                    wreQueryRewardsLovelace
+                                        renv
+                                        rewardAccount
+                                upper <-
+                                    resolveUpperBound
+                                        (wreComputeUpperBound renv)
+                                        (wriValidityHours input)
+                                case upper of
+                                    Left e -> pure (Left e)
+                                    Right upperBound ->
+                                        let forcedTexts =
+                                                map outRefText forcedRefs
+                                            env =
+                                                WithdrawEnv
+                                                    { weNetwork =
+                                                        wriNetwork input
+                                                    , weUpperBoundSlot =
+                                                        upperBound
+                                                    , weNetworkConstants =
+                                                        withdrawNetworkConstants
+                                                    , weRegistry =
+                                                        wriRegistry input
+                                                    , weScopeView =
+                                                        ScopeView
+                                                            { svScope =
+                                                                wriScope input
+                                                            , svRefs = refs
+                                                            , svDefaultSigners = []
+                                                            }
+                                                    , weWalletSelection =
+                                                        WalletSelection
+                                                            { wsTxIn = walletRef
+                                                            , wsAddress =
+                                                                wriWalletAddrBech32
+                                                                    input
+                                                            , wsExtraTxIns =
+                                                                forcedTexts
+                                                            }
+                                                    , weTreasuryRewardAccount =
+                                                        rewardAccount
+                                                    , weRewardsLovelace =
+                                                        rewards
+                                                    }
+                                        in  pure (Right (env, outcome))
+
+walletShortfallError
+    :: [OutRef] -> Integer -> Integer -> WithdrawResolverError
+walletShortfallError exclRefs avail target
+    | null exclRefs = WithdrawResolverEmptyWalletUtxos
+    | otherwise =
+        WithdrawResolverWalletShortfallWithExcludes
+            avail
+            target
+            exclRefs
+
+walletCandidateRef :: (Text, Integer, Bool) -> OutRef
+walletCandidateRef (ref, _, _) =
+    case parseOutRef ref of
+        Right r -> r
+        Left e ->
+            error
+                ( "withdraw-wizard: wallet candidate ref not parseable: "
+                    <> T.unpack ref
+                    <> ": "
+                    <> T.unpack e
+                )
+
+{- | Build the per-ref pool-attribution outcome for the
+wallet-only candidate pool. Preserves exclusion-set input
+order so the wizard's log lines stay deterministic. Withdraw
+has no treasury pool, so every hit is 'WalletOnly'.
+-}
+buildWithdrawOutcome
+    :: [OutRef] -> [OutRef] -> InputControlOutcome
+buildWithdrawOutcome excluded walletRefs =
+    let classify ref
+            | ref `elem` walletRefs = Right (ref, WalletOnly)
+            | otherwise = Left ref
+        classified = map classify excluded
+    in  InputControlOutcome
+            { icoHits = rights classified
+            , icoInert = lefts classified
+            }
+
+{- | Render the per-ref exclusion log line emitted by the
+withdraw wizard when @--exclude-utxo@ matches a wallet
+candidate. Pool attribution is always rendered as
+@[wallet]@ (withdraw is single-pool); the constructor is
+retained for symmetry with the disburse/swap wizards.
+-}
+renderWithdrawExclusionLogLine
+    :: Text -> OutRef -> PoolHit -> Text
+renderWithdrawExclusionLogLine prefix ref _pool =
+    prefix
+        <> ": excluded utxo "
+        <> outRefText ref
+        <> " (operator-supplied) [wallet]"
+
+{- | Append the operator's excluded refs to a base
+shortfall message. Wizard-side shim that DELEGATES to the
+shared 'renderShortfallWithExcludes' from
+'Amaru.Treasury.Wizard.InputControl'.
+-}
+renderWithdrawWalletShortfallWithExcludes
+    :: Text -> [OutRef] -> Text
+renderWithdrawWalletShortfallWithExcludes =
+    renderShortfallWithExcludes
 
 withdrawNetworkConstants :: WithdrawNetworkConstants
 withdrawNetworkConstants =

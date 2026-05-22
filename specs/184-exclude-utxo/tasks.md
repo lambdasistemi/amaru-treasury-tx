@@ -224,11 +224,11 @@ Forbidden scope:
 
 Tasks:
 
-- [ ] T020 [US3] RED: contradiction against `withdraw-wizard`.
-- [ ] T021 [P] [US1] RED: exclusion filters wallet pool.
-- [ ] T022 [P] [US2] RED: forced inclusion lands in withdraw intent's `wallet.extraTxIns`.
-- [ ] T023 [P] [US1+US4] RED: shortfall-with-excludes names excluded refs; SC-005 byte stability against existing withdraw fixture.
-- [ ] T024 [US1+US2+US3] GREEN: extend `WithdrawOpts` and `withdrawOptsP`, wire validation + filter + intent emission (with FR-009 not-on-wallet error) + error rendering + log line (with `wallet`/`treasury`/`both` pool attribution), run `./gate.sh`, record in `WIP.md`.
+- [X] T020 [US3] RED: contradiction against `withdraw-wizard`.
+- [X] T021 [P] [US1] RED: exclusion filters wallet pool.
+- [X] T022 [P] [US2] RED: forced inclusion lands in withdraw intent's `wallet.extraTxIns`.
+- [X] T023 [P] [US1+US4] RED: shortfall-with-excludes names excluded refs; SC-005 byte stability against existing withdraw fixture.
+- [X] T024 [US1+US2+US3] GREEN: extend `WithdrawOpts` and `withdrawOptsP`, wire validation + filter + intent emission (with FR-009 not-on-wallet error) + error rendering + log line (with `wallet`/`treasury`/`both` pool attribution), run `./gate.sh`, record in `WIP.md`.
 
 Checkpoint: `./gate.sh` PASS at HEAD. `withdraw-wizard --help` lists
 the flags. Existing withdraw fixture byte-identical.

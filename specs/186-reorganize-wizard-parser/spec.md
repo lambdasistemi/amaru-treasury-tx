@@ -88,7 +88,7 @@ wizard followed the same "Slice 1: parser scaffold" pattern.
 
 **Independent Test**: spawn the built executable as a subprocess,
 pass `reorganize-wizard --help`, capture stdout, assert that each
-documented flag name (`--funding-seed-txin`, `--registry`,
+documented flag name (`--funding-seed-txin`, `--metadata`,
 `--wallet-addr`, `--out`, `--network`, plus the sibling-mirrored
 shared flags) is present in the help output. Exit code is 0.
 No chain, no DevNet, no file I/O beyond the test's own stdout
@@ -98,7 +98,7 @@ capture.
 
 1. **Given** the built `amaru-treasury-tx` executable, **When**
    `amaru-treasury-tx reorganize-wizard --help` runs, **Then** stdout
-   lists every required flag (`--funding-seed-txin`, `--registry`,
+   lists every required flag (`--funding-seed-txin`, `--metadata`,
    `--wallet-addr`, `--out`, `--network`, and the sibling-mirrored
    shared flags settled in plan) and exits 0.
 2. **Given** the built executable, **When**
@@ -145,9 +145,12 @@ flag.
 
 ### User Story 3 — missing required flag is rejected with a stable error (Priority: P1)
 
-**As an operator**, when I forget `--registry` or `--wallet-addr`, the
-wizard rejects my command at parse time with optparse-applicative's
-`missing required option` error and exits non-zero before any I/O.
+**As an operator**, when I forget `--metadata` or `--wallet-addr`,
+the wizard rejects my command at parse time with
+optparse-applicative's `missing required option` error and exits
+non-zero before any I/O. (Issue #186's AC originally named
+`--registry`; verdict α renamed it to `--metadata` for sibling
+consistency — see Clarifications.)
 
 **Why this priority**: required-flag enforcement is a parser
 correctness invariant — silently defaulting any of these flags
@@ -155,16 +158,16 @@ would let the operator submit an under-specified intent. The
 "missing required option" error is the standard `optparse-applicative`
 shape every sibling wizard already produces.
 
-**Independent Test**: spawn the executable with `--registry`
+**Independent Test**: spawn the executable with `--metadata`
 omitted (otherwise valid flag set); assert exit code is non-zero
-and stderr contains `Missing: --registry`. Repeat with
+and stderr contains `Missing: --metadata`. Repeat with
 `--wallet-addr` omitted.
 
 **Acceptance Scenarios**:
 
 1. **Given** the executable, **When** every required flag except
-   `--registry` is supplied, **Then** the parser exits non-zero
-   and stderr contains a `Missing:` clause naming `--registry`
+   `--metadata` is supplied, **Then** the parser exits non-zero
+   and stderr contains a `Missing:` clause naming `--metadata`
    (the exact wording matches `optparse-applicative` defaults).
 2. **Given** the executable, **When** every required flag except
    `--wallet-addr` is supplied, **Then** the parser exits non-zero
@@ -218,38 +221,50 @@ needed in the test, since the pre-flight precedes socket setup).
 
 ---
 
-### User Story 5 — `--network` other than `devnet` is rejected at parse time (Priority: P1)
+### User Story 5 — `--network` other than `devnet` is rejected before any chain query, file write, or socket open (Priority: P1)
 
 **As an operator**, when I accidentally point `--network` at
 `preprod` or `mainnet`, the wizard refuses to even build the intent
-— this slice's parser rejects any non-`devnet` value before the
-runner is invoked, mirroring the upstream
-`reorganize-wizard --network devnet` invariant the parent epic
-calls out under "Network safety is fail-closed".
+— this slice's runner pre-flight rejects any non-`devnet` value
+before any chain query, file write, or socket open, mirroring the
+upstream `reorganize-wizard --network devnet` invariant the
+parent epic calls out under "Network safety is fail-closed".
+
+(Q-001-C verdict: refined to C2 at plan time. The check lives in
+the runner pre-flight rather than a parser-time custom `ReadM`
+because `--network` is owned by the global parser
+`Amaru.Treasury.Cli.Common.globalOptsP`; a wizard-subcommand flag
+would shadow it. The pre-flight runs before any chain query, file
+write, or socket open — observationally identical to a parse-time
+rejection for the operator. See plan.md and research.md §5.)
 
 **Why this priority**: parent-epic carry-forward invariant. Without
-network safety enforced at the parser, an operator could build a
-reorganize intent that names a mainnet treasury address and not
-discover the mistake until much later. The runner body (#187) will
-re-validate, but the parser must already fail closed.
+network safety enforced before any work happens, an operator could
+build a reorganize intent that names a mainnet treasury address
+and not discover the mistake until much later. The runner body
+(#187) will re-validate, but this slice's pre-flight must already
+fail closed.
 
 **Independent Test**: invoke the wizard with `--network preprod`
-(or `mainnet`), assert exit code is non-zero, stderr names
-`--network`, no chain query was attempted. Repeat for `mainnet`.
+(or `mainnet`), assert exit code is non-zero (2), stderr names
+the typed `ReorganizeNonDevnetNetwork` error, no chain query was
+attempted, no file was written. Repeat for `mainnet` and
+`preview`.
 
 **Acceptance Scenarios**:
 
 1. **Given** the executable, **When** the operator passes
-   `--network preprod`, **Then** the parser rejects the value at
-   parse time (no chain query, no file written), exits non-zero,
-   stderr names the `--network` flag.
+   `--network preprod`, **Then** the wizard rejects before any
+   chain query, file write, or socket open; exits with code 2;
+   stderr contains `ReorganizeNonDevnetNetwork "preprod"`.
 2. **Given** the executable, **When** the operator passes
-   `--network mainnet`, **Then** the parser rejects identically.
+   `--network mainnet`, **Then** the wizard rejects identically
+   with `ReorganizeNonDevnetNetwork "mainnet"`.
 3. **Given** the executable, **When** the operator passes
-   `--network devnet`, **Then** the parser accepts the value; the
-   runner stub fires the typed `ReorganizeTodoSliceC` error
-   downstream — proving the parse-level network check accepted
-   the only allowed value.
+   `--network devnet`, **Then** the pre-flight accepts the value;
+   the runner stub fires the typed `ReorganizeTodoSliceC` error
+   downstream — proving the pre-flight check accepted the only
+   allowed value.
 
 ---
 
@@ -331,13 +346,19 @@ re-validate, but the parser must already fail closed.
   `Amaru.Treasury.LedgerParse.txInFromText` via
   `Options.Applicative.eitherReader` for the
   `--funding-seed-txin` flag. No hand-rolled `txid#ix` parser.
-- **FR-007**: The parser MUST reject `--network` values other
-  than `"devnet"` at parse time. The exact mechanism is plan-time
-  (custom `ReadM`, post-parse validation in `runReorganizeWizard`
-  pre-flight, or reuse of an existing shared
-  network-name validator). The acceptance shape (User Story 5)
-  is fixed: parse-time rejection, no chain query, no file write,
-  stderr names `--network`.
+- **FR-007**: The runner pre-flight MUST reject `--network`
+  values other than `"devnet"` before any chain query, file write,
+  or socket open. The check is implemented in
+  `runReorganizeWizardEither` (`Amaru.Treasury.Cli.ReorganizeWizard`)
+  and surfaces a typed `ReorganizeNonDevnetNetwork Text` error at
+  exit code 2. The check lives at the pre-flight tier rather than
+  as a parser-time custom `ReadM` because `--network` is owned by
+  the global parser `Amaru.Treasury.Cli.Common.globalOptsP`; a
+  wizard-subcommand `--network` flag would shadow / conflict with
+  the global flag. (Q-001-C verdict: refined to C2 at plan time —
+  see plan.md and research.md §5.) The acceptance shape (User
+  Story 5) is preserved: no chain query, no file write, no socket
+  open, stderr names the typed error.
 - **FR-008**: Every required flag MUST be marked required in the
   parser (no `optional` wrapper, no `value` default).
 - **FR-009**: `amaru-treasury-tx.cabal` MUST expose
@@ -443,7 +464,7 @@ usable operator command lives at #187, where the cast follows in
 
 - **SC-001**: `amaru-treasury-tx reorganize-wizard --help` exits 0
   and stdout lists every flag named in the parser tests
-  (`--funding-seed-txin`, `--registry`, `--wallet-addr`, `--out`,
+  (`--funding-seed-txin`, `--metadata`, `--wallet-addr`, `--out`,
   `--network`, plus the sibling-mirrored shared flags settled in
   plan).
 - **SC-002**: Invoking `amaru-treasury-tx reorganize-wizard` with a
@@ -452,15 +473,16 @@ usable operator command lives at #187, where the cast follows in
   `Options.Applicative.execParserPure` (`Failure` constructor with
   the expected message), not a subprocess regex.
 - **SC-003**: Invoking the wizard with any of `--funding-seed-txin`,
-  `--registry`, `--wallet-addr`, `--out` omitted exits non-zero with
+  `--metadata`, `--wallet-addr`, `--out` omitted exits non-zero with
   a `Missing:` clause naming the omitted flag.
 - **SC-004**: Invoking the wizard with `--out
   /tmp/<nonexistent>/foo.json` exits with code 2 and stderr names
   `ReorganizeOutputParentMissing` (the typed error's `Show`
   instance). No socket is opened.
 - **SC-005**: Invoking the wizard with `--network preprod` (or
-  `mainnet`) exits non-zero at parse time; stderr names
-  `--network`. With `--network devnet` and a valid `--out` path,
+  `mainnet`) exits non-zero before any chain query, file write,
+  or socket open; stderr names the typed
+  `ReorganizeNonDevnetNetwork` error. With `--network devnet` and a valid `--out` path,
   the runner stub fires `ReorganizeTodoSliceC` (or its plan-time
   equivalent) and exits non-zero.
 - **SC-006**: `grep -nE 'funding-seed-txin' lib/Amaru/Treasury/Cli/ReorganizeWizard.hs`
@@ -489,9 +511,8 @@ the live DevNet smoke is shipped by #87.
 by #185's dispatcher arm). After #187 lands, an operator runs
 
 ```bash
-amaru-treasury-tx reorganize-wizard \
-  --network devnet \
-  --registry <metadata.json> \
+amaru-treasury-tx --network devnet reorganize-wizard \
+  --metadata <metadata.json> \
   --wallet-addr <bech32> \
   --funding-seed-txin <txid64hex>#<word16> \
   --scope <name> \
@@ -509,12 +530,49 @@ command's parser surface; the second command already works.
 
 ## Clarifications
 
-### Open clarifications (Q-001-spec-ready)
+### Resolved clarifications (Q-001-spec-ready @ A-001, Q-002-plan-ready @ A-002)
 
-The five User Stories above are deliberately tight on parser
-behavior (they re-state the issue's ACs in given/when/then form).
-Two design choices need confirmation from the epic owner before
-plan:
+Three design choices opened at Q-001-spec-ready. Verdicts
+approved at A-001 + A-002:
+
+- **A → A1 (chosen)**: `--scope` is a required CLI flag at the
+  parser, reusing the shared `scopeReader`. Sibling-mirror.
+- **B → B1 (chosen)**: the parser exposes the full
+  sibling-mirrored shared flag block (`--description`,
+  `--justification`, `--destination-label`, `--event`, `--label`,
+  `--validity-hours`, `--metadata`, `--force`) alongside the
+  reorganize-specific `--funding-seed-txin`. Parser tests cover
+  only the issue-enumerated five.
+- **C → C2 (refined from C1 at plan time)**: the `--network
+  devnet` check lives in the **runner pre-flight** (in
+  `runReorganizeWizardEither`), not in a parser-time custom
+  `ReadM`. C1 was architecturally infeasible because `--network`
+  is owned by the global parser
+  `Amaru.Treasury.Cli.Common.globalOptsP`; a wizard-subcommand
+  flag would shadow / conflict with the global flag. The C2
+  pre-flight runs before any chain query, file write, or socket
+  open — observationally identical to a parse-time rejection
+  from the operator's perspective. See plan.md and research.md
+  §5.
+
+**Q-001 verdict α — `--registry` flag name amended to
+`--metadata`**: issue #186's ACs use the flag name `--registry`.
+Every sibling wizard uses `--metadata` (path to
+`journal/2026/metadata.json`). Verdict α (approved at A-002)
+ships the sibling-mirrored `--metadata` flag. This spec amends
+User Story 3's heading + Independent Test + Acceptance Scenarios
+1 & 2, User Story 1's flag inventory, SC-001's and SC-003's flag
+lists, and the Command-Recovery Posture's example invocation to
+use `--metadata`. User Story 3 keeps a "(Issue #186's AC
+originally named `--registry`; verdict α renamed it to
+`--metadata` for sibling consistency)" gloss so a reader can
+trace back to the issue text. See analysis.md §3.2.
+
+### Original clarification text (preserved for context)
+
+The five User Stories above are tight on parser behavior (they
+re-state the issue's ACs in given/when/then form). Three design
+choices were flagged at spec time:
 
 - **Q-001-A: `--scope` as a required CLI flag?** Every sibling
   wizard takes `--scope` as a required flag (the `scopeReader` is

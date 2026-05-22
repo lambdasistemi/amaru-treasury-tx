@@ -218,6 +218,7 @@ library
     Amaru.Treasury.Vault.Age
     Amaru.Treasury.Vault.Witness
     Amaru.Treasury.Wizard.Common
+    Amaru.Treasury.Wizard.InputControl
 
   build-depends:
     , aeson
@@ -489,6 +490,8 @@ test-suite unit-tests
     Amaru.Treasury.UtxoSelectSpec
     Amaru.Treasury.Vault.AgeSpec
     Amaru.Treasury.Vault.WitnessSpec
+    Amaru.Treasury.Wizard.InputControlSpec
+    Amaru.Treasury.Wizard.InputControlTestHelpers
     Paths_amaru_treasury_tx
     PlaceholderSpec
 

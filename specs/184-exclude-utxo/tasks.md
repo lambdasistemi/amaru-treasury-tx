@@ -268,11 +268,11 @@ Forbidden scope:
 
 Tasks:
 
-- [ ] T025 [US3] RED: contradiction against `registry-init-wizard` (seed-split mode).
-- [ ] T026 [P] [US1] RED: exclusion filters wallet pool in seed-split mode.
-- [ ] T027 [P] [US2] RED: forced inclusion lands in seed-split intent's `wallet.extraTxIns`.
-- [ ] T028 [P] [US1+US4] RED: shortfall-with-excludes naming + SC-005 byte stability against existing seed-split, mint, reference-scripts fixtures.
-- [ ] T029 [US1+US2+US3] GREEN: extend `RegistryInitWizardOpts` and `registryInitWizardOptsP`, wire validation + filter + intent emission (with FR-009 not-on-wallet error) + error rendering + log line (with `wallet`/`treasury`/`both` pool attribution) at BOTH call sites (`selectWallet 1` at lines ~306 AND ~401 — wiring only one will fail T028's all-modes byte-stability assertion), run `./gate.sh`, record in `WIP.md`.
+- [X] T025 [US3] RED: contradiction against `registry-init-wizard` (seed-split mode).
+- [X] T026 [P] [US1] RED: exclusion filters wallet pool in seed-split mode.
+- [X] T027 [P] [US2] RED: forced inclusion lands in seed-split intent's `wallet.extraTxIns`.
+- [X] T028 [P] [US1+US4] RED: shortfall-with-excludes naming + SC-005 byte stability against existing seed-split, mint, reference-scripts fixtures.
+- [X] T029 [US1+US2+US3] GREEN: extend `RegistryInitWizardOpts` and `registryInitWizardOptsP`, wire validation + filter + intent emission (with FR-009 not-on-wallet error) + error rendering + log line (with `wallet`/`treasury`/`both` pool attribution) at BOTH call sites (`selectWallet 1` at lines ~306 AND ~401 — wiring only one will fail T028's all-modes byte-stability assertion), run `./gate.sh`, record in `WIP.md`.
 
 Checkpoint: `./gate.sh` PASS at HEAD. `registry-init-wizard --help`
 lists the flags. All three mode fixtures byte-identical.

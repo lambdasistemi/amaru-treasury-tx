@@ -285,35 +285,35 @@ S1–S4.
 
 ### Tasks
 
-- [ ] **T038 [S5]** Bump `amaru-treasury-tx.cabal` `version`
+- [X] **T038 [S5]** Bump `amaru-treasury-tx.cabal` `version`
   (patch-position bump, per [research.md R8](research.md#r8-cabal-version-bump-semver)).
-- [ ] **T039 [S5]** Append a bullet under `CHANGELOG.md`'s
+- [X] **T039 [S5]** Append a bullet under `CHANGELOG.md`'s
   `## Unreleased > ### Features` describing the new flags and the
   on-chain audit-chain capability.
-- [ ] **T040 [S5]** Add a `disburse-wizard --reference-*` section to
+- [X] **T040 [S5]** Add a `disburse-wizard --reference-*` section to
   `README.md` (or `docs/disburse.md`), with a worked example matching
   [quickstart.md](quickstart.md). Reference the d6c14625 precedent
   for shape reasoning. Embed the asciinema cast via the
   `asciinema-player` mkdocs plugin block.
-- [ ] **T041 [S5]** Record the asciinema cast against fixture/preprod
+- [X] **T041 [S5]** Record the asciinema cast against fixture/preprod
   data (per the recording-scope rule — no real secrets, no mainnet
   treasury addresses), post-process via the dev-assets `compress` /
   `resize` flow, and write to
   `docs/assets/asciinema/disburse-wizard-references.cast`.
-- [ ] **T042 [S5]** If `mkdocs.yml` does not already register the
+- [X] **T042 [S5]** If `mkdocs.yml` does not already register the
   `asciinema-player` plugin, register it now (one-line config) and
   bootstrap `docs/assets/asciinema/` if absent. Confirm
   `MKDOCS_SITE_URL` env-override is in place per the preview-URL
   defensive pattern; if not, add it in `mkdocs.yml` + the docs PR
   workflow.
-- [ ] **T043 [S5]** Run `nix develop --quiet -c mkdocs build --strict`
+- [X] **T043 [S5]** Run `nix develop --quiet -c mkdocs build --strict`
   green.
-- [ ] **T044 [S5]** Run `./gate.sh` green (includes
+- [X] **T044 [S5]** Run `./gate.sh` green (includes
   `cabal-check`, `release-check`, `format-check`, `hlint`).
-- [ ] **T045 [S5]** Commit: subject
+- [X] **T045 [S5]** Commit: subject
   `docs: announce --reference-* flags + release wiring + asciinema`,
   trailer `Tasks: T038–T044`.
-- [ ] **T046 [S5]** (orchestrator-only) Mark T038–T045 `[X]`, amend
+- [X] **T046 [S5]** (orchestrator-only) Mark T038–T045 `[X]`, amend
   HEAD. Push the branch and verify the docs-preview build renders
   the cast (per the preview-verification rule).
 

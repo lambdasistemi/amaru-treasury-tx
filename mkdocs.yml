@@ -2,7 +2,7 @@ site_name: amaru-treasury-tx
 site_description: >-
   Build unsigned Amaru treasury transactions
   from unified intents
-site_url: https://lambdasistemi.github.io/amaru-treasury-tx/
+site_url: !ENV [MKDOCS_SITE_URL, "https://lambdasistemi.github.io/amaru-treasury-tx/"]
 repo_url: https://github.com/lambdasistemi/amaru-treasury-tx
 repo_name: lambdasistemi/amaru-treasury-tx
 edit_uri: edit/main/docs/
@@ -56,6 +56,7 @@ markdown_extensions:
 
 plugins:
   - search
+  - asciinema-player
   - mermaid2
 
 nav:

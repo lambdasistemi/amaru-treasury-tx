@@ -4,6 +4,9 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+### Features
+
+* **disburse-wizard:** document `--reference-uri`, `--reference-type`, and `--reference-label` for on-chain rationale audit chains backed by IPFS references.
 * **constitution:** amend Principle VIII v2 — payee+beneficiary model with payee on-chain address bound to `vendors.yaml`; introduces 4-doc minimum evidence set (5 with cycle review) when payee ≠ beneficiary (#210)
 * **registry:** add `vendors.yaml` at repository root as the source of truth for vendor canonical legal names, jurisdictions, roles, and payee on-chain addresses (#210)
 * **transactions:** add `transactions/2026/network_compliance/may-references.json` — May 2026 disburse-reference manifest under Principle VIII v2 (Crypto Accounting Group payee, Cyber Castellum + Antithesis beneficiaries) (#201)

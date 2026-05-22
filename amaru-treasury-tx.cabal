@@ -1,6 +1,6 @@
 cabal-version:      3.4
 name:               amaru-treasury-tx
-version:            0.2.12.0
+version:            0.2.13.0
 synopsis:           Build unsigned Amaru treasury transactions
 description:
   Haskell port of the Amaru treasury bash recipes
@@ -23,6 +23,7 @@ extra-source-files:
   assets/plutus/sundae_order.cbor
   assets/plutus/treasury.cbor
   assets/plutus/treasury_registry.cbor
+  docs/assets/asciinema/*.cast
   docs/assets/intent-schema.json
   docs/assets/treasury-inspect-schema.json
   docs/assets/tx-report-schema.json

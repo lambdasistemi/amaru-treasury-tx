@@ -40,6 +40,77 @@ amaru-treasury-tx ... disburse-wizard \
     ...
 ```
 
+## On-chain references
+
+Use `--reference-uri`, `--reference-type`, and `--reference-label`
+when the rationale must carry the audit chain on chain. Each
+`--reference-uri` opens a new reference slot; the following
+`--reference-type` and `--reference-label` populate that slot until
+the next URI. `--reference-type` defaults to `Other`, which matches
+the d6c14625 mainnet precedent used by this repository's golden
+fixture.
+
+The Cyber Castellum Milestone 1 quickstart uses four IPFS references:
+
+```bash
+export CARDANO_NODE_SOCKET_PATH=/code/cardano-mainnet/ipc/node.socket
+RUNDIR=/tmp/attx-cyber-m1
+mkdir -p "$RUNDIR"
+
+amaru-treasury-tx --network mainnet disburse-wizard \
+  --wallet-addr "$WALLET_ADDR" \
+  --metadata "${DATA_DIR:-$HOME/.local/share/amaru-treasury}/metadata.json" \
+  --scope network_compliance \
+  --unit usdm \
+  --amount 18750000000 \
+  --beneficiary-addr addr1q8qrds2nnx7clx3kcpp2l0eu45twmdcahsfu9m0xcwy59j6xz3vs0hnfaz9nhje8z34kfnds4jyk7hs6dnrag6e2lfgqtyf4rl \
+  --description "Cyber Castellum Whitehacking Milestone 1 - 18750 USDM" \
+  --justification "Required to pay Cyber Castellum as vendor; payment instruction confirmed by CAG 2026-05-21" \
+  --destination-label "Crypto Accounting Group off-ramp wallet" \
+  --extra-signer core_development \
+  --validity-hours 48 \
+  --reference-uri ipfs://bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da \
+  --reference-label "Whitehacking Agreement - Cyber Castellum 2026-03-31" \
+  --reference-uri ipfs://bafybeigy37ui2ikn7bim2vw6cojcbxkcndpjwh7cj5fv3vzs4cszezipxu \
+  --reference-label "Invoice 3508 - Cyber Castellum Whitehacking M1" \
+  --reference-uri ipfs://bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga \
+  --reference-label "CAG MSA - 2026-04-09" \
+  --reference-uri ipfs://bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm \
+  --reference-label "CAG payment confirmation - Laura Dugan email 2026-05-21" \
+  --out "$RUNDIR/intent.json" \
+  --log "$RUNDIR/wizard.log"
+```
+
+In `intent.json`, the references are written under
+`rationale.references[]`:
+
+```json
+[
+  {
+    "uri": "ipfs://bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da",
+    "@type": "Other",
+    "label": "Whitehacking Agreement - Cyber Castellum 2026-03-31"
+  },
+  {
+    "uri": "ipfs://bafybeigy37ui2ikn7bim2vw6cojcbxkcndpjwh7cj5fv3vzs4cszezipxu",
+    "@type": "Other",
+    "label": "Invoice 3508 - Cyber Castellum Whitehacking M1"
+  }
+]
+```
+
+During `tx-build`, IPFS URIs are emitted as `["ipfs://", "<CID>"]`
+so each metadata string chunk stays under the Cardano ledger limit.
+Labels containing the literal separator `" - "` are split the same
+way as the d6c14625 transaction fixture, preserving compatibility
+with downstream treasury metadata readers.
+
+```asciinema-player
+{
+  "file": "assets/asciinema/disburse-wizard-references.cast"
+}
+```
+
 ## What the wizard resolves
 
 The wizard verifies the local `metadata.json` hint against the

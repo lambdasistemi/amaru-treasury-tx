@@ -1,4 +1,5 @@
-{ pkgs, src, components, lintPkgs ? pkgs, treasuryMetadata }:
+{ pkgs, src, components, lintPkgs ? pkgs
+, treasuryMetadata, recentTxs }:
 # Each verification step is built as a single
 # `writeShellApplication` app, then exposed twice:
 #
@@ -48,6 +49,58 @@ let
           exit 1
         fi
         printf 'metadata-pin: OK (sha256=%s)\n' "$observed"
+      '';
+    };
+
+    # #239 T002 — Asserts the build-time recent-txs manifest
+    # parses as JSON, surfaces at most 10 entries, each entry
+    # has all four required fields, every txid is 64 hex
+    # chars, the scope is one of the registered values, and
+    # the list is sorted by submitted_at descending.
+    recent-txs-manifest = {
+      runtimeInputs = [ pkgs.jq pkgs.coreutils ];
+      text = ''
+        m='${recentTxs}/recent-txs.json'
+
+        # Valid JSON envelope.
+        count=$(jq '.rtmEntries | length' "$m")
+        if [ "$count" -gt 10 ]; then
+          echo "recent-txs-manifest: too many entries ($count)" >&2
+          exit 1
+        fi
+
+        # Every entry shape.
+        bad=$(jq -r '
+          .rtmEntries[] |
+          select(
+            (.rteScope|type) != "string" or
+            (.rteTxid|test("^[0-9a-f]{64}$")|not) or
+            (.rteSubmittedAt|type) != "string" or
+            (.rteCardanoscanUrl|test("^https://cardanoscan.io/transaction/[0-9a-f]{64}$")|not) or
+            ([.rteScope] | inside(["core_development","ops_and_use_cases","network_compliance","middleware","contingency"]) | not)
+          ) |
+          .rteTxid
+        ' "$m")
+        if [ -n "$bad" ]; then
+          echo "recent-txs-manifest: malformed entries:" >&2
+          printf '  %s\n' "$bad" >&2
+          exit 1
+        fi
+
+        # Descending submitted_at order.
+        if [ "$count" -gt 1 ]; then
+          if ! jq -e '
+            .rtmEntries
+            | map(.rteSubmittedAt)
+            | . == (sort | reverse)
+          ' "$m" > /dev/null; then
+            echo "recent-txs-manifest: not sorted desc" >&2
+            jq '.rtmEntries | map(.rteSubmittedAt)' "$m" >&2
+            exit 1
+          fi
+        fi
+
+        printf 'recent-txs-manifest: OK (%d entries)\n' "$count"
       '';
     };
 
@@ -377,6 +430,8 @@ in
   # Sandboxed checks (nix flake check / nix build).
   build = mkCheck "build" scripts.build;
   metadata-pin = mkCheck "metadata-pin" scripts.metadata-pin;
+  recent-txs-manifest =
+    mkCheck "recent-txs-manifest" scripts.recent-txs-manifest;
   schema = mkCheck "schema" scripts.schema;
   unit = mkCheck "unit" scripts.unit;
   golden = mkCheck "golden" scripts.golden;

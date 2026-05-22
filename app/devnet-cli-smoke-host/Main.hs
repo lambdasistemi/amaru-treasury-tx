@@ -36,6 +36,11 @@ import Cardano.Ledger.Address
     , Addr (..)
     , serialiseAddr
     )
+import Cardano.Ledger.Api.Tx.Body
+    ( feeTxBodyL
+    , inputsTxBodyL
+    , outputsTxBodyL
+    )
 import Cardano.Ledger.Api.Tx.Out
     ( TxOut
     , addrTxOutL
@@ -44,17 +49,23 @@ import Cardano.Ledger.Api.Tx.Out
 import Cardano.Ledger.BaseTypes (Network (..))
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
+import Cardano.Ledger.Core (bodyTxL)
 import Cardano.Ledger.Credential
     ( Credential (..)
     , StakeReference (..)
     )
-import Cardano.Ledger.Hashes (KeyHash (..))
+import Cardano.Ledger.Hashes (KeyHash (..), ScriptHash (..))
 import Cardano.Ledger.Keys
     ( KeyRole (Payment)
     , VKey (..)
     , hashKey
     )
-import Cardano.Ledger.Mary.Value (MaryValue (..))
+import Cardano.Ledger.Mary.Value
+    ( MaryValue (..)
+    , PolicyID (..)
+    , assetNameToTextAsHex
+    , flattenMultiAsset
+    )
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Node.Client.E2E.Devnet (withCardanoNode)
 import Cardano.Node.Client.E2E.Setup
@@ -77,7 +88,7 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Char8 qualified as BS8
 import Data.ByteString.Lazy qualified as BSL
-import Data.Foldable (traverse_)
+import Data.Foldable (toList, traverse_)
 import Data.List (isPrefixOf)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (isJust, isNothing)
@@ -93,7 +104,13 @@ import Amaru.Treasury.LedgerParse
     , txInFromText
     , txInToText
     )
+import Amaru.Treasury.Tx.AttachWitness
+    ( decodeUnsignedTxHex
+    , renderAttachError
+    )
+import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Parser, parseEither, withObject, (.:), (.:?))
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
@@ -294,14 +311,25 @@ main = do
                     socket
                     devnetMagic
                     (smokeCode == ExitSuccess)
+                runReorganizeAssertionsIfPresent
+                    runDir
+                    socket
+                    devnetMagic
+                    (smokeCode == ExitSuccess)
                 case smokeCode of
                     ExitSuccess -> do
                         markFullSummaryPassed runDir socket
                         exitSuccess
                     code -> exitWith code
-            "reorganize" -> case smokeCode of
-                ExitSuccess -> exitSuccess
-                code -> exitWith code
+            "reorganize" -> do
+                runReorganizeAssertionsIfPresent
+                    runDir
+                    socket
+                    devnetMagic
+                    (smokeCode == ExitSuccess)
+                case smokeCode of
+                    ExitSuccess -> exitSuccess
+                    code -> exitWith code
             _ -> case smokeCode of
                 ExitSuccess -> exitSuccess
                 code -> exitWith code
@@ -1850,6 +1878,337 @@ parseDisburseAssertionRequest =
                 , darBeneficiaryAddress = beneficiaryAddress
                 , darExpectedBeneficiaryLovelace = beneficiaryLovelace
                 }
+
+-- ---------------------------------------------------------------------
+-- Reorganize chain assertions (#87 S2)
+-- ---------------------------------------------------------------------
+
+{- | If the smoke wrote a reorganize assertion request, decode
+the unsigned Conway CBOR, resolve the input UTxOs via N2C
+'queryUTxOByTxInH', and sum the input + continuing-output
+values across every asset class (lovelace, then each native
+@(policyId, assetName)@ pair). Diverging sums exit non-zero
+with 'ASSET_PRESERVATION_FAILED'; the verdict and observed
+sums land in @summary.json@ under @assetPreservationVerdict@.
+
+The exec-units assertion (slice S3, T013–T015) is a separate
+file; this function does not touch protocol parameters or
+exec-units bookkeeping.
+-}
+runReorganizeAssertionsIfPresent
+    :: FilePath -> FilePath -> NetworkMagic -> Bool -> IO ()
+runReorganizeAssertionsIfPresent runDir socket magic required = do
+    let requestPath =
+            runDir
+                </> "chain"
+                </> "reorganize.assertions.request.json"
+    exists <- doesFileExist requestPath
+    if exists
+        then runReorganizeAssertions runDir socket magic
+        else
+            when required $
+                die
+                    ( "reorganize-assertion: missing request "
+                        <> requestPath
+                    )
+
+runReorganizeAssertions
+    :: FilePath -> FilePath -> NetworkMagic -> IO ()
+runReorganizeAssertions runDir socket magic = do
+    let requestPath =
+            runDir
+                </> "chain"
+                </> "reorganize.assertions.request.json"
+        reportPath =
+            runDir </> "chain" </> "reorganize.assertions.json"
+        logPath =
+            runDir </> "chain" </> "reorganize.assertions.log"
+    createDirectoryIfMissing True (runDir </> "chain")
+    raw <-
+        eitherDecodeFileStrict' requestPath
+            >>= either (die . badRequest) pure
+    request <-
+        either (die . badRequest) pure $
+            parseEither parseReorganizeAssertionRequest raw
+    hexBytes <- BS.readFile (rarCborPath request)
+    tx <- case decodeUnsignedTxHex hexBytes of
+        Right t -> pure t
+        Left err ->
+            die
+                ( "ASSET_PRESERVATION_FAILED: cannot decode "
+                    <> "unsigned CBOR "
+                    <> rarCborPath request
+                    <> ": "
+                    <> T.unpack (renderAttachError err)
+                )
+    let body = tx ^. bodyTxL
+        inputTxIns = body ^. inputsTxBodyL
+        outputs = toList (body ^. outputsTxBodyL)
+        outputValues = fmap (^. valueTxOutL) outputs
+        Coin feeLovelace = body ^. feeTxBodyL
+        outputSumRaw = sumAssetValues outputValues
+        -- Ledger invariant: sum(inputs) = sum(outputs) + fee.
+        -- Adding the body's fee back into the outputs side
+        -- means every asset class (lovelace + every native
+        -- (policyId, assetName) pair) must match bit-for-bit
+        -- across inputs and outputs.
+        outputSum = addLovelace outputSumRaw feeLovelace
+    inputUtxos <-
+        withLocalNodeBackend magic socket $ \backend ->
+            Backend.singleShotWithAcquired backend $ \qh ->
+                Backend.queryUTxOByTxInH qh inputTxIns
+    let inputValues =
+            fmap (^. valueTxOutL) (Map.elems inputUtxos)
+        inputSum = sumAssetValues inputValues
+        missingInputs =
+            Set.toList
+                (inputTxIns `Set.difference` Map.keysSet inputUtxos)
+        diff = diffAssetSum inputSum outputSum
+        preservationOk =
+            null missingInputs && isAssetSumZero diff
+        report =
+            object
+                [ "phase" .= ("reorganize" :: Text)
+                , "status"
+                    .= ( if preservationOk
+                            then "passed"
+                            else
+                                "failed"
+                                    :: Text
+                       )
+                , "cborPath" .= rarCborPath request
+                , "scope" .= rarScope request
+                , "selectedInputUtxos"
+                    .= fmap txInToText (Set.toList inputTxIns)
+                , "missingInputUtxos"
+                    .= fmap txInToText missingInputs
+                , "inputValueSum" .= assetSumJson inputSum
+                , "continuingOutputValueSum"
+                    .= assetSumJson outputSum
+                , "feeLovelace" .= feeLovelace
+                , "assetValueDiff" .= assetSumJson diff
+                ]
+    BSL.writeFile reportPath (encode report)
+    writeFile logPath (unlines (renderChainAssertionLog report))
+    updateReorganizeSummaryVerdict
+        (rarSummaryPath request)
+        preservationOk
+        inputSum
+        outputSum
+        diff
+        missingInputs
+        reportPath
+    if preservationOk
+        then
+            hPutStrLn
+                stderr
+                ( "devnet-cli-smoke-host: reorganize asset "
+                    <> "preservation verified ("
+                    <> reportPath
+                    <> ")"
+                )
+        else
+            die
+                ( "ASSET_PRESERVATION_FAILED: input value sum "
+                    <> "differs from continuing-output sum across "
+                    <> "one or more asset classes; see "
+                    <> reportPath
+                )
+  where
+    badRequest err =
+        "reorganize-assertion: cannot parse request: " <> err
+
+data ReorganizeAssertionRequest = ReorganizeAssertionRequest
+    { rarCborPath :: !FilePath
+    , rarSummaryPath :: !FilePath
+    , rarScope :: !Text
+    }
+
+parseReorganizeAssertionRequest
+    :: Value -> Parser ReorganizeAssertionRequest
+parseReorganizeAssertionRequest =
+    withObject "ReorganizeAssertionRequest" $ \root -> do
+        cbor <- root .: "cborPath"
+        summary <- root .: "summaryPath"
+        scope <- root .: "scope"
+        pure
+            ReorganizeAssertionRequest
+                { rarCborPath = cbor
+                , rarSummaryPath = summary
+                , rarScope = scope
+                }
+
+{- | Per-asset-class value sum: lovelace plus a map of
+@(policyIdHex, assetNameHex)@ → quantity. Used to prove that
+reorganize preserves every asset class across the merged
+inputs and the single continuing output.
+-}
+data AssetSum
+    = AssetSum
+        !Integer
+        !(Map.Map (Text, Text) Integer)
+
+emptyAssetSum :: AssetSum
+emptyAssetSum = AssetSum 0 Map.empty
+
+sumAssetValues :: [MaryValue] -> AssetSum
+sumAssetValues =
+    foldr
+        ( \v acc ->
+            mergeAssetSum acc (assetSumFromMary v)
+        )
+        emptyAssetSum
+
+assetSumFromMary :: MaryValue -> AssetSum
+assetSumFromMary (MaryValue (Coin l) ma) =
+    AssetSum
+        l
+        ( foldr
+            insertTriple
+            Map.empty
+            (flattenMultiAsset ma)
+        )
+  where
+    insertTriple (pid, aname, amt) =
+        Map.insertWith
+            (+)
+            (policyIdHex pid, assetNameToTextAsHex aname)
+            amt
+
+policyIdHex :: PolicyID -> Text
+policyIdHex (PolicyID (ScriptHash sh)) =
+    TE.decodeUtf8 (B16.encode (hashToBytes sh))
+
+mergeAssetSum :: AssetSum -> AssetSum -> AssetSum
+mergeAssetSum (AssetSum la ma) (AssetSum lb mb) =
+    AssetSum
+        (la + lb)
+        (Map.unionWith (+) ma mb)
+
+addLovelace :: AssetSum -> Integer -> AssetSum
+addLovelace (AssetSum l m) extra =
+    AssetSum (l + extra) m
+
+diffAssetSum :: AssetSum -> AssetSum -> AssetSum
+diffAssetSum (AssetSum la ma) (AssetSum lb mb) =
+    AssetSum
+        (la - lb)
+        ( Map.filter
+            (/= 0)
+            ( Map.unionWith
+                (+)
+                ma
+                (Map.map negate mb)
+            )
+        )
+
+isAssetSumZero :: AssetSum -> Bool
+isAssetSumZero (AssetSum l m) =
+    l == 0 && all (== 0) (Map.elems m)
+
+assetSumJson :: AssetSum -> Value
+assetSumJson (AssetSum l m) =
+    object
+        [ "lovelace" .= l
+        , "assets"
+            .= [ object
+                [ "policyId" .= pid
+                , "assetName" .= an
+                , "quantity" .= q
+                ]
+               | ((pid, an), q) <- Map.toList m
+               ]
+        ]
+
+{- | Overwrite the reorganize @summary.json@ written by the
+smoke with the host-observed verdict + value sums.
+
+Replaces the placeholder @assetPreservationVerdict@ and
+@continuingOutput@ keys; leaves every other field intact.
+-}
+updateReorganizeSummaryVerdict
+    :: FilePath
+    -> Bool
+    -> AssetSum
+    -> AssetSum
+    -> AssetSum
+    -> [TxIn]
+    -> FilePath
+    -> IO ()
+updateReorganizeSummaryVerdict
+    summaryPath
+    verdictOk
+    inputSum
+    outputSum
+    diff
+    missing
+    reportPath = do
+        exists <- doesFileExist summaryPath
+        unless exists $
+            die
+                ( "reorganize-assertion: missing summary at "
+                    <> summaryPath
+                )
+        raw <-
+            eitherDecodeFileStrict' summaryPath
+                >>= either (die . badSummary) pure
+        let baseObj = case raw of
+                Aeson.Object o -> o
+                _ -> KeyMap.empty
+            verdictText :: Text
+            verdictText =
+                if verdictOk
+                    then "passed"
+                    else "failed"
+            continuingOutput :: Value
+            continuingOutput =
+                object
+                    [ "valueSum" .= assetSumJson outputSum
+                    , "note"
+                        .= ( "Host-observed sum across the tx body's "
+                                <> "continuing outputs."
+                                :: Text
+                           )
+                    ]
+            newPairs =
+                KeyMap.fromList
+                    [
+                        ( Key.fromString "assetPreservationVerdict"
+                        , Aeson.String verdictText
+                        )
+                    ,
+                        ( Key.fromString "continuingOutput"
+                        , continuingOutput
+                        )
+                    ,
+                        ( Key.fromString "inputValueSum"
+                        , assetSumJson inputSum
+                        )
+                    ,
+                        ( Key.fromString "continuingOutputValueSum"
+                        , assetSumJson outputSum
+                        )
+                    ,
+                        ( Key.fromString "assetValueDiff"
+                        , assetSumJson diff
+                        )
+                    ,
+                        ( Key.fromString "missingInputUtxos"
+                        , Aeson.toJSON
+                            (fmap txInToText missing)
+                        )
+                    ,
+                        ( Key.fromString "chainAssertions"
+                        , Aeson.toJSON reportPath
+                        )
+                    ]
+            updated =
+                KeyMap.union newPairs baseObj
+        BSL.writeFile summaryPath (encode (Aeson.Object updated))
+      where
+        badSummary err =
+            "reorganize-assertion: cannot parse summary: "
+                <> err
 
 -- ---------------------------------------------------------------------
 -- Diagnostics

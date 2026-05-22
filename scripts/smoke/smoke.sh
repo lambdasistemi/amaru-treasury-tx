@@ -93,15 +93,10 @@ preflight_for_phase() {
             require_tool cabal
             require_tool tr
             ;;
-        governance | disburse | full)
+        governance | disburse | full | reorganize)
             require_tool jq
             require_tool cabal
             require_tool tr
-            ;;
-        reorganize)
-            require_tool jq
-            require_tool cardano-node
-            require_tool amaru-treasury-tx
             ;;
         *)
             die "unknown phase: $phase (try --help)"
@@ -1488,19 +1483,216 @@ disburse_phase() {
     log "disburse: complete (summary in $summary_json)"
 }
 
+# Issue #87 S2 — live reorganize phase body.
+#
+# Chains after disburse_phase, asserts the core_development
+# treasury carries >= 2 UTxOs (firing INSUFFICIENT_TREASURY_UTXOS
+# fail-closed otherwise), invokes the shipped reorganize-wizard
+# runner to produce intent.json, then tx-build --intent to produce
+# unsigned Conway CBOR. Writes a per-phase summary.json carrying
+# the selected input UTxOs, the continuing-output reference, the
+# epoch/tip context, the artifact paths, and an asset-preservation
+# verdict placeholder that the host chain assertion overwrites.
+#
+# The on-chain proof that input value equals continuing output
+# value across every asset class lives in
+# app/devnet-cli-smoke-host/Main.hs:runReorganizeAssertionsIfPresent
+# (T010); ASSET_PRESERVATION_FAILED is the host-side diagnostic.
+# REORGANIZE_BUILD_FAILED surfaces a non-zero tx-build exit. The
+# tx-validate / exec-units assertion (S3) lands in a later slice.
+reorganize_phase() {
+    # Run-dir layout produced by this phase (rooted under $run_dir):
+    #   phases/reorganize/intent.json
+    #   phases/reorganize/reorganize.unsigned.cbor
+    #   phases/reorganize/build.log
+    #   phases/reorganize/summary.json
+    local run_dir=$1
+    local timeout_seconds=$2
+    local phase_dir="$run_dir/phases/reorganize"
+    mkdir -p "$phase_dir"
+
+    disburse_phase "$run_dir" "$timeout_seconds"
+
+    require_env CARDANO_NODE_SOCKET_PATH
+    require_env CLI_SMOKE_FUNDING_ADDR
+
+    AMARU_EXE=$(resolve_amaru_exe)
+    log "reorganize: using $AMARU_EXE"
+    "$AMARU_EXE" reorganize-wizard --help >/dev/null 2>&1 \
+        || die "MISSING_REORGANIZE_BUILDER: amaru-treasury-tx does not expose 'reorganize-wizard'"
+
+    local disburse_summary="$run_dir/disburse-submit/summary.json"
+    local metadata="$run_dir/disburse-submit/metadata.json"
+    require_file "disburse summary" "$disburse_summary"
+    require_file "metadata.json" "$metadata"
+
+    local wallet_change_txin
+    wallet_change_txin=$(jq -r '.walletChangeTxIn' "$disburse_summary") \
+        || die "reorganize: cannot read walletChangeTxIn from $disburse_summary"
+    if [[ -z "$wallet_change_txin" \
+        || "$wallet_change_txin" == "null" ]]; then
+        die "reorganize: walletChangeTxIn missing in $disburse_summary"
+    fi
+
+    local inspect_json="$phase_dir/treasury-inspect.json"
+    log "reorganize: treasury-inspect core_development"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        treasury-inspect \
+        --metadata "$metadata" \
+        --scope core_development \
+        --format json \
+        --out "$inspect_json" \
+        || die "reorganize: treasury-inspect failed (see $inspect_json)"
+
+    local utxo_count
+    utxo_count=$(jq -r \
+        '[.. | objects | select(has("utxos")) | .utxos[]?] | length' \
+        "$inspect_json" 2>/dev/null) \
+        || utxo_count=0
+    if [[ -z "$utxo_count" || "$utxo_count" == "null" ]]; then
+        utxo_count=0
+    fi
+    log "reorganize: core_development carries $utxo_count utxo(s)"
+
+    # In-harness setup substep (T006): when the treasury at
+    # core_development carries fewer than 2 UTxOs the reorganize
+    # tx has nothing to merge. The shipped CLI surface does not
+    # expose a wallet-to-treasury top-up (the only path that
+    # would deterministically add a second UTxO at the scope's
+    # treasury address); a second disburse-wizard run also keeps
+    # the count at 1 because every disburse consumes the one
+    # treasury UTxO and produces a single reduced one. We
+    # therefore re-query the inspect snapshot after the
+    # disburse_phase chain completed; if the count still cannot
+    # reach >= 2 we fail closed with the typed diagnostic so the
+    # live-boundary leg surfaces the gap (the live setup
+    # substep is the orchestrator-owned T016 follow-up).
+    if [[ "$utxo_count" -lt 2 ]]; then
+        log "reorganize: setup substep re-queries treasury-inspect"
+        "$AMARU_EXE" --network devnet \
+            --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+            treasury-inspect \
+            --metadata "$metadata" \
+            --scope core_development \
+            --format json \
+            --out "$inspect_json" \
+            || die "reorganize: treasury-inspect (retry) failed"
+        utxo_count=$(jq -r \
+            '[.. | objects | select(has("utxos")) | .utxos[]?] | length' \
+            "$inspect_json" 2>/dev/null) \
+            || utxo_count=0
+        if [[ -z "$utxo_count" || "$utxo_count" == "null" ]]; then
+            utxo_count=0
+        fi
+    fi
+
+    if [[ "$utxo_count" -lt 2 ]]; then
+        die "INSUFFICIENT_TREASURY_UTXOS: treasury at core_development carries $utxo_count utxo(s); reorganize needs >= 2 (see $inspect_json)"
+    fi
+
+    local intent_path="$phase_dir/intent.json"
+    local intent_log="$phase_dir/intent.log"
+    log "reorganize: reorganize-wizard --network devnet"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        reorganize-wizard \
+        --wallet-addr "$CLI_SMOKE_FUNDING_ADDR" \
+        --metadata "$metadata" \
+        --scope core_development \
+        --funding-seed-txin "$wallet_change_txin" \
+        --log "$intent_log" \
+        --out "$intent_path" \
+        || die "reorganize: reorganize-wizard failed (see $intent_log)"
+
+    local cbor_path="$phase_dir/reorganize.unsigned.cbor"
+    local build_log="$phase_dir/build.log"
+    log "reorganize: tx-build --intent"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        tx-build --intent "$intent_path" \
+        --out "$cbor_path" \
+        --log "$build_log" \
+        || die "REORGANIZE_BUILD_FAILED: tx-build exited non-zero (see $build_log)"
+
+    local tip_slot
+    tip_slot=$(jq -r '.tip.slot // .tip.slotNo // 0' \
+        "$inspect_json" 2>/dev/null) \
+        || tip_slot=0
+    if [[ -z "$tip_slot" || "$tip_slot" == "null" ]]; then
+        tip_slot=0
+    fi
+    local utxo_array
+    utxo_array=$(jq -c \
+        '[.. | objects | select(has("utxos")) | .utxos[]?]' \
+        "$inspect_json" 2>/dev/null) \
+        || utxo_array='[]'
+    if [[ -z "$utxo_array" || "$utxo_array" == "null" ]]; then
+        utxo_array='[]'
+    fi
+
+    local summary_json="$phase_dir/summary.json"
+    local chain_dir="$run_dir/chain"
+    mkdir -p "$chain_dir"
+    local assertion_request="$chain_dir/reorganize.assertions.request.json"
+    jq -n \
+        --argjson selectedInputUtxos "$utxo_array" \
+        --argjson tipSlot "$tip_slot" \
+        --arg intentPath "$intent_path" \
+        --arg cborPath "$cbor_path" \
+        --arg buildLogPath "$build_log" \
+        --arg inspectPath "$inspect_json" \
+        --arg chainAssertionsRequest "$assertion_request" \
+        '{
+            phase: "reorganize",
+            network: "devnet",
+            scope: "core_development",
+            selectedInputUtxos: $selectedInputUtxos,
+            continuingOutput: {
+                placeholder: "pending-host-assertion",
+                note: "Host runReorganizeAssertions overwrites this with the on-chain merged output value."
+            },
+            epochTipContext: {
+                slot: $tipSlot
+            },
+            intentPath: $intentPath,
+            cborPath: $cborPath,
+            buildLogPath: $buildLogPath,
+            inspectPath: $inspectPath,
+            chainAssertionsRequest: $chainAssertionsRequest,
+            assetPreservationVerdict: "pending-host-assertion"
+        }' >"$summary_json"
+
+    jq -n \
+        --arg cborPath "$cbor_path" \
+        --arg summaryPath "$summary_json" \
+        --arg scope "core_development" \
+        '{
+            phase: "reorganize",
+            cborPath: $cborPath,
+            summaryPath: $summaryPath,
+            scope: $scope
+        }' >"$assertion_request"
+
+    log "reorganize: complete (summary in $summary_json)"
+}
+
 write_full_summary() {
     local run_dir=$1
     local summary_path="$run_dir/summary.json"
     local registry_summary="$run_dir/phases/registry-stake/summary.json"
     local governance_summary="$run_dir/phases/governance/summary.json"
     local disburse_summary="$run_dir/disburse-submit/summary.json"
+    local reorganize_summary="$run_dir/phases/reorganize/summary.json"
     require_file "registry-stake summary" "$registry_summary"
     require_file "governance summary" "$governance_summary"
     require_file "disburse summary" "$disburse_summary"
+    require_file "reorganize summary" "$reorganize_summary"
     jq -n \
         --arg registrySummary "$registry_summary" \
         --arg governanceSummary "$governance_summary" \
         --arg disburseSummary "$disburse_summary" \
+        --arg reorganizeSummary "$reorganize_summary" \
         --arg runDir "$run_dir" \
         --arg socketPath "${CARDANO_NODE_SOCKET_PATH:-}" \
         '{
@@ -1509,6 +1701,7 @@ write_full_summary() {
             registrySummary: $registrySummary,
             governanceSummary: $governanceSummary,
             disburseSummary: $disburseSummary,
+            reorganizeSummary: $reorganizeSummary,
             runDir: $runDir,
             socketPath: $socketPath,
             verificationStatus: "pending-host-assertions"
@@ -1520,25 +1713,8 @@ full_phase() {
     local run_dir=$1
     local timeout_seconds=$2
     disburse_phase "$run_dir" "$timeout_seconds"
+    reorganize_phase "$run_dir" "$timeout_seconds"
     write_full_summary "$run_dir"
-}
-
-# Slice S1 scaffold for the reorganize phase. Verifies the shipped
-# amaru-treasury-tx binary exposes the reorganize-wizard subcommand
-# (the #46 operator surface) and exits 0 without doing any live
-# chain work. The live phase body (utxo selection, intent encode,
-# tx-build, asset-preservation assertion, exec-units assertion)
-# lands in slices S2 and S3 per specs/87-devnet-reorganize-smoke.
-reorganize_phase_scaffold() {
-    local run_dir=$1
-    local phase_dir="$run_dir/phases/reorganize"
-    mkdir -p "$phase_dir"
-
-    AMARU_EXE=$(resolve_amaru_exe)
-    "$AMARU_EXE" reorganize-wizard --help >/dev/null 2>&1 \
-        || die "MISSING_REORGANIZE_BUILDER: amaru-treasury-tx does not expose 'reorganize-wizard'"
-
-    log "reorganize: scaffold complete; live body in slice S2"
 }
 
 create_run_dir() {
@@ -1677,7 +1853,7 @@ main() {
                 || die "MISSING_REORGANIZE_BUILDER: amaru-treasury-tx does not expose 'reorganize-wizard'"
             require_inside_devnet "$inside_devnet" "$phase" \
                 "$run_dir" "$timeout_seconds" "$force"
-            reorganize_phase_scaffold "$run_dir"
+            reorganize_phase "$run_dir" "$timeout_seconds"
             ;;
     esac
 }

@@ -17,7 +17,7 @@ module App where
 import Prelude
 
 import Api as Api
-import Data.Argonaut.Core (Json, stringify)
+import Data.Argonaut.Core (Json)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String.CodePoints as Data.String.CodePoints
@@ -25,14 +25,13 @@ import Effect.Aff.Class (class MonadAff)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Properties as HP
+import JsonView as JsonView
 
 -- | A scope's lifecycle on the page.
 data ScopeState
   = Loading
-  | Loaded String
+  | Loaded Json
   | Failed String
-
-derive instance eqScopeState :: Eq ScopeState
 
 type State =
   { scopes ::
@@ -136,10 +135,7 @@ component =
           HH.p
             [ HP.classes [ HH.ClassName "scope-error" ] ]
             [ HH.text ("Error: " <> err) ]
-        Loaded raw ->
-          HH.pre
-            [ HP.classes [ HH.ClassName "scope-json" ] ]
-            [ HH.text raw ]
+        Loaded j -> JsonView.render j
     in
       HH.section
         [ HP.classes [ HH.ClassName "scope-card" ] ]
@@ -232,7 +228,7 @@ component =
       res <- H.liftAff (Api.fetchInspect key)
       let
         next = case res of
-          Right j -> Loaded (prettyJson j)
+          Right j -> Loaded j
           Left err -> Failed err
       H.modify_ \s ->
         s
@@ -249,9 +245,6 @@ component =
 
 -- ---------------------------------------------------------------------------
 -- Helpers
-
-prettyJson :: Json -> String
-prettyJson = stringify
 
 substring :: Int -> Int -> String -> String
 substring start n s =

@@ -1,6 +1,6 @@
 # amaru-treasury-tx Development Guidelines
 
-Auto-generated from feature plans. Last updated: 2026-05-17
+Auto-generated from feature plans. Last updated: 2026-05-22
 
 ## Active Technologies
 - Haskell, GHC 9.6+ (matches `cardano-node-clients`). (005-unified-tx-build)
@@ -78,7 +78,6 @@ nix run .#lint
 ## Recent Changes
 - 157-flatten-devnet-cli: Added Haskell, GHC 9.6+ via the repository Nix shell. + `cardano-node-clients`, `cardano-tx-tools`,
 - 074-report-render: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`).
-- 007-aggregate-wallet-utxos: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`). + `cardano-node-clients` (`TxBuild q e a` DSL, `selectWallet` location), `cardano-ledger-conway` (Conway tx body for `inputsTxBodyL`/`collateralInputsTxBodyL`), `aeson` (intent.json shape).
 
   research, data model, contracts, quickstart.
 

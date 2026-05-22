@@ -1547,7 +1547,7 @@ reorganize_phase() {
 
     local utxo_count
     utxo_count=$(jq -r \
-        '[.. | objects | select(has("utxos")) | .utxos[]?] | length' \
+        '[.scopes[]? | select(.scope == "core_development") | .treasuryUtxos[]?] | length' \
         "$inspect_json" 2>/dev/null) \
         || utxo_count=0
     if [[ -z "$utxo_count" || "$utxo_count" == "null" ]]; then
@@ -1579,7 +1579,7 @@ reorganize_phase() {
             --out "$inspect_json" \
             || die "reorganize: treasury-inspect (retry) failed"
         utxo_count=$(jq -r \
-            '[.. | objects | select(has("utxos")) | .utxos[]?] | length' \
+            '[.scopes[]? | select(.scope == "core_development") | .treasuryUtxos[]?] | length' \
             "$inspect_json" 2>/dev/null) \
             || utxo_count=0
         if [[ -z "$utxo_count" || "$utxo_count" == "null" ]]; then
@@ -1645,7 +1645,7 @@ reorganize_phase() {
     fi
     local utxo_array
     utxo_array=$(jq -c \
-        '[.. | objects | select(has("utxos")) | .utxos[]?]' \
+        '[.scopes[]? | select(.scope == "core_development") | .treasuryUtxos[]?]' \
         "$inspect_json" 2>/dev/null) \
         || utxo_array='[]'
     if [[ -z "$utxo_array" || "$utxo_array" == "null" ]]; then

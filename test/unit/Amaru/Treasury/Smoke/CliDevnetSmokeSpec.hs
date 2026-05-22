@@ -716,6 +716,16 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
                 let body = writeFullSummaryFnBody src
                 body `shouldSatisfyContain` "execUnitsVerdict"
 
+    describe "reorganize treasury-utxo count keying (#87 T020)" $ do
+        it
+            "reorganize_phase keys the treasury-UTxO count on \
+            \.treasuryUtxos (not the wrong .utxos key from S2)"
+            $ do
+                src <- mustRead smokeScriptPath
+                let body = reorganizePhaseFnBody src
+                body `shouldSatisfyContain` ".treasuryUtxos"
+                body `shouldSatisfyNotContain` ".utxos[]?]"
+
 -- ---------------------------------------------------------------------
 -- Helpers
 -- ---------------------------------------------------------------------

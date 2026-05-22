@@ -47,8 +47,8 @@ Owned-files boundaries and proof strategies are normative in [plan.md](./plan.md
 **Commit subject**: `fix(smoke): key reorganize treasury-utxo count on treasuryUtxos`
 **Tasks trailer**: `Tasks: T019, T020`
 
-- [ ] **T019** — In `scripts/smoke/smoke.sh`'s `reorganize_phase`, fix both jq filters (the primary count and the post-setup retry count) so they key on `.treasuryUtxos[]?` and `has("treasuryUtxos")` (or filter the matching `scopes[]` entry by `.scope == "core_development"` and take `.treasuryUtxos | length` — pick whichever is more legible).
-- [ ] **T020** — In `test/unit/Amaru/Treasury/Smoke/CliDevnetSmokeSpec.hs`, add a fixture-driven regression that pins the *exact* jq filter path used in `reorganize_phase` against the `treasuryUtxos` key (a static-fixture substring assertion is enough — embedding a runtime jq invocation against a sample JSON is out of scope, but the static check must ensure the smoke source references `treasuryUtxos` as the jq key inside the reorganize_phase body, not `utxos`).
+- [X] **T019** — In `scripts/smoke/smoke.sh`'s `reorganize_phase`, fix both jq filters (the primary count and the post-setup retry count) so they key on `.treasuryUtxos` filtered by `.scope == "core_development"`.
+- [X] **T020** — In `test/unit/Amaru/Treasury/Smoke/CliDevnetSmokeSpec.hs`, add a fixture-driven regression that pins the `.treasuryUtxos` jq key inside the `reorganize_phase` body and asserts the absent wrong key `.utxos[]?]`.
 
 ## Slice S4 — finalization (orchestrator-owned)
 

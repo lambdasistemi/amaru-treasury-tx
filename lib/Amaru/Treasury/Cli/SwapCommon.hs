@@ -30,6 +30,7 @@ import Cardano.Slotting.Slot (SlotNo (..))
 import Amaru.Treasury.Backend (Provider)
 import Amaru.Treasury.Cli.Common
     ( queryFlat
+    , queryFlatFunds
     )
 import Amaru.Treasury.Cli.SwapOptions
     ( SwapQuoteQuoteArg (..)
@@ -167,7 +168,7 @@ providerToResolverEnv :: Provider IO -> ResolverEnv IO
 providerToResolverEnv p =
     ResolverEnv
         { reEnvQueryWalletUtxos = queryFlat p
-        , reEnvQueryTreasuryUtxos = queryFlat p
+        , reEnvQueryTreasuryUtxos = queryFlatFunds p
         , reEnvComputeUpperBound = \choice -> do
             r <- queryUpperBoundSlot p choice
             pure (fmap unwrapSlot r)

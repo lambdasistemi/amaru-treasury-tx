@@ -16,6 +16,8 @@ module Amaru.Treasury.Cli.Common
     , withSocket
     , withLogHandle
     , queryFlat
+    , queryFlatFunds
+    , filterFundUtxos
     , queryValues
     , nowTip
     ) where
@@ -43,8 +45,14 @@ import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.Environment (lookupEnv)
 import System.IO qualified as IO
 
-import Cardano.Ledger.Api.Tx.Out (valueTxOutL)
+import Cardano.Ledger.Api.Tx.Out
+    ( TxOut
+    , referenceScriptTxOutL
+    , valueTxOutL
+    )
+import Cardano.Ledger.BaseTypes (StrictMaybe (..))
 import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Mary.Value
     ( MaryValue (..)
     , MultiAsset (..)
@@ -195,6 +203,61 @@ queryFlat p addrText = case parseAddr addrText of
             , lov
             , not (Map.null ma)
             )
+
+{- | Boundary helper for treasury-fund selection.
+
+Same shape as 'queryFlat', but drops any UTxO whose
+'TxOut' carries a reference script — i.e. per-scope
+script-deploy outputs at the treasury address. The wizard
+resolver must not pick those up as fund UTxOs because the
+build phase lists them as reference inputs; Conway
+requires the spend set and the reference set to be
+disjoint (see [#217](https://github.com/lambdasistemi/amaru-treasury-tx/issues/217)).
+-}
+queryFlatFunds
+    :: Provider IO
+    -> Text
+    -> IO [(Text, Integer, Bool)]
+queryFlatFunds p addrText = case parseAddr addrText of
+    Left e ->
+        throwIO $
+            userError
+                ( "queryFlatFunds: bech32 address: "
+                    <> T.unpack addrText
+                    <> ": "
+                    <> e
+                )
+    Right a -> do
+        utxos <- queryUTxOs p a
+        pure (summarise <$> filterFundUtxos utxos)
+  where
+    summarise (txin, txout) =
+        let MaryValue (Coin lov) (MultiAsset ma) =
+                txout ^. valueTxOutL
+        in  ( txInToText txin
+            , lov
+            , not (Map.null ma)
+            )
+
+{- | Drop any @(TxIn, TxOut)@ pair whose 'TxOut' carries a
+reference script. Pure half of 'queryFlatFunds'.
+
+A per-scope script-deploy output sits at the treasury
+script address and is structurally identified by its
+@SJust@ 'referenceScriptTxOutL'; real fund UTxOs never
+carry one. Filtering here keeps the wizard's spend set
+disjoint from the build phase's reference set.
+-}
+filterFundUtxos
+    :: [(TxIn, TxOut ConwayEra)]
+    -> [(TxIn, TxOut ConwayEra)]
+filterFundUtxos =
+    filter (not . hasReferenceScript . snd)
+  where
+    hasReferenceScript txout =
+        case txout ^. referenceScriptTxOutL of
+            SJust _ -> True
+            SNothing -> False
 
 queryValues
     :: Provider IO

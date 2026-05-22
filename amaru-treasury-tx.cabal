@@ -423,6 +423,7 @@ test-suite unit-tests
     Amaru.Treasury.Build.ReorganizeDispatchSpec
     Amaru.Treasury.Build.WithdrawSpec
     Amaru.Treasury.BuildSpec
+    Amaru.Treasury.Cli.CommonSpec
     Amaru.Treasury.Cli.EnvelopeSpec
     Amaru.Treasury.Cli.GovernanceWithdrawalInitWizardParserSpec
     Amaru.Treasury.Cli.ParserSpec

@@ -17,16 +17,22 @@ Two layers covered here:
 -}
 module Amaru.Treasury.Tx.DisburseSpec (spec) where
 
-import Cardano.Crypto.Hash.Class (Hash, HashAlgorithm, hashFromBytes)
+import Cardano.Crypto.Hash.Class
+    ( Hash
+    , HashAlgorithm
+    , hashFromBytes
+    , hashToBytes
+    )
 import Cardano.Ledger.Address
     ( AccountAddress (..)
     , AccountId (..)
     , Addr (..)
     , Withdrawals (..)
     )
+import Cardano.Ledger.Alonzo.TxWits (Redeemers (..))
 import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.Api.PParams (emptyPParams)
-import Cardano.Ledger.Api.Tx (auxDataTxL)
+import Cardano.Ledger.Api.Tx (auxDataTxL, witsTxL)
 import Cardano.Ledger.Api.Tx.AuxData (metadataTxAuxDataL)
 import Cardano.Ledger.Api.Tx.Body
     ( collateralInputsTxBodyL
@@ -36,7 +42,13 @@ import Cardano.Ledger.Api.Tx.Body
     , reqSignerHashesTxBodyL
     , withdrawalsTxBodyL
     )
-import Cardano.Ledger.Api.Tx.Out (TxOut, valueTxOutL)
+import Cardano.Ledger.Api.Tx.Out
+    ( TxOut
+    , coinTxOutL
+    , getMinCoinTxOut
+    , valueTxOutL
+    )
+import Cardano.Ledger.Api.Tx.Wits (rdmrsTxWitsL)
 import Cardano.Ledger.BaseTypes
     ( Network (..)
     , StrictMaybe (..)
@@ -68,7 +80,9 @@ import Cardano.Ledger.Mary.Value
 import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Slotting.Slot (SlotNo (..))
 import Cardano.Tx.Ledger (ConwayTx)
+import Codec.Serialise qualified as Codec
 import Data.ByteString qualified as BS
+import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Short qualified as SBS
 import Data.Foldable (toList)
 import Data.Map.Strict qualified as Map
@@ -82,6 +96,7 @@ import Test.Hspec
     , expectationFailure
     , it
     , shouldBe
+    , shouldContain
     , shouldSatisfy
     )
 import Test.QuickCheck
@@ -118,6 +133,8 @@ import Amaru.Treasury.IntentJSON
     , encodeSomeTreasuryIntent
     , translateIntent
     )
+import Amaru.Treasury.PParams (readPParamsFile)
+import Amaru.Treasury.Redeemer (disburseUsdmRedeemer)
 import Amaru.Treasury.Tx.Disburse
     ( DisburseAdaPayload (..)
     , DisburseIntent (..)
@@ -247,6 +264,23 @@ usdmPayload =
                     Map.singleton otherAsset 7
         }
 
+expectedUsdmRedeemerHex :: Coin -> BS.ByteString
+expectedUsdmRedeemerHex (Coin lovelace) =
+    B16.encode . BSL.toStrict . Codec.serialise $
+        disburseUsdmRedeemer
+            (policyBytes usdmPolicy)
+            (assetBytes usdmAsset)
+            (dupAmountUsdm usdmPayload)
+            lovelace
+
+policyBytes :: PolicyID -> BS.ByteString
+policyBytes (PolicyID (ScriptHash h)) =
+    hashToBytes h
+
+assetBytes :: AssetName -> BS.ByteString
+assetBytes (AssetName raw) =
+    SBS.fromShort raw
+
 spec :: Spec
 spec = do
     describe "Amaru.Treasury.Tx.Disburse" $ do
@@ -282,20 +316,18 @@ spec = do
                 ^. reqSignerHashesTxBodyL
                 `shouldSatisfy` \s -> Set.size s == 2
 
-        -- Regression for #215. The on-chain treasury validator
+        -- Regression for #224/#81. The on-chain treasury validator
         -- enforces lovelace conservation:
         --     equal_plus_min_ada(input_sum - amount, output_sum)
-        -- For a USDM disburse the redeemer's `amount.lovelace`
-        -- is 0, so the treasury-leftover output must carry the
-        -- FULL treasury-input lovelace. The beneficiary's
-        -- min-UTxO deposit is wallet-funded, not sourced from
-        -- treasury inputs. The payload below encodes that
-        -- validator-correct shape.
+        -- For a treasury-funded USDM disburse the redeemer's
+        -- `amount.lovelace` must equal the beneficiary output's
+        -- compensated min-UTxO, and the treasury leftover output
+        -- must subtract the same lovelace.
         it
-            "USDM disburse: treasury leftover keeps full input lovelace; beneficiary's 2 M is wallet-funded (#215)"
+            "USDM disburse: payTo compensation funds beneficiary min-UTxO from treasury ADA"
             $ do
+                pp <- readPParamsFile "test/fixtures/pparams.json"
                 let totalTreasuryInputLov = 1_400_000_000_000 :: Integer
-                    beneficiaryMinUtxo = 2_000_000 :: Integer
                     validatorCorrectPayload =
                         usdmPayload
                             { dupLeftoverLovelace =
@@ -303,38 +335,46 @@ spec = do
                             }
                     usdmTx =
                         draft
-                            emptyPParams
-                            ( disburseUsdmProgram
-                                fields
-                                validatorCorrectPayload
-                                (Coin beneficiaryMinUtxo)
-                            )
+                            pp
+                            (disburseUsdmProgram fields validatorCorrectPayload)
                     usdmBody = usdmTx ^. bodyTxL
-                    values =
-                        (^. valueTxOutL)
-                            <$> toList (usdmBody ^. outputsTxBodyL)
-                values
-                    `shouldBe` [ MaryValue
-                                    (Coin totalTreasuryInputLov)
-                                    ( MultiAsset $
-                                        Map.fromList
-                                            [
-                                                ( usdmPolicy
-                                                , Map.singleton usdmAsset 50_000_000
-                                                )
-                                            ,
-                                                ( otherPolicy
-                                                , Map.singleton otherAsset 7
-                                                )
-                                            ]
-                                    )
-                               , MaryValue
-                                    (Coin beneficiaryMinUtxo)
-                                    ( MultiAsset $
-                                        Map.singleton usdmPolicy $
-                                            Map.singleton usdmAsset 100_000_000
-                                    )
-                               ]
+                    outs = toList (usdmBody ^. outputsTxBodyL)
+                case outs of
+                    [treasuryOut, beneficiaryOut] -> do
+                        let beneficiaryCoin = beneficiaryOut ^. coinTxOutL
+                            Coin beneficiaryLov = beneficiaryCoin
+                            required =
+                                getMinCoinTxOut pp beneficiaryOut
+                        beneficiaryCoin `shouldSatisfy` (>= required)
+                        treasuryOut
+                            ^. valueTxOutL
+                            `shouldBe` MaryValue
+                                (Coin (totalTreasuryInputLov - beneficiaryLov))
+                                ( MultiAsset $
+                                    Map.fromList
+                                        [
+                                            ( usdmPolicy
+                                            , Map.singleton usdmAsset 50_000_000
+                                            )
+                                        ,
+                                            ( otherPolicy
+                                            , Map.singleton otherAsset 7
+                                            )
+                                        ]
+                                )
+                        beneficiaryOut
+                            ^. valueTxOutL
+                            `shouldBe` MaryValue
+                                beneficiaryCoin
+                                ( MultiAsset $
+                                    Map.singleton usdmPolicy $
+                                        Map.singleton usdmAsset 100_000_000
+                                )
+                    _ ->
+                        expectationFailure
+                            ( "expected two outputs, saw "
+                                <> show (length outs)
+                            )
 
     -- Keystone invariant. This is the test that would have
     -- caught #215 at unit-test time: the wizard's USDM
@@ -401,6 +441,34 @@ spec = do
                                 [input]
                                 amount
                 dtsLeftoverUsdm sel `shouldBe` 1_580_144_633
+
+        it "authorizes treasury-funded USDM min-UTxO in the spend redeemer" $ do
+            pp <- readPParamsFile "test/fixtures/pparams.json"
+            let usdmTx =
+                    draft
+                        pp
+                        (disburseUsdmProgram fields usdmPayload)
+                outs = toList (usdmTx ^. bodyTxL . outputsTxBodyL)
+                Redeemers redeemers =
+                    usdmTx ^. witsTxL . rdmrsTxWitsL
+                redeemerHexes =
+                    [ B16.encode . BSL.toStrict $
+                        serialize
+                            (eraProtVerLow @ConwayEra)
+                            dat
+                    | (_, (dat, _)) <- Map.toAscList redeemers
+                    ]
+            case outs of
+                [_, beneficiaryOut] ->
+                    redeemerHexes
+                        `shouldContain` [ expectedUsdmRedeemerHex
+                                            (beneficiaryOut ^. coinTxOutL)
+                                        ]
+                _ ->
+                    expectationFailure
+                        ( "expected two outputs, saw "
+                            <> show (length outs)
+                        )
 
     describe "Amaru.Treasury.Tx.DisburseIntentJSON" $ do
         it

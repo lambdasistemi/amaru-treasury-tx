@@ -48,7 +48,9 @@ import Data.Map.Strict qualified as Map
 import Cardano.Tx.Build
     ( TxBuild
     , collateral
+    , observeTxOutCoin
     , payTo
+    , peek
     , reference
     , requireSignature
     , spend
@@ -61,7 +63,7 @@ import Amaru.Treasury.Backend (SlotNo)
 import Amaru.Treasury.Redeemer
     ( RawPlutusData (..)
     , disburseAdaRedeemer
-    , disburseRedeemer
+    , disburseUsdmRedeemer
     , emptyListRedeemer
     )
 
@@ -190,25 +192,33 @@ disburseAdaProgram f p = do
 {- | Build the USDM disburse transaction. The operation
 sequence is the same as 'disburseAdaProgram', but the
 treasury redeemer and beneficiary output carry a
-single native asset entry under the configured USDM
-policy/token. All spent ADA, leftover USDM, and other
-native assets remain on the treasury leftover output.
+native asset entry under the configured USDM
+policy/token. The redeemer also carries the beneficiary
+lovelace because the pinned Sundae treasury validator
+must see treasury-funded min-UTxO as value leaving the
+treasury. Leftover USDM and other native assets remain
+on the treasury leftover output.
 -}
 disburseUsdmProgram
     :: DisburseIntentFields
     -> DisburseUsdmPayload
-    -> Coin
-    -- ^ lovelace deposit on the beneficiary output
     -> TxBuild q e ()
-disburseUsdmProgram f p beneficiaryLovelace = do
+disburseUsdmProgram f p = do
+    -- Output 0 is the treasury leftover. Output 1 is the
+    -- beneficiary. Peek index 1 before emitting either output so the
+    -- previous build iteration can feed the compensated payTo coin
+    -- into both the redeemer and leftover value without reordering
+    -- the transaction body.
+    beneficiaryLovelace <- peek (observeTxOutCoin 1)
     _ <- spend (difWalletUtxo f)
     collateral (difWalletUtxo f)
     let spendRedeemer =
             RawPlutusData $
-                disburseRedeemer
+                disburseUsdmRedeemer
                     (policyIdBytes (dupUsdmPolicy p))
                     (assetNameRawBytes (dupUsdmAsset p))
                     (dupAmountUsdm p)
+                    (unCoin beneficiaryLovelace)
     forM_ (difTreasuryUtxos f) $ \txin ->
         void (spendScript txin spendRedeemer)
     reference (difScopesDeployedAt f)
@@ -223,7 +233,7 @@ disburseUsdmProgram f p beneficiaryLovelace = do
         payTo
             (difTreasuryAddress f)
             ( MaryValue
-                (dupLeftoverLovelace p)
+                (subtractCoin (dupLeftoverLovelace p) beneficiaryLovelace)
                 ( leftoverAssets
                     (dupUsdmPolicy p)
                     (dupUsdmAsset p)
@@ -235,7 +245,7 @@ disburseUsdmProgram f p beneficiaryLovelace = do
         payTo
             (difBeneficiaryAddress f)
             ( MaryValue
-                beneficiaryLovelace
+                (Coin 0)
                 (singleAsset (dupUsdmPolicy p) (dupUsdmAsset p) (dupAmountUsdm p))
             )
     forM_ (difSigners f) requireSignature
@@ -251,6 +261,9 @@ singleAsset policy asset quantity =
         normalizeAssetMap $
             Map.singleton policy $
                 Map.singleton asset quantity
+
+subtractCoin :: Coin -> Coin -> Coin
+subtractCoin (Coin a) (Coin b) = Coin (a - b)
 
 leftoverAssets
     :: PolicyID -> AssetName -> Integer -> MultiAsset -> MultiAsset

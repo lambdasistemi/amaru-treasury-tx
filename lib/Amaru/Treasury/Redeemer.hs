@@ -12,6 +12,10 @@ recipes byte-for-byte:
   constructor 3, single-asset map. Mirrors
   [`make_redeemer_disburse.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/lib/make_redeemer_disburse.sh).
 
+* @disburseUsdmRedeemer@ — Sundae @TreasurySpendRedeemer.Disburse@,
+  constructor 3, carrying both USDM and the lovelace released
+  from the treasury for the beneficiary output's min-UTxO.
+
 * @reorganizeRedeemer@ — Sundae @TreasurySpendRedeemer.Reorganize@,
   constructor 0, empty fields. Mirrors
   [`make_redeemer_reorganize.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/lib/make_redeemer_reorganize.sh).
@@ -28,6 +32,7 @@ module Amaru.Treasury.Redeemer
     ( -- * Sundae treasury-spend redeemers
       disburseAdaRedeemer
     , disburseRedeemer
+    , disburseUsdmRedeemer
     , reorganizeRedeemer
 
       -- * SundaeSwap order redeemers
@@ -72,6 +77,34 @@ disburseRedeemer policy asset qty =
 -- | Convenience for ADA disbursements: empty policy + empty asset.
 disburseAdaRedeemer :: Integer -> Data
 disburseAdaRedeemer = disburseRedeemer "" ""
+
+{- | USDM disbursement redeemer including the lovelace released from
+the treasury for the beneficiary output's min-UTxO.
+
+The pinned Sundae treasury validator subtracts the redeemer @amount@
+from the treasury inputs and requires the remaining treasury outputs
+to match non-ADA assets exactly while only allowing additional ADA on
+the treasury output. A USDM-only redeemer therefore cannot authorize
+treasury ADA to leave for the beneficiary output deposit.
+-}
+disburseUsdmRedeemer
+    :: ByteString
+    -- ^ USDM minting-policy id
+    -> ByteString
+    -- ^ USDM asset name
+    -> Integer
+    -- ^ USDM quantity
+    -> Integer
+    -- ^ lovelace quantity released for beneficiary min-UTxO
+    -> Data
+disburseUsdmRedeemer policy asset qty lovelace =
+    Constr
+        3
+        [ Map
+            [ (B "", Map [(B "", I lovelace)])
+            , (B policy, Map [(B asset, I qty)])
+            ]
+        ]
 
 {- | @Constr 0 []@ — Sundae @Reorganize@.
 

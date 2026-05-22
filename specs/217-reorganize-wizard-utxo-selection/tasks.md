@@ -19,12 +19,12 @@ Commit subject:
 fix(reorganize-wizard): drop script-deploy UTxOs from treasury-fund selection
 ```
 
-- [ ] T001 — RED: add unit tests asserting (a) the new
+- [X] T001 — RED: add unit tests asserting (a) the new
   `queryFlatFunds` / `filterFundUtxos` helper drops
   reference-script-bearing UTxOs and (b) `resolveReorganize` mocked
   with a list including `treasuryDeployedAt` excludes that outref
   from `riTreasuryUtxos`. Both must fail on `origin/main`.
-- [ ] T002 — GREEN: add `queryFlatFunds` (and pure
+- [X] T002 — GREEN: add `queryFlatFunds` (and pure
   `filterFundUtxos` helper) to `Cli/Common.hs`; wire
   `sreQueryTreasuryUtxos` (`Cli/ReorganizeWizard.hs:379`) and
   `reEnvQueryTreasuryUtxos` (`Cli/SwapCommon.hs:170`) to it. RED

@@ -74,6 +74,7 @@ import Amaru.Treasury.Backend.N2C
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , queryFlat
+    , queryFlatFunds
     , resolveNetworkName
     )
 import Amaru.Treasury.IntentJSON
@@ -376,7 +377,7 @@ mkLiveEnv backend =
     ReorganizeResolverEnv
         { sreReadMetadata = readMetadataSafely
         , sreQueryWalletUtxos = queryFlat backend
-        , sreQueryTreasuryUtxos = queryFlat backend
+        , sreQueryTreasuryUtxos = queryFlatFunds backend
         , sreComputeUpperBound = \choice -> do
             r <- queryUpperBoundSlot backend choice
             pure (fmap unwrapSlot r)

@@ -27,7 +27,9 @@ treasury candidate pool):
 - `stake-reward-init-wizard` (both sub-actions)
 - `governance-withdrawal-init-wizard` (both sub-actions)
 - `reorganize-wizard` (wallet pool only; treasury inputs are
-  metadata-driven, not selection-driven)
+  metadata-driven and downstream-batched — see
+  [Reorganize batching](#reorganize-batching-and-exclude-utxo)
+  for how to influence the treasury subset via the same flag)
 
 ## Why this exists
 
@@ -158,8 +160,54 @@ auto-detection.
   in this iteration. Treasury inputs are selected per-scope; forced
   inclusion semantics for the treasury pool needs its own design
   pass.
-- Treasury-side filtering for `reorganize-wizard` — reorganize
-  consumes ALL UTxOs at the per-scope treasury address (no
-  selection), so `--exclude-utxo` cannot be applied there without
-  changing reorganize semantics; the flag filters the wallet pool
-  only.
+- Treasury-side filtering for `reorganize-wizard` — the wizard
+  itself still emits every treasury UTxO it finds, but the
+  downstream auto-batcher in `tx-build` picks the largest fitting
+  subset and surfaces the rest as residue (see
+  [Reorganize batching](#reorganize-batching-and-exclude-utxo)
+  below). `--exclude-utxo` on the wizard CLI still filters only the
+  wallet pool; for surgical treasury-side exclusion (e.g. parking
+  a high-value UTxO for a different operation), use `--exclude-utxo`
+  on the wallet side and let the treasury batcher pick on the
+  intent's pre-shrunk treasury list — or hand-edit the intent JSON
+  before `tx-build` for one-off cases.
+
+## Reorganize batching and exclude-utxo
+
+`reorganize-wizard` enumerates every UTxO at the per-scope treasury
+address into the emitted intent. `tx-build`, when it sees an action
+= reorganize whose treasury input set exceeds the per-tx
+`maxTxExUnits` ceiling, runs a **projected linear descent** (a
+closed-form sqrt projection of the largest @N@ whose cost would
+fit, then linear step-down by 1 against real Plutus evaluations
+until the empirical cliff is found) and rebuilds with the
+largest-value @N@-subset. The dropped outrefs are logged as
+`reorganize: batched N of M UTxOs (R residue: …)` and recorded in
+`brResidualTreasuryInputs`. The operator chains another wizard run
+on the residue after this batch settles on-chain.
+
+Two layers of control compose cleanly:
+
+1. **Wizard `--exclude-utxo` (wallet pool)** — surgically pull a
+   wallet UTxO out of the candidate set before the wizard picks
+   fuel + collateral.
+2. **`tx-build` batcher (treasury pool)** — automatic; picks the
+   largest-value @N@-subset that fits the per-tx ceiling, no
+   operator-side knob.
+
+If you need surgical exclusion on the **treasury** side (e.g. keep
+a specific high-value UTxO out of this batch so it goes into the
+next round, or skip a UTxO that's already pending in another
+build), there is no operator flag in this iteration. Two
+workarounds:
+
+- Hand-edit `intent.json` before `tx-build` — remove the offending
+  outref from `.reorganize.treasuryUtxos`. The batcher then runs
+  over the shrunk set as usual.
+- Run the wizard, capture the residue from `tx-build`'s log, and
+  let the next wizard run pick it up naturally on the next chain
+  query.
+
+A first-class `--exclude-utxo` for the treasury pool of
+`reorganize-wizard` is a possible follow-up; file an issue if it
+becomes a frequent need.

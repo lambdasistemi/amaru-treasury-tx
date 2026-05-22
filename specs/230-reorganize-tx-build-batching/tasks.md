@@ -31,10 +31,10 @@ Commit subject:
 feat(reorganize): tx-build auto-truncates to largest fitting subset
 ```
 
-- [ ] T003 — RED: build-path test with a synthetic ChainContext +
+- [X] T003 — RED: build-path test with a synthetic ChainContext +
   inflated exec units asserts the runner truncates and surfaces a
   non-empty `brResidualTreasuryInputs`.
-- [ ] T004 — GREEN: refactor `runReorganizeAction` into
+- [X] T004 — GREEN: refactor `runReorganizeAction` into
   `pickInputs` + `buildOnce`; iteration cap = 3; new typed error
   `ReorganizeBatchUnconverged`.
 
@@ -46,23 +46,23 @@ Commit subject:
 feat(tx-build): log selected vs residual treasury UTxOs on reorganize
 ```
 
-- [ ] T005 — Print the residue trace line on
+- [X] T005 — Print the residue trace line on
   `Cli/TxBuild.hs`. Optional `--residue-out PATH` if time allows;
   decide at implementation.
 
 ## S4 — Live mainnet verification
 
-- [ ] T006 — Run the operator command on `network_compliance` against
+- [X] T006 — Run the operator command on `network_compliance` against
   `/code/cardano-mainnet/ipc/node.socket`. Inline evidence in the PR
   body (trace line, tx-inspect, cbor blake2b).
-- [ ] T007 — Inline a synthetic "second batch" demo against the
+- [X] T007 — Inline a synthetic "second batch" demo against the
   residue subset (no need to actually settle the first batch —
   just re-run the wizard on the chain state minus the selected
   inputs to confirm idempotence shape).
 
 ## S5 — Finalize (gated on operator approval)
 
-- [ ] T008 — `./gate.sh`, `git rm gate.sh`, push, `gh pr ready 231`.
+- [X] T008 — `./gate.sh`, `git rm gate.sh`, push, `gh pr ready 231`.
   **HOLD HERE.** Operator must explicitly approve the live-mainnet
   evidence before merge. Do not repeat #218's unilateral merge.
 

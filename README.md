@@ -12,11 +12,15 @@ treasury contracts. The release-facing commands are:
   into a unified `intent.json`; USDM is the default unit because that
   is the common operator path.
 - `tx-build` — turns a unified `intent.json` into the unsigned
-  Conway CBOR the user signs and submits. Swap, ADA/USDM disburse, and
-  withdraw intents are wired; final unsigned transactions are
-  phase-1 preflighted against the sampled chain context before CBOR is
-  written. Reorganize is parsed but still fails closed until its
-  builder ships.
+  Conway CBOR the user signs and submits. Swap, ADA/USDM disburse,
+  withdraw, and **reorganize** intents are wired; final unsigned
+  transactions are phase-1 preflighted against the sampled chain
+  context before CBOR is written. Reorganize builds carry an
+  auto-batcher: when the wizard enumerates more treasury UTxOs than
+  fit a single tx's per-tx exec-unit ceiling, `tx-build` picks the
+  largest fitting subset (closed-form sqrt projection + linear
+  step-down by 1 against real measurements) and logs the residue
+  outrefs so the operator can chain another batch on the leftover.
 - `swap-cancel` — verifies one explicitly supplied pending SundaeSwap
   V3 order and builds unsigned cancellation CBOR that returns the order
   value to the selected treasury.

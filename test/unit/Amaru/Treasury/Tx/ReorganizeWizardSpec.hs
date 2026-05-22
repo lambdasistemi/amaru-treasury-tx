@@ -289,7 +289,7 @@ sampleAnswers =
         , rwaDestinationLabel = Nothing
         , rwaEvent = Nothing
         , rwaLabel = Nothing
-        , rwaFundingSeedTxIn = fundingSeedTxIn
+        , rwaFundingSeedTxIn = Just fundingSeedTxIn
         }
 
 happyResolverEnv :: ReorganizeResolverEnv Identity

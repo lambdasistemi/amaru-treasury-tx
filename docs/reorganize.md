@@ -44,7 +44,6 @@ amaru-treasury-tx --network mainnet reorganize-wizard \
   --metadata metadata.json \
   --scope <scope> \
   --wallet-addr <operator-wallet-bech32> \
-  --funding-seed-txin <txid#ix> \
   --out reorganize.intent.json
 ```
 
@@ -53,19 +52,21 @@ Required arguments:
 - `--scope NAME` — `core_development`, `ops_and_use_cases`,
   `network_compliance`, `middleware`, or `contingency`.
 - `--wallet-addr BECH32` — operator wallet, source of fee + collateral.
-- `--funding-seed-txin TXID#IX` — UTxO at `--wallet-addr` to use as
-  fuel and collateral.
 - `--out PATH` — where to write the `intent.json`.
 
 Optional arguments:
+
+- `--funding-seed-txin TXID#IX` — operator-named wallet UTxO to use
+  for fuel + collateral. When omitted, the wizard auto-picks the
+  largest pure-ADA UTxO at `--wallet-addr` (same shape as
+  `disburse-wizard` / `withdraw-wizard` / `swap-wizard`). Pass an
+  explicit outref when you want to pin a specific UTxO — typically
+  to avoid colliding with a parallel in-flight build.
 
 - `--validity-hours HOURS` — explicit upper validity bound. Defaults
   to the chain's current safe horizon.
 - `--description / --justification / --label / …` — overrides for
   the on-chain CIP-1694 rationale metadata.
-- `--exclude-utxo TXID#IX` (repeatable) — drop the named outref from
-  the **wallet** candidate set before the wizard picks fuel.
-- `--extra-tx-in TXID#IX` (repeatable) — force an extra wallet input.
 
 The wizard emits an `intent.json` whose `reorganize.treasuryUtxos`
 field lists **every** UTxO at the scope's treasury script address

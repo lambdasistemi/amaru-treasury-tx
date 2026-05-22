@@ -43,7 +43,7 @@ import Test.Hspec
 
 import Amaru.Treasury.Cli.Common (GlobalOpts (..))
 import Amaru.Treasury.Cli.ReorganizeWizard
-    ( ReorganizeWizardOpts
+    ( ReorganizeWizardOpts (..)
     , reorganizeWizardOptsP
     , runReorganizeWizardEither
     , validateOutPath
@@ -267,7 +267,6 @@ us3MissingFlagSpec = do
         cases =
             [ ("--wallet-addr", "--wallet-addr")
             , ("--metadata", "--metadata")
-            , ("--funding-seed-txin", "--funding-seed-txin")
             , ("--out", "--out")
             , ("--scope", "--scope")
             ]
@@ -279,6 +278,21 @@ us3MissingFlagSpec = do
                 body `shouldSatisfy` (flagName `isInfixOf`)
         )
         cases
+    it
+        "accepts a parse without --funding-seed-txin (auto-pick \
+        \fallback; sibling-wizard parity with disburse / withdraw \
+        \/ swap)"
+        $ do
+            case parseArgs (omitFlag "--funding-seed-txin") of
+                Success opts ->
+                    rwoFundingSeedTxIn opts `shouldBe` Nothing
+                other ->
+                    expectationFailure
+                        ( "expected Success on missing \
+                          \--funding-seed-txin, got: "
+                            <> show
+                                (renderFailureBody other)
+                        )
 
 -- ----------------------------------------------------
 -- US4 — --out parent missing rejected before work

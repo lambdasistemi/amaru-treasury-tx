@@ -137,7 +137,11 @@ data ReorganizeWizardAnswers = ReorganizeWizardAnswers
     , rwaDestinationLabel :: !(Maybe Text)
     , rwaEvent :: !(Maybe Text)
     , rwaLabel :: !(Maybe Text)
-    , rwaFundingSeedTxIn :: !TxIn
+    , rwaFundingSeedTxIn :: !(Maybe TxIn)
+    -- ^ Optional operator-named wallet UTxO for fuel + collateral.
+    --     When 'Nothing', the resolver's wallet auto-pick (the same
+    --     'selectWallet' biggest-pure-ADA selector every other
+    --     wizard uses) is forwarded into the emitted intent.
     }
     deriving stock (Eq, Show)
 
@@ -676,6 +680,16 @@ reorganizeToIntent env ans = do
             )
     treasuryUtxoTxIns <-
         parseTreasuryUtxos (reTreasuryUtxos env)
+    -- When the operator does not supply --funding-seed-txin, fall
+    -- back to the resolver's wallet auto-pick (sibling parity with
+    -- disburse / withdraw / swap). 'WalletSelection.wsTxIn' is the
+    -- selected outref in @txid#ix@ text form; parse it.
+    fundingTxIn <- case rwaFundingSeedTxIn ans of
+        Just t -> Right t
+        Nothing ->
+            wrapParse
+                "walletUtxo"
+                (txInFromText (wsTxIn (reWalletSelection env)))
     let intent =
             TreasuryIntent
                 { tiSAction = SReorganize
@@ -684,7 +698,7 @@ reorganizeToIntent env ans = do
                 , tiWallet =
                     mkWalletReorganize
                         (reWalletSelection env)
-                        (rwaFundingSeedTxIn ans)
+                        fundingTxIn
                 , tiScope =
                     mkScopeReorganize
                         env
@@ -697,8 +711,7 @@ reorganizeToIntent env ans = do
                     mkRationaleReorganize ans
                 , tiPayload =
                     ReorganizeInputs
-                        { riWalletUtxo =
-                            rwaFundingSeedTxIn ans
+                        { riWalletUtxo = fundingTxIn
                         , riTreasuryUtxos =
                             treasuryUtxoTxIns
                         , riTreasuryAddress = treasuryAddr

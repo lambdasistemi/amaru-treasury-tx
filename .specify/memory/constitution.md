@@ -107,28 +107,64 @@ requires a separate, deliberate amendment to this constitution.
 
 Every Amaru treasury `disburse` transaction MUST anchor its supporting
 documents on IPFS and surface them in the rationale `body.references[]`
-per the SundaeSwap TOM spec (uri/@type/label, with the `ipfs://` URI
-split convention established by mainnet tx
-[d6c14625][example-tx-cid]).
+per the SundaeSwap TOM spec (uri/@type/label). The repository-root file
+`vendors.yaml` is the source of truth for each vendor's canonical legal
+name, jurisdiction, role (payee, beneficiary, or both), and — for
+payees — the verified on-chain address.
 
-**Minimum evidence set per disburse:**
+#### Two vendor roles
 
-1. **Contract** — the signed engagement contract with the beneficiary
-   (IPFS-pinned, `@type: "Other"`, label `"Contract - <Beneficiary>"`).
-2. **Invoice** — the invoice the disburse is paying against
-   (IPFS-pinned, `@type: "Other"`, label `"Invoice #<N> - <Beneficiary>"`).
-3. **Monthly-plan acceptance** — for contracts with a monthly review
-   cycle, one document proving the beneficiary accepted the current
-   month's plan/scope before this disburse was built (IPFS-pinned,
-   `@type: "Other"`, label `"<MonthYear> plan acceptance - <Beneficiary>"`).
-   **Yearly-contract disbursements are exempt** from this third item
-   (e.g. Antithesis). Whether a contract is monthly or yearly MUST be
-   recorded in the beneficiary's contract document itself.
+1. **Payee** — the entity that receives the on-chain disburse. Bound
+   to a single verified on-chain address. All disburses from the
+   2026 `network_compliance` scope are paid to the
+   **Crypto Accounting Group** (CAG) payee.
+2. **Beneficiary** — the entity whose work is being paid for. May
+   differ from the payee (e.g., Cyber Castellum Corporation,
+   Antithesis Operations LLC). When payee == beneficiary, both roles
+   collapse into a single vendor's evidence set.
 
-A `disburse` tx built without the minimum set above for its contract
-class is a constitution violation and MUST NOT be submitted.
+The on-chain disburse destination address MUST equal the registered
+payee's verified address from `vendors.yaml`. A disburse to any other
+address is a constitution violation and MUST NOT be submitted.
 
-[example-tx-cid]: https://cardanoscan.io/transaction/d6c14625d5b017a1e86f219cb12a887c770076a0e8b2b334bb4eac03533eff7d
+#### Minimum evidence set per disburse
+
+**Payee identity (always required, 2 docs):**
+
+1. **Payee engagement contract** — the contract between AMC and the
+   payee (e.g., the CAG Master Service Agreement).
+2. **Payee address-of-record proof** — a signed artifact (typically a
+   signed email or notarized confirmation) proving the on-chain
+   destination address belongs to the named payee.
+
+**Beneficiary identity (always required, 2 docs):**
+
+3. **Beneficiary engagement contract** — the contract between AMC and
+   the beneficiary (the actual service-providing entity).
+4. **Beneficiary current invoice** — the invoice that triggers this
+   disburse.
+
+**Cycle review (required when applicable, 1 doc):**
+
+5. **Beneficiary cycle-review acceptance** — for beneficiary contracts
+   with a periodic review cycle (monthly, bi-monthly, quarterly, etc.),
+   the latest cycle's plan/review evidence.
+
+When payee == beneficiary the two contracts collapse into one and
+slots 1 and 3 merge; minimum becomes 3 docs (4 with review). When
+they differ (the common case for this arc), minimum is 4 docs (5
+with review).
+
+#### Canonical legal names
+
+Reference labels MUST use the canonical legal name from `vendors.yaml`
+verbatim (e.g., `CYBER CASTELLUM CORPORATION`, not "Cyber Castellum"
+or "CC"). Shorthand, abbreviations, and informal names are prohibited.
+
+A disburse tx built without the minimum set above, or with a
+destination address not matching the registered payee, or with
+non-canonical vendor labels, is a constitution violation and MUST
+NOT be submitted.
 
 ## Technology Constraints
 
@@ -173,4 +209,4 @@ The `/speckit.plan` step gates all implementation work against these
 principles; any deviation is recorded in the plan's
 "Constitution Compliance" section.
 
-**Version**: 0.3.0 | **Ratified**: 2026-05-04 | **Last Amended**: 2026-05-22
+**Version**: 0.4.0 | **Ratified**: 2026-05-04 | **Last Amended**: 2026-05-22

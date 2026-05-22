@@ -4,6 +4,9 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+* **constitution:** amend Principle VIII v2 — payee+beneficiary model with payee on-chain address bound to `vendors.yaml`; introduces 4-doc minimum evidence set (5 with cycle review) when payee ≠ beneficiary (#210)
+* **registry:** add `vendors.yaml` at repository root as the source of truth for vendor canonical legal names, jurisdictions, roles, and payee on-chain addresses (#210)
+
 ## [0.2.12.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.11.0...v0.2.12.0) (2026-05-21)
 
 ### Features

@@ -328,16 +328,16 @@ away from ready.
 
 ### Tasks
 
-- [ ] **T047 [S6]** Run the resolve-ticket finalization audit
+- [X] **T047 [S6]** Run the resolve-ticket finalization audit
   (specs match delivered behaviour, every commit carries `Tasks:`
   trailer, all checkboxes `[X]`, README + docs aligned, PR body
   current, CI green).
-- [ ] **T048 [S6]** `git rm gate.sh`; commit subject
+- [X] **T048 [S6]** `git rm gate.sh`; commit subject
   `chore: drop gate.sh (ready for review)`; empty `Tasks:` trailer
   (finalization is not a Tasks-tracked slice).
-- [ ] **T049 [S6]** Push branch; `gh pr ready 197`; confirm PR moves
+- [X] **T049 [S6]** Push branch; `gh pr ready 197`; confirm PR moves
   to ready.
-- [ ] **T050 [S6]** (orchestrator-only) Final PR body update naming
+- [X] **T050 [S6]** (orchestrator-only) Final PR body update naming
   the merged-ready state, the release version, and the deliverables
   rundown for the reviewer.
 

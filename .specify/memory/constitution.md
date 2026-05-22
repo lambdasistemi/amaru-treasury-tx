@@ -142,10 +142,26 @@ address is a constitution violation and MUST NOT be submitted.
 3. **Beneficiary engagement contract** — the contract between AMC and
    the beneficiary (the actual service-providing entity).
 4. **Beneficiary current invoice** — the invoice that triggers this
-   disburse. The invoice MAY be redacted (counter-party-blind /
-   dollar-amount-blind portions removed) provided the redacted
-   version still establishes amount, period, and beneficiary identity
+   disburse. The invoice MAY be redacted (counter-party-blind
+   portions removed) provided the redacted version still establishes
+   the disburse amount, the period, and the beneficiary identity
    legibly. The redacted document is what gets pinned to IPFS.
+
+   **Amount cross-check (NON-NEGOTIABLE).** Before signing, the
+   operator MUST manually compare the disburse-wizard's `--amount`
+   (in human USDM units, accounting for the 1e-6 USDM scaling) to
+   the numeric amount stated in the pinned invoice PDF. The two
+   MUST match exactly. The redaction guidance above is specifically
+   written so the invoice amount remains legible after redaction.
+   Mismatches — including "spend all" / "spend remaining balance"
+   shortcuts that bypass the invoice number — are a constitution
+   violation; the operator must re-build with the corrected amount
+   or, if a deliberate over-or-under-payment is needed, draft a
+   separate justification paragraph in the rationale naming the
+   reason and the dollar delta (e.g., *"Disbursing 405 000 USDM
+   vs invoice INV-635's 400 000 USDM: 5 000 USDM advance for
+   June-July 2026 retainer per Antithesis email
+   2026-05-21."*). Silent deviation is forbidden.
 
 **Cycle review (required when applicable, 1 doc):**
 
@@ -262,4 +278,4 @@ The `/speckit.plan` step gates all implementation work against these
 principles; any deviation is recorded in the plan's
 "Constitution Compliance" section.
 
-**Version**: 0.5.0 | **Ratified**: 2026-05-04 | **Last Amended**: 2026-05-22
+**Version**: 0.5.1 | **Ratified**: 2026-05-04 | **Last Amended**: 2026-05-22

@@ -30,7 +30,7 @@ This spec mechanically pins three properties:
 module Amaru.Treasury.Smoke.CliDevnetSmokeSpec (spec) where
 
 import Control.Monad (forM_, unless, when)
-import Data.List (isInfixOf)
+import Data.List (isInfixOf, isPrefixOf)
 import Data.Maybe (catMaybes)
 import System.Directory
     ( doesFileExist
@@ -67,6 +67,25 @@ legacyGovernanceLibPath =
 shippedGovernanceCliPath :: FilePath
 shippedGovernanceCliPath =
     "lib/Amaru/Treasury/Cli/GovernanceWithdrawalInitWizard.hs"
+
+{- | Phase tokens the CLI DevNet smoke recognizes.
+
+The list is the canonical allow-list of phase strings the
+@scripts\/smoke\/smoke.sh@ entrypoint and the
+@app\/devnet-cli-smoke-host\/Main.hs@ host dispatch must
+both keep in sync. Issue #87 adds @\"reorganize\"@.
+-}
+recognizedPhaseTokens :: [String]
+recognizedPhaseTokens =
+    [ "scaffold"
+    , "preflight"
+    , "vault-preflight"
+    , "registry-stake"
+    , "governance"
+    , "disburse"
+    , "full"
+    , "reorganize"
+    ]
 
 {- | Forbidden references for product (non-test) smoke files.
 
@@ -478,6 +497,235 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
                 src <- mustRead legacyGovernanceLibPath
                 src `shouldSatisfyContain` "submitVoteTx"
 
+    describe "reorganize CLI surface (#87)" $ do
+        it "smoke.sh print_help mentions the reorganize phase" $ do
+            src <- mustRead smokeScriptPath
+            printHelpFnBody src `shouldSatisfyContain` "reorganize"
+
+        it "smoke.sh main case has a reorganize) arm" $ do
+            src <- mustRead smokeScriptPath
+            let caseBlock = mainPhaseCaseBlock src
+            caseBlock `shouldSatisfyContain` "reorganize)"
+
+        it "reorganize) arm emits the MISSING_REORGANIZE_BUILDER diagnostic" $ do
+            src <- mustRead smokeScriptPath
+            let arm = reorganizeArm src
+            arm `shouldSatisfyContain` "MISSING_REORGANIZE_BUILDER"
+
+        it
+            "reorganize) arm checks reorganize-wizard --help via $AMARU_EXE"
+            $ do
+                src <- mustRead smokeScriptPath
+                let arm = reorganizeArm src
+                arm `shouldSatisfyContain` "reorganize-wizard --help"
+
+        it
+            "MISSING_REORGANIZE_BUILDER fires before require_inside_devnet \
+            \in the reorganize arm"
+            $ do
+                src <- mustRead smokeScriptPath
+                let arm = reorganizeArm src
+                case ( substringOffset "MISSING_REORGANIZE_BUILDER" arm
+                     , substringOffset "require_inside_devnet" arm
+                     ) of
+                    (Just m, Just r) ->
+                        unless (m < r) $
+                            expectationFailure $
+                                "expected MISSING_REORGANIZE_BUILDER offset ("
+                                    <> show m
+                                    <> ") to be strictly less than "
+                                    <> "require_inside_devnet offset ("
+                                    <> show r
+                                    <> ") inside the reorganize) arm"
+                    (Nothing, _) ->
+                        expectationFailure $
+                            "MISSING_REORGANIZE_BUILDER absent from "
+                                <> "reorganize) arm"
+                    (_, Nothing) ->
+                        expectationFailure $
+                            "require_inside_devnet absent from "
+                                <> "reorganize) arm (S1 scaffold must "
+                                <> "still chain through the host)"
+
+        it
+            "recognizedPhaseTokens contains reorganize and every token has \
+            \a smoke.sh case arm"
+            $ do
+                "reorganize" `shouldSatisfy` (`elem` recognizedPhaseTokens)
+                src <- mustRead smokeScriptPath
+                let caseBlock = mainPhaseCaseBlock src
+                forM_ recognizedPhaseTokens $ \token ->
+                    caseBlock `shouldSatisfyContain` (token <> ")")
+
+        it "host Main.hs recognizes the reorganize phase string" $ do
+            src <- mustRead hostMainPath
+            src `shouldSatisfyContain` "\"reorganize\""
+
+    describe "reorganize live phase body (#87 S2)" $ do
+        it
+            "smoke.sh defines a reorganize_phase function that drives \
+            \reorganize-wizard --network devnet and tx-build --intent"
+            $ do
+                src <- mustRead smokeScriptPath
+                let body = reorganizePhaseFnBody src
+                body `shouldSatisfyContain` "reorganize-wizard"
+                body `shouldSatisfyContain` "--network devnet"
+                body `shouldSatisfyContain` "tx-build --intent"
+
+        it
+            "reorganize_phase enforces INSUFFICIENT_TREASURY_UTXOS via \
+            \treasury-inspect"
+            $ do
+                src <- mustRead smokeScriptPath
+                let body = reorganizePhaseFnBody src
+                body `shouldSatisfyContain` "INSUFFICIENT_TREASURY_UTXOS"
+                body `shouldSatisfyContain` "treasury-inspect"
+
+        it "reorganize_phase surfaces REORGANIZE_BUILD_FAILED" $ do
+            src <- mustRead smokeScriptPath
+            let body = reorganizePhaseFnBody src
+            body `shouldSatisfyContain` "REORGANIZE_BUILD_FAILED"
+
+        it "reorganize_phase writes the documented run-dir layout" $ do
+            src <- mustRead smokeScriptPath
+            let body = reorganizePhaseFnBody src
+            forM_
+                [ "phases/reorganize/intent.json"
+                , "phases/reorganize/reorganize.unsigned.cbor"
+                , "phases/reorganize/build.log"
+                , "phases/reorganize/summary.json"
+                ]
+                $ \needle -> body `shouldSatisfyContain` needle
+
+        it "full_phase chains reorganize_phase after disburse_phase" $ do
+            src <- mustRead smokeScriptPath
+            let body = fullPhaseFnBody src
+            body `shouldSatisfyContain` "reorganize_phase"
+
+        it "write_full_summary carries reorganizeSummary" $ do
+            src <- mustRead smokeScriptPath
+            let body = writeFullSummaryFnBody src
+            body `shouldSatisfyContain` "reorganizeSummary"
+
+        it
+            "host main.hs reorganize arm invokes \
+            \runReorganizeAssertionsIfPresent"
+            $ do
+                src <- mustRead hostMainPath
+                src `shouldSatisfyContain` "runReorganizeAssertionsIfPresent"
+                let arm = reorganizeHostDispatch src
+                arm `shouldSatisfyContain` "runReorganizeAssertionsIfPresent"
+
+        it
+            "host main.hs carries the ASSET_PRESERVATION_FAILED \
+            \diagnostic literal"
+            $ do
+                src <- mustRead hostMainPath
+                src `shouldSatisfyContain` "ASSET_PRESERVATION_FAILED"
+
+    describe "reorganize exec-units assertion (#87 S3)" $ do
+        it
+            "reorganize_phase invokes tx-validate with --input \
+            \and --n2c-socket-path"
+            $ do
+                src <- mustRead smokeScriptPath
+                let body = reorganizePhaseFnBody src
+                body `shouldSatisfyContain` "tx-validate"
+                body `shouldSatisfyContain` "--input"
+                body `shouldSatisfyContain` "--n2c-socket-path"
+
+        it
+            "reorganize_phase captures tx-validate output to the \
+            \run-dir"
+            $ do
+                src <- mustRead smokeScriptPath
+                let body = reorganizePhaseFnBody src
+                body `shouldSatisfyContain` "phases/reorganize/tx-validate.json"
+
+        it
+            "host Main.hs carries the EXEC_UNITS_OVER_LIMIT \
+            \diagnostic literal"
+            $ do
+                src <- mustRead hostMainPath
+                src `shouldSatisfyContain` "EXEC_UNITS_OVER_LIMIT"
+
+        it
+            "host Main.hs carries the EXEC_UNITS_VALIDATOR_UNAVAILABLE \
+            \diagnostic literal"
+            $ do
+                src <- mustRead hostMainPath
+                src `shouldSatisfyContain` "EXEC_UNITS_VALIDATOR_UNAVAILABLE"
+
+        it
+            "host Main.hs writes the execUnitsVerdict key into \
+            \summary.json"
+            $ do
+                src <- mustRead hostMainPath
+                src `shouldSatisfyContain` "execUnitsVerdict"
+
+        it
+            "host Main.hs loads pparams.maxTxExecutionUnits via the \
+            \project's queryProtocolParams wrapper"
+            $ do
+                src <- mustRead hostMainPath
+                src `shouldSatisfyContain` "queryProtocolParamsH"
+                src `shouldSatisfyContain` "maxTxExecutionUnits"
+
+        it
+            "full_phase calls reorganize_phase before any direct \
+            \disburse_phase invocation, with at most one direct \
+            \disburse_phase call"
+            $ do
+                src <- mustRead smokeScriptPath
+                let body = fullPhaseFnBody src
+                    startsCall w l =
+                        let trimmed = dropWhile (== ' ') l
+                        in  (w <> " ") `isPrefixOf` trimmed
+                                || trimmed == w
+                    disburseCalls =
+                        length
+                            ( filter
+                                (startsCall "disburse_phase")
+                                (lines body)
+                            )
+                disburseCalls `shouldSatisfy` (<= 1)
+                let reorgOff =
+                        substringOffset "reorganize_phase" body
+                    disburseOff =
+                        substringOffset "disburse_phase" body
+                case (reorgOff, disburseOff) of
+                    (Nothing, _) ->
+                        expectationFailure
+                            "reorganize_phase absent from full_phase body"
+                    (Just _, Nothing) -> pure ()
+                    (Just r, Just d) ->
+                        unless (r < d) $
+                            expectationFailure $
+                                "reorganize_phase at offset "
+                                    <> show r
+                                    <> " should precede disburse_phase "
+                                    <> "at offset "
+                                    <> show d
+                                    <> " inside full_phase body"
+
+        it
+            "write_full_summary surfaces the reorganize exec-units \
+            \verdict in the unified summary"
+            $ do
+                src <- mustRead smokeScriptPath
+                let body = writeFullSummaryFnBody src
+                body `shouldSatisfyContain` "execUnitsVerdict"
+
+    describe "reorganize treasury-utxo count keying (#87 T020)" $ do
+        it
+            "reorganize_phase keys the treasury-UTxO count on \
+            \.treasuryUtxos (not the wrong .utxos key from S2)"
+            $ do
+                src <- mustRead smokeScriptPath
+                let body = reorganizePhaseFnBody src
+                body `shouldSatisfyContain` ".treasuryUtxos"
+                body `shouldSatisfyNotContain` ".utxos[]?]"
+
 -- ---------------------------------------------------------------------
 -- Helpers
 -- ---------------------------------------------------------------------
@@ -531,6 +779,96 @@ sectionBetween start end =
         . takeWhile (not . (end `isInfixOf`))
         . dropWhile (not . (start `isInfixOf`))
         . lines
+
+{- | Slice the body of the @print_help()@ shell function out of
+@scripts/smoke/smoke.sh@. Returns every line between the opening
+@print_help() {@ and the standalone closing @}@ line, including
+the heredoc body — which is what holds the @--phase <name>@
+documentation we want to assert on.
+-}
+printHelpFnBody :: String -> String
+printHelpFnBody =
+    unlines
+        . takeWhile (/= "}")
+        . drop 1
+        . dropWhile (not . ("print_help() {" `isInfixOf`))
+        . lines
+
+{- | Slice the main @case "$phase"@ block out of
+@scripts/smoke/smoke.sh@. There are two such case statements
+in the file (one in @preflight_for_phase@, one in @main@); this
+helper anchors on @main() {@ first so it returns the @main@
+switch and not the preflight one.
+-}
+mainPhaseCaseBlock :: String -> String
+mainPhaseCaseBlock src =
+    let mainBody = sectionBetween "main() {" "main \"$@\"" src
+    in  sectionBetween "case \"$phase\" in" "esac" mainBody
+
+{- | Slice the @reorganize)@ arm out of the main @case "$phase"@
+block in @scripts/smoke/smoke.sh@. Returns the text from the line
+containing @reorganize)@ up to (but not including) the next line
+containing @;;@.
+-}
+reorganizeArm :: String -> String
+reorganizeArm src =
+    sectionBetween "reorganize)" ";;" (mainPhaseCaseBlock src)
+
+{- | Zero-based character offset of the first occurrence of
+@needle@ in @haystack@, or @Nothing@ if absent.
+-}
+substringOffset :: String -> String -> Maybe Int
+substringOffset needle = go 0
+  where
+    go _ [] = Nothing
+    go i s
+        | needle `isPrefixOf` s = Just i
+        | otherwise = case s of
+            (_ : cs) -> go (i + 1) cs
+            [] -> Nothing
+
+{- | Slice the body of the @reorganize_phase()@ shell function out of
+@scripts/smoke/smoke.sh@. Returns every line between the opening
+@reorganize_phase() {@ line and the standalone closing @}@ line.
+-}
+reorganizePhaseFnBody :: String -> String
+reorganizePhaseFnBody =
+    unlines
+        . takeWhile (/= "}")
+        . drop 1
+        . dropWhile (not . ("reorganize_phase() {" `isInfixOf`))
+        . lines
+
+{- | Slice the body of the @full_phase()@ shell function out of
+@scripts/smoke/smoke.sh@.
+-}
+fullPhaseFnBody :: String -> String
+fullPhaseFnBody =
+    unlines
+        . takeWhile (/= "}")
+        . drop 1
+        . dropWhile (not . ("full_phase() {" `isInfixOf`))
+        . lines
+
+{- | Slice the body of the @write_full_summary()@ shell function
+out of @scripts/smoke/smoke.sh@.
+-}
+writeFullSummaryFnBody :: String -> String
+writeFullSummaryFnBody =
+    unlines
+        . takeWhile (/= "}")
+        . drop 1
+        . dropWhile (not . ("write_full_summary() {" `isInfixOf`))
+        . lines
+
+{- | Slice the @\"reorganize\"@ dispatch arm out of the host
+@Main.hs@ phase dispatch. Returns the text from the line containing
+@\"reorganize\" -> @ up to (but not including) the next line
+containing the catch-all @_ -> case@ arm.
+-}
+reorganizeHostDispatch :: String -> String
+reorganizeHostDispatch =
+    sectionBetween "\"reorganize\" ->" "_ -> case"
 
 witnessCommandBlocks :: String -> [String]
 witnessCommandBlocks = go . lines

@@ -199,38 +199,46 @@ added or modified — the executable surface is exercised, not extended).
 
 ## Clarifications
 
-### Open Clarification 1 — CAG `onchain_address` resolution
+### Clarification 1 — CAG `onchain_address` (resolved 2026-05-22)
 
-`vendors.yaml` currently lists
-`onchain_address: <TBD-CAG-BECH32>`. The disburse cannot be built
-without a concrete bech32 destination. **Folded into this PR per
-operator decision (2026-05-22):** an S0 commit on this branch
-replaces the placeholder with the resolved bech32 once the operator
-supplies it. `scripts/build-may-cc-disburse.sh` refuses to print
-while the placeholder is still in place.
+`vendors.yaml` originally listed `onchain_address: <TBD-CAG-BECH32>`.
+Resolved by reading the address-of-record proof email pinned at
+`ipfs://bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm`
+("Re: Amaru - CAG Address confirmation - Antithesis Invoice"), in
+which the same 103-character mainnet base address appears four times:
 
-### Open Clarification 2 — PR #197 (disburse-wizard `--reference-*`) is still draft
+```
+addr1q8qrds2nnx7clx3kcpp2l0eu45twmdcahsfu9m0xcwy59j6xz3vs0hnfaz9nhje8z34kfnds4jyk7hs6dnrag6e2lfgqtyf4rl
+```
+
+Folded into this PR via `fix(vendors): resolve crypto_accounting_group
+onchain_address`. `scripts/build-may-cc-disburse.sh` now succeeds and
+emits this address as `--beneficiary-addr`.
+
+### Clarification 2 — PR #197 stacking (resolved 2026-05-22)
 
 As of 2026-05-22 PR #197 sits at S5 (release wiring) / S6 (drop gate)
-and is not merged. The flag surface that the operator command above
-requires therefore lives on branch
-`feat/issue-196-disburse-wizard-references` rather than `main`. The
-operator either:
-- waits for #197 to merge (preferred), or
-- runs the disburse-wizard from a checkout of that branch (acceptable
-  for a one-off rehearsal, but the archive PR's commit graph would
-  then need a `Depends-on: #197` note in the PR body).
+and is not merged. **Operator decision:** rebase #202 onto
+`feat/issue-196-disburse-wizard-references` and retarget PR #213's
+base to that branch. The stack will be rebased onto `main` once #197
+merges. The gate.sh on #202 inherits #197's `nix develop -c just ci`
+block so the source tree from #197 stays green under #202's changes.
 
-This is tracked as a hard blocker on S2 (the build slice).
-
-### Open Clarification 3 — extra-signer roster
+### Clarification 3 — extra-signer roster (resolved 2026-05-22)
 
 The acceptance criteria require the witness roster to satisfy
-`permissions.ak` (owner + ≥1 other scope owner). The exact identity of
-"other scope owner" depends on the current `network_compliance` scope
-membership at submit time and is read from the on-chain registry; the
-operator confirms the chosen `--extra-signer` bech32 against the
-registry before S3 (witness-collection) runs.
+`permissions.ak` (owner + ≥1 other scope owner). **Operator decision
+2026-05-22:** use the `ops_and_use_cases` scope owner as the
+`--extra-signer`. From `/code/amaru-treasury/journal/2026/metadata.json`:
+
+```
+ops_and_use_cases.owner = f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e
+```
+
+The disburse-wizard's `--extra-signer` flag accepts a scope alias
+(`--extra-signer ops_and_use_cases`) or a 28-byte hex
+(`--extra-signer f3ab64b0…d23e2e`); the scope alias is preferred for
+auditability of the operator-command transcript.
 
 ## Non-claims
 

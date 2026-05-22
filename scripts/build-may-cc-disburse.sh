@@ -23,12 +23,22 @@
 # Inputs (defaultable):
 #   * --metadata PATH        journal metadata file
 #                            (default: /code/amaru-treasury/journal/2026/metadata.json)
-#   * --out PATH             where disburse-wizard writes tx artifacts
-#                            (default: ./build-may-cc-rundir)
+#   * --out PATH             rundir where the wizard writes
+#                            `intent.json` and the build log
+#                            (default: ./build-may-cc-rundir). The
+#                            wizard's own `--out` flag points at
+#                            `<rundir>/intent.json`; `--log` at
+#                            `<rundir>/build.log`.
 #   * --log PATH             disburse-wizard build log
 #                            (default: <out>/build.log)
 #   * --binary NAME          which amaru-treasury-tx to invoke
 #                            (default: amaru-treasury-tx)
+#   * --destination-label T  rationale destination label
+#                            (default: payee canonical legal name)
+#   * --description T        rationale description
+#                            (default: templated from manifest)
+#   * --justification T      rationale justification
+#                            (default: templated, names Principle VIII v2)
 #
 # Constitutional guards (Principle VIII v2):
 #   * the manifest's `may-2026-cyber-castellum` block MUST carry exactly
@@ -66,6 +76,10 @@ LOG=
 BINARY=amaru-treasury-tx
 WALLET_ADDR=
 EXTRA_SIGNERS=()
+DESTINATION_LABEL=
+DESCRIPTION=
+JUSTIFICATION=
+LABEL=
 
 # --- argument parsing -----------------------------------------------
 die() { echo "error: $*" >&2; exit 1; }
@@ -79,6 +93,10 @@ while [ $# -gt 0 ]; do
     --out)             OUT="$2"; shift 2 ;;
     --log)             LOG="$2"; shift 2 ;;
     --binary)          BINARY="$2"; shift 2 ;;
+    --destination-label) DESTINATION_LABEL="$2"; shift 2 ;;
+    --description)     DESCRIPTION="$2"; shift 2 ;;
+    --justification)   JUSTIFICATION="$2"; shift 2 ;;
+    --label)           LABEL="$2"; shift 2 ;;
     -h|--help)         sed -n '2,60p' "$0"; exit 0 ;;
     *)                 die "unknown flag: $1 (try --help)" ;;
   esac
@@ -145,8 +163,27 @@ echo "$DISB_JSON" | jq -e --argjson want "$EXPECTED_KINDS" '
 # Amount: --amount is in 1e-6 USDM, so 18 750 USDM => 18_750_000_000.
 AMOUNT_SCALED=$(jq -nr --argjson n 18750 '$n * 1000000')
 
-# Default log path under --out if the operator didn't override.
-[ -n "$LOG" ] || LOG="$OUT/build.log"
+# --out is treated as a rundir; the wizard's --out gets <rundir>/intent.json
+# and --log defaults to <rundir>/build.log unless the operator overrode it.
+RUNDIR="$OUT"
+INTENT_OUT="$RUNDIR/intent.json"
+[ -n "$LOG" ] || LOG="$RUNDIR/build.log"
+if [ "$EXEC" -eq 1 ]; then
+  mkdir -p "$RUNDIR"
+fi
+
+# Templated rationale text (overridable via --description /
+# --justification / --destination-label / --label). The strings
+# mirror the cadence of the mainnet d6c14625 precedent — terse,
+# factual, no enumeration of evidence in prose (the 5 documents are
+# already in references[]). destinationLabel uses natural case (per
+# precedent), not the all-caps vendors.yaml legal name; the
+# Principle VIII v2 canonical-legal-name rule is scoped to
+# references[].label, not the destinationLabel.
+[ -n "$DESTINATION_LABEL" ] || DESTINATION_LABEL="Crypto Accounting Group"
+[ -n "$DESCRIPTION" ] || DESCRIPTION="Disbursement of 18750 USDM to Crypto Accounting Group for the Cyber Castellum May 2026 invoice."
+[ -n "$JUSTIFICATION" ] || JUSTIFICATION="Acceptance of the Cyber Castellum May 2026 cycle review."
+[ -n "$LABEL" ] || LABEL="Pay USDM"
 
 # Collect reference triplets verbatim from the manifest, in declared
 # order (jq preserves array order).
@@ -167,8 +204,12 @@ argv=( "$BINARY" --network mainnet disburse-wizard
        --validity-hours 48
        --wallet-addr "$WALLET_ADDR"
        --metadata "$METADATA"
-       --out "$OUT"
+       --out "$INTENT_OUT"
        --log "$LOG"
+       --destination-label "$DESTINATION_LABEL"
+       --description "$DESCRIPTION"
+       --justification "$JUSTIFICATION"
+       --label "$LABEL"
 )
 for s in "${EXTRA_SIGNERS[@]}"; do
   argv+=( --extra-signer "$s" )

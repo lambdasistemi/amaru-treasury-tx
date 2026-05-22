@@ -36,6 +36,8 @@ module Amaru.Treasury.IntentJSON
     , WalletJSON (..)
     , ScopeJSON (..)
     , RationaleJSON (..)
+    , RationaleReferenceJSON (..)
+    , fromJSONReference
 
       -- * Per-action input records
     , SwapInputs (..)
@@ -162,6 +164,7 @@ import Codec.Binary.Bech32 qualified as Bech32
 
 import Amaru.Treasury.AuxData
     ( RationaleBody (..)
+    , RationaleReference (..)
     , rationaleMetadatum
     )
 import Amaru.Treasury.IntentJSON.Common
@@ -397,7 +400,9 @@ instance ToJSON ScopeJSON where
 {- | Rationale block. Defaults are applied upstream by
 the wizard's pure translation; the JSON parser requires
 every field to be present (the wizard never emits an
-intent with a missing rationale field).
+intent with a missing rationale field) except
+@references@, which is optional and defaults to @[]@
+for back-compat with pre-S2 intents.
 -}
 data RationaleJSON = RationaleJSON
     { rjEvent :: !Text
@@ -405,6 +410,21 @@ data RationaleJSON = RationaleJSON
     , rjDescription :: !Text
     , rjJustification :: !Text
     , rjDestinationLabel :: !Text
+    , rjReferences :: ![RationaleReferenceJSON]
+    -- ^ optional typed external references on the
+    --   rationale body; defaults to @[]@ on parse.
+    }
+    deriving stock (Eq, Show)
+
+{- | JSON-side projection of 'RationaleReference'. Wire
+shape: @{ "uri", "@type", "label" }@. The @"@type"@
+field is optional on parse (defaults to @"Other"@); on
+emit it is always present.
+-}
+data RationaleReferenceJSON = RationaleReferenceJSON
+    { rjrUri :: !Text
+    , rjrType :: !Text
+    , rjrLabel :: !Text
     }
     deriving stock (Eq, Show)
 
@@ -416,6 +436,7 @@ instance FromJSON RationaleJSON where
             <*> o .: "description"
             <*> o .: "justification"
             <*> o .: "destinationLabel"
+            <*> o .:? "references" .!= []
 
 instance ToJSON RationaleJSON where
     toJSON RationaleJSON{..} =
@@ -425,7 +446,36 @@ instance ToJSON RationaleJSON where
             , "description" .= rjDescription
             , "justification" .= rjJustification
             , "destinationLabel" .= rjDestinationLabel
+            , "references" .= rjReferences
             ]
+
+instance FromJSON RationaleReferenceJSON where
+    parseJSON =
+        withObject "RationaleReferenceJSON" $ \o ->
+            RationaleReferenceJSON
+                <$> o .: "uri"
+                <*> o .:? "@type" .!= "Other"
+                <*> o .: "label"
+
+instance ToJSON RationaleReferenceJSON where
+    toJSON RationaleReferenceJSON{..} =
+        object
+            [ "uri" .= rjrUri
+            , "@type" .= rjrType
+            , "label" .= rjrLabel
+            ]
+
+{- | Project a 'RationaleReferenceJSON' (wire shape) into
+the typed 'RationaleReference' consumed by the
+metadatum builder.
+-}
+fromJSONReference :: RationaleReferenceJSON -> RationaleReference
+fromJSONReference r =
+    RationaleReference
+        { rrUri = rjrUri r
+        , rrType = rjrType r
+        , rrLabel = rjrLabel r
+        }
 
 -- ----------------------------------------------------
 -- Per-action input records
@@ -1767,7 +1817,7 @@ translateSwap ti = do
             RationaleBody
                 { rbEvent = rjEvent rat
                 , rbLabel = rjLabel rat
-                , rbReferences = []
+                , rbReferences = map fromJSONReference (rjReferences rat)
                 , rbDescription = [rjDescription rat]
                 , rbDestinationLabel = rjDestinationLabel rat
                 , rbJustification = [rjJustification rat]
@@ -1852,7 +1902,7 @@ translateDisburse ti = do
             RationaleBody
                 { rbEvent = rjEvent rat
                 , rbLabel = rjLabel rat
-                , rbReferences = []
+                , rbReferences = map fromJSONReference (rjReferences rat)
                 , rbDescription = [rjDescription rat]
                 , rbDestinationLabel = rjDestinationLabel rat
                 , rbJustification = [rjJustification rat]
@@ -1966,7 +2016,7 @@ translateWithdraw ti = do
             RationaleBody
                 { rbEvent = rjEvent rat
                 , rbLabel = rjLabel rat
-                , rbReferences = []
+                , rbReferences = map fromJSONReference (rjReferences rat)
                 , rbDescription = [rjDescription rat]
                 , rbDestinationLabel = rjDestinationLabel rat
                 , rbJustification = [rjJustification rat]
@@ -2004,7 +2054,7 @@ translateReorganize ti = do
             RationaleBody
                 { rbEvent = rjEvent rat
                 , rbLabel = rjLabel rat
-                , rbReferences = []
+                , rbReferences = map fromJSONReference (rjReferences rat)
                 , rbDescription = [rjDescription rat]
                 , rbDestinationLabel = rjDestinationLabel rat
                 , rbJustification = [rjJustification rat]

@@ -531,6 +531,7 @@ genRationale =
         <*> pure "A description"
         <*> pure "A justification"
         <*> pure "Beneficiary X"
+        <*> pure []
 
 genDisburseIntentJSON :: Gen DisburseIntentJSON
 genDisburseIntentJSON = do

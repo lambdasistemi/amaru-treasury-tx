@@ -1038,6 +1038,7 @@ mkRationale ans =
             , drjDescription = raDescription r
             , drjJustification = raJustification r
             , drjDestinationLabel = raDestinationLabel r
+            , drjReferences = []
             }
 
 unitText :: Unit -> Text
@@ -1108,4 +1109,5 @@ mkTreasuryRationale ans =
             , rjDescription = raDescription r
             , rjJustification = raJustification r
             , rjDestinationLabel = raDestinationLabel r
+            , rjReferences = []
             }

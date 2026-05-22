@@ -623,6 +623,7 @@ wizardToTreasuryIntent we q = do
                     , TI.rjJustification = raJustification rat
                     , TI.rjDestinationLabel =
                         raDestinationLabel rat
+                    , TI.rjReferences = []
                     }
             , TI.tiPayload =
                 TI.SwapInputs

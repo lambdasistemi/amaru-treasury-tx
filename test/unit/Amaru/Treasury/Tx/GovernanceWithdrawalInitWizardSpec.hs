@@ -276,6 +276,7 @@ sampleRationale =
             "governance-withdrawal-init bootstrap fixture"
         , rjJustification = "test"
         , rjDestinationLabel = "fixture"
+        , rjReferences = []
         }
 
 -- ----------------------------------------------------

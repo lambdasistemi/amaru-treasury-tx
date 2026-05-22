@@ -302,6 +302,7 @@ mkRationale ans =
                 fromMaybe
                     (scopeName <> " treasury")
                     (waDestinationLabel ans)
+            , rjReferences = []
             }
 
 networkFamily :: Text -> Maybe Network

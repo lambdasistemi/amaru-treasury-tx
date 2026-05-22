@@ -6,7 +6,8 @@
         "destinationLabel": "fixture",
         "event": "stake-reward-init",
         "justification": "test",
-        "label": "stake-reward-init"
+        "label": "stake-reward-init",
+        "references": []
     },
     "schema": 1,
     "scope": {

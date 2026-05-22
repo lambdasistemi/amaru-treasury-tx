@@ -275,6 +275,7 @@ emptyRationaleJSON =
         , rjDescription = "stake-reward-init bootstrap fixture"
         , rjJustification = "test"
         , rjDestinationLabel = "fixture"
+        , rjReferences = []
         }
 
 placeholderScopeJSON :: ScopeJSON

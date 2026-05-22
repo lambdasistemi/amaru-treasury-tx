@@ -13,7 +13,8 @@
         "destinationLabel": "ACME Translations Ltd.",
         "event": "disburse",
         "justification": "Per CIP-1694 budget allocation",
-        "label": "Disburse ADA"
+        "label": "Disburse ADA",
+        "references": []
     },
     "schema": 1,
     "scope": {

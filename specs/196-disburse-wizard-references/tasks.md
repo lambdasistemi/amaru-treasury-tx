@@ -130,30 +130,30 @@ the disburse rationale block; existing intents continue to validate.
 
 ### Tasks
 
-- [ ] **T015 [S2]** Add the schema entry per
+- [X] **T015 [S2]** Add the schema entry per
   [contracts/intent-schema.md](contracts/intent-schema.md). Field
   optional, default `[]`, items require `uri` + `label`, `@type`
   defaults to `"Other"`, `additionalProperties: false`.
-- [ ] **T016 [S2]** Update `RationaleJSON` (and the FromJSON/ToJSON
+- [X] **T016 [S2]** Update `RationaleJSON` (and the FromJSON/ToJSON
   instances) to round-trip `references`. `ToJSON` MUST emit
   `"references": []` when empty (not omit the field) so schema and
   emitted JSON stay symmetric.
-- [ ] **T017 [S2]** Add a QuickCheck round-trip property:
+- [X] **T017 [S2]** Add a QuickCheck round-trip property:
   `decode (encode r) == Just r` for every well-formed
   `RationaleReferenceJSON`. Lives in the existing JSON test module.
-- [ ] **T018 [S2]** Add a round-trip test for the intent.json fixture
+- [X] **T018 [S2]** Add a round-trip test for the intent.json fixture
   from T002 (parse → re-emit → re-parse equals).
-- [ ] **T019 [S2]** Confirm RED on T017/T018 before T015/T016 edits
+- [X] **T019 [S2]** Confirm RED on T017/T018 before T015/T016 edits
   land (the new property/test fails — field doesn't round-trip yet).
-- [ ] **T020 [S2]** Run `nix develop --quiet -c just update-schema`,
+- [X] **T020 [S2]** Run `nix develop --quiet -c just update-schema`,
   commit the regenerated `docs/assets/intent-schema.json` diff in
   the same slice commit.
-- [ ] **T021 [S2]** Run `nix develop --quiet -c just schema-check`
+- [X] **T021 [S2]** Run `nix develop --quiet -c just schema-check`
   green; `nix develop --quiet -c just unit` green; `./gate.sh` green.
-- [ ] **T022 [S2]** Commit one bisect-safe slice: subject
+- [X] **T022 [S2]** Commit one bisect-safe slice: subject
   `feat(intent-json): allow references on disburse rationale (schema + round-trip)`,
   trailer `Tasks: T015–T021`. No push.
-- [ ] **T023 [S2]** (orchestrator-only) Mark T015–T022 `[X]`, amend
+- [X] **T023 [S2]** (orchestrator-only) Mark T015–T022 `[X]`, amend
   HEAD.
 
 **Checkpoint S2**: intent.json with `references[]` round-trips

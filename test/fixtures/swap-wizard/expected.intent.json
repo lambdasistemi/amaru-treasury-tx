@@ -6,7 +6,8 @@
         "destinationLabel": "Network Compliance's treasury",
         "event": "disburse",
         "justification": "Required to pay Antithesis as vendor",
-        "label": "Swap ADA<->USDM"
+        "label": "Swap ADA<->USDM",
+        "references": []
     },
     "schema": 1,
     "scope": {

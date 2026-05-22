@@ -61,6 +61,10 @@ data ReorganizeIntent = ReorganizeIntent
     -- ^ Amaru permissions reward account
     , rgiPermissionsDeployedAt :: !TxIn
     -- ^ deployed permissions withdrawal-script reference UTxO
+    , rgiScopesDeployedAt :: !TxIn
+    -- ^ scopes-NFT reference UTxO. The permissions
+    --   withdraw-script walks @reference_inputs@ looking
+    --   for the scopes-NFT and fails phase-2 when absent.
     , rgiScopeOwnerSigner :: !(KeyHash Guard)
     -- ^ scope-owner key hash required as signer
     , rgiUpperBound :: !SlotNo
@@ -94,6 +98,7 @@ reorganizeProgram intent preservedValue = do
     reference (rgiTreasuryDeployedAt intent)
     reference (rgiRegistryDeployedAt intent)
     reference (rgiPermissionsDeployedAt intent)
+    reference (rgiScopesDeployedAt intent)
     withdrawScript
         (rgiPermissionsRewardAccount intent)
         (Coin 0)

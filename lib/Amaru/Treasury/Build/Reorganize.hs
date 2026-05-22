@@ -102,6 +102,7 @@ runReorganizeAction ctx intent rationale walletAddr = do
             [ rgiTreasuryDeployedAt intent
             , rgiRegistryDeployedAt intent
             , rgiPermissionsDeployedAt intent
+            , rgiScopesDeployedAt intent
             ]
         utxoMap = ccUtxos ctx
         required = walletInput : treasuryInputs ++ refInputs

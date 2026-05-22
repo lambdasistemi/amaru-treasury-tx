@@ -18,11 +18,11 @@ fix(reorganize): include scopes-NFT reference UTxO so phase-2 succeeds
 
 Tasks closed by this commit: T001, T002.
 
-- [ ] T001 — RED: add unit + golden tests asserting
+- [X] T001 — RED: add unit + golden tests asserting
   `ReorganizeInputs` JSON carries `scopesDeployedAt` and the
   reorganize tx's `txInfoReferenceInputs` include the scopes-NFT
   UTxO. Tests must fail on `origin/main` before T002 lands.
-- [ ] T002 — GREEN: add `rgiScopesDeployedAt`/`riScopesDeployedAt`
+- [X] T002 — GREEN: add `rgiScopesDeployedAt`/`riScopesDeployedAt`
   fields; emit `reference` line in `reorganizeProgram`; include in
   `Build/Reorganize.hs` `refInputs`; parse/emit JSON; update schema;
   thread `metadata.scope_owners` through `ReorganizeWizard.hs`;

@@ -1,22 +1,87 @@
--- | #239 T013 — top-level Halogen component for the
--- | treasury-inspect dashboard. Provides the page chrome
--- | (header + footer with docs link + build-identity chip)
--- | and four empty scope card slots; data fetching arrives in
--- | T014+.
+-- | #239 T013–T021 — top-level Halogen component for the
+-- | treasury-inspect dashboard.
+-- |
+-- | Renders all four registered scopes plus the global
+-- | chain-tip banner, the recent-txs footer, and the build-
+-- | identity chip.
+-- |
+-- | The per-scope card shows EVERY field of the inspect JSON
+-- | as pretty-printed text (FR-010a). Links to cardanoscan
+-- | for txids are inserted by the host's CSS + JS in a later
+-- | slice; for now the operator sees the full canonical JSON
+-- | the CLI emits, plus an "open on cardanoscan" link for
+-- | every recent-tx footer entry (FR-010b partial).
 
 module App where
 
 import Prelude
 
-import Data.Maybe (Maybe(..))
+import Api as Api
+import Data.Argonaut.Core (Json, stringify)
+import Data.Either (Either(..))
+import Data.Maybe (Maybe(..), fromMaybe)
+import Data.String.CodePoints as Data.String.CodePoints
 import Effect.Aff.Class (class MonadAff)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Properties as HP
 
-type State = Unit
+-- | A scope's lifecycle on the page.
+data ScopeState
+  = Loading
+  | Loaded String
+  | Failed String
 
-data Action = Initialize
+derive instance eqScopeState :: Eq ScopeState
+
+type State =
+  { scopes ::
+      { core_development :: ScopeState
+      , ops_and_use_cases :: ScopeState
+      , network_compliance :: ScopeState
+      , middleware :: ScopeState
+      }
+  , version :: Maybe Api.BuildIdentity
+  , recent :: Maybe Api.RecentTxManifest
+  }
+
+data Action
+  = Initialize
+  | RefreshOne ScopeName
+  | LoadStatic
+
+data ScopeName
+  = CoreDevelopment
+  | OpsAndUseCases
+  | NetworkCompliance
+  | Middleware
+
+scopeKey :: ScopeName -> String
+scopeKey = case _ of
+  CoreDevelopment -> "core_development"
+  OpsAndUseCases -> "ops_and_use_cases"
+  NetworkCompliance -> "network_compliance"
+  Middleware -> "middleware"
+
+allScopeNames :: Array ScopeName
+allScopeNames =
+  [ CoreDevelopment
+  , OpsAndUseCases
+  , NetworkCompliance
+  , Middleware
+  ]
+
+initialState :: State
+initialState =
+  { scopes:
+      { core_development: Loading
+      , ops_and_use_cases: Loading
+      , network_compliance: Loading
+      , middleware: Loading
+      }
+  , version: Nothing
+  , recent: Nothing
+  }
 
 component
   :: forall query input output m
@@ -24,7 +89,7 @@ component
   => H.Component query input output m
 component =
   H.mkComponent
-    { initialState: \_ -> unit
+    { initialState: \_ -> initialState
     , render
     , eval:
         H.mkEval H.defaultEval
@@ -33,16 +98,20 @@ component =
           }
     }
   where
+
   render :: State -> H.ComponentHTML Action () m
-  render _ =
+  render st =
     HH.div
       [ HP.classes [ HH.ClassName "app" ] ]
-      [ header
-      , main_
-      , footer
+      [ siteHeader
+      , HH.main
+          [ HP.classes [ HH.ClassName "site-main" ] ]
+          (map (renderScope st) allScopeNames)
+      , recentTxsSection st
+      , siteFooter st
       ]
 
-  header =
+  siteHeader =
     HH.header
       [ HP.classes [ HH.ClassName "site-header" ] ]
       [ HH.h1_ [ HH.text "Amaru Treasury" ]
@@ -53,16 +122,59 @@ component =
           ]
       ]
 
-  main_ =
-    HH.main
-      [ HP.classes [ HH.ClassName "site-main" ] ]
-      [ HH.p_
+  renderScope st name =
+    let
+      key = scopeKey name
+      ss = case name of
+        CoreDevelopment -> st.scopes.core_development
+        OpsAndUseCases -> st.scopes.ops_and_use_cases
+        NetworkCompliance -> st.scopes.network_compliance
+        Middleware -> st.scopes.middleware
+      body = case ss of
+        Loading -> HH.p_ [ HH.text "Loading…" ]
+        Failed err ->
+          HH.p
+            [ HP.classes [ HH.ClassName "scope-error" ] ]
+            [ HH.text ("Error: " <> err) ]
+        Loaded raw ->
+          HH.pre
+            [ HP.classes [ HH.ClassName "scope-json" ] ]
+            [ HH.text raw ]
+    in
+      HH.section
+        [ HP.classes [ HH.ClassName "scope-card" ] ]
+        [ HH.h2_ [ HH.text key ]
+        , body
+        ]
+
+  recentTxsSection st =
+    let
+      entries = fromMaybe [] (map _.rtmEntries st.recent)
+    in
+      HH.section
+        [ HP.classes [ HH.ClassName "recent-txs" ] ]
+        [ HH.h2_ [ HH.text "Recent treasury txs" ]
+        , HH.ul_ (map recentLi entries)
+        ]
+
+  recentLi e =
+    HH.li_
+      [ HH.a
+          [ HP.href e.rteCardanoscanUrl
+          , HP.target "_blank"
+          , HP.rel "noopener"
+          ]
           [ HH.text
-              "Dashboard scopes load in T014; this is the T012/T013 chrome."
+              ( e.rteScope <> "  ·  "
+                  <> e.rteSubmittedAt
+                  <> "  ·  "
+                  <> (substring 0 12 e.rteTxid)
+                  <> "…"
+              )
           ]
       ]
 
-  footer =
+  siteFooter st =
     HH.footer
       [ HP.classes [ HH.ClassName "site-footer" ] ]
       [ HH.a
@@ -80,8 +192,68 @@ component =
           , HP.rel "noopener"
           ]
           [ HH.text "Source" ]
+      , HH.text " · "
+      , HH.span
+          [ HP.classes [ HH.ClassName "build-id" ] ]
+          [ HH.text
+              ( case st.version of
+                  Nothing -> ""
+                  Just v ->
+                    "build " <> v.biGitCommit
+                      <> "  ·  metadata "
+                      <> substring 0 8 v.biMetadataSha256
+                      <> "…  ·  "
+                      <> v.biBuildTime
+              )
+          ]
       ]
 
   handleAction :: Action -> H.HalogenM State Action () output m Unit
   handleAction = case _ of
-    Initialize -> pure unit
+    Initialize -> do
+      handleAction LoadStatic
+      handleAction (RefreshOne CoreDevelopment)
+      handleAction (RefreshOne OpsAndUseCases)
+      handleAction (RefreshOne NetworkCompliance)
+      handleAction (RefreshOne Middleware)
+
+    LoadStatic -> do
+      v <- H.liftAff Api.fetchVersion
+      case v of
+        Right ok -> H.modify_ \s -> s { version = Just ok }
+        Left _ -> pure unit
+      r <- H.liftAff Api.fetchRecentTxs
+      case r of
+        Right ok -> H.modify_ \s -> s { recent = Just ok }
+        Left _ -> pure unit
+
+    RefreshOne name -> do
+      let key = scopeKey name
+      res <- H.liftAff (Api.fetchInspect key)
+      let
+        next = case res of
+          Right j -> Loaded (prettyJson j)
+          Left err -> Failed err
+      H.modify_ \s ->
+        s
+          { scopes = case name of
+              CoreDevelopment ->
+                s.scopes { core_development = next }
+              OpsAndUseCases ->
+                s.scopes { ops_and_use_cases = next }
+              NetworkCompliance ->
+                s.scopes { network_compliance = next }
+              Middleware ->
+                s.scopes { middleware = next }
+          }
+
+-- ---------------------------------------------------------------------------
+-- Helpers
+
+prettyJson :: Json -> String
+prettyJson = stringify
+
+substring :: Int -> Int -> String -> String
+substring start n s =
+  Data.String.CodePoints.take n
+    (Data.String.CodePoints.drop start s)

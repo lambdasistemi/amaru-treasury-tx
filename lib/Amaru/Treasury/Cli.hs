@@ -54,6 +54,10 @@ import Amaru.Treasury.Cli.RegistryInitWizard
     ( RegistryInitWizardOpts
     , registryInitWizardOptsP
     )
+import Amaru.Treasury.Cli.ReorganizeWizard
+    ( ReorganizeWizardOpts
+    , reorganizeWizardOptsP
+    )
 import Amaru.Treasury.Cli.StakeRewardInitWizard
     ( StakeRewardInitWizardOpts
     , stakeRewardInitWizardOptsP
@@ -109,6 +113,7 @@ data Cmd
     | CmdRegistryInitWizard RegistryInitWizardOpts
     | CmdStakeRewardInitWizard StakeRewardInitWizardOpts
     | CmdGovernanceWithdrawalInitWizard GovernanceWithdrawalInitWizardOpts
+    | CmdReorganizeWizard ReorganizeWizardOpts
     | CmdTxBuild TxBuildOpts
     | CmdReportRender ReportRenderOpts
     | CmdTreasuryInspect InspectOpts
@@ -212,6 +217,14 @@ cmdP =
                     )
                     ( progDesc
                         "Produce governance-withdrawal-init intent.json files for proposal | materialization (devnet only; Slice 1 stubs the live path)"
+                    )
+                )
+            <> command
+                "reorganize-wizard"
+                ( info
+                    (CmdReorganizeWizard <$> reorganizeWizardOptsP)
+                    ( progDesc
+                        "Produce a reorganize intent.json from registry and treasury UTxO state (devnet only; Slice 1 stubs the live path)"
                     )
                 )
             <> command

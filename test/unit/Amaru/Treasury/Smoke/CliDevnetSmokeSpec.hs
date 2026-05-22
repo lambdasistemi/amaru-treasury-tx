@@ -30,7 +30,7 @@ This spec mechanically pins three properties:
 module Amaru.Treasury.Smoke.CliDevnetSmokeSpec (spec) where
 
 import Control.Monad (forM_, unless, when)
-import Data.List (isInfixOf)
+import Data.List (isInfixOf, isPrefixOf)
 import Data.Maybe (catMaybes)
 import System.Directory
     ( doesFileExist
@@ -67,6 +67,25 @@ legacyGovernanceLibPath =
 shippedGovernanceCliPath :: FilePath
 shippedGovernanceCliPath =
     "lib/Amaru/Treasury/Cli/GovernanceWithdrawalInitWizard.hs"
+
+{- | Phase tokens the CLI DevNet smoke recognizes.
+
+The list is the canonical allow-list of phase strings the
+@scripts\/smoke\/smoke.sh@ entrypoint and the
+@app\/devnet-cli-smoke-host\/Main.hs@ host dispatch must
+both keep in sync. Issue #87 adds @\"reorganize\"@.
+-}
+recognizedPhaseTokens :: [String]
+recognizedPhaseTokens =
+    [ "scaffold"
+    , "preflight"
+    , "vault-preflight"
+    , "registry-stake"
+    , "governance"
+    , "disburse"
+    , "full"
+    , "reorganize"
+    ]
 
 {- | Forbidden references for product (non-test) smoke files.
 
@@ -478,6 +497,70 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
                 src <- mustRead legacyGovernanceLibPath
                 src `shouldSatisfyContain` "submitVoteTx"
 
+    describe "reorganize CLI surface (#87)" $ do
+        it "smoke.sh print_help mentions the reorganize phase" $ do
+            src <- mustRead smokeScriptPath
+            printHelpFnBody src `shouldSatisfyContain` "reorganize"
+
+        it "smoke.sh main case has a reorganize) arm" $ do
+            src <- mustRead smokeScriptPath
+            let caseBlock = mainPhaseCaseBlock src
+            caseBlock `shouldSatisfyContain` "reorganize)"
+
+        it "reorganize) arm emits the MISSING_REORGANIZE_BUILDER diagnostic" $ do
+            src <- mustRead smokeScriptPath
+            let arm = reorganizeArm src
+            arm `shouldSatisfyContain` "MISSING_REORGANIZE_BUILDER"
+
+        it
+            "reorganize) arm checks reorganize-wizard --help via $AMARU_EXE"
+            $ do
+                src <- mustRead smokeScriptPath
+                let arm = reorganizeArm src
+                arm `shouldSatisfyContain` "reorganize-wizard --help"
+
+        it
+            "MISSING_REORGANIZE_BUILDER fires before require_inside_devnet \
+            \in the reorganize arm"
+            $ do
+                src <- mustRead smokeScriptPath
+                let arm = reorganizeArm src
+                case ( substringOffset "MISSING_REORGANIZE_BUILDER" arm
+                     , substringOffset "require_inside_devnet" arm
+                     ) of
+                    (Just m, Just r) ->
+                        unless (m < r) $
+                            expectationFailure $
+                                "expected MISSING_REORGANIZE_BUILDER offset ("
+                                    <> show m
+                                    <> ") to be strictly less than "
+                                    <> "require_inside_devnet offset ("
+                                    <> show r
+                                    <> ") inside the reorganize) arm"
+                    (Nothing, _) ->
+                        expectationFailure $
+                            "MISSING_REORGANIZE_BUILDER absent from "
+                                <> "reorganize) arm"
+                    (_, Nothing) ->
+                        expectationFailure $
+                            "require_inside_devnet absent from "
+                                <> "reorganize) arm (S1 scaffold must "
+                                <> "still chain through the host)"
+
+        it
+            "recognizedPhaseTokens contains reorganize and every token has \
+            \a smoke.sh case arm"
+            $ do
+                "reorganize" `shouldSatisfy` (`elem` recognizedPhaseTokens)
+                src <- mustRead smokeScriptPath
+                let caseBlock = mainPhaseCaseBlock src
+                forM_ recognizedPhaseTokens $ \token ->
+                    caseBlock `shouldSatisfyContain` (token <> ")")
+
+        it "host Main.hs recognizes the reorganize phase string" $ do
+            src <- mustRead hostMainPath
+            src `shouldSatisfyContain` "\"reorganize\""
+
 -- ---------------------------------------------------------------------
 -- Helpers
 -- ---------------------------------------------------------------------
@@ -531,6 +614,53 @@ sectionBetween start end =
         . takeWhile (not . (end `isInfixOf`))
         . dropWhile (not . (start `isInfixOf`))
         . lines
+
+{- | Slice the body of the @print_help()@ shell function out of
+@scripts/smoke/smoke.sh@. Returns every line between the opening
+@print_help() {@ and the standalone closing @}@ line, including
+the heredoc body — which is what holds the @--phase <name>@
+documentation we want to assert on.
+-}
+printHelpFnBody :: String -> String
+printHelpFnBody =
+    unlines
+        . takeWhile (/= "}")
+        . drop 1
+        . dropWhile (not . ("print_help() {" `isInfixOf`))
+        . lines
+
+{- | Slice the main @case "$phase"@ block out of
+@scripts/smoke/smoke.sh@. There are two such case statements
+in the file (one in @preflight_for_phase@, one in @main@); this
+helper anchors on @main() {@ first so it returns the @main@
+switch and not the preflight one.
+-}
+mainPhaseCaseBlock :: String -> String
+mainPhaseCaseBlock src =
+    let mainBody = sectionBetween "main() {" "main \"$@\"" src
+    in  sectionBetween "case \"$phase\" in" "esac" mainBody
+
+{- | Slice the @reorganize)@ arm out of the main @case "$phase"@
+block in @scripts/smoke/smoke.sh@. Returns the text from the line
+containing @reorganize)@ up to (but not including) the next line
+containing @;;@.
+-}
+reorganizeArm :: String -> String
+reorganizeArm src =
+    sectionBetween "reorganize)" ";;" (mainPhaseCaseBlock src)
+
+{- | Zero-based character offset of the first occurrence of
+@needle@ in @haystack@, or @Nothing@ if absent.
+-}
+substringOffset :: String -> String -> Maybe Int
+substringOffset needle = go 0
+  where
+    go _ [] = Nothing
+    go i s
+        | needle `isPrefixOf` s = Just i
+        | otherwise = case s of
+            (_ : cs) -> go (i + 1) cs
+            [] -> Nothing
 
 witnessCommandBlocks :: String -> [String]
 witnessCommandBlocks = go . lines

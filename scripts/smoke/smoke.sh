@@ -35,7 +35,8 @@ Options:
   --inside-devnet            Mark that the script runs inside the DevNet host callback;
                              skips DevNet bring-up and trusts CARDANO_NODE_SOCKET_PATH.
   --phase <name>             scaffold | preflight | vault-preflight | registry-stake |
-                             governance | disburse | full (default: scaffold).
+                             governance | disburse | reorganize | full
+                             (default: scaffold).
   --timeout-seconds <int>    Per-phase polling timeout in seconds (default: 900).
   --force                    Allow a non-empty existing --run-dir.
   --help                     Show this help and exit.
@@ -96,6 +97,11 @@ preflight_for_phase() {
             require_tool jq
             require_tool cabal
             require_tool tr
+            ;;
+        reorganize)
+            require_tool jq
+            require_tool cardano-node
+            require_tool amaru-treasury-tx
             ;;
         *)
             die "unknown phase: $phase (try --help)"
@@ -1517,6 +1523,24 @@ full_phase() {
     write_full_summary "$run_dir"
 }
 
+# Slice S1 scaffold for the reorganize phase. Verifies the shipped
+# amaru-treasury-tx binary exposes the reorganize-wizard subcommand
+# (the #46 operator surface) and exits 0 without doing any live
+# chain work. The live phase body (utxo selection, intent encode,
+# tx-build, asset-preservation assertion, exec-units assertion)
+# lands in slices S2 and S3 per specs/87-devnet-reorganize-smoke.
+reorganize_phase_scaffold() {
+    local run_dir=$1
+    local phase_dir="$run_dir/phases/reorganize"
+    mkdir -p "$phase_dir"
+
+    AMARU_EXE=$(resolve_amaru_exe)
+    "$AMARU_EXE" reorganize-wizard --help >/dev/null 2>&1 \
+        || die "MISSING_REORGANIZE_BUILDER: amaru-treasury-tx does not expose 'reorganize-wizard'"
+
+    log "reorganize: scaffold complete; live body in slice S2"
+}
+
 create_run_dir() {
     local run_dir=$1
     local force=$2
@@ -1646,6 +1670,14 @@ main() {
             require_inside_devnet "$inside_devnet" "$phase" \
                 "$run_dir" "$timeout_seconds" "$force"
             full_phase "$run_dir" "$timeout_seconds"
+            ;;
+        reorganize)
+            AMARU_EXE=$(resolve_amaru_exe)
+            "$AMARU_EXE" reorganize-wizard --help >/dev/null 2>&1 \
+                || die "MISSING_REORGANIZE_BUILDER: amaru-treasury-tx does not expose 'reorganize-wizard'"
+            require_inside_devnet "$inside_devnet" "$phase" \
+                "$run_dir" "$timeout_seconds" "$force"
+            reorganize_phase_scaffold "$run_dir"
             ;;
     esac
 }

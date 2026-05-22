@@ -11,11 +11,11 @@ Owned-files boundaries and proof strategies are normative in [plan.md](./plan.md
 **Commit subject**: `feat(smoke): reorganize phase scaffold + MISSING_REORGANIZE_BUILDER guard`
 **Tasks trailer**: `Tasks: T001, T002, T003, T004, T005`
 
-- [ ] **T001** — Recognize `reorganize` as a phase token in `scripts/smoke/smoke.sh` (`preflight_for_phase`, `main` `case "$phase"`, `print_help`).
-- [ ] **T002** — Add the boundary `MISSING_REORGANIZE_BUILDER` check (verify `amaru-treasury-tx reorganize-wizard --help` succeeds) before any DevNet bring-up; emit the diagnostic on the stderr trace and exit non-zero with a typed code documented in `spec.md`.
-- [ ] **T003** — Extend `app/devnet-cli-smoke-host/Main.hs` phase dispatch with a `reorganize` case that, for S1, only forwards to the smoke script and exits with whatever the smoke returned (no chain assertions yet).
-- [ ] **T004** — Extend `test/unit/Amaru/Treasury/Smoke/CliDevnetSmokeSpec.hs` with the new phase string in the allowed-phase list, plus a fixture-driven test that asserts the `MISSING_REORGANIZE_BUILDER` diagnostic is produced by a stub binary missing `reorganize-wizard`.
-- [ ] **T005** — Confirm `./gate.sh` runs green at HEAD; no `gate.sh` extension required if `just ci` already covers the new unit cases.
+- [X] **T001** — Recognize `reorganize` as a phase token in `scripts/smoke/smoke.sh` (`preflight_for_phase`, `main` `case "$phase"`, `print_help`).
+- [X] **T002** — Add the boundary `MISSING_REORGANIZE_BUILDER` check (verify `amaru-treasury-tx reorganize-wizard --help` succeeds) before any DevNet bring-up; emit the diagnostic on the stderr trace and exit non-zero with a typed code documented in `spec.md`.
+- [X] **T003** — Extend `app/devnet-cli-smoke-host/Main.hs` phase dispatch with a `reorganize` case that, for S1, only forwards to the smoke script and exits with whatever the smoke returned (no chain assertions yet).
+- [X] **T004** — Extend `test/unit/Amaru/Treasury/Smoke/CliDevnetSmokeSpec.hs` with the new phase string in the allowed-phase list, plus a fixture-driven test that asserts the `MISSING_REORGANIZE_BUILDER` diagnostic is produced by a stub binary missing `reorganize-wizard` (shipped as the static-fixture A-001 binding form: source-level ordering + literal + phase allow-list assertions on `scripts/smoke/smoke.sh` and `app/devnet-cli-smoke-host/Main.hs`).
+- [X] **T005** — Confirm `./gate.sh` runs green at HEAD; no `gate.sh` extension required if `just ci` already covers the new unit cases.
 
 ## Slice S2 — live reorganize phase body
 

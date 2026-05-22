@@ -299,6 +299,9 @@ main = do
                         markFullSummaryPassed runDir socket
                         exitSuccess
                     code -> exitWith code
+            "reorganize" -> case smokeCode of
+                ExitSuccess -> exitSuccess
+                code -> exitWith code
             _ -> case smokeCode of
                 ExitSuccess -> exitSuccess
                 code -> exitWith code

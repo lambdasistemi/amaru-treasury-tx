@@ -180,10 +180,16 @@ fi
 # precedent), not the all-caps vendors.yaml legal name; the
 # Principle VIII v2 canonical-legal-name rule is scoped to
 # references[].label, not the destinationLabel.
-[ -n "$DESTINATION_LABEL" ] || DESTINATION_LABEL="Crypto Accounting Group"
-[ -n "$DESCRIPTION" ] || DESCRIPTION="Disbursement of 18750 USDM to Crypto Accounting Group for the Cyber Castellum May 2026 invoice."
-[ -n "$JUSTIFICATION" ] || JUSTIFICATION="Acceptance of the Cyber Castellum May 2026 cycle review."
-[ -n "$LABEL" ] || LABEL="Pay USDM"
+#
+# Every defaulted string here MUST fit in 64 UTF-8 bytes — the
+# Cardano per-text metadatum cap. The wizard does NOT auto-chunk
+# description/justification/destinationLabel/label (it chunks URIs
+# and references[].label, but not these). Tracked as a follow-up
+# wizard ergonomics issue.
+[ -n "$DESTINATION_LABEL" ] || DESTINATION_LABEL="Crypto Accounting Group"     # 23 B
+[ -n "$DESCRIPTION" ]       || DESCRIPTION="Disburse 18750 USDM (CAG payee) for Cyber Castellum May 2026."     # 61 B
+[ -n "$JUSTIFICATION" ]     || JUSTIFICATION="Acceptance of the Cyber Castellum May 2026 cycle review."         # 56 B
+[ -n "$LABEL" ]             || LABEL="Pay USDM"                                                                  # 8 B
 
 # Collect reference triplets verbatim from the manifest, in declared
 # order (jq preserves array order).

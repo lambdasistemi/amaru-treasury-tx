@@ -1,0 +1,74 @@
+{
+    "action": "disburse",
+    "disburse": {
+        "amount": 18750000000,
+        "beneficiaryAddress": "addr1q8qrds2nnx7clx3kcpp2l0eu45twmdcahsfu9m0xcwy59j6xz3vs0hnfaz9nhje8z34kfnds4jyk7hs6dnrag6e2lfgqtyf4rl",
+        "unit": "usdm",
+        "usdmPolicy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+        "usdmToken": "0014df105553444d"
+    },
+    "network": "mainnet",
+    "rationale": {
+        "description": "Disburse 18750 USDM (CAG payee) for Cyber Castellum May 2026.",
+        "destinationLabel": "Crypto Accounting Group",
+        "event": "disburse",
+        "justification": "Acceptance of the Cyber Castellum May 2026 cycle review.",
+        "label": "Pay USDM",
+        "references": [
+            {
+                "@type": "Other",
+                "label": "Contract - CRYPTO ACCOUNTING GROUP",
+                "uri": "ipfs://bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga"
+            },
+            {
+                "@type": "Other",
+                "label": "Address-of-record proof - CRYPTO ACCOUNTING GROUP",
+                "uri": "ipfs://bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm"
+            },
+            {
+                "@type": "Other",
+                "label": "Contract - CYBER CASTELLUM CORPORATION",
+                "uri": "ipfs://bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da"
+            },
+            {
+                "@type": "Other",
+                "label": "Invoice #3508 - CYBER CASTELLUM CORPORATION",
+                "uri": "ipfs://bafybeigy37ui2ikn7bim2vw6cojcbxkcndpjwh7cj5fv3vzs4cszezipxu"
+            },
+            {
+                "@type": "Other",
+                "label": "May2026 cycle review - CYBER CASTELLUM CORPORATION",
+                "uri": "ipfs://bafybeihdmnitrbu2oir3r2fefnpqy3bk7zdz42olzmltmxyt5xag4i2t5a"
+            }
+        ]
+    },
+    "schema": 1,
+    "scope": {
+        "id": "network_compliance",
+        "permissionsDeployedAt": "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+        "permissionsRewardAccount": "a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094",
+        "registryDeployedAt": "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2",
+        "registryPolicyId": "38c627d45835744a2d6c727124f2b5852e5564aeab3f608e0e84ea6d",
+        "scopesDeployedAt": "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0",
+        "treasuryAddress": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
+        "treasuryDeployedAt": "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+        "treasuryLeftoverLovelace": 4612003,
+        "treasuryLeftoverOtherAssets": {},
+        "treasuryLeftoverUsdm": 1664173527,
+        "treasuryScriptHash": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+        "treasuryUtxos": [
+            "77b1b046d1bfb1a09011d4606817ea45d13d8d9e0d02258984d0c6126e4cc9e9#1",
+            "3c3d5332cb159a5f0b42cf48a6f897f1603f94fb4405c6f0c1146d5feb627963#1"
+        ]
+    },
+    "signers": [
+        "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+        "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+    ],
+    "validityUpperBoundSlot": 188064495,
+    "wallet": {
+        "address": "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz",
+        "extraTxIns": [],
+        "txIn": "44454ed0def64621ef645958830f599b488b699b28e3797cc37c4f4dd1463a79#2"
+    }
+}

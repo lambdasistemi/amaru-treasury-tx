@@ -1,51 +1,48 @@
 # #201 tasks
 
-One bisect-safe slice (**S1**). Driver = `%87`, navigator = `%88`.
+One bisect-safe slice (**S1**). After #210 landed and the v2 schema
+became binding, all 5 CIDs are known (4 pinned during the original
+A-001 run, 1 added during post-#210 operator review) and the manifest
+work collapses to a mechanical literal-JSON write. The orchestrator
+takes this slice directly under the mechanical-edit carve-out (no
+RED/GREEN test pair applicable; gate.sh + verify-may-references.sh are
+the proof).
 
-## S1 — pin + collect + assemble (driver writes; navigator reviews)
+## S0 — orchestration amendments (orchestrator-owned, completed)
 
-- [ ] **T010** Driver: read `PINATA_JWT` from `~/.secrets/pinata/jwt`
-      into a subshell env var; verify `curl -sS -H "Authorization:
-      Bearer $PINATA_JWT" https://api.pinata.cloud/data/testAuthentication`
-      returns success. Do not echo the JWT.
-- [ ] **T020** Driver: resolve the 3 already-pinned CIDs (Castellum
-      contract, Castellum invoice, Antithesis contract) via Pinata
-      `GET /data/pinList`. Disambiguate by `metadata.name`; on
-      ambiguity Q-file the orchestrator.
-- [ ] **T030** Driver: pin the 2 missing PDFs (Castellum May 2026
-      plan acceptance, Antithesis invoice) via `POST
-      /pinning/pinFileToIPFS`. Source-PDF paths come from operator
-      inline (orchestrator forwards via Q/A). Record CIDs +
-      invoice numbers.
-- [ ] **T040** Driver: write
+- [X] **T000** Rebase `201-ipfs-pin-may-references` onto fresh
+      `origin/main` (post-#210 / sha 078a1ce2).
+- [X] **T001** Amend `spec.md`, `plan.md`, `tasks.md` to reflect
+      Principle VIII v2 / schema v2.
+- [X] **T002** Extend `gate.sh` to validate the v2 schema
+      (`disbursements[]` + per-disbursement minimum evidence set).
+
+## S1 — write the manifest (orchestrator-owned mechanical edit)
+
+- [X] **T040** Write
       `transactions/2026/network_compliance/may-references.json` per
-      schema `amaru-treasury-may-references-v1`. Labels:
-      `Contract - Cyber Castellum`,
-      `Invoice #<N> - Cyber Castellum`,
-      `May2026 plan acceptance - Cyber Castellum`,
-      `Contract - Antithesis`,
-      `Invoice #<N> - Antithesis`. Every `type` = `"Other"`. Every
-      `uri` = `ipfs://<CID>`.
-- [ ] **T050** Driver: write `scripts/verify-may-references.sh`
-      (executable). For each ref in the manifest, `curl -fsS -I
-      "https://ipfs.io/ipfs/${cid}" >/dev/null`; print PASS/FAIL per
-      CID and exit non-zero on first failure.
-- [ ] **T060** Driver: add an Unreleased bullet to `CHANGELOG.md`
-      referencing #201 and the manifest path.
-- [ ] **T070** Driver: run `./gate.sh`; expect PASS. Navigator
-      observes; reports any RED/GREEN-order or secret-leak concern.
-- [ ] **T080** Driver: create one slice commit. Subject:
-      `feat(transactions): may 2026 network_compliance disburse-reference manifest`.
-      Body: non-empty, references Principle VIII (v0.3.0) and #205,
-      ends with `Tasks: T010, T020, T030, T040, T050, T060, T070,
-      T080`. No JWT, no Pinata account ID, no API token in body.
-- [ ] **T090** Navigator: pre-commit diff review on driver's HEAD
-      candidate; secret-leak grep
-      (`grep -rE 'eyJ|PINATA_JWT=' .`); commit-shape check; sign off
-      via STATUS.md `REVIEW-APPROVED green`.
-- [ ] **T100** Orchestrator: rerun `./gate.sh` at HEAD; rerun
-      secret-leak grep; amend HEAD to check off tasks T010–T100 in
-      this `tasks.md`; push to PR #209; log `SLICE-DONE S1`.
+      schema `amaru-treasury-may-references-v2`. Two disbursements:
+      `may-2026-cyber-castellum` (18750 USDM, 5 refs including cycle
+      review), `may-2026-antithesis` (400000 USDM, 4 refs, no cycle
+      review per yearly cadence). Canonical labels verbatim:
+      `Contract - CRYPTO ACCOUNTING GROUP`,
+      `Address-of-record proof - CRYPTO ACCOUNTING GROUP`,
+      `Contract - CYBER CASTELLUM CORPORATION`,
+      `Invoice #3508 - CYBER CASTELLUM CORPORATION`,
+      `May2026 cycle review - CYBER CASTELLUM CORPORATION`,
+      `Contract - ANTITHESIS OPERATIONS LLC`,
+      `Invoice INV-635 - ANTITHESIS OPERATIONS LLC`.
+- [X] **T050** Write `scripts/verify-may-references.sh` (executable).
+      Dedupes URIs across disbursements, `curl -fsS -I
+      "$IPFS_GATEWAY/${cid}"`; prints PASS/FAIL per CID; exits
+      non-zero on first failure.
+- [X] **T060** Add an Unreleased bullet to `CHANGELOG.md` referencing
+      #201, the manifest path, and Principle VIII v2.
+- [X] **T070** Run `./gate.sh`; expect PASS.
+- [X] **T080** Create one slice commit. Subject:
+      `feat(transactions): may 2026 network_compliance disburse-reference manifest (v2 schema)`.
+      Body: non-empty, references Principle VIII v2 (v0.4.0) and #210.
+      Ends with `Tasks: T040, T050, T060, T070, T080`.
 
 ## S2 — finalization (orchestrator-owned)
 
@@ -56,12 +53,10 @@ One bisect-safe slice (**S1**). Driver = `%87`, navigator = `%88`.
 
 ## Notes
 
-- Tasks T010–T070 are not separable into RED/GREEN pairs — they are
-  data assembly + a live-boundary verification script. Proof of
-  correctness is gate.sh + verify-script output, captured in the
-  slice's WIP.md.
-- The single slice maps to one bisect-safe commit; T090 (navigator
-  sign-off) and T100 (orchestrator amend) do not introduce new
-  commits — T090 is a review act, T100 is the in-place amend that
-  carries the tasks.md checkboxes onto the same SHA the driver
-  produced.
+- T010–T030 (Pinata authentication, pinList, pin missing PDFs) were
+  executed during the original A-001 run before the #210 amendment;
+  all 5 CIDs are now known and inlined in the worker brief, so the
+  remaining work is pure data assembly with no live Pinata calls.
+- This slice is one bisect-safe commit; T040–T070 fold into the single
+  commit produced by T080. The tasks.md checkboxes are amended onto
+  that same commit.

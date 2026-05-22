@@ -3,48 +3,54 @@
 ## P1 user story
 
 As the **Amaru treasury operator** preparing the May 2026 disburses
-out of `network_compliance` (Cyber Castellum + Antithesis), I need a
-single committed manifest enumerating every IPFS-pinned supporting
-document and the exact label / `@type` to attach via
-`disburse-wizard --reference-uri/-type/-label`, so that:
+out of `network_compliance` (paid to **Crypto Accounting Group**,
+benefiting **Cyber Castellum Corporation** and **Antithesis Operations
+LLC**), I need a single committed manifest enumerating every
+IPFS-pinned supporting document and the exact label / `@type` to
+attach via `disburse-wizard --reference-uri/-type/-label`, so that:
 
 - the wizard call is reproducible from the manifest alone,
 - the resulting `disburse` tx satisfies **Constitution Principle VIII
-  (NON-NEGOTIABLE)** (Castellum monthly = 3 refs; Antithesis yearly = 2
-  refs),
-- labels match the `<kind> - <Beneficiary>` split convention from
-  mainnet tx
-  [d6c14625](https://cardanoscan.io/transaction/d6c14625d5b017a1e86f219cb12a887c770076a0e8b2b334bb4eac03533eff7d).
+  v2 (NON-NEGOTIABLE)** — the payee+beneficiary model: 2 payee docs +
+  2 beneficiary docs (+1 cycle-review when periodic);
+- labels use canonical legal names verbatim per `vendors.yaml`
+  (`CRYPTO ACCOUNTING GROUP`, `CYBER CASTELLUM CORPORATION`,
+  `ANTITHESIS OPERATIONS LLC`).
 
 ## Acceptance criteria
 
 - A file at `transactions/2026/network_compliance/may-references.json`
-  conforming to schema `amaru-treasury-may-references-v1`:
+  conforming to schema `amaru-treasury-may-references-v2`
+  (payee+beneficiary model):
 
   ```json
   {
-    "schema": "amaru-treasury-may-references-v1",
+    "schema": "amaru-treasury-may-references-v2",
     "scope": "network_compliance",
     "month": "2026-05",
     "constitution_principle": "VIII",
-    "constitution_version": "0.3.0",
-    "vendors": {
-      "cyber_castellum": {
-        "contract_class": "monthly",
-        "references": [ {kind, uri, type, label} x 3 ]
-      },
-      "antithesis": {
-        "contract_class": "yearly",
-        "references": [ {kind, uri, type, label} x 2 ]
+    "constitution_version": "0.4.0",
+    "disbursements": [
+      {
+        "id": "may-2026-<beneficiary-slug>",
+        "amount_usdm": <integer>,
+        "payee_id": "<vendors.yaml id>",
+        "beneficiary_id": "<vendors.yaml id>",
+        "references": [ { kind, vendor_id, uri, type, label }, ... ]
       }
-    }
+    ]
   }
   ```
 
 - Every `uri` starts with `ipfs://`; every `type` is `"Other"` (per
-  Principle VIII); every `label` follows `<kind> - <Beneficiary>`
-  with `kind` ∈ {`Contract`, `Invoice #<N>`, `<MonthYear> plan
-  acceptance`}.
+  Principle VIII); every `vendor_id` matches an id in `vendors.yaml`.
+- Each disbursement carries the minimum evidence set per Principle VIII
+  v2: `payee_contract`, `payee_address_proof`, `beneficiary_contract`,
+  `beneficiary_invoice` (and `beneficiary_cycle_review` when the
+  beneficiary has a periodic review cycle).
+- Labels use canonical legal names verbatim from `vendors.yaml`
+  (`CRYPTO ACCOUNTING GROUP`, `CYBER CASTELLUM CORPORATION`,
+  `ANTITHESIS OPERATIONS LLC`).
 - Each CID resolves through a public IPFS gateway
   (`https://ipfs.io/ipfs/<CID>`).
 - No placeholder markers (`<CID>`, `__PLACEHOLDER__`, `TODO`, `TBD`)
@@ -56,8 +62,9 @@ document and the exact label / `@type` to attach via
 ## Exclusions
 
 - No `lib/`, `app/`, `test/`, `nix/`, `*.cabal` edits.
-- No changes to `.specify/memory/constitution.md` (Principle VIII
-  landed via #206, sha cfeea015 / merge 51f257ff).
+- No changes to `.specify/memory/constitution.md` (Principle VIII v1
+  landed via #206; v2 amendment landed via #210).
+- No changes to `vendors.yaml` (landed via #210).
 - No on-chain action; this ticket produces data only.
 - No edits to siblings #196 (window 0:6), #189/#187 (window 0:7).
 - No commit, log, transcript, PR-body, or CHANGELOG line containing

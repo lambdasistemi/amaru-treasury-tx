@@ -51,9 +51,8 @@ ARCHIVE_ROOT=transactions/2026/network_compliance
 base_ref="${BASE_REF:-origin/main}"
 git fetch origin main >/dev/null 2>&1 || true
 new_rundirs=$(git diff --name-only --diff-filter=A "$base_ref"..HEAD -- "$ARCHIVE_ROOT" 2>/dev/null \
-              | awk -F/ -v root="$ARCHIVE_ROOT" '
-                  $0 ~ ("^"root"/[0-9a-f]{64}/") { print root"/"$3 }
-                ' | sort -u)
+              | grep -oE "^${ARCHIVE_ROOT}/[0-9a-f]{64}" \
+              | sort -u)
 if [ -n "${new_rundirs:-}" ]; then
   while IFS= read -r dir; do
     [ -z "$dir" ] && continue

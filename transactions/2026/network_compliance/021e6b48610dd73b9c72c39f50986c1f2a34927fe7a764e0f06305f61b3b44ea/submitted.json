@@ -1,0 +1,10 @@
+{
+  "txId": "021e6b48610dd73b9c72c39f50986c1f2a34927fe7a764e0f06305f61b3b44ea",
+  "kind": "reorganize",
+  "batch": "05-final",
+  "submittedAt": "2026-05-22T18:25:35Z",
+  "submitter": "local-node-n2c",
+  "socket": "/code/cardano-mainnet/ipc/node.socket",
+  "network": "mainnet",
+  "networkMagic": 764824073
+}

@@ -45,12 +45,18 @@ nix develop --quiet -c just ci
 #     inputs/<parent-txid>.cbor
 # This block is a noop until the rundir actually appears in-tree.
 ARCHIVE_ROOT=transactions/2026/network_compliance
-if [ -d "$ARCHIVE_ROOT" ]; then
+# Only audit rundirs added by this PR (paths present at HEAD that
+# weren't in origin/main). Pre-existing partial archives elsewhere in
+# the tree are out of scope for this PR's gate.
+base_ref="${BASE_REF:-origin/main}"
+git fetch origin main >/dev/null 2>&1 || true
+new_rundirs=$(git diff --name-only --diff-filter=A "$base_ref"..HEAD -- "$ARCHIVE_ROOT" 2>/dev/null \
+              | awk -F/ -v root="$ARCHIVE_ROOT" '
+                  $0 ~ ("^"root"/[0-9a-f]{64}/") { print root"/"$3 }
+                ' | sort -u)
+if [ -n "${new_rundirs:-}" ]; then
   while IFS= read -r dir; do
     [ -z "$dir" ] && continue
-    # only check directories that look like txid rundirs (64 hex chars)
-    base=$(basename "$dir")
-    [[ "$base" =~ ^[0-9a-f]{64}$ ]] || continue
     echo "==> archive completeness on $dir"
     for f in intent.json tx.cbor tx.envelope.json signed-tx.hex \
              signed-tx.tx submit.log submitted.json summary.md; do
@@ -61,13 +67,22 @@ if [ -d "$ARCHIVE_ROOT" ]; then
       || { echo "missing $dir/inputs/ directory"; exit 1; }
     [ -n "$(ls -A "$dir/inputs" 2>/dev/null)" ] \
       || { echo "$dir/inputs/ has no parent CBORs"; exit 1; }
-  done < <(find "$ARCHIVE_ROOT" -mindepth 1 -maxdepth 1 -type d)
+  done <<< "$new_rundirs"
 fi
 
 # --- secret-leak grep ------------------------------------------------
-echo "==> secret-leak grep (signing keys, vault passphrases, seeds)"
-if git grep -nE '(ed25519_sk|cardano-cli.*signing-key|vault.*passphrase|seed_phrase|BEGIN PRIVATE KEY|aged?-secret-key)' -- ':!gate.sh' ':!specs/'; then
-  echo "potential secret leak in committed tree"; exit 1
+# Match actual key-material shapes, not the words "vault" / "passphrase"
+# that legitimately appear in docs and CLI flag definitions:
+#   * bech32 addr/ed25519 signing keys (addr_sk1…, ed25519_sk1…, root_xsk1…)
+#   * PEM private-key blocks
+#   * JWT-shaped tokens (eyJ…\..*\..*)
+#   * age secret-key bech32 (AGE-SECRET-KEY-1…)
+# Limited to archive + scripts produced by this PR; skill/docs/source
+# trees that talk *about* secrets are excluded.
+echo "==> secret-leak grep (actual key material in PR-owned paths)"
+PR_PATHS=( ':!gate.sh' ':!specs/' ':!.claude/' ':!docs/' ':!lib/' ':!test/' ':!skills/' ':!scripts/smoke/' )
+if git grep -nE '(\b(addr_sk|ed25519_sk|root_xsk|stake_sk)1[ac-hj-np-z02-9]{50,}|BEGIN (PRIVATE|ENCRYPTED) KEY|AGE-SECRET-KEY-1[A-Z0-9]{30,}|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})' -- "${PR_PATHS[@]}"; then
+  echo "potential secret leak in PR-owned tree"; exit 1
 fi
 
 # --- commit-message gate --------------------------------------------

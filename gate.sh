@@ -46,8 +46,8 @@ commit_gate() {
     chore*|docs*|build*|ci*|style*|revert*) ;;
     *)
       printf '%s\n' "$body" \
-        | grep -Eq '^Tasks:[[:space:]]*T[0-9]+([[:space:]]*,[[:space:]]*T[0-9]+)*[[:space:]]*$' \
-        || { echo "commit body missing 'Tasks: T###[, T###]' trailer"; return 1; }
+        | grep -Eq '^Tasks:[[:space:]]*T[0-9]+[a-z]?([[:space:]]*,[[:space:]]*T[0-9]+[a-z]?)*[[:space:]]*$' \
+        || { echo "commit body missing 'Tasks: T###[a-z]?[, T###[a-z]?]' trailer"; return 1; }
       ;;
   esac
 }

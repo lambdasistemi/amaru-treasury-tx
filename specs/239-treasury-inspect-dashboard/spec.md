@@ -86,7 +86,7 @@ After a redeploy (image rebuild + container restart on the production host), the
 - **FR-008**: For each scope the dashboard MUST display a top-N table of UTxOs sortable by USDM and by lovelace. The default N is 20 and the default sort is "USDM, descending".
 - **FR-009**: For each scope the dashboard MUST display the list of pending SundaeSwap orders attributable to that scope (sourced from the inspect report's `pendingOrders` field).
 - **FR-010**: Clicking any UTxO row MUST expand it inline beneath itself, on the same page, without navigation, to reveal outref, deployed-at, and datum (where present).
-- **FR-011**: The dashboard MUST display, in a footer-adjacent region, links to the ten most-recently-submitted treasury transactions, each opening cardanoscan in a new tab for the correct txid.
+- **FR-011**: The dashboard MUST display, in a footer-adjacent region, links to the ten most-recently-submitted treasury transactions, each opening cardanoscan in a new tab for the correct txid. The list is sourced from the in-repo `transactions/2026/<scope>/<txid>/` archive baked into the image (see FR-022a).
 
 **Auto-refresh**
 
@@ -104,9 +104,14 @@ After a redeploy (image rebuild + container restart on the production host), the
 
 **Metadata locking**
 
-- **FR-020**: The metadata source — the upstream `pragma-org/amaru-treasury` repository's `journal/2026/metadata.json` — MUST be pinned to a specific commit as a build input to the deployed image and baked into the image at a fixed in-container path.
-- **FR-021**: The metadata file inside the container MUST be on a read-only layer; no process inside the container is permitted to modify it. Updating the metadata in production REQUIRES a rebuild + redeploy of the image, not a file write.
-- **FR-022**: The deployed system MUST expose the metadata's pinned commit / hash to the operator in a discoverable way (e.g., in the page footer or via a small `/v1/version` probe) so that a fresh visit to the URL can be tied to a specific metadata snapshot.
+- **FR-020**: The metadata source — the upstream `github.com/pragma-org/amaru-treasury` repository's `journal/2026/metadata.json` — MUST be pinned to a specific commit as a Nix flake input to the deployed image and baked into the image at a fixed in-container path (e.g., `/etc/amaru-treasury/metadata.json`). The pinned content is content-addressed by the flake's lock file; the same lock yields the same metadata in the image.
+- **FR-021**: The metadata file inside the container MUST be on a read-only layer; no process inside the container is permitted to modify it. Updating the metadata in production REQUIRES bumping the flake input + rebuilding + redeploying, not a file write.
+- **FR-022**: The deployed system MUST expose the metadata's pinned commit and sha256 to the operator in TWO discoverable ways: (a) in the page footer alongside the docs/repo links, and (b) at a small JSON probe `GET /v1/version`. Both surfaces MUST agree.
+
+**Recent treasury txs**
+
+- **FR-022a**: The "last 10 recently-submitted treasury txs" footer list MUST be sourced from the project's in-repo committed archive at `transactions/2026/<scope>/<txid>/`. The archive is consumed at image-build time, materialised inside the image as a small read-only JSON manifest, and surfaced from a backend endpoint (e.g., `GET /v1/recent-txs`) consumed by the dashboard.
+- **FR-022b**: Because the recent-txs list is baked into the image, updating it in production REQUIRES bumping the in-repo `transactions/2026/` directory (via a normal commit), rebuilding, and redeploying. The dashboard does NOT query the chain or any external service to enumerate recent txs.
 
 **Mainnet integration**
 
@@ -142,6 +147,15 @@ After a redeploy (image rebuild + container restart on the production host), the
 - **SC-006**: Auto-refresh keeps the displayed "last refreshed" timestamp within 35 seconds of wall-clock as long as the node is in sync (verified by inspecting the page after 5 minutes of idle).
 - **SC-007**: A request for an unknown scope returns HTTP 400 (never 500, never 200 with empty data) in 100% of attempts.
 - **SC-008**: The deployed image is built from a Nix derivation whose inputs are content-addressed; re-running the build from the same commit yields the same image hash in at least 99% of cases (allowing for known nondeterminism in compressed layers).
+
+## Clarifications
+
+### Session 2026-05-22
+
+- **Q1: Metadata pin source.** → Pinned via Nix flake input from `github.com/pragma-org/amaru-treasury` at a chosen commit (the upstream is the canonical source; the in-repo `test/fixtures/metadata.json` and `/code/metadata-mainnet.json` mirrors are byte-identical to the upstream `journal/2026/metadata.json` — sha256 `8ea2c53b931efae432f5a7fc031b732147cc39b9b6159b4f6e1b22c8b78fa375` at spec date).
+- **Q2: Recent-txs source.** → Local committed archive at `transactions/2026/<scope>/<txid>/` (657 committed files in this repo at spec date). Materialised at image-build time as a small read-only manifest. No on-chain query, no external service.
+- **Q3: Build identity exposure.** → Both surfaces: page footer (alongside docs/repo links) AND `GET /v1/version` JSON probe.
+- **Q4: Refresh cadence / stale threshold.** → 30 s refresh tick, 5 min stale threshold (spec defaults retained).
 
 ## Assumptions
 

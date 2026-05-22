@@ -168,9 +168,28 @@
             inherit pkgs;
             transactionsDir = ./transactions/2026;
           };
+          # ISO-8601 stamp of the flake source's last-modified
+          # time. Reproducible (same commit → same value);
+          # surfaces as biBuildTime in /v1/version.
+          buildTimeISO =
+            let t = self.lastModified or 0;
+            in pkgs.lib.substring 0 19
+                 (pkgs.lib.replaceStrings [ " " ] [ "T" ]
+                   (builtins.readFile (pkgs.runCommand
+                     "amaru-treasury-build-time" { } ''
+                       date -u -d @${toString t} \
+                         '+%Y-%m-%dT%H:%M:%SZ' > $out
+                     '')))
+            + "Z";
+          buildIdentity = import ./nix/build-identity.nix {
+            inherit pkgs treasuryMetadata recentTxs;
+            gitCommit =
+              self.shortRev or self.dirtyShortRev or "dirty";
+            buildTime = buildTimeISO;
+          };
           checks = import ./nix/checks.nix {
             inherit pkgs components lintPkgs
-              treasuryMetadata recentTxs;
+              treasuryMetadata recentTxs buildIdentity;
             src = ./.;
           };
           checkApps = import ./nix/apps.nix { inherit pkgs checks; };

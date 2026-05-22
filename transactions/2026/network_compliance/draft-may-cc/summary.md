@@ -8,18 +8,43 @@ Once submitted, this directory is renamed to
 
 | Field | Value |
 |---|---|
-| Unsigned-tx txId | `db6e0b3a6a49941d36465babe1355e1178c2bfc3646b6fcda7f8b06432485604` |
-| Body size | 2 204 bytes |
-| Fee | 501 398 lovelace (≈ 0.501 ADA) |
-| Total collateral | 752 097 lovelace (≈ 0.752 ADA) |
-| Validity (invalidHereafter slot) | 188 065 340 |
-| Auxiliary-data hash (label-1694) | `18d40a5ff26d9aaa02bee904ec165d5bc077450f6e48756603acf0b8d14c58b8` |
+| Unsigned-tx txId | `c150d5c5c67658c8f2a3bc24e16a4852257d46a03224257ac990fcca6f6fde78` |
+| Body size | 2 220 bytes |
+| Fee | 516 135 lovelace (≈ 0.516 ADA) |
+| Total collateral | 774 203 lovelace (≈ 0.774 ADA) |
+| Validity (invalidHereafter slot) | 188 070 688 |
+| Auxiliary-data hash (label-1694) | (see `report.json`) |
 | Redeemers / failures | 3 redeemers, 0 failures, status `ok` |
 | Network | mainnet (magic 764 824 073) |
 
+## Design (post-#229)
+
+The redeemer's `amount` carries the beneficiary's min-UTxO lovelace
+together with the USDM quantity. The treasury validator's `or` clause
+(`lovelace_of(amount) == 0` OR `is_entirely_before(validity_range,
+expiration)`) permits the non-zero `amount.lovelace` because we are
+pre-expiration; the treasury then funds the beneficiary's min-UTxO
+directly from its own ADA reserves, and the operator wallet pays only
+the network fee.
+
+This is the design `treasury-contracts/lib/utilities.ak`'s
+`equal_plus_min_ada` rule was authored for (`"allows the ADA to
+increase if it needs to cover minUTxO"`). It mirrors the bash recipe's
+`calculate_min_utxo` semantics and is what PR #229 corrected after
+#215 had mistakenly steered the wizard into a "wallet-pays" design.
+
+## Redeemer amount (netDebit)
+
+| | lovelace | USDM |
+|---|---|---|
+| `amount` (`Disburse` redeemer) | 1 189 560 | 18 750 000 000 |
+
+Treasury leftover lovelace = `input.lov − 1 189 560` = 3 422 443
+(per validator equality at the `≥` bound).
+
 ## Inputs
 
-### Wallet (fuel + beneficiary min-UTxO contribution)
+### Wallet (fuel only)
 
 | TxIn | Lovelace |
 |---|---|
@@ -48,21 +73,29 @@ Once submitted, this directory is renamed to
 
 | Address | Lovelace | USDM |
 |---|---|---|
-| `addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk` | 4 612 003 | 1 664 173 527 |
+| `addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk` | 3 422 443 | 1 664 173 527 |
 
-✓ Lovelace == treasury input lovelace (4 612 003 == 4 612 003). Validator's `equal_plus_min_ada` rule satisfied (post-#216 fix; was 2 612 003 in the pre-fix build).
+✓ Lovelace conservation:
+`leftover.lov (3 422 443) = input.lov (4 612 003) − amount.lov (1 189 560)`.
+Validator's `equal_plus_min_ada` rule satisfied as equality.
 
-### Beneficiary (CAG payee, min-UTxO from wallet)
+### Beneficiary (CAG payee, min-UTxO funded by treasury)
 
 | Address | Lovelace | USDM |
 |---|---|---|
-| `addr1q8qrds2nnx7clx3kcpp2l0eu45twmdcahsfu9m0xcwy59j6xz3vs0hnfaz9nhje8z34kfnds4jyk7hs6dnrag6e2lfgqtyf4rl` | 2 000 000 | 18 750 000 000 |
+| `addr1q8qrds2nnx7clx3kcpp2l0eu45twmdcahsfu9m0xcwy59j6xz3vs0hnfaz9nhje8z34kfnds4jyk7hs6dnrag6e2lfgqtyf4rl` | 1 189 560 | 18 750 000 000 |
+
+The 1 189 560 lovelace matches `calculate_min_utxo` against live
+mainnet protocol params for this output shape — identical to what
+the bash recipe produces.
 
 ### Wallet change
 
 | Address | Lovelace |
 |---|---|
-| `addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz` | 87 421 386 (89.92 − 2.0 beneficiary − 0.501 fee) |
+| `addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz` | 89 406 649 (= 89.92 input − 0.516 fee) |
+
+Operator wallet pays only the network fee; no min-UTxO drain.
 
 ## Rationale (label-1694, CIP-1694 + SundaeSwap TOM spec)
 
@@ -88,8 +121,6 @@ Each text field ≤ 64 bytes (Cardano per-text metadatum cap).
 | 4 | `beneficiary_invoice` | `Invoice #3508 - CYBER CASTELLUM CORPORATION` | `ipfs://bafybeigy37ui2ikn7bim2vw6cojcbxkcndpjwh7cj5fv3vzs4cszezipxu` |
 | 5 | `beneficiary_cycle_review` | `May2026 cycle review - CYBER CASTELLUM CORPORATION` | `ipfs://bafybeihdmnitrbu2oir3r2fefnpqy3bk7zdz42olzmltmxyt5xag4i2t5a` |
 
-URIs are emitted as 2-element CBOR arrays `["ipfs://", "<cid>"]` to fit the 64-byte per-text cap (matches d6c14625 precedent).
-
 ## Required signers
 
 | Hash | Role |
@@ -114,9 +145,10 @@ Satisfies `permissions.ak` (`approved_by_owner_and_someone_else`).
 - ✓ `tx-inspect --rules amaru-treasury.yaml` clean (T220)
 - ✓ `tx-validate --n2c-socket-path /code/cardano-mainnet/ipc/node.socket --network-magic 764824073` `structurally_clean`, exit 0 (T230)
 - ✓ `body.references[] | length == 5` with canonical legal names (T240)
-- ✓ Pre-#216 phase-2 script eval bug NOT triggered (fixed wizard; merged at `fe19c764`)
+- ✓ Phase-2 script eval passes (post-#216 wizard fix)
 - ✓ Phase-1 ledger validation passes (description / justification / destinationLabel each ≤ 64 bytes)
-- ✓ TextEnvelope produced by canonical `amaru-treasury-tx envelope-tx` (description = `"Ledger Cddl Format"`, matches every past archived rundir)
+- ✓ TextEnvelope produced by canonical `amaru-treasury-tx envelope-tx`
+- ✓ Beneficiary min-UTxO funded by the treasury via the redeemer's `amount.lovelace` (post-#229 design)
 
 ## Pending
 
@@ -128,5 +160,6 @@ Satisfies `permissions.ak` (`approved_by_owner_and_someone_else`).
 
 ## Stack provenance
 
-- main (post-#216 merge at `fe19c764`)
+- main
+- → #229 (https://github.com/lambdasistemi/amaru-treasury-tx/pull/229) USDM min-UTxO redeemer compensation
 - → this PR (#221, https://github.com/lambdasistemi/amaru-treasury-tx/pull/221)

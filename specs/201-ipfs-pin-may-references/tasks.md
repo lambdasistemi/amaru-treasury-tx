@@ -46,7 +46,7 @@ the proof).
 
 ## S2 — finalization (orchestrator-owned)
 
-- [ ] **T200** Orchestrator: `git rm gate.sh` + `chore: drop gate.sh
+- [X] **T200** Orchestrator: `git rm gate.sh` + `chore: drop gate.sh
       (ready for review)` commit; push; `gh pr ready 209`; append
       `COMPLETE https://github.com/lambdasistemi/amaru-treasury-tx/pull/209`
       to STATUS.md.

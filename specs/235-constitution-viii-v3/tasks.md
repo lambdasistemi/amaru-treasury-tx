@@ -5,29 +5,27 @@ slice (**S2**). All orchestrator-owned; no driver/navigator pair.
 
 ## S1 — constitution + vendors.yaml v3 amendment
 
-- [ ] **T100** Edit `.specify/memory/constitution.md` Principle VIII:
-      keep intro / two-vendor-roles / destination-address / canonical
-      legal names / final non-violation paragraph UNCHANGED; replace
-      the v2 "Minimum evidence set" sub-section with the v3 version
-      that:
-      * Adds `#### Beneficiary contract publication carve-out (NDA-blocked)`.
-      * Adds `#### Yearly cycle / contract-collapse`.
-      * Adds `#### Minimum evidence sets (summary table)` with the
-        four-row table from spec.md.
-      * Preserves the requirement that NDA-blocked omissions MUST be
-        acknowledged in `body.justification`.
-- [ ] **T110** Bump the constitution version footer to `**Version**:
-      0.5.0` and update `**Last Amended**` to today (2026-05-22).
-- [ ] **T120** Edit `vendors.yaml`: add a top-of-file comment (or a
-      short YAML key like `schema_notes`) documenting that
-      `engagement_contract_cid` MAY be `null` (or omitted) for an
-      NDA-blocked vendor under Principle VIII v3 carve-out A. Do NOT
-      change any existing CID values in this PR.
-- [ ] **T130** Run `./gate.sh`; expect PASS.
-- [ ] **T140** One bisect-safe slice commit. Subject:
+- [X] **T100** Edited `.specify/memory/constitution.md` Principle
+      VIII: kept intro / two-vendor-roles / destination-address /
+      canonical legal names / final non-violation paragraph
+      UNCHANGED; added `#### Beneficiary contract publication
+      carve-out (NDA-blocked)`, `#### Yearly cycle /
+      contract-collapse`, and `#### Minimum evidence sets (summary
+      table)` with the four-row table from spec.md; folded the
+      "redacted invoice acceptable" sentence into the existing slot 4
+      definition; preserved the NDA-omission `justification` field
+      requirement.
+- [X] **T110** Bumped constitution version footer to
+      `**Version**: 0.5.0 | **Ratified**: 2026-05-04 | **Last
+      Amended**: 2026-05-22`.
+- [X] **T120** Added schema-notes comment block at the top of
+      `vendors.yaml` documenting nullability of
+      `engagement_contract_cid` under carve-out A, plus the v3
+      `review_cycle` enum reminder. No existing CID values changed.
+- [X] **T130** `./gate.sh` PASS.
+- [X] **T140** One bisect-safe slice commit. Subject:
       `docs(constitution): amend Principle VIII v3 — NDA carve-out + yearly-cycle collapse`.
-      Body references #235 and the v0.5.0 version footer bump. Ends
-      with `Tasks: T100, T110, T120, T130, T140`.
+      Tasks trailer: `Tasks: T100, T110, T120, T130, T140`.
 
 ## S2 — Finalization (orchestrator-owned)
 

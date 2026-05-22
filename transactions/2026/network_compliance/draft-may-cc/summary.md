@@ -8,18 +8,18 @@ Once submitted, this directory is renamed to
 
 | Field | Value |
 |---|---|
-| Unsigned-tx txId | `a8156039625f75d2bb6f6ec34cbb23f62370478cd5be1baafbc862c359457f4b` |
+| Unsigned-tx txId | `db6e0b3a6a49941d36465babe1355e1178c2bfc3646b6fcda7f8b06432485604` |
 | Body size | 2 204 bytes |
 | Fee | 501 398 lovelace (≈ 0.501 ADA) |
 | Total collateral | 752 097 lovelace (≈ 0.752 ADA) |
-| Validity (invalidHereafter slot) | 188 064 495 |
+| Validity (invalidHereafter slot) | 188 065 340 |
 | Auxiliary-data hash (label-1694) | `18d40a5ff26d9aaa02bee904ec165d5bc077450f6e48756603acf0b8d14c58b8` |
 | Redeemers / failures | 3 redeemers, 0 failures, status `ok` |
 | Network | mainnet (magic 764 824 073) |
 
 ## Inputs
 
-### Wallet (fuel + min-UTxO contribution)
+### Wallet (fuel + beneficiary min-UTxO contribution)
 
 | TxIn | Lovelace |
 |---|---|
@@ -29,9 +29,9 @@ Once submitted, this directory is renamed to
 
 | TxIn | Lovelace | USDM |
 |---|---|---|
-| `77b1b046d1bfb1a09011d4606817ea45d13d8d9e0d02258984d0c6126e4cc9e9#1` | 2 306 002 | 10 174 810 641 |
+| `77b1b046d1bfb1a09011d4606817ea45d13d8d9e0d02258984d0c6126e4cc9e9#1` | 2 306 002 | 10 239 362 886 |
 | `3c3d5332cb159a5f0b42cf48a6f897f1603f94fb4405c6f0c1146d5feb627963#1` | 2 306 001 | 10 174 810 641 |
-| **Sum** | **4 612 003** | **20 349 621 282** |
+| **Sum** | **4 612 003** | **20 414 173 527** |
 
 ### Reference inputs (read-only)
 
@@ -48,22 +48,21 @@ Once submitted, this directory is renamed to
 
 | Address | Lovelace | USDM |
 |---|---|---|
-| `addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk` | 4 612 003 | 1 599 621 282 |
+| `addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk` | 4 612 003 | 1 664 173 527 |
 
-✓ Lovelace == treasury input lovelace (4 612 003). Validator's
-`equal_plus_min_ada` rule satisfied (was 2 612 003 before #216).
+✓ Lovelace == treasury input lovelace (4 612 003 == 4 612 003). Validator's `equal_plus_min_ada` rule satisfied (post-#216 fix; was 2 612 003 in the pre-fix build).
 
-### Beneficiary (CAG payee)
+### Beneficiary (CAG payee, min-UTxO from wallet)
 
 | Address | Lovelace | USDM |
 |---|---|---|
-| `addr1q8qrds2nnx7clx3kcpp2l0eu45twmdcahsfu9m0xcwy59j6xz3vs0hnfaz9nhje8z34kfnds4jyk7hs6dnrag6e2lfgqtyf4rl` | 2 000 000 (min-UTxO from wallet) | 18 750 000 000 |
+| `addr1q8qrds2nnx7clx3kcpp2l0eu45twmdcahsfu9m0xcwy59j6xz3vs0hnfaz9nhje8z34kfnds4jyk7hs6dnrag6e2lfgqtyf4rl` | 2 000 000 | 18 750 000 000 |
 
 ### Wallet change
 
 | Address | Lovelace |
 |---|---|
-| `addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz` | 87 421 386 (89.92 − 2.0 − 0.501 fee) |
+| `addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz` | 87 421 386 (89.92 − 2.0 beneficiary − 0.501 fee) |
 
 ## Rationale (label-1694, CIP-1694 + SundaeSwap TOM spec)
 
@@ -77,9 +76,7 @@ Once submitted, this directory is renamed to
 }
 ```
 
-Each text field ≤ 64 bytes (Cardano per-text metadatum cap). The
-wizard does not yet auto-chunk these fields — operator-side
-discipline.
+Each text field ≤ 64 bytes (Cardano per-text metadatum cap).
 
 ### Five `references[]` (Principle VIII v2 evidence set)
 
@@ -109,26 +106,27 @@ Satisfies `permissions.ak` (`approved_by_owner_and_someone_else`).
 | `treasury-inspect --scope network_compliance` USDM total | 414 892.255806 USDM (414 892 255 806 micro-USDM) |
 | Disburse amount | 18 750 USDM (18 750 000 000 micro-USDM) |
 | Headroom | 22× |
-| Treasury UTxO count | 55 (largest single USDM = 10 174.81 USDM) |
-| Greedy selection | 2 UTxOs, sum 20 349.62 USDM (1 599.62 USDM left as leftover) |
+| Treasury UTxO count (at re-build) | 55 (total lovelace 131 596 392) |
+| Greedy selection | 2 UTxOs (`77b1b046…#1` + `3c3d5332…#1`), sum 20 414.17 USDM |
 
 ## Verification gates passed
 
 - ✓ `tx-inspect --rules amaru-treasury.yaml` clean (T220)
-- ✓ `tx-validate --n2c-socket-path /code/cardano-mainnet/ipc/node.socket` `structurally_clean` (T230)
+- ✓ `tx-validate --n2c-socket-path /code/cardano-mainnet/ipc/node.socket --network-magic 764824073` `structurally_clean`, exit 0 (T230)
 - ✓ `body.references[] | length == 5` with canonical legal names (T240)
-- ✓ Pre-#216 phase-2 script eval bug not triggered (fixed wizard)
-- ✓ `description.bytes ≤ 64`, `justification.bytes ≤ 64`, `destinationLabel.bytes ≤ 64`
+- ✓ Pre-#216 phase-2 script eval bug NOT triggered (fixed wizard; merged at `fe19c764`)
+- ✓ Phase-1 ledger validation passes (description / justification / destinationLabel each ≤ 64 bytes)
+- ✓ TextEnvelope produced by canonical `amaru-treasury-tx envelope-tx` (description = `"Ledger Cddl Format"`, matches every past archived rundir)
 
 ## Pending
 
 - Owner witnesses for `8bd03209…b1c1` and `f3ab64b0…d23e2e` (S3).
 - Re-run `tx-inspect` + `tx-validate` post-attach (S3 T320).
-- Fresh-subagent pre-submit brief (S4).
+- Claude-authored pre-submit brief (S4).
 - Submit on explicit operator go (S5).
 - Populate `inputs/<parent-txid>.cbor` for the 3 parent txs after submit (T530).
 
 ## Stack provenance
 
-- main → #216 (https://github.com/lambdasistemi/amaru-treasury-tx/pull/216) wizard USDM-leftover fix
-- → this PR (#220, https://github.com/lambdasistemi/amaru-treasury-tx/pull/220)
+- main (post-#216 merge at `fe19c764`)
+- → this PR (#221, https://github.com/lambdasistemi/amaru-treasury-tx/pull/221)

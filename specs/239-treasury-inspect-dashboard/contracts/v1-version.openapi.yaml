@@ -1,0 +1,33 @@
+openapi: 3.0.3
+info:
+  title: amaru-treasury-tx-api / v1-version
+  version: "0.1.0"
+  description: |
+    Read-only HTTP endpoint surfacing the deployed image's build identity:
+    git commit, baked metadata sha256, upstream metadata source pin,
+    build time, and the recent-txs manifest size. Same values are rendered
+    in the dashboard footer (FR-022).
+servers:
+  - url: https://amaru-treasury.plutimus.com
+paths:
+  /v1/version:
+    get:
+      summary: Deployed image build identity
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuildIdentity"
+components:
+  schemas:
+    BuildIdentity:
+      type: object
+      properties:
+        biGitCommit: { type: string, description: "Short sha of amaru-treasury-tx commit used to build the image." }
+        biMetadataSha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        biMetadataSource: { type: string, description: "github:pragma-org/amaru-treasury/<rev>" }
+        biBuildTime: { type: string, format: date-time }
+        biRecentTxsCount: { type: integer, minimum: 0 }
+      required: [biGitCommit, biMetadataSha256, biMetadataSource, biBuildTime, biRecentTxsCount]

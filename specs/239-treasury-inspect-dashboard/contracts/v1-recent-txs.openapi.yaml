@@ -1,0 +1,42 @@
+openapi: 3.0.3
+info:
+  title: amaru-treasury-tx-api / v1-recent-txs
+  version: "0.1.0"
+  description: |
+    Read-only HTTP endpoint exposing the baked-in recent-transactions
+    manifest. Updated only via a commit to `transactions/2026/` followed by
+    an image rebuild and redeploy.
+servers:
+  - url: https://amaru-treasury.plutimus.com
+paths:
+  /v1/recent-txs:
+    get:
+      summary: Last ten recently-submitted treasury transactions
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecentTxManifest"
+components:
+  schemas:
+    RecentTxManifest:
+      type: object
+      properties:
+        rtmEntries:
+          type: array
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/RecentTxEntry"
+      required: [rtmEntries]
+    RecentTxEntry:
+      type: object
+      properties:
+        rteScope:
+          type: string
+          enum: [core_development, ops_and_use_cases, network_compliance, middleware, contingency]
+        rteTxid: { type: string, pattern: "^[0-9a-f]{64}$" }
+        rteSubmittedAt: { type: string, format: date-time }
+        rteCardanoscanUrl: { type: string, format: uri }
+      required: [rteScope, rteTxid, rteSubmittedAt, rteCardanoscanUrl]

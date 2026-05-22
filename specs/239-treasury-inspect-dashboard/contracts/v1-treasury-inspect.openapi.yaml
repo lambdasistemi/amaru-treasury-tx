@@ -1,0 +1,61 @@
+openapi: 3.0.3
+info:
+  title: amaru-treasury-tx-api / v1-treasury-inspect
+  version: "0.1.0"
+  description: |
+    Read-only HTTP endpoint exposing the JSON payload that powers the
+    treasury-inspect dashboard. Output is byte-identical to the
+    `amaru-treasury-tx treasury-inspect --format json` CLI command
+    invoked against the same node with the same pinned metadata.
+servers:
+  - url: https://amaru-treasury.plutimus.com
+paths:
+  /v1/treasury-inspect:
+    get:
+      summary: Live treasury state for a registered scope
+      parameters:
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [core_development, ops_and_use_cases, network_compliance, middleware]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InspectReport"
+        "400":
+          description: Unknown or missing scope
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+components:
+  schemas:
+    InspectReport:
+      type: object
+      description: |
+        Identical encoding to Amaru.Treasury.Inspect.Render.encodeReport.
+        See lib/Amaru/Treasury/Inspect/Types.hs for the source of truth;
+        any divergence here is a documentation lag, not a contract change.
+      properties:
+        irChainTip:
+          type: object
+          properties:
+            ctSlot: { type: integer }
+            ctBlockHash: { type: string, nullable: true }
+        irDeployment:
+          type: object
+        irScopes:
+          type: array
+          items: { type: object }
+      required: [irChainTip, irDeployment, irScopes]
+    ApiError:
+      type: object
+      properties:
+        aeMessage: { type: string }
+        aeField: { type: string, nullable: true }
+      required: [aeMessage]

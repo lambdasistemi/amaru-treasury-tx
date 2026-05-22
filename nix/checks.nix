@@ -1,5 +1,5 @@
 { pkgs, src, components, lintPkgs ? pkgs
-, treasuryMetadata, recentTxs }:
+, treasuryMetadata, recentTxs, buildIdentity }:
 # Each verification step is built as a single
 # `writeShellApplication` app, then exposed twice:
 #
@@ -49,6 +49,54 @@ let
           exit 1
         fi
         printf 'metadata-pin: OK (sha256=%s)\n' "$observed"
+      '';
+    };
+
+    # #239 T003 — Asserts the build-identity JSON carries
+    # the five required fields, the sha256 hex shape holds,
+    # the recent-txs count equals the manifest's, and the
+    # metadata sha256 matches the value in nix/metadata.nix
+    # so a flake-input bump always touches both.
+    build-identity = {
+      runtimeInputs = [ pkgs.jq pkgs.coreutils ];
+      text = ''
+        f='${buildIdentity}/build-identity.json'
+        m='${recentTxs}/recent-txs.json'
+
+        # Shape (all keys present, correct types).
+        if ! jq -e '
+          (.biBuildTime|type)       == "string" and
+          (.biGitCommit|type)       == "string" and
+          (.biMetadataSha256|test("^[0-9a-f]{64}$")) and
+          (.biMetadataSource|type)  == "string" and
+          (.biRecentTxsCount|type)  == "number"
+        ' "$f" > /dev/null; then
+          echo "build-identity: shape mismatch" >&2
+          jq . "$f" >&2
+          exit 1
+        fi
+
+        # Cross-checks against the rest of the slice.
+        observed_sha=$(jq -r '.biMetadataSha256' "$f")
+        expected_sha='${treasuryMetadata.pinnedSha256}'
+        if [ "$observed_sha" != "$expected_sha" ]; then
+          echo "build-identity: metadata sha drift" >&2
+          echo "  identity says: $observed_sha" >&2
+          echo "  pin says:      $expected_sha" >&2
+          exit 1
+        fi
+
+        observed_count=$(jq '.biRecentTxsCount' "$f")
+        expected_count=$(jq '.rtmEntries | length' "$m")
+        if [ "$observed_count" != "$expected_count" ]; then
+          echo "build-identity: recentTxsCount drift" >&2
+          echo "  identity says: $observed_count" >&2
+          echo "  manifest:      $expected_count" >&2
+          exit 1
+        fi
+
+        printf 'build-identity: OK\n'
+        jq -c . "$f"
       '';
     };
 
@@ -429,6 +477,7 @@ in
 {
   # Sandboxed checks (nix flake check / nix build).
   build = mkCheck "build" scripts.build;
+  build-identity = mkCheck "build-identity" scripts.build-identity;
   metadata-pin = mkCheck "metadata-pin" scripts.metadata-pin;
   recent-txs-manifest =
     mkCheck "recent-txs-manifest" scripts.recent-txs-manifest;

@@ -65,7 +65,11 @@ The frontend consumes the now-live endpoint. Slices stack monotonically — ever
 
 - [ ] **T015 [P]** All four scopes fetched in parallel; each card renders summary + top-N sortable table. **RED**: spec covers sort-order toggles + top-N defaults. Commit: `feat(239): four scope cards with sortable tables`.
 
-- [ ] **T016 [P]** Inline UTxO drill-down on click (no navigation). **RED**: spec asserts state transition reveals + hides UTxO detail panel. Commit: `feat(239): inline utxo drill-down`.
+- [ ] **T016 [P]** Inline UTxO drill-down on click (no navigation) — drill-down renders **every InspectReport field** (FR-010a) with resolved presentation (FR-010b): outref + txid as cardanoscan links, addresses short+full-on-hover, script-hash/policy-ID short+full-on-hover, every `OtherAsset`, deployed-at, datum tree. **RED**: spec asserts the drill-down DOM carries one node per JSON field of the source UTxO. Commit: `feat(239): resolved inline utxo drill-down`.
+
+- [ ] **T016a [P]** Chain-tip + deployment-anchor row at the top of the page (FR-010a). Slot + block hash + scope-owners outref, all cardanoscan-linked. **RED**: spec asserts the chain-tip section renders the three fields verbatim from the report. Commit: `feat(239): chain-tip + deployment-anchor banner`.
+
+- [ ] **T016b [P]** Pending-orders drill-down rendering the full `PendingSwapOrder` datum tree (FR-010a). **RED**: spec asserts every PendingSwapOrder field is visible after expanding the order. Commit: `feat(239): full pending-order drill-down`.
 
 - [ ] **T017 [P]** Auto-refresh tick (30 s default) with single-flight guard (FR-013). **RED**: spec asserts a second tick while a fetch is in flight is dropped. Commit: `feat(239): auto-refresh with single-flight`.
 

@@ -118,11 +118,23 @@ the smoke wiring, and #188 owns the operator-facing recording.
 
 ## Acceptance criteria
 
+This ticket's deliverable is the **phase-2 redeemer/reference parity
+fix** only. Everything below describes that scope; the wider devnet
+end-to-end pass and the mainnet operator path are tracked separately
+([#217](https://github.com/lambdasistemi/amaru-treasury-tx/issues/217)
+and
+[#218](https://github.com/lambdasistemi/amaru-treasury-tx/issues/218)).
+
 1. Phase-1 lint: `nix develop -c just ci` green at HEAD.
-2. Phase-2 proof: `nix develop -c just devnet-cli-smoke --phase
-   reorganize` produces a tx that evaluates without phase-2 error,
-   submits, and confirms the merged treasury UTxO on the local
-   devnet.
+2. Phase-2 proof: the Aiken permissions rewarding script no longer
+   returns `error` on the constructed reorganize transaction. The
+   live `just devnet-cli-smoke --phase reorganize` build.log reaches
+   phase-1 of the ledger evaluator with the permissions withdraw
+   script accepting the transaction shape. End-to-end submit + merged
+   UTxO confirmation is **not** in this ticket — `tx-build` after
+   this fix surfaces a separate phase-1 wizard-selection bug
+   ([#217](https://github.com/lambdasistemi/amaru-treasury-tx/issues/217))
+   that masked nothing before #212 (the phase-2 error fired first).
 3. Unit RED-then-GREEN: at least one new test in
    `test/unit/Amaru/Treasury/IntentJSONSpec.hs` and one in
    `test/golden/ReorganizeGoldenSpec.hs` fails on `origin/main` and
@@ -134,3 +146,15 @@ the smoke wiring, and #188 owns the operator-facing recording.
    preserved verbatim; the smoke happy path is recorded by #87's
    contract, not weakened.
 6. `gate.sh` passes locally before push (`./gate.sh`).
+
+## What this PR does NOT deliver
+
+- **An end-to-end-working devnet reorganize tx.** Phase-1 still fails
+  on `BabbageNonDisjointRefInputs` because the wizard selects
+  script-deploy reference UTxOs as treasury funds. Filed as
+  [#217](https://github.com/lambdasistemi/amaru-treasury-tx/issues/217).
+- **A mainnet reorganize tx.** The wizard hard-refuses non-devnet
+  with `ReorganizeNonDevnetNetwork`. Filed as
+  [#218](https://github.com/lambdasistemi/amaru-treasury-tx/issues/218).
+  Epic #189's real exit criterion is a mainnet tx body on disk — that
+  ticket carries it.

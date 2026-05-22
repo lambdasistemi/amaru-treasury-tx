@@ -96,6 +96,7 @@ import Amaru.Treasury.IntentJSON
     ( Action (..)
     , DisburseInputs (..)
     , RationaleJSON (..)
+    , RationaleReferenceJSON (..)
     , SAction (..)
     , ScopeJSON (..)
     , TreasuryIntent (..)
@@ -168,6 +169,9 @@ data DisburseAnswers = DisburseAnswers
     --   resolver asks the chain horizon helper for
     --   'Validity.AutoLongest'. 'Just 0' is rejected.
     , daRationale :: !RationaleAnswers
+    , daRationaleReferences :: ![RationaleReferenceJSON]
+    -- ^ Optional external-document references for the emitted
+    --   rationale body.
     , daExtraSigners :: ![Text]
     -- ^ Each token is either a scope name (lowercased,
     --   e.g. @"ops_and_use_cases"@) resolved through
@@ -281,6 +285,7 @@ instance FromJSON DisburseAnswers where
             <*> o .: "beneficiaryAddrBech32"
             <*> o .:? "validityHours"
             <*> o .: "rationale"
+            <*> (fromMaybe [] <$> o .:? "rationaleReferences")
             <*> (fromMaybe [] <$> o .:? "extraSigners")
 
 instance FromJSON DisburseTreasurySelection where
@@ -1038,7 +1043,7 @@ mkRationale ans =
             , drjDescription = raDescription r
             , drjJustification = raJustification r
             , drjDestinationLabel = raDestinationLabel r
-            , drjReferences = []
+            , drjReferences = daRationaleReferences ans
             }
 
 unitText :: Unit -> Text
@@ -1109,5 +1114,5 @@ mkTreasuryRationale ans =
             , rjDescription = raDescription r
             , rjJustification = raJustification r
             , rjDestinationLabel = raDestinationLabel r
-            , rjReferences = []
+            , rjReferences = daRationaleReferences ans
             }

@@ -10,15 +10,23 @@ and runners.
 -}
 module Amaru.Treasury.Cli
     ( Cmd (..)
+    , execCliParser
     , opts
+    , parseCliArgs
     ) where
 
+import Data.List (isInfixOf)
 import Data.Version (showVersion)
 import Options.Applicative
     ( Parser
+    , ParserFailure (..)
     , ParserInfo
+    , ParserResult (..)
     , command
+    , defaultPrefs
+    , execParserPure
     , fullDesc
+    , handleParseResult
     , help
     , helper
     , hsubparser
@@ -26,9 +34,13 @@ import Options.Applicative
     , infoOption
     , long
     , progDesc
+    , renderFailure
     , short
     , (<**>)
     )
+import Options.Applicative.Help.Types (ParserHelp)
+import System.Environment (getArgs)
+import System.Exit (ExitCode (..))
 
 import Paths_amaru_treasury_tx (version)
 
@@ -334,3 +346,40 @@ opts =
             <> progDesc
                 "Build unsigned Amaru treasury transactions"
         )
+
+execCliParser :: IO (GlobalOpts, Cmd)
+execCliParser =
+    getArgs >>= handleParseResult . parseCliArgs
+
+parseCliArgs :: [String] -> ParserResult (GlobalOpts, Cmd)
+parseCliArgs args =
+    adjustDisburseReferenceFailure args $
+        execParserPure defaultPrefs opts args
+
+adjustDisburseReferenceFailure
+    :: [String]
+    -> ParserResult a
+    -> ParserResult a
+adjustDisburseReferenceFailure args (Failure failure)
+    | "disburse-wizard" `elem` args
+    , isDisburseReferenceGrammarFailure failure =
+        Failure (withFailureExit (ExitFailure 2) failure)
+adjustDisburseReferenceFailure _ result = result
+
+isDisburseReferenceGrammarFailure
+    :: ParserFailure ParserHelp -> Bool
+isDisburseReferenceGrammarFailure failure =
+    any
+        (`isInfixOf` body)
+        [ "--reference-label requires a preceding --reference-uri"
+        , "--reference-type requires a preceding --reference-uri"
+        ]
+  where
+    (body, _) = renderFailure failure "amaru-treasury-tx"
+
+withFailureExit
+    :: ExitCode -> ParserFailure h -> ParserFailure h
+withFailureExit exitCode failure =
+    ParserFailure $ \programName ->
+        let (body, _oldExitCode, columns) = execFailure failure programName
+        in  (body, exitCode, columns)

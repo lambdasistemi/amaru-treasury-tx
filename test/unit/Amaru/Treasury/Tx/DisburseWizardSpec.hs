@@ -40,7 +40,9 @@ import Test.QuickCheck
 
 import Amaru.Treasury.Constants (Unit (..))
 import Amaru.Treasury.IntentJSON
-    ( SAction (..)
+    ( RationaleJSON (..)
+    , RationaleReferenceJSON (..)
+    , SAction (..)
     , TreasuryIntent (..)
     )
 import Amaru.Treasury.Scope
@@ -83,6 +85,24 @@ spec =
             tiSAction intent `shouldBe` SDisburse
             tiSchema intent `shouldBe` 1
             tiNetwork intent `shouldBe` "mainnet"
+
+        it "threads Cyber Castellum references into intent rationale" $ do
+            env <-
+                eitherDecodeStrict
+                    "test/fixtures/disburse-wizard/env.usdm.json"
+            answers <-
+                eitherDecodeStrict
+                    "test/fixtures/disburse-wizard/answers.usdm.json"
+            intent <-
+                expectRight $
+                    disburseToTreasuryIntent
+                        env
+                        answers
+                            { daRationaleReferences =
+                                cyberCastellumReferences
+                            }
+            rjReferences (tiRationale intent)
+                `shouldBe` cyberCastellumReferences
 
         it
             "defaults contingency disburse signers to all four scope owners"
@@ -459,3 +479,34 @@ otherAssets quantity
         Map.singleton
             "0000000000000000000000000000000000000000000000000000005b"
             (Map.singleton "4f54484552" quantity)
+
+cyberCastellumReferences :: [RationaleReferenceJSON]
+cyberCastellumReferences =
+    [ RationaleReferenceJSON
+        { rjrUri =
+            "ipfs://bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da"
+        , rjrType = "Other"
+        , rjrLabel =
+            "Whitehacking Agreement - Cyber Castellum 2026-03-31"
+        }
+    , RationaleReferenceJSON
+        { rjrUri =
+            "ipfs://bafybeigy37ui2ikn7bim2vw6cojcbxkcndpjwh7cj5fv3vzs4cszezipxu"
+        , rjrType = "Other"
+        , rjrLabel =
+            "Invoice 3508 - Cyber Castellum Whitehacking M1"
+        }
+    , RationaleReferenceJSON
+        { rjrUri =
+            "ipfs://bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga"
+        , rjrType = "Other"
+        , rjrLabel = "CAG MSA - 2026-04-09"
+        }
+    , RationaleReferenceJSON
+        { rjrUri =
+            "ipfs://bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm"
+        , rjrType = "Other"
+        , rjrLabel =
+            "CAG payment confirmation - Laura Dugan email 2026-05-21"
+        }
+    ]

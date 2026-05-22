@@ -12,11 +12,10 @@ only dispatches.
 module Main (main) where
 
 import Main.Utf8 (withUtf8)
-import Options.Applicative (execParser)
 
 import Amaru.Treasury.Cli
     ( Cmd (..)
-    , opts
+    , execCliParser
     )
 import Amaru.Treasury.Cli.AttachWitness
     ( runAttachWitness
@@ -84,7 +83,7 @@ import Amaru.Treasury.Tx.Envelope
 
 main :: IO ()
 main = withUtf8 . withUpdateCheckMain $ do
-    (g, c) <- execParser opts
+    (g, c) <- execCliParser
     case c of
         CmdReportRender ro ->
             runReportRender ro

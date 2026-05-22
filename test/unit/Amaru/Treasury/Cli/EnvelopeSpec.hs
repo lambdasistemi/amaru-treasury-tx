@@ -7,11 +7,11 @@ License     : Apache-2.0
 -}
 module Amaru.Treasury.Cli.EnvelopeSpec (spec) where
 
+import Data.List (isInfixOf)
 import Data.Text qualified as T
 import Options.Applicative
     ( ParserResult (..)
-    , defaultPrefs
-    , execParserPure
+    , renderFailure
     )
 import System.Exit (ExitCode (..))
 import Test.Hspec
@@ -24,7 +24,7 @@ import Test.Hspec
 
 import Amaru.Treasury.Cli
     ( Cmd (..)
-    , opts
+    , parseCliArgs
     )
 import Amaru.Treasury.Cli.DisburseWizard
     ( ContingencyDisburseOpts (..)
@@ -34,6 +34,9 @@ import Amaru.Treasury.Cli.Envelope
     ( DeEnvelopeFilterResult (..)
     , runDeEnvelopeFilter
     , runEnvelopeFilter
+    )
+import Amaru.Treasury.IntentJSON
+    ( RationaleReferenceJSON (..)
     )
 import Amaru.Treasury.LedgerParse (txInToText)
 import Amaru.Treasury.Scope
@@ -74,6 +77,132 @@ spec =
 
         it "parses generic disburse-wizard for owned scopes only" $
             parseCmd disburseWizardArgs `shouldBe` Right "disburse-wizard"
+
+        it "defaults disburse-wizard references to []" $
+            parseDisburseReferences disburseWizardArgs
+                `shouldBe` Right []
+
+        it "parses one disburse-wizard reference with default @type" $
+            parseDisburseReferences
+                ( disburseWizardArgs
+                    ++ [ "--reference-uri"
+                       , "ipfs://one"
+                       , "--reference-label"
+                       , "Invoice 3508"
+                       ]
+                )
+                `shouldBe` Right
+                    [ RationaleReferenceJSON
+                        { rjrUri = "ipfs://one"
+                        , rjrType = "Other"
+                        , rjrLabel = "Invoice 3508"
+                        }
+                    ]
+
+        it "leaves labelless disburse-wizard references to intent validation" $
+            parseDisburseReferences
+                ( disburseWizardArgs
+                    ++ [ "--reference-uri"
+                       , "ipfs://one"
+                       ]
+                )
+                `shouldBe` Right
+                    [ RationaleReferenceJSON
+                        { rjrUri = "ipfs://one"
+                        , rjrType = "Other"
+                        , rjrLabel = ""
+                        }
+                    ]
+
+        it "parses two disburse-wizard reference slots" $
+            parseDisburseReferences
+                ( disburseWizardArgs
+                    ++ [ "--reference-uri"
+                       , "ipfs://one"
+                       , "--reference-label"
+                       , "Invoice 3508"
+                       , "--reference-uri"
+                       , "ipfs://two"
+                       , "--reference-label"
+                       , "Signed agreement"
+                       ]
+                )
+                `shouldBe` Right
+                    [ RationaleReferenceJSON
+                        { rjrUri = "ipfs://one"
+                        , rjrType = "Other"
+                        , rjrLabel = "Invoice 3508"
+                        }
+                    , RationaleReferenceJSON
+                        { rjrUri = "ipfs://two"
+                        , rjrType = "Other"
+                        , rjrLabel = "Signed agreement"
+                        }
+                    ]
+
+        it "rejects stray disburse-wizard --reference-label" $ do
+            let result =
+                    parseDisburseFailure
+                        ( disburseWizardArgs
+                            ++ [ "--reference-label"
+                               , "Missing URI"
+                               ]
+                        )
+            resultExit result `shouldBe` ExitFailure 2
+            resultBody result
+                `shouldSatisfy` isInfixOf
+                    "--reference-label requires a preceding --reference-uri"
+
+        it "rejects stray disburse-wizard --reference-type" $ do
+            let result =
+                    parseDisburseFailure
+                        ( disburseWizardArgs
+                            ++ [ "--reference-type"
+                               , "Invoice"
+                               ]
+                        )
+            resultExit result `shouldBe` ExitFailure 2
+            resultBody result
+                `shouldSatisfy` isInfixOf
+                    "--reference-type requires a preceding --reference-uri"
+
+        it "keeps unrelated executable parser failures at exit 1" $ do
+            let result =
+                    parseCliFailure
+                        [ "withdraw-wizard"
+                        , "--reference-label"
+                        , "Missing URI"
+                        ]
+            resultExit result `shouldBe` ExitFailure 1
+            resultBody result
+                `shouldSatisfy` not
+                    . isInfixOf
+                        "--reference-label requires a preceding --reference-uri"
+
+        it "lets later disburse-wizard --reference-type win" $
+            parseDisburseReferences
+                ( disburseWizardArgs
+                    ++ [ "--reference-uri"
+                       , "ipfs://one"
+                       , "--reference-type"
+                       , "Agreement"
+                       , "--reference-type"
+                       , "Invoice"
+                       , "--reference-label"
+                       , "Invoice 3508"
+                       ]
+                )
+                `shouldBe` Right
+                    [ RationaleReferenceJSON
+                        { rjrUri = "ipfs://one"
+                        , rjrType = "Invoice"
+                        , rjrLabel = "Invoice 3508"
+                        }
+                    ]
+
+        it "parses the Cyber Castellum four-reference input" $
+            parseDisburseReferences cyberCastellumArgs
+                `shouldBe` Right cyberCastellumReferences
 
         it "parses repeatable disburse-wizard treasury TxIn selectors" $
             parseDisburseTreasuryTxIns
@@ -143,7 +272,7 @@ spec =
 
 parseCmd :: [String] -> Either String String
 parseCmd args =
-    case execParserPure defaultPrefs opts args of
+    case parseCliArgs args of
         Success (_, cmd) -> Right (cmdTag cmd)
         Failure{} -> Left "parse failure"
         CompletionInvoked{} -> Left "completion invoked"
@@ -151,7 +280,7 @@ parseCmd args =
 parseContingencyDisburse
     :: [String] -> Either String (ScopeId, Integer)
 parseContingencyDisburse args =
-    case execParserPure defaultPrefs opts args of
+    case parseCliArgs args of
         Success (_, CmdContingencyDisburse o) ->
             Right
                 ( cdOptsDestinationScope o
@@ -163,12 +292,42 @@ parseContingencyDisburse args =
 
 parseDisburseTreasuryTxIns :: [String] -> Either String [String]
 parseDisburseTreasuryTxIns args =
-    case execParserPure defaultPrefs opts args of
+    case parseCliArgs args of
         Success (_, CmdDisburseWizard o) ->
             Right (T.unpack . txInToText <$> dwOptsTreasuryTxIns o)
         Success{} -> Left "wrong command"
         Failure{} -> Left "parse failure"
         CompletionInvoked{} -> Left "completion invoked"
+
+parseDisburseReferences
+    :: [String] -> Either String [RationaleReferenceJSON]
+parseDisburseReferences args =
+    case parseCliArgs args of
+        Success (_, CmdDisburseWizard o) ->
+            Right (dwOptsReferences o)
+        Success{} -> Left "wrong command"
+        Failure{} -> Left "parse failure"
+        CompletionInvoked{} -> Left "completion invoked"
+
+data ParserFailureResult = ParserFailureResult
+    { resultBody :: !String
+    , resultExit :: !ExitCode
+    }
+    deriving stock (Eq, Show)
+
+parseDisburseFailure :: [String] -> ParserFailureResult
+parseDisburseFailure = parseCliFailure
+
+parseCliFailure :: [String] -> ParserFailureResult
+parseCliFailure args =
+    case parseCliArgs args of
+        Failure failure ->
+            let (body, code) = renderFailure failure "amaru-treasury-tx"
+            in  ParserFailureResult body code
+        Success{} ->
+            errorWithoutStackTrace "expected parse failure"
+        CompletionInvoked{} ->
+            errorWithoutStackTrace "expected parse failure, got completion"
 
 cmdTag :: Cmd -> String
 cmdTag = \case
@@ -185,6 +344,10 @@ cmdTag = \case
     CmdDisburseWizard{} -> "disburse-wizard"
     CmdContingencyDisburse{} -> "contingency-disburse-wizard"
     CmdWithdrawWizard{} -> "withdraw-wizard"
+    CmdRegistryInitWizard{} -> "registry-init-wizard"
+    CmdStakeRewardInitWizard{} -> "stake-reward-init-wizard"
+    CmdGovernanceWithdrawalInitWizard{} ->
+        "governance-withdrawal-init-wizard"
     CmdReportRender{} -> "report-render"
     CmdTreasuryInspect{} -> "treasury-inspect"
     CmdVaultCreate{} -> "vault-create"
@@ -226,6 +389,60 @@ disburseWizardArgs =
     , "Approved invoice"
     , "--destination-label"
     , "Vendor"
+    ]
+
+cyberCastellumArgs :: [String]
+cyberCastellumArgs =
+    replaceArg "1" "18750000000"
+        $ replaceArg
+            "Vendor payment"
+            "Cyber Castellum Whitehacking Milestone 1 - 18750 USDM"
+        $ replaceArg
+            "Approved invoice"
+            "Required to pay Cyber Castellum as vendor; payment instruction confirmed by CAG 2026-05-21"
+        $ replaceArg
+            "Vendor"
+            "Crypto Accounting Group off-ramp wallet"
+        $ disburseWizardArgs
+            ++ concatMap referenceArgs cyberCastellumReferences
+
+referenceArgs :: RationaleReferenceJSON -> [String]
+referenceArgs ref =
+    [ "--reference-uri"
+    , T.unpack (rjrUri ref)
+    , "--reference-label"
+    , T.unpack (rjrLabel ref)
+    ]
+
+cyberCastellumReferences :: [RationaleReferenceJSON]
+cyberCastellumReferences =
+    [ RationaleReferenceJSON
+        { rjrUri =
+            "ipfs://bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da"
+        , rjrType = "Other"
+        , rjrLabel =
+            "Whitehacking Agreement - Cyber Castellum 2026-03-31"
+        }
+    , RationaleReferenceJSON
+        { rjrUri =
+            "ipfs://bafybeigy37ui2ikn7bim2vw6cojcbxkcndpjwh7cj5fv3vzs4cszezipxu"
+        , rjrType = "Other"
+        , rjrLabel =
+            "Invoice 3508 - Cyber Castellum Whitehacking M1"
+        }
+    , RationaleReferenceJSON
+        { rjrUri =
+            "ipfs://bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga"
+        , rjrType = "Other"
+        , rjrLabel = "CAG MSA - 2026-04-09"
+        }
+    , RationaleReferenceJSON
+        { rjrUri =
+            "ipfs://bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm"
+        , rjrType = "Other"
+        , rjrLabel =
+            "CAG payment confirmation - Laura Dugan email 2026-05-21"
+        }
     ]
 
 goodTxIdHex1 :: String

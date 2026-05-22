@@ -36,6 +36,9 @@ module Amaru.Treasury.Cli.ReorganizeWizard
 
       -- * Opts → Answers projection
     , optsToAnswers
+
+      -- * Input control (#184 — Slice 10)
+    , validateReorganizeWizardInputControl
     ) where
 
 import Control.Exception (IOException, try)
@@ -61,7 +64,7 @@ import Options.Applicative
 import System.Directory (doesDirectoryExist, doesFileExist)
 import System.Exit (ExitCode (..), exitWith)
 import System.FilePath (takeDirectory)
-import System.IO (hPrint, stderr)
+import System.IO (hPrint, hPutStrLn, stderr)
 
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Node.Client.Provider (queryUpperBoundSlot)
@@ -87,12 +90,24 @@ import Amaru.Treasury.Metadata
     )
 import Amaru.Treasury.Scope (ScopeId, scopeFromText)
 import Amaru.Treasury.Tx.ReorganizeWizard
-    ( ReorganizeError (..)
+    ( InputControlOutcome (..)
+    , ReorganizeError (..)
     , ReorganizeResolverEnv (..)
     , ReorganizeResolverInput (..)
     , ReorganizeWizardAnswers (..)
+    , renderReorganizeExclusionLogLine
+    , renderReorganizeWalletShortfallWithExcludes
     , reorganizeToIntent
-    , resolveReorganize
+    , resolveReorganizeIC
+    )
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    , InputControlError (..)
+    , excludeUtxoP
+    , extraTxInP
+    , outRefText
+    , validateInputControl
     )
 
 -- ----------------------------------------------------
@@ -118,6 +133,10 @@ data CommonFlags = CommonFlags
     , cfEvent :: !(Maybe Text)
     , cfLabel :: !(Maybe Text)
     , cfForce :: !Bool
+    , cfExcludeSet :: !ExclusionSet
+    -- ^ Operator-supplied @--exclude-utxo@ refs (#184).
+    , cfForcedSet :: !ForcedInclusionSet
+    -- ^ Operator-supplied @--extra-tx-in@ refs (#184).
     }
     deriving stock (Eq, Show)
 
@@ -245,6 +264,68 @@ commonFlagsP =
                 <> help
                     "Overwrite the file at --out if it already exists"
             )
+        <*> (ExclusionSet <$> excludeUtxoP)
+        <*> (ForcedInclusionSet <$> extraTxInP)
+
+-- ----------------------------------------------------
+-- Input-control helpers (#184 Slice 10)
+-- ----------------------------------------------------
+
+validateReorganizeWizardInputControl
+    :: CommonFlags -> Either InputControlError ()
+validateReorganizeWizardInputControl cf =
+    validateInputControl (cfExcludeSet cf) (cfForcedSet cf)
+
+renderReorganizeResolverError :: ReorganizeError -> Text
+renderReorganizeResolverError
+    (ReorganizeResolverExtraTxInNotOnWallet refs) =
+        "extra input not found on wallet: "
+            <> T.intercalate ", " (map outRefText refs)
+renderReorganizeResolverError
+    ( ReorganizeResolverWalletShortfallWithExcludes
+            avail
+            required
+            refs
+        ) =
+        renderReorganizeWalletShortfallWithExcludes
+            ( "wallet shortfall available="
+                <> T.pack (show avail)
+                <> " required="
+                <> T.pack (show required)
+            )
+            refs
+renderReorganizeResolverError e =
+    "resolve: " <> T.pack (show e)
+
+emitReorganizeExclusionLog :: InputControlOutcome -> IO ()
+emitReorganizeExclusionLog outcome = do
+    let prefix = "reorganize-wizard" :: Text
+    mapM_
+        ( \(ref, pool) ->
+            hPutStrLn
+                stderr
+                ( T.unpack
+                    ( renderReorganizeExclusionLogLine
+                        prefix
+                        ref
+                        pool
+                    )
+                )
+        )
+        (icoHits outcome)
+    mapM_
+        ( \ref ->
+            hPutStrLn
+                stderr
+                ( T.unpack
+                    ( prefix
+                        <> ": excluded utxo "
+                        <> outRefText ref
+                        <> " (operator-supplied) [absent]"
+                    )
+                )
+        )
+        (icoInert outcome)
 
 -- ----------------------------------------------------
 -- ReadM helpers
@@ -309,10 +390,21 @@ runReorganizeWizardEither
     :: GlobalOpts
     -> ReorganizeWizardOpts
     -> IO (Either ReorganizeError ())
-runReorganizeWizardEither g opts = do
-    case resolveNetworkName g of
-        Right _ -> stepOut
-        Left _ -> pure (Left ReorganizeUnresolvedNetwork)
+runReorganizeWizardEither g opts =
+    case validateReorganizeWizardInputControl (rwoCommon opts) of
+        Left (Contradiction refs) ->
+            -- Surface the contradiction through the existing
+            -- ReorganizeError shape (extra-tx-in not-on-wallet
+            -- has the right "refs caused this" payload shape;
+            -- the contradiction never reaches selection).
+            pure
+                ( Left
+                    ( ReorganizeResolverExtraTxInNotOnWallet refs
+                    )
+                )
+        Right () -> case resolveNetworkName g of
+            Right _ -> stepOut
+            Left _ -> pure (Left ReorganizeUnresolvedNetwork)
   where
     cf = rwoCommon opts
     stepOut = do
@@ -358,16 +450,23 @@ runReorganizeWizardLive g opts renv = do
                 , rriScope = cfScope cf
                 , rriValidityHours = cfValidityHours cf
                 }
-    resolved <- resolveReorganize renv input
+    resolved <-
+        resolveReorganizeIC
+            renv
+            (cfExcludeSet cf)
+            (cfForcedSet cf)
+            input
     case resolved of
         Left e -> pure (Left e)
-        Right env -> case reorganizeToIntent env (optsToAnswers opts) of
-            Left e -> pure (Left e)
-            Right intent -> do
-                BSL.writeFile
-                    (cfOut cf)
-                    (encodeSomeTreasuryIntent intent)
-                pure (Right ())
+        Right (env, outcome) -> do
+            emitReorganizeExclusionLog outcome
+            case reorganizeToIntent env (optsToAnswers opts) of
+                Left e -> pure (Left e)
+                Right intent -> do
+                    BSL.writeFile
+                        (cfOut cf)
+                        (encodeSomeTreasuryIntent intent)
+                    pure (Right ())
 
 mkLiveEnv :: Backend -> ReorganizeResolverEnv IO
 mkLiveEnv backend =
@@ -415,6 +514,8 @@ exitCodeFor = \case
     ReorganizeValidityHoursZero -> 2
     ReorganizeValidityOvershoot{} -> 2
     ReorganizeLedgerFieldParseError{} -> 3
+    ReorganizeResolverExtraTxInNotOnWallet{} -> 2
+    ReorganizeResolverWalletShortfallWithExcludes{} -> 2
 
 {- | Top-level reorganize-wizard runner.
 
@@ -429,7 +530,22 @@ runReorganizeWizard g opts = do
     case r of
         Right () -> pure ()
         Left e -> do
-            hPrint stderr e
+            case e of
+                ReorganizeResolverExtraTxInNotOnWallet{} ->
+                    hPutStrLn
+                        stderr
+                        ( "reorganize-wizard: "
+                            <> T.unpack
+                                (renderReorganizeResolverError e)
+                        )
+                ReorganizeResolverWalletShortfallWithExcludes{} ->
+                    hPutStrLn
+                        stderr
+                        ( "reorganize-wizard: "
+                            <> T.unpack
+                                (renderReorganizeResolverError e)
+                        )
+                _ -> hPrint stderr e
             exitWith (ExitFailure (exitCodeFor e))
 
 -- ----------------------------------------------------

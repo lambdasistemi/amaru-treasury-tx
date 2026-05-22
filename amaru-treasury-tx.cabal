@@ -434,6 +434,7 @@ test-suite unit-tests
     Amaru.Treasury.Cli.RegistryInitWizardModeSplitSpec
     Amaru.Treasury.Cli.RegistryInitWizardParserSpec
     Amaru.Treasury.Cli.ReorganizeWizardDispatchSpec
+    Amaru.Treasury.Cli.ReorganizeWizardInputControlSpec
     Amaru.Treasury.Cli.ReorganizeWizardParserSpec
     Amaru.Treasury.Cli.StakeRewardInitWizardInputControlSpec
     Amaru.Treasury.Cli.StakeRewardInitWizardParserSpec

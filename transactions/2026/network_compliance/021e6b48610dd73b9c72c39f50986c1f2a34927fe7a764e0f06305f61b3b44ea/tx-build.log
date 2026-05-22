@@ -1,0 +1,11 @@
+tx-build: intent <- stdin
+tx-build: parsed action=Reorganize network=mainnet
+tx-build: connecting to /code/cardano-mainnet/ipc/node.socket
+tx-build: required utxos: 23
+tx-build: handshake ok (magic 764824073 matches intent network=mainnet)
+tx-build: reorganize: batched 10 of 18 UTxOs (8 residue: 4a9a1acf4083f6d936ac5c1256b2cca6c3f78ad795d10b76bb2cb574f7ce69f7#1, 68a1277af23755376967e788752c603044f45ea0d99220b3b5dfc7d617642b6b#1, 76d6988cd15f1b302fc0832b3c4fa0f1e2c904baa9e8661bda82d938501d5511#1, 8c3f683232a419dcfee68fccefe13671f45b516423b280cd0e7fe6b52d55e125#1, c5e6215afb677ecaf2d50ccdf5c5b5d405acc695c69549380e3a76eef7438b20#1, cda0126e9ea7b336bbb338d2bfc7622a41b584e3bebc33c9c320e8895b9bc082#1, cda0126e9ea7b336bbb338d2bfc7622a41b584e3bebc33c9c320e8895b9bc082#2, 44454ed0def64621ef645958830f599b488b699b28e3797cc37c4f4dd1463a79#1)
+tx-build: built 1649 bytes  fee=1570352  total_collateral=2355528
+tx-build: re-evaluated 11 redeemers, 0 failed
+tx-build: cbor -> transactions/2026/network_compliance/reorganize-batch-05-draft/tx.cbor.hex
+tx-build: VALIDATION OK
+tx-build: report -> transactions/2026/network_compliance/reorganize-batch-05-draft/report.json

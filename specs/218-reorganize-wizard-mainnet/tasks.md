@@ -24,11 +24,19 @@ feat(reorganize-wizard): admit any resolved network (mainnet, preprod, preview, 
 
 ## S2 — Produce the live mainnet tx body (load-bearing)
 
-- [ ] T003 — Build a real reorganize transaction body against
-  `/code/cardano-mainnet/ipc/node.socket` and
-  `/code/amaru-treasury/journal/2026/metadata.json` for the chosen
-  scope. Archive `intent.json`, `cbor.hex`, and `tx-inspect` summary
-  in the PR body. **PR remains draft until this artifact exists.**
+- [X] T003 — Built a real mainnet reorganize transaction body for
+  `core_development` against `/code/cardano-mainnet/ipc/node.socket`
+  and `/code/amaru-treasury/journal/2026/metadata.json`. Operator
+  wallet from `~/.config/amaru-treasury-tx/operator.json`. Surfaced
+  one secondary issue — Conway's 64-byte per-metadatum-string cap
+  rejected the wizard's default `rjDescription` (67 bytes) — and
+  shipped the trivial shortening (59 bytes) in the same slice.
+  `tx-build`: `built 1217 bytes  fee=428294  total_collateral=642441`
+  / `re-evaluated 3 redeemers, 0 failed` / `VALIDATION OK`.
+  `intent.json`, `tx-build.log`, and `reorganize.cbor.hex`
+  (blake2b-256 `1872aaedf470eb59f90b9c72a7f97bb25d5f9bff6afbdf27d43a0a3cc11a78f0`)
+  archived under `evidence/218-mainnet/` (untracked) and inlined in
+  the PR body.
 
 ## S3 — Finalize
 

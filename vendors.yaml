@@ -1,3 +1,15 @@
+# Vendor registry — source of truth for Constitution Principle VIII v3.
+#
+# Schema notes (informative; not enforced by a typed schema yet):
+#   * `engagement_contract_cid` MAY be `null` (or the key omitted) for
+#     an NDA-blocked beneficiary under Principle VIII v3 carve-out A.
+#     In that case the disburse rationale's `justification` field MUST
+#     name the prohibition explicitly.
+#   * `review_cycle` accepts: monthly | bi-monthly | quarterly |
+#     yearly | one-off. Under v3 yearly-cycle/contract-collapse
+#     (carve-out B), no separate `beneficiary_cycle_review` doc is
+#     required — the annual renewal contract serves both roles.
+#
 schema: amaru-treasury-vendors-v1
 vendors:
   - id: crypto_accounting_group

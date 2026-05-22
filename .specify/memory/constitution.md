@@ -142,7 +142,10 @@ address is a constitution violation and MUST NOT be submitted.
 3. **Beneficiary engagement contract** — the contract between AMC and
    the beneficiary (the actual service-providing entity).
 4. **Beneficiary current invoice** — the invoice that triggers this
-   disburse.
+   disburse. The invoice MAY be redacted (counter-party-blind /
+   dollar-amount-blind portions removed) provided the redacted
+   version still establishes amount, period, and beneficiary identity
+   legibly. The redacted document is what gets pinned to IPFS.
 
 **Cycle review (required when applicable, 1 doc):**
 
@@ -153,7 +156,57 @@ address is a constitution violation and MUST NOT be submitted.
 When payee == beneficiary the two contracts collapse into one and
 slots 1 and 3 merge; minimum becomes 3 docs (4 with review). When
 they differ (the common case for this arc), minimum is 4 docs (5
-with review).
+with review). Two narrow carve-outs (below) further reduce the
+minimum when applicable.
+
+#### Beneficiary contract publication carve-out (NDA-blocked)
+
+When the beneficiary's engagement contract is bound by an NDA or
+similar confidentiality clause that prohibits publication, the
+`beneficiary_contract` reference (slot 3) MAY be omitted from
+`body.references[]`. When this carve-out applies:
+
+- The omission MUST be acknowledged in the rationale's
+  `justification` field with a sentence naming the prohibition
+  (e.g., *"Beneficiary engagement contract omitted from on-chain
+  references per Antithesis Operations LLC NDA."*). Silent omission
+  is a constitution violation.
+- A non-IPFS internal-only audit reference (file path or document
+  hash retained at AMC's audit registry) MAY be kept off-chain. The
+  on-chain rationale carries only the remaining references.
+- The vendor's `engagement_contract_cid` in `vendors.yaml` MAY be
+  set to `null` (or the field omitted) for an NDA-blocked
+  beneficiary.
+
+#### Yearly cycle / contract-collapse
+
+When the beneficiary's `review_cycle` is yearly and the annual
+contract renewal IS the cycle's plan/review evidence (i.e., the
+renewal contract document also serves as the cycle review), the
+`beneficiary_cycle_review` slot (5) MAY be merged into the
+`beneficiary_contract` slot (3). No separate cycle-review reference
+is required.
+
+When this collapse applies AND the NDA carve-out above also applies,
+no cycle-review reference is required either — the cycle review
+collapses into the omitted contract slot and disappears from the
+evidence set.
+
+#### Minimum evidence sets (summary table)
+
+The four resulting cases:
+
+| beneficiary review cycle | NDA-blocked? | min docs | slots |
+|---|---|---|---|
+| periodic (mo/bi-mo/qtr/etc.) | no | 5 | payee_contract + payee_address_proof + beneficiary_contract + beneficiary_invoice + beneficiary_cycle_review |
+| periodic | yes | 4 | payee_contract + payee_address_proof + beneficiary_invoice + beneficiary_cycle_review |
+| yearly (renewal-as-cycle) | no | 4 | payee_contract + payee_address_proof + beneficiary_contract + beneficiary_invoice |
+| yearly (renewal-as-cycle) | yes | **3** | payee_contract + payee_address_proof + beneficiary_invoice |
+| payee == beneficiary, no cycle | n/a | 3 | (collapsed) contract + payee_address_proof + invoice |
+
+Carve-outs ADD optionality; they do NOT remove any other v2
+invariant (verified payee address, canonical legal names, signed
+metadata still apply unchanged).
 
 #### Canonical legal names
 
@@ -209,4 +262,4 @@ The `/speckit.plan` step gates all implementation work against these
 principles; any deviation is recorded in the plan's
 "Constitution Compliance" section.
 
-**Version**: 0.4.0 | **Ratified**: 2026-05-04 | **Last Amended**: 2026-05-22
+**Version**: 0.5.0 | **Ratified**: 2026-05-04 | **Last Amended**: 2026-05-22

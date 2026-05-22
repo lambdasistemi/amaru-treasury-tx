@@ -33,6 +33,7 @@ The parser reuses 'Amaru.Treasury.LedgerParse.txInFromText' and
 module Amaru.Treasury.Cli.RegistryInitWizard
     ( -- * Options
       RegistryInitWizardOpts (..)
+    , CommonFlags (..)
     , SeedSplitOpts (..)
     , MintOpts (..)
     , ReferenceScriptsOpts (..)
@@ -44,6 +45,9 @@ module Amaru.Treasury.Cli.RegistryInitWizard
       -- * Runner + --out checks
     , runRegistryInitWizard
     , validateOutPath
+
+      -- * Input control (#184 — Slice 5)
+    , validateRegistryInitWizardInputControl
     ) where
 
 import Data.ByteString.Lazy qualified as BSL
@@ -108,7 +112,8 @@ import Amaru.Treasury.Scope
     , scopeFromText
     )
 import Amaru.Treasury.Tx.RegistryInitWizard
-    ( RegistryInitBootstrapInput (..)
+    ( InputControlOutcome (..)
+    , RegistryInitBootstrapInput (..)
     , RegistryInitError (..)
     , RegistryInitMintAnswers (..)
     , RegistryInitReferenceScriptsAnswers (..)
@@ -118,11 +123,23 @@ import Amaru.Treasury.Tx.RegistryInitWizard
     , registryInitMintToIntent
     , registryInitReferenceScriptsToIntent
     , registryInitSeedSplitToIntent
-    , resolveRegistryInitBootstrap
-    , resolveRegistryInitSeedSplit
+    , renderRegistryInitExclusionLogLine
+    , renderRegistryInitWalletShortfallWithExcludes
+    , resolveRegistryInitBootstrapIC
+    , resolveRegistryInitSeedSplitIC
     )
 import Amaru.Treasury.Tx.SwapWizard
     ( registryViewFromVerified
+    )
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    , InputControlError
+    , excludeUtxoP
+    , extraTxInP
+    , outRefText
+    , renderInputControlError
+    , validateInputControl
     )
 
 -- ----------------------------------------------------
@@ -151,6 +168,10 @@ data CommonFlags = CommonFlags
     , cfEvent :: !(Maybe Text)
     , cfLabel :: !(Maybe Text)
     , cfForce :: !Bool
+    , cfExcludeSet :: !ExclusionSet
+    -- ^ Operator-supplied @--exclude-utxo@ refs in flag order (#184).
+    , cfForcedSet :: !ForcedInclusionSet
+    -- ^ Operator-supplied @--extra-tx-in@ refs in flag order (#184).
     , cfBootstrap :: !Bool
     -- ^ Slice 1 of #175: when 'True', dispatch to the bootstrap
     -- runner branch (DevNet-only, no on-chain registry metadata
@@ -431,6 +452,8 @@ commonFlagsP =
                 <> help
                     "Overwrite the file at --out if it already exists"
             )
+        <*> (ExclusionSet <$> excludeUtxoP)
+        <*> (ForcedInclusionSet <$> extraTxInP)
         <*> flag
             False
             True
@@ -507,6 +530,78 @@ validateOutPath path force = do
                 else pure (Right ())
 
 -- ----------------------------------------------------
+-- Input-control helpers (#184 Slice 5)
+-- ----------------------------------------------------
+
+{- | Pre-flight check for @--exclude-utxo@ / @--extra-tx-in@
+contradictions on the @registry-init-wizard@ subcommand
+family. Run before any chain query so the contradiction
+exits fast.
+-}
+validateRegistryInitWizardInputControl
+    :: CommonFlags -> Either InputControlError ()
+validateRegistryInitWizardInputControl cf =
+    validateInputControl (cfExcludeSet cf) (cfForcedSet cf)
+
+{- | Render the FR-008 / FR-009 resolver errors introduced
+by #184 onto stderr-friendly text. Falls back to @show@ for
+all other 'RegistryInitError' variants.
+-}
+renderRegistryInitResolverError
+    :: RegistryInitError -> Text
+renderRegistryInitResolverError
+    (RegistryInitResolverExtraTxInNotOnWallet refs) =
+        "extra input not found on wallet: "
+            <> T.intercalate ", " (map outRefText refs)
+renderRegistryInitResolverError
+    (RegistryInitResolverWalletShortfallWithExcludes avail required refs) =
+        renderRegistryInitWalletShortfallWithExcludes
+            ( "wallet shortfall available="
+                <> T.pack (show avail)
+                <> " required="
+                <> T.pack (show required)
+            )
+            refs
+renderRegistryInitResolverError e =
+    "resolve: " <> T.pack (show e)
+
+{- | Emit one stderr log line per excluded ref in
+exclusion-set input order. Hits carry pool attribution
+(@[wallet]@); inert refs (operator-supplied excludes that
+did not match any candidate) are logged with @[absent]@ so
+the operator sees their @--exclude-utxo@ was applied.
+-}
+emitRegistryInitExclusionLog
+    :: Text -> InputControlOutcome -> IO ()
+emitRegistryInitExclusionLog prefix outcome = do
+    mapM_
+        ( \(ref, pool) ->
+            hPutStrLn
+                stderr
+                ( T.unpack
+                    ( renderRegistryInitExclusionLogLine
+                        prefix
+                        ref
+                        pool
+                    )
+                )
+        )
+        (icoHits outcome)
+    mapM_
+        ( \ref ->
+            hPutStrLn
+                stderr
+                ( T.unpack
+                    ( prefix
+                        <> ": excluded utxo "
+                        <> outRefText ref
+                        <> " (operator-supplied) [absent]"
+                    )
+                )
+        )
+        (icoInert outcome)
+
+-- ----------------------------------------------------
 -- Runner
 -- ----------------------------------------------------
 
@@ -564,6 +659,10 @@ the registry view ends up keyed for an unsupported network.
 -}
 runSeedSplitVerified :: GlobalOpts -> CommonFlags -> IO ()
 runSeedSplitVerified g cf = do
+    case validateRegistryInitWizardInputControl cf of
+        Right () -> pure ()
+        Left ce ->
+            abortSeedSplit (renderInputControlError ce)
     networkName <- case resolveNetworkName g of
         Right t -> pure t
         Left e -> abortSeedSplit (T.pack e)
@@ -615,12 +714,20 @@ runSeedSplitVerified g cf = do
                         r <- queryUpperBoundSlot backend choice
                         pure (fmap unwrapSlot r)
                     }
-        er <- resolveRegistryInitSeedSplit renv input
+        er <-
+            resolveRegistryInitSeedSplitIC
+                renv
+                (cfExcludeSet cf)
+                (cfForcedSet cf)
+                input
         env <- case er of
             Left e ->
-                abortSeedSplit
-                    ("resolve: " <> T.pack (show e))
-            Right e -> pure e
+                abortSeedSplit (renderRegistryInitResolverError e)
+            Right (e, outcome) -> do
+                emitRegistryInitExclusionLog
+                    "registry-init-wizard seed-split"
+                    outcome
+                pure e
         intent <-
             case registryInitSeedSplitToIntent env answers of
                 Left te ->
@@ -656,6 +763,10 @@ translation is printed to stderr with exit code 3.
 runMintVerified :: GlobalOpts -> MintOpts -> IO ()
 runMintVerified g mintOpts = do
     let cf = mCommon mintOpts
+    case validateRegistryInitWizardInputControl cf of
+        Right () -> pure ()
+        Left ce ->
+            abortMint (renderInputControlError ce)
     networkName <- case resolveNetworkName g of
         Right t -> pure t
         Left e -> abortMint (T.pack e)
@@ -710,12 +821,20 @@ runMintVerified g mintOpts = do
                         r <- queryUpperBoundSlot backend choice
                         pure (fmap unwrapSlot r)
                     }
-        er <- resolveRegistryInitSeedSplit renv input
+        er <-
+            resolveRegistryInitSeedSplitIC
+                renv
+                (cfExcludeSet cf)
+                (cfForcedSet cf)
+                input
         env <- case er of
             Left e ->
-                abortMint
-                    ("resolve: " <> T.pack (show e))
-            Right e -> pure e
+                abortMint (renderRegistryInitResolverError e)
+            Right (e, outcome) -> do
+                emitRegistryInitExclusionLog
+                    "registry-init-wizard mint"
+                    outcome
+                pure e
         intent <-
             case registryInitMintToIntent env answers of
                 Left te ->
@@ -755,6 +874,10 @@ runReferenceScriptsVerified
     :: GlobalOpts -> ReferenceScriptsOpts -> IO ()
 runReferenceScriptsVerified g rsOpts = do
     let cf = rsCommon rsOpts
+    case validateRegistryInitWizardInputControl cf of
+        Right () -> pure ()
+        Left ce ->
+            abortReferenceScripts (renderInputControlError ce)
     networkName <- case resolveNetworkName g of
         Right t -> pure t
         Left e -> abortReferenceScripts (T.pack e)
@@ -809,12 +932,21 @@ runReferenceScriptsVerified g rsOpts = do
                         r <- queryUpperBoundSlot backend choice
                         pure (fmap unwrapSlot r)
                     }
-        er <- resolveRegistryInitSeedSplit renv input
+        er <-
+            resolveRegistryInitSeedSplitIC
+                renv
+                (cfExcludeSet cf)
+                (cfForcedSet cf)
+                input
         env <- case er of
             Left e ->
                 abortReferenceScripts
-                    ("resolve: " <> T.pack (show e))
-            Right e -> pure e
+                    (renderRegistryInitResolverError e)
+            Right (e, outcome) -> do
+                emitRegistryInitExclusionLog
+                    "registry-init-wizard reference-scripts"
+                    outcome
+                pure e
         intent <-
             case registryInitReferenceScriptsToIntent env answers of
                 Left te ->
@@ -855,6 +987,10 @@ anchors from submitted tx ids.
 -}
 runSeedSplitBootstrap :: GlobalOpts -> CommonFlags -> IO ()
 runSeedSplitBootstrap g cf = do
+    case validateRegistryInitWizardInputControl cf of
+        Right () -> pure ()
+        Left ce ->
+            abortSeedSplit (renderInputControlError ce)
     networkName <- case resolveNetworkName g of
         Right t -> pure t
         Left e -> abortSeedSplit (T.pack e)
@@ -893,12 +1029,21 @@ runSeedSplitBootstrap g cf = do
                         r <- queryUpperBoundSlot backend choice
                         pure (fmap unwrapSlot r)
                     }
-        er <- resolveRegistryInitBootstrap renv input
+        er <-
+            resolveRegistryInitBootstrapIC
+                renv
+                (cfExcludeSet cf)
+                (cfForcedSet cf)
+                input
         env <- case er of
             Left e ->
                 abortSeedSplit
-                    ("resolve: " <> T.pack (show e))
-            Right e -> pure e
+                    (renderRegistryInitResolverError e)
+            Right (e, outcome) -> do
+                emitRegistryInitExclusionLog
+                    "registry-init-wizard seed-split (bootstrap)"
+                    outcome
+                pure e
         intent <-
             case registryInitSeedSplitToIntent env answers of
                 Left te ->
@@ -920,6 +1065,10 @@ translator.
 runMintBootstrap :: GlobalOpts -> MintOpts -> IO ()
 runMintBootstrap g mintOpts = do
     let cf = mCommon mintOpts
+    case validateRegistryInitWizardInputControl cf of
+        Right () -> pure ()
+        Left ce ->
+            abortMint (renderInputControlError ce)
     networkName <- case resolveNetworkName g of
         Right t -> pure t
         Left e -> abortMint (T.pack e)
@@ -961,11 +1110,20 @@ runMintBootstrap g mintOpts = do
                         r <- queryUpperBoundSlot backend choice
                         pure (fmap unwrapSlot r)
                     }
-        er <- resolveRegistryInitBootstrap renv input
+        er <-
+            resolveRegistryInitBootstrapIC
+                renv
+                (cfExcludeSet cf)
+                (cfForcedSet cf)
+                input
         env <- case er of
             Left e ->
-                abortMint ("resolve: " <> T.pack (show e))
-            Right e -> pure e
+                abortMint (renderRegistryInitResolverError e)
+            Right (e, outcome) -> do
+                emitRegistryInitExclusionLog
+                    "registry-init-wizard mint (bootstrap)"
+                    outcome
+                pure e
         intent <-
             case registryInitMintToIntent env answers of
                 Left te ->
@@ -988,6 +1146,10 @@ runReferenceScriptsBootstrap
     :: GlobalOpts -> ReferenceScriptsOpts -> IO ()
 runReferenceScriptsBootstrap g rsOpts = do
     let cf = rsCommon rsOpts
+    case validateRegistryInitWizardInputControl cf of
+        Right () -> pure ()
+        Left ce ->
+            abortReferenceScripts (renderInputControlError ce)
     networkName <- case resolveNetworkName g of
         Right t -> pure t
         Left e -> abortReferenceScripts (T.pack e)
@@ -1029,12 +1191,21 @@ runReferenceScriptsBootstrap g rsOpts = do
                         r <- queryUpperBoundSlot backend choice
                         pure (fmap unwrapSlot r)
                     }
-        er <- resolveRegistryInitBootstrap renv input
+        er <-
+            resolveRegistryInitBootstrapIC
+                renv
+                (cfExcludeSet cf)
+                (cfForcedSet cf)
+                input
         env <- case er of
             Left e ->
                 abortReferenceScripts
-                    ("resolve: " <> T.pack (show e))
-            Right e -> pure e
+                    (renderRegistryInitResolverError e)
+            Right (e, outcome) -> do
+                emitRegistryInitExclusionLog
+                    "registry-init-wizard reference-scripts (bootstrap)"
+                    outcome
+                pure e
         intent <-
             case registryInitReferenceScriptsToIntent env answers of
                 Left te ->

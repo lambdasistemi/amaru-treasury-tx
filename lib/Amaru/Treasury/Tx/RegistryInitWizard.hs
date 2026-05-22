@@ -45,6 +45,15 @@ module Amaru.Treasury.Tx.RegistryInitWizard
     , RegistryInitBootstrapInput (..)
     , resolveRegistryInitBootstrap
 
+      -- * Input control (#184 — Slice 5)
+    , PoolHit (..)
+    , InputControlOutcome (..)
+    , OutRef
+    , resolveRegistryInitSeedSplitIC
+    , resolveRegistryInitBootstrapIC
+    , renderRegistryInitExclusionLogLine
+    , renderRegistryInitWalletShortfallWithExcludes
+
       -- * Pure translation
     , registryInitSeedSplitToIntent
     , registryInitMintToIntent
@@ -80,13 +89,25 @@ import Amaru.Treasury.IntentJSON
     )
 import Amaru.Treasury.Scope (ScopeId, scopeText)
 import Amaru.Treasury.Tx.SwapWizard
-    ( RegistryView (..)
+    ( InputControlOutcome (..)
+    , PoolHit (..)
+    , RegistryView (..)
     , ScopeOwners (..)
     , ScopeView (..)
     , TreasuryRefs (..)
     , WalletSelection (..)
     , selectWallet
     )
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    , OutRef
+    , filterPool
+    , outRefText
+    , parseOutRef
+    , renderShortfallWithExcludes
+    )
+import Data.Either (lefts, rights)
 
 import Data.Text qualified as T
 
@@ -203,6 +224,16 @@ data RegistryInitError
     | -- | @--validity-hours = Just n@ overshoots the chain
       --   horizon. Payload from 'Validity.HorizonError'.
       RegistryInitValidityOvershoot !Validity.HorizonError
+    | -- | One or more @--extra-tx-in@ refs were not returned
+      --   by the wallet-address query (FR-009, #184).
+      RegistryInitResolverExtraTxInNotOnWallet ![OutRef]
+    | -- | @RegistryInitResolverWalletShortfallWithExcludes
+      --   available target refs@. Wallet pool was emptied by
+      --   the operator's @--exclude-utxo@ set (FR-008, #184).
+      RegistryInitResolverWalletShortfallWithExcludes
+        !Integer
+        !Integer
+        ![OutRef]
     deriving stock (Eq, Show)
 
 -- ----------------------------------------------------
@@ -282,7 +313,30 @@ resolveRegistryInitSeedSplit
     => RegistryInitResolverEnv m
     -> RegistryInitResolverInput
     -> m (Either RegistryInitError RegistryInitEnv)
-resolveRegistryInitSeedSplit renv input
+resolveRegistryInitSeedSplit renv input = do
+    r <-
+        resolveRegistryInitSeedSplitIC
+            renv
+            (ExclusionSet [])
+            (ForcedInclusionSet [])
+            input
+    pure (fmap fst r)
+
+{- | Variant of 'resolveRegistryInitSeedSplit' that threads
+the operator's @--exclude-utxo@ and @--extra-tx-in@ sets
+through the wallet candidate pool (#184 Slice 5). Returns
+the resolved 'RegistryInitEnv' alongside the
+'InputControlOutcome' the caller uses to emit per-ref log
+lines.
+-}
+resolveRegistryInitSeedSplitIC
+    :: (Monad m)
+    => RegistryInitResolverEnv m
+    -> ExclusionSet
+    -> ForcedInclusionSet
+    -> RegistryInitResolverInput
+    -> m (Either RegistryInitError (RegistryInitEnv, InputControlOutcome))
+resolveRegistryInitSeedSplitIC renv excl forced input
     | wriNetwork input /= "devnet" =
         pure
             ( Left
@@ -303,40 +357,85 @@ resolveRegistryInitSeedSplit renv input
                     wreQueryWalletUtxos
                         renv
                         (wriWalletAddrBech32 input)
-                case selectWallet 1 walletUtxos of
-                    Left _ ->
-                        pure (Left RegistryInitWalletShortfall)
-                    Right ([], _) ->
-                        pure (Left RegistryInitWalletShortfall)
-                    Right (walletRef : _, _) -> do
-                        upperE <-
-                            resolveUpperBound
-                                (wreComputeUpperBound renv)
-                                (wriValidityHours input)
-                        case upperE of
-                            Left e -> pure (Left e)
-                            Right upperBound ->
-                                pure $
-                                    Right
-                                        RegistryInitEnv
-                                            { reNetwork = wriNetwork input
-                                            , reUpperBoundSlot = upperBound
-                                            , reRegistry = wriRegistry input
-                                            , reScopeView =
-                                                ScopeView
-                                                    { svScope = wriScope input
-                                                    , svRefs = refs
-                                                    , svDefaultSigners = []
-                                                    }
-                                            , reWalletSelection =
-                                                WalletSelection
-                                                    { wsTxIn = walletRef
-                                                    , wsAddress =
-                                                        wriWalletAddrBech32
-                                                            input
-                                                    , wsExtraTxIns = []
-                                                    }
-                                            }
+                let ExclusionSet exclRefs = excl
+                    ForcedInclusionSet forcedRefs = forced
+                    walletRefSet =
+                        map walletCandidateRef walletUtxos
+                    missing =
+                        filter
+                            (`notElem` walletRefSet)
+                            forcedRefs
+                if not (null missing)
+                    then
+                        pure
+                            ( Left
+                                ( RegistryInitResolverExtraTxInNotOnWallet
+                                    missing
+                                )
+                            )
+                    else
+                        let (filteredWallet, _, _, _) =
+                                filterPool
+                                    walletCandidateRef
+                                    excl
+                                    forced
+                                    walletUtxos
+                            outcome =
+                                buildRegistryInitOutcome
+                                    exclRefs
+                                    walletRefSet
+                            forcedTexts =
+                                map outRefText forcedRefs
+                        in  case selectWallet 1 filteredWallet of
+                                Left _ ->
+                                    pure
+                                        ( Left
+                                            ( registryInitWalletShortfallError
+                                                exclRefs
+                                                0
+                                                1
+                                            )
+                                        )
+                                Right ([], _) ->
+                                    pure
+                                        ( Left
+                                            ( registryInitWalletShortfallError
+                                                exclRefs
+                                                0
+                                                1
+                                            )
+                                        )
+                                Right (walletRef : _, _) -> do
+                                    upperE <-
+                                        resolveUpperBound
+                                            (wreComputeUpperBound renv)
+                                            (wriValidityHours input)
+                                    case upperE of
+                                        Left e -> pure (Left e)
+                                        Right upperBound ->
+                                            pure $
+                                                Right
+                                                    ( RegistryInitEnv
+                                                        { reNetwork = wriNetwork input
+                                                        , reUpperBoundSlot = upperBound
+                                                        , reRegistry = wriRegistry input
+                                                        , reScopeView =
+                                                            ScopeView
+                                                                { svScope = wriScope input
+                                                                , svRefs = refs
+                                                                , svDefaultSigners = []
+                                                                }
+                                                        , reWalletSelection =
+                                                            WalletSelection
+                                                                { wsTxIn = walletRef
+                                                                , wsAddress =
+                                                                    wriWalletAddrBech32
+                                                                        input
+                                                                , wsExtraTxIns = forcedTexts
+                                                                }
+                                                        }
+                                                    , outcome
+                                                    )
 
 -- ----------------------------------------------------
 -- Bootstrap resolver (#175 Slice 2)
@@ -389,7 +488,29 @@ resolveRegistryInitBootstrap
     => RegistryInitResolverEnv m
     -> RegistryInitBootstrapInput
     -> m (Either RegistryInitError RegistryInitEnv)
-resolveRegistryInitBootstrap renv input
+resolveRegistryInitBootstrap renv input = do
+    r <-
+        resolveRegistryInitBootstrapIC
+            renv
+            (ExclusionSet [])
+            (ForcedInclusionSet [])
+            input
+    pure (fmap fst r)
+
+{- | Variant of 'resolveRegistryInitBootstrap' that threads
+the operator's @--exclude-utxo@ and @--extra-tx-in@ sets
+through the wallet candidate pool (#184 Slice 5). Same
+shape as 'resolveRegistryInitSeedSplitIC' but consumes the
+bootstrap input record.
+-}
+resolveRegistryInitBootstrapIC
+    :: (Monad m)
+    => RegistryInitResolverEnv m
+    -> ExclusionSet
+    -> ForcedInclusionSet
+    -> RegistryInitBootstrapInput
+    -> m (Either RegistryInitError (RegistryInitEnv, InputControlOutcome))
+resolveRegistryInitBootstrapIC renv excl forced input
     | wbiNetwork input /= "devnet" =
         pure
             ( Left
@@ -398,40 +519,87 @@ resolveRegistryInitBootstrap renv input
     | otherwise = do
         walletUtxos <-
             wreQueryWalletUtxos renv (wbiWalletAddrBech32 input)
-        case selectWallet 1 walletUtxos of
-            Left _ -> pure (Left RegistryInitWalletShortfall)
-            Right ([], _) ->
-                pure (Left RegistryInitWalletShortfall)
-            Right (walletRef : _, _) -> do
-                upperE <-
-                    resolveUpperBound
-                        (wreComputeUpperBound renv)
-                        (wbiValidityHours input)
-                case upperE of
-                    Left e -> pure (Left e)
-                    Right upperBound ->
-                        pure $
-                            Right
-                                RegistryInitEnv
-                                    { reNetwork = wbiNetwork input
-                                    , reUpperBoundSlot = upperBound
-                                    , reRegistry =
-                                        bootstrapSkeletonRegistry
-                                            (wbiScope input)
-                                    , reScopeView =
-                                        ScopeView
-                                            { svScope = wbiScope input
-                                            , svRefs = bootstrapSkeletonRefs
-                                            , svDefaultSigners = []
-                                            }
-                                    , reWalletSelection =
-                                        WalletSelection
-                                            { wsTxIn = walletRef
-                                            , wsAddress =
-                                                wbiWalletAddrBech32 input
-                                            , wsExtraTxIns = []
-                                            }
-                                    }
+        let ExclusionSet exclRefs = excl
+            ForcedInclusionSet forcedRefs = forced
+            walletRefSet =
+                map walletCandidateRef walletUtxos
+            missing =
+                filter (`notElem` walletRefSet) forcedRefs
+        if not (null missing)
+            then
+                pure
+                    ( Left
+                        ( RegistryInitResolverExtraTxInNotOnWallet
+                            missing
+                        )
+                    )
+            else
+                let (filteredWallet, _, _, _) =
+                        filterPool
+                            walletCandidateRef
+                            excl
+                            forced
+                            walletUtxos
+                    outcome =
+                        buildRegistryInitOutcome
+                            exclRefs
+                            walletRefSet
+                    forcedTexts = map outRefText forcedRefs
+                in  case selectWallet 1 filteredWallet of
+                        Left _ ->
+                            pure
+                                ( Left
+                                    ( registryInitWalletShortfallError
+                                        exclRefs
+                                        0
+                                        1
+                                    )
+                                )
+                        Right ([], _) ->
+                            pure
+                                ( Left
+                                    ( registryInitWalletShortfallError
+                                        exclRefs
+                                        0
+                                        1
+                                    )
+                                )
+                        Right (walletRef : _, _) -> do
+                            upperE <-
+                                resolveUpperBound
+                                    (wreComputeUpperBound renv)
+                                    (wbiValidityHours input)
+                            case upperE of
+                                Left e -> pure (Left e)
+                                Right upperBound ->
+                                    pure $
+                                        Right
+                                            ( bootstrapEnv
+                                                walletRef
+                                                upperBound
+                                                forcedTexts
+                                            , outcome
+                                            )
+  where
+    bootstrapEnv walletRef upperBound forcedTexts =
+        RegistryInitEnv
+            { reNetwork = wbiNetwork input
+            , reUpperBoundSlot = upperBound
+            , reRegistry =
+                bootstrapSkeletonRegistry (wbiScope input)
+            , reScopeView =
+                ScopeView
+                    { svScope = wbiScope input
+                    , svRefs = bootstrapSkeletonRefs
+                    , svDefaultSigners = []
+                    }
+            , reWalletSelection =
+                WalletSelection
+                    { wsTxIn = walletRef
+                    , wsAddress = wbiWalletAddrBech32 input
+                    , wsExtraTxIns = forcedTexts
+                    }
+            }
 
 {- | Skeleton 'RegistryView' for bootstrap mode. The build
 translators do not read these fields; they are filled with
@@ -485,6 +653,84 @@ bootstrapPlaceholderHash = T.replicate 56 "0"
 bootstrapPlaceholderAddress :: Text
 bootstrapPlaceholderAddress =
     "addr_test1vq3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygswahgq5"
+
+-- ----------------------------------------------------
+-- Input-control helpers (#184 Slice 5)
+-- ----------------------------------------------------
+
+{- | Either of the two new error constructors, selected by
+whether the operator supplied any @--exclude-utxo@ refs.
+When @exclRefs@ is empty (the legacy-shim path), the
+function returns the original 'RegistryInitWalletShortfall'
+so the existing tests + fixtures stay byte-identical.
+-}
+registryInitWalletShortfallError
+    :: [OutRef] -> Integer -> Integer -> RegistryInitError
+registryInitWalletShortfallError exclRefs avail target
+    | null exclRefs = RegistryInitWalletShortfall
+    | otherwise =
+        RegistryInitResolverWalletShortfallWithExcludes
+            avail
+            target
+            exclRefs
+
+{- | Project a wallet candidate triple onto the 'OutRef'
+the InputControl filter operates over. Parser failures here
+are programmer errors: the chain query returns refs in the
+canonical @TX_HASH#IX@ form already.
+-}
+walletCandidateRef :: (Text, Integer, Bool) -> OutRef
+walletCandidateRef (ref, _, _) =
+    case parseOutRef ref of
+        Right r -> r
+        Left e ->
+            error
+                ( "registry-init-wizard: wallet candidate ref not parseable: "
+                    <> T.unpack ref
+                    <> ": "
+                    <> T.unpack e
+                )
+
+{- | Build the per-ref pool-attribution outcome for the
+wallet-only candidate pool. Preserves exclusion-set input
+order so the wizard's log lines stay deterministic.
+Registry-init has no treasury pool, so every hit is
+'WalletOnly'.
+-}
+buildRegistryInitOutcome
+    :: [OutRef] -> [OutRef] -> InputControlOutcome
+buildRegistryInitOutcome excluded walletRefs =
+    let classify ref
+            | ref `elem` walletRefs = Right (ref, WalletOnly)
+            | otherwise = Left ref
+        classified = map classify excluded
+    in  InputControlOutcome
+            { icoHits = rights classified
+            , icoInert = lefts classified
+            }
+
+{- | Render the per-ref exclusion log line emitted by the
+registry-init wizard when @--exclude-utxo@ matches a wallet
+candidate. Pool attribution is always rendered as
+@[wallet]@ (registry-init is single-pool).
+-}
+renderRegistryInitExclusionLogLine
+    :: Text -> OutRef -> PoolHit -> Text
+renderRegistryInitExclusionLogLine prefix ref _pool =
+    prefix
+        <> ": excluded utxo "
+        <> outRefText ref
+        <> " (operator-supplied) [wallet]"
+
+{- | Append the operator's excluded refs to a base
+shortfall message. Wizard-side shim that DELEGATES to the
+shared 'renderShortfallWithExcludes' from
+'Amaru.Treasury.Wizard.InputControl'.
+-}
+renderRegistryInitWalletShortfallWithExcludes
+    :: Text -> [OutRef] -> Text
+renderRegistryInitWalletShortfallWithExcludes =
+    renderShortfallWithExcludes
 
 resolveUpperBound
     :: (Monad m)

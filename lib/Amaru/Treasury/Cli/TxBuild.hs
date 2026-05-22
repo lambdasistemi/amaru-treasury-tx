@@ -72,6 +72,7 @@ import Amaru.Treasury.IntentJSON
     , decodeTreasuryIntentFile
     )
 import Amaru.Treasury.IntentJSON.Common (parseTxIn)
+import Amaru.Treasury.LedgerParse (txInToText)
 import Amaru.Treasury.Report
     ( BuildFailure (..)
     , ReportContext (..)
@@ -217,6 +218,19 @@ emitBuildResult tr outPath reportPath magic some tbr = do
             | ScriptResult purpose (Left e) <-
                 brScriptResults tbr
             ]
+    let residue = brResidualTreasuryInputs tbr
+    case residue of
+        [] -> pure ()
+        _ ->
+            traceWith
+                tr
+                ( BuildEventReorganizeBatched
+                    (length (brTreasuryInputs tbr))
+                    ( length (brTreasuryInputs tbr)
+                        + length residue
+                    )
+                    (map txInToText residue)
+                )
     traceWith
         tr
         ( BuildEventBuilt

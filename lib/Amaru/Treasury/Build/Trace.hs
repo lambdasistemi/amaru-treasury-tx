@@ -87,6 +87,17 @@ data BuildEvent
       BuildEventReportWriteFailed !FilePath !Text
     | -- | The build aborted before producing CBOR.
       BuildEventAborted !Text
+    | -- | The reorganize batcher truncated the wizard's
+      --   treasury-input list to fit per-tx @maxTxExUnits@.
+      --   Carries the selected count, original wizard count,
+      --   and the dropped outrefs (as @txid#ix@ strings).
+      BuildEventReorganizeBatched
+        !Int
+        -- ^ number of treasury inputs selected for this batch
+        !Int
+        -- ^ number of treasury inputs the wizard emitted
+        ![Text]
+        -- ^ residue: outrefs (txid#ix) dropped from this batch
     deriving stock (Eq, Show)
 
 -- | Single-line, prefix-tagged rendering for log output.
@@ -152,6 +163,16 @@ renderBuildEvent =
                 <> ": "
                 <> err
         BuildEventAborted msg -> "ABORT " <> msg
+        BuildEventReorganizeBatched selected emitted residue ->
+            "reorganize: batched "
+                <> tshow selected
+                <> " of "
+                <> tshow emitted
+                <> " UTxOs ("
+                <> tshow (length residue)
+                <> " residue: "
+                <> T.intercalate ", " residue
+                <> ")"
 
 {- | Lift a 'Text' sink into a 'BuildEvent' tracer via
 'renderBuildEvent'.

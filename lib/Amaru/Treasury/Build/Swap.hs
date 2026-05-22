@@ -251,4 +251,5 @@ runSwapAction ctx intent rationale walletInput walletAddr = do
                     , brCollateralReturn =
                         strictMaybe
                             (body ^. collateralReturnTxBodyL)
+                    , brResidualTreasuryInputs = []
                     }

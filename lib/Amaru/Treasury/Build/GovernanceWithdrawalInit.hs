@@ -290,6 +290,7 @@ materializeResultImpl validatePhase1 ctx walletInputUtxos result =
                     , brCollateralReturn =
                         strictMaybe
                             (body ^. collateralReturnTxBodyL)
+                    , brResidualTreasuryInputs = []
                     }
 
 validateProposalPhase1

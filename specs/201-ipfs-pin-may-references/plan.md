@@ -94,10 +94,32 @@ The orchestrator (me) re-runs the grep before accepting the slice.
 
 ## Carry-forward to siblings
 
-- The schema `amaru-treasury-may-references-v1` is established here;
-  future months reuse it.
+- The schema `amaru-treasury-may-references-v2` (payee+beneficiary
+  model, per Constitution Principle VIII v2 / #210) is established
+  here; future months reuse it.
 - `disburse-wizard` consumption (#196) is unaffected by the manifest's
   internal shape because it only reads `references[].{uri,type,label}`.
+
+## Post-#210 amendment
+
+This plan was authored under Principle VIII v1 (per-beneficiary
+`monthly`/`yearly` contract classes). After #210 merged on 2026-05-22,
+the constitution and schema were updated to the payee+beneficiary
+model:
+
+- All 2026 `network_compliance` disburses are paid on-chain to
+  **Crypto Accounting Group (CAG)** (payee); the service providers
+  (Cyber Castellum, Antithesis) are beneficiaries.
+- Each disburse carries 2 payee docs (contract + address-of-record
+  proof) + 2 beneficiary docs (contract + current invoice) + 1
+  optional cycle-review document.
+- Labels use canonical legal names verbatim per `vendors.yaml`.
+- The manifest schema becomes `amaru-treasury-may-references-v2` with
+  a top-level `disbursements[]` array instead of the v1
+  `vendors.<name>` map.
+
+The slice plan is unchanged in shape (one bisect-safe commit); only
+the data layout, label text, and gate.sh schema check are updated.
 
 ## Plan-review checklist (orchestrator-self)
 

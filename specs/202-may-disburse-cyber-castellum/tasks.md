@@ -9,18 +9,19 @@ prose for the orchestrator to commit.
 
 ## S0 — Open clarifications to resolve before S2 runs
 
-- [ ] **T010** Operator → orchestrator: supply the resolved CAG
-      `onchain_address` (mainnet bech32). Orchestrator amends
-      `vendors.yaml` under this PR (folded in per operator decision
-      2026-05-22), replacing the `<TBD-CAG-BECH32>` placeholder.
+- [X] **T010** Orchestrator: amend `vendors.yaml` with the resolved
+      CAG `onchain_address` extracted from the address-of-record proof
+      email pinned at
+      `ipfs://bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm`:
+      `addr1q8qrds2nnx7clx3kcpp2l0eu45twmdcahsfu9m0xcwy59j6xz3vs0hnfaz9nhje8z34kfnds4jyk7hs6dnrag6e2lfgqtyf4rl`.
       Commit subject: `fix(vendors): resolve crypto_accounting_group onchain_address`.
-- [ ] **T020** Operator + orchestrator: confirm PR #197 status
-      (merged vs draft) before S2 starts. If still draft, decide:
-      wait, or pin S2 to `feat/issue-196-disburse-wizard-references`
-      with a `Depends-on: #197` note in the PR body.
-- [ ] **T030** Operator: confirm the `--extra-signer` bech32 for the
-      other `network_compliance` scope owner against the on-chain
-      registry.
+- [X] **T020** Resolved 2026-05-22: rebased #202 onto
+      `feat/issue-196-disburse-wizard-references`; PR #213's base
+      retargeted to that branch. Re-rebase onto `main` once #197
+      merges.
+- [X] **T030** Resolved 2026-05-22: `--extra-signer ops_and_use_cases`
+      (scope alias preferred over the raw hex
+      `f3ab64b0…d23e2e` from `journal/2026/metadata.json`).
 
 ## S1 — Operator helper script (orchestrator-owned, mechanical edit)
 

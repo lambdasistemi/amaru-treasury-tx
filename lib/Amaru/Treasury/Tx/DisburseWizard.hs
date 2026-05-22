@@ -420,9 +420,14 @@ selectDisburseAda usdmPolicy usdmAsset inputs amount =
         =<< selectByKey lovelaceOf inputs amount
 
 {- | Select treasury inputs for a USDM disbursement,
-largest-first by USDM quantity. The beneficiary output
-also needs a lovelace deposit; the caller supplies that
-debit so the leftover lovelace remains deterministic.
+largest-first by USDM quantity. For USDM disburses the
+on-chain treasury validator enforces strict lovelace
+conservation (the redeemer's @amount.lovelace@ is 0), so
+the FULL treasury-input lovelace remains on the leftover
+output. The beneficiary's own min-UTxO deposit is
+wallet-funded; the caller still supplies a floor so the
+selected inputs can satisfy the leftover output's
+min-UTxO requirement. See #215.
 -}
 selectDisburseUsdm
     :: PolicyID
@@ -430,7 +435,10 @@ selectDisburseUsdm
     -> AssetName
     -- ^ USDM token name
     -> Integer
-    -- ^ beneficiary-output lovelace deposit
+    -- ^ minimum lovelace the selected inputs must provide
+    --   so the leftover output meets its own min-UTxO
+    --   floor (the beneficiary's deposit is wallet-funded,
+    --   not debited here).
     -> [(TxIn, MaryValue)]
     -> Integer
     -- ^ beneficiary USDM quantity
@@ -438,13 +446,13 @@ selectDisburseUsdm
 selectDisburseUsdm
     usdmPolicy
     usdmAsset
-    beneficiaryLovelace
+    leftoverLovelaceFloor
     inputs
     amount =
         selectedToDisburseSelection
             usdmPolicy
             usdmAsset
-            beneficiaryLovelace
+            0
             amount
             =<< selectByKeyUntil
                 (assetQuantity usdmPolicy usdmAsset)
@@ -455,7 +463,7 @@ selectDisburseUsdm
             sum (assetQuantity usdmPolicy usdmAsset . snd <$> selected)
                 >= amount
                 && sum (lovelaceOf . snd <$> selected)
-                    >= beneficiaryLovelace
+                    >= leftoverLovelaceFloor
 
 selectByKeyUntil
     :: (MaryValue -> Integer)

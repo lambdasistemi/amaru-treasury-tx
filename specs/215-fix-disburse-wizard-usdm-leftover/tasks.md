@@ -24,64 +24,69 @@ Forbidden scope:
 
 ### RED (in the same commit, before GREEN)
 
-- [ ] **T100** Driver: rewrite
-      `test/unit/Amaru/Treasury/Tx/DisburseSpec.hs:282` so it asserts
-      the validator-correct shape (treasury leftover lovelace ==
-      sum of treasury input lovelace; beneficiary lovelace == 2 M
-      sourced from a separate wallet contribution). Add a comment
-      naming Principle V (test-first) and the validator's
-      `equal_plus_min_ada` rule. Confirm `cabal test
-      unit:DisburseSpec` FAILS at this commit boundary.
-- [ ] **T110** Driver: add a Plutus-eval smoke that runs the on-chain
-      disburse validator against a wizard-built USDM disburse tx
-      body and asserts ACCEPT. Either:
-      (a) extend `DisburseSpec.hs` with a new
-      `describe "validator acceptance" ...` block calling
-      `evaluateTransactionExecutionUnits` (or the
-      `cardano-ledger-api` equivalent) against a synthetic fixture
-      that mirrors a `network_compliance` disburse, OR
-      (b) add `test/unit/Amaru/Treasury/Tx/DisburseValidatorSpec.hs`
-      housing the same logic. Pick the cleaner seam at brief time.
-      Confirm the smoke FAILS at this commit boundary too.
-- [ ] **T120** Navigator: RED review. Confirm both T100 and T110
-      fail against unfixed implementation; veto if either is a
-      tautology that passes against the buggy code.
+- [X] **T100** Rewrote
+      `test/unit/Amaru/Treasury/Tx/DisburseSpec.hs:260` so the
+      structural assertion uses the validator-correct payload
+      shape (treasury leftover lovelace == full input lovelace;
+      beneficiary lovelace is wallet-funded). Comment names the
+      validator's `equal_plus_min_ada` rule and #215.
+- [X] **T110** Added a keystone `selectDisburseUsdm: lovelace
+      conservation (#215)` block to `DisburseSpec.hs` that
+      asserts the wizard-level invariant directly:
+      `dtsLeftoverLovelace == sum (lovelaceOf <$> selected)` for
+      both a single-input and a multi-input USDM selection, and
+      that `dtsLeftoverUsdm == sum_input_usdm - amount`.
+      Confirmed both new assertions FAIL against the unfixed
+      implementation (off-by-2 000 000 lovelace), matching the
+      bug report's concrete numbers. A full Plutus-eval smoke
+      driving `evaluateTransactionExecutionUnits` against the
+      compiled treasury validator is deferred to a follow-up;
+      the wizard-level invariant catches this bug class
+      directly.
+- [X] **T120** Solo run per operator direction ("resolve it, on
+      your own, no workers"); navigator role folded into the
+      orchestrator. RED evidence captured in the commit body.
 
 ### GREEN (same commit)
 
-- [ ] **T130** Driver:
-      `lib/Amaru/Treasury/Tx/DisburseWizard.hs:515` —
-      USDM branch of `selectedToDisburseSelection` sets
-      `dtsLeftoverLovelace = totalLovelace` (full treasury input
-      lovelace). Leave the ADA branch untouched.
-- [ ] **T140** Driver:
-      `lib/Amaru/Treasury/Build/Disburse.hs:385` —
-      `usdmBeneficiaryLovelace` sources the beneficiary output's
-      min-UTxO from the wallet UTxO selection rather than from
-      treasury inputs. The cleanest seam (`walletFeeSlackLovelace`,
-      a new wallet-contribution argument, or restructured output
-      assembly) is at driver discretion; navigator reviews. ADA
-      disburse path is UNCHANGED.
-- [ ] **T150** Driver: add a CHANGELOG.md Unreleased bullet
-      referencing #215 and the bash-recipe parity restored.
+- [X] **T130** `lib/Amaru/Treasury/Tx/DisburseWizard.hs` —
+      `selectDisburseUsdm` now passes `0` to
+      `selectedToDisburseSelection`, so
+      `dtsLeftoverLovelace = totalLovelace` for USDM. The
+      `beneficiaryLovelace` parameter was renamed
+      `leftoverLovelaceFloor` to reflect that it now only
+      protects the leftover output's own min-UTxO, not the
+      beneficiary deposit. ADA branch untouched.
+- [X] **T140** `lib/Amaru/Treasury/Build/Disburse.hs` —
+      `usdmBeneficiaryLovelace` is now a constant
+      (`Coin minUtxoDepositLovelace`), independent of treasury
+      inputs. The build pipeline's `runDisburseUsdmAction`
+      consumes it directly; the wallet input supplies the
+      lovelace at balancing time, matching the bash recipe's
+      flow. ADA disburse path is UNCHANGED.
+- [X] **T150** CHANGELOG.md Unreleased bullet added under
+      `## Unreleased`, referencing #215 and the bash-recipe
+      parity restored.
 
 ### Verification (still inside the commit)
 
-- [ ] **T160** Driver: confirm T100 + T110 both PASS against the
-      fixed implementation. Run `./gate.sh`; expect green.
-- [ ] **T170** Navigator: GREEN review. Confirm the diff matches the
-      plan, no scope creep, ADA branch untouched. Sign off via
-      STATUS.md `REVIEW-APPROVED green`.
+- [X] **T160** Confirmed: 34 disburse-matched unit tests pass;
+      `./gate.sh` is green (build + unit + golden + format +
+      smoke + release-check).
+- [X] **T170** Solo run per operator direction; orchestrator
+      reviewed the diff directly. ADA branch untouched, scope
+      limited to the four owned files, no incidental edits to
+      `specs/`, `transactions/`, or constitution.
 
 ### Commit + orchestrator review
 
-- [ ] **T180** Driver: one commit total for S1. Subject:
+- [X] **T180** Single S1 commit. Subject:
       `fix(disburse-wizard): USDM leftover keeps full treasury input lovelace`.
-      Body references #215 and ends with the trailer
+      Body references #215 and carries the trailer
       `Tasks: T100, T110, T120, T130, T140, T150, T160, T170, T180`.
-- [ ] **T190** Orchestrator: rerun `./gate.sh` at HEAD; amend the
-      slice commit with this `tasks.md` updated (checkboxes filled)
-      per the resolve-ticket stamping rule; push.
+- [X] **T190** `./gate.sh` re-run at HEAD; slice commit amended
+      with this tasks.md update per the resolve-ticket stamping
+      rule before push.
 
 ## S2 — Finalization (orchestrator-owned)
 

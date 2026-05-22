@@ -67,6 +67,7 @@ import Amaru.Treasury.Build.Result
     , ScriptResult (..)
     )
 import Amaru.Treasury.ChainContext (ChainContext (..))
+import Amaru.Treasury.Constants (minUtxoDepositLovelace)
 import Amaru.Treasury.Tx.Disburse
     ( DisburseAdaPayload
     , DisburseIntent (..)
@@ -274,15 +275,8 @@ runDisburseUsdmAction ctx fields payload rationale walletAddr = do
             | i <- refInputs
             ]
         pp = ccPParams ctx
-    beneficiaryLovelace <-
-        case usdmBeneficiaryLovelace payload treasuryInputUtxos of
-            Left e ->
-                throwE $
-                    actionBuildError
-                        BuildPhaseBuild
-                        (DiagnosticChecksFailed e)
-            Right ok -> pure ok
-    let evaluator tx = do
+    let beneficiaryLovelace = usdmBeneficiaryLovelace
+        evaluator tx = do
             m <- ccEvaluateTx ctx tx
             pure (fmap (either (Left . show) Right) m)
         program = do
@@ -370,23 +364,13 @@ runDisburseUsdmAction ctx fields payload rationale walletAddr = do
                             (body ^. collateralReturnTxBodyL)
                     }
 
-usdmBeneficiaryLovelace
-    :: DisburseUsdmPayload
-    -> [(a, TxOut ConwayEra)]
-    -> Either T.Text Coin
-usdmBeneficiaryLovelace payload treasuryInputUtxos =
-    let totalInput =
-            sum
-                [ lovelace
-                | (_, txOut) <- treasuryInputUtxos
-                , let MaryValue (Coin lovelace) _ =
-                        txOut ^. valueTxOutL
-                ]
-        Coin leftover = dupLeftoverLovelace payload
-        beneficiary = totalInput - leftover
-    in  if beneficiary <= 0
-            then
-                Left $
-                    "USDM disburse beneficiary lovelace is non-positive; "
-                        <> "check treasuryLeftoverLovelace against selected inputs"
-            else Right (Coin beneficiary)
+{- | Lovelace deposit on the USDM-disburse beneficiary
+output. For USDM disburses the treasury validator
+enforces strict lovelace conservation (the redeemer's
+@amount.lovelace@ is 0), so the beneficiary's min-UTxO
+deposit must be funded by the wallet input, not debited
+from the treasury. This value is therefore independent
+of the selected treasury inputs. See #215.
+-}
+usdmBeneficiaryLovelace :: Coin
+usdmBeneficiaryLovelace = Coin minUtxoDepositLovelace

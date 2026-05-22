@@ -4,29 +4,64 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.14.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.12.0...v0.2.14.0) (2026-05-22)
+
 ### Features
 
-* **disburse-wizard:** document `--reference-uri`, `--reference-type`, and `--reference-label` for on-chain rationale audit chains backed by IPFS references.
-
-* **transactions:** record May 2026 18 750 USDM disburse from `network_compliance` to Crypto Accounting Group (CAG payee) benefiting Cyber Castellum Corporation, submitted on mainnet as txId [`c150d5c5c67658c8f2a3bc24e16a4852257d46a03224257ac990fcca6f6fde78`](https://cardanoscan.io/transaction/c150d5c5c67658c8f2a3bc24e16a4852257d46a03224257ac990fcca6f6fde78) with the 5-reference Principle VIII v2 evidence set (#202).
-
-* **transactions:** record May 2026 `network_compliance` USDM-consolidation reorganize batch-01 (preparing the Antithesis disburse), submitted on mainnet as txId [`cb8f1a1254d650afc1c5b2a1e677df24ac72c4540e96eff52072bcb04b7274ba`](https://cardanoscan.io/transaction/cb8f1a1254d650afc1c5b2a1e677df24ac72c4540e96eff52072bcb04b7274ba) — 10 of 54 treasury UTxOs consolidated into one (71 886.81 USDM + 26.29 ADA); validator-enforced value conservation (#202).
-
-* **transactions:** record reorganize batch-02 (continuing the consolidation), submitted on mainnet as txId [`019586ee09f54155379d36ea2c6aa010296dcf5b8e28564a668bec1a44d8f503`](https://cardanoscan.io/transaction/019586ee09f54155379d36ea2c6aa010296dcf5b8e28564a668bec1a44d8f503) — 10 more UTxOs (including the batch-01 leftover) consolidated into one (162 071.81 USDM + 48.95 ADA); treasury count 45 → 36 (#202).
-
-* **transactions:** record reorganize batch-03, submitted on mainnet as txId [`71ff129b5e0b5983ac01da968c6e345a8b6bc36d650a27f18c02ea9787a13dbe`](https://cardanoscan.io/transaction/71ff129b5e0b5983ac01da968c6e345a8b6bc36d650a27f18c02ea9787a13dbe) — leftover now 237 307.84 USDM + 70.76 ADA; treasury count 36 → 27 (#202).
-
-* **transactions:** record reorganize batch-04, submitted on mainnet as txId [`65bfd93936abf4fb26a135e89bd3ef133bb4b02152b37199586ed443979a95b1`](https://cardanoscan.io/transaction/65bfd93936abf4fb26a135e89bd3ef133bb4b02152b37199586ed443979a95b1) — leftover now 295 706.64 USDM; treasury count 27 → 18 (#202).
-
-* **transactions:** record reorganize batch-05 (final consolidation before Antithesis disburse), submitted on mainnet as txId [`021e6b48610dd73b9c72c39f50986c1f2a34927fe7a764e0f06305f61b3b44ea`](https://cardanoscan.io/transaction/021e6b48610dd73b9c72c39f50986c1f2a34927fe7a764e0f06305f61b3b44ea) — leftover now 366 113.20 USDM (~90% of treasury total); treasury count 18 → 9; ready for a single-tx Antithesis disburse (#202).
+* **intent:** real ReorganizeInputs + ReorganizeIntent shapes ([f836a6c](https://github.com/lambdasistemi/amaru-treasury-tx/commit/f836a6ca5524e57b3388114d02b758443029c864))
+* **tx:** add Build.Reorganize runner + materialization golden ([15ec7e7](https://github.com/lambdasistemi/amaru-treasury-tx/commit/15ec7e7d889c638c2c58d48c91d2aa7e1368227b))
+* **tx:** wire SReorganize dispatcher arm ([2ac9b7f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/2ac9b7f16444b5e555e4aea076f1e8217c26c09b))
+* **cli:** reorganize-wizard parser + stub runner ([6c155fa](https://github.com/lambdasistemi/amaru-treasury-tx/commit/6c155fadb1703d9364ebb1395b936c90d3ab6bb3))
+* **cli:** wire reorganize-wizard subcommand into dispatcher ([05675a6](https://github.com/lambdasistemi/amaru-treasury-tx/commit/05675a635207f5b0d4c58c18e325f2d9867a8134))
+* **tx:** reorganize-wizard resolver + pure translator ([fd4857d](https://github.com/lambdasistemi/amaru-treasury-tx/commit/fd4857d5461b0f852270d2554629f25fabfec54a))
+* **cli:** wire reorganize-wizard live runner ([bd38c8a](https://github.com/lambdasistemi/amaru-treasury-tx/commit/bd38c8a2d2e9e6097e22dde543c271704909262b))
+* **smoke:** reorganize phase scaffold + MISSING_REORGANIZE_BUILDER guard ([18973aa](https://github.com/lambdasistemi/amaru-treasury-tx/commit/18973aa58ec8d0165226ae39f928469d81a27f99))
+* **smoke:** live reorganize phase + asset preservation assertion ([a2c73c8](https://github.com/lambdasistemi/amaru-treasury-tx/commit/a2c73c8186f708a426f59c99c6784db394049726))
+* **smoke:** assert reorganize exec units within pparams.maxTxExecutionUnits ([78dd9f9](https://github.com/lambdasistemi/amaru-treasury-tx/commit/78dd9f977426d148e2f774ff2e141bdcb2e6abf3))
+* **transactions:** may 2026 network_compliance disburse-reference manifest (v2 schema) ([d65f03b](https://github.com/lambdasistemi/amaru-treasury-tx/commit/d65f03b98368e376b0399bcd71bd2c887c1fbb1d))
+* **auxdata:** add RationaleBody.rbReferences with d6c14625 golden ([7dfc511](https://github.com/lambdasistemi/amaru-treasury-tx/commit/7dfc51114b0e5de46e8d0ddc6ca7e2ab898e3463))
+* **intent-json:** allow references on disburse rationale (schema + round-trip) ([96c1e57](https://github.com/lambdasistemi/amaru-treasury-tx/commit/96c1e575309802b79282806cc2202efbbd8d98bb))
+* **disburse-wizard:** add repeatable --reference-uri/-type/-label flags ([5b16994](https://github.com/lambdasistemi/amaru-treasury-tx/commit/5b169946a98d5cb08a8b6f706f562f9e2f59f9fa))
+* **reorganize-wizard:** admit any resolved network (mainnet, preprod, preview, devnet) ([f33ad97](https://github.com/lambdasistemi/amaru-treasury-tx/commit/f33ad972410a36e411ac80e6175b63209bb9fa7b))
+* **wizard:** shared InputControl module for --exclude-utxo / --extra-tx-in (#184) ([6c62b0f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/6c62b0fb9e5c0c498116138b995cfc67b5a965f9))
+* **swap-wizard:** --exclude-utxo / --extra-tx-in (#184) ([5ae22ba](https://github.com/lambdasistemi/amaru-treasury-tx/commit/5ae22ba39ef7610c7c3bb10032dd79f343ebb00f))
+* **disburse-wizard:** --exclude-utxo / --extra-tx-in for disburse + contingency-disburse (#184) ([6b1b45c](https://github.com/lambdasistemi/amaru-treasury-tx/commit/6b1b45cb3e7c1109844f2e4c0e3815d668def196))
+* **withdraw-wizard:** --exclude-utxo / --extra-tx-in (#184) ([a9a17fe](https://github.com/lambdasistemi/amaru-treasury-tx/commit/a9a17fe0bc489f80385af51876c546f9974d6b70))
+* **registry-init-wizard:** --exclude-utxo / --extra-tx-in (#184) ([df8e949](https://github.com/lambdasistemi/amaru-treasury-tx/commit/df8e94991bc3344d7db2fc4ad5874441b7a4edb3))
+* **stake-reward-init-wizard:** --exclude-utxo / --extra-tx-in (#184) ([5cae06d](https://github.com/lambdasistemi/amaru-treasury-tx/commit/5cae06d9a75d76eb18a753ff01ae5ca94dd39d12))
+* **governance-withdrawal-init-wizard:** --exclude-utxo / --extra-tx-in (#184) ([c2e745c](https://github.com/lambdasistemi/amaru-treasury-tx/commit/c2e745cd00763d8095e0de883a66972f28bfef99))
+* **reorganize-wizard:** --exclude-utxo / --extra-tx-in (#184) ([66f4b77](https://github.com/lambdasistemi/amaru-treasury-tx/commit/66f4b77904f5a277cb377127ae1881f05b00cc09))
+* **reorganize:** projected linear descent picks largest fitting batch ([adb8863](https://github.com/lambdasistemi/amaru-treasury-tx/commit/adb8863d0e4d223d5a6aa6cc6ac8785e95176fe3))
+* **reorganize-wizard:** --funding-seed-txin optional; fall back to wallet auto-pick ([80e6032](https://github.com/lambdasistemi/amaru-treasury-tx/commit/80e6032e43de571b14a40e833e7f093ce435aaca))
+* **scripts:** operator helper to materialise may CC disburse-wizard argv from #201 manifest ([a92b480](https://github.com/lambdasistemi/amaru-treasury-tx/commit/a92b480731fc501bdb15a4b510679c824bb444ee))
+* **scripts:** build-may-cc-disburse.sh rundir layout + rationale text fields ([96bbf87](https://github.com/lambdasistemi/amaru-treasury-tx/commit/96bbf8779ceac0e47260b5066927e85422c7bbcf))
+* **transactions:** build may CC 18 750 USDM disburse (unsigned tx + summary) ([0367c4b](https://github.com/lambdasistemi/amaru-treasury-tx/commit/0367c4b80a2ecf84ffe89d9185e43ffd7fc755cb))
+* **transactions:** attach owner witnesses to may CC disburse ([0f5f358](https://github.com/lambdasistemi/amaru-treasury-tx/commit/0f5f358b5b2d4ba073cdd74a55aae12405e80294))
+* **transactions:** submit may CC 18 750 USDM disburse + archive ([6151404](https://github.com/lambdasistemi/amaru-treasury-tx/commit/6151404b1ed543664c3e1ec95f145fcf48391274))
+* **transactions:** submit and archive reorganize batch-01 (network_compliance USDM consolidation) ([b566259](https://github.com/lambdasistemi/amaru-treasury-tx/commit/b56625940642759cdcd02d57123818ae9b535afa))
+* **transactions:** submit and archive reorganize batch-02 ([603c62a](https://github.com/lambdasistemi/amaru-treasury-tx/commit/603c62ad4efccde7c6c099c304391eb0a1ddc194))
+* **transactions:** submit and archive reorganize batch-03 ([90abee7](https://github.com/lambdasistemi/amaru-treasury-tx/commit/90abee7d344f2fcb00f56920768aa65c97fe9bf6))
+* **transactions:** submit and archive reorganize batch-04 ([0287cea](https://github.com/lambdasistemi/amaru-treasury-tx/commit/0287cea973f37628094a85d720016392ea565360))
+* **transactions:** submit and archive reorganize batch-05 (final consolidation) ([5b3e0ee](https://github.com/lambdasistemi/amaru-treasury-tx/commit/5b3e0eeb2770b3431ab9e893673988b2cc16d267))
 
 ### Bug Fixes
 
-* **disburse-wizard:** USDM disburses now keep the full treasury input lovelace on the leftover output and source the beneficiary's min-UTxO deposit from the wallet, restoring the on-chain treasury validator's lovelace-conservation invariant (parity with the bash recipe) (#215)
-
-* **constitution:** amend Principle VIII v2 — payee+beneficiary model with payee on-chain address bound to `vendors.yaml`; introduces 4-doc minimum evidence set (5 with cycle review) when payee ≠ beneficiary (#210)
-* **registry:** add `vendors.yaml` at repository root as the source of truth for vendor canonical legal names, jurisdictions, roles, and payee on-chain addresses (#210)
-* **transactions:** add `transactions/2026/network_compliance/may-references.json` — May 2026 disburse-reference manifest under Principle VIII v2 (Crypto Accounting Group payee, Cyber Castellum + Antithesis beneficiaries) (#201)
+* **build:** repair withdraw Phase-1 construction (#191) ([1c5c23c](https://github.com/lambdasistemi/amaru-treasury-tx/commit/1c5c23c0c4571522cb116300a920543f7e1fa3e1))
+* **build:** repair governance withdrawal Phase-1 construction (#191) ([5385535](https://github.com/lambdasistemi/amaru-treasury-tx/commit/538553580df943ef09f4cdfa6ecf722428acdc14))
+* **build:** account withdrawal rewards as transaction supply (#191) ([f6d2532](https://github.com/lambdasistemi/amaru-treasury-tx/commit/f6d253258ce36ee2de9d0e9e332aba6e5a3b0d65))
+* **build:** validate withdrawal-bearing final transactions (#191) ([4a2fee6](https://github.com/lambdasistemi/amaru-treasury-tx/commit/4a2fee66be87ac371409dfdf0327e9f22df9c409))
+* **smoke:** key reorganize treasury-utxo count on treasuryUtxos ([2e5f2c6](https://github.com/lambdasistemi/amaru-treasury-tx/commit/2e5f2c6d5d19554429940ee52b710b452a90b353))
+* **rebase:** default reorganize rationale references ([fad9efc](https://github.com/lambdasistemi/amaru-treasury-tx/commit/fad9efc80e14f6c9f73479af239f13fd086ec4b1))
+* **reorganize:** include scopes-NFT reference UTxO so phase-2 succeeds ([ea43342](https://github.com/lambdasistemi/amaru-treasury-tx/commit/ea43342b26e2dcf21f24aaabd66dff58f8a41984))
+* **disburse-wizard:** USDM leftover keeps full treasury input lovelace ([201dd8f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/201dd8f09078c46a5893e04cd1cfdbe644b44b2a))
+* **reorganize-wizard:** drop script-deploy UTxOs from treasury-fund selection ([d9c7888](https://github.com/lambdasistemi/amaru-treasury-tx/commit/d9c7888372ee7d91de67d8ec2e22513adfdb9c8a))
+* **treasury-inspect:** apply the same script-deploy filter as the wizard ([339073a](https://github.com/lambdasistemi/amaru-treasury-tx/commit/339073ae8be35c83f61bb1ca41210fb49c1f099b))
+* **disburse:** observe USDM min-UTxO compensation ([47c6c1a](https://github.com/lambdasistemi/amaru-treasury-tx/commit/47c6c1a2211ba8aa911faa7c4fe3a32caf4e4c61))
+* **reorganize-wizard:** default description ≤64 bytes for Conway metadatum cap ([c9a6944](https://github.com/lambdasistemi/amaru-treasury-tx/commit/c9a6944969d2f097382233ffe3f52fb7977bb17c))
+* **vendors:** resolve crypto_accounting_group onchain_address ([d15d53c](https://github.com/lambdasistemi/amaru-treasury-tx/commit/d15d53cf3902b20419758d9e42decc59dfdc15ac))
+* **transactions:** regenerate may CC tx envelope via envelope-tx (canonical "Ledger Cddl Format") ([bf7a33f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/bf7a33f6e552079b5c9a6347e6a2c8fc38dae771))
+* **transactions:** rerun may CC unsigned build (new validity slot + txId) ([7b75c9b](https://github.com/lambdasistemi/amaru-treasury-tx/commit/7b75c9b473ca5907955ba34a7a59793cb989f51b))
+* **transactions:** rerun may CC build on #229 base (treasury pays min-UTxO via redeemer) ([bcee355](https://github.com/lambdasistemi/amaru-treasury-tx/commit/bcee355d3c8f3f8bc3f72de6cbd0a8055f0e6dd6))
 
 ## [0.2.12.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.11.0...v0.2.12.0) (2026-05-21)
 

@@ -720,6 +720,7 @@ mkRationaleReorganize ans =
                 (rwaJustification ans)
         , rjDestinationLabel =
             fromMaybe "treasury" (rwaDestinationLabel ans)
+        , rjReferences = []
         }
 
 -- ----------------------------------------------------

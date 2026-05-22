@@ -161,8 +161,16 @@
             inherit pkgs;
             amaruTreasurySrc = amaru-treasury;
           };
+          # The build-time recent-txs manifest baked into the
+          # image. Sourced from the in-repo committed archive
+          # at `transactions/2026/`; see nix/recent-txs.nix.
+          recentTxs = import ./nix/recent-txs.nix {
+            inherit pkgs;
+            transactionsDir = ./transactions/2026;
+          };
           checks = import ./nix/checks.nix {
-            inherit pkgs components lintPkgs treasuryMetadata;
+            inherit pkgs components lintPkgs
+              treasuryMetadata recentTxs;
             src = ./.;
           };
           checkApps = import ./nix/apps.nix { inherit pkgs checks; };

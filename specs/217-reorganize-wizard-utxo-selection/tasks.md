@@ -48,7 +48,7 @@ fix(reorganize-wizard): drop script-deploy UTxOs from treasury-fund selection
 
 ## S3 — Finalize (orchestrator-owned)
 
-- [ ] T004 — Finalization audit, `git rm gate.sh`,
+- [X] T004 — Finalization audit, `git rm gate.sh`,
   `chore: drop gate.sh (ready for review)`, push, `gh pr ready 219`.
 
 ## Cross-references

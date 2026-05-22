@@ -1,0 +1,25 @@
+services:
+  amaru-treasury:
+    image: ghcr.io/lambdasistemi/amaru-treasury-tx-api:${VERSION:-latest}
+    container_name: amaru-treasury
+    restart: unless-stopped
+    read_only: true
+    networks:
+      - web
+    volumes:
+      - /node/mainnet/ipc/node.socket:/n2c/node.socket:ro
+    labels:
+      - traefik.docker.network=web
+      - traefik.http.routers.amaru-treasury.rule=Host(`amaru-treasury.plutimus.com`)
+      - traefik.http.routers.amaru-treasury.tls=true
+      - traefik.http.routers.amaru-treasury.tls.certresolver=le
+      - traefik.http.services.amaru-treasury.loadbalancer.server.port=8080
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "10"
+
+networks:
+  web:
+    external: true

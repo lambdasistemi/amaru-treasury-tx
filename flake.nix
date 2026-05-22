@@ -216,6 +216,11 @@
             pkgs = frontendPkgs;
             src = ./frontend;
           };
+          image = import ./nix/docker.nix {
+            inherit pkgs treasuryMetadata recentTxs
+              buildIdentity frontend;
+            apiExe = amaru-treasury-tx-api;
+          };
           checks = import ./nix/checks.nix {
             inherit pkgs components lintPkgs
               treasuryMetadata recentTxs buildIdentity
@@ -231,6 +236,7 @@
               meta.mainProgram = name;
             };
           amaru-treasury-tx = mkExe "amaru-treasury-tx";
+          amaru-treasury-tx-api = mkExe "amaru-treasury-tx-api";
           amaru-treasury-intent-schema =
             mkExe "amaru-treasury-intent-schema";
           swap-probe = mkExe "swap-probe";
@@ -308,10 +314,12 @@
             default = amaru-treasury-tx;
             inherit
               amaru-treasury-tx
+              amaru-treasury-tx-api
               amaru-treasury-intent-schema
               swap-probe
               capture-swap-context
               frontend
+              image
               ;
           } // darwinReleasePackages // linuxReleasePackages;
           # Drop the internal `scripts` attr (raw text bodies

@@ -73,6 +73,7 @@ import Amaru.Treasury.Backend (Provider (..))
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
+    , filterFundUtxos
     , nowTip
     )
 import Amaru.Treasury.Constants
@@ -315,7 +316,7 @@ queryAllTreasuries backend metadata filterScope =
         utxos <- queryUTxOs backend addr
         let asTreasury =
                 [ toTreasuryUtxo txin (txOut ^. valueTxOutL)
-                | (txin, txOut) <- utxos
+                | (txin, txOut) <- filterFundUtxos utxos
                 ]
         pure (scope, asTreasury)
 

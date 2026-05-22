@@ -3,19 +3,16 @@
 
 {- |
 Module      : Amaru.Treasury.Cli.ReorganizeWizard
-Description : CLI parser and stub runner for the reorganize-wizard
+Description : CLI parser and runner for the reorganize-wizard
 Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
-Slice 1 of #186 — parser scaffold + TODO-stub runner.
+Parser scaffold and live runner for the reorganize wizard.
 Exposes the @optparse-applicative@ parser surface for the
 @reorganize-wizard@ subcommand, the @--out@ parent-directory
 pre-flight ('validateOutPath'), the devnet network guard, and
-a stub runner ('runReorganizeWizard') that surfaces a typed
-'ReorganizeTodoSliceC' error from the runner shell. The
-runner body — chain query, treasury UTxO selection,
-validity-bound sampling, intent encode — lands in #187 and is
-out of scope for this slice.
+a runner ('runReorganizeWizard') that resolves live chain state,
+builds a reorganize intent, and writes the encoded intent JSON.
 
 The parser reuses 'Amaru.Treasury.LedgerParse.txInFromText'
 via 'Options.Applicative.eitherReader' (FR-006). Module
@@ -33,6 +30,7 @@ module Amaru.Treasury.Cli.ReorganizeWizard
       -- * Pre-flight + runner shell
     , validateOutPath
     , runReorganizeWizardEither
+    , runReorganizeWizardLive
     , exitCodeFor
     , runReorganizeWizard
 
@@ -40,6 +38,8 @@ module Amaru.Treasury.Cli.ReorganizeWizard
     , optsToAnswers
     ) where
 
+import Control.Exception (IOException, try)
+import Data.ByteString.Lazy qualified as BSL
 import Data.Char (toLower)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -64,16 +64,34 @@ import System.FilePath (takeDirectory)
 import System.IO (hPrint, stderr)
 
 import Cardano.Ledger.TxIn (TxIn)
+import Cardano.Node.Client.Provider (queryUpperBoundSlot)
+import Cardano.Slotting.Slot (SlotNo (..))
 
+import Amaru.Treasury.Backend (Backend)
+import Amaru.Treasury.Backend.N2C
+    ( withLocalNodeBackend
+    )
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
+    , queryFlat
     , resolveNetworkName
     )
+import Amaru.Treasury.IntentJSON
+    ( encodeSomeTreasuryIntent
+    )
 import Amaru.Treasury.LedgerParse (txInFromText)
+import Amaru.Treasury.Metadata
+    ( TreasuryMetadata
+    , readMetadataFile
+    )
 import Amaru.Treasury.Scope (ScopeId, scopeFromText)
 import Amaru.Treasury.Tx.ReorganizeWizard
     ( ReorganizeError (..)
+    , ReorganizeResolverEnv (..)
+    , ReorganizeResolverInput (..)
     , ReorganizeWizardAnswers (..)
+    , reorganizeToIntent
+    , resolveReorganize
     )
 
 -- ----------------------------------------------------
@@ -272,7 +290,7 @@ validateOutPath path force = do
 -- Runner shell
 -- ----------------------------------------------------
 
-{- | Pre-flight + stub runner shell.
+{- | Pre-flight + live runner shell.
 
 Returns the typed 'ReorganizeError' instead of calling
 'exitWith' so the test suite can drive the runner without
@@ -282,8 +300,9 @@ intercepting 'ExitException'. The 'IO'-exiting
 The pre-flight ordering is fixed (see
 @contracts/exit-code-contract.md@): network guard first
 (string compare; cheapest), then @--out@ parent-dir check
-(one syscall), then the stub runner body. No chain query,
-no socket open, no file write happens on any error path.
+(one syscall), then @--node-socket@ presence, then the
+live N2C runner body. No chain query, socket open, or file
+write happens on any earlier error path.
 -}
 runReorganizeWizardEither
     :: GlobalOpts
@@ -302,30 +321,108 @@ runReorganizeWizardEither g opts = do
         r <- validateOutPath (cfOut cf) (cfForce cf)
         case r of
             Left e -> pure (Left e)
-            Right () -> pure (Left ReorganizeTodoSliceC)
+            Right () -> case goSocketPath g of
+                Nothing -> pure (Left ReorganizeMissingNodeSocket)
+                Just socket ->
+                    withLocalNodeBackend
+                        (goNetworkMagic g)
+                        socket
+                        $ \backend ->
+                            runReorganizeWizardLive
+                                g
+                                opts
+                                (mkLiveEnv backend)
+
+{- | Live reorganize pipeline with injectable resolver
+environment.
+
+Builds the resolver input from parsed CLI options, resolves
+chain and metadata state, translates the resolved environment
+to a reorganize intent, and writes the encoded JSON to
+@--out@.
+-}
+runReorganizeWizardLive
+    :: GlobalOpts
+    -> ReorganizeWizardOpts
+    -> ReorganizeResolverEnv IO
+    -> IO (Either ReorganizeError ())
+runReorganizeWizardLive g opts renv = do
+    let cf = rwoCommon opts
+        networkName =
+            case resolveNetworkName g of
+                Right n -> n
+                Left _ -> "<unresolved>"
+        input =
+            ReorganizeResolverInput
+                { rriNetwork = networkName
+                , rriWalletAddrBech32 = cfWalletAddr cf
+                , rriMetadataPath = cfMetadataPath cf
+                , rriScope = cfScope cf
+                , rriValidityHours = cfValidityHours cf
+                }
+    resolved <- resolveReorganize renv input
+    case resolved of
+        Left e -> pure (Left e)
+        Right env -> case reorganizeToIntent env (optsToAnswers opts) of
+            Left e -> pure (Left e)
+            Right intent -> do
+                BSL.writeFile
+                    (cfOut cf)
+                    (encodeSomeTreasuryIntent intent)
+                pure (Right ())
+
+mkLiveEnv :: Backend -> ReorganizeResolverEnv IO
+mkLiveEnv backend =
+    ReorganizeResolverEnv
+        { sreReadMetadata = readMetadataSafely
+        , sreQueryWalletUtxos = queryFlat backend
+        , sreQueryTreasuryUtxos = queryFlat backend
+        , sreComputeUpperBound = \choice -> do
+            r <- queryUpperBoundSlot backend choice
+            pure (fmap unwrapSlot r)
+        }
+  where
+    unwrapSlot (SlotNo s) = s
+
+{- | Read and decode treasury metadata, surfacing any
+'IOException' as resolver data instead of throwing through
+the typed runner boundary.
+-}
+readMetadataSafely
+    :: FilePath
+    -> IO (Either String TreasuryMetadata)
+readMetadataSafely path =
+    try (readMetadataFile path) >>= \case
+        Left (ioe :: IOException) -> pure (Left (show ioe))
+        Right metadata -> pure (Right metadata)
 
 {- | Map a typed 'ReorganizeError' to the CLI exit code the
 runner shim should propagate.
 
-Pre-flight failures surface at exit code 2; the
-runner-stub marker surfaces at exit code 3. #187 may grow
-the runner-body variants — those will also exit 3 (typed
-runner failures) per the sibling convention.
+Pre-flight, resolver, configuration, and sparse chain-state
+failures surface at exit code 2; malformed ledger-shaped
+fields discovered by the runner body surface at exit code 3.
 -}
 exitCodeFor :: ReorganizeError -> Int
 exitCodeFor = \case
     ReorganizeOutputParentMissing{} -> 2
     ReorganizeOutputExistsNoForce{} -> 2
     ReorganizeNonDevnetNetwork{} -> 2
-    ReorganizeTodoSliceC -> 3
+    ReorganizeMissingNodeSocket -> 2
+    ReorganizeMetadataReadError{} -> 2
+    ReorganizeScopeNotInMetadata{} -> 2
+    ReorganizeScopeOwnerMissing{} -> 2
+    ReorganizeInsufficientTreasuryUtxos{} -> 2
+    ReorganizeWalletShortfall -> 2
+    ReorganizeValidityHoursZero -> 2
+    ReorganizeValidityOvershoot{} -> 2
+    ReorganizeLedgerFieldParseError{} -> 3
 
 {- | Top-level reorganize-wizard runner.
 
 Thin shim over 'runReorganizeWizardEither' that maps the
 typed error to a stderr trace + 'exitWith' so the binary
-exits non-zero on the error path. #187's runner body
-extends 'runReorganizeWizardEither' (the typed Either
-boundary) rather than this shim.
+exits non-zero on the error path.
 -}
 runReorganizeWizard
     :: GlobalOpts -> ReorganizeWizardOpts -> IO ()
@@ -342,16 +439,13 @@ runReorganizeWizard g opts = do
 -- ----------------------------------------------------
 
 {- | Project a parsed 'ReorganizeWizardOpts' to the typed
-'ReorganizeWizardAnswers' record the #187 runner body will
-consume.
+'ReorganizeWizardAnswers' record the runner body consumes.
 
 Shipped on the Cli side (rather than in the @Tx@ module
 where 'ReorganizeWizardAnswers' lives) because the source
 record 'ReorganizeWizardOpts' is itself a Cli concern;
 putting the projection in @Tx@ would force a circular
-import. The Slice-1 stub runner does not yet call this —
-it short-circuits at 'ReorganizeTodoSliceC' — but #187
-will.
+import.
 -}
 optsToAnswers :: ReorganizeWizardOpts -> ReorganizeWizardAnswers
 optsToAnswers ReorganizeWizardOpts{rwoCommon = cf, rwoFundingSeedTxIn = txin} =

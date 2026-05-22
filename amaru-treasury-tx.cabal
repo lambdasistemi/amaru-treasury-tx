@@ -471,6 +471,7 @@ test-suite unit-tests
     Amaru.Treasury.Tx.RegistryInitWizardNetworkGuardSpec
     Amaru.Treasury.Tx.RegistryInitWizardNoSimulationSpec
     Amaru.Treasury.Tx.RegistryInitWizardSpec
+    Amaru.Treasury.Tx.ReorganizeWizardSpec
     Amaru.Treasury.Tx.StakeRewardInitWizardNetworkGuardSpec
     Amaru.Treasury.Tx.StakeRewardInitWizardNoSimulationSpec
     Amaru.Treasury.Tx.StakeRewardInitWizardSpec

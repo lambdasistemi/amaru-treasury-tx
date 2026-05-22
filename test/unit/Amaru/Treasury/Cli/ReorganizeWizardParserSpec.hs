@@ -287,12 +287,14 @@ us4OutPathSpec = do
                         <> show other
                     )
 
-    it "accepts a valid parent and falls through to the stub runner" $ do
-        withSystemTempDirectory "reorganize-wizard-s1" $ \tmp -> do
-            let outPath = tmp </> "intent.json"
-            let opts = optsWithOut outPath
-            r <- runReorganizeWizardEither devnetGlobal opts
-            r `shouldBe` Left ReorganizeTodoSliceC
+    it
+        "accepts a valid parent and falls through to the missing-socket check"
+        $ do
+            withSystemTempDirectory "reorganize-wizard-s1" $ \tmp -> do
+                let outPath = tmp </> "intent.json"
+                let opts = optsWithOut outPath
+                r <- runReorganizeWizardEither devnetGlobal opts
+                r `shouldBe` Left ReorganizeMissingNodeSocket
 
 -- ----------------------------------------------------
 -- US5 — non-devnet --network rejected before work
@@ -312,12 +314,14 @@ us5NetworkGuardSpec = do
                     r `shouldBe` Left (ReorganizeNonDevnetNetwork name)
         )
         nonDevnet
-    it "accepts --network devnet and falls through to the stub runner" $ do
-        withSystemTempDirectory "reorganize-wizard-s1" $ \tmp -> do
-            let outPath = tmp </> "intent.json"
-            let opts = optsWithOut outPath
-            r <- runReorganizeWizardEither devnetGlobal opts
-            r `shouldBe` Left ReorganizeTodoSliceC
+    it
+        "accepts --network devnet and falls through to the missing-socket check"
+        $ do
+            withSystemTempDirectory "reorganize-wizard-s1" $ \tmp -> do
+                let outPath = tmp </> "intent.json"
+                let opts = optsWithOut outPath
+                r <- runReorganizeWizardEither devnetGlobal opts
+                r `shouldBe` Left ReorganizeMissingNodeSocket
 
 -- ----------------------------------------------------
 -- Type alias drag — pin the Answers re-export in scope so

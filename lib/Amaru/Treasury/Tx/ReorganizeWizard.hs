@@ -15,9 +15,8 @@ pure translator ('reorganizeToIntent') emitting a
 @SomeTreasuryIntent SReorganize@ value.
 
 The CLI shell ('Amaru.Treasury.Cli.ReorganizeWizard.runReorganizeWizardEither')
-keeps the Slice-1 'ReorganizeTodoSliceC' stub in this slice;
-S2 of #187 replaces the stub with a live-N2C wiring of this
-module and drops the 'ReorganizeTodoSliceC' variant.
+wires this resolver to the live N2C backend and writes the
+encoded intent JSON.
 
 Sibling-mirror: the resolver+translator pattern matches
 'Amaru.Treasury.Tx.StakeRewardInitWizard'. The shape of the
@@ -130,12 +129,7 @@ data ReorganizeWizardAnswers = ReorganizeWizardAnswers
 runner.
 
 Each variant maps to a CLI exit code via the @exitCodeFor@
-helper in 'Amaru.Treasury.Cli.ReorganizeWizard'. S1 of #187
-extends the four-variant Slice-1 sum (#186) with the
-runner-body variants; the
-'ReorganizeTodoSliceC' sentinel is preserved here so the
-existing parser spec keeps compiling — S2 of #187 removes
-it together with the live runner wiring.
+helper in 'Amaru.Treasury.Cli.ReorganizeWizard'.
 -}
 data ReorganizeError
     = -- | @--out@'s parent directory does not exist; exit 2.
@@ -147,9 +141,9 @@ data ReorganizeError
       -- the offending network name so test specs can pin
       -- the exact value.
       ReorganizeNonDevnetNetwork !Text
-    | -- | Stub marker preserved by S1; replaced together
-      -- with the live wiring in S2 of #187.
-      ReorganizeTodoSliceC
+    | -- | @--node-socket@ / @CARDANO_NODE_SOCKET_PATH@ is
+      -- required but absent; exit 2.
+      ReorganizeMissingNodeSocket
     | -- | @--metadata@ file failed to read or decode; exit
       -- 2. Payload is the raw IOException or aeson decode
       -- message (whichever the resolver-env mock surfaces).

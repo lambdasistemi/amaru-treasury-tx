@@ -264,7 +264,7 @@ passes.
 
 ### RED for S2
 
-- [ ] T011 Add `ReorganizeMissingNodeSocket` variant to the
+- [X] T011 Add `ReorganizeMissingNodeSocket` variant to the
   `ReorganizeError` sum in
   `lib/Amaru/Treasury/Tx/ReorganizeWizard.hs` (between the
   existing `ReorganizeNonDevnetNetwork` and the new
@@ -276,7 +276,7 @@ passes.
 
 ### GREEN for S2
 
-- [ ] T012 Update the two parser-spec assertions in
+- [X] T012 Update the two parser-spec assertions in
   `test/unit/Amaru/Treasury/Cli/ReorganizeWizardParserSpec.hs`:
   - **Line ~295** (US4 "accepts a valid parent and falls
     through to the stub runner"): change
@@ -289,7 +289,7 @@ passes.
     update the `it` label to "accepts --network devnet and
     falls through to the missing-socket check".
   Do not change any other assertion in the file.
-- [ ] T013 [US4] Replace the stub body of
+- [X] T013 [US4] Replace the stub body of
   `runReorganizeWizardEither` in
   `lib/Amaru/Treasury/Cli/ReorganizeWizard.hs` to extend the
   cheap-first pipeline per `research.md` §8: after the
@@ -298,7 +298,7 @@ passes.
   `Left ReorganizeMissingNodeSocket`. Do not yet open the
   backend; the helper `runReorganizeWizardLive` (T014) is
   the next step.
-- [ ] T014 [US1] [US2] [US3] Add the live-pipeline helper
+- [X] T014 [US1] [US2] [US3] Add the live-pipeline helper
   `runReorganizeWizardLive :: GlobalOpts ->
   ReorganizeWizardOpts -> ReorganizeResolverEnv IO ->
   IO (Either ReorganizeError ())` to
@@ -315,7 +315,7 @@ passes.
   writes the bytes to `cfOut` via `BSL.writeFile`,
   returning `Right ()`;
   (f) any `Left e` short-circuits and propagates.
-- [ ] T015 [US1] [US2] [US3] [US4] Replace the
+- [X] T015 [US1] [US2] [US3] [US4] Replace the
   stub-runner branch of `runReorganizeWizardEither` (the
   one that returned `pure (Left ReorganizeTodoSliceC)`)
   with a call into the N2C backend:
@@ -326,7 +326,7 @@ passes.
   each field via `queryFlat backend` (for wallet + treasury
   UTxOs), `queryUpperBoundSlot backend` (for validity
   bound), and a `readMetadataSafely` wrapper (T016).
-- [ ] T016 [P] [US2] Add the IO wrapper
+- [X] T016 [P] [US2] Add the IO wrapper
   `readMetadataSafely :: FilePath -> IO (Either String
   TreasuryMetadata)` (module-internal; mirrors
   `readRegistrySafely` in sibling
@@ -335,7 +335,7 @@ passes.
   `Amaru.Treasury.Metadata.readMetadataFile` and reflects
   it as `Left (show ioe)`. The live `mkLiveEnv` consumes
   this in the `sreReadMetadata` field.
-- [ ] T017 Update
+- [X] T017 Update
   `Amaru.Treasury.Cli.ReorganizeWizard.exitCodeFor` per
   `contracts/exit-code-contract.md`: remove the
   `ReorganizeTodoSliceC` case; add the new variants at
@@ -351,7 +351,7 @@ passes.
   `ReorganizeLedgerFieldParseError` → 3). Pattern-match
   every constructor (no wildcard fallback — prevents
   silent drift if future variants are added).
-- [ ] T018 [P] Update the module export list of
+- [X] T018 [P] Update the module export list of
   `lib/Amaru/Treasury/Cli/ReorganizeWizard.hs` to include
   the new `runReorganizeWizardLive` helper (so the test
   suite + downstream callers can substitute mock resolver
@@ -359,7 +359,7 @@ passes.
   `app/amaru-treasury-tx/Main.hs` still resolves
   (`runReorganizeWizard` is the IO shim and remains the
   CLI entry point — no Main.hs edit needed).
-- [ ] T019 [US4] [US5] Re-run the existing
+- [X] T019 [US4] [US5] Re-run the existing
   `Cli/ReorganizeWizardParserSpec.hs` after T011–T018;
   confirm:
   - the four `us4OutPathSpec` cases still pass;
@@ -369,7 +369,7 @@ passes.
   - the two updated assertions (T012) pass with
     `ReorganizeMissingNodeSocket`;
   - no other spec needs updating.
-- [ ] T020 Run the full `nix develop --quiet -c just ci`
+- [X] T020 Run the full `nix develop --quiet -c just ci`
   locally; if green, record the gate evidence in the
   driver+navigator handoff. Any sibling-wizard regression
   is a stop-and-redispatch trigger (S2's owned-files list

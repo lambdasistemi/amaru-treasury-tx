@@ -148,7 +148,12 @@ invariant block).
 -}
 data ReorganizeWizardOpts = ReorganizeWizardOpts
     { rwoCommon :: !CommonFlags
-    , rwoFundingSeedTxIn :: !TxIn
+    , rwoFundingSeedTxIn :: !(Maybe TxIn)
+    -- ^ Operator-named wallet UTxO to use as fuel + collateral.
+    --     When absent, the wizard falls back to its standard
+    --     wallet auto-pick (largest pure-ADA at @--wallet-addr@,
+    --     same shape as @disburse-wizard@ / @withdraw-wizard@ /
+    --     @swap-wizard@).
     }
     deriving stock (Eq, Show)
 
@@ -170,12 +175,17 @@ reorganizeWizardOptsP :: Parser ReorganizeWizardOpts
 reorganizeWizardOptsP =
     ReorganizeWizardOpts
         <$> commonFlagsP
-        <*> option
-            txInReader
-            ( long "funding-seed-txin"
-                <> metavar "TXID#IX"
-                <> help
-                    "Funding seed TxIn — fuel + collateral for the reorganize tx"
+        <*> optional
+            ( option
+                txInReader
+                ( long "funding-seed-txin"
+                    <> metavar "TXID#IX"
+                    <> help
+                        "Funding seed TxIn — fuel + collateral for \
+                        \the reorganize tx. Optional; when absent the \
+                        \wizard auto-picks the largest pure-ADA UTxO \
+                        \at --wallet-addr (sibling-wizard parity)."
+                )
             )
 
 commonFlagsP :: Parser CommonFlags

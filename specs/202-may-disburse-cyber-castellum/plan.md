@@ -151,9 +151,26 @@ ready, awaiting external review and merge.
   against the feature branch, the rebase semantics of the archive PR
   vs PR #197 require explicit handling — likely a `Depends-on: #197`
   note plus rebase once #197 merges.
-- **USDM balance shortfall** on `network_compliance`. If
-  `treasury-inspect` returns less than 18 750 USDM, this ticket
-  blocks pending #203's swap or an out-of-band reorganize.
+- **USDM selection failure modes.**
+  `selectDisburseUsdm` (`lib/Amaru/Treasury/Tx/DisburseWizard.hs:422`)
+  picks treasury UTxOs largest-first and must satisfy two constraints
+  *simultaneously*: selected USDM ≥ 18 750 000 000 AND selected
+  lovelace ≥ the beneficiary output's min-UTxO deposit. Three
+  distinct failure shapes the operator may encounter at S2 build
+  time:
+  1. **USDM-total shortfall** — the parsed `treasury-inspect` total
+     is below 18 750 USDM. T200 catches this before any build is
+     attempted; #202 blocks on either #203's swap (ADA → USDM) or
+     an out-of-band top-up.
+  2. **Lovelace-per-output shortfall** — the treasury holds enough
+     USDM in aggregate but the largest-USDM UTxOs are
+     lovelace-thin, so no greedy pick reaches the min-UTxO floor
+     for the CAG output. Build returns `selectionShortfall`.
+     Operator response: run `reorganize-wizard` to consolidate
+     USDM + lovelace into a single output before retrying S2.
+  3. **Wallet ADA fuel shortfall** —
+     `ResolverWalletShortfall` from `selectWallet`. Separate from
+     the treasury; the operator tops up `--wallet-addr` and retries.
 - **Vault-passphrase or signing-key loss** mid-S3. Documented in the
   brief but no orchestrator-side mitigation; operator handles.
 - **Submitter-endpoint outage** at S5. Operator retries; archive

@@ -27,12 +27,17 @@ module Amaru.Treasury.AuxData
 
       -- * Field-level helpers
     , RationaleBody (..)
+    , RationaleReference (..)
     , rationaleMetadatum
+    , splitUri
+    , splitLabel
     ) where
 
 import Data.ByteString (ByteString)
+import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Word (Word64)
 
@@ -42,18 +47,45 @@ import Cardano.Ledger.Metadata (Metadatum (..))
 label1694 :: Word64
 label1694 = 1694
 
+{- | One entry of @body.references[]@.
+
+Each reference is a typed link to an external document
+(contract, invoice, signed email, …) and is emitted on
+chain as
+@{ "uri": [chunk, …], "@type": "Other", "label": [chunk, …] }@.
+
+The 'rrUri' and 'rrLabel' fields hold the full,
+unchunked source strings — the metadatum encoder splits
+them via 'splitUri' \/ 'splitLabel' to respect the
+ledger's 64-byte metadatum-string cap.
+-}
+data RationaleReference = RationaleReference
+    { rrUri :: !Text
+    -- ^ full URI (e.g. @"ipfs://bafy…"@, @"https://…"@).
+    , rrType :: !Text
+    -- ^ reference @\@type@ tag (defaults to @"Other"@
+    --   per the d6c14625 precedent).
+    , rrLabel :: !Text
+    -- ^ human-readable label (split on first @" - "@).
+    }
+    deriving (Eq, Show)
+
 {- | Variable fields of the rationale @body@ object.
 
-The static fields (@references@) and the closing
-@hashAlgorithm@ + @\@context@ are pinned to the
-SundaeSwap rationale spec; only the user-facing copy
-varies between events.
+The closing @hashAlgorithm@ + @\@context@ are pinned to
+the SundaeSwap rationale spec; only the user-facing
+copy and the optional 'rbReferences' list vary between
+events.
 -}
 data RationaleBody = RationaleBody
     { rbEvent :: !Text
     -- ^ e.g. @"disburse"@, @"reorganize"@
     , rbLabel :: !Text
     -- ^ short human-readable label
+    , rbReferences :: ![RationaleReference]
+    -- ^ optional list of typed external references;
+    --   defaults to @[]@ which serialises to @List []@
+    --   (the shape every prior fixture pins).
     , rbDescription :: ![Text]
     -- ^ rationale paragraphs
     , rbDestinationLabel :: !Text
@@ -95,7 +127,11 @@ rationaleMetadatum body registryPolicyId =
         Map
             [ (S "event", S (rbEvent body))
             , (S "label", S (rbLabel body))
-            , (S "references", List [])
+            ,
+                ( S "references"
+                , List
+                    (map referenceM (rbReferences body))
+                )
             ,
                 ( S "description"
                 , List (map S (rbDescription body))
@@ -109,6 +145,82 @@ rationaleMetadatum body registryPolicyId =
                 , List (map S (rbJustification body))
                 )
             ]
+
+{- | Render one 'RationaleReference' as the per-reference
+map @{ "uri": [...], "@type": ..., "label": [...] }@.
+
+The split functions raise via 'error' on chunk overflow
+— validation is expected to have happened at the
+parser layer (JSON FromJSON \/ optparse-applicative).
+-}
+referenceM :: RationaleReference -> Metadatum
+referenceM r =
+    Map
+        [ (S "uri", List (map S (mustSplit "uri" (splitUri (rrUri r)))))
+        , (S "@type", S (rrType r))
+        ,
+            ( S "label"
+            , List (map S (mustSplit "label" (splitLabel (rrLabel r))))
+            )
+        ]
+  where
+    mustSplit :: String -> Either String [Text] -> [Text]
+    mustSplit field = either (\e -> error (field <> ": " <> e)) id
+
+{- | Split a URI into chunks compatible with the ledger's
+64-byte metadatum-string cap.
+
+* @ipfs://…@ URIs split into @["ipfs://", "<rest>"]@
+  (the d6c14625 mainnet precedent).
+* All other URIs emit a single-element list.
+
+Returns @Left@ when any chunk exceeds 64 UTF-8 bytes.
+-}
+splitUri :: Text -> Either String [Text]
+splitUri uri
+    | ipfsPrefix `T.isPrefixOf` uri =
+        checkChunks
+            [ipfsPrefix, T.drop (T.length ipfsPrefix) uri]
+    | otherwise = checkChunks [uri]
+  where
+    ipfsPrefix :: Text
+    ipfsPrefix = "ipfs://"
+
+{- | Split a label on the first @\" - \"@ (space-dash-
+space) separator.
+
+* @\"<lhs> - <rhs>\"@ splits to @[lhs, " - ", rhs]@.
+* Labels without the separator emit a single-element
+  list.
+
+Returns @Left@ when any chunk exceeds 64 UTF-8 bytes.
+-}
+splitLabel :: Text -> Either String [Text]
+splitLabel lbl =
+    case T.breakOn sep lbl of
+        (_, "") -> checkChunks [lbl]
+        (lhs, rest) ->
+            checkChunks
+                [lhs, sep, T.drop (T.length sep) rest]
+  where
+    sep :: Text
+    sep = " - "
+
+{- | Reject any chunk whose UTF-8 encoding is over the
+ledger's 64-byte metadatum-string cap.
+-}
+checkChunks :: [Text] -> Either String [Text]
+checkChunks chunks =
+    case filter overCap chunks of
+        [] -> Right chunks
+        (bad : _) ->
+            Left
+                ( "chunk exceeds 64 bytes: "
+                    <> show bad
+                )
+  where
+    overCap :: Text -> Bool
+    overCap = (> 64) . BS.length . TE.encodeUtf8
 
 {- | The rationale used by @swap.sh@: a "disburse" event
 labelled @"Swap ADA\<-\>USDM"@ targeting Network
@@ -131,6 +243,7 @@ swapRationaleMetadatum description destination justification =
         RationaleBody
             { rbEvent = "disburse"
             , rbLabel = "Swap ADA<->USDM"
+            , rbReferences = []
             , rbDescription = [description]
             , rbDestinationLabel = destination
             , rbJustification = [justification]
@@ -156,6 +269,7 @@ disburseRationaleMetadatum lbl description destination justification =
         RationaleBody
             { rbEvent = "disburse"
             , rbLabel = lbl
+            , rbReferences = []
             , rbDescription = [description]
             , rbDestinationLabel = destination
             , rbJustification = [justification]

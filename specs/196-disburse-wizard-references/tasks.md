@@ -51,14 +51,14 @@ the bottom of this file.
 
 ### Tasks
 
-- [ ] **T001 [S1]** Fetch the d6c14625 rationale metadatum from
+- [X] **T001 [S1]** Fetch the d6c14625 rationale metadatum from
   Blockfrost (`/txs/d6c14625…/metadata`), encode label-1694
   metadatum to canonical CBOR, write to
   `test/fixtures/disburse/d6c14625-references/rationale.cbor`. Add a
   `README.md` next to it naming the source tx, block, fetch date, and
   the Blockfrost call. (Fixture is the golden contract — must be
   byte-equal to chain.) See [research.md R7](research.md#r7-golden-cbor-provenance-for-d6c14625).
-- [ ] **T002 [S1]** Write
+- [X] **T002 [S1]** Write
   `test/fixtures/disburse/d6c14625-references/intent.json` with the
   inputs that match the d6c14625 rationale verbatim: two references
   (RCA `bafybei…dbls2l4` labelled "Remunerated Contributor
@@ -66,43 +66,43 @@ the bottom of this file.
   labelled "Invoice - January February March Rust optimisation"),
   same `description` / `destination.label` / `justification` text as
   on chain.
-- [ ] **T003 [S1]** Add `test/unit/Amaru/Treasury/ReferencesSpec.hs`
+- [X] **T003 [S1]** Add `test/unit/Amaru/Treasury/ReferencesSpec.hs`
   (sibling of `AuxDataSpec.hs`; module
   `Amaru.Treasury.ReferencesSpec`) with the golden CBOR test: load
   the intent, build the rationale metadatum in-process, encode to
   canonical CBOR, assert byte equality against `rationale.cbor`. RED
   expected (function doesn't exist yet).
-- [ ] **T004 [S1]** Wire `Amaru.Treasury.ReferencesSpec` into
+- [X] **T004 [S1]** Wire `Amaru.Treasury.ReferencesSpec` into
   `amaru-treasury-tx.cabal` test stanza (alongside existing
   `Amaru.Treasury.*Spec` modules).
-- [ ] **T005 [S1]** Confirm RED: `nix develop --quiet -c just unit
+- [X] **T005 [S1]** Confirm RED: `nix develop --quiet -c just unit
   ReferencesSpec` fails with "rbReferences not in scope" (or
   equivalent). Capture the failing output in `./WIP.md` per the
   pair-programming brief.
-- [ ] **T006 [S1]** Add `data RationaleReference = RationaleReference
+- [X] **T006 [S1]** Add `data RationaleReference = RationaleReference
   { rrUri, rrType, rrLabel :: !Text }` to
   `lib/Amaru/Treasury/AuxData.hs` (export list updated).
-- [ ] **T007 [S1]** Add `rbReferences :: ![RationaleReference]` to
+- [X] **T007 [S1]** Add `rbReferences :: ![RationaleReference]` to
   `RationaleBody`. Default `[]` for every existing helper
   (`swapRationaleMetadatum`, `disburseRationaleMetadatum`, and any
   other internal constructor) so existing fixtures stay byte-equal.
-- [ ] **T008 [S1]** Implement `splitUri :: Text -> Either String [Text]`
+- [X] **T008 [S1]** Implement `splitUri :: Text -> Either String [Text]`
   per [research.md R2](research.md#r2-uri-chunking-strategy).
-- [ ] **T009 [S1]** Implement `splitLabel :: Text -> Either String [Text]`
+- [X] **T009 [S1]** Implement `splitLabel :: Text -> Either String [Text]`
   per [research.md R3](research.md#r3-label-chunking-strategy).
-- [ ] **T010 [S1]** Implement `rationaleMetadatum` to emit
+- [X] **T010 [S1]** Implement `rationaleMetadatum` to emit
   `body.references = List [Map …]` from `rbReferences`, using
   `splitUri` and `splitLabel`. When `rbReferences` is `[]`, emit
   `List []` (preserves prior bytes).
-- [ ] **T011 [S1]** Confirm GREEN: `nix develop --quiet -c just unit
+- [X] **T011 [S1]** Confirm GREEN: `nix develop --quiet -c just unit
   ReferencesSpec` passes; `nix develop --quiet -c just unit` passes
   end-to-end (every prior `*Spec` still green).
-- [ ] **T012 [S1]** Run `./gate.sh` from worktree root; must be green.
-- [ ] **T013 [S1]** Commit one bisect-safe slice: subject
+- [X] **T012 [S1]** Run `./gate.sh` from worktree root; must be green.
+- [X] **T013 [S1]** Commit one bisect-safe slice: subject
   `feat(auxdata): add RationaleBody.rbReferences with d6c14625 golden`,
   body explains the golden contract, trailer `Tasks: T001, T002, T003,
   T004, T005, T006, T007, T008, T009, T010, T011, T012`. No push.
-- [ ] **T014 [S1]** (orchestrator-only, on acceptance) Mark T001–T013
+- [X] **T014 [S1]** (orchestrator-only, on acceptance) Mark T001–T013
   `[X]` in `tasks.md`, amend HEAD to include the checkbox updates
   (per resolve-ticket § "Reviewing Worker Pair Output").
 

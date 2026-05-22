@@ -447,6 +447,7 @@ test-suite unit-tests
     Amaru.Treasury.MetadataSpec
     Amaru.Treasury.PParamsSpec
     Amaru.Treasury.RedeemerSpec
+    Amaru.Treasury.ReferencesSpec
     Amaru.Treasury.Registry.ConstantsSpec
     Amaru.Treasury.Registry.DeriveSpec
     Amaru.Treasury.Registry.MetadataSpec

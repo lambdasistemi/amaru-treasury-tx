@@ -29,7 +29,7 @@ slice (**S2**). All orchestrator-owned; no driver/navigator pair.
 
 ## S2 — Finalization (orchestrator-owned)
 
-- [ ] **T200** `git rm gate.sh` +
+- [X] **T200** `git rm gate.sh` +
       `chore: drop gate.sh (ready for review)` commit; push;
       `gh pr ready` against this PR.
 - [ ] **T210** Comment on the Antithesis disburse ticket once it's

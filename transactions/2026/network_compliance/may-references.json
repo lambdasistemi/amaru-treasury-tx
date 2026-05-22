@@ -1,0 +1,88 @@
+{
+  "schema": "amaru-treasury-may-references-v2",
+  "scope": "network_compliance",
+  "month": "2026-05",
+  "constitution_principle": "VIII",
+  "constitution_version": "0.4.0",
+  "disbursements": [
+    {
+      "id": "may-2026-cyber-castellum",
+      "amount_usdm": 18750,
+      "payee_id": "crypto_accounting_group",
+      "beneficiary_id": "cyber_castellum_corporation",
+      "references": [
+        {
+          "kind": "payee_contract",
+          "vendor_id": "crypto_accounting_group",
+          "uri": "ipfs://bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga",
+          "type": "Other",
+          "label": "Contract - CRYPTO ACCOUNTING GROUP"
+        },
+        {
+          "kind": "payee_address_proof",
+          "vendor_id": "crypto_accounting_group",
+          "uri": "ipfs://bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm",
+          "type": "Other",
+          "label": "Address-of-record proof - CRYPTO ACCOUNTING GROUP"
+        },
+        {
+          "kind": "beneficiary_contract",
+          "vendor_id": "cyber_castellum_corporation",
+          "uri": "ipfs://bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da",
+          "type": "Other",
+          "label": "Contract - CYBER CASTELLUM CORPORATION"
+        },
+        {
+          "kind": "beneficiary_invoice",
+          "vendor_id": "cyber_castellum_corporation",
+          "uri": "ipfs://bafybeigy37ui2ikn7bim2vw6cojcbxkcndpjwh7cj5fv3vzs4cszezipxu",
+          "type": "Other",
+          "label": "Invoice #3508 - CYBER CASTELLUM CORPORATION"
+        },
+        {
+          "kind": "beneficiary_cycle_review",
+          "vendor_id": "cyber_castellum_corporation",
+          "uri": "ipfs://bafybeihdmnitrbu2oir3r2fefnpqy3bk7zdz42olzmltmxyt5xag4i2t5a",
+          "type": "Other",
+          "label": "May2026 cycle review - CYBER CASTELLUM CORPORATION"
+        }
+      ]
+    },
+    {
+      "id": "may-2026-antithesis",
+      "amount_usdm": 400000,
+      "payee_id": "crypto_accounting_group",
+      "beneficiary_id": "antithesis_operations_llc",
+      "references": [
+        {
+          "kind": "payee_contract",
+          "vendor_id": "crypto_accounting_group",
+          "uri": "ipfs://bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga",
+          "type": "Other",
+          "label": "Contract - CRYPTO ACCOUNTING GROUP"
+        },
+        {
+          "kind": "payee_address_proof",
+          "vendor_id": "crypto_accounting_group",
+          "uri": "ipfs://bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm",
+          "type": "Other",
+          "label": "Address-of-record proof - CRYPTO ACCOUNTING GROUP"
+        },
+        {
+          "kind": "beneficiary_contract",
+          "vendor_id": "antithesis_operations_llc",
+          "uri": "ipfs://bafybeihsqdjvr4egubfdg54sz5wlbdwo4wvdzdsetg5xe34oy243srfasy",
+          "type": "Other",
+          "label": "Contract - ANTITHESIS OPERATIONS LLC"
+        },
+        {
+          "kind": "beneficiary_invoice",
+          "vendor_id": "antithesis_operations_llc",
+          "uri": "ipfs://bafkreifstgrzuqi6ccjhefbyzepf7kiwmvm7izlmuumweku3onmopbywdq",
+          "type": "Other",
+          "label": "Invoice INV-635 - ANTITHESIS OPERATIONS LLC"
+        }
+      ]
+    }
+  ]
+}

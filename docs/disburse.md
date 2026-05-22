@@ -3,7 +3,12 @@
 `disburse-wizard` resolves treasury state into a unified disburse
 `intent.json`, and `tx-build` turns that intent into unsigned Conway
 CBOR. The wizard supports both ADA and USDM; when `--unit` is omitted,
-it defaults to USDM.
+it defaults to USDM. The same shape applies to
+`contingency-disburse-wizard`.
+
+See [Wizard input control](wizard-input-control.md) for the
+`--exclude-utxo` / `--extra-tx-in` flags shared with every other
+wizard.
 
 ## Wizard pipeline
 

@@ -46,7 +46,7 @@ the bottom of this file.
 - `lib/Amaru/Treasury/AuxData.hs`
 - `test/fixtures/disburse/d6c14625-references/intent.json` (NEW)
 - `test/fixtures/disburse/d6c14625-references/rationale.cbor` (NEW)
-- `test/unit/ReferencesSpec.hs` (NEW)
+- `test/unit/Amaru/Treasury/ReferencesSpec.hs` (NEW — sibling of `AuxDataSpec.hs`; cabal module name `Amaru.Treasury.ReferencesSpec`)
 - `amaru-treasury-tx.cabal` (test module wiring only — version bump deferred to S5)
 
 ### Tasks
@@ -66,13 +66,15 @@ the bottom of this file.
   labelled "Invoice - January February March Rust optimisation"),
   same `description` / `destination.label` / `justification` text as
   on chain.
-- [ ] **T003 [S1]** Add `test/unit/ReferencesSpec.hs` with the golden
-  CBOR test: load the intent, build the rationale metadatum
-  in-process, encode to canonical CBOR, assert byte equality against
-  `rationale.cbor`. RED expected (function doesn't exist yet).
-- [ ] **T004 [S1]** Wire `ReferencesSpec` into
+- [ ] **T003 [S1]** Add `test/unit/Amaru/Treasury/ReferencesSpec.hs`
+  (sibling of `AuxDataSpec.hs`; module
+  `Amaru.Treasury.ReferencesSpec`) with the golden CBOR test: load
+  the intent, build the rationale metadatum in-process, encode to
+  canonical CBOR, assert byte equality against `rationale.cbor`. RED
+  expected (function doesn't exist yet).
+- [ ] **T004 [S1]** Wire `Amaru.Treasury.ReferencesSpec` into
   `amaru-treasury-tx.cabal` test stanza (alongside existing
-  `*Spec` modules).
+  `Amaru.Treasury.*Spec` modules).
 - [ ] **T005 [S1]** Confirm RED: `nix develop --quiet -c just unit
   ReferencesSpec` fails with "rbReferences not in scope" (or
   equivalent). Capture the failing output in `./WIP.md` per the
@@ -412,7 +414,7 @@ Shared context:
 Owned files:
 - lib/Amaru/Treasury/AuxData.hs
 - test/fixtures/disburse/d6c14625-references/{intent.json,rationale.cbor,README.md}
-- test/unit/ReferencesSpec.hs
+- test/unit/Amaru/Treasury/ReferencesSpec.hs (module Amaru.Treasury.ReferencesSpec)
 - amaru-treasury-tx.cabal (test stanza only)
 
 Forbidden scope:
@@ -433,7 +435,7 @@ Required orchestrator analysis already applied:
   golden is also bash-parity (Constitution Principle I).
 
 RED proof:
-- test/unit/ReferencesSpec.hs golden test FAILS before any
+- test/unit/Amaru/Treasury/ReferencesSpec.hs golden test FAILS before any
   AuxData.hs edit lands (no rbReferences field, no
   RationaleReference type). Capture the failing output.
 

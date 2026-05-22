@@ -356,11 +356,11 @@ Forbidden scope:
 
 Tasks:
 
-- [ ] T035 [US3] RED: contradiction against `governance-withdrawal-init-wizard` (proposal path).
-- [ ] T036 [P] [US1] RED: exclusion filters wallet pool — `firstPureAdaRef` returns the next pure-ADA ref after the excluded one is removed.
-- [ ] T037 [P] [US2] RED: forced inclusion lands in proposal intent's `wallet.extraTxIns`.
-- [ ] T038 [P] [US1+US4] RED: shortfall-with-excludes naming (no pure-ADA candidates remain after exclusion) + SC-005 byte stability against the existing proposal fixture.
-- [ ] T039 [US1+US2+US3] GREEN: extend opts + parser, wire validation + filter + intent emission (with FR-009 not-on-wallet error) + error rendering + log line (with pool attribution) at BOTH call sites (proposal at line ~684 AND materialization at ~1075 — wiring only one will fail T038's byte-stability assertion across both paths), run `./gate.sh`, record in `WIP.md`.
+- [X] T035 [US3] RED: contradiction against `governance-withdrawal-init-wizard` (proposal path).
+- [X] T036 [P] [US1] RED: exclusion filters wallet pool — `firstPureAdaRef` returns the next pure-ADA ref after the excluded one is removed.
+- [X] T037 [P] [US2] RED: forced inclusion lands in proposal intent's `wallet.extraTxIns`.
+- [X] T038 [P] [US1+US4] RED: shortfall-with-excludes naming (no pure-ADA candidates remain after exclusion) + SC-005 byte stability against the existing proposal fixture.
+- [X] T039 [US1+US2+US3] GREEN: extend opts + parser, wire validation + filter + intent emission (with FR-009 not-on-wallet error) + error rendering + log line (with pool attribution) at BOTH call sites (proposal at line ~684 AND materialization at ~1075 — wiring only one will fail T038's byte-stability assertion across both paths), run `./gate.sh`, record in `WIP.md`.
 
 Checkpoint: `./gate.sh` PASS at HEAD.
 `governance-withdrawal-init-wizard --help` lists the flags. Existing

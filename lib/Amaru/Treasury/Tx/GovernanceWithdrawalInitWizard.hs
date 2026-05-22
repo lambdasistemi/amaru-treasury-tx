@@ -69,6 +69,15 @@ module Amaru.Treasury.Tx.GovernanceWithdrawalInitWizard
     , GovernanceWithdrawalInitMaterializationResolverEnv (..)
     , resolveGovernanceWithdrawalInitMaterialization
 
+      -- * Input control (#184 — Slice 7)
+    , PoolHit (..)
+    , InputControlOutcome (..)
+    , OutRef
+    , resolveGovernanceWithdrawalInitProposalIC
+    , resolveGovernanceWithdrawalInitMaterializationIC
+    , renderGovernanceWithdrawalInitExclusionLogLine
+    , renderGovernanceWithdrawalInitWalletShortfallWithExcludes
+
       -- * Pure translation
     , governanceWithdrawalInitProposalToIntent
     , governanceWithdrawalInitMaterializationToIntent
@@ -128,8 +137,20 @@ import Amaru.Treasury.IntentJSON
     )
 import Amaru.Treasury.LedgerParse (txInFromText, txInToText)
 import Amaru.Treasury.Tx.SwapWizard
-    ( WalletSelection (..)
+    ( InputControlOutcome (..)
+    , PoolHit (..)
+    , WalletSelection (..)
     )
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    , OutRef
+    , filterPool
+    , outRefText
+    , parseOutRef
+    , renderShortfallWithExcludes
+    )
+import Data.Either (lefts, rights)
 
 -- ----------------------------------------------------
 -- Answers
@@ -454,6 +475,17 @@ data GovernanceWithdrawalInitError
       --   chain horizon.
       GovernanceWithdrawalInitValidityOvershoot
         !Validity.HorizonError
+    | -- | One or more @--extra-tx-in@ refs were not returned
+      --   by the wallet-address query (FR-009, #184).
+      GovernanceWithdrawalInitResolverExtraTxInNotOnWallet
+        ![OutRef]
+    | -- | @GovernanceWithdrawalInitResolverWalletShortfallWithExcludes
+      --   available target refs@. Wallet pool emptied by the
+      --   operator's @--exclude-utxo@ set (FR-008, #184).
+      GovernanceWithdrawalInitResolverWalletShortfallWithExcludes
+        !Integer
+        !Integer
+        ![OutRef]
     deriving stock (Eq, Show)
 
 -- ----------------------------------------------------
@@ -599,7 +631,37 @@ resolveGovernanceWithdrawalInitProposal
             GovernanceWithdrawalInitError
             GovernanceWithdrawalInitEnv
         )
-resolveGovernanceWithdrawalInitProposal renv input
+resolveGovernanceWithdrawalInitProposal renv input = do
+    r <-
+        resolveGovernanceWithdrawalInitProposalIC
+            renv
+            (ExclusionSet [])
+            (ForcedInclusionSet [])
+            input
+    pure (fmap fst r)
+
+{- | Variant of 'resolveGovernanceWithdrawalInitProposal'
+that threads the operator's @--exclude-utxo@ and
+@--extra-tx-in@ sets through the wallet candidate pool
+(#184 Slice 7). Returns the resolved
+'GovernanceWithdrawalInitEnv' alongside the
+'InputControlOutcome' the caller uses to emit per-ref log
+lines.
+-}
+resolveGovernanceWithdrawalInitProposalIC
+    :: (Monad m)
+    => GovernanceWithdrawalInitResolverEnv m
+    -> ExclusionSet
+    -> ForcedInclusionSet
+    -> GovernanceWithdrawalInitResolverInput
+    -> m
+        ( Either
+            GovernanceWithdrawalInitError
+            ( GovernanceWithdrawalInitEnv
+            , InputControlOutcome
+            )
+        )
+resolveGovernanceWithdrawalInitProposalIC renv excl forced input
     | gwiriNetwork input /= "devnet" =
         pure
             ( Left
@@ -642,6 +704,8 @@ resolveGovernanceWithdrawalInitProposal renv input
                             Right prereqs ->
                                 continueAfterCrossValidation
                                     renv
+                                    excl
+                                    forced
                                     input
                                     registry
                                     accounts
@@ -650,6 +714,8 @@ resolveGovernanceWithdrawalInitProposal renv input
 continueAfterCrossValidation
     :: (Monad m)
     => GovernanceWithdrawalInitResolverEnv m
+    -> ExclusionSet
+    -> ForcedInclusionSet
     -> GovernanceWithdrawalInitResolverInput
     -> DevnetGovernanceWithdrawalRegistry
     -> DevnetGovernanceStakeRewardAccounts
@@ -657,68 +723,118 @@ continueAfterCrossValidation
     -> m
         ( Either
             GovernanceWithdrawalInitError
-            GovernanceWithdrawalInitEnv
+            ( GovernanceWithdrawalInitEnv
+            , InputControlOutcome
+            )
         )
-continueAfterCrossValidation renv input registry accounts prereqs = do
-    walletUtxos <-
-        gwireQueryWalletUtxos
-            renv
-            (gwiriWalletAddrBech32 input)
-    dc <- gwireDepositComponents renv
-    let pureAdaBalance =
-            sum
-                [ lov
-                | (_, lov, hasNa) <- walletUtxos
-                , not hasNa
-                ]
-        floor_ = proposalWalletFloorLovelace dc
-    if pureAdaBalance < floor_
-        then
-            pure
-                ( Left
-                    ( GovernanceWithdrawalInitWalletShortfall
-                        dc
-                        pureAdaBalance
-                    )
-                )
-        else case firstPureAdaRef walletUtxos of
-            Nothing ->
-                -- Balance >= floor but no pure-ADA entry exists;
-                -- the wallet entries are all asset-bearing. Surface
-                -- as a shortfall with the same diagnostic so the
-                -- operator sees the asymmetry.
+continueAfterCrossValidation
+    renv
+    excl
+    forced
+    input
+    registry
+    accounts
+    prereqs = do
+        walletUtxos <-
+            gwireQueryWalletUtxos
+                renv
+                (gwiriWalletAddrBech32 input)
+        dc <- gwireDepositComponents renv
+        let ExclusionSet exclRefs = excl
+            ForcedInclusionSet forcedRefs = forced
+            walletRefSet = map walletCandidateRef walletUtxos
+            missing = filter (`notElem` walletRefSet) forcedRefs
+        if not (null missing)
+            then
                 pure
                     ( Left
-                        ( GovernanceWithdrawalInitWalletShortfall
-                            dc
-                            pureAdaBalance
+                        ( GovernanceWithdrawalInitResolverExtraTxInNotOnWallet
+                            missing
                         )
                     )
-            Just walletRef -> do
-                upperE <-
-                    resolveUpperBound
-                        (gwireComputeUpperBound renv)
-                        (gwiriValidityHours input)
-                case upperE of
-                    Left e -> pure (Left e)
-                    Right upper ->
-                        pure $
-                            Right
-                                GovernanceWithdrawalInitEnv
-                                    { gwieNetwork = gwiriNetwork input
-                                    , gwieUpperBoundSlot = upper
-                                    , gwieRegistry = registry
-                                    , gwieAccounts = accounts
-                                    , gwiePrerequisites = prereqs
-                                    , gwieWalletSelection =
-                                        WalletSelection
-                                            { wsTxIn = walletRef
-                                            , wsAddress =
-                                                gwiriWalletAddrBech32 input
-                                            , wsExtraTxIns = []
-                                            }
-                                    , gwieDepositComponents = dc
-                                    }
+            else
+                let (filteredWallet, _, _, _) =
+                        filterPool
+                            walletCandidateRef
+                            excl
+                            forced
+                            walletUtxos
+                    outcome =
+                        buildGovernanceWithdrawalInitOutcome
+                            exclRefs
+                            walletRefSet
+                    pureAdaBalance =
+                        sum
+                            [ lov
+                            | (_, lov, hasNa) <- filteredWallet
+                            , not hasNa
+                            ]
+                    floor_ = proposalWalletFloorLovelace dc
+                    forcedTexts = map outRefText forcedRefs
+                in  if pureAdaBalance < floor_
+                        then
+                            pure
+                                ( Left
+                                    ( governanceProposalShortfall
+                                        exclRefs
+                                        dc
+                                        pureAdaBalance
+                                        floor_
+                                    )
+                                )
+                        else case firstPureAdaRef filteredWallet of
+                            Nothing ->
+                                pure
+                                    ( Left
+                                        ( governanceProposalShortfall
+                                            exclRefs
+                                            dc
+                                            pureAdaBalance
+                                            floor_
+                                        )
+                                    )
+                            Just walletRef -> do
+                                upperE <-
+                                    resolveUpperBound
+                                        (gwireComputeUpperBound renv)
+                                        (gwiriValidityHours input)
+                                case upperE of
+                                    Left e -> pure (Left e)
+                                    Right upper ->
+                                        pure $
+                                            Right
+                                                ( GovernanceWithdrawalInitEnv
+                                                    { gwieNetwork = gwiriNetwork input
+                                                    , gwieUpperBoundSlot = upper
+                                                    , gwieRegistry = registry
+                                                    , gwieAccounts = accounts
+                                                    , gwiePrerequisites = prereqs
+                                                    , gwieWalletSelection =
+                                                        WalletSelection
+                                                            { wsTxIn = walletRef
+                                                            , wsAddress =
+                                                                gwiriWalletAddrBech32 input
+                                                            , wsExtraTxIns = forcedTexts
+                                                            }
+                                                    , gwieDepositComponents = dc
+                                                    }
+                                                , outcome
+                                                )
+
+governanceProposalShortfall
+    :: [OutRef]
+    -> DepositComponents
+    -> Integer
+    -> Integer
+    -> GovernanceWithdrawalInitError
+governanceProposalShortfall exclRefs dc available target
+    | null exclRefs =
+        GovernanceWithdrawalInitWalletShortfall dc available
+    | otherwise =
+        GovernanceWithdrawalInitResolverWalletShortfallWithExcludes
+            available
+            target
+            exclRefs
 
 firstPureAdaRef :: [(Text, Integer, Bool)] -> Maybe Text
 firstPureAdaRef utxos =
@@ -985,7 +1101,34 @@ resolveGovernanceWithdrawalInitMaterialization
             GovernanceWithdrawalInitError
             GovernanceWithdrawalInitMaterializationEnv
         )
-resolveGovernanceWithdrawalInitMaterialization renv input
+resolveGovernanceWithdrawalInitMaterialization renv input = do
+    r <-
+        resolveGovernanceWithdrawalInitMaterializationIC
+            renv
+            (ExclusionSet [])
+            (ForcedInclusionSet [])
+            input
+    pure (fmap fst r)
+
+{- | Variant of 'resolveGovernanceWithdrawalInitMaterialization'
+that threads the operator's @--exclude-utxo@ and
+@--extra-tx-in@ sets through the wallet candidate pool
+(#184 Slice 7).
+-}
+resolveGovernanceWithdrawalInitMaterializationIC
+    :: (Monad m)
+    => GovernanceWithdrawalInitMaterializationResolverEnv m
+    -> ExclusionSet
+    -> ForcedInclusionSet
+    -> GovernanceWithdrawalInitResolverInput
+    -> m
+        ( Either
+            GovernanceWithdrawalInitError
+            ( GovernanceWithdrawalInitMaterializationEnv
+            , InputControlOutcome
+            )
+        )
+resolveGovernanceWithdrawalInitMaterializationIC renv excl forced input
     | gwiriNetwork input /= "devnet" =
         pure
             ( Left
@@ -1029,6 +1172,8 @@ resolveGovernanceWithdrawalInitMaterialization renv input
                             Right prereqs ->
                                 continueMaterializationAfterCrossValidation
                                     renv
+                                    excl
+                                    forced
                                     input
                                     registry
                                     accounts
@@ -1037,6 +1182,8 @@ resolveGovernanceWithdrawalInitMaterialization renv input
 continueMaterializationAfterCrossValidation
     :: (Monad m)
     => GovernanceWithdrawalInitMaterializationResolverEnv m
+    -> ExclusionSet
+    -> ForcedInclusionSet
     -> GovernanceWithdrawalInitResolverInput
     -> DevnetGovernanceWithdrawalRegistry
     -> DevnetGovernanceStakeRewardAccounts
@@ -1044,10 +1191,14 @@ continueMaterializationAfterCrossValidation
     -> m
         ( Either
             GovernanceWithdrawalInitError
-            GovernanceWithdrawalInitMaterializationEnv
+            ( GovernanceWithdrawalInitMaterializationEnv
+            , InputControlOutcome
+            )
         )
 continueMaterializationAfterCrossValidation
     renv
+    excl
+    forced
     input
     registry
     accounts
@@ -1057,56 +1208,140 @@ continueMaterializationAfterCrossValidation
                 renv
                 (gwiriWalletAddrBech32 input)
         let mfc = gwimreFloorComponents renv
-            pureAdaBalance =
-                sum
-                    [ lov
-                    | (_, lov, hasNa) <- walletUtxos
-                    , not hasNa
-                    ]
-            floor_ = materializationWalletFloorLovelace mfc
-        if pureAdaBalance < floor_
+            ExclusionSet exclRefs = excl
+            ForcedInclusionSet forcedRefs = forced
+            walletRefSet = map walletCandidateRef walletUtxos
+            missing = filter (`notElem` walletRefSet) forcedRefs
+        if not (null missing)
             then
                 pure
                     ( Left
-                        ( GovernanceWithdrawalInitMaterializationWalletShortfall
-                            mfc
-                            pureAdaBalance
+                        ( GovernanceWithdrawalInitResolverExtraTxInNotOnWallet
+                            missing
                         )
                     )
-            else case firstPureAdaRef walletUtxos of
-                Nothing ->
-                    pure
-                        ( Left
-                            ( GovernanceWithdrawalInitMaterializationWalletShortfall
-                                mfc
-                                pureAdaBalance
-                            )
-                        )
-                Just walletRef -> do
-                    upperE <-
-                        resolveUpperBound
-                            (gwimreComputeUpperBound renv)
-                            (gwiriValidityHours input)
-                    case upperE of
-                        Left e -> pure (Left e)
-                        Right upper ->
-                            pure $
-                                Right
-                                    GovernanceWithdrawalInitMaterializationEnv
-                                        { gwimeNetwork = gwiriNetwork input
-                                        , gwimeUpperBoundSlot = upper
-                                        , gwimeRegistry = registry
-                                        , gwimeAccounts = accounts
-                                        , gwimePrerequisites = prereqs
-                                        , gwimeWalletSelection =
-                                            WalletSelection
-                                                { wsTxIn = walletRef
-                                                , wsAddress =
-                                                    gwiriWalletAddrBech32 input
-                                                , wsExtraTxIns = []
-                                                }
-                                        , gwimeFloorComponents = mfc
-                                        }
+            else
+                let (filteredWallet, _, _, _) =
+                        filterPool
+                            walletCandidateRef
+                            excl
+                            forced
+                            walletUtxos
+                    outcome =
+                        buildGovernanceWithdrawalInitOutcome
+                            exclRefs
+                            walletRefSet
+                    pureAdaBalance =
+                        sum
+                            [ lov
+                            | (_, lov, hasNa) <- filteredWallet
+                            , not hasNa
+                            ]
+                    floor_ = materializationWalletFloorLovelace mfc
+                    forcedTexts = map outRefText forcedRefs
+                in  if pureAdaBalance < floor_
+                        then
+                            pure
+                                ( Left
+                                    ( governanceMaterializationShortfall
+                                        exclRefs
+                                        mfc
+                                        pureAdaBalance
+                                        floor_
+                                    )
+                                )
+                        else case firstPureAdaRef filteredWallet of
+                            Nothing ->
+                                pure
+                                    ( Left
+                                        ( governanceMaterializationShortfall
+                                            exclRefs
+                                            mfc
+                                            pureAdaBalance
+                                            floor_
+                                        )
+                                    )
+                            Just walletRef -> do
+                                upperE <-
+                                    resolveUpperBound
+                                        (gwimreComputeUpperBound renv)
+                                        (gwiriValidityHours input)
+                                case upperE of
+                                    Left e -> pure (Left e)
+                                    Right upper ->
+                                        pure $
+                                            Right
+                                                ( GovernanceWithdrawalInitMaterializationEnv
+                                                    { gwimeNetwork = gwiriNetwork input
+                                                    , gwimeUpperBoundSlot = upper
+                                                    , gwimeRegistry = registry
+                                                    , gwimeAccounts = accounts
+                                                    , gwimePrerequisites = prereqs
+                                                    , gwimeWalletSelection =
+                                                        WalletSelection
+                                                            { wsTxIn = walletRef
+                                                            , wsAddress =
+                                                                gwiriWalletAddrBech32 input
+                                                            , wsExtraTxIns = forcedTexts
+                                                            }
+                                                    , gwimeFloorComponents = mfc
+                                                    }
+                                                , outcome
+                                                )
+
+governanceMaterializationShortfall
+    :: [OutRef]
+    -> MaterializationFloorComponents
+    -> Integer
+    -> Integer
+    -> GovernanceWithdrawalInitError
+governanceMaterializationShortfall exclRefs mfc available target
+    | null exclRefs =
+        GovernanceWithdrawalInitMaterializationWalletShortfall
+            mfc
+            available
+    | otherwise =
+        GovernanceWithdrawalInitResolverWalletShortfallWithExcludes
+            available
+            target
+            exclRefs
+
+walletCandidateRef :: (Text, Integer, Bool) -> OutRef
+walletCandidateRef (ref, _, _) =
+    case parseOutRef ref of
+        Right r -> r
+        Left e ->
+            error
+                ( "governance-withdrawal-init-wizard: wallet candidate ref not parseable: "
+                    <> T.unpack ref
+                    <> ": "
+                    <> T.unpack e
+                )
+
+buildGovernanceWithdrawalInitOutcome
+    :: [OutRef] -> [OutRef] -> InputControlOutcome
+buildGovernanceWithdrawalInitOutcome excluded walletRefs =
+    let classify ref
+            | ref `elem` walletRefs = Right (ref, WalletOnly)
+            | otherwise = Left ref
+        classified = map classify excluded
+    in  InputControlOutcome
+            { icoHits = rights classified
+            , icoInert = lefts classified
+            }
+
+renderGovernanceWithdrawalInitExclusionLogLine
+    :: Text -> OutRef -> PoolHit -> Text
+renderGovernanceWithdrawalInitExclusionLogLine prefix ref _pool =
+    prefix
+        <> ": excluded utxo "
+        <> outRefText ref
+        <> " (operator-supplied) [wallet]"
+
+renderGovernanceWithdrawalInitWalletShortfallWithExcludes
+    :: Text -> [OutRef] -> Text
+renderGovernanceWithdrawalInitWalletShortfallWithExcludes =
+    renderShortfallWithExcludes
 
 -- ----------------------------------------------------
 -- Pure translation (materialization)

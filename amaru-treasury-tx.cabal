@@ -427,6 +427,7 @@ test-suite unit-tests
     Amaru.Treasury.Cli.CommonSpec
     Amaru.Treasury.Cli.DisburseWizardInputControlSpec
     Amaru.Treasury.Cli.EnvelopeSpec
+    Amaru.Treasury.Cli.GovernanceWithdrawalInitWizardInputControlSpec
     Amaru.Treasury.Cli.GovernanceWithdrawalInitWizardParserSpec
     Amaru.Treasury.Cli.ParserSpec
     Amaru.Treasury.Cli.RegistryInitWizardInputControlSpec

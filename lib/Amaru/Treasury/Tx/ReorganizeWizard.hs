@@ -714,8 +714,12 @@ mkRationaleReorganize ans =
             fromMaybe "reorganize" (rwaLabel ans)
         , rjDescription =
             fromMaybe
-                "Treasury reorganize: merge treasury UTxOs \
-                \into one continuing output"
+                -- Stay ≤64 bytes to satisfy Conway's
+                -- per-metadatum-string cap; longer
+                -- operator-supplied descriptions must
+                -- be auto-chunked at the boundary (a
+                -- separate hardening pass).
+                "Treasury reorganize: merge UTxOs into one continuing output"
                 (rwaDescription ans)
         , rjJustification =
             fromMaybe

@@ -107,7 +107,7 @@ effort). One bisect-safe commit. Do not push. You are not alone in
 the codebase; do not revert edits made by others. Reuse the
 `InputControl` API from Slice 1; do not duplicate parsing,
 contradiction, or filter logic. Commit body MUST include
-`Tasks: T006, T007, T008, T009, T010, T011, T012`.
+`Tasks: T006, T007, T008, T009, T010, T010a, T010b, T011, T012`.
 
 Owned files:
 

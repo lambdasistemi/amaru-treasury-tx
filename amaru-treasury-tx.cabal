@@ -438,6 +438,7 @@ test-suite unit-tests
     Amaru.Treasury.Cli.SwapWizardInputControlSpec
     Amaru.Treasury.Cli.TxBuildRequiredUtxosSpec
     Amaru.Treasury.Cli.VaultSpec
+    Amaru.Treasury.Cli.WithdrawWizardInputControlSpec
     Amaru.Treasury.Cli.WitnessSpec
     Amaru.Treasury.ConstantsSpec
     Amaru.Treasury.Devnet.DisburseSubmitSpec

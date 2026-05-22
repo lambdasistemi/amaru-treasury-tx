@@ -26,26 +26,48 @@ if [ -f "$MANIFEST" ]; then
   echo "==> jq sanity on $MANIFEST"
   jq -e '.' "$MANIFEST" >/dev/null
 
-  echo "==> schema fields present"
+  echo "==> schema fields present (v2: payee+beneficiary model)"
   jq -e '
-    .schema == "amaru-treasury-may-references-v1" and
+    .schema == "amaru-treasury-may-references-v2" and
     .scope == "network_compliance" and
     .month == "2026-05" and
     .constitution_principle == "VIII" and
-    (.vendors.cyber_castellum.contract_class == "monthly") and
-    (.vendors.cyber_castellum.references | length == 3) and
-    (.vendors.antithesis.contract_class == "yearly") and
-    (.vendors.antithesis.references | length == 2)
+    .constitution_version == "0.4.0" and
+    (.disbursements | type == "array" and length >= 1)
   ' "$MANIFEST" >/dev/null \
     || { echo "manifest fails schema invariants"; exit 1; }
 
-  echo "==> every reference has uri/type/label and ipfs:// scheme"
+  echo "==> each disbursement has payee_id, beneficiary_id, and minimum evidence set"
+  # Principle VIII v2: when payee != beneficiary, minimum is 4 docs
+  # (payee contract + payee address proof + beneficiary contract +
+  # beneficiary invoice), 5 if a cycle review applies.
   jq -e '
-    [.vendors[].references[]]
+    .disbursements
+    | all(
+        (.id | type == "string" and length > 0)
+        and (.payee_id | type == "string" and length > 0)
+        and (.beneficiary_id | type == "string" and length > 0)
+        and (.amount_usdm | type == "number")
+        and (
+          [.references[].kind]
+          | (any(. == "payee_contract"))
+            and (any(. == "payee_address_proof"))
+            and (any(. == "beneficiary_contract"))
+            and (any(. == "beneficiary_invoice"))
+        )
+      )
+  ' "$MANIFEST" >/dev/null \
+    || { echo "manifest fails per-disbursement minimum evidence set"; exit 1; }
+
+  echo "==> every reference has uri/type/label/vendor_id and ipfs:// scheme"
+  jq -e '
+    [.disbursements[].references[]]
     | all(
         (.uri | startswith("ipfs://"))
         and (.type | type == "string")
         and (.label | type == "string" and length > 0)
+        and (.vendor_id | type == "string" and length > 0)
+        and (.kind | type == "string" and length > 0)
       )
   ' "$MANIFEST" >/dev/null \
     || { echo "manifest reference rows malformed"; exit 1; }

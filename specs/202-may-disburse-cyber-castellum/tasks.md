@@ -40,29 +40,41 @@ prose for the orchestrator to commit.
 
 Blocker: T010 + T020 resolved.
 
-- [ ] **T200** Orchestrator: `treasury-inspect --scope
-      network_compliance` — parse the USDM total out of the JSON
-      response and **assert it is ≥ 18 750 000 000 (smallest USDM
-      units, i.e. ≥ 18 750 USDM)**. Record the value, the source
-      UTxO count, and the largest single-UTxO USDM quantity in the
-      draft rundir's `summary.md`. If the parsed total is below the
-      threshold, S2 STOPS — see plan.md "USDM selection failure
-      modes" for the operator response (swap or reorganize).
-- [ ] **T210** Orchestrator: `scripts/build-may-cc-disburse.sh --exec`
-      with operator-supplied `--wallet-addr`, `--extra-signer`,
-      `--metadata journal-metadata.json`, `--validity-hours 48`.
-      Capture stdout + stderr to a draft rundir.
-- [ ] **T220** Orchestrator: `tx-inspect --rules amaru-treasury.yaml`
-      against unsigned `tx.cbor`; expect clean.
-- [ ] **T230** Orchestrator: `tx-validate` against unsigned `tx.cbor`;
-      expect clean or only `WithdrawalsNotInRewardsCERTS` false
-      positive.
-- [ ] **T240** Orchestrator: assert `body.references | length == 5`
-      and the canonical labels are present verbatim.
-- [ ] **T250** Orchestrator: stage the draft rundir
-      (`transactions/2026/network_compliance/draft-<short>/`) with
-      `intent.json`, `tx.cbor`, `tx.envelope.json`, `summary.md`.
-- [ ] **T260** Orchestrator: commit. Subject:
+- [X] **T200** `treasury-inspect --scope network_compliance` (live
+      mainnet read 2026-05-22) returned 414 892.255806 USDM available
+      across 55 UTxOs (largest single = 10 174.81 USDM). Threshold
+      assertion 414 892 255 806 ≥ 18 750 000 000 holds (22× headroom).
+- [X] **T210** `scripts/build-may-cc-disburse.sh --exec` produced
+      `tx.cbor.hex` (2 204-byte unsigned Conway tx body) on the
+      first try post-#216 merge. Wizard log records the 2 treasury
+      UTxOs selected (`77b1b046…#1` + `3c3d5332…#1`) and confirms
+      `leftoverLov=4612003` (= full treasury input lovelace, vs the
+      pre-#216 buggy `2612003`). One helper-script tweak: shorten
+      the default `--description` to 61 bytes (was 95 — over
+      Cardano's per-text metadatum cap).
+- [X] **T220** `tx-inspect --rules amaru-treasury.yaml`
+      against unsigned `tx.cbor.hex`: clean (treasury inputs +
+      wallet + 4 reference inputs + 2 outputs + permissions
+      0-lovelace withdrawal + required signers visible).
+- [X] **T230** `tx-validate --n2c-socket-path /code/cardano-mainnet/ipc/node.socket
+      --network-magic 764824073 --input <hex>` returned
+      `{"exit_code":0,"status":"structurally_clean"}`. All UTxO
+      sources resolved via n2c. No `WithdrawalsNotInRewardsCERTS`
+      false positive.
+- [X] **T240** `body.references[]` carries exactly 5 entries with
+      canonical legal labels verbatim:
+      `Contract - CRYPTO ACCOUNTING GROUP`,
+      `Address-of-record proof - CRYPTO ACCOUNTING GROUP`,
+      `Contract - CYBER CASTELLUM CORPORATION`,
+      `Invoice #3508 - CYBER CASTELLUM CORPORATION`,
+      `May2026 cycle review - CYBER CASTELLUM CORPORATION`.
+- [X] **T250** Draft rundir
+      `transactions/2026/network_compliance/draft-may-cc/` populated:
+      `intent.json`, `tx.cbor.hex`, `tx.envelope.json`, `build.log`,
+      `tx-build.log`, `report.json`, `summary.md`. Renamed to
+      `<txid>/` at S5 once the on-chain txid is confirmed
+      (`a8156039625f75d2bb6f6ec34cbb23f62370478cd5be1baafbc862c359457f4b`).
+- [X] **T260** One slice commit. Subject:
       `feat(transactions): build may CC 18 750 USDM disburse (unsigned tx + summary)`.
       Tasks trailer: `Tasks: T200, T210, T220, T230, T240, T250, T260`.
 

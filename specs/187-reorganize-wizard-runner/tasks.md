@@ -409,11 +409,11 @@ After commit:
 - Append `COMPLETE` + `NOTE PR #198 marked ready for review`
   to STATUS.md.
 
-- [ ] T021 [P] Run `finalization_audit 198` from the
+- [X] T021 [P] Run `finalization_audit 198` from the
   `gate-script` skill; confirm every commit on the branch
   passes the commit-message gate AND every task in
   `tasks.md` is `[X]`.
-- [ ] T022 `git rm gate.sh && git commit -m "chore: drop
+- [X] T022 `git rm gate.sh && git commit -m "chore: drop
   gate.sh (ready for review)"`; push; `gh pr ready 198`.
 
 ## Dependencies

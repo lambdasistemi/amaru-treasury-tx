@@ -1,0 +1,8 @@
+{
+  "txId": "c150d5c5c67658c8f2a3bc24e16a4852257d46a03224257ac990fcca6f6fde78",
+  "submittedAt": "2026-05-22T16:57:02Z",
+  "submitter": "local-node-n2c",
+  "socket": "/code/cardano-mainnet/ipc/node.socket",
+  "network": "mainnet",
+  "networkMagic": 764824073
+}

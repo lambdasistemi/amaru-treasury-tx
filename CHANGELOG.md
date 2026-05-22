@@ -8,6 +8,8 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 * **disburse-wizard:** document `--reference-uri`, `--reference-type`, and `--reference-label` for on-chain rationale audit chains backed by IPFS references.
 
+* **transactions:** record May 2026 18 750 USDM disburse from `network_compliance` to Crypto Accounting Group (CAG payee) benefiting Cyber Castellum Corporation, submitted on mainnet as txId [`c150d5c5c67658c8f2a3bc24e16a4852257d46a03224257ac990fcca6f6fde78`](https://cardanoscan.io/transaction/c150d5c5c67658c8f2a3bc24e16a4852257d46a03224257ac990fcca6f6fde78) with the 5-reference Principle VIII v2 evidence set (#202).
+
 ### Bug Fixes
 
 * **disburse-wizard:** USDM disburses now keep the full treasury input lovelace on the leftover output and source the beneficiary's min-UTxO deposit from the wallet, restoring the on-chain treasury validator's lovelace-conservation invariant (parity with the bash recipe) (#215)

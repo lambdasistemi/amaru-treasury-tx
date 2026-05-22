@@ -90,12 +90,12 @@ Forbidden scope:
 
 ## S2 — Finalization (orchestrator-owned)
 
-- [ ] **T200** Orchestrator: `git rm gate.sh` +
+- [X] **T200** `git rm gate.sh` +
       `chore: drop gate.sh (ready for review)` commit; push;
       `gh pr ready`.
-- [ ] **T210** Orchestrator: comment on PR #213 (#202) and the not-
-      yet-opened #203 PR that #215 has merged and they can rebase
-      onto refreshed main. Append `COMPLETE <pr-url>` to STATUS.md.
+- [ ] **T210** Comment on PR #213 (#202) and the not-yet-opened
+      #203 PR that #215 has merged and they can rebase onto
+      refreshed main. Deferred until #216 actually merges.
 
 ## Notes
 

@@ -1,4 +1,4 @@
-{ pkgs, src, components, lintPkgs ? pkgs }:
+{ pkgs, src, components, lintPkgs ? pkgs, treasuryMetadata }:
 # Each verification step is built as a single
 # `writeShellApplication` app, then exposed twice:
 #
@@ -25,6 +25,29 @@ let
         test -e ${components.exes.amaru-treasury-tx}
         test -e ${components.exes.amaru-treasury-intent-schema}
         echo "build outputs realized"
+      '';
+    };
+
+    # #239 T001 — Asserts that the metadata baked into the
+    # deployed image at build time matches the expected
+    # sha256. Lives here so a flake-input bump that changes
+    # the bytes fails `nix flake check` loudly and prompts
+    # an explicit `pinnedSha256` update in nix/metadata.nix.
+    metadata-pin = {
+      runtimeInputs = [ pkgs.coreutils ];
+      text = ''
+        observed=$(sha256sum '${treasuryMetadata.metadataFile}' \
+          | cut -d' ' -f1)
+        expected='${treasuryMetadata.pinnedSha256}'
+        if [ "$observed" != "$expected" ]; then
+          printf 'metadata-pin: sha256 mismatch\n' >&2
+          printf '  observed: %s\n' "$observed" >&2
+          printf '  expected: %s\n' "$expected" >&2
+          printf 'Bump nix/metadata.nix: pinnedSha256 to match.\n' \
+            >&2
+          exit 1
+        fi
+        printf 'metadata-pin: OK (sha256=%s)\n' "$observed"
       '';
     };
 
@@ -353,6 +376,7 @@ in
 {
   # Sandboxed checks (nix flake check / nix build).
   build = mkCheck "build" scripts.build;
+  metadata-pin = mkCheck "metadata-pin" scripts.metadata-pin;
   schema = mkCheck "schema" scripts.schema;
   unit = mkCheck "unit" scripts.unit;
   golden = mkCheck "golden" scripts.golden;

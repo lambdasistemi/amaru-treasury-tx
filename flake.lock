@@ -66,6 +66,23 @@
         "type": "github"
       }
     },
+    "amaru-treasury": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1779425702,
+        "narHash": "sha256-rvoQEyfI3UpGuIVaKH4eSpNAj1CfP+dZqTNcr+DFMKU=",
+        "owner": "pragma-org",
+        "repo": "amaru-treasury",
+        "rev": "fb1937964196b061ddc4f247d2de11a13745d541",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pragma-org",
+        "repo": "amaru-treasury",
+        "rev": "fb1937964196b061ddc4f247d2de11a13745d541",
+        "type": "github"
+      }
+    },
     "blst": {
       "flake": false,
       "locked": {
@@ -1665,6 +1682,7 @@
     "root": {
       "inputs": {
         "CHaP": "CHaP",
+        "amaru-treasury": "amaru-treasury",
         "bundlers": "bundlers",
         "cardano-node": "cardano-node",
         "dev-assets": "dev-assets",

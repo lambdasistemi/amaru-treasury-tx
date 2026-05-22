@@ -99,16 +99,24 @@ spec = describe "ReorganizeWizard" $ do
                             treasuryTxRefA :| [treasuryTxRefB]
                         }
 
-        it "rejects non-devnet before any resolver effects" $ do
-            let result =
-                    runIdentity
-                        ( resolveReorganize
-                            effectMustNotRunResolverEnv
-                            sampleInput{rriNetwork = "preprod"}
-                        )
-            result
-                `shouldBe` Left
-                    (ReorganizeNonDevnetNetwork "preprod")
+        it
+            "admits any resolved network (mainnet) and \
+            \forwards the name into the resolved environment"
+            $ do
+                let result =
+                        runIdentity
+                            ( resolveReorganize
+                                happyResolverEnv
+                                sampleInput{rriNetwork = "mainnet"}
+                            )
+                case result of
+                    Right env ->
+                        reNetwork env `shouldBe` "mainnet"
+                    Left e ->
+                        expectationFailure
+                            ( "expected resolver to admit mainnet, got: "
+                                <> show e
+                            )
 
         it "wraps metadata read failures" $
             resolveWith

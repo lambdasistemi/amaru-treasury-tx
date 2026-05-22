@@ -311,11 +311,8 @@ runReorganizeWizardEither
     -> IO (Either ReorganizeError ())
 runReorganizeWizardEither g opts = do
     case resolveNetworkName g of
-        Right "devnet" -> stepOut
-        Right other ->
-            pure (Left (ReorganizeNonDevnetNetwork other))
-        Left _ ->
-            pure (Left (ReorganizeNonDevnetNetwork "<unresolved>"))
+        Right _ -> stepOut
+        Left _ -> pure (Left ReorganizeUnresolvedNetwork)
   where
     cf = rwoCommon opts
     stepOut = do
@@ -408,7 +405,7 @@ exitCodeFor :: ReorganizeError -> Int
 exitCodeFor = \case
     ReorganizeOutputParentMissing{} -> 2
     ReorganizeOutputExistsNoForce{} -> 2
-    ReorganizeNonDevnetNetwork{} -> 2
+    ReorganizeUnresolvedNetwork -> 2
     ReorganizeMissingNodeSocket -> 2
     ReorganizeMetadataReadError{} -> 2
     ReorganizeScopeNotInMetadata{} -> 2

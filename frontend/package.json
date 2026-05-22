@@ -1,0 +1,7 @@
+{
+  "name": "amaru-treasury-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Halogen dashboard bundled by Nix for amaru-treasury.plutimus.com (#239).",
+  "dependencies": {}
+}

@@ -1,5 +1,5 @@
 { pkgs, src, components, lintPkgs ? pkgs
-, treasuryMetadata, recentTxs, buildIdentity }:
+, treasuryMetadata, recentTxs, buildIdentity, frontend }:
 # Each verification step is built as a single
 # `writeShellApplication` app, then exposed twice:
 #
@@ -97,6 +97,22 @@ let
 
         printf 'build-identity: OK\n'
         jq -c . "$f"
+      '';
+    };
+
+    # #239 T012 — Asserts the Halogen frontend bundle builds
+    # reproducibly and emits the two files the image expects.
+    frontend-bundle = {
+      runtimeInputs = [ pkgs.coreutils ];
+      text = ''
+        test -e '${frontend}/index.html'
+        test -e '${frontend}/index.js'
+        size=$(stat -c %s '${frontend}/index.js')
+        if [ "$size" -lt 10000 ]; then
+          echo "frontend-bundle: index.js suspiciously small ($size bytes)" >&2
+          exit 1
+        fi
+        printf 'frontend-bundle: OK (index.js=%s bytes)\n' "$size"
       '';
     };
 
@@ -478,6 +494,8 @@ in
   # Sandboxed checks (nix flake check / nix build).
   build = mkCheck "build" scripts.build;
   build-identity = mkCheck "build-identity" scripts.build-identity;
+  frontend-bundle =
+    mkCheck "frontend-bundle" scripts.frontend-bundle;
   metadata-pin = mkCheck "metadata-pin" scripts.metadata-pin;
   recent-txs-manifest =
     mkCheck "recent-txs-manifest" scripts.recent-txs-manifest;

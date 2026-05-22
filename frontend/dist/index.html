@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>Amaru Treasury — inspect dashboard</title>
+    <meta
+      name="description"
+      content="Live read-only view of the Amaru 2026 treasury across all four registered scopes."
+    />
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #fbfbfd;
+        --fg: #1a1a1f;
+        --muted: #555;
+        --accent: #2b5fb0;
+        --card: #ffffff;
+        --border: #e2e2e8;
+        --mono: ui-monospace, "SF Mono", "Cascadia Code", "Source Code Pro",
+          monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #14141a;
+          --fg: #f3f3f7;
+          --muted: #a6a6b0;
+          --accent: #6da6ff;
+          --card: #1e1e26;
+          --border: #2a2a36;
+        }
+      }
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: ui-sans-serif, system-ui, -apple-system, "Helvetica Neue",
+          Arial, sans-serif;
+        font-size: 15px;
+        line-height: 1.5;
+      }
+      #app {
+        min-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+      }
+      noscript {
+        display: block;
+        padding: 2rem;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <noscript>
+        This dashboard requires JavaScript. The same data is reachable
+        via <code>GET /v1/treasury-inspect?scope=&lt;name&gt;</code>.
+      </noscript>
+    </div>
+    <script src="./index.js" type="module"></script>
+  </body>
+</html>

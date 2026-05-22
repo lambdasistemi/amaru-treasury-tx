@@ -1,0 +1,43 @@
+package:
+  name: amaru-treasury-dashboard
+  dependencies:
+    - prelude
+    - effect
+    - aff
+    - console
+    - halogen
+    - affjax
+    - affjax-web
+    - argonaut
+    - argonaut-codecs
+    - arrays
+    - either
+    - foldable-traversable
+    - maybe
+    - strings
+    - ordered-collections
+    - refs
+    - tuples
+    - web-html
+    - web-dom
+    - web-events
+    - foreign-object
+    - integers
+    - numbers
+    - datetime
+    - now
+    - js-timers
+    - parallel
+  bundle:
+    module: Main
+    outfile: dist/index.js
+    platform: browser
+    type: app
+  test:
+    main: Test.Main
+    dependencies:
+      - spec
+
+workspace:
+  packageSet:
+    registry: 72.1.0

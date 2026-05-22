@@ -1,0 +1,7 @@
+output/
+.spago/
+node_modules/
+package-lock.json
+dist/index.js
+dist/deps.js
+dist/bundle.js

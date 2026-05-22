@@ -39,6 +39,19 @@
     cardano-node = {
       url = "github:IntersectMBO/cardano-node/10.7.0";
     };
+    # PureScript toolchain for the Halogen dashboard frontend
+    # (slice T012+). Lambdasistemi house pattern — same overlays
+    # /code/graph-browser-view-export-import and
+    # /code/cardano-mpfs-browser use.
+    purescript-overlay = {
+      url =
+        "github:paolino/purescript-overlay/fix/remove-nodePackages";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    mkSpagoDerivation = {
+      url = "github:jeslie0/mkSpagoDerivation";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     # Upstream Amaru 2026 treasury journal — single source of
     # truth for `journal/2026/metadata.json`. Pinned by commit
     # so the deployed dashboard's metadata is fully content-
@@ -60,7 +73,8 @@
 
   outputs = inputs@{ self, nixpkgs, lintNixpkgs, flake-parts
     , haskellNix, hackageNix, iohkNix, CHaP, cardano-node
-    , amaru-treasury, ... }:
+    , amaru-treasury, purescript-overlay, mkSpagoDerivation
+    , ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [ "x86_64-linux" "aarch64-darwin" ];
       perSystem = { system, ... }:
@@ -187,9 +201,25 @@
               self.shortRev or self.dirtyShortRev or "dirty";
             buildTime = buildTimeISO;
           };
+          # PureScript-flavoured nixpkgs (different overlay set
+          # from the haskell.nix pkgs). Used solely to build the
+          # frontend bundle — its outputs flow into the image via
+          # `nix/docker.nix` (T023).
+          frontendPkgs = import nixpkgs {
+            inherit system;
+            overlays = [
+              purescript-overlay.overlays.default
+              mkSpagoDerivation.overlays.default
+            ];
+          };
+          frontend = import ./nix/frontend.nix {
+            pkgs = frontendPkgs;
+            src = ./frontend;
+          };
           checks = import ./nix/checks.nix {
             inherit pkgs components lintPkgs
-              treasuryMetadata recentTxs buildIdentity;
+              treasuryMetadata recentTxs buildIdentity
+              frontend;
             src = ./.;
           };
           checkApps = import ./nix/apps.nix { inherit pkgs checks; };
@@ -281,6 +311,7 @@
               amaru-treasury-intent-schema
               swap-probe
               capture-swap-context
+              frontend
               ;
           } // darwinReleasePackages // linuxReleasePackages;
           # Drop the internal `scripts` attr (raw text bodies

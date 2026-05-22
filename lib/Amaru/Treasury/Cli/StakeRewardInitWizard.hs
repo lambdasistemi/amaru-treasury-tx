@@ -37,6 +37,7 @@ Common flags every sub-action shares: @--wallet-addr@,
 module Amaru.Treasury.Cli.StakeRewardInitWizard
     ( -- * Options
       StakeRewardInitWizardOpts (..)
+    , CommonFlags (..)
     , ScriptAccountOpts (..)
     , PlainAccountOpts (..)
 
@@ -46,6 +47,9 @@ module Amaru.Treasury.Cli.StakeRewardInitWizard
       -- * Runner + --out checks
     , runStakeRewardInitWizard
     , validateOutPath
+
+      -- * Input control (#184 — Slice 6)
+    , validateStakeRewardInitWizardInputControl
     ) where
 
 import Control.Exception (IOException, try)
@@ -99,15 +103,28 @@ import Amaru.Treasury.LedgerParse
     ( txInFromText
     )
 import Amaru.Treasury.Tx.StakeRewardInitWizard
-    ( StakeRewardInitError (..)
+    ( InputControlOutcome (..)
+    , StakeRewardInitError (..)
     , StakeRewardInitPlainAccountAnswers (..)
     , StakeRewardInitResolverEnv (..)
     , StakeRewardInitResolverInput (..)
     , StakeRewardInitScriptAccountAnswers (..)
-    , resolveStakeRewardInitPlainAccount
-    , resolveStakeRewardInitScriptAccount
+    , renderStakeRewardInitExclusionLogLine
+    , renderStakeRewardInitWalletShortfallWithExcludes
+    , resolveStakeRewardInitPlainAccountIC
+    , resolveStakeRewardInitScriptAccountIC
     , stakeRewardInitPlainAccountToIntent
     , stakeRewardInitScriptAccountToIntent
+    )
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    , InputControlError
+    , excludeUtxoP
+    , extraTxInP
+    , outRefText
+    , renderInputControlError
+    , validateInputControl
     )
 
 -- ----------------------------------------------------
@@ -131,6 +148,10 @@ data CommonFlags = CommonFlags
     , cfValidityHours :: !(Maybe Word16)
     , cfLog :: !(Maybe FilePath)
     , cfForce :: !Bool
+    , cfExcludeSet :: !ExclusionSet
+    -- ^ Operator-supplied @--exclude-utxo@ refs (#184).
+    , cfForcedSet :: !ForcedInclusionSet
+    -- ^ Operator-supplied @--extra-tx-in@ refs (#184).
     }
     deriving stock (Eq, Show)
 
@@ -236,6 +257,8 @@ commonFlagsP =
                 <> help
                     "Overwrite the file at --out if it already exists"
             )
+        <*> (ExclusionSet <$> excludeUtxoP)
+        <*> (ForcedInclusionSet <$> extraTxInP)
 
 -- ----------------------------------------------------
 -- ReadM helpers
@@ -272,6 +295,67 @@ validateOutPath path force = do
             if fileExists && not force
                 then pure (Left (StakeRewardInitOutputExistsNoForce path))
                 else pure (Right ())
+
+-- ----------------------------------------------------
+-- Input-control helpers (#184 Slice 6)
+-- ----------------------------------------------------
+
+validateStakeRewardInitWizardInputControl
+    :: CommonFlags -> Either InputControlError ()
+validateStakeRewardInitWizardInputControl cf =
+    validateInputControl (cfExcludeSet cf) (cfForcedSet cf)
+
+renderStakeRewardInitResolverError
+    :: StakeRewardInitError -> Text
+renderStakeRewardInitResolverError
+    (StakeRewardInitResolverExtraTxInNotOnWallet refs) =
+        "extra input not found on wallet: "
+            <> T.intercalate ", " (map outRefText refs)
+renderStakeRewardInitResolverError
+    ( StakeRewardInitResolverWalletShortfallWithExcludes
+            avail
+            required
+            refs
+        ) =
+        renderStakeRewardInitWalletShortfallWithExcludes
+            ( "wallet shortfall available="
+                <> T.pack (show avail)
+                <> " required="
+                <> T.pack (show required)
+            )
+            refs
+renderStakeRewardInitResolverError e =
+    "resolve: " <> T.pack (show e)
+
+emitStakeRewardInitExclusionLog
+    :: Text -> InputControlOutcome -> IO ()
+emitStakeRewardInitExclusionLog prefix outcome = do
+    mapM_
+        ( \(ref, pool) ->
+            hPutStrLn
+                stderr
+                ( T.unpack
+                    ( renderStakeRewardInitExclusionLogLine
+                        prefix
+                        ref
+                        pool
+                    )
+                )
+        )
+        (icoHits outcome)
+    mapM_
+        ( \ref ->
+            hPutStrLn
+                stderr
+                ( T.unpack
+                    ( prefix
+                        <> ": excluded utxo "
+                        <> outRefText ref
+                        <> " (operator-supplied) [absent]"
+                    )
+                )
+        )
+        (icoInert outcome)
 
 -- ----------------------------------------------------
 -- Runner
@@ -321,6 +405,10 @@ chain query.
 -}
 runScriptAccount :: GlobalOpts -> CommonFlags -> IO ()
 runScriptAccount g cf = do
+    case validateStakeRewardInitWizardInputControl cf of
+        Right () -> pure ()
+        Left ce ->
+            abortScriptAccount (renderInputControlError ce)
     networkName <- case resolveNetworkName g of
         Right t -> pure t
         Left e -> abortScriptAccount (T.pack e)
@@ -351,12 +439,20 @@ runScriptAccount g cf = do
                     , sreReadRegistry = readRegistrySafely
                     }
         er <-
-            resolveStakeRewardInitScriptAccount renv input
+            resolveStakeRewardInitScriptAccountIC
+                renv
+                (cfExcludeSet cf)
+                (cfForcedSet cf)
+                input
         env <- case er of
             Left e ->
                 abortScriptAccount
-                    ("resolve: " <> T.pack (show e))
-            Right e -> pure e
+                    (renderStakeRewardInitResolverError e)
+            Right (e, outcome) -> do
+                emitStakeRewardInitExclusionLog
+                    "stake-reward-init-wizard script-account"
+                    outcome
+                pure e
         intent <-
             case stakeRewardInitScriptAccountToIntent env answers of
                 Left te ->
@@ -408,6 +504,10 @@ chain query, mirroring the script-account runner.
 -}
 runPlainAccount :: GlobalOpts -> CommonFlags -> IO ()
 runPlainAccount g cf = do
+    case validateStakeRewardInitWizardInputControl cf of
+        Right () -> pure ()
+        Left ce ->
+            abortPlainAccount (renderInputControlError ce)
     networkName <- case resolveNetworkName g of
         Right t -> pure t
         Left e -> abortPlainAccount (T.pack e)
@@ -438,12 +538,20 @@ runPlainAccount g cf = do
                     , sreReadRegistry = readRegistrySafely
                     }
         er <-
-            resolveStakeRewardInitPlainAccount renv input
+            resolveStakeRewardInitPlainAccountIC
+                renv
+                (cfExcludeSet cf)
+                (cfForcedSet cf)
+                input
         env <- case er of
             Left e ->
                 abortPlainAccount
-                    ("resolve: " <> T.pack (show e))
-            Right e -> pure e
+                    (renderStakeRewardInitResolverError e)
+            Right (e, outcome) -> do
+                emitStakeRewardInitExclusionLog
+                    "stake-reward-init-wizard plain-account"
+                    outcome
+                pure e
         intent <-
             case stakeRewardInitPlainAccountToIntent env answers of
                 Left te ->

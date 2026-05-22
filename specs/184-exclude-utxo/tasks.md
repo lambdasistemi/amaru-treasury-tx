@@ -310,11 +310,11 @@ Forbidden scope:
 
 Tasks:
 
-- [ ] T030 [US3] RED: contradiction against `stake-reward-init-wizard`.
-- [ ] T031 [P] [US1] RED: exclusion filters wallet pool.
-- [ ] T032 [P] [US2] RED: forced inclusion lands in intent's `wallet.extraTxIns`.
-- [ ] T033 [P] [US1+US4] RED: shortfall-with-excludes naming + SC-005 byte stability against existing fixtures.
-- [ ] T034 [US1+US2+US3] GREEN: extend opts + parser, wire validation + filter + intent emission (with FR-009 not-on-wallet error) + error rendering + log line (with pool attribution), run `./gate.sh`, record in `WIP.md`.
+- [X] T030 [US3] RED: contradiction against `stake-reward-init-wizard`.
+- [X] T031 [P] [US1] RED: exclusion filters wallet pool.
+- [X] T032 [P] [US2] RED: forced inclusion lands in intent's `wallet.extraTxIns`.
+- [X] T033 [P] [US1+US4] RED: shortfall-with-excludes naming + SC-005 byte stability against existing fixtures.
+- [X] T034 [US1+US2+US3] GREEN: extend opts + parser, wire validation + filter + intent emission (with FR-009 not-on-wallet error) + error rendering + log line (with pool attribution), run `./gate.sh`, record in `WIP.md`.
 
 Checkpoint: `./gate.sh` PASS at HEAD. `stake-reward-init-wizard --help`
 lists the flags. Existing fixtures byte-identical.

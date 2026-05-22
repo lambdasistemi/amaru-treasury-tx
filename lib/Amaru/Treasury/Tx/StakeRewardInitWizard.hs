@@ -49,6 +49,15 @@ module Amaru.Treasury.Tx.StakeRewardInitWizard
     , resolveStakeRewardInitScriptAccount
     , resolveStakeRewardInitPlainAccount
 
+      -- * Input control (#184 — Slice 6)
+    , PoolHit (..)
+    , InputControlOutcome (..)
+    , OutRef
+    , resolveStakeRewardInitScriptAccountIC
+    , resolveStakeRewardInitPlainAccountIC
+    , renderStakeRewardInitExclusionLogLine
+    , renderStakeRewardInitWalletShortfallWithExcludes
+
       -- * Pure translation
     , stakeRewardInitScriptAccountToIntent
     , stakeRewardInitPlainAccountToIntent
@@ -84,9 +93,21 @@ import Amaru.Treasury.IntentJSON
 import Amaru.Treasury.LedgerParse (txInFromText)
 import Amaru.Treasury.Registry.Derive (scriptHashToHex)
 import Amaru.Treasury.Tx.SwapWizard
-    ( WalletSelection (..)
+    ( InputControlOutcome (..)
+    , PoolHit (..)
+    , WalletSelection (..)
     , selectWallet
     )
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    , OutRef
+    , filterPool
+    , outRefText
+    , parseOutRef
+    , renderShortfallWithExcludes
+    )
+import Data.Either (lefts, rights)
 
 -- ----------------------------------------------------
 -- Answers
@@ -192,6 +213,16 @@ data StakeRewardInitError
     | -- | @--validity-hours = Just n@ overshoots the chain
       --   horizon.
       StakeRewardInitValidityOvershoot !Validity.HorizonError
+    | -- | One or more @--extra-tx-in@ refs were not returned
+      --   by the wallet-address query (FR-009, #184).
+      StakeRewardInitResolverExtraTxInNotOnWallet ![OutRef]
+    | -- | @StakeRewardInitResolverWalletShortfallWithExcludes
+      --   available target refs@. Wallet pool was emptied by
+      --   the operator's @--exclude-utxo@ set (FR-008, #184).
+      StakeRewardInitResolverWalletShortfallWithExcludes
+        !Integer
+        !Integer
+        ![OutRef]
     deriving stock (Eq, Show)
 
 -- ----------------------------------------------------
@@ -283,7 +314,32 @@ resolveStakeRewardInitScriptAccount
     => StakeRewardInitResolverEnv m
     -> StakeRewardInitResolverInput
     -> m (Either StakeRewardInitError StakeRewardInitEnv)
-resolveStakeRewardInitScriptAccount renv input
+resolveStakeRewardInitScriptAccount renv input = do
+    r <-
+        resolveStakeRewardInitScriptAccountIC
+            renv
+            (ExclusionSet [])
+            (ForcedInclusionSet [])
+            input
+    pure (fmap fst r)
+
+{- | Variant of 'resolveStakeRewardInitScriptAccount' that
+threads the operator's @--exclude-utxo@ and @--extra-tx-in@
+sets through the wallet candidate pool (#184 Slice 6).
+Returns the resolved 'StakeRewardInitEnv' alongside the
+'InputControlOutcome' the caller uses to emit per-ref log
+lines.
+-}
+resolveStakeRewardInitScriptAccountIC
+    :: (Monad m)
+    => StakeRewardInitResolverEnv m
+    -> ExclusionSet
+    -> ForcedInclusionSet
+    -> StakeRewardInitResolverInput
+    -> m
+        ( Either StakeRewardInitError (StakeRewardInitEnv, InputControlOutcome)
+        )
+resolveStakeRewardInitScriptAccountIC renv excl forced input
     | sriNetwork input /= "devnet" =
         pure
             ( Left
@@ -300,34 +356,150 @@ resolveStakeRewardInitScriptAccount renv input
                     sreQueryWalletUtxos
                         renv
                         (sriWalletAddrBech32 input)
-                case selectWallet 1 walletUtxos of
-                    Left _ ->
-                        pure (Left StakeRewardInitWalletShortfall)
-                    Right ([], _) ->
-                        pure (Left StakeRewardInitWalletShortfall)
-                    Right (walletRef : _, _) -> do
-                        upperE <-
-                            resolveUpperBound
-                                (sreComputeUpperBound renv)
-                                (sriValidityHours input)
-                        case upperE of
-                            Left e -> pure (Left e)
-                            Right upperBound ->
-                                pure $
-                                    Right
-                                        StakeRewardInitEnv
-                                            { sreNetwork = sriNetwork input
-                                            , sreUpperBoundSlot = upperBound
-                                            , sreRegistry = registry
-                                            , sreWalletSelection =
-                                                WalletSelection
-                                                    { wsTxIn = walletRef
-                                                    , wsAddress =
-                                                        sriWalletAddrBech32
-                                                            input
-                                                    , wsExtraTxIns = []
-                                                    }
-                                            }
+                let ExclusionSet exclRefs = excl
+                    ForcedInclusionSet forcedRefs = forced
+                    walletRefSet =
+                        map walletCandidateRef walletUtxos
+                    missing =
+                        filter (`notElem` walletRefSet) forcedRefs
+                if not (null missing)
+                    then
+                        pure
+                            ( Left
+                                ( StakeRewardInitResolverExtraTxInNotOnWallet
+                                    missing
+                                )
+                            )
+                    else
+                        let (filteredWallet, _, _, _) =
+                                filterPool
+                                    walletCandidateRef
+                                    excl
+                                    forced
+                                    walletUtxos
+                            outcome =
+                                buildStakeRewardInitOutcome
+                                    exclRefs
+                                    walletRefSet
+                            forcedTexts = map outRefText forcedRefs
+                        in  case selectWallet 1 filteredWallet of
+                                Left _ ->
+                                    pure
+                                        ( Left
+                                            ( stakeRewardWalletShortfallError
+                                                exclRefs
+                                                0
+                                                1
+                                            )
+                                        )
+                                Right ([], _) ->
+                                    pure
+                                        ( Left
+                                            ( stakeRewardWalletShortfallError
+                                                exclRefs
+                                                0
+                                                1
+                                            )
+                                        )
+                                Right (walletRef : _, _) -> do
+                                    upperE <-
+                                        resolveUpperBound
+                                            (sreComputeUpperBound renv)
+                                            (sriValidityHours input)
+                                    case upperE of
+                                        Left e -> pure (Left e)
+                                        Right upperBound ->
+                                            pure $
+                                                Right
+                                                    ( StakeRewardInitEnv
+                                                        { sreNetwork = sriNetwork input
+                                                        , sreUpperBoundSlot = upperBound
+                                                        , sreRegistry = registry
+                                                        , sreWalletSelection =
+                                                            WalletSelection
+                                                                { wsTxIn = walletRef
+                                                                , wsAddress =
+                                                                    sriWalletAddrBech32
+                                                                        input
+                                                                , wsExtraTxIns = forcedTexts
+                                                                }
+                                                        }
+                                                    , outcome
+                                                    )
+
+{- | Same as 'resolveStakeRewardInitScriptAccountIC': the
+plain-account resolver's environmental checks are
+sub-action-agnostic.
+-}
+resolveStakeRewardInitPlainAccountIC
+    :: (Monad m)
+    => StakeRewardInitResolverEnv m
+    -> ExclusionSet
+    -> ForcedInclusionSet
+    -> StakeRewardInitResolverInput
+    -> m
+        ( Either StakeRewardInitError (StakeRewardInitEnv, InputControlOutcome)
+        )
+resolveStakeRewardInitPlainAccountIC =
+    resolveStakeRewardInitScriptAccountIC
+
+-- ----------------------------------------------------
+-- Input-control helpers (#184 Slice 6)
+-- ----------------------------------------------------
+
+stakeRewardWalletShortfallError
+    :: [OutRef] -> Integer -> Integer -> StakeRewardInitError
+stakeRewardWalletShortfallError exclRefs avail target
+    | null exclRefs = StakeRewardInitWalletShortfall
+    | otherwise =
+        StakeRewardInitResolverWalletShortfallWithExcludes
+            avail
+            target
+            exclRefs
+
+walletCandidateRef :: (Text, Integer, Bool) -> OutRef
+walletCandidateRef (ref, _, _) =
+    case parseOutRef ref of
+        Right r -> r
+        Left e ->
+            error
+                ( "stake-reward-init-wizard: wallet candidate ref not parseable: "
+                    <> T.unpack ref
+                    <> ": "
+                    <> T.unpack e
+                )
+
+buildStakeRewardInitOutcome
+    :: [OutRef] -> [OutRef] -> InputControlOutcome
+buildStakeRewardInitOutcome excluded walletRefs =
+    let classify ref
+            | ref `elem` walletRefs = Right (ref, WalletOnly)
+            | otherwise = Left ref
+        classified = map classify excluded
+    in  InputControlOutcome
+            { icoHits = rights classified
+            , icoInert = lefts classified
+            }
+
+{- | Render the per-ref exclusion log line for the
+stake-reward-init wizard family. Wallet pool only, so
+attribution is always @[wallet]@.
+-}
+renderStakeRewardInitExclusionLogLine
+    :: Text -> OutRef -> PoolHit -> Text
+renderStakeRewardInitExclusionLogLine prefix ref _pool =
+    prefix
+        <> ": excluded utxo "
+        <> outRefText ref
+        <> " (operator-supplied) [wallet]"
+
+{- | Wizard-side shim that DELEGATES to the shared
+'Amaru.Treasury.Wizard.InputControl.renderShortfallWithExcludes'.
+-}
+renderStakeRewardInitWalletShortfallWithExcludes
+    :: Text -> [OutRef] -> Text
+renderStakeRewardInitWalletShortfallWithExcludes =
+    renderShortfallWithExcludes
 
 resolveUpperBound
     :: (Monad m)

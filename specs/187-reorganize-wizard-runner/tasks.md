@@ -85,7 +85,7 @@ passes (no regressions in sibling wizards); `./gate.sh` passes.
 
 ### Tests for S1 (RED)
 
-- [ ] T001 [US1] [US2] [US3] [US5] Add the RED spec skeleton at
+- [X] T001 [US1] [US2] [US3] [US5] Add the RED spec skeleton at
   `test/unit/Amaru/Treasury/Tx/ReorganizeWizardSpec.hs` that
   imports `Amaru.Treasury.Tx.ReorganizeWizard
   (ReorganizeError (..), ReorganizeResolverInput (..),
@@ -99,7 +99,7 @@ passes (no regressions in sibling wizards); `./gate.sh` passes.
 
 ### Implementation for S1 (GREEN)
 
-- [ ] T002 [US2] [US3] [US5] Extend
+- [X] T002 [US2] [US3] [US5] Extend
   `lib/Amaru/Treasury/Tx/ReorganizeWizard.hs` with the new
   `ReorganizeError` variants per `data-model.md` §2 and
   `research.md` §4:
@@ -115,12 +115,12 @@ passes (no regressions in sibling wizards); `./gate.sh` passes.
   required imports
   (`Cardano.Node.Client.Validity.HorizonError`) and Haddocks.
   Update the module's export list accordingly.
-- [ ] T003 [US1] [US2] [US3] Add the resolver-input record
+- [X] T003 [US1] [US2] [US3] Add the resolver-input record
   `ReorganizeResolverInput` per `data-model.md` §1
   (`rriNetwork`, `rriWalletAddrBech32`,
   `rriMetadataPath`, `rriScope`, `rriValidityHours`)
   `deriving stock (Eq, Show)`. Export it from the module.
-- [ ] T004 [P] [US1] [US2] [US3] Add the resolver-env record
+- [X] T004 [P] [US1] [US2] [US3] Add the resolver-env record
   `ReorganizeResolverEnv m` per `data-model.md` §3 and
   `contracts/resolver-contract.md` (`sreReadMetadata`,
   `sreQueryWalletUtxos`, `sreQueryTreasuryUtxos`,
@@ -129,7 +129,7 @@ passes (no regressions in sibling wizards); `./gate.sh` passes.
   `Validity.HorizonError` imports from
   `Cardano.Node.Client.Validity`. Export the record + its
   constructor + field selectors.
-- [ ] T005 [P] [US1] Add the resolved-env record
+- [X] T005 [P] [US1] Add the resolved-env record
   `ReorganizeEnv` per `data-model.md` §4
   (`reNetwork`, `reUpperBoundSlot`, `reMetadata`,
   `reScopeMetadata`, `reWalletSelection`, `reTreasuryUtxos
@@ -137,7 +137,7 @@ passes (no regressions in sibling wizards); `./gate.sh` passes.
   `Amaru.Treasury.Metadata.{TreasuryMetadata, ScopeMetadata}`
   and reuse the existing `WalletSelection` from
   `Amaru.Treasury.Tx.SwapWizard`. Export the record.
-- [ ] T006 [US1] [US2] [US3] [US5] Implement
+- [X] T006 [US1] [US2] [US3] [US5] Implement
   `resolveReorganize :: Monad m => ReorganizeResolverEnv m
   -> ReorganizeResolverInput -> m (Either ReorganizeError
   ReorganizeEnv)` per `contracts/resolver-contract.md` and
@@ -153,7 +153,7 @@ passes (no regressions in sibling wizards); `./gate.sh` passes.
   `Amaru.Treasury.Tx.SwapWizard` for the wallet shortfall
   check. Use `Cardano.Ledger.TxIn.TxIn`'s default `Ord`
   instance for the sort comparator (Q-001-D1).
-- [ ] T007 [US1] [US5] Implement
+- [X] T007 [US1] [US5] Implement
   `reorganizeToIntent :: ReorganizeEnv ->
   ReorganizeWizardAnswers -> Either ReorganizeError
   SomeTreasuryIntent` per `data-model.md` §6 and
@@ -168,7 +168,7 @@ passes (no regressions in sibling wizards); `./gate.sh` passes.
   `SomeTreasuryIntent SReorganize <ti>`. Mirror the
   defensive `Just 0` guard on `rwaValidityHours` from
   sibling `stakeRewardInitScriptAccountToIntent`.
-- [ ] T008 [P] [US1] Implement the
+- [X] T008 [P] [US1] Implement the
   `derivePermissionsRewardAccount :: Network ->
   ScriptHash -> Either String AccountAddress` helper
   (module-internal — not exported) per
@@ -176,12 +176,12 @@ passes (no regressions in sibling wizards); `./gate.sh` passes.
   Reuse `Cardano.Ledger.Address.mkRewardAccount` and the
   existing `Amaru.Treasury.IntentJSON` bech32 render
   surface. `reorganizeToIntent` (T007) calls this helper.
-- [ ] T009 [US1] [US2] [US3] [US5] Update
+- [X] T009 [US1] [US2] [US3] [US5] Update
   `amaru-treasury-tx.cabal` to expose
   `Amaru.Treasury.Tx.ReorganizeWizardSpec` under the
   `test-suite unit-tests.other-modules` list,
   alphabetically ordered per existing convention.
-- [ ] T010 [US1] [US2] [US3] [US5] Implement the spec body
+- [X] T010 [US1] [US2] [US3] [US5] Implement the spec body
   in `test/unit/Amaru/Treasury/Tx/ReorganizeWizardSpec.hs`
   covering every scenario from
   `contracts/resolver-contract.md` § "Spec assertions

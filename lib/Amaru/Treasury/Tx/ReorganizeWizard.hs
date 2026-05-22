@@ -137,10 +137,13 @@ data ReorganizeError
     | -- | @--out@ points at an existing file and @--force@
       -- was not passed; exit 2.
       ReorganizeOutputExistsNoForce !FilePath
-    | -- | @--network@ is not @"devnet"@; exit 2. Carries
-      -- the offending network name so test specs can pin
-      -- the exact value.
-      ReorganizeNonDevnetNetwork !Text
+    | -- | Neither @--network@ nor a recognized
+      -- @--network-magic@ was supplied; exit 2. The wizard
+      -- needs a resolvable network name to pick the right
+      -- N2C handshake magic and to populate the intent's
+      -- @network@ field, but does not otherwise care which
+      -- one (mainnet, preprod, preview, devnet all work).
+      ReorganizeUnresolvedNetwork
     | -- | @--node-socket@ / @CARDANO_NODE_SOCKET_PATH@ is
       -- required but absent; exit 2.
       ReorganizeMissingNodeSocket
@@ -276,58 +279,52 @@ data ReorganizeEnv = ReorganizeEnv
 
 {- | Resolve the chain-derived reorganize environment.
 
-The DEVNET guard is the first check; on any
-non-@"devnet"@ network the function returns
-'ReorganizeNonDevnetNetwork' WITHOUT performing any other
-effect. Subsequent steps are cheap-first: metadata read →
-scope lookup → scope-owner check → wallet query +
-'selectWallet' → treasury query (count ≥ 2 + sort by
-@(TxId, TxIx)@) → upper-bound resolve. Any 'Left' short
-circuits without touching the remaining steps.
+Steps are cheap-first: metadata read → scope lookup →
+scope-owner check → wallet query + 'selectWallet' →
+treasury query (count ≥ 2 + sort by @(TxId, TxIx)@) →
+upper-bound resolve. Any 'Left' short-circuits without
+touching the remaining steps.
+
+The network name carried in the resolver input is
+forwarded to the emitted intent; the resolver itself is
+network-agnostic — the CLI front-end ensures the name is
+resolvable before reaching this function.
 -}
 resolveReorganize
     :: (Monad m)
     => ReorganizeResolverEnv m
     -> ReorganizeResolverInput
     -> m (Either ReorganizeError ReorganizeEnv)
-resolveReorganize renv input
-    | rriNetwork input /= "devnet" =
-        pure
-            ( Left
-                ( ReorganizeNonDevnetNetwork
-                    (rriNetwork input)
-                )
-            )
-    | otherwise = do
-        metaE <- sreReadMetadata renv (rriMetadataPath input)
-        case metaE of
-            Left e ->
-                pure (Left (ReorganizeMetadataReadError e))
-            Right meta ->
-                case Map.lookup
-                    (rriScope input)
-                    (tmTreasuries meta) of
+resolveReorganize renv input = do
+    metaE <- sreReadMetadata renv (rriMetadataPath input)
+    case metaE of
+        Left e ->
+            pure (Left (ReorganizeMetadataReadError e))
+        Right meta ->
+            case Map.lookup
+                (rriScope input)
+                (tmTreasuries meta) of
+                Nothing ->
+                    pure
+                        ( Left
+                            ( ReorganizeScopeNotInMetadata
+                                (rriScope input)
+                            )
+                        )
+                Just scope -> case smOwner scope of
                     Nothing ->
                         pure
                             ( Left
-                                ( ReorganizeScopeNotInMetadata
+                                ( ReorganizeScopeOwnerMissing
                                     (rriScope input)
                                 )
                             )
-                    Just scope -> case smOwner scope of
-                        Nothing ->
-                            pure
-                                ( Left
-                                    ( ReorganizeScopeOwnerMissing
-                                        (rriScope input)
-                                    )
-                                )
-                        Just _ ->
-                            resolveWalletAndOn
-                                renv
-                                input
-                                meta
-                                scope
+                    Just _ ->
+                        resolveWalletAndOn
+                            renv
+                            input
+                            meta
+                            scope
 
 resolveWalletAndOn
     :: (Monad m)

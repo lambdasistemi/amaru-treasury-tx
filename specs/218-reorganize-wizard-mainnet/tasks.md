@@ -15,9 +15,9 @@ Commit subject:
 feat(reorganize-wizard): admit any resolved network (mainnet, preprod, preview, devnet)
 ```
 
-- [ ] T001 — RED: unit test asserts `--network mainnet` no longer
+- [X] T001 — RED: unit test asserts `--network mainnet` no longer
   produces `ReorganizeNonDevnetNetwork`; must fail on `origin/main`.
-- [ ] T002 — GREEN: rename `ReorganizeNonDevnetNetwork Text` →
+- [X] T002 — GREEN: rename `ReorganizeNonDevnetNetwork Text` →
   `ReorganizeUnresolvedNetwork`, replace the pattern match in
   `runReorganizeWizardEither`, update `exitCodeFor`, fix all
   call sites. `./gate.sh` green.

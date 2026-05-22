@@ -125,6 +125,19 @@ mkGlobal n =
 devnetGlobal :: GlobalOpts
 devnetGlobal = mkGlobal (Just "devnet")
 
+{- | 'GlobalOpts' with no resolvable network — neither
+@--network@ nor a recognized @--network-magic@ supplied.
+'resolveNetworkName' returns 'Left', triggering the typed
+'ReorganizeUnresolvedNetwork' error.
+-}
+unresolvableGlobal :: GlobalOpts
+unresolvableGlobal =
+    GlobalOpts
+        { goSocketPath = Nothing
+        , goNetworkMagic = NetworkMagic 9999999
+        , goNetworkName = Nothing
+        }
+
 -- ----------------------------------------------------
 -- Parser helpers
 -- ----------------------------------------------------
@@ -297,31 +310,49 @@ us4OutPathSpec = do
                 r `shouldBe` Left ReorganizeMissingNodeSocket
 
 -- ----------------------------------------------------
--- US5 — non-devnet --network rejected before work
+-- US5 — any resolved network admitted; only unresolved fails
 -- ----------------------------------------------------
 
 us5NetworkGuardSpec :: Spec
 us5NetworkGuardSpec = do
-    let nonDevnet :: [Text]
-        nonDevnet = ["preprod", "mainnet", "preview"]
+    let resolvedNetworks :: [Text]
+        resolvedNetworks =
+            ["devnet", "preprod", "preview", "mainnet"]
     mapM_
         ( \name ->
-            it ("rejects --network " <> show name) $ do
-                withSystemTempDirectory "reorganize-wizard-s1" $ \tmp -> do
-                    let outPath = tmp </> "intent.json"
-                    let opts = optsWithOut outPath
-                    r <- runReorganizeWizardEither (mkGlobal (Just name)) opts
-                    r `shouldBe` Left (ReorganizeNonDevnetNetwork name)
+            it
+                ( "accepts --network "
+                    <> show name
+                    <> " and falls through to the "
+                    <> "missing-socket check"
+                )
+                $ do
+                    withSystemTempDirectory
+                        "reorganize-wizard-s1"
+                        $ \tmp -> do
+                            let outPath = tmp </> "intent.json"
+                            let opts = optsWithOut outPath
+                            r <-
+                                runReorganizeWizardEither
+                                    (mkGlobal (Just name))
+                                    opts
+                            r
+                                `shouldBe` Left
+                                    ReorganizeMissingNodeSocket
         )
-        nonDevnet
+        resolvedNetworks
     it
-        "accepts --network devnet and falls through to the missing-socket check"
+        "rejects an unresolvable network magic with the typed \
+        \ReorganizeUnresolvedNetwork error"
         $ do
             withSystemTempDirectory "reorganize-wizard-s1" $ \tmp -> do
                 let outPath = tmp </> "intent.json"
                 let opts = optsWithOut outPath
-                r <- runReorganizeWizardEither devnetGlobal opts
-                r `shouldBe` Left ReorganizeMissingNodeSocket
+                r <-
+                    runReorganizeWizardEither
+                        unresolvableGlobal
+                        opts
+                r `shouldBe` Left ReorganizeUnresolvedNetwork
 
 -- ----------------------------------------------------
 -- Type alias drag — pin the Answers re-export in scope so

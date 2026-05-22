@@ -39,6 +39,14 @@ module Amaru.Treasury.Tx.ReorganizeWizard
       -- * Resolver
     , resolveReorganize
 
+      -- * Input control (#184 — Slice 10)
+    , PoolHit (..)
+    , InputControlOutcome (..)
+    , OutRef
+    , resolveReorganizeIC
+    , renderReorganizeExclusionLogLine
+    , renderReorganizeWalletShortfallWithExcludes
+
       -- * Pure translation
     , reorganizeToIntent
     ) where
@@ -91,9 +99,21 @@ import Amaru.Treasury.Metadata
     )
 import Amaru.Treasury.Scope (ScopeId, scopeText)
 import Amaru.Treasury.Tx.SwapWizard
-    ( WalletSelection (..)
+    ( InputControlOutcome (..)
+    , PoolHit (..)
+    , WalletSelection (..)
     , selectWallet
     )
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    , OutRef
+    , filterPool
+    , outRefText
+    , parseOutRef
+    , renderShortfallWithExcludes
+    )
+import Data.Either (lefts, rights)
 
 -- ----------------------------------------------------
 -- Answers
@@ -177,6 +197,16 @@ data ReorganizeError
       -- permissions reward account, etc.); exit 3.
       -- Payload is @(field-name, raw-decode-message)@.
       ReorganizeLedgerFieldParseError !Text !String
+    | -- | One or more @--extra-tx-in@ refs were not returned
+      --   by the wallet-address query (FR-009, #184).
+      ReorganizeResolverExtraTxInNotOnWallet ![OutRef]
+    | -- | @ReorganizeResolverWalletShortfallWithExcludes
+      --   available target refs@. Wallet pool emptied by the
+      --   operator's @--exclude-utxo@ set (FR-008, #184).
+      ReorganizeResolverWalletShortfallWithExcludes
+        !Integer
+        !Integer
+        ![OutRef]
     deriving stock (Eq, Show)
 
 -- ----------------------------------------------------
@@ -296,6 +326,30 @@ resolveReorganize
     -> ReorganizeResolverInput
     -> m (Either ReorganizeError ReorganizeEnv)
 resolveReorganize renv input = do
+    r <-
+        resolveReorganizeIC
+            renv
+            (ExclusionSet [])
+            (ForcedInclusionSet [])
+            input
+    pure (fmap fst r)
+
+{- | Variant of 'resolveReorganize' that threads the
+operator's @--exclude-utxo@ and @--extra-tx-in@ sets through
+the wallet candidate pool (#184 Slice 10). Returns the
+resolved 'ReorganizeEnv' alongside the
+'InputControlOutcome' the caller uses to emit per-ref log
+lines. Treasury selection is metadata-driven, not
+selection-driven, so only the wallet pool is filtered.
+-}
+resolveReorganizeIC
+    :: (Monad m)
+    => ReorganizeResolverEnv m
+    -> ExclusionSet
+    -> ForcedInclusionSet
+    -> ReorganizeResolverInput
+    -> m (Either ReorganizeError (ReorganizeEnv, InputControlOutcome))
+resolveReorganizeIC renv excl forced input = do
     metaE <- sreReadMetadata renv (rriMetadataPath input)
     case metaE of
         Left e ->
@@ -322,6 +376,8 @@ resolveReorganize renv input = do
                     Just _ ->
                         resolveWalletAndOn
                             renv
+                            excl
+                            forced
                             input
                             meta
                             scope
@@ -329,59 +385,142 @@ resolveReorganize renv input = do
 resolveWalletAndOn
     :: (Monad m)
     => ReorganizeResolverEnv m
+    -> ExclusionSet
+    -> ForcedInclusionSet
     -> ReorganizeResolverInput
     -> TreasuryMetadata
     -> ScopeMetadata
-    -> m (Either ReorganizeError ReorganizeEnv)
-resolveWalletAndOn renv input meta scope = do
+    -> m (Either ReorganizeError (ReorganizeEnv, InputControlOutcome))
+resolveWalletAndOn renv excl forced input meta scope = do
     walletUtxos <-
         sreQueryWalletUtxos
             renv
             (rriWalletAddrBech32 input)
-    case selectWallet 1 walletUtxos of
-        Left _ -> pure (Left ReorganizeWalletShortfall)
-        Right ([], _) ->
-            pure (Left ReorganizeWalletShortfall)
-        Right (walletRef : _, _) -> do
-            treasuryRows <-
-                sreQueryTreasuryUtxos
-                    renv
-                    (smAddress scope)
-            case sortTreasuryUtxos treasuryRows of
-                Left countE ->
-                    pure (Left countE)
-                Right sortedNE -> do
-                    upperE <-
-                        resolveUpperBound
-                            (sreComputeUpperBound renv)
-                            (rriValidityHours input)
-                    case upperE of
-                        Left e -> pure (Left e)
-                        Right upper ->
-                            pure $
-                                Right
-                                    ReorganizeEnv
-                                        { reNetwork =
-                                            rriNetwork
-                                                input
-                                        , reUpperBoundSlot =
-                                            upper
-                                        , reMetadata = meta
-                                        , reScopeMetadata =
-                                            scope
-                                        , reWalletSelection =
-                                            WalletSelection
-                                                { wsTxIn =
-                                                    walletRef
-                                                , wsAddress =
-                                                    rriWalletAddrBech32
-                                                        input
-                                                , wsExtraTxIns =
-                                                    []
-                                                }
-                                        , reTreasuryUtxos =
-                                            sortedNE
-                                        }
+    let ExclusionSet exclRefs = excl
+        ForcedInclusionSet forcedRefs = forced
+        walletRefSet = map walletCandidateRef walletUtxos
+        missing = filter (`notElem` walletRefSet) forcedRefs
+    if not (null missing)
+        then
+            pure
+                ( Left
+                    ( ReorganizeResolverExtraTxInNotOnWallet
+                        missing
+                    )
+                )
+        else
+            let (filteredWallet, _, _, _) =
+                    filterPool
+                        walletCandidateRef
+                        excl
+                        forced
+                        walletUtxos
+                outcome =
+                    buildReorganizeOutcome
+                        exclRefs
+                        walletRefSet
+                forcedTexts = map outRefText forcedRefs
+            in  case selectWallet 1 filteredWallet of
+                    Left _ ->
+                        pure
+                            ( Left
+                                ( reorganizeWalletShortfallError
+                                    exclRefs
+                                    0
+                                    1
+                                )
+                            )
+                    Right ([], _) ->
+                        pure
+                            ( Left
+                                ( reorganizeWalletShortfallError
+                                    exclRefs
+                                    0
+                                    1
+                                )
+                            )
+                    Right (walletRef : _, _) -> do
+                        treasuryRows <-
+                            sreQueryTreasuryUtxos
+                                renv
+                                (smAddress scope)
+                        case sortTreasuryUtxos treasuryRows of
+                            Left countE ->
+                                pure (Left countE)
+                            Right sortedNE -> do
+                                upperE <-
+                                    resolveUpperBound
+                                        (sreComputeUpperBound renv)
+                                        (rriValidityHours input)
+                                case upperE of
+                                    Left e -> pure (Left e)
+                                    Right upper ->
+                                        pure $
+                                            Right
+                                                ( ReorganizeEnv
+                                                    { reNetwork =
+                                                        rriNetwork input
+                                                    , reUpperBoundSlot = upper
+                                                    , reMetadata = meta
+                                                    , reScopeMetadata = scope
+                                                    , reWalletSelection =
+                                                        WalletSelection
+                                                            { wsTxIn = walletRef
+                                                            , wsAddress =
+                                                                rriWalletAddrBech32 input
+                                                            , wsExtraTxIns = forcedTexts
+                                                            }
+                                                    , reTreasuryUtxos = sortedNE
+                                                    }
+                                                , outcome
+                                                )
+
+reorganizeWalletShortfallError
+    :: [OutRef] -> Integer -> Integer -> ReorganizeError
+reorganizeWalletShortfallError exclRefs avail target
+    | null exclRefs = ReorganizeWalletShortfall
+    | otherwise =
+        ReorganizeResolverWalletShortfallWithExcludes
+            avail
+            target
+            exclRefs
+
+walletCandidateRef :: (Text, Integer, Bool) -> OutRef
+walletCandidateRef (ref, _, _) =
+    case parseOutRef ref of
+        Right r -> r
+        Left e ->
+            error
+                ( "reorganize-wizard: wallet candidate ref not parseable: "
+                    <> T.unpack ref
+                    <> ": "
+                    <> T.unpack e
+                )
+
+buildReorganizeOutcome
+    :: [OutRef] -> [OutRef] -> InputControlOutcome
+buildReorganizeOutcome excluded walletRefs =
+    let classify ref
+            | ref `elem` walletRefs = Right (ref, WalletOnly)
+            | otherwise = Left ref
+        classified = map classify excluded
+    in  InputControlOutcome
+            { icoHits = rights classified
+            , icoInert = lefts classified
+            }
+
+renderReorganizeExclusionLogLine
+    :: Text -> OutRef -> PoolHit -> Text
+renderReorganizeExclusionLogLine prefix ref _pool =
+    prefix
+        <> ": excluded utxo "
+        <> outRefText ref
+        <> " (operator-supplied) [wallet]"
+
+renderReorganizeWalletShortfallWithExcludes
+    :: Text -> [OutRef] -> Text
+renderReorganizeWalletShortfallWithExcludes =
+    renderShortfallWithExcludes
 
 {- | Enforce @count ≥ 2@ and sort by @(TxId, TxIx)@
 ascending. Returns a fresh 'NonEmpty' of the original

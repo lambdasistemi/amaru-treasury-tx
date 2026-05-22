@@ -15,11 +15,11 @@ Commit subject:
 feat(reorganize/batch): pure scaler picks largest N that fits maxTxExUnits
 ```
 
-- [ ] T001 — RED: unit tests in
+- [X] T001 — RED: unit tests in
   `test/unit/Amaru/Treasury/Build/Reorganize/BatchSpec.hs` covering
   `nStarFromMeasured` and `decideBatch` (boundary cases listed in
   `plan.md` → S1).
-- [ ] T002 — GREEN: new module
+- [X] T002 — GREEN: new module
   `lib/Amaru/Treasury/Build/Reorganize/Batch.hs` exports the pure
   scaler; cabal updated.
 

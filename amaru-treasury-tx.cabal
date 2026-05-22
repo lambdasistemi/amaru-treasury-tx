@@ -118,6 +118,7 @@ library
     Amaru.Treasury.Build.GovernanceWithdrawalInit
     Amaru.Treasury.Build.RegistryInit
     Amaru.Treasury.Build.Reorganize
+    Amaru.Treasury.Build.Reorganize.Batch
     Amaru.Treasury.Build.ReportWriter
     Amaru.Treasury.Build.Result
     Amaru.Treasury.Build.StakeRewardInit
@@ -421,6 +422,7 @@ test-suite unit-tests
     Amaru.Treasury.Build.CommonSpec
     Amaru.Treasury.Build.GovernanceWithdrawalInitSpec
     Amaru.Treasury.Build.NetworkGuardSpec
+    Amaru.Treasury.Build.Reorganize.BatchSpec
     Amaru.Treasury.Build.ReorganizeDispatchSpec
     Amaru.Treasury.Build.WithdrawSpec
     Amaru.Treasury.BuildSpec

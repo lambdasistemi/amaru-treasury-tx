@@ -217,30 +217,39 @@ spec =
                         )
                 dtsInputs selection
                     `shouldBe` txInToText <$> [mkTxIn 2, mkTxIn 3]
-                dtsLeftoverLovelace selection `shouldBe` 3_500_000
+                -- #215: the treasury leftover output keeps the
+                -- FULL selected input lovelace (3 M + 2 M = 5 M);
+                -- the beneficiary's min-UTxO deposit is
+                -- wallet-funded, not debited from treasury.
+                dtsLeftoverLovelace selection `shouldBe` 5_000_000
                 dtsLeftoverUsdm selection `shouldBe` 50
                 dtsLeftoverOtherAssets selection
                     `shouldBe` otherAssets 11
 
-            it "adds inputs until the beneficiary ADA deposit is covered" $ do
-                let inputs =
-                        [ (mkTxIn 1, mkValue 1_000_000 500 7)
-                        , (mkTxIn 2, mkValue 1_500_000 1 5)
-                        ]
-                selection <-
-                    expectJust
-                        "selectDisburseUsdm"
-                        ( selectDisburseUsdm
-                            usdmPolicy
-                            usdmAsset
-                            2_000_000
-                            inputs
-                            450
-                        )
-                dtsInputs selection
-                    `shouldBe` txInToText <$> [mkTxIn 1, mkTxIn 2]
-                dtsLeftoverLovelace selection `shouldBe` 500_000
-                dtsLeftoverUsdm selection `shouldBe` 51
+            it
+                "adds inputs until the leftover-output min-UTxO floor is covered"
+                $ do
+                    let inputs =
+                            [ (mkTxIn 1, mkValue 1_000_000 500 7)
+                            , (mkTxIn 2, mkValue 1_500_000 1 5)
+                            ]
+                    selection <-
+                        expectJust
+                            "selectDisburseUsdm"
+                            ( selectDisburseUsdm
+                                usdmPolicy
+                                usdmAsset
+                                2_000_000
+                                inputs
+                                450
+                            )
+                    dtsInputs selection
+                        `shouldBe` txInToText <$> [mkTxIn 1, mkTxIn 2]
+                    -- #215: leftover lovelace is the full
+                    -- selected input total (1 M + 1.5 M = 2.5 M),
+                    -- not "total minus beneficiary deposit".
+                    dtsLeftoverLovelace selection `shouldBe` 2_500_000
+                    dtsLeftoverUsdm selection `shouldBe` 51
 
             it "reports Nothing when selected USDM cannot cover the amount" $
                 selectDisburseUsdm
@@ -287,9 +296,13 @@ spec =
                                         sum (assetOf usdmPolicy usdmAsset <$> picked)
                                     pickedOther =
                                         sum (assetOf otherPolicy otherAsset <$> picked)
-                                in  pickedUsdm >= target
+                                in  -- #215: leftover lovelace == full
+                                    -- input lovelace; beneficiary's
+                                    -- deposit is wallet-funded.
+                                    pickedUsdm >= target
+                                        && pickedLov >= beneficiaryLov
                                         && dtsLeftoverLovelace selection
-                                            == pickedLov - beneficiaryLov
+                                            == pickedLov
                                         && dtsLeftoverUsdm selection
                                             == pickedUsdm - target
                                         && dtsLeftoverOtherAssets selection

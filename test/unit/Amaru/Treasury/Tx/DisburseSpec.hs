@@ -107,6 +107,7 @@ import Amaru.Treasury.ChainContext.Fixture
     , readSwapFixture
     , toFrozenContext
     )
+import Amaru.Treasury.Constants (minUtxoDepositLovelace)
 import Amaru.Treasury.IntentJSON
     ( Action (..)
     , SAction (..)
@@ -139,7 +140,9 @@ import Amaru.Treasury.Tx.DisburseIntentJSON
 import Amaru.Treasury.Tx.DisburseWizard
     ( DisburseAnswers
     , DisburseEnv
+    , DisburseTreasurySelection (..)
     , disburseToTreasuryIntent
+    , selectDisburseUsdm
     )
 
 import Data.Aeson qualified as Aeson
@@ -279,41 +282,125 @@ spec = do
                 ^. reqSignerHashesTxBodyL
                 `shouldSatisfy` \s -> Set.size s == 2
 
-        it "builds USDM beneficiary and treasury leftover values" $ do
-            let usdmTx =
-                    draft
-                        emptyPParams
-                        ( disburseUsdmProgram
-                            fields
-                            usdmPayload
-                            (Coin 2_000_000)
-                        )
-                usdmBody = usdmTx ^. bodyTxL
-                values =
-                    (^. valueTxOutL)
-                        <$> toList (usdmBody ^. outputsTxBodyL)
-            values
-                `shouldBe` [ MaryValue
-                                (Coin 1_400_000_000_000)
-                                ( MultiAsset $
-                                    Map.fromList
-                                        [
-                                            ( usdmPolicy
-                                            , Map.singleton usdmAsset 50_000_000
-                                            )
-                                        ,
-                                            ( otherPolicy
-                                            , Map.singleton otherAsset 7
-                                            )
-                                        ]
-                                )
-                           , MaryValue
-                                (Coin 2_000_000)
-                                ( MultiAsset $
-                                    Map.singleton usdmPolicy $
-                                        Map.singleton usdmAsset 100_000_000
-                                )
-                           ]
+        -- Regression for #215. The on-chain treasury validator
+        -- enforces lovelace conservation:
+        --     equal_plus_min_ada(input_sum - amount, output_sum)
+        -- For a USDM disburse the redeemer's `amount.lovelace`
+        -- is 0, so the treasury-leftover output must carry the
+        -- FULL treasury-input lovelace. The beneficiary's
+        -- min-UTxO deposit is wallet-funded, not sourced from
+        -- treasury inputs. The payload below encodes that
+        -- validator-correct shape.
+        it
+            "USDM disburse: treasury leftover keeps full input lovelace; beneficiary's 2 M is wallet-funded (#215)"
+            $ do
+                let totalTreasuryInputLov = 1_400_000_000_000 :: Integer
+                    beneficiaryMinUtxo = 2_000_000 :: Integer
+                    validatorCorrectPayload =
+                        usdmPayload
+                            { dupLeftoverLovelace =
+                                Coin totalTreasuryInputLov
+                            }
+                    usdmTx =
+                        draft
+                            emptyPParams
+                            ( disburseUsdmProgram
+                                fields
+                                validatorCorrectPayload
+                                (Coin beneficiaryMinUtxo)
+                            )
+                    usdmBody = usdmTx ^. bodyTxL
+                    values =
+                        (^. valueTxOutL)
+                            <$> toList (usdmBody ^. outputsTxBodyL)
+                values
+                    `shouldBe` [ MaryValue
+                                    (Coin totalTreasuryInputLov)
+                                    ( MultiAsset $
+                                        Map.fromList
+                                            [
+                                                ( usdmPolicy
+                                                , Map.singleton usdmAsset 50_000_000
+                                                )
+                                            ,
+                                                ( otherPolicy
+                                                , Map.singleton otherAsset 7
+                                                )
+                                            ]
+                                    )
+                               , MaryValue
+                                    (Coin beneficiaryMinUtxo)
+                                    ( MultiAsset $
+                                        Map.singleton usdmPolicy $
+                                            Map.singleton usdmAsset 100_000_000
+                                    )
+                               ]
+
+    -- Keystone invariant. This is the test that would have
+    -- caught #215 at unit-test time: the wizard's USDM
+    -- selection MUST yield `dtsLeftoverLovelace == sum of
+    -- input lovelaces`. Anything less and the on-chain
+    -- treasury validator's `equal_plus_min_ada` check
+    -- rejects the tx (the redeemer's `amount.lovelace` is 0
+    -- for USDM disburses).
+    describe "selectDisburseUsdm: lovelace conservation (#215)" $ do
+        let mkUsdmInput :: Word8 -> Integer -> Integer -> (TxIn, MaryValue)
+            mkUsdmInput n lov usdmQty =
+                ( mkTxIn n
+                , MaryValue
+                    (Coin lov)
+                    ( MultiAsset $
+                        Map.singleton usdmPolicy $
+                            Map.singleton usdmAsset usdmQty
+                    )
+                )
+        it
+            "leftover lovelace == sum of selected treasury input lovelaces (single input)"
+            $ do
+                let input = mkUsdmInput 30 4_612_003 20_330_144_633
+                    amount = 18_750_000_000
+                    sel =
+                        fromJust $
+                            selectDisburseUsdm
+                                usdmPolicy
+                                usdmAsset
+                                minUtxoDepositLovelace
+                                [input]
+                                amount
+                dtsLeftoverLovelace sel `shouldBe` 4_612_003
+
+        it
+            "leftover lovelace == sum of selected treasury input lovelaces (multi-input)"
+            $ do
+                let inputs =
+                        [ mkUsdmInput 30 3_000_000 12_000_000_000
+                        , mkUsdmInput 31 4_500_000 8_500_000_000
+                        ]
+                    amount = 18_750_000_000
+                    sel =
+                        fromJust $
+                            selectDisburseUsdm
+                                usdmPolicy
+                                usdmAsset
+                                minUtxoDepositLovelace
+                                inputs
+                                amount
+                dtsLeftoverLovelace sel `shouldBe` 7_500_000
+
+        it
+            "leftover USDM == sum of selected treasury input USDM minus disbursed amount"
+            $ do
+                let input = mkUsdmInput 30 4_612_003 20_330_144_633
+                    amount = 18_750_000_000
+                    sel =
+                        fromJust $
+                            selectDisburseUsdm
+                                usdmPolicy
+                                usdmAsset
+                                minUtxoDepositLovelace
+                                [input]
+                                amount
+                dtsLeftoverUsdm sel `shouldBe` 1_580_144_633
 
     describe "Amaru.Treasury.Tx.DisburseIntentJSON" $ do
         it

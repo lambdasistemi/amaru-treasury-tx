@@ -103,12 +103,29 @@ correctly.
 
 ## Operator command
 
+The actual flag surface of `disburse-wizard` on `main` uses
+`--unit usdm --amount <int>` (where `--amount` is in 1e-6 USDM,
+i.e. 18 750 USDM ⇒ `--amount 18750000000`) and `--beneficiary-addr
+<bech32>` for the on-chain destination. The shorthand `--usdm 18750`
+appears in the issue body but is not a real flag.
+
+The canonical invocation is materialised by
+`scripts/build-may-cc-disburse.sh` (S1) and looks like:
+
 ```bash
 amaru-treasury-tx \
   --network mainnet \
   disburse-wizard \
   --scope network_compliance \
-  --usdm 18750 \
+  --unit usdm \
+  --amount 18750000000 \
+  --beneficiary-addr <CAG-bech32 from vendors.yaml> \
+  --validity-hours 48 \
+  --wallet-addr <funding-bech32> \
+  --metadata /code/amaru-treasury/journal/2026/metadata.json \
+  --out ./build-may-cc-rundir \
+  --log ./build-may-cc-rundir/build.log \
+  --extra-signer <other-network_compliance-scope-owner-bech32> \
   --reference-uri  ipfs://bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga \
   --reference-type Other \
   --reference-label "Contract - CRYPTO ACCOUNTING GROUP" \
@@ -123,18 +140,20 @@ amaru-treasury-tx \
   --reference-label "Invoice #3508 - CYBER CASTELLUM CORPORATION" \
   --reference-uri  ipfs://bafybeihdmnitrbu2oir3r2fefnpqy3bk7zdz42olzmltmxyt5xag4i2t5a \
   --reference-type Other \
-  --reference-label "May2026 cycle review - CYBER CASTELLUM CORPORATION" \
-  --extra-signer <other-scope-owner-bech32> \
-  --validity-hours 48 \
-  --wallet-addr <funding-bech32> \
-  --metadata <journal-metadata.json>
+  --reference-label "May2026 cycle review - CYBER CASTELLUM CORPORATION"
 ```
 
 All five `--reference-*` triplets MUST be drawn verbatim from
 `transactions/2026/network_compliance/may-references.json` — no
-inline overrides. The script under `scripts/build-may-cc-disburse.sh`
-(authored by S2 below) is the canonical way to materialise this
-command from the manifest at run time.
+inline overrides. `scripts/build-may-cc-disburse.sh` (S1) is the
+canonical way to materialise this command from the manifest at run
+time; it refuses to print when CAG `onchain_address` is still
+`<TBD>` or when the 5-kind evidence set is incomplete.
+
+Note that `--beneficiary-addr` is a v1 legacy flag name — under
+Principle VIII v2 it carries the **payee** address (CAG), not the
+beneficiary (Cyber Castellum). Renaming the flag is out of scope
+for #202; tracked separately.
 
 ## Exclusions / non-goals
 
@@ -142,8 +161,11 @@ command from the manifest at run time.
   blocks pending #203's swap or an out-of-band reorganize).
 - No changes to `disburse-wizard` source — that's PR #197 / #196.
 - No Antithesis disburse — that's #203.
-- No changes to `vendors.yaml`, `.specify/memory/constitution.md`, or
+- No changes to `.specify/memory/constitution.md` or
   `transactions/2026/network_compliance/may-references.json`.
+- `vendors.yaml` IS edited under this PR (the CAG `onchain_address`
+  is resolved from `<TBD-CAG-BECH32>` to the real bech32 — see
+  Open Clarification 1; folded in per operator request).
 - No journal-side documentation in `pragma-org/amaru-treasury`.
 
 ## Deliverables
@@ -181,9 +203,11 @@ added or modified — the executable surface is exercised, not extended).
 
 `vendors.yaml` currently lists
 `onchain_address: <TBD-CAG-BECH32>`. The disburse cannot be built
-without a concrete bech32 destination. The operator MUST supply or
-confirm the resolved address before the build step in S2 runs. The
-slice plan parks at S2 entry if this value is still `<TBD>`.
+without a concrete bech32 destination. **Folded into this PR per
+operator decision (2026-05-22):** an S0 commit on this branch
+replaces the placeholder with the resolved bech32 once the operator
+supplies it. `scripts/build-may-cc-disburse.sh` refuses to print
+while the placeholder is still in place.
 
 ### Open Clarification 2 — PR #197 (disburse-wizard `--reference-*`) is still draft
 

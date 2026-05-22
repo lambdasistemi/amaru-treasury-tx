@@ -175,10 +175,15 @@ clarify):
 - `governance-withdrawal-init-wizard` (wallet selection via
   `firstPureAdaRef` — different selector, same exclusion/inclusion
   semantics)
-- `reorganize-wizard` (wallet + treasury selection)
 
 Out-of-scope commands (no wallet or treasury input selection):
 
+- `reorganize-wizard` — at HEAD this is a typed-answers scaffold
+  (`lib/Amaru/Treasury/Tx/ReorganizeWizard.hs`) and does not yet
+  call any selector. Wiring `--exclude-utxo` / `--extra-tx-in` here
+  would expose flags that have nothing to filter. The flag wires can
+  be added in the same PR that turns the scaffold into a live
+  selecting wizard (see #185–#187 / parent #189).
 - `swap-quote`, `swap-cancel`, `tx-build`, `treasury-inspect`,
   `attach-witness`, `witness`, `submit`, `vault`, envelope helpers,
   `report-render`.
@@ -224,8 +229,8 @@ Out-of-scope commands (no wallet or treasury input selection):
 - **FR-004**: The exclusion set MUST be applied to the candidate set
   passed into each selector — wallet selection for all in-scope
   wizards, and treasury selection for `swap-wizard`,
-  `disburse-wizard`, `contingency-disburse-wizard`, and
-  `reorganize-wizard` — **before** any largest-first selection runs.
+  `disburse-wizard`, and `contingency-disburse-wizard` — **before**
+  any largest-first selection runs.
 - **FR-005**: For each excluded outref the wizard MUST emit a log
   line of the form `<wizard>: excluded utxo <outref> (operator-supplied)`
   identifying which pool(s) the ref hit (wallet, treasury, or both).
@@ -254,7 +259,7 @@ Out-of-scope commands (no wallet or treasury input selection):
   MUST document both flags with identical phrasing, so the operator
   reads the same contract across all wizards.
 - **FR-012**: The exclusion/inclusion logic MUST live in a shared
-  helper module that every wizard consumes, so the eight wizards do
+  helper module that every wizard consumes, so the seven wizards do
   not duplicate the parsing, validation, contradiction-check, or
   filter behavior.
 - **FR-013**: The branch-local `./gate.sh` MUST be the local pre-push
@@ -302,13 +307,11 @@ Out-of-scope commands (no wallet or treasury input selection):
     (`stakeRewardInitWizardOptsP`)
   - `lib/Amaru/Treasury/Cli/GovernanceWithdrawalInitWizard.hs`
     (`governanceWithdrawalInitWizardOptsP`)
-  - `lib/Amaru/Treasury/Cli/ReorganizeWizard.hs`
-    (`reorganizeWizardOptsP`)
 - Selector call sites in each wizard's `Tx/*Wizard.hs` runner
   updated to apply the exclusion filter before calling the
   selector, and to thread the forced-inclusion set into the emitted
   intent.
-- Updated error shape (or wrapping) for the eight wizards' shortfall
+- Updated error shape (or wrapping) for the seven wizards' shortfall
   paths so the existing structured error names excluded outrefs.
 - Focused regression tests (TDD) per in-scope wizard exercising
   exclusion, forced inclusion, contradiction, and shortfall-with-excludes.
@@ -321,7 +324,7 @@ Out-of-scope commands (no wallet or treasury input selection):
   their format, and the contradiction error.
 - README quickstart updates wherever a wizard command example is
   shown.
-- PR metadata naming the eight in-scope wizards, the shared helper
+- PR metadata naming the seven in-scope wizards, the shared helper
   module, the deferred asciinema follow-up (see Non-Goals), and the
   sibling relationship to #183.
 
@@ -349,7 +352,7 @@ spec needs to grow correspondingly.
 
 ## Success Criteria
 
-- **SC-001**: For each of the eight in-scope wizards, a focused
+- **SC-001**: For each of the seven in-scope wizards, a focused
   regression test fails before the new flags are wired and passes
   after, demonstrating exclusion, forced inclusion, the
   contradiction error, and the shortfall-with-excludes error.

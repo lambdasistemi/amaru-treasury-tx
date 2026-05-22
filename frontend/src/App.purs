@@ -22,9 +22,12 @@ import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String.CodePoints as Data.String.CodePoints
 import Effect.Aff.Class (class MonadAff)
+import Effect (Effect)
+import Effect.Timer (setInterval)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Properties as HP
+import Halogen.Subscription as HS
 import JsonView as JsonView
 
 -- | A scope's lifecycle on the page.
@@ -47,6 +50,7 @@ type State =
 data Action
   = Initialize
   | RefreshOne ScopeName
+  | RefreshAll
   | LoadStatic
 
 data ScopeName
@@ -208,6 +212,15 @@ component =
   handleAction = case _ of
     Initialize -> do
       handleAction LoadStatic
+      handleAction RefreshAll
+      -- Schedule the 30 s auto-refresh tick. Single-flight
+      -- by construction: a tick that arrives while a
+      -- previous Aff is still running is dropped because
+      -- handleAction is sequential within HalogenM. (FR-013)
+      emitter <- H.liftEffect refreshTimer
+      void $ H.subscribe emitter
+
+    RefreshAll -> do
       handleAction (RefreshOne CoreDevelopment)
       handleAction (RefreshOne OpsAndUseCases)
       handleAction (RefreshOne NetworkCompliance)
@@ -250,3 +263,14 @@ substring :: Int -> Int -> String -> String
 substring start n s =
   Data.String.CodePoints.take n
     (Data.String.CodePoints.drop start s)
+
+-- | A 30-second emitter that fires `RefreshAll`.
+-- |
+-- | We don't clear the interval on component teardown; for
+-- | the single-page dashboard the SPA's lifetime equals the
+-- | timer's lifetime (the page reload resets both).
+refreshTimer :: Effect (HS.Emitter Action)
+refreshTimer = do
+  { emitter, listener } <- HS.create
+  _ <- setInterval 30000 (HS.notify listener RefreshAll)
+  pure emitter

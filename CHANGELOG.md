@@ -16,6 +16,8 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 * **transactions:** record reorganize batch-03, submitted on mainnet as txId [`71ff129b5e0b5983ac01da968c6e345a8b6bc36d650a27f18c02ea9787a13dbe`](https://cardanoscan.io/transaction/71ff129b5e0b5983ac01da968c6e345a8b6bc36d650a27f18c02ea9787a13dbe) — leftover now 237 307.84 USDM + 70.76 ADA; treasury count 36 → 27 (#202).
 
+* **transactions:** record reorganize batch-04, submitted on mainnet as txId [`65bfd93936abf4fb26a135e89bd3ef133bb4b02152b37199586ed443979a95b1`](https://cardanoscan.io/transaction/65bfd93936abf4fb26a135e89bd3ef133bb4b02152b37199586ed443979a95b1) — leftover now 295 706.64 USDM; treasury count 27 → 18 (#202).
+
 ### Bug Fixes
 
 * **disburse-wizard:** USDM disburses now keep the full treasury input lovelace on the leftover output and source the beneficiary's min-UTxO deposit from the wallet, restoring the on-chain treasury validator's lovelace-conservation invariant (parity with the bash recipe) (#215)

@@ -103,6 +103,33 @@ tie-break, **if the bash-recipe shape and the SundaeSwap TOM body
 shape disagree, the bash shape wins.** Closing a body-shape gap
 requires a separate, deliberate amendment to this constitution.
 
+### VIII. IPFS-anchored disbursement evidence (NON-NEGOTIABLE)
+
+Every Amaru treasury `disburse` transaction MUST anchor its supporting
+documents on IPFS and surface them in the rationale `body.references[]`
+per the SundaeSwap TOM spec (uri/@type/label, with the `ipfs://` URI
+split convention established by mainnet tx
+[d6c14625][example-tx-cid]).
+
+**Minimum evidence set per disburse:**
+
+1. **Contract** — the signed engagement contract with the beneficiary
+   (IPFS-pinned, `@type: "Other"`, label `"Contract - <Beneficiary>"`).
+2. **Invoice** — the invoice the disburse is paying against
+   (IPFS-pinned, `@type: "Other"`, label `"Invoice #<N> - <Beneficiary>"`).
+3. **Monthly-plan acceptance** — for contracts with a monthly review
+   cycle, one document proving the beneficiary accepted the current
+   month's plan/scope before this disburse was built (IPFS-pinned,
+   `@type: "Other"`, label `"<MonthYear> plan acceptance - <Beneficiary>"`).
+   **Yearly-contract disbursements are exempt** from this third item
+   (e.g. Antithesis). Whether a contract is monthly or yearly MUST be
+   recorded in the beneficiary's contract document itself.
+
+A `disburse` tx built without the minimum set above for its contract
+class is a constitution violation and MUST NOT be submitted.
+
+[example-tx-cid]: https://cardanoscan.io/transaction/d6c14625d5b017a1e86f219cb12a887c770076a0e8b2b334bb4eac03533eff7d
+
 ## Technology Constraints
 
 - GHC 9.6+ (matches `cardano-node-clients`).
@@ -146,4 +173,4 @@ The `/speckit.plan` step gates all implementation work against these
 principles; any deviation is recorded in the plan's
 "Constitution Compliance" section.
 
-**Version**: 0.2.0 | **Ratified**: 2026-05-04 | **Last Amended**: 2026-05-15
+**Version**: 0.3.0 | **Ratified**: 2026-05-04 | **Last Amended**: 2026-05-22

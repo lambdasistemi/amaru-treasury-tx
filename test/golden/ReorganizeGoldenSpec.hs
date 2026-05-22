@@ -230,6 +230,7 @@ reorganizeIntentFromInputs ReorganizeInputs{..} =
         , rgiRegistryDeployedAt = riRegistryDeployedAt
         , rgiPermissionsRewardAccount = riPermissionsRewardAccount
         , rgiPermissionsDeployedAt = riPermissionsDeployedAt
+        , rgiScopesDeployedAt = riScopesDeployedAt
         , rgiScopeOwnerSigner = riScopeOwnerSigner
         , rgiUpperBound = riUpperBound
         }
@@ -265,6 +266,7 @@ assertReorganizeShape ctx intent result = do
                 [ rgiTreasuryDeployedAt intent
                 , rgiRegistryDeployedAt intent
                 , rgiPermissionsDeployedAt intent
+                , rgiScopesDeployedAt intent
                 ]
     expectedInputs
         `shouldSatisfy` (`Set.isSubsetOf` (body ^. inputsTxBodyL))

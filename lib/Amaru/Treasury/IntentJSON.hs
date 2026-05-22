@@ -717,6 +717,11 @@ data ReorganizeInputs = ReorganizeInputs
     -- ^ permissions reward account for the withdraw-zero entry
     , riPermissionsDeployedAt :: !TxIn
     -- ^ deployed permissions withdrawal-script reference UTxO
+    , riScopesDeployedAt :: !TxIn
+    -- ^ scopes-NFT reference UTxO. The permissions
+    --   withdraw script walks @reference_inputs@ for the
+    --   scopes-NFT carrying @config.scopes_token_name@ and
+    --   fails phase-2 when absent.
     , riScopeOwnerSigner :: !(KeyHash Guard)
     -- ^ scope-owner key hash required as signer
     , riUpperBound :: !SlotNo
@@ -741,6 +746,7 @@ instance FromJSON ReorganizeInputs where
         permissionsRewardAccountText <-
             o .: "permissionsRewardAccount"
         permissionsDeployedAtText <- o .: "permissionsDeployedAt"
+        scopesDeployedAtText <- o .: "scopesDeployedAt"
         scopeOwnerSignerText <- o .: "scopeOwnerSigner"
         upperBound <- o .: "upperBound"
         ReorganizeInputs
@@ -766,6 +772,9 @@ instance FromJSON ReorganizeInputs where
                 "permissionsDeployedAt"
                 (parseTxIn permissionsDeployedAtText)
             <*> parseLedgerField
+                "scopesDeployedAt"
+                (parseTxIn scopesDeployedAtText)
+            <*> parseLedgerField
                 "scopeOwnerSigner"
                 (parseGuardKeyHash scopeOwnerSignerText)
             <*> pure (SlotNo (upperBound :: Word64))
@@ -785,6 +794,8 @@ instance ToJSON ReorganizeInputs where
                 .= renderRewardAccount riPermissionsRewardAccount
             , "permissionsDeployedAt"
                 .= renderTxIn riPermissionsDeployedAt
+            , "scopesDeployedAt"
+                .= renderTxIn riScopesDeployedAt
             , "scopeOwnerSigner"
                 .= renderGuardKeyHash riScopeOwnerSigner
             , "upperBound" .= renderSlotNo riUpperBound
@@ -2176,6 +2187,8 @@ translateReorganize ti = do
                     riPermissionsRewardAccount inputs
                 , rgiPermissionsDeployedAt =
                     riPermissionsDeployedAt inputs
+                , rgiScopesDeployedAt =
+                    riScopesDeployedAt inputs
                 , rgiScopeOwnerSigner =
                     riScopeOwnerSigner inputs
                 , rgiUpperBound = riUpperBound inputs

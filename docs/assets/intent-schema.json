@@ -269,6 +269,9 @@
                 "scopeOwnerSigner": {
                     "$ref": "#/$defs/hex28"
                 },
+                "scopesDeployedAt": {
+                    "$ref": "#/$defs/txIn"
+                },
                 "treasuryAddress": {
                     "$ref": "#/$defs/bech32Address"
                 },
@@ -298,6 +301,7 @@
                 "registryDeployedAt",
                 "permissionsRewardAccount",
                 "permissionsDeployedAt",
+                "scopesDeployedAt",
                 "scopeOwnerSigner",
                 "upperBound"
             ],

@@ -371,6 +371,7 @@ reorganizeSchema =
         , "registryDeployedAt"
         , "permissionsRewardAccount"
         , "permissionsDeployedAt"
+        , "scopesDeployedAt"
         , "scopeOwnerSigner"
         , "upperBound"
         ]
@@ -381,6 +382,7 @@ reorganizeSchema =
         , ("registryDeployedAt", ref "txIn")
         , ("permissionsRewardAccount", ref "rewardAccount")
         , ("permissionsDeployedAt", ref "txIn")
+        , ("scopesDeployedAt", ref "txIn")
         , ("scopeOwnerSigner", ref "hex28")
         , ("upperBound", nonNegativeIntegerSchema)
         ]

@@ -209,6 +209,10 @@ spec = describe "Amaru.Treasury.IntentJSON" $ do
             decodeTreasuryIntent rawReorganizeEmptyTreasuryUtxos
                 `shouldSatisfy` errorContains
                     "treasuryUtxos must be non-empty"
+        it "rejects reorganize missing scopesDeployedAt" $
+            decodeTreasuryIntent
+                rawReorganizeMissingScopesDeployedAt
+                `shouldSatisfy` errorContains "scopesDeployedAt"
 
     describe "withdraw contract" $ do
         it "decodes a non-empty withdraw payload" $
@@ -681,6 +685,7 @@ genReorganizeInputs = do
     treasuryDeployedAt <- genParsedTxIn
     registryDeployedAt <- genParsedTxIn
     permissionsDeployedAt <- genParsedTxIn
+    scopesDeployedAt <- genParsedTxIn
     scopeOwnerSigner <- genParsedGuardKeyHash
     upperBound <- SlotNo . fromIntegral <$> chooseInt (1, 200_000_000)
     pure
@@ -694,6 +699,7 @@ genReorganizeInputs = do
             , riPermissionsRewardAccount =
                 samplePermissionsRewardAccount
             , riPermissionsDeployedAt = permissionsDeployedAt
+            , riScopesDeployedAt = scopesDeployedAt
             , riScopeOwnerSigner = scopeOwnerSigner
             , riUpperBound = upperBound
             }
@@ -957,6 +963,39 @@ rawReorganizeEmptyTreasuryUtxosBlock =
         <> ",\"registryDeployedAt\":\"2222222222222222222222222222222222222222222222222222222222222222#2\""
         <> ",\"permissionsRewardAccount\":\"stake_test1uqnd6vjvvf\""
         <> ",\"permissionsDeployedAt\":\"3333333333333333333333333333333333333333333333333333333333333333#3\""
+        <> ",\"scopeOwnerSigner\":\"44444444444444444444444444444444444444444444444444444444\""
+        <> ",\"upperBound\":1}"
+
+{- | A reorganize intent whose payload omits the
+@scopesDeployedAt@ reference. The phase-2 fix requires the
+scopes-NFT UTxO to be threaded as a fourth reference input;
+the parser must reject a payload that does not declare it.
+-}
+rawReorganizeMissingScopesDeployedAt :: ByteString
+rawReorganizeMissingScopesDeployedAt =
+    "{\"schema\":1"
+        <> ",\"action\":\"reorganize\""
+        <> ",\"network\":\"mainnet\""
+        <> ",\"wallet\":{\"txIn\":\"abc#0\",\"address\":\"addr1\"}"
+        <> ",\"scope\":"
+        <> rawScope
+        <> ",\"signers\":[]"
+        <> ",\"validityUpperBoundSlot\":1"
+        <> ",\"rationale\":"
+        <> rawRationale
+        <> ",\"reorganize\":"
+        <> rawReorganizeMissingScopesDeployedAtBlock
+        <> "}"
+
+rawReorganizeMissingScopesDeployedAtBlock :: ByteString
+rawReorganizeMissingScopesDeployedAtBlock =
+    "{\"walletUtxo\":\"0000000000000000000000000000000000000000000000000000000000000000#0\""
+        <> ",\"treasuryUtxos\":[\"1111111111111111111111111111111111111111111111111111111111111111#1\"]"
+        <> ",\"treasuryAddress\":\"addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk\""
+        <> ",\"treasuryDeployedAt\":\"2222222222222222222222222222222222222222222222222222222222222222#2\""
+        <> ",\"registryDeployedAt\":\"3333333333333333333333333333333333333333333333333333333333333333#3\""
+        <> ",\"permissionsRewardAccount\":\"stake17xny6xu7rthlu4q9vq6dsjthqcd5t2fxj8hu9qhmaclup9q5msta3\""
+        <> ",\"permissionsDeployedAt\":\"4444444444444444444444444444444444444444444444444444444444444444#4\""
         <> ",\"scopeOwnerSigner\":\"44444444444444444444444444444444444444444444444444444444\""
         <> ",\"upperBound\":1}"
 

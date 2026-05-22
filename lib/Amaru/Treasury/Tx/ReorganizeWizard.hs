@@ -518,6 +518,10 @@ reorganizeToIntent env ans = do
             ( txInFromText
                 (srDeployedAt (smPermissions scope))
             )
+    scopesDeployed <-
+        wrapParse
+            "scopesDeployedAt"
+            (txInFromText (tmScopeOwners (reMetadata env)))
     permissionsHashBytes <-
         wrapParse
             "permissionsScriptHash"
@@ -570,6 +574,8 @@ reorganizeToIntent env ans = do
                             rewardAccount
                         , riPermissionsDeployedAt =
                             permissionsDeployed
+                        , riScopesDeployedAt =
+                            scopesDeployed
                         , riScopeOwnerSigner = ownerKeyHash
                         , riUpperBound =
                             SlotNo (reUpperBoundSlot env)

@@ -1,4 +1,5 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeApplications #-}
 
 {- |
 Module      : Amaru.Treasury.Tx.DisburseSpec
@@ -23,7 +24,10 @@ import Cardano.Ledger.Address
     , Addr (..)
     , Withdrawals (..)
     )
+import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.Api.PParams (emptyPParams)
+import Cardano.Ledger.Api.Tx (auxDataTxL)
+import Cardano.Ledger.Api.Tx.AuxData (metadataTxAuxDataL)
 import Cardano.Ledger.Api.Tx.Body
     ( collateralInputsTxBodyL
     , inputsTxBodyL
@@ -32,12 +36,19 @@ import Cardano.Ledger.Api.Tx.Body
     , reqSignerHashesTxBodyL
     , withdrawalsTxBodyL
     )
-import Cardano.Ledger.Api.Tx.Out (valueTxOutL)
+import Cardano.Ledger.Api.Tx.Out (TxOut, valueTxOutL)
 import Cardano.Ledger.BaseTypes
     ( Network (..)
+    , StrictMaybe (..)
     , mkTxIxPartial
     )
+import Cardano.Ledger.Binary
+    ( DecCBOR (..)
+    , decodeFullAnnotator
+    , serialize
+    )
 import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (bodyTxL)
 import Cardano.Ledger.Credential
     ( Credential (..)
@@ -56,6 +67,7 @@ import Cardano.Ledger.Mary.Value
     )
 import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Slotting.Slot (SlotNo (..))
+import Cardano.Tx.Ledger (ConwayTx)
 import Data.ByteString qualified as BS
 import Data.ByteString.Short qualified as SBS
 import Data.Foldable (toList)
@@ -63,7 +75,7 @@ import Data.Map.Strict qualified as Map
 import Data.Maybe (fromJust)
 import Data.Set qualified as Set
 import Data.Word (Word8)
-import Lens.Micro ((^.))
+import Lens.Micro ((&), (.~), (^.))
 import Test.Hspec
     ( Spec
     , describe
@@ -85,6 +97,16 @@ import Test.QuickCheck
 
 import Cardano.Tx.Build (draft)
 
+import Amaru.Treasury.AuxData (label1694)
+import Amaru.Treasury.Build
+    ( BuildResult (..)
+    , runFromIntent
+    )
+import Amaru.Treasury.ChainContext.Fixture
+    ( SwapFixture (..)
+    , readSwapFixture
+    , toFrozenContext
+    )
 import Amaru.Treasury.IntentJSON
     ( Action (..)
     , SAction (..)
@@ -348,6 +370,27 @@ spec = do
                     expectationFailure
                         "expected SDisburse intent"
 
+    describe "Amaru.Treasury.Build.runFromIntent"
+        $ it
+            "builds d6c14625 references intent with golden label-1694 CBOR"
+        $ do
+            some <-
+                expectRight
+                    =<< decodeTreasuryIntentFile
+                        d6c14625IntentPath
+            fixture <-
+                readSwapFixture "test/fixtures/disburse/ada"
+            fundedFixture <-
+                fundD6c14625TreasuryAssets some fixture
+            result <-
+                runFromIntent
+                    (toFrozenContext fundedFixture)
+                    some
+            tx <- expectRight (decodeFinalTx result)
+            actual <- expectRight (label1694Cbor tx)
+            expected <- BS.readFile d6c14625RationalePath
+            actual `shouldBe` expected
+
 -- ----------------------------------------------------
 -- T020: Pure-translation goldens (ADA + USDM)
 -- ----------------------------------------------------
@@ -413,6 +456,94 @@ expectRight =
 stableEncode :: TreasuryIntent 'Disburse -> BSL.ByteString
 stableEncode =
     encodeSomeTreasuryIntent . SomeTreasuryIntent SDisburse
+
+d6c14625IntentPath :: FilePath
+d6c14625IntentPath =
+    "test/fixtures/disburse/d6c14625-references/intent.json"
+
+d6c14625RationalePath :: FilePath
+d6c14625RationalePath =
+    "test/fixtures/disburse/d6c14625-references/rationale.cbor"
+
+fundD6c14625TreasuryAssets
+    :: SomeTreasuryIntent
+    -> SwapFixture
+    -> IO SwapFixture
+fundD6c14625TreasuryAssets some fixture =
+    case some of
+        SomeTreasuryIntent SDisburse intent -> do
+            (_, translated) <-
+                expectRight (translateIntent SDisburse intent)
+            case translated of
+                DisburseUsdmIntent translatedFields translatedUsdm ->
+                    case difTreasuryUtxos translatedFields of
+                        [treasuryInput] ->
+                            pure
+                                fixture
+                                    { sfUtxos =
+                                        Map.adjust
+                                            ( withUsdmTreasuryValue
+                                                translatedUsdm
+                                            )
+                                            treasuryInput
+                                            (sfUtxos fixture)
+                                    }
+                        _ ->
+                            fail
+                                "expected one d6c14625 treasury input"
+                DisburseAdaIntent{} ->
+                    fail
+                        "expected d6c14625 USDM disburse intent"
+        _ ->
+            fail "expected SDisburse intent"
+
+withUsdmTreasuryValue
+    :: DisburseUsdmPayload
+    -> TxOut ConwayEra
+    -> TxOut ConwayEra
+withUsdmTreasuryValue translatedUsdm txOut =
+    txOut
+        & valueTxOutL
+            .~ MaryValue
+                lovelace
+                ( MultiAsset $
+                    Map.singleton
+                        (dupUsdmPolicy translatedUsdm)
+                        ( Map.singleton
+                            (dupUsdmAsset translatedUsdm)
+                            ( dupAmountUsdm translatedUsdm
+                                + dupLeftoverUsdm translatedUsdm
+                            )
+                        )
+                )
+  where
+    MaryValue lovelace _ = txOut ^. valueTxOutL
+
+decodeFinalTx :: BuildResult -> Either String ConwayTx
+decodeFinalTx result =
+    case decodeFullAnnotator
+        (eraProtVerLow @ConwayEra)
+        "ConwayTx"
+        decCBOR
+        (brCborBytes result) of
+        Right tx -> Right tx
+        Left err -> Left (show err)
+
+label1694Cbor :: ConwayTx -> Either String BS.ByteString
+label1694Cbor tx =
+    case tx ^. auxDataTxL of
+        SNothing -> Left "built tx has no auxiliary data"
+        SJust auxData ->
+            case Map.lookup
+                label1694
+                (auxData ^. metadataTxAuxDataL) of
+                Nothing -> Left "built tx has no label-1694 metadatum"
+                Just metadatum ->
+                    Right $
+                        BSL.toStrict $
+                            serialize
+                                (eraProtVerLow @ConwayEra)
+                                metadatum
 
 -- ----------------------------------------------------
 -- T012: JSON round-trip property

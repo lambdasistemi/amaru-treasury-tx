@@ -213,7 +213,7 @@ cleanly and validates against the published schema.
 - [X] **T031 [S3]** Commit one bisect-safe slice: subject
   `feat(disburse-wizard): add repeatable --reference-uri/-type/-label flags`,
   trailer `Tasks: T024–T030`.
-- [ ] **T032 [S3]** (orchestrator-only) Mark T024–T031 `[X]`, amend
+- [X] **T032 [S3]** (orchestrator-only) Mark T024–T031 `[X]`, amend
   HEAD.
 
 **Checkpoint S3**: operator can invoke `disburse-wizard` with
@@ -237,24 +237,24 @@ yields a tx whose rationale metadatum equals the S1 golden.
 
 ### Tasks
 
-- [ ] **T033 [S4]** Write an integration test that:
+- [X] **T033 [S4]** Write an integration test that:
   (a) loads the d6c14625-references intent.json fixture from T002;
   (b) invokes the in-process build pipeline (the same path
   `tx-build` uses) to produce the unsigned tx body;
   (c) extracts the aux-data label-1694 metadatum from the body and
   encodes to canonical CBOR;
   (d) asserts byte equality against the S1 `rationale.cbor` golden.
-- [ ] **T034 [S4]** Confirm RED if T033 was written before S1+S3
+- [X] **T034 [S4]** Confirm RED if T033 was written before S1+S3
   landed (it would have, but in this slice ordering S1/S2/S3 already
   passed; the test should pass on first run). Document the result
   in `./WIP.md` regardless (the test landing in a *new* commit on a
   clean tree is still meaningful — it proves the wiring works
   end-to-end at this slice's HEAD).
-- [ ] **T035 [S4]** Run `./gate.sh` green.
-- [ ] **T036 [S4]** Commit: subject
+- [X] **T035 [S4]** Run `./gate.sh` green.
+- [X] **T036 [S4]** Commit: subject
   `test(integration): cli→intent→build round-trip equals d6c14625 golden`,
   trailer `Tasks: T033–T035`.
-- [ ] **T037 [S4]** (orchestrator-only) Mark T033–T036 `[X]`, amend
+- [X] **T037 [S4]** (orchestrator-only) Mark T033–T036 `[X]`, amend
   HEAD.
 
 **Checkpoint S4**: end-to-end proof. The wizard's emitted intent

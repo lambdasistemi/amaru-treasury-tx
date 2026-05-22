@@ -233,10 +233,23 @@ rationaleSchema =
         ]
         [ ("event", stringSchema)
         , ("label", stringSchema)
-        , ("description", stringSchema)
-        , ("justification", stringSchema)
+        , ("description", rationaleTextSchema)
+        , ("justification", rationaleTextSchema)
         , ("destinationLabel", stringSchema)
         , ("references", referencesSchema)
+        ]
+
+rationaleTextSchema :: Value
+rationaleTextSchema =
+    object
+        [ "oneOf"
+            .= [ stringSchema
+               , object
+                    [ "type" .= ("array" :: Text)
+                    , "minItems" .= (1 :: Int)
+                    , "items" .= stringSchema
+                    ]
+               ]
         ]
 
 referencesSchema :: Value

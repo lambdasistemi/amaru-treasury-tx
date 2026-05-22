@@ -35,9 +35,19 @@ module Amaru.Treasury.IntentJSON
       -- * Shared structural blocks
     , WalletJSON (..)
     , ScopeJSON (..)
-    , RationaleJSON (..)
+    , RationaleJSON
+        ( RationaleJSON
+        , rjEvent
+        , rjLabel
+        , rjDescription
+        , rjJustification
+        , rjDestinationLabel
+        , rjReferences
+        )
     , RationaleReferenceJSON (..)
     , fromJSONReference
+    , rationaleDescriptionLines
+    , rationaleJustificationLines
 
       -- * Per-action input records
     , SwapInputs (..)
@@ -90,7 +100,7 @@ import Control.Monad (unless)
 import Data.Aeson
     ( FromJSON (..)
     , ToJSON (..)
-    , Value
+    , Value (..)
     , eitherDecode
     , eitherDecodeFileStrict
     , object
@@ -107,11 +117,12 @@ import Data.Aeson.Encode.Pretty
     , NumberFormat (..)
     , encodePretty'
     )
-import Data.Aeson.Types (Parser)
+import Data.Aeson.Types (Parser, typeMismatch)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Short qualified as SBS
+import Data.Foldable (toList)
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
@@ -404,16 +415,69 @@ intent with a missing rationale field) except
 @references@, which is optional and defaults to @[]@
 for back-compat with pre-S2 intents.
 -}
-data RationaleJSON = RationaleJSON
-    { rjEvent :: !Text
-    , rjLabel :: !Text
-    , rjDescription :: !Text
-    , rjJustification :: !Text
-    , rjDestinationLabel :: !Text
-    , rjReferences :: ![RationaleReferenceJSON]
-    -- ^ optional typed external references on the
-    --   rationale body; defaults to @[]@ on parse.
+data RationaleJSON = RationaleJSONInternal
+    { rjiEvent :: !Text
+    , rjiLabel :: !Text
+    , rjiDescription :: !RationaleText
+    , rjiJustification :: !RationaleText
+    , rjiDestinationLabel :: !Text
+    , rjiReferences :: ![RationaleReferenceJSON]
     }
+    deriving stock (Eq, Show)
+
+pattern RationaleJSON
+    :: Text
+    -> Text
+    -> Text
+    -> Text
+    -> Text
+    -> [RationaleReferenceJSON]
+    -> RationaleJSON
+pattern RationaleJSON
+    { rjEvent
+    , rjLabel
+    , rjDescription
+    , rjJustification
+    , rjDestinationLabel
+    , rjReferences
+    } <-
+    RationaleJSONInternal
+        { rjiEvent = rjEvent
+        , rjiLabel = rjLabel
+        , rjiDescription = (rationaleTextToText -> rjDescription)
+        , rjiJustification = (rationaleTextToText -> rjJustification)
+        , rjiDestinationLabel = rjDestinationLabel
+        , rjiReferences = rjReferences
+        }
+    where
+        RationaleJSON
+            event
+            label
+            description
+            justification
+            destinationLabel
+            references =
+                RationaleJSONInternal
+                    { rjiEvent = event
+                    , rjiLabel = label
+                    , rjiDescription = RationaleTextScalar description
+                    , rjiJustification = RationaleTextScalar justification
+                    , rjiDestinationLabel = destinationLabel
+                    , rjiReferences = references
+                    }
+
+{-# COMPLETE RationaleJSON #-}
+
+{- | Backwards-compatible internal rationale text field.
+
+Legacy wizard intents emit scalar JSON strings. Historical
+chain-shaped rationale metadata can carry multiple paragraph chunks,
+so the decoder also accepts an array of strings and preserves that
+shape on re-encode.
+-}
+data RationaleText
+    = RationaleTextScalar !Text
+    | RationaleTextLines ![Text]
     deriving stock (Eq, Show)
 
 {- | JSON-side projection of 'RationaleReference'. Wire
@@ -428,9 +492,41 @@ data RationaleReferenceJSON = RationaleReferenceJSON
     }
     deriving stock (Eq, Show)
 
+instance FromJSON RationaleText where
+    parseJSON value = case value of
+        String t -> pure (RationaleTextScalar t)
+        Array xs ->
+            RationaleTextLines
+                <$> traverse parseJSON (toList xs)
+        _ -> typeMismatch "string or array of strings" value
+
+instance ToJSON RationaleText where
+    toJSON (RationaleTextScalar t) = toJSON t
+    toJSON (RationaleTextLines ts) = toJSON ts
+
+-- | Project a rationale text value to metadatum text chunks.
+rationaleTextLines :: RationaleText -> [Text]
+rationaleTextLines (RationaleTextScalar t) = [t]
+rationaleTextLines (RationaleTextLines ts) = ts
+
+-- | Render rationale text for human-facing summaries.
+rationaleTextToText :: RationaleText -> Text
+rationaleTextToText =
+    T.intercalate " " . rationaleTextLines
+
+-- | Project the description field to metadatum text chunks.
+rationaleDescriptionLines :: RationaleJSON -> [Text]
+rationaleDescriptionLines =
+    rationaleTextLines . rjiDescription
+
+-- | Project the justification field to metadatum text chunks.
+rationaleJustificationLines :: RationaleJSON -> [Text]
+rationaleJustificationLines =
+    rationaleTextLines . rjiJustification
+
 instance FromJSON RationaleJSON where
     parseJSON = withObject "RationaleJSON" $ \o ->
-        RationaleJSON
+        RationaleJSONInternal
             <$> o .: "event"
             <*> o .: "label"
             <*> o .: "description"
@@ -439,14 +535,14 @@ instance FromJSON RationaleJSON where
             <*> o .:? "references" .!= []
 
 instance ToJSON RationaleJSON where
-    toJSON RationaleJSON{..} =
+    toJSON RationaleJSONInternal{..} =
         object
-            [ "event" .= rjEvent
-            , "label" .= rjLabel
-            , "description" .= rjDescription
-            , "justification" .= rjJustification
-            , "destinationLabel" .= rjDestinationLabel
-            , "references" .= rjReferences
+            [ "event" .= rjiEvent
+            , "label" .= rjiLabel
+            , "description" .= rjiDescription
+            , "justification" .= rjiJustification
+            , "destinationLabel" .= rjiDestinationLabel
+            , "references" .= rjiReferences
             ]
 
 instance FromJSON RationaleReferenceJSON where
@@ -1818,9 +1914,9 @@ translateSwap ti = do
                 { rbEvent = rjEvent rat
                 , rbLabel = rjLabel rat
                 , rbReferences = map fromJSONReference (rjReferences rat)
-                , rbDescription = [rjDescription rat]
+                , rbDescription = rationaleDescriptionLines rat
                 , rbDestinationLabel = rjDestinationLabel rat
-                , rbJustification = [rjJustification rat]
+                , rbJustification = rationaleJustificationLines rat
                 }
         shared =
             TranslatedShared
@@ -1903,9 +1999,9 @@ translateDisburse ti = do
                 { rbEvent = rjEvent rat
                 , rbLabel = rjLabel rat
                 , rbReferences = map fromJSONReference (rjReferences rat)
-                , rbDescription = [rjDescription rat]
+                , rbDescription = rationaleDescriptionLines rat
                 , rbDestinationLabel = rjDestinationLabel rat
-                , rbJustification = [rjJustification rat]
+                , rbJustification = rationaleJustificationLines rat
                 }
         shared =
             TranslatedShared
@@ -2017,9 +2113,9 @@ translateWithdraw ti = do
                 { rbEvent = rjEvent rat
                 , rbLabel = rjLabel rat
                 , rbReferences = map fromJSONReference (rjReferences rat)
-                , rbDescription = [rjDescription rat]
+                , rbDescription = rationaleDescriptionLines rat
                 , rbDestinationLabel = rjDestinationLabel rat
-                , rbJustification = [rjJustification rat]
+                , rbJustification = rationaleJustificationLines rat
                 }
         shared =
             TranslatedShared
@@ -2055,9 +2151,9 @@ translateReorganize ti = do
                 { rbEvent = rjEvent rat
                 , rbLabel = rjLabel rat
                 , rbReferences = map fromJSONReference (rjReferences rat)
-                , rbDescription = [rjDescription rat]
+                , rbDescription = rationaleDescriptionLines rat
                 , rbDestinationLabel = rjDestinationLabel rat
-                , rbJustification = [rjJustification rat]
+                , rbJustification = rationaleJustificationLines rat
                 }
         shared =
             TranslatedShared

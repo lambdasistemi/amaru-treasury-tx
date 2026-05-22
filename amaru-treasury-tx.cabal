@@ -103,6 +103,8 @@ library
   other-modules:    Paths_amaru_treasury_tx
   exposed-modules:
     Amaru.Treasury
+    Amaru.Treasury.Api.Server
+    Amaru.Treasury.Api.Types
     Amaru.Treasury.AuxData
     Amaru.Treasury.Backend
     Amaru.Treasury.Backend.N2C
@@ -252,8 +254,10 @@ library
     , filepath
     , github-release-check
     , haskeline
+    , http-api-data
     , http-client
     , http-conduit
+    , http-media
     , memory
     , microlens
     , optparse-applicative
@@ -264,6 +268,7 @@ library
     , plutus-ledger-api
     , plutus-tx
     , scientific
+    , servant
     , text
     , time
     , transformers
@@ -418,6 +423,7 @@ test-suite unit-tests
   default-language:   GHC2021
   autogen-modules:    Paths_amaru_treasury_tx
   other-modules:
+    Amaru.Treasury.Api.TypesSpec
     Amaru.Treasury.AuxDataSpec
     Amaru.Treasury.Build.CommonSpec
     Amaru.Treasury.Build.GovernanceWithdrawalInitSpec
@@ -540,6 +546,7 @@ test-suite unit-tests
     , serialise
     , temporary
     , text
+    , time
 
   build-tool-depends: hspec-discover:hspec-discover
 

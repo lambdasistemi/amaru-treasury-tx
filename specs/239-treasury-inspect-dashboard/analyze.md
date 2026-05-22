@@ -16,6 +16,8 @@ A single pass over spec.md, plan.md, research.md, data-model.md, contracts/, qui
 | FR-008 (top-N sortable) | T015 | Default N=20, sort = USDM desc. |
 | FR-009 (pending SundaeSwap orders) | T019 | Pending-orders rendering. |
 | FR-010 (inline drill-down) | T016 | No navigation, same page. |
+| FR-010a (every InspectReport field on the page) | T015, T016, T016a, T016b | Full-coverage rendering. |
+| FR-010b (resolved presentation) | T016, T016a, T016b | Cardanoscan links, short+full hover. |
 | FR-011 (10 recent txs / cardanoscan) | T002, T009, T020 | Manifest derivation + handler + frontend consumption. |
 | FR-012 (auto-refresh 30 s) | T017 | Single-flight guard. |
 | FR-013 (no stacking) | T017 | Same task. |

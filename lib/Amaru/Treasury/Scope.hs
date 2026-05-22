@@ -23,6 +23,10 @@ import Data.Aeson (FromJSON (..), ToJSON (..), withText)
 import Data.Aeson.Types (Parser)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Web.HttpApiData
+    ( FromHttpApiData (..)
+    , ToHttpApiData (..)
+    )
 
 -- | One of the five Amaru treasury scopes.
 data ScopeId
@@ -74,3 +78,13 @@ instance FromJSON ScopeId where
         case scopeFromText t of
             Right s -> pure s
             Left err -> fail err :: Parser ScopeId
+
+instance ToHttpApiData ScopeId where
+    toUrlPiece = scopeText
+    toQueryParam = scopeText
+
+instance FromHttpApiData ScopeId where
+    parseUrlPiece = parseQueryParam
+    parseQueryParam t = case scopeFromText t of
+        Right s -> Right s
+        Left err -> Left (T.pack err)

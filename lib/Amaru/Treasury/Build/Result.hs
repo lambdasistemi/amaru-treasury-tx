@@ -70,4 +70,12 @@ data BuildResult = BuildResult
     -- ^ wallet input selected as collateral, when present
     , brCollateralReturn :: !(Maybe (TxOut ConwayEra))
     -- ^ collateral-return output from the final body, when present
+    , brResidualTreasuryInputs :: ![TxIn]
+    -- ^ treasury inputs that were enumerated by the wizard but
+    --     dropped by the reorganize batcher because the full set
+    --     exceeded the per-tx exec-units / size ceiling. Empty when
+    --     no truncation happened (the build used every wizard-listed
+    --     input). The operator chains another reorganize on these
+    --     after the first batch settles on-chain.
+    --     See @Amaru.Treasury.Build.Reorganize.Batch@ for the math.
     }

@@ -208,6 +208,7 @@ materializeResult ctx walletInputUtxos result =
                     , brCollateralReturn =
                         strictMaybe
                             (body ^. collateralReturnTxBodyL)
+                    , brResidualTreasuryInputs = []
                     }
 
 {- | Lift a Void-error 'BuildError' from the construction

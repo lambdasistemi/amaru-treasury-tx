@@ -230,6 +230,7 @@ runDisburseAdaAction ctx fields payload rationale walletAddr = do
                     , brCollateralReturn =
                         strictMaybe
                             (body ^. collateralReturnTxBodyL)
+                    , brResidualTreasuryInputs = []
                     }
 
 -- | The USDM-disburse build pipeline.
@@ -358,4 +359,5 @@ runDisburseUsdmAction ctx fields payload rationale walletAddr = do
                     , brCollateralReturn =
                         strictMaybe
                             (body ^. collateralReturnTxBodyL)
+                    , brResidualTreasuryInputs = []
                     }

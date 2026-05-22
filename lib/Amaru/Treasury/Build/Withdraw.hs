@@ -225,6 +225,7 @@ runWithdrawAction ctx intent rationale walletAddr = do
                     , brCollateralReturn =
                         strictMaybe
                             (body ^. collateralReturnTxBodyL)
+                    , brResidualTreasuryInputs = []
                     }
 
 addWithdrawalToChange

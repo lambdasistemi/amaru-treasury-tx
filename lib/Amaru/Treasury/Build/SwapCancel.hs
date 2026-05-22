@@ -190,4 +190,5 @@ runSwapCancelAction ctx intent = do
                         case body ^. collateralReturnTxBodyL of
                             SNothing -> Nothing
                             SJust out -> Just out
+                    , brResidualTreasuryInputs = []
                     }

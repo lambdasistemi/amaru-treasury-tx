@@ -54,8 +54,13 @@ isolation.
 effort). Driver holds the write lock; navigator reviews before
 commit. One bisect-safe commit. Do not push. You are not alone in
 the codebase; do not revert edits made by others. Keep this slice to
-the new shared module + tests + cabal exposure. Commit body MUST
-include `Tasks: T001, T002, T003, T004, T005`.
+the new shared module + tests + cabal exposure. The project builds
+under `-Werror`: every API export MUST be exercised by
+`InputControlSpec` or by `InputControlTestHelpers`, otherwise
+`-Wunused-top-binds` will fail the slice — if you find yourself
+exporting something the tests don't consume, drop the export and let
+a later wiring slice add it via a forward extension. Commit body
+MUST include `Tasks: T001, T002, T003, T004, T005`.
 
 Owned files:
 
@@ -76,7 +81,7 @@ Tasks:
 
 - [ ] T001 [US1+US2] RED: write `InputControlSpec` assertions for `parseOutRef` — valid 64-char lowercase hex + `#` + non-negative index round-trips; uppercase hex rejected; missing `#` rejected; non-numeric index rejected; negative index rejected; index leading zeros accepted; surplus chars rejected. Tests fail because the module does not yet exist.
 - [ ] T002 [P] [US3] RED: extend `InputControlSpec` with `validateInputControl` assertions — disjoint sets pass; a single overlapping outref produces a structured `Contradiction <ref>` error; two overlapping refs produce both refs in the error in deterministic order.
-- [ ] T003 [P] [US1] RED: extend `InputControlSpec` with `filterPool` assertions — empty exclusion set is a no-op; single match removes one element and returns it in the "hit" set; multi match preserves remaining order; no match returns the original list unchanged; assertions also cover `renderShortfallWithExcludes` text shape (excluded refs listed in input order, no trailing newline, one ref per line).
+- [ ] T003 [P] [US1] RED: extend `InputControlSpec` with `filterPool` assertions — empty exclusion set is a no-op; single match removes one element and returns it in the "hit" set; multi match preserves remaining order; no match returns the original list unchanged; an "exclude-not-present-in-pool" case returns the original list AND records the inert excluded ref so callers can log it (per spec Edge Case "silently a no-op (with a log line)"); a forced-inclusion ref already present in the candidate pool is removed from the pool and emitted into the extras list exactly once (per FR-006 dedup invariant); multi-ref `--extra-tx-in` ordering is preserved in input order (per FR-006 "no silent reordering"); assertions also cover `renderShortfallWithExcludes` text shape (excluded refs listed in input order, no trailing newline, one ref per line).
 - [ ] T004 [US1+US2+US3] GREEN: implement `lib/Amaru/Treasury/Wizard/InputControl.hs` exporting `OutRef`, `parseOutRef`, `outRefText`, `ExclusionSet`, `ForcedInclusionSet`, `InputControlError(..)`, `validateInputControl`, `filterPool`, `excludeUtxoP`, `extraTxInP`, `renderInputControlError`, `renderShortfallWithExcludes`. Implement `test/unit/Amaru/Treasury/Wizard/InputControlTestHelpers.hs` with the small fixture builders Slices 2–7 will reuse (sample candidate lists, sample outrefs, builder for `(Text, Integer, Bool)` triples).
 - [ ] T005 GREEN: expose both new library modules + the new test-suite module in `amaru-treasury-tx.cabal`; run `./gate.sh` end-to-end and record the result in `WIP.md`.
 
@@ -131,7 +136,9 @@ Tasks:
 - [ ] T008 [P] [US2] RED: assert that with `--extra-tx-in <R>` for a wallet UTxO present at the wallet address, the emitted intent has `wallet.extraTxIns` containing `<R>` exactly once and the primary `wallet.txIn` selection runs unchanged on the remaining pool.
 - [ ] T009 [P] [US1] RED: assert that with `--exclude-utxo` filtering all candidates from a pool that becomes empty, the wizard fails with `WalletNoPureAda` (or `WalletShortfall`) whose error message names every excluded outref via `renderShortfallWithExcludes`.
 - [ ] T010 [P] [US4] RED: assert SC-005 — running `swap-wizard` over the existing fixture with no `--exclude-utxo` or `--extra-tx-in` produces byte-identical intent bytes against the existing golden.
-- [ ] T011 [US1+US2+US3] GREEN: thread `ExclusionSet` / `ForcedInclusionSet` into `WizardOpts`, wire `excludeUtxoP` / `extraTxInP` into `wizardOptsP`, run `validateInputControl` at flag-validation time, and apply `filterPool` to wallet + treasury candidate sets in `resolveWizardEnv` (both pools), the all-ADA resolver, and `resolveSelections`. Emit forced-inclusion refs into the wizard output's `wallet.extraTxIns`. Render shortfall errors via `renderShortfallWithExcludes`. Trace the `swap-wizard: excluded utxo <ref> (operator-supplied)` log line per excluded ref.
+- [ ] T010a [P] [US2] RED: assert FR-009 — passing `--extra-tx-in <R>` for an outref the wallet-address chain query does NOT return causes `swap-wizard` to exit non-zero with a structured "extra input not found on wallet" error naming `<R>`. This is the canary that proves the not-on-wallet contract on the most invasive runner; the same shape is reused in the per-wizard slices below.
+- [ ] T010b [P] [US1] RED: assert FR-005 pool attribution — when an excluded ref hits the wallet pool only, the log line names `wallet`; when it hits the treasury pool only, names `treasury`; when it hits both, names `both`. Use the multi-resolver shape of `swap-wizard` (which queries both pools) to cover all three branches in a single canary slice.
+- [ ] T011 [US1+US2+US3] GREEN: thread `ExclusionSet` / `ForcedInclusionSet` into `WizardOpts`, wire `excludeUtxoP` / `extraTxInP` into `wizardOptsP`, run `validateInputControl` at flag-validation time, and apply `filterPool` to wallet + treasury candidate sets in `resolveWizardEnv` (both pools), the all-ADA resolver, and `resolveSelections`. Emit forced-inclusion refs into the wizard output's `wallet.extraTxIns` (use the shared `InputControl` API; do not duplicate). Render shortfall errors via `renderShortfallWithExcludes`. Trace the `swap-wizard: excluded utxo <ref> (operator-supplied)` log line per excluded ref, including the pool attribution (`wallet`, `treasury`, or `both`). Resolve every `--extra-tx-in` ref against the wallet-query result; emit the FR-009 "extra input not found on wallet" error when any ref is missing. Note for the worker: the shared `InputControl` module from Slice 1 is FROZEN — needed extensions go in a forward slice, not via `git commit --amend` of Slice 1.
 - [ ] T012 GREEN: run `./gate.sh` end-to-end (which executes the new specs + the existing SwapGolden) and record the result in `WIP.md`.
 
 Checkpoint: `./gate.sh` PASS at HEAD. `swap-wizard --help` lists both
@@ -181,7 +188,7 @@ Tasks:
 - [ ] T016 [P] [US2] RED: forced inclusion lands in disburse intent's `wallet.extraTxIns` for both wizards.
 - [ ] T017 [P] [US1] RED: shortfall-with-excludes names excluded refs for both pools.
 - [ ] T018 [P] [US4] RED: SC-005 — byte-identical disburse intents against existing fixtures with no flags.
-- [ ] T019 [US1+US2+US3] GREEN: extend `DisburseWizardOpts` and `ContingencyDisburseOpts` with the shared field set (use the shared parser helpers from `InputControl`), wire `validateInputControl` at flag-validation time, apply `filterPool` to wallet AND per-unit treasury pools in `selectAndAssemble`, emit forced inclusions into the intent's `extraTxIns`, render shortfall errors via `renderShortfallWithExcludes`, trace per-wizard log lines (`disburse-wizard:`/`contingency-disburse-wizard:` prefix), and run `./gate.sh`. Record the result in `WIP.md`.
+- [ ] T019 [US1+US2+US3] GREEN: extend `DisburseWizardOpts` and `ContingencyDisburseOpts` with the shared field set (use the shared parser helpers from `InputControl`), wire `validateInputControl` at flag-validation time, apply `filterPool` to wallet AND per-unit treasury pools in `selectAndAssemble`, emit forced inclusions into the intent's `extraTxIns`, render shortfall errors via `renderShortfallWithExcludes`, trace per-wizard log lines with pool attribution (`disburse-wizard:`/`contingency-disburse-wizard:` prefix + `wallet`/`treasury`/`both` suffix), emit the FR-009 "extra input not found on wallet" error when any `--extra-tx-in` ref is missing from the wallet query, and run `./gate.sh`. Record the result in `WIP.md`.
 
 Checkpoint: `./gate.sh` PASS at HEAD. Both disburse-family wizards
 list the flags in `--help`. Existing ADA + USDM fixtures byte-identical.
@@ -221,7 +228,7 @@ Tasks:
 - [ ] T021 [P] [US1] RED: exclusion filters wallet pool.
 - [ ] T022 [P] [US2] RED: forced inclusion lands in withdraw intent's `wallet.extraTxIns`.
 - [ ] T023 [P] [US1+US4] RED: shortfall-with-excludes names excluded refs; SC-005 byte stability against existing withdraw fixture.
-- [ ] T024 [US1+US2+US3] GREEN: extend `WithdrawOpts` and `withdrawOptsP`, wire validation + filter + intent emission + error rendering + log line, run `./gate.sh`, record in `WIP.md`.
+- [ ] T024 [US1+US2+US3] GREEN: extend `WithdrawOpts` and `withdrawOptsP`, wire validation + filter + intent emission (with FR-009 not-on-wallet error) + error rendering + log line (with `wallet`/`treasury`/`both` pool attribution), run `./gate.sh`, record in `WIP.md`.
 
 Checkpoint: `./gate.sh` PASS at HEAD. `withdraw-wizard --help` lists
 the flags. Existing withdraw fixture byte-identical.
@@ -265,7 +272,7 @@ Tasks:
 - [ ] T026 [P] [US1] RED: exclusion filters wallet pool in seed-split mode.
 - [ ] T027 [P] [US2] RED: forced inclusion lands in seed-split intent's `wallet.extraTxIns`.
 - [ ] T028 [P] [US1+US4] RED: shortfall-with-excludes naming + SC-005 byte stability against existing seed-split, mint, reference-scripts fixtures.
-- [ ] T029 [US1+US2+US3] GREEN: extend `RegistryInitWizardOpts` and `registryInitWizardOptsP`, wire validation + filter + intent emission + error rendering + log line at both call sites, run `./gate.sh`, record in `WIP.md`.
+- [ ] T029 [US1+US2+US3] GREEN: extend `RegistryInitWizardOpts` and `registryInitWizardOptsP`, wire validation + filter + intent emission (with FR-009 not-on-wallet error) + error rendering + log line (with `wallet`/`treasury`/`both` pool attribution) at BOTH call sites (`selectWallet 1` at lines ~306 AND ~401 — wiring only one will fail T028's all-modes byte-stability assertion), run `./gate.sh`, record in `WIP.md`.
 
 Checkpoint: `./gate.sh` PASS at HEAD. `registry-init-wizard --help`
 lists the flags. All three mode fixtures byte-identical.
@@ -307,7 +314,7 @@ Tasks:
 - [ ] T031 [P] [US1] RED: exclusion filters wallet pool.
 - [ ] T032 [P] [US2] RED: forced inclusion lands in intent's `wallet.extraTxIns`.
 - [ ] T033 [P] [US1+US4] RED: shortfall-with-excludes naming + SC-005 byte stability against existing fixtures.
-- [ ] T034 [US1+US2+US3] GREEN: extend opts + parser, wire validation + filter + intent emission + error rendering + log line, run `./gate.sh`, record in `WIP.md`.
+- [ ] T034 [US1+US2+US3] GREEN: extend opts + parser, wire validation + filter + intent emission (with FR-009 not-on-wallet error) + error rendering + log line (with pool attribution), run `./gate.sh`, record in `WIP.md`.
 
 Checkpoint: `./gate.sh` PASS at HEAD. `stake-reward-init-wizard --help`
 lists the flags. Existing fixtures byte-identical.
@@ -353,7 +360,7 @@ Tasks:
 - [ ] T036 [P] [US1] RED: exclusion filters wallet pool — `firstPureAdaRef` returns the next pure-ADA ref after the excluded one is removed.
 - [ ] T037 [P] [US2] RED: forced inclusion lands in proposal intent's `wallet.extraTxIns`.
 - [ ] T038 [P] [US1+US4] RED: shortfall-with-excludes naming (no pure-ADA candidates remain after exclusion) + SC-005 byte stability against the existing proposal fixture.
-- [ ] T039 [US1+US2+US3] GREEN: extend opts + parser, wire validation + filter + intent emission + error rendering + log line at both call sites, run `./gate.sh`, record in `WIP.md`.
+- [ ] T039 [US1+US2+US3] GREEN: extend opts + parser, wire validation + filter + intent emission (with FR-009 not-on-wallet error) + error rendering + log line (with pool attribution) at BOTH call sites (proposal at line ~684 AND materialization at ~1075 — wiring only one will fail T038's byte-stability assertion across both paths), run `./gate.sh`, record in `WIP.md`.
 
 Checkpoint: `./gate.sh` PASS at HEAD.
 `governance-withdrawal-init-wizard --help` lists the flags. Existing
@@ -392,6 +399,7 @@ Tasks:
 - [ ] T043 [P] [US4] Add a one-line flag reference to `docs/withdraw.md` linking the new shared page.
 - [ ] T044 Update `docs/index.md`'s command table footer to mention the shared input-control page.
 - [ ] T045 [P] If `README.md` quickstart shows a wizard command, add a one-line pointer at the shared page; otherwise no-op.
+- [ ] T045a [US4] FR-011 parity verification: assert that the seven wizards' `--help` output for `--exclude-utxo` and `--extra-tx-in` is byte-identical across wizards. Recommended implementation: a thin Hspec spec that captures `<wizard> --help` for each in-scope wizard and asserts the substring describing the two flags is identical. If structural reasons make a runtime test impractical, document in `docs/wizard-input-control.md` that parity is guaranteed by every wizard consuming the same `excludeUtxoP` / `extraTxInP` helpers from `Wizard.InputControl`, and link to the helper source.
 
 Checkpoint: `./gate.sh` PASS at HEAD. Shared docs page exists; per-wizard
 pages link it; `docs/index.md` advertises it.
@@ -414,7 +422,7 @@ Owned files:
 
 Tasks:
 
-- [ ] T046 Re-read the spec's Acceptance items SC-001 through SC-006 against the merged-state branch; record outcome in PR body.
+- [ ] T046 Re-read the spec's Acceptance items SC-001 through SC-006 against HEAD before the drop commit (NOT against a merged-state branch — this slice precedes merge); record outcome in PR body. Verify FR-001 through FR-013 each have a backing commit on the branch (commit body `Tasks:` trailer or orchestrator-owned slice).
 - [ ] T047 File the asciinema follow-up issue ("adopt mkdocs `asciinema-player` plugin + record wizard input-control cast for #184"). Capture the issue URL.
 - [ ] T048 Update PR #200 body with: completed acceptance summary, link to the new docs page, link to the asciinema follow-up issue, restated sibling relationship to #183.
 - [ ] T049 Re-run `./gate.sh` to confirm green at HEAD before the drop commit.

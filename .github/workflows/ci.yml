@@ -17,6 +17,8 @@ jobs:
     runs-on: nixos
     steps:
       - uses: actions/checkout@v6
+        with:
+          clean: false
       - uses: cachix/cachix-action@v17
         with:
           name: paolino
@@ -38,6 +40,8 @@ jobs:
     runs-on: nixos
     steps:
       - uses: actions/checkout@v6
+        with:
+          clean: false
       - uses: cachix/cachix-action@v17
         with:
           name: paolino
@@ -50,6 +54,8 @@ jobs:
     runs-on: nixos
     steps:
       - uses: actions/checkout@v6
+        with:
+          clean: false
       - uses: cachix/cachix-action@v17
         with:
           name: paolino
@@ -62,6 +68,8 @@ jobs:
     runs-on: nixos
     steps:
       - uses: actions/checkout@v6
+        with:
+          clean: false
       - uses: cachix/cachix-action@v17
         with:
           name: paolino
@@ -74,6 +82,8 @@ jobs:
     runs-on: nixos
     steps:
       - uses: actions/checkout@v6
+        with:
+          clean: false
       - uses: cachix/cachix-action@v17
         with:
           name: paolino
@@ -86,6 +96,8 @@ jobs:
     runs-on: nixos
     steps:
       - uses: actions/checkout@v6
+        with:
+          clean: false
       - uses: cachix/cachix-action@v17
         with:
           name: paolino

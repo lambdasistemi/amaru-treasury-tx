@@ -23,6 +23,7 @@ import Test.Hspec (Spec, describe, it, shouldBe)
 import Amaru.Treasury.Redeemer
     ( disburseAdaRedeemer
     , disburseRedeemer
+    , disburseUsdmRedeemer
     , emptyListRedeemer
     , reorganizeRedeemer
     , sundaeCancelRedeemer
@@ -64,6 +65,20 @@ spec = describe "Amaru.Treasury.Redeemer" $ do
             `shouldBe` "d87c9fa1581cc48cbb3d5e57ed56e276bc45f99a\
                        \b39abe94e6cd7ac39fb402da47ada1480014df10\
                        \5553444d1a02faf080ff"
+
+    it "encodes a USDM disburse with treasury-funded min-UTxO lovelace" $ do
+        let policy =
+                BS.pack
+                    "\xc4\x8c\xbb\x3d\x5e\x57\xed\x56\xe2\x76\xbc\x45\
+                    \\xf9\x9a\xb3\x9a\xbe\x94\xe6\xcd\x7a\xc3\x9f\xb4\
+                    \\x02\xda\x47\xad"
+            asset =
+                BS.pack
+                    "\x00\x14\xdf\x10\x55\x53\x44\x4d"
+        hex (disburseUsdmRedeemer policy asset 50_000_000 2_000_000)
+            `shouldBe` "d87c9fa240a1401a001e8480581cc48cbb3d5e57\
+                       \ed56e276bc45f99ab39abe94e6cd7ac39fb402da\
+                       \47ada1480014df105553444d1a02faf080ff"
 
     it "round-trips every redeemer through CBOR" $ do
         roundTrip reorganizeRedeemer `shouldBe` reorganizeRedeemer

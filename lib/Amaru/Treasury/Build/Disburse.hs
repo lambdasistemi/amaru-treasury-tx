@@ -24,13 +24,11 @@ import Cardano.Ledger.Api.Tx.Body
     , feeTxBodyL
     , totalCollateralTxBodyL
     )
-import Cardano.Ledger.Api.Tx.Out (TxOut, valueTxOutL)
 import Cardano.Ledger.BaseTypes (StrictMaybe (..))
 import Cardano.Ledger.Binary (serialize)
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (bodyTxL)
-import Cardano.Ledger.Mary.Value (MaryValue (..))
 import Cardano.Ledger.Metadata (Metadatum)
 import Cardano.Tx.Build
     ( InterpretIO (..)
@@ -67,7 +65,6 @@ import Amaru.Treasury.Build.Result
     , ScriptResult (..)
     )
 import Amaru.Treasury.ChainContext (ChainContext (..))
-import Amaru.Treasury.Constants (minUtxoDepositLovelace)
 import Amaru.Treasury.Tx.Disburse
     ( DisburseAdaPayload
     , DisburseIntent (..)
@@ -275,12 +272,11 @@ runDisburseUsdmAction ctx fields payload rationale walletAddr = do
             | i <- refInputs
             ]
         pp = ccPParams ctx
-    let beneficiaryLovelace = usdmBeneficiaryLovelace
-        evaluator tx = do
+    let evaluator tx = do
             m <- ccEvaluateTx ctx tx
             pure (fmap (either (Left . show) Right) m)
         program = do
-            disburseUsdmProgram fields payload beneficiaryLovelace
+            disburseUsdmProgram fields payload
             setMetadata label1694 rationale
         noCtxIO :: InterpretIO q
         noCtxIO =
@@ -363,14 +359,3 @@ runDisburseUsdmAction ctx fields payload rationale walletAddr = do
                         strictMaybe
                             (body ^. collateralReturnTxBodyL)
                     }
-
-{- | Lovelace deposit on the USDM-disburse beneficiary
-output. For USDM disburses the treasury validator
-enforces strict lovelace conservation (the redeemer's
-@amount.lovelace@ is 0), so the beneficiary's min-UTxO
-deposit must be funded by the wallet input, not debited
-from the treasury. This value is therefore independent
-of the selected treasury inputs. See #215.
--}
-usdmBeneficiaryLovelace :: Coin
-usdmBeneficiaryLovelace = Coin minUtxoDepositLovelace

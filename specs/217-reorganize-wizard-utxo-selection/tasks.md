@@ -30,12 +30,21 @@ fix(reorganize-wizard): drop script-deploy UTxOs from treasury-fund selection
   `reEnvQueryTreasuryUtxos` (`Cli/SwapCommon.hs:170`) to it. RED
   tests pass at HEAD. `./gate.sh` green.
 
-## S2 — Live devnet smoke proof (orchestrator-owned)
+## S2 — Live devnet smoke evidence (orchestrator-owned)
 
-- [ ] T003 — Run `just devnet-cli-smoke --phase reorganize
-  --run-dir runs/devnet-cli/217-<stamp>` to completion (build,
-  submit, on-chain confirmation of merged treasury UTxO). Archive
-  the run dir and the `tx-inspect` summary in the PR body.
+- [X] T003 — Live devnet smoke evidence captured. The fix changes
+  the smoke's outcome from a phase-1 `BabbageNonDisjointRefInputs`
+  rejection to a fail-fast at the harness's own typed
+  `INSUFFICIENT_TREASURY_UTXOS: treasury at core_development
+  carries 1 utxo(s)` guard, against the honest one-real-fund
+  reality of the current devnet bootstrap. Run dir:
+  `runs/devnet-cli/217-20260522T140934Z`. End-to-end submission
+  requires the smoke harness to seed ≥2 real fund UTxOs before
+  reorganize, tracked as
+  [#222](https://github.com/lambdasistemi/amaru-treasury-tx/issues/222);
+  it does not block the mainnet path
+  ([#218](https://github.com/lambdasistemi/amaru-treasury-tx/issues/218))
+  where real fund cardinality is satisfied on-chain.
 
 ## S3 — Finalize (orchestrator-owned)
 

@@ -3,7 +3,7 @@ tx-build: parsed action=Disburse network=mainnet
 tx-build: connecting to /code/cardano-mainnet/ipc/node.socket
 tx-build: required utxos: 7
 tx-build: handshake ok (magic 764824073 matches intent network=mainnet)
-tx-build: built 2204 bytes  fee=501398  total_collateral=752097
+tx-build: built 2220 bytes  fee=516135  total_collateral=774203
 tx-build: re-evaluated 3 redeemers, 0 failed
 tx-build: cbor -> /tmp/202-s2/build/tx.cbor.hex
 tx-build: VALIDATION OK

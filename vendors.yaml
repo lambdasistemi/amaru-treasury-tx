@@ -1,0 +1,26 @@
+schema: amaru-treasury-vendors-v1
+vendors:
+  - id: crypto_accounting_group
+    legal_name: CRYPTO ACCOUNTING GROUP
+    jurisdiction: US-NM
+    address: "209 Double Arrow Rd, Santa Fe NM 87505, U.S.A."
+    roles: [payee]
+    onchain_address: <TBD-CAG-BECH32>
+    address_proof_cid: bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm
+    engagement_contract_cid: bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga
+
+  - id: cyber_castellum_corporation
+    legal_name: CYBER CASTELLUM CORPORATION
+    jurisdiction: US-NY
+    address: "1924 Central Ave, Albany NY 12205, U.S.A."
+    roles: [beneficiary]
+    engagement_contract_cid: bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da
+    review_cycle: bi-monthly
+
+  - id: antithesis_operations_llc
+    legal_name: ANTITHESIS OPERATIONS LLC
+    jurisdiction: US-DE
+    address: "8607 Westwood Center Drive Suite #550, Vienna VA 22182, U.S.A."
+    roles: [beneficiary]
+    engagement_contract_cid: bafybeihsqdjvr4egubfdg54sz5wlbdwo4wvdzdsetg5xe34oy243srfasy
+    review_cycle: yearly

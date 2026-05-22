@@ -1,8 +1,16 @@
 # May 2026 — Disburse 18 750 USDM to Crypto Accounting Group
 
-**Status:** unsigned draft (S2). Awaiting owner witnesses (S3).
-Once submitted, this directory is renamed to
-`transactions/2026/network_compliance/<txid>/`.
+**Status:** **submitted on mainnet 2026-05-22T16:57:02Z** (S5
+complete). Node N2C `submit` accepted txId
+`c150d5c5c67658c8f2a3bc24e16a4852257d46a03224257ac990fcca6f6fde78`.
+
+Tx-level view: <https://cardanoscan.io/transaction/c150d5c5c67658c8f2a3bc24e16a4852257d46a03224257ac990fcca6f6fde78>
+
+Operator went directly from "S3 — witnesses attached" to "submit"
+without commissioning the Claude-authored S4 pre-submit brief; the
+operator-go decision was taken on the basis of summary.md +
+tx-inspect/tx-validate + the CBOR-derived address cross-check
+against the AOR proof email (`ipfs://bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm`).
 
 ## Tx identity
 

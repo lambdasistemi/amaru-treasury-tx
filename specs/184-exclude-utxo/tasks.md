@@ -182,13 +182,13 @@ Forbidden scope:
 
 Tasks:
 
-- [ ] T013 [US3] RED: contradiction error against `disburse-wizard` and against `contingency-disburse-wizard`.
-- [ ] T014 [P] [US1] RED: exclusion filters wallet pool for both wizards.
-- [ ] T015 [P] [US1] RED: exclusion filters the per-unit treasury pool (`selectTreasuryForUnit`) for the ADA path.
-- [ ] T016 [P] [US2] RED: forced inclusion lands in disburse intent's `wallet.extraTxIns` for both wizards.
-- [ ] T017 [P] [US1] RED: shortfall-with-excludes names excluded refs for both pools.
-- [ ] T018 [P] [US4] RED: SC-005 — byte-identical disburse intents against existing fixtures with no flags.
-- [ ] T019 [US1+US2+US3] GREEN: extend `DisburseWizardOpts` and `ContingencyDisburseOpts` with the shared field set (use the shared parser helpers from `InputControl`), wire `validateInputControl` at flag-validation time, apply `filterPool` to wallet AND per-unit treasury pools in `selectAndAssemble`, emit forced inclusions into the intent's `extraTxIns`, render shortfall errors via `renderShortfallWithExcludes`, trace per-wizard log lines with pool attribution (`disburse-wizard:`/`contingency-disburse-wizard:` prefix + `wallet`/`treasury`/`both` suffix), emit the FR-009 "extra input not found on wallet" error when any `--extra-tx-in` ref is missing from the wallet query, and run `./gate.sh`. Record the result in `WIP.md`.
+- [X] T013 [US3] RED: contradiction error against `disburse-wizard` and against `contingency-disburse-wizard`.
+- [X] T014 [P] [US1] RED: exclusion filters wallet pool for both wizards.
+- [X] T015 [P] [US1] RED: exclusion filters the per-unit treasury pool (`selectTreasuryForUnit`) for the ADA path.
+- [X] T016 [P] [US2] RED: forced inclusion lands in disburse intent's `wallet.extraTxIns` for both wizards.
+- [X] T017 [P] [US1] RED: shortfall-with-excludes names excluded refs for both pools.
+- [X] T018 [P] [US4] RED: SC-005 — byte-identical disburse intents against existing fixtures with no flags.
+- [X] T019 [US1+US2+US3] GREEN: extend `DisburseWizardOpts` and `ContingencyDisburseOpts` with the shared field set (use the shared parser helpers from `InputControl`), wire `validateInputControl` at flag-validation time, apply `filterPool` to wallet AND per-unit treasury pools in `selectAndAssemble`, emit forced inclusions into the intent's `extraTxIns`, render shortfall errors via `renderShortfallWithExcludes`, trace per-wizard log lines with pool attribution (`disburse-wizard:`/`contingency-disburse-wizard:` prefix + `wallet`/`treasury`/`both` suffix), emit the FR-009 "extra input not found on wallet" error when any `--extra-tx-in` ref is missing from the wallet query, and run `./gate.sh`. Record the result in `WIP.md`.
 
 Checkpoint: `./gate.sh` PASS at HEAD. Both disburse-family wizards
 list the flags in `--help`. Existing ADA + USDM fixtures byte-identical.

@@ -20,6 +20,8 @@ module Amaru.Treasury.Cli.DisburseWizard
     , contingencyDisburseOptsP
     , runDisburseWizard
     , runContingencyDisburse
+    , validateDisburseWizardInputControl
+    , validateContingencyDisburseInputControl
     ) where
 
 import Control.Applicative ((<|>))
@@ -101,6 +103,16 @@ import Amaru.Treasury.Scope
     )
 import Amaru.Treasury.Tx.DisburseWizard qualified as Disburse
 import Amaru.Treasury.Tx.DisburseWizard.Trace qualified as DisburseTrace
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    , InputControlError
+    , excludeUtxoP
+    , extraTxInP
+    , outRefText
+    , renderInputControlError
+    , validateInputControl
+    )
 
 {- | Flags for the @disburse-wizard@ subcommand.
 Mirrors @specs/004-disburse-wizard/contracts/disburse-wizard-cli.md §1@.
@@ -133,6 +145,12 @@ data DisburseWizardOpts = DisburseWizardOpts
     , dwOptsTreasuryTxIns :: ![TxIn]
     -- ^ optional treasury TxIn allow-list applied after querying
     --   the treasury address.
+    , dwOptsExcludeSet :: !ExclusionSet
+    -- ^ Operator-supplied @--exclude-utxo@ refs, in flag
+    -- order (#184).
+    , dwOptsForcedSet :: !ForcedInclusionSet
+    -- ^ Operator-supplied @--extra-tx-in@ refs, in flag
+    -- order (#184).
     }
     deriving stock (Eq, Show)
 
@@ -152,6 +170,12 @@ data ContingencyDisburseOpts = ContingencyDisburseOpts
     , cdOptsValidityHours :: !(Maybe Word16)
     , cdOptsDescription :: !Text
     , cdOptsJustification :: !Text
+    , cdOptsExcludeSet :: !ExclusionSet
+    -- ^ Operator-supplied @--exclude-utxo@ refs, in flag
+    -- order (#184).
+    , cdOptsForcedSet :: !ForcedInclusionSet
+    -- ^ Operator-supplied @--extra-tx-in@ refs, in flag
+    -- order (#184).
     }
     deriving stock (Eq, Show)
 
@@ -275,6 +299,8 @@ disburseWizardOptsP =
                         "Restrict treasury selection to this TxIn. Repeatable."
                 )
             )
+        <*> (ExclusionSet <$> excludeUtxoP)
+        <*> (ForcedInclusionSet <$> extraTxInP)
 
 contingencyDisburseOptsP :: Parser ContingencyDisburseOpts
 contingencyDisburseOptsP =
@@ -341,6 +367,27 @@ contingencyDisburseOptsP =
                 <> metavar "TEXT"
                 <> help "Rationale: justification"
             )
+        <*> (ExclusionSet <$> excludeUtxoP)
+        <*> (ForcedInclusionSet <$> extraTxInP)
+
+{- | Pre-flight check for @--exclude-utxo@ / @--extra-tx-in@
+contradictions on the @disburse-wizard@ subcommand.
+Returns 'Left' (Contradiction refs) when an outref appears
+in both flag sets on the same invocation.
+-}
+validateDisburseWizardInputControl
+    :: DisburseWizardOpts -> Either InputControlError ()
+validateDisburseWizardInputControl o =
+    validateInputControl (dwOptsExcludeSet o) (dwOptsForcedSet o)
+
+{- | Pre-flight check for @--exclude-utxo@ / @--extra-tx-in@
+contradictions on the @contingency-disburse-wizard@
+subcommand.
+-}
+validateContingencyDisburseInputControl
+    :: ContingencyDisburseOpts -> Either InputControlError ()
+validateContingencyDisburseInputControl o =
+    validateInputControl (cdOptsExcludeSet o) (cdOptsForcedSet o)
 
 ownedScopeReader :: ReadM ScopeId
 ownedScopeReader =
@@ -498,7 +545,7 @@ runDisburseWizard
     :: GlobalOpts
     -> DisburseWizardOpts
     -> IO ()
-runDisburseWizard g DisburseWizardOpts{..} =
+runDisburseWizard g opts@DisburseWizardOpts{..} =
     runDisburseCommand
         "disburse-wizard"
         g
@@ -507,6 +554,9 @@ runDisburseWizard g DisburseWizardOpts{..} =
         dwOptsOut
         (Set.singleton dwOptsScope)
         dwOptsScope
+        dwOptsExcludeSet
+        dwOptsForcedSet
+        (validateDisburseWizardInputControl opts)
         $ \networkName rv _verified ->
             let answers =
                     Disburse.DisburseAnswers
@@ -554,7 +604,7 @@ runContingencyDisburse
     :: GlobalOpts
     -> ContingencyDisburseOpts
     -> IO ()
-runContingencyDisburse g ContingencyDisburseOpts{..} =
+runContingencyDisburse g opts@ContingencyDisburseOpts{..} =
     runDisburseCommand
         "contingency-disburse-wizard"
         g
@@ -563,6 +613,9 @@ runContingencyDisburse g ContingencyDisburseOpts{..} =
         cdOptsOut
         (Set.fromList [Contingency, cdOptsDestinationScope])
         Contingency
+        cdOptsExcludeSet
+        cdOptsForcedSet
+        (validateContingencyDisburseInputControl opts)
         $ \networkName rv verified -> do
             destinationAddr <-
                 destinationScopeAddress
@@ -619,94 +672,188 @@ runDisburseCommand
     -> Maybe FilePath
     -> Set.Set ScopeId
     -> ScopeId
+    -> ExclusionSet
+    -> ForcedInclusionSet
+    -> Either InputControlError ()
     -> ( Text
          -> Disburse.RegistryView
          -> VerifiedRegistry
          -> Either Text (Disburse.DisburseAnswers, Disburse.ResolverInput)
        )
     -> IO ()
-runDisburseCommand commandName g logPath metadataPath outPath verifyScopes sourceScope buildRun =
-    withLogHandle logPath $ \logH -> do
-        let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
-            tr =
-                DisburseTrace.disburseEventTracerWithPrefix
-                    commandName
-                    textTracer
-        networkName <- case resolveNetworkName g of
-            Right t -> pure t
-            Left e -> abortDisburse tr (T.pack e)
-        let socket = fromMaybe "(unset)" (goSocketPath g)
-            NetworkMagic magic = goNetworkMagic g
-        traceWith
-            tr
-            ( DisburseTrace.DweNetwork
-                networkName
-                (fromIntegral magic)
-            )
-        traceWith tr (DisburseTrace.DweMetadata metadataPath)
+runDisburseCommand
+    commandName
+    g
+    logPath
+    metadataPath
+    outPath
+    verifyScopes
+    sourceScope
+    excludeSet
+    forcedSet
+    inputControlCheck
+    buildRun =
+        withLogHandle logPath $ \logH -> do
+            let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
+                tr =
+                    DisburseTrace.disburseEventTracerWithPrefix
+                        commandName
+                        textTracer
+            case inputControlCheck of
+                Right () -> pure ()
+                Left ce ->
+                    abortDisburse tr (renderInputControlError ce)
+            networkName <- case resolveNetworkName g of
+                Right t -> pure t
+                Left e -> abortDisburse tr (T.pack e)
+            let socket = fromMaybe "(unset)" (goSocketPath g)
+                NetworkMagic magic = goNetworkMagic g
+            traceWith
+                tr
+                ( DisburseTrace.DweNetwork
+                    networkName
+                    (fromIntegral magic)
+                )
+            traceWith tr (DisburseTrace.DweMetadata metadataPath)
 
-        withLocalNodeBackend (goNetworkMagic g) socket $
-            \backend -> do
-                verified <-
-                    verifyDisburseRegistry
-                        backend
-                        metadataPath
-                        verifyScopes
-                        networkName
-                (rv, registry) <- case verified of
-                    Left e ->
-                        abortDisburse
-                            tr
-                            ("verify: " <> T.pack (show e))
-                    Right registry ->
-                        case Disburse.registryViewFromVerified
-                            sourceScope
-                            registry of
-                            Left e ->
-                                abortDisburse
-                                    tr
-                                    ("project: " <> T.pack (show e))
-                            Right view -> pure (view, registry)
-                traceDisburseRegistryView tr sourceScope rv
-                (answers, ri) <- case buildRun networkName rv registry of
-                    Left e ->
-                        abortDisburse tr ("prepare: " <> e)
-                    Right run -> pure run
-                let renv =
-                        traceDisburseResolverEnv tr $
-                            providerToDisburseResolverEnv backend
-                er <- Disburse.resolveDisburseEnv renv ri
-                env <- case er of
-                    Left e ->
-                        abortDisburse
-                            tr
-                            ("resolve: " <> T.pack (show e))
-                    Right e -> pure e
-                traceDisburseEnv tr env
-                intent <-
-                    case Disburse.disburseToTreasuryIntent env answers of
-                        Left de ->
+            withLocalNodeBackend (goNetworkMagic g) socket $
+                \backend -> do
+                    verified <-
+                        verifyDisburseRegistry
+                            backend
+                            metadataPath
+                            verifyScopes
+                            networkName
+                    (rv, registry) <- case verified of
+                        Left e ->
                             abortDisburse
                                 tr
-                                ( "translate: "
-                                    <> T.pack
-                                        ( show
-                                            ( de
-                                                :: Disburse.DisburseError
-                                            )
+                                ("verify: " <> T.pack (show e))
+                        Right registry ->
+                            case Disburse.registryViewFromVerified
+                                sourceScope
+                                registry of
+                                Left e ->
+                                    abortDisburse
+                                        tr
+                                        ("project: " <> T.pack (show e))
+                                Right view -> pure (view, registry)
+                    traceDisburseRegistryView tr sourceScope rv
+                    (answers, ri) <- case buildRun networkName rv registry of
+                        Left e ->
+                            abortDisburse tr ("prepare: " <> e)
+                        Right run -> pure run
+                    let renv =
+                            traceDisburseResolverEnv tr $
+                                providerToDisburseResolverEnv backend
+                    er <-
+                        Disburse.resolveDisburseEnvIC
+                            renv
+                            excludeSet
+                            forcedSet
+                            ri
+                    env <- case er of
+                        Left
+                            (Disburse.ResolverExtraTxInNotOnWallet refs) ->
+                                abortDisburse
+                                    tr
+                                    ( commandName
+                                        <> ": extra input not found on wallet: "
+                                        <> T.intercalate
+                                            ", "
+                                            (map outRefText refs)
+                                    )
+                        Left
+                            ( Disburse.ResolverWalletShortfallWithExcludes
+                                    avail
+                                    required
+                                    refs
+                                ) ->
+                                abortDisburse
+                                    tr
+                                    ( Disburse.renderDisburseWalletShortfallWithExcludes
+                                        ( "wallet shortfall available="
+                                            <> T.pack (show avail)
+                                            <> " required="
+                                            <> T.pack (show required)
                                         )
-                                )
-                        Right i -> pure i
-                traceWith tr $
-                    DisburseTrace.DweUpperBoundResolved
-                        (tiValidityUpperBoundSlot intent)
-                traceWith tr (DisburseTrace.DweIntentReady outPath)
-                let bytes =
-                        encodeSomeTreasuryIntent
-                            (SomeTreasuryIntent SDisburse intent)
-                case outPath of
-                    Nothing -> BSL.putStr bytes
-                    Just fp -> BSL.writeFile fp bytes
+                                        refs
+                                    )
+                        Left
+                            ( Disburse.ResolverTreasuryShortfallWithExcludes
+                                    avail
+                                    required
+                                    refs
+                                ) ->
+                                abortDisburse
+                                    tr
+                                    ( Disburse.renderDisburseWalletShortfallWithExcludes
+                                        ( "treasury shortfall available="
+                                            <> T.pack (show avail)
+                                            <> " required="
+                                            <> T.pack (show required)
+                                        )
+                                        refs
+                                    )
+                        Left e ->
+                            abortDisburse
+                                tr
+                                ("resolve: " <> T.pack (show e))
+                        Right (e, outcome) -> do
+                            emitDisburseExclusionLog
+                                commandName
+                                textTracer
+                                outcome
+                            pure e
+                    traceDisburseEnv tr env
+                    intent <-
+                        case Disburse.disburseToTreasuryIntent env answers of
+                            Left de ->
+                                abortDisburse
+                                    tr
+                                    ( "translate: "
+                                        <> T.pack
+                                            ( show
+                                                ( de
+                                                    :: Disburse.DisburseError
+                                                )
+                                            )
+                                    )
+                            Right i -> pure i
+                    traceWith tr $
+                        DisburseTrace.DweUpperBoundResolved
+                            (tiValidityUpperBoundSlot intent)
+                    traceWith tr (DisburseTrace.DweIntentReady outPath)
+                    let bytes =
+                            encodeSomeTreasuryIntent
+                                (SomeTreasuryIntent SDisburse intent)
+                    case outPath of
+                        Nothing -> BSL.putStr bytes
+                        Just fp -> BSL.writeFile fp bytes
+
+emitDisburseExclusionLog
+    :: Text
+    -> Tracer IO Text
+    -> Disburse.InputControlOutcome
+    -> IO ()
+emitDisburseExclusionLog commandName textTracer outcome = do
+    mapM_
+        ( traceWith textTracer
+            . uncurry
+                (Disburse.renderDisburseExclusionLogLine commandName)
+        )
+        (Disburse.icoHits outcome)
+    mapM_
+        ( \ref ->
+            traceWith
+                textTracer
+                ( commandName
+                    <> ": excluded utxo "
+                    <> outRefText ref
+                    <> " (operator-supplied) [absent]"
+                )
+        )
+        (Disburse.icoInert outcome)
 
 verifyDisburseRegistry
     :: Provider IO

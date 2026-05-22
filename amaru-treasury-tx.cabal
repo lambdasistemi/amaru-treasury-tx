@@ -269,10 +269,14 @@ library
     , plutus-tx
     , scientific
     , servant
+    , servant-server
+    , tagged
     , text
     , time
     , transformers
     , unix
+    , wai
+    , warp
 
 executable amaru-treasury-tx
   import:           warnings
@@ -423,6 +427,7 @@ test-suite unit-tests
   default-language:   GHC2021
   autogen-modules:    Paths_amaru_treasury_tx
   other-modules:
+    Amaru.Treasury.Api.ServerSpec
     Amaru.Treasury.Api.TypesSpec
     Amaru.Treasury.AuxDataSpec
     Amaru.Treasury.Build.CommonSpec
@@ -542,11 +547,17 @@ test-suite unit-tests
     , optparse-applicative
     , ouroboros-network:api
     , plutus-core
+    , http-types
     , QuickCheck
     , serialise
+    , servant
+    , servant-server
+    , tagged
     , temporary
     , text
     , time
+    , wai
+    , wai-extra
 
   build-tool-depends: hspec-discover:hspec-discover
 

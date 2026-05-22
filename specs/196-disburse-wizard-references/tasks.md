@@ -182,35 +182,35 @@ cleanly and validates against the published schema.
 
 ### Tasks
 
-- [ ] **T024 [S3]** Locate the `disburse-wizard` parser in
+- [X] **T024 [S3]** Locate the `disburse-wizard` parser in
   `app/amaru-treasury-tx/Main.hs` (or the per-wizard module the
   current codebase uses). Record its location in `./WIP.md`.
-- [ ] **T025 [S3]** Write parser tests covering the matrix in
+- [X] **T025 [S3]** Write parser tests covering the matrix in
   [contracts/cli.md#slot-opening-rule](contracts/cli.md#slot-opening-rule):
   zero flags, one slot with default `@type`, two slots, stray
   `--reference-label` (must exit 2 with named error), stray
   `--reference-type` (same), later `--reference-type` wins.
-- [ ] **T026 [S3]** Confirm RED: parser tests fail (flags don't exist
+- [X] **T026 [S3]** Confirm RED: parser tests fail (flags don't exist
   / errors aren't raised). Capture in `./WIP.md`.
-- [ ] **T027 [S3]** Implement the three flags using
+- [X] **T027 [S3]** Implement the three flags using
   `optparse-applicative`. The slot-opening model uses a custom
   accumulating parser; the simplest shape is a tagged sum
   `ReferenceFragment = OpenUri Text | SetType Text | SetLabel Text`
   parsed with `many` then folded into `[RationaleReferenceJSON]`,
   raising a parse error when a `SetType` / `SetLabel` appears before
   any `OpenUri`.
-- [ ] **T028 [S3]** Thread the parsed `[RationaleReferenceJSON]` into
+- [X] **T028 [S3]** Thread the parsed `[RationaleReferenceJSON]` into
   the existing `RationaleJSON` value the wizard writes to
   `intent.json`. Default `[]` when no `--reference-uri` flags are
   present (preserves Acceptance Scenario 1).
-- [ ] **T029 [S3]** Add a CLI smoke test: invoke the wizard via the
+- [X] **T029 [S3]** Add a CLI smoke test: invoke the wizard via the
   test harness with the four-reference Cyber Castellum input from
   [quickstart.md](quickstart.md), parse the resulting
   `intent.json`, assert `references` has four entries with the
   expected uris and labels.
-- [ ] **T030 [S3]** Confirm GREEN: all parser + smoke tests pass;
+- [X] **T030 [S3]** Confirm GREEN: all parser + smoke tests pass;
   `nix develop --quiet -c just unit` green; `./gate.sh` green.
-- [ ] **T031 [S3]** Commit one bisect-safe slice: subject
+- [X] **T031 [S3]** Commit one bisect-safe slice: subject
   `feat(disburse-wizard): add repeatable --reference-uri/-type/-label flags`,
   trailer `Tasks: T024–T030`.
 - [ ] **T032 [S3]** (orchestrator-only) Mark T024–T031 `[X]`, amend

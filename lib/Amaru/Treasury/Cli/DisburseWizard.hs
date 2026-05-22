@@ -22,6 +22,7 @@ module Amaru.Treasury.Cli.DisburseWizard
     , runContingencyDisburse
     ) where
 
+import Control.Applicative ((<|>))
 import Control.Tracer (Tracer (..), traceWith)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Char (isDigit, toLower)
@@ -67,7 +68,8 @@ import Amaru.Treasury.Cli.Common
     )
 import Amaru.Treasury.Constants (Unit (..))
 import Amaru.Treasury.IntentJSON
-    ( SAction (..)
+    ( RationaleReferenceJSON (..)
+    , SAction (..)
     , SomeTreasuryIntent (..)
     , encodeSomeTreasuryIntent
     , tiValidityUpperBoundSlot
@@ -122,6 +124,9 @@ data DisburseWizardOpts = DisburseWizardOpts
     , dwOptsDestinationLabel :: !Text
     , dwOptsEvent :: !(Maybe Text)
     , dwOptsLabel :: !(Maybe Text)
+    , dwOptsReferences :: ![RationaleReferenceJSON]
+    -- ^ optional external rationale references; populated only by
+    --   @disburse-wizard@.
     , dwOptsSigners :: ![Text]
     -- ^ accumulated extra-signer flags; empty = selected
     --   scope owner only.
@@ -250,6 +255,7 @@ disburseWizardOptsP =
                         "Rationale label override (defaults Disburse <unit>)"
                 )
             )
+        <*> referenceSlotsP
         <*> many
             ( strOption
                 ( long "extra-signer"
@@ -361,6 +367,102 @@ txInReader :: ReadM TxIn
 txInReader =
     eitherReader (txInFromText . T.pack)
 
+data ReferenceFragment
+    = SetType !Text
+    | SetLabel !Text
+    deriving stock (Eq, Show)
+
+data ReferenceSlot = ReferenceSlot !Text ![ReferenceFragment]
+    deriving stock (Eq, Show)
+
+referenceSlotsP :: Parser [RationaleReferenceJSON]
+referenceSlotsP =
+    fmap referenceSlotToJSON
+        <$> many
+            ( strayReferenceTypeP
+                <|> strayReferenceLabelP
+                <|> referenceSlotP
+            )
+
+referenceSlotP :: Parser ReferenceSlot
+referenceSlotP =
+    ReferenceSlot
+        <$> strOption
+            ( long "reference-uri"
+                <> metavar "TEXT"
+                <> help "Reference URI (opens a new reference slot)"
+            )
+        <*> many referenceFragmentP
+
+referenceFragmentP :: Parser ReferenceFragment
+referenceFragmentP =
+    ( SetType
+        <$> strOption
+            ( long "reference-type"
+                <> metavar "TEXT"
+                <> help "Reference @type (defaults to Other)"
+            )
+    )
+        <|> ( SetLabel
+                <$> strOption
+                    ( long "reference-label"
+                        <> metavar "TEXT"
+                        <> help "Reference human-readable label"
+                    )
+            )
+
+strayReferenceTypeP :: Parser ReferenceSlot
+strayReferenceTypeP =
+    option
+        ( eitherReader
+            ( const $
+                Left
+                    "--reference-type requires a preceding --reference-uri"
+            )
+        )
+        ( long "reference-type"
+            <> metavar "TEXT"
+            <> help "Reference @type (must follow --reference-uri)"
+        )
+
+strayReferenceLabelP :: Parser ReferenceSlot
+strayReferenceLabelP =
+    option
+        ( eitherReader
+            ( const $
+                Left
+                    "--reference-label requires a preceding --reference-uri"
+            )
+        )
+        ( long "reference-label"
+            <> metavar "TEXT"
+            <> help "Reference label (must follow --reference-uri)"
+        )
+
+referenceSlotToJSON :: ReferenceSlot -> RationaleReferenceJSON
+referenceSlotToJSON (ReferenceSlot uri fragments) =
+    RationaleReferenceJSON
+        { rjrUri = uri
+        , rjrType = lastType fragments
+        , rjrLabel = lastLabel fragments
+        }
+
+lastType :: [ReferenceFragment] -> Text
+lastType fragments =
+    fromMaybe "Other" $
+        listToMaybe
+            [ t
+            | SetType t <- reverse fragments
+            ]
+
+lastLabel :: [ReferenceFragment] -> Text
+lastLabel fragments =
+    fromMaybe "" $
+        listToMaybe
+            [ label
+            | SetLabel label <- reverse fragments
+            ]
+
 parseAdaToLovelace :: Text -> Either String Integer
 parseAdaToLovelace raw =
     case T.splitOn "." raw of
@@ -426,6 +528,8 @@ runDisburseWizard g DisburseWizardOpts{..} =
                                 , Disburse.raEvent = dwOptsEvent
                                 , Disburse.raLabel = dwOptsLabel
                                 }
+                        , Disburse.daRationaleReferences =
+                            dwOptsReferences
                         , Disburse.daExtraSigners = dwOptsSigners
                         }
                 ri =
@@ -487,6 +591,7 @@ runContingencyDisburse g ContingencyDisburseOpts{..} =
                                 , Disburse.raLabel =
                                     Just "Contingency disburse"
                                 }
+                        , Disburse.daRationaleReferences = []
                         , Disburse.daExtraSigners = []
                         }
                 ri =

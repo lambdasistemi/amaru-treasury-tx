@@ -59,7 +59,15 @@ module Amaru.Treasury.Tx.SwapWizard
     , resolveWizardEnv
     , ResolverAllAdaInput (..)
     , resolveWizardEnvAllAda
+
+      -- * Input control (#184 — Slice 2)
+    , PoolHit (..)
+    , InputControlOutcome (..)
+    , resolveWizardEnvIC
+    , resolveWizardEnvAllAdaIC
+    , renderExclusionLogLine
     , renderWalletShortfall
+    , renderWalletShortfallWithExcludes
 
       -- * Re-usable helpers
     , txInToText
@@ -95,6 +103,7 @@ import Data.Aeson
     )
 import Data.Aeson.Types qualified as A
 import Data.ByteString.Base16 qualified as B16
+import Data.Either (lefts, rights)
 import Data.Function (on)
 import Data.List qualified as L
 import Data.Map.Strict (Map)
@@ -135,6 +144,15 @@ import Amaru.Treasury.Scope
 import Amaru.Treasury.Wizard.Common
     ( isHex28
     , signerScopeFromText
+    )
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    , OutRef
+    , filterPool
+    , outRefText
+    , parseOutRef
+    , renderShortfallWithExcludes
     )
 
 -- ----------------------------------------------------
@@ -714,6 +732,54 @@ data ResolverError
       --   so the CLI can render a one-line diagnostic.
       ResolverValidityOvershoot !Validity.HorizonError
     | ResolverAllAdaFailed !AllAdaError
+    | -- | @ResolverExtraTxInNotOnWallet refs@. One or more
+      --   refs supplied via @--extra-tx-in@ were not returned
+      --   by the wallet-address chain query (FR-009).
+      ResolverExtraTxInNotOnWallet ![OutRef]
+    | -- | @ResolverWalletShortfallWithExcludes available
+      --   target refs@. Wallet-side shortfall after applying
+      --   the operator's @--exclude-utxo@ set; @refs@ lists
+      --   every excluded outref so the caller can render them
+      --   via 'renderShortfallWithExcludes' (FR-008).
+      ResolverWalletShortfallWithExcludes
+        !Integer
+        !Integer
+        ![OutRef]
+    deriving (Eq, Show)
+
+-- ----------------------------------------------------
+-- Input control (#184 Slice 2)
+-- ----------------------------------------------------
+
+{- | Per-ref pool attribution for the operator log line
+introduced by @--exclude-utxo@. An excluded ref may match
+the wallet candidate pool, the treasury candidate pool, or
+both. The single-pool wizards in Slices 3–7 emit only
+@WalletOnly@ or @TreasuryOnly@; @swap-wizard@ is the only
+runner that exercises @Both@ in a single slice (canary).
+-}
+data PoolHit
+    = WalletOnly
+    | TreasuryOnly
+    | Both
+    deriving (Eq, Show)
+
+{- | Outcome of applying an 'ExclusionSet' /
+'ForcedInclusionSet' against the live wallet and treasury
+candidate sets.
+
+@icoHits@ records every excluded ref that matched at least
+one candidate pool, paired with its pool attribution in
+exclusion-set input order. @icoInert@ records excluded
+refs that did not match any candidate pool — per the
+spec's Edge Case, the wizard still logs an entry for these
+so the operator sees that their @--exclude-utxo@ was a
+no-op.
+-}
+data InputControlOutcome = InputControlOutcome
+    { icoHits :: ![(OutRef, PoolHit)]
+    , icoInert :: ![OutRef]
+    }
     deriving (Eq, Show)
 
 {- | Resolver inputs for all-ADA mode. Amount and chunk size
@@ -1106,11 +1172,33 @@ resolveWizardEnv
     => ResolverEnv m
     -> ResolverInput
     -> m (Either ResolverError WizardEnv)
-resolveWizardEnv ResolverEnv{..} ri =
+resolveWizardEnv renv ri = do
+    r <-
+        resolveWizardEnvIC
+            renv
+            (ExclusionSet [])
+            (ForcedInclusionSet [])
+            ri
+    pure (fmap fst r)
+
+{- | Variant of 'resolveWizardEnv' that also threads the
+operator's @--exclude-utxo@ and @--extra-tx-in@ sets through
+the resolver (#184 Slice 2). Returns the resolved
+'WizardEnv' alongside the 'InputControlOutcome' the caller
+uses to emit per-ref log lines.
+-}
+resolveWizardEnvIC
+    :: (Monad m)
+    => ResolverEnv m
+    -> ExclusionSet
+    -> ForcedInclusionSet
+    -> ResolverInput
+    -> m (Either ResolverError (WizardEnv, InputControlOutcome))
+resolveWizardEnvIC ResolverEnv{..} excl forced ri =
     case networkConstants (riNetwork ri) of
         Left _ ->
             pure (Left (ResolverNetworkUnsupported (riNetwork ri)))
-        Right nc -> do
+        Right nc ->
             case ( addrNetwork (riWalletAddrBech32 ri)
                  , networkFamily (riNetwork ri)
                  ) of
@@ -1128,144 +1216,175 @@ resolveWizardEnv ResolverEnv{..} ri =
                                 )
                 _ -> resolveWith nc
   where
+    ExclusionSet exclRefs = excl
+    ForcedInclusionSet forcedRefs = forced
+
     resolveWith nc =
-        case Map.lookup (riScope ri) (rvTreasuryByScope (riRegistry ri)) of
+        case Map.lookup
+            (riScope ri)
+            (rvTreasuryByScope (riRegistry ri)) of
             Nothing ->
-                pure (Left (ResolverScopeUnsupported (riScope ri)))
+                pure
+                    (Left (ResolverScopeUnsupported (riScope ri)))
             Just refs -> do
                 walletUtxos <-
                     reEnvQueryWalletUtxos
                         (riWalletAddrBech32 ri)
                 if null walletUtxos
                     then pure (Left ResolverEmptyWalletUtxos)
-                    else do
-                        treasuryUtxos <-
-                            reEnvQueryTreasuryUtxos
-                                (trAddress refs)
-                        let chunkCount =
-                                chunkCountFor
-                                    (riAmountLovelace ri)
-                                    (riChunkSizeLovelace ri)
-                            fundingTarget =
-                                riAmountLovelace ri
-                                    + chunkCount
-                                        * ncExtraPerChunkLovelace nc
-                        if null treasuryUtxos
-                            then
-                                pure
-                                    (Left ResolverEmptyTreasuryUtxos)
-                            else case selectTreasury
-                                ( map
-                                    (\(r, l, _) -> (r, l))
-                                    treasuryUtxos
-                                )
-                                fundingTarget of
-                                Nothing ->
+                    else
+                        let walletRefSet =
+                                utxoOutRefs walletUtxos
+                            missing =
+                                filter
+                                    (`notElem` walletRefSet)
+                                    forcedRefs
+                        in  if not (null missing)
+                                then
                                     pure
                                         ( Left
-                                            ( ResolverShortfall
-                                                ( sum
-                                                    ( map
-                                                        ( \(_, l, _) ->
-                                                            l
-                                                        )
-                                                        treasuryUtxos
-                                                    )
-                                                )
-                                                fundingTarget
+                                            ( ResolverExtraTxInNotOnWallet
+                                                missing
                                             )
                                         )
-                                Just (picked, leftover)
-                                    | riChunkSizeLovelace ri <= 0 ->
-                                        pure
-                                            ( Left
-                                                ( ResolverInvalidChunkSize
-                                                    (riChunkSizeLovelace ri)
-                                                )
-                                            )
-                                    | otherwise ->
-                                        let walletTarget =
-                                                walletFeeSlackLovelace
-                                        in  case selectWallet
-                                                walletTarget
-                                                walletUtxos of
-                                                Left WalletNoPureAda ->
-                                                    pure
-                                                        ( Left
-                                                            ResolverEmptyWalletUtxos
-                                                        )
-                                                Left
-                                                    ( WalletShortfall
-                                                            avail
-                                                            target
-                                                        ) ->
-                                                        pure
-                                                            ( Left
-                                                                ( ResolverWalletShortfall
-                                                                    avail
-                                                                    target
-                                                                )
-                                                            )
-                                                Right ([], _) ->
-                                                    pure
-                                                        ( Left
-                                                            ResolverEmptyWalletUtxos
-                                                        )
-                                                Right (walletHead : walletTail, _) -> do
-                                                    upper <-
-                                                        resolveUpperBound
-                                                            reEnvComputeUpperBound
-                                                            (riValidityHours ri)
-                                                    case upper of
-                                                        Left e ->
-                                                            pure (Left e)
-                                                        Right upperBound ->
-                                                            let owners =
-                                                                    rvOwners
-                                                                        (riRegistry ri)
-                                                                env =
-                                                                    WizardEnv
-                                                                        { weNetwork =
-                                                                            riNetwork ri
-                                                                        , weUpperBoundSlot =
-                                                                            upperBound
-                                                                        , weNetworkConstants =
-                                                                            nc
-                                                                        , weRegistry =
-                                                                            riRegistry ri
-                                                                        , weScopeView =
-                                                                            ScopeView
-                                                                                { svScope =
-                                                                                    riScope
-                                                                                        ri
-                                                                                , svRefs =
-                                                                                    refs
-                                                                                , svDefaultSigners =
-                                                                                    maybeToList
-                                                                                        ( scopeOwnerText
-                                                                                            owners
-                                                                                            (riScope ri)
-                                                                                        )
-                                                                                }
-                                                                        , weTreasurySelection =
-                                                                            TreasurySelection
-                                                                                { tsInputs =
-                                                                                    picked
-                                                                                , tsLeftoverLovelace =
-                                                                                    leftover
-                                                                                }
-                                                                        , weWalletSelection =
-                                                                            WalletSelection
-                                                                                { wsTxIn =
-                                                                                    walletHead
-                                                                                , wsAddress =
-                                                                                    riWalletAddrBech32
-                                                                                        ri
-                                                                                , wsExtraTxIns =
-                                                                                    walletTail
-                                                                                }
-                                                                        }
-                                                            in  pure (Right env)
+                                else
+                                    continueAfterWallet
+                                        nc
+                                        refs
+                                        walletUtxos
+                                        walletRefSet
+
+    continueAfterWallet nc refs walletUtxos walletRefSet = do
+        treasuryUtxos <-
+            reEnvQueryTreasuryUtxos (trAddress refs)
+        let treasuryRefSet = utxoOutRefs treasuryUtxos
+            (filteredWallet, _wHits, _wInert, _wExtras) =
+                filterPool
+                    utxoCandidateRef
+                    excl
+                    forced
+                    walletUtxos
+            (filteredTreasury, _tHits, _tInert, _) =
+                filterPool
+                    utxoCandidateRef
+                    excl
+                    (ForcedInclusionSet [])
+                    treasuryUtxos
+            outcome =
+                buildOutcome
+                    exclRefs
+                    walletRefSet
+                    treasuryRefSet
+            chunkCount =
+                chunkCountFor
+                    (riAmountLovelace ri)
+                    (riChunkSizeLovelace ri)
+            fundingTarget =
+                riAmountLovelace ri
+                    + chunkCount
+                        * ncExtraPerChunkLovelace nc
+        if null treasuryUtxos
+            then pure (Left ResolverEmptyTreasuryUtxos)
+            else case selectTreasury
+                ( map
+                    (\(r, l, _) -> (r, l))
+                    filteredTreasury
+                )
+                fundingTarget of
+                Nothing ->
+                    pure
+                        ( Left
+                            ( ResolverShortfall
+                                ( sum
+                                    ( map
+                                        (\(_, l, _) -> l)
+                                        filteredTreasury
+                                    )
+                                )
+                                fundingTarget
+                            )
+                        )
+                Just (picked, leftover)
+                    | riChunkSizeLovelace ri <= 0 ->
+                        pure
+                            ( Left
+                                ( ResolverInvalidChunkSize
+                                    (riChunkSizeLovelace ri)
+                                )
+                            )
+                    | otherwise ->
+                        selectWalletAndBuild
+                            nc
+                            refs
+                            filteredWallet
+                            picked
+                            leftover
+                            outcome
+
+    selectWalletAndBuild nc refs filteredWallet picked leftover outcome =
+        case selectWallet
+            walletFeeSlackLovelace
+            filteredWallet of
+            Left WalletNoPureAda ->
+                pure (Left (walletShortfallError 0 walletFeeSlackLovelace))
+            Left (WalletShortfall avail target) ->
+                pure (Left (walletShortfallError avail target))
+            Right ([], _) ->
+                pure (Left (walletShortfallError 0 walletFeeSlackLovelace))
+            Right (walletHead : walletTail, _) -> do
+                upper <-
+                    resolveUpperBound
+                        reEnvComputeUpperBound
+                        (riValidityHours ri)
+                case upper of
+                    Left e -> pure (Left e)
+                    Right upperBound ->
+                        let owners =
+                                rvOwners (riRegistry ri)
+                            forcedTexts =
+                                map outRefText forcedRefs
+                            env =
+                                WizardEnv
+                                    { weNetwork = riNetwork ri
+                                    , weUpperBoundSlot = upperBound
+                                    , weNetworkConstants = nc
+                                    , weRegistry = riRegistry ri
+                                    , weScopeView =
+                                        ScopeView
+                                            { svScope = riScope ri
+                                            , svRefs = refs
+                                            , svDefaultSigners =
+                                                maybeToList
+                                                    ( scopeOwnerText
+                                                        owners
+                                                        (riScope ri)
+                                                    )
+                                            }
+                                    , weTreasurySelection =
+                                        TreasurySelection
+                                            { tsInputs = picked
+                                            , tsLeftoverLovelace = leftover
+                                            }
+                                    , weWalletSelection =
+                                        WalletSelection
+                                            { wsTxIn = walletHead
+                                            , wsAddress =
+                                                riWalletAddrBech32 ri
+                                            , wsExtraTxIns =
+                                                forcedTexts
+                                                    <> walletTail
+                                            }
+                                    }
+                        in  pure (Right (env, outcome))
+
+    walletShortfallError avail target
+        | null exclRefs =
+            ResolverWalletShortfall avail target
+        | otherwise =
+            ResolverWalletShortfallWithExcludes
+                avail
+                target
+                exclRefs
 
 {- | Resolve @swap-wizard --all-ada@ from live data.
 
@@ -1278,7 +1397,34 @@ resolveWizardEnvAllAda
     => ResolverEnv m
     -> ResolverAllAdaInput
     -> m (Either ResolverError (WizardEnv, AllAdaPlan))
-resolveWizardEnvAllAda ResolverEnv{..} rai =
+resolveWizardEnvAllAda renv rai = do
+    r <-
+        resolveWizardEnvAllAdaIC
+            renv
+            (ExclusionSet [])
+            (ForcedInclusionSet [])
+            rai
+    pure (fmap dropOutcome r)
+  where
+    dropOutcome (env, plan, _) = (env, plan)
+
+{- | Variant of 'resolveWizardEnvAllAda' that threads
+@--exclude-utxo@ / @--extra-tx-in@ through the all-ADA
+resolver. Behaves like the fixed-USDM 'resolveWizardEnvIC'
+but produces an additional 'AllAdaPlan'.
+-}
+resolveWizardEnvAllAdaIC
+    :: (Monad m)
+    => ResolverEnv m
+    -> ExclusionSet
+    -> ForcedInclusionSet
+    -> ResolverAllAdaInput
+    -> m
+        ( Either
+            ResolverError
+            (WizardEnv, AllAdaPlan, InputControlOutcome)
+        )
+resolveWizardEnvAllAdaIC ResolverEnv{..} excl forced rai =
     case networkConstants (raiNetwork rai) of
         Left _ ->
             pure (Left (ResolverNetworkUnsupported (raiNetwork rai)))
@@ -1300,6 +1446,9 @@ resolveWizardEnvAllAda ResolverEnv{..} rai =
                                 )
                 _ -> resolveWith nc
   where
+    ExclusionSet exclRefs = excl
+    ForcedInclusionSet forcedRefs = forced
+
     resolveWith nc =
         case Map.lookup
             (raiScope rai)
@@ -1312,42 +1461,78 @@ resolveWizardEnvAllAda ResolverEnv{..} rai =
                         (raiWalletAddrBech32 rai)
                 if null walletUtxos
                     then pure (Left ResolverEmptyWalletUtxos)
-                    else do
-                        treasuryUtxos <-
-                            reEnvQueryTreasuryUtxos
-                                (trAddress refs)
-                        if null treasuryUtxos
-                            then pure (Left ResolverEmptyTreasuryUtxos)
-                            else case planAllAda
-                                nc
-                                (raiSplit rai)
-                                ( raiRateNumerator rai
-                                , raiRateDenominator rai
-                                )
-                                treasuryUtxos of
-                                Left e ->
-                                    pure (Left (ResolverAllAdaFailed e))
-                                Right plan ->
-                                    resolveSelections
-                                        refs
-                                        plan
-                                        walletUtxos
+                    else
+                        let walletRefSet =
+                                utxoOutRefs walletUtxos
+                            missing =
+                                filter
+                                    (`notElem` walletRefSet)
+                                    forcedRefs
+                        in  if not (null missing)
+                                then
+                                    pure
+                                        ( Left
+                                            ( ResolverExtraTxInNotOnWallet
+                                                missing
+                                            )
+                                        )
+                                else
+                                    continueAfterWallet
                                         nc
+                                        refs
+                                        walletUtxos
+                                        walletRefSet
 
-    resolveSelections refs plan walletUtxos nc =
-        case selectWallet walletFeeSlackLovelace walletUtxos of
+    continueAfterWallet nc refs walletUtxos walletRefSet = do
+        treasuryUtxos <-
+            reEnvQueryTreasuryUtxos (trAddress refs)
+        let treasuryRefSet = utxoOutRefs treasuryUtxos
+            (filteredWallet, _wHits, _wInert, _wExtras) =
+                filterPool
+                    utxoCandidateRef
+                    excl
+                    forced
+                    walletUtxos
+            (filteredTreasury, _tHits, _tInert, _) =
+                filterPool
+                    utxoCandidateRef
+                    excl
+                    (ForcedInclusionSet [])
+                    treasuryUtxos
+            outcome =
+                buildOutcome
+                    exclRefs
+                    walletRefSet
+                    treasuryRefSet
+        if null treasuryUtxos
+            then pure (Left ResolverEmptyTreasuryUtxos)
+            else case planAllAda
+                nc
+                (raiSplit rai)
+                ( raiRateNumerator rai
+                , raiRateDenominator rai
+                )
+                filteredTreasury of
+                Left e ->
+                    pure (Left (ResolverAllAdaFailed e))
+                Right plan ->
+                    resolveSelections
+                        refs
+                        plan
+                        filteredWallet
+                        nc
+                        outcome
+
+    resolveSelections refs plan filteredWallet nc outcome =
+        case selectWallet
+            walletFeeSlackLovelace
+            filteredWallet of
             Left WalletNoPureAda ->
-                pure (Left ResolverEmptyWalletUtxos)
+                pure (Left (walletShortfallError 0 walletFeeSlackLovelace))
             Left (WalletShortfall avail target) ->
-                pure
-                    ( Left
-                        ( ResolverWalletShortfall
-                            avail
-                            target
-                        )
-                    )
+                pure (Left (walletShortfallError avail target))
             Right ([], _) ->
-                pure (Left ResolverEmptyWalletUtxos)
+                pure (Left (walletShortfallError 0 walletFeeSlackLovelace))
             Right (walletHead : walletTail, _) -> do
                 upper <-
                     resolveUpperBound
@@ -1357,6 +1542,8 @@ resolveWizardEnvAllAda ResolverEnv{..} rai =
                     Left e -> pure (Left e)
                     Right upperBound ->
                         let owners = rvOwners (raiRegistry rai)
+                            forcedTexts =
+                                map outRefText forcedRefs
                             env =
                                 WizardEnv
                                     { weNetwork = raiNetwork rai
@@ -1389,10 +1576,21 @@ resolveWizardEnvAllAda ResolverEnv{..} rai =
                                             , wsAddress =
                                                 raiWalletAddrBech32
                                                     rai
-                                            , wsExtraTxIns = walletTail
+                                            , wsExtraTxIns =
+                                                forcedTexts
+                                                    <> walletTail
                                             }
                                     }
-                        in  pure (Right (env, plan))
+                        in  pure (Right (env, plan, outcome))
+
+    walletShortfallError avail target
+        | null exclRefs =
+            ResolverWalletShortfall avail target
+        | otherwise =
+            ResolverWalletShortfallWithExcludes
+                avail
+                target
+                exclRefs
 
 {- | Drive the resolver's @reEnvComputeUpperBound@ effect with
 the operator's optional @--validity-hours@.
@@ -1473,3 +1671,87 @@ renderWalletShortfall ri available required =
         <> " (feeSlack="
         <> T.pack (show walletFeeSlackLovelace)
         <> ")"
+
+{- | Append the operator's excluded refs to a base wallet
+shortfall message. Wizard-side shim that delegates to the
+shared 'renderShortfallWithExcludes' from
+'Amaru.Treasury.Wizard.InputControl'; the wizard-side
+helper exists so callers do not have to thread the shared
+module's import through every error site.
+-}
+renderWalletShortfallWithExcludes :: Text -> [OutRef] -> Text
+renderWalletShortfallWithExcludes =
+    renderShortfallWithExcludes
+
+{- | Render the per-ref exclusion log line emitted by
+@swap-wizard@ when @--exclude-utxo@ matches at least one
+candidate. Pool attribution is rendered as @[wallet]@,
+@[treasury]@, or @[both]@; the @swap-wizard:@ prefix
+matches the existing 'renderEvent' line style.
+-}
+renderExclusionLogLine :: OutRef -> PoolHit -> Text
+renderExclusionLogLine ref pool =
+    "swap-wizard: excluded utxo "
+        <> outRefText ref
+        <> " (operator-supplied) ["
+        <> poolText
+        <> "]"
+  where
+    poolText = case pool of
+        WalletOnly -> "wallet"
+        TreasuryOnly -> "treasury"
+        Both -> "both"
+
+-- ----------------------------------------------------
+-- Input-control internal helpers
+-- ----------------------------------------------------
+
+{- | Parse the @"txid#ix"@ rendering of a wallet/treasury
+candidate's reference into an 'OutRef'. Backend-returned
+refs are well-formed; this helper only filters out
+unparseable entries defensively (the inert case is treated
+as a no-match).
+-}
+utxoCandidateRef :: (Text, Integer, Bool) -> OutRef
+utxoCandidateRef (ref, _, _) =
+    case parseOutRef ref of
+        Right r -> r
+        Left e ->
+            error
+                ( "swap-wizard: candidate ref not parseable: "
+                    <> T.unpack ref
+                    <> ": "
+                    <> T.unpack e
+                )
+
+-- | Reference set of a candidate UTxO list, in input order.
+utxoOutRefs :: [(Text, Integer, Bool)] -> [OutRef]
+utxoOutRefs = map utxoCandidateRef
+
+{- | Build the per-ref pool-attribution outcome from an
+exclusion list and the two candidate-pool reference sets.
+Preserves the exclusion-set input order so the wizard's
+log lines stay deterministic.
+-}
+buildOutcome
+    :: [OutRef]
+    -> [OutRef]
+    -> [OutRef]
+    -> InputControlOutcome
+buildOutcome excluded walletRefs treasuryRefs =
+    let classify ref
+            | ref `elem` walletRefs
+            , ref `elem` treasuryRefs =
+                Right (ref, Both)
+            | ref `elem` walletRefs =
+                Right (ref, WalletOnly)
+            | ref `elem` treasuryRefs =
+                Right (ref, TreasuryOnly)
+            | otherwise = Left ref
+        classified = map classify excluded
+        hits = rights classified
+        inert = lefts classified
+    in  InputControlOutcome
+            { icoHits = hits
+            , icoInert = inert
+            }

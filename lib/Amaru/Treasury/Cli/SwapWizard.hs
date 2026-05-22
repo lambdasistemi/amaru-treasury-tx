@@ -10,6 +10,7 @@ module Amaru.Treasury.Cli.SwapWizard
     ( WizardOpts (..)
     , wizardOptsP
     , runWizard
+    , validateWizardInputControl
     ) where
 
 import Control.Applicative ((<|>))
@@ -74,6 +75,7 @@ import Amaru.Treasury.Tx.SwapQuote
 import Amaru.Treasury.Tx.SwapQuote qualified as SQ
 import Amaru.Treasury.Tx.SwapWizard
     ( AllAdaPlan (..)
+    , InputControlOutcome (..)
     , RationaleAnswers (..)
     , ResolverAllAdaInput (..)
     , ResolverError (..)
@@ -81,14 +83,27 @@ import Amaru.Treasury.Tx.SwapWizard
     , SwapWizardQ (..)
     , WizardError
     , registryViewFromVerified
+    , renderExclusionLogLine
     , renderWalletShortfall
-    , resolveWizardEnv
-    , resolveWizardEnvAllAda
+    , renderWalletShortfallWithExcludes
+    , resolveWizardEnvAllAdaIC
+    , resolveWizardEnvIC
     , wizardToTreasuryIntent
     )
 import Amaru.Treasury.Tx.SwapWizard.Trace
     ( WizardEvent (..)
     , eventTracer
+    )
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    , InputControlError
+    , OutRef
+    , excludeUtxoP
+    , extraTxInP
+    , outRefText
+    , renderInputControlError
+    , validateInputControl
     )
 
 data ChunkSpec
@@ -140,6 +155,12 @@ data WizardOpts = WizardOpts
     , wOptsEvent :: !(Maybe Text)
     , wOptsLabel :: !(Maybe Text)
     , wOptsSigners :: ![Text]
+    , wOptsExcludeSet :: !ExclusionSet
+    -- ^ Operator-supplied @--exclude-utxo@ refs, in flag
+    -- order (#184).
+    , wOptsForcedSet :: !ForcedInclusionSet
+    -- ^ Operator-supplied @--extra-tx-in@ refs, in flag
+    -- order (#184).
     }
 
 wizardOptsP :: Parser WizardOpts
@@ -229,6 +250,8 @@ wizardOptsP =
                         "Repeat for each extra signer (scope name/alias or 28-byte hex)"
                 )
             )
+        <*> (ExclusionSet <$> excludeUtxoP)
+        <*> (ForcedInclusionSet <$> extraTxInP)
 
 scopeReader :: ReadM ScopeId
 scopeReader =
@@ -440,12 +463,26 @@ traceAllAdaPlan tr plan requestedSplit =
             (aapRateNumerator plan)
             (aapRateDenominator plan)
 
+{- | Pre-flight check for @--exclude-utxo@ / @--extra-tx-in@
+contradictions. Returns 'Left' (Contradiction refs) when an
+outref appears in both flag sets on the same invocation;
+runs before any chain query so the wizard can fail fast.
+-}
+validateWizardInputControl
+    :: WizardOpts -> Either InputControlError ()
+validateWizardInputControl WizardOpts{..} =
+    validateInputControl wOptsExcludeSet wOptsForcedSet
+
 runWizard :: GlobalOpts -> WizardOpts -> IO ()
-runWizard g WizardOpts{..} = do
+runWizard g opts@WizardOpts{..} = do
     let socket = fromMaybe "(unset)" (goSocketPath g)
     withLogHandle wOptsLog $ \logH -> do
         let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
             tr = eventTracer textTracer
+        case validateWizardInputControl opts of
+            Right () -> pure ()
+            Left ce ->
+                abortTr tr (renderInputControlError ce)
         networkName <- case resolveNetworkName g of
             Right t -> pure t
             Left e -> abortTr tr (T.pack e)
@@ -499,7 +536,12 @@ runWizard g WizardOpts{..} = do
                                         , riValidityHours =
                                             wOptsValidityHours
                                         }
-                            er <- resolveWizardEnv renv ri
+                            er <-
+                                resolveWizardEnvIC
+                                    renv
+                                    wOptsExcludeSet
+                                    wOptsForcedSet
+                                    ri
                             env <- case er of
                                 Left
                                     ( ResolverWalletShortfall
@@ -513,11 +555,38 @@ runWizard g WizardOpts{..} = do
                                                 avail
                                                 required
                                             )
+                                Left
+                                    ( ResolverWalletShortfallWithExcludes
+                                            avail
+                                            required
+                                            refs
+                                        ) ->
+                                        abortTr
+                                            tr
+                                            ( renderWalletShortfallWithExcludes
+                                                ( renderWalletShortfall
+                                                    ri
+                                                    avail
+                                                    required
+                                                )
+                                                refs
+                                            )
+                                Left
+                                    ( ResolverExtraTxInNotOnWallet
+                                            refs
+                                        ) ->
+                                        abortTr
+                                            tr
+                                            ( renderExtraTxInNotOnWallet
+                                                refs
+                                            )
                                 Left e ->
                                     abortTr
                                         tr
                                         ("resolve: " <> T.pack (show e))
-                                Right e -> pure e
+                                Right (e, outcome) -> do
+                                    emitExclusionLog textTracer outcome
+                                    pure e
                             pure (env, params)
                         AllAda split -> do
                             rateParams <-
@@ -537,13 +606,47 @@ runWizard g WizardOpts{..} = do
                                         , raiValidityHours =
                                             wOptsValidityHours
                                         }
-                            er <- resolveWizardEnvAllAda renv rai
+                            er <-
+                                resolveWizardEnvAllAdaIC
+                                    renv
+                                    wOptsExcludeSet
+                                    wOptsForcedSet
+                                    rai
                             (env, plan) <- case er of
+                                Left
+                                    ( ResolverExtraTxInNotOnWallet
+                                            refs
+                                        ) ->
+                                        abortTr
+                                            tr
+                                            ( renderExtraTxInNotOnWallet
+                                                refs
+                                            )
+                                Left
+                                    ( ResolverWalletShortfallWithExcludes
+                                            avail
+                                            required
+                                            refs
+                                        ) ->
+                                        abortTr
+                                            tr
+                                            ( renderWalletShortfallWithExcludes
+                                                ( "wallet shortfall available="
+                                                    <> T.pack
+                                                        (show avail)
+                                                    <> " required="
+                                                    <> T.pack
+                                                        (show required)
+                                                )
+                                                refs
+                                            )
                                 Left e ->
                                     abortTr
                                         tr
                                         ("resolve: " <> T.pack (show e))
-                                Right e -> pure e
+                                Right (e, plan', outcome) -> do
+                                    emitExclusionLog textTracer outcome
+                                    pure (e, plan')
                             traceAllAdaPlan tr plan split
                             pure
                                 ( env
@@ -612,3 +715,36 @@ runWizard g WizardOpts{..} = do
                 case wOptsOut of
                     Nothing -> BSL.putStr bytes
                     Just fp -> BSL.writeFile fp bytes
+
+{- | Emit one log line per excluded ref that matched a
+candidate pool, in exclusion-set input order. Refs that
+did not match any pool ('icoInert') are still logged so
+the operator sees their @--exclude-utxo@ was applied.
+-}
+emitExclusionLog
+    :: Tracer IO Text -> InputControlOutcome -> IO ()
+emitExclusionLog textTracer outcome = do
+    mapM_
+        ( traceWith textTracer
+            . uncurry renderExclusionLogLine
+        )
+        (icoHits outcome)
+    mapM_
+        ( \ref ->
+            traceWith
+                textTracer
+                ( "swap-wizard: excluded utxo "
+                    <> outRefText ref
+                    <> " (operator-supplied) [absent]"
+                )
+        )
+        (icoInert outcome)
+
+{- | Render the FR-009 "extra input not found on wallet"
+error, naming every offending outref the operator
+supplied via @--extra-tx-in@.
+-}
+renderExtraTxInNotOnWallet :: [OutRef] -> Text
+renderExtraTxInNotOnWallet refs =
+    "swap-wizard: extra input not found on wallet: "
+        <> T.intercalate ", " (map outRefText refs)

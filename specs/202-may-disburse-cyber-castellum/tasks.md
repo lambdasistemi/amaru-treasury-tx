@@ -9,10 +9,11 @@ prose for the orchestrator to commit.
 
 ## S0 — Open clarifications to resolve before S2 runs
 
-- [ ] **T010** Operator: confirm or supply the resolved CAG
-      `onchain_address` (bech32). Update path: amend `vendors.yaml`
-      via a separate small PR before S2 — `vendors.yaml` is NOT
-      owned by this PR. Track status in this PR body.
+- [ ] **T010** Operator → orchestrator: supply the resolved CAG
+      `onchain_address` (mainnet bech32). Orchestrator amends
+      `vendors.yaml` under this PR (folded in per operator decision
+      2026-05-22), replacing the `<TBD-CAG-BECH32>` placeholder.
+      Commit subject: `fix(vendors): resolve crypto_accounting_group onchain_address`.
 - [ ] **T020** Operator + orchestrator: confirm PR #197 status
       (merged vs draft) before S2 starts. If still draft, decide:
       wait, or pin S2 to `feat/issue-196-disburse-wizard-references`
@@ -23,13 +24,14 @@ prose for the orchestrator to commit.
 
 ## S1 — Operator helper script (orchestrator-owned, mechanical edit)
 
-- [ ] **T100** Orchestrator: write `scripts/build-may-cc-disburse.sh`
+- [X] **T100** Orchestrator: write `scripts/build-may-cc-disburse.sh`
       per the plan (read manifest, validate 5-kind set, read CAG
-      bech32, refuse on `<TBD>`, print/exec argv).
-- [ ] **T110** Orchestrator: write a small README block under
-      `scripts/` (or extend the existing one) documenting the helper.
-- [ ] **T120** Orchestrator: run `./gate.sh`; expect PASS.
-- [ ] **T130** Orchestrator: commit. Subject:
+      bech32, refuse on `<TBD>`, print/exec argv with real flag
+      surface `--unit usdm --amount <1e-6 USDM> --beneficiary-addr`).
+- [X] **T110** Orchestrator: usage documentation lives in the
+      script's `--help` block (subsumed; no separate scripts/README).
+- [X] **T120** Orchestrator: run `./gate.sh`; expect PASS.
+- [X] **T130** Orchestrator: commit. Subject:
       `feat(scripts): operator helper to materialise may CC disburse-wizard argv from #201 manifest`.
       Tasks trailer: `Tasks: T100, T110, T120, T130`.
 

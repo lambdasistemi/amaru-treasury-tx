@@ -39,10 +39,28 @@
     cardano-node = {
       url = "github:IntersectMBO/cardano-node/10.7.0";
     };
+    # Upstream Amaru 2026 treasury journal — single source of
+    # truth for `journal/2026/metadata.json`. Pinned by commit
+    # so the deployed dashboard's metadata is fully content-
+    # addressed and bumping it requires a flake.lock update.
+    #
+    # Pinned to the PR-20 branch
+    # (https://github.com/pragma-org/amaru-treasury/pull/20)
+    # which pads the contingency `registry_script.hash` to 28
+    # bytes; upstream `main` HEAD as of 2026-05-22 still ships
+    # a 55-char hash (typo, missing one nibble) that fails
+    # script-hash validation. Bump to a merge commit once the
+    # PR lands on `main`.
+    amaru-treasury = {
+      url =
+        "github:pragma-org/amaru-treasury/fb1937964196b061ddc4f247d2de11a13745d541";
+      flake = false;
+    };
   };
 
   outputs = inputs@{ self, nixpkgs, lintNixpkgs, flake-parts
-    , haskellNix, hackageNix, iohkNix, CHaP, cardano-node, ... }:
+    , haskellNix, hackageNix, iohkNix, CHaP, cardano-node
+    , amaru-treasury, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [ "x86_64-linux" "aarch64-darwin" ];
       perSystem = { system, ... }:
@@ -134,8 +152,17 @@
             };
           };
           components = project.hsPkgs.amaru-treasury-tx.components;
+          # The upstream metadata journal as a content-addressed
+          # Nix store path. `nix/metadata.nix` is the single
+          # access point — every consumer (checks, image, the
+          # eventual API binary's runtime config) reads through
+          # it so the flake-input bump is the only knob.
+          treasuryMetadata = import ./nix/metadata.nix {
+            inherit pkgs;
+            amaruTreasurySrc = amaru-treasury;
+          };
           checks = import ./nix/checks.nix {
-            inherit pkgs components lintPkgs;
+            inherit pkgs components lintPkgs treasuryMetadata;
             src = ./.;
           };
           checkApps = import ./nix/apps.nix { inherit pkgs checks; };

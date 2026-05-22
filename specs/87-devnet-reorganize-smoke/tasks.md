@@ -40,6 +40,16 @@ Owned-files boundaries and proof strategies are normative in [plan.md](./plan.md
 - [X] **T015** — `CliDevnetSmokeSpec.hs` extended with 8 fixture-driven cases pinning `tx-validate` flag binding, run-dir output path, `EXEC_UNITS_OVER_LIMIT` / `EXEC_UNITS_VALIDATOR_UNAVAILABLE` literals, `execUnitsVerdict` key, `queryProtocolParamsH` + `maxTxExecutionUnits` references, `full_phase` ordering (reorganize before disburse, with disburse removed), `write_full_summary` surfacing `execUnitsVerdict` via `--slurpfile`.
 - [ ] **T016** — Re-run the live-boundary leg manually (operator follow-up owned by the orchestrator): `just devnet-cli-smoke --phase reorganize --run-dir runs/devnet-cli/<stamp>` and capture the relevant `summary.json` keys (`reorganizeInputs`, `reorganizeContinuingOutput`, `assetPreservationVerdict`, `execUnitsVerdict`) into the PR body before the PR is marked ready. **This task is orchestrator-owned and does not change repo files; it is the live-boundary evidence gate.**
 
+## Slice S3b — fix treasuryUtxos jq path (live-boundary regression)
+
+**Surfaced by T016**: live-boundary leg `just devnet-cli-smoke --phase reorganize` showed the chain DID have 3 `treasuryUtxos` at `core_development` after the disburse + seed-split chain ran, but the smoke's jq filter (`'[.. | objects | select(has("utxos")) | .utxos[]?] | length'`) keyed on `"utxos"` instead of `"treasuryUtxos"` (the actual key in the `amaru-treasury-tx treasury-inspect --format json` output). Smoke read 0 and fired `INSUFFICIENT_TREASURY_UTXOS` on the happy path. Unit suite missed it because the static fixtures pin the literal diagnostic and the helper name, not the jq path.
+
+**Commit subject**: `fix(smoke): key reorganize treasury-utxo count on treasuryUtxos`
+**Tasks trailer**: `Tasks: T019, T020`
+
+- [ ] **T019** — In `scripts/smoke/smoke.sh`'s `reorganize_phase`, fix both jq filters (the primary count and the post-setup retry count) so they key on `.treasuryUtxos[]?` and `has("treasuryUtxos")` (or filter the matching `scopes[]` entry by `.scope == "core_development"` and take `.treasuryUtxos | length` — pick whichever is more legible).
+- [ ] **T020** — In `test/unit/Amaru/Treasury/Smoke/CliDevnetSmokeSpec.hs`, add a fixture-driven regression that pins the *exact* jq filter path used in `reorganize_phase` against the `treasuryUtxos` key (a static-fixture substring assertion is enough — embedding a runtime jq invocation against a sample JSON is out of scope, but the static check must ensure the smoke source references `treasuryUtxos` as the jq key inside the reorganize_phase body, not `utxos`).
+
 ## Slice S4 — finalization (orchestrator-owned)
 
 **Commit subject**: `chore: drop gate.sh (ready for review)`

@@ -5,6 +5,10 @@ unified `intent.json`. `tx-build` consumes that intent and builds the
 unsigned Conway CBOR. There is no release-facing `withdraw` builder
 command.
 
+See [Wizard input control](wizard-input-control.md) for the
+`--exclude-utxo` / `--extra-tx-in` flags shared with every other
+wizard.
+
 ## CLI usage
 
 Set the node socket once:

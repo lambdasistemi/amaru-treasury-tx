@@ -393,16 +393,46 @@ Owned files:
 
 Tasks:
 
-- [ ] T040 [US4] Author `docs/wizard-input-control.md`: outref format, `--exclude-utxo` semantics, `--extra-tx-in` semantics, contradiction error, in-flight-build motivation, pointer at #183 as the principled auto-detection layer.
-- [ ] T041 [P] [US4] Add a one-line flag reference to `docs/swap.md` linking the new shared page.
-- [ ] T042 [P] [US4] Add a one-line flag reference to `docs/disburse.md` linking the new shared page (covers both disburse and contingency-disburse).
-- [ ] T043 [P] [US4] Add a one-line flag reference to `docs/withdraw.md` linking the new shared page.
-- [ ] T044 Update `docs/index.md`'s command table footer to mention the shared input-control page.
-- [ ] T045 [P] If `README.md` quickstart shows a wizard command, add a one-line pointer at the shared page; otherwise no-op.
-- [ ] T045a [US4] FR-011 parity verification: assert that the seven wizards' `--help` output for `--exclude-utxo` and `--extra-tx-in` is byte-identical across wizards. Recommended implementation: a thin Hspec spec that captures `<wizard> --help` for each in-scope wizard and asserts the substring describing the two flags is identical. If structural reasons make a runtime test impractical, document in `docs/wizard-input-control.md` that parity is guaranteed by every wizard consuming the same `excludeUtxoP` / `extraTxInP` helpers from `Wizard.InputControl`, and link to the helper source.
+- [X] T040 [US4] Author `docs/wizard-input-control.md`: outref format, `--exclude-utxo` semantics, `--extra-tx-in` semantics, contradiction error, in-flight-build motivation, pointer at #183 as the principled auto-detection layer.
+- [X] T041 [P] [US4] Add a one-line flag reference to `docs/swap.md` linking the new shared page.
+- [X] T042 [P] [US4] Add a one-line flag reference to `docs/disburse.md` linking the new shared page (covers both disburse and contingency-disburse).
+- [X] T043 [P] [US4] Add a one-line flag reference to `docs/withdraw.md` linking the new shared page.
+- [X] T044 Update `docs/index.md`'s command table footer to mention the shared input-control page.
+- [X] T045 [P] If `README.md` quickstart shows a wizard command, add a one-line pointer at the shared page; otherwise no-op.
+- [X] T045a [US4] FR-011 parity verification: assert that the seven wizards' `--help` output for `--exclude-utxo` and `--extra-tx-in` is byte-identical across wizards. Recommended implementation: a thin Hspec spec that captures `<wizard> --help` for each in-scope wizard and asserts the substring describing the two flags is identical. If structural reasons make a runtime test impractical, document in `docs/wizard-input-control.md` that parity is guaranteed by every wizard consuming the same `excludeUtxoP` / `extraTxInP` helpers from `Wizard.InputControl`, and link to the helper source.
 
 Checkpoint: `./gate.sh` PASS at HEAD. Shared docs page exists; per-wizard
 pages link it; `docs/index.md` advertises it.
+
+## Phase 9.5: Slice 10 — `reorganize-wizard` wiring (added post-#218)
+
+**Goal**: Wire the shared flags into `reorganize-wizard` once it came
+online for real networks via #218. The wizard was a typed-answers
+scaffold at #184 spec time and was explicitly out-of-scope; #218
+turned it into a live selecting wizard, so we add it back.
+
+**Worker brief**: Orchestrator-owned (per the operator's "continue
+without sub-h sub-workers" directive earlier in the PR).
+
+Owned files:
+
+- `lib/Amaru/Treasury/Tx/ReorganizeWizard.hs`
+- `lib/Amaru/Treasury/Cli/ReorganizeWizard.hs`
+- `test/unit/Amaru/Treasury/Cli/ReorganizeWizardInputControlSpec.hs` (new)
+- `amaru-treasury-tx.cabal`
+- `specs/184-exclude-utxo/spec.md` (bring reorganize-wizard back in scope)
+
+Tasks:
+
+- [X] T051 [US3] RED+GREEN: contradiction at flag validation.
+- [X] T052 [US1] RED+GREEN: exclusion filters wallet pool; log line carries `[wallet]` attribution.
+- [X] T053 [US2] RED+GREEN: forced inclusion lands in `wsExtraTxIns`.
+- [X] T054 [US1+US4] RED+GREEN: shortfall-with-excludes naming via the wizard-side delegate.
+
+Checkpoint: `./gate.sh` PASS at HEAD. `reorganize-wizard --help` lists
+the two flags. Existing `ReorganizeWizardSpec` and the live mainnet
+golden path remain byte-identical (legacy `resolveReorganize` is a
+shim with empty sets).
 
 ## Phase 10: Slice 9 — Finalize (orchestrator-owned)
 
@@ -422,11 +452,11 @@ Owned files:
 
 Tasks:
 
-- [ ] T046 Re-read the spec's Acceptance items SC-001 through SC-006 against HEAD before the drop commit (NOT against a merged-state branch — this slice precedes merge); record outcome in PR body. Verify FR-001 through FR-013 each have a backing commit on the branch (commit body `Tasks:` trailer or orchestrator-owned slice).
-- [ ] T047 File the asciinema follow-up issue ("adopt mkdocs `asciinema-player` plugin + record wizard input-control cast for #184"). Capture the issue URL.
-- [ ] T048 Update PR #200 body with: completed acceptance summary, link to the new docs page, link to the asciinema follow-up issue, restated sibling relationship to #183.
-- [ ] T049 Re-run `./gate.sh` to confirm green at HEAD before the drop commit.
-- [ ] T050 Commit `chore: drop gate.sh (ready for review)` (orchestrator-owned, no `Tasks:` trailer required for `chore:` per the commit gate), push, then `gh pr ready 200`.
+- [X] T046 Re-read the spec's Acceptance items SC-001 through SC-006 against HEAD before the drop commit (NOT against a merged-state branch — this slice precedes merge); record outcome in PR body. Verify FR-001 through FR-013 each have a backing commit on the branch (commit body `Tasks:` trailer or orchestrator-owned slice).
+- [X] T047 File the asciinema follow-up issue ("adopt mkdocs `asciinema-player` plugin + record wizard input-control cast for #184"). Capture the issue URL.
+- [X] T048 Update PR #200 body with: completed acceptance summary, link to the new docs page, link to the asciinema follow-up issue, restated sibling relationship to #183.
+- [X] T049 Re-run `./gate.sh` to confirm green at HEAD before the drop commit.
+- [X] T050 Commit `chore: drop gate.sh (ready for review)` (orchestrator-owned, no `Tasks:` trailer required for `chore:` per the commit gate), push, then `gh pr ready 200`.
 
 Checkpoint: PR is ready for external review. No `gate.sh` at HEAD.
 PR body cites the asciinema follow-up issue.

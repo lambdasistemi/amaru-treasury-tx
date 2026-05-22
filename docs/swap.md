@@ -4,6 +4,10 @@ Walks through using `amaru-treasury-tx tx-build` to produce an
 unsigned swap CBOR for a treasury scope, and the parity
 guarantees behind it.
 
+See [Wizard input control](wizard-input-control.md) for the
+`--exclude-utxo` / `--extra-tx-in` flags shared with every other
+wizard.
+
 ## What "swap" means
 
 A swap tx spends N treasury UTxOs and emits:

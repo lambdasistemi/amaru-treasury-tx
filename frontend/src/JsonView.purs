@@ -22,33 +22,82 @@ import Foreign.Object as FO
 import Halogen.HTML as HH
 import Halogen.HTML.Properties as HP
 
+-- | Top-level render. Compound values are wrapped in
+-- | <details> so the reader can collapse subtrees and
+-- | navigate large reports.
 render :: forall w i. Json -> HH.HTML w i
-render j =
+render = renderValue
+
+renderValue :: forall w i. Json -> HH.HTML w i
+renderValue j =
   caseJson
     (\_ -> HH.span [ HP.classes [ HH.ClassName "v-null" ] ] [ HH.text "null" ])
     (\b -> HH.span [ HP.classes [ HH.ClassName "v-bool" ] ] [ HH.text (show b) ])
     (\n -> HH.span [ HP.classes [ HH.ClassName "v-num" ] ] [ HH.text (showNum n) ])
     renderStringValue
-    (\xs ->
-      HH.ul
-        [ HP.classes [ HH.ClassName "v-array" ] ]
-        (map (\x -> HH.li_ [ render x ]) xs)
-    )
-    (\obj ->
-      HH.dl
-        [ HP.classes [ HH.ClassName "v-object" ] ]
-        ( Array.concatMap
-            ( \(Tuple k v) ->
-                [ HH.dt
-                    [ HP.classes [ HH.ClassName "v-key" ] ]
-                    [ HH.text k ]
-                , HH.dd [] [ render v ]
-                ]
-            )
-            (FO.toUnfoldable obj)
-        )
-    )
+    renderArray
+    renderObject
     j
+
+renderArray :: forall w i. Array Json -> HH.HTML w i
+renderArray xs =
+  let
+    n = Array.length xs
+    label =
+      "array (" <> show n
+        <> (if n == 1 then " item)" else " items)")
+  in
+    HH.details
+      [ HP.classes [ HH.ClassName "v-node v-array-node" ]
+      , HP.prop (HH.PropName "open") true
+      ]
+      [ HH.summary
+          [ HP.classes [ HH.ClassName "v-summary" ] ]
+          [ HH.span
+              [ HP.classes [ HH.ClassName "v-meta" ] ]
+              [ HH.text label ]
+          ]
+      , HH.ol
+          [ HP.classes [ HH.ClassName "v-array" ] ]
+          (map (\x -> HH.li_ [ renderValue x ]) xs)
+      ]
+
+renderObject :: forall w i. FO.Object Json -> HH.HTML w i
+renderObject obj =
+  let
+    entries :: Array (Tuple String Json)
+    entries = FO.toUnfoldable obj
+    n = Array.length entries
+    label =
+      "object (" <> show n
+        <> (if n == 1 then " key)" else " keys)")
+  in
+    HH.details
+      [ HP.classes [ HH.ClassName "v-node v-object-node" ]
+      , HP.prop (HH.PropName "open") true
+      ]
+      [ HH.summary
+          [ HP.classes [ HH.ClassName "v-summary" ] ]
+          [ HH.span
+              [ HP.classes [ HH.ClassName "v-meta" ] ]
+              [ HH.text label ]
+          ]
+      , HH.dl
+          [ HP.classes [ HH.ClassName "v-object" ] ]
+          (Array.concatMap renderEntry entries)
+      ]
+
+-- | One key/value pair inside an object.  If the value is
+-- | itself a compound (object/array), the *value* renderer
+-- | already emits a <details>; the key sits next to its
+-- | toggle.
+renderEntry :: forall w i. Tuple String Json -> Array (HH.HTML w i)
+renderEntry (Tuple k v) =
+  [ HH.dt
+      [ HP.classes [ HH.ClassName "v-key" ] ]
+      [ HH.text k ]
+  , HH.dd [] [ renderValue v ]
+  ]
 
 renderStringValue :: forall w i. String -> HH.HTML w i
 renderStringValue s

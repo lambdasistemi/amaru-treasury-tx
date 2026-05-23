@@ -53,6 +53,10 @@ pkgs.dockerTools.streamLayeredImage {
        var/lib/amaru-treasury/static/index.js
     cp ${frontend}/material.js \
        var/lib/amaru-treasury/static/material.js
+    cp ${frontend}/styles.css \
+       var/lib/amaru-treasury/static/styles.css
+    cp ${frontend}/favicon.svg \
+       var/lib/amaru-treasury/static/favicon.svg
     # Mountpoint for the host's N2C socket — created so the
     # bind mount in docker-compose.yaml has a target even if
     # the path is missing on a fresh container.

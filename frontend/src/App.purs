@@ -25,6 +25,7 @@ import Data.Argonaut.Core (Json, caseJsonObject)
 import Data.Argonaut.Core as Argonaut
 import Data.Array as Array
 import Data.Either (Either(..))
+import Data.Foldable (sum, traverse_)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String.CodePoints as CodePoints
@@ -54,6 +55,7 @@ type State =
       , ops_and_use_cases :: ScopeState
       , network_compliance :: ScopeState
       , middleware :: ScopeState
+      , contingency :: ScopeState
       }
   , version :: Maybe Api.BuildIdentity
   , recent :: Maybe Api.RecentTxManifest
@@ -73,6 +75,7 @@ data ScopeName
   | OpsAndUseCases
   | NetworkCompliance
   | Middleware
+  | Contingency
 
 derive instance eqScopeName :: Eq ScopeName
 
@@ -82,6 +85,7 @@ scopeKey = case _ of
   OpsAndUseCases -> "ops_and_use_cases"
   NetworkCompliance -> "network_compliance"
   Middleware -> "middleware"
+  Contingency -> "contingency"
 
 scopeTitle :: ScopeName -> String
 scopeTitle = case _ of
@@ -89,6 +93,7 @@ scopeTitle = case _ of
   OpsAndUseCases -> "Ops & use cases"
   NetworkCompliance -> "Network compliance"
   Middleware -> "Middleware"
+  Contingency -> "Contingency"
 
 allScopeNames :: Array ScopeName
 allScopeNames =
@@ -96,6 +101,7 @@ allScopeNames =
   , OpsAndUseCases
   , NetworkCompliance
   , Middleware
+  , Contingency
   ]
 
 initialState :: State
@@ -105,6 +111,7 @@ initialState =
       , ops_and_use_cases: Loading
       , network_compliance: Loading
       , middleware: Loading
+      , contingency: Loading
       }
   , version: Nothing
   , recent: Nothing
@@ -118,6 +125,7 @@ scopeOf st = case _ of
   OpsAndUseCases -> st.scopes.ops_and_use_cases
   NetworkCompliance -> st.scopes.network_compliance
   Middleware -> st.scopes.middleware
+  Contingency -> st.scopes.contingency
 
 -- ---------------------------------------------------------------------------
 -- Component
@@ -140,27 +148,27 @@ component =
 
   render :: State -> H.ComponentHTML Action () m
   render st =
-    HH.div_
-      [ topbar st
-      , siteHeader
-      , statusBanner st
-      , scopeGrid st
-      , siteFooter st
-      ]
+    let
+      totals = computeTotals st
+    in
+      HH.div_
+        [ topbar st
+        , siteHeader st
+        , totalsStrip totals
+        , scopeGrid st totals.ada
+        , siteFooter st
+        ]
 
   topbar st =
     HH.div
-      [ HP.style
-          "display:flex;align-items:center;\
-          \justify-content:space-between;gap:16px;"
-      ]
+      [ HP.classes [ HH.ClassName "topbar" ] ]
       [ HH.div
-          [ HP.classes [ HH.ClassName "md-typescale-title-large" ]
-          , HP.style
-              "display:flex;align-items:center;gap:8px;\
-              \color:var(--md-sys-color-on-surface);"
+          [ HP.classes
+              [ HH.ClassName "md-typescale-title-large"
+              , HH.ClassName "topbar__brand"
+              ]
           ]
-          [ HH.text "amaru-treasury" ]
+          [ HH.text "amaru-treasury.dev.plutimus.com" ]
       , md "md-text-button"
           [ HE.onClick (\_ -> ToggleTheme) ]
           [ HH.text
@@ -171,33 +179,54 @@ component =
           ]
       ]
 
-  siteHeader =
-    HH.div_
-      [ HH.div
+  siteHeader st =
+    HH.div
+      [ HP.classes [ HH.ClassName "site-header" ] ]
+      [ HH.h1
           [ HP.classes
-              [ HH.ClassName "md-typescale-label-small" ]
-          , HP.style
-              "color:var(--md-sys-color-on-surface-variant);\
-              \text-transform:uppercase;letter-spacing:0.1em;"
-          ]
-          [ HH.text "amaru-treasury.plutimus.com" ]
-      , HH.h1
-          [ HP.classes
-              [ HH.ClassName "md-typescale-display-medium" ]
-          , HP.style "margin:4px 0 8px 0;"
+              [ HH.ClassName "md-typescale-display-medium"
+              , HH.ClassName "site-header__title"
+              ]
           ]
           [ HH.text "Amaru Treasury" ]
       , HH.p
           [ HP.classes
-              [ HH.ClassName "md-typescale-body-large" ]
-          , HP.style
-              "margin:0;color:var(--md-sys-color-on-surface-variant);\
-              \max-width:64ch;"
+              [ HH.ClassName "md-typescale-body-large"
+              , HH.ClassName "site-header__lede"
+              ]
           ]
           [ HH.text
-              "Live read-only view across the four registered \
+              "Live read-only view across the five registered \
               \scopes of the Amaru 2026 treasury."
           ]
+      , statusBanner st
+      ]
+
+  totalsStrip totals =
+    HH.div
+      [ HP.classes [ HH.ClassName "totals" ] ]
+      [ totalTile "Total ADA" (showAda totals.ada)
+      , totalTile "Total USDM" (showUsdm totals.usdm)
+      , totalTile "Total UTxOs" (formatThousands totals.utxos)
+      ]
+
+  totalTile label_ value_ =
+    HH.div
+      [ HP.classes [ HH.ClassName "totals__tile" ] ]
+      [ HH.div
+          [ HP.classes
+              [ HH.ClassName "md-typescale-title-medium"
+              , HH.ClassName "totals__value"
+              ]
+          ]
+          [ HH.text value_ ]
+      , HH.div
+          [ HP.classes
+              [ HH.ClassName "md-typescale-label-small"
+              , HH.ClassName "totals__label"
+              ]
+          ]
+          [ HH.text label_ ]
       ]
 
   statusBanner st =
@@ -222,32 +251,32 @@ component =
       ]
       []
 
-  scopeGrid st =
+  scopeGrid st totalAda =
     HH.div
-      [ HP.style
-          "display:grid;grid-template-columns:repeat(auto-fit,\
-          \minmax(min(100%,420px),1fr));gap:16px;"
-      ]
-      (map (renderScope st) allScopeNames)
+      [ HP.classes [ HH.ClassName "scope-grid" ] ]
+      (map (renderScope st totalAda) allScopeNames)
 
-  renderScope st name =
+  renderScope st totalAda name =
     let
       ss = scopeOf st name
+      share =
+        if totalAda <= 0.0 then 0.0
+        else scopeStateAda ss / totalAda
       body = case ss of
         Loading ->
           HH.p
             [ HP.classes
-                [ HH.ClassName "md-typescale-body-medium" ]
-            , HP.style
-                "color:var(--md-sys-color-on-surface-variant);"
+                [ HH.ClassName "md-typescale-body-medium"
+                , HH.ClassName "scope-card__loading"
+                ]
             ]
             [ HH.text "Loading live treasury state…" ]
         Failed err ->
           HH.p
             [ HP.classes
-                [ HH.ClassName "md-typescale-body-medium" ]
-            , HP.style
-                "color:var(--md-sys-color-error);"
+                [ HH.ClassName "md-typescale-body-medium"
+                , HH.ClassName "scope-card__error"
+                ]
             ]
             [ HH.text err ]
         Loaded j ->
@@ -255,57 +284,63 @@ component =
             [ scopeSummary name j
             , scopeKvList name j
             , md "md-divider" [] []
-            , HH.details_
+            , HH.details
+                [ HP.classes [ HH.ClassName "json-block" ] ]
                 [ HH.summary
                     [ HP.classes
                         [ HH.ClassName
                             "md-typescale-label-large"
                         ]
-                    , HP.style
-                        "cursor:pointer;\
-                        \color:var(--md-sys-color-primary);\
-                        \padding:8px 0;"
                     ]
                     [ HH.text "Full inspect JSON" ]
-                , JsonView.render j
+                , HH.div
+                    [ HP.classes
+                        [ HH.ClassName "json-body" ]
+                    ]
+                    [ JsonView.render j ]
                 ]
             ]
     in
       md "md-elevated-card"
-        [ HP.style
-            "padding:20px;display:block;\
-            \background:var(--md-sys-color-surface);\
-            \color:var(--md-sys-color-on-surface);"
+        [ HP.classes [ HH.ClassName "scope-card" ]
+        , HP.style ("--share: " <> showShare share <> ";")
         ]
-        [ HH.h2
+        [ HH.div
             [ HP.classes
-                [ HH.ClassName "md-typescale-title-large" ]
-            , HP.style "margin:0 0 4px 0;"
+                [ HH.ClassName "scope-card__head" ]
             ]
-            [ HH.text (scopeTitle name) ]
+            [ HH.h2
+                [ HP.classes
+                    [ HH.ClassName "md-typescale-title-large"
+                    , HH.ClassName "scope-card__title"
+                    ]
+                ]
+                [ HH.text (scopeTitle name) ]
+            , HH.div
+                [ HP.classes
+                    [ HH.ClassName "md-typescale-label-small"
+                    , HH.ClassName "scope-card__slug"
+                    ]
+                ]
+                [ HH.text (scopeKey name) ]
+            ]
         , HH.div
-            [ HP.classes
-                [ HH.ClassName "md-typescale-label-small" ]
-            , HP.style
-                "color:var(--md-sys-color-on-surface-variant);\
-                \margin-bottom:16px;"
-            ]
-            [ HH.text (scopeKey name) ]
-        , body
+            [ HP.classes [ HH.ClassName "scope-card__weight" ] ]
+            []
+        , HH.div
+            [ HP.classes [ HH.ClassName "scope-card__body" ] ]
+            [ body ]
         ]
 
   siteFooter st =
     HH.div
-      [ HP.classes [ HH.ClassName "md-typescale-body-small" ]
-      , HP.style
-          "color:var(--md-sys-color-on-surface-variant);\
-          \display:flex;flex-wrap:wrap;gap:12px;\
-          \justify-content:space-between;\
-          \padding:12px 0;border-top:1px solid \
-          \var(--md-sys-color-outline-variant);"
+      [ HP.classes
+          [ HH.ClassName "md-typescale-body-small"
+          , HH.ClassName "site-footer"
+          ]
       ]
       [ HH.div
-          [ HP.style "display:flex;flex-wrap:wrap;gap:12px;" ]
+          [ HP.classes [ HH.ClassName "site-footer__links" ] ]
           [ HH.a
               [ HP.href
                   "https://lambdasistemi.github.io/amaru-treasury-tx/"
@@ -332,9 +367,7 @@ component =
               [ HH.text "/v1/recent-txs" ]
           ]
       , HH.div
-          [ HP.style
-              "font-family:'Roboto Mono',monospace;font-size:0.75rem;"
-          ]
+          [ HP.classes [ HH.ClassName "site-footer__build" ] ]
           [ HH.text
               ( case st.version of
                   Nothing -> "build identity loading…"
@@ -371,10 +404,7 @@ component =
       H.modify_ \s -> s { theme = t' }
 
     RefreshAll -> do
-      handleAction (RefreshOne CoreDevelopment)
-      handleAction (RefreshOne OpsAndUseCases)
-      handleAction (RefreshOne NetworkCompliance)
-      handleAction (RefreshOne Middleware)
+      traverse_ (handleAction <<< RefreshOne) allScopeNames
       now <- H.liftEffect nowIso
       H.modify_ \s -> s { lastRefresh = Just now }
 
@@ -405,6 +435,8 @@ component =
                 s.scopes { network_compliance = next }
               Middleware ->
                 s.scopes { middleware = next }
+              Contingency ->
+                s.scopes { contingency = next }
           }
 
 -- ---------------------------------------------------------------------------
@@ -438,10 +470,7 @@ scopeSummary name j =
         Nothing -> 0
   in
     HH.div
-      [ HP.style
-          "display:grid;grid-template-columns:repeat(3,1fr);\
-          \gap:8px;margin-bottom:12px;"
-      ]
+      [ HP.classes [ HH.ClassName "stat-grid" ] ]
       [ stat "ADA" (showAda lovelace)
       , stat "USDM" (showUsdm usdm)
       , stat "UTxOs" (formatThousands utxoCount)
@@ -450,22 +479,19 @@ scopeSummary name j =
 stat :: forall w i. String -> String -> HH.HTML w i
 stat label_ value_ =
   HH.div
-    [ HP.style
-        "padding:10px 12px;\
-        \background:var(--md-sys-color-surface-variant);\
-        \color:var(--md-sys-color-on-surface-variant);\
-        \border-radius:12px;"
-    ]
+    [ HP.classes [ HH.ClassName "stat-tile" ] ]
     [ HH.div
-        [ HP.classes [ HH.ClassName "md-typescale-title-medium" ]
-        , HP.style
-            "font-family:'Roboto Mono',monospace;\
-            \color:var(--md-sys-color-on-surface);"
+        [ HP.classes
+            [ HH.ClassName "md-typescale-title-medium"
+            , HH.ClassName "stat-tile__value"
+            ]
         ]
         [ HH.text value_ ]
     , HH.div
-        [ HP.classes [ HH.ClassName "md-typescale-label-small" ]
-        , HP.style "text-transform:uppercase;letter-spacing:0.08em;"
+        [ HP.classes
+            [ HH.ClassName "md-typescale-label-small"
+            , HH.ClassName "stat-tile__label"
+            ]
         ]
         [ HH.text label_ ]
     ]
@@ -498,10 +524,6 @@ scopeKvList name j =
           ("https://cardanoscan.io/script/" <> scriptHash)
       , kvItem "pending swap orders"
           (formatThousands pendingCount) ""
-      , kvLink "view on cardanoscan"
-          "history & balance"
-          ("Recent activity at " <> addr)
-          ("https://cardanoscan.io/address/" <> addr)
       ]
 
 kvItem
@@ -512,9 +534,7 @@ kvItem label_ value_ titleAttr =
     [ HP.title titleAttr ]
     [ HH.div
         [ HP.attr (HH.AttrName "slot") "headline"
-        , HP.style
-            "font-family:'Roboto Mono',monospace;\
-            \overflow-wrap:anywhere;"
+        , HP.classes [ HH.ClassName "kv__value" ]
         ]
         [ HH.text value_ ]
     , HH.div
@@ -536,9 +556,10 @@ kvLink label_ value_ titleAttr href_ =
     ]
     [ HH.div
         [ HP.attr (HH.AttrName "slot") "headline"
-        , HP.style
-            "font-family:'Roboto Mono',monospace;\
-            \overflow-wrap:anywhere;color:var(--md-sys-color-primary);"
+        , HP.classes
+            [ HH.ClassName "kv__value"
+            , HH.ClassName "kv__value--link"
+            ]
         ]
         [ HH.text value_ ]
     , HH.div
@@ -591,6 +612,81 @@ readString
 readString Nothing _ = ""
 readString (Just obj) key =
   fromMaybe "" (FO.lookup key obj >>= Argonaut.toString)
+
+-- ---------------------------------------------------------------------------
+-- Cross-scope aggregates (totals strip + per-card share)
+
+type Totals = { ada :: Number, usdm :: Number, utxos :: Int }
+
+computeTotals :: State -> Totals
+computeTotals st =
+  let
+    triples = map (scopeStateTotals <<< scopeOf st) allScopeNames
+  in
+    { ada: sum (map _.ada triples)
+    , usdm: sum (map _.usdm triples)
+    , utxos: sum (map _.utxos triples)
+    }
+
+scopeStateTotals :: ScopeState -> Totals
+scopeStateTotals = case _ of
+  Loaded j ->
+    let
+      sect = lookupTopScope j
+      ada = readNumber sect [ "totals", "lovelace" ]
+      usdm = readNumber sect [ "totals", "usdm" ]
+      utxos =
+        case sect of
+          Just s ->
+            fromMaybe 0
+              ( do
+                  a <- Argonaut.toArray
+                    =<< FO.lookup "treasuryUtxos" s
+                  pure (Array.length a)
+              )
+          Nothing -> 0
+    in
+      { ada, usdm, utxos }
+  _ -> { ada: 0.0, usdm: 0.0, utxos: 0 }
+
+scopeStateAda :: ScopeState -> Number
+scopeStateAda ss = (scopeStateTotals ss).ada
+
+-- | Given the scopes object in the raw report, pick the first
+-- | (and only) entry. Each Loaded report carries exactly one
+-- | scope already.
+lookupTopScope :: Json -> Maybe (FO.Object Json)
+lookupTopScope j =
+  caseJsonObject Nothing
+    ( \root -> do
+        scopes <- Argonaut.toArray
+          =<< FO.lookup "scopes" root
+        Array.head scopes >>= Argonaut.toObject
+    )
+    j
+
+-- | Three-decimal share string for the inline `--share: …`
+-- | custom property.  Clamped to [0, 1].
+showShare :: Number -> String
+showShare s =
+  let
+    clamped =
+      if s < 0.0 then 0.0
+      else if s > 1.0 then 1.0
+      else s
+    scaled = Int.round (clamped * 1000.0)
+    leading = scaled / 1000
+    trailing = scaled - (leading * 1000)
+    pad3 n =
+      let
+        t = show n
+      in
+        case CodePoints.length t of
+          1 -> "00" <> t
+          2 -> "0" <> t
+          _ -> t
+  in
+    show leading <> "." <> pad3 trailing
 
 -- ---------------------------------------------------------------------------
 -- Formatting

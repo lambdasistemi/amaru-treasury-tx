@@ -439,6 +439,7 @@ executable amaru-treasury-tx-api
     , streaming-commons
     , text
     , time
+    , wai
     , warp
 
 test-suite unit-tests

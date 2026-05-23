@@ -23,7 +23,7 @@ services:
     networks:
       - web
     volumes:
-      - /node/mainnet:/n2c:ro
+      - /code/cardano-mainnet/ipc:/n2c:ro
       - /home/paolino/services/amaru-treasury-dev/static:/srv/static:ro
     command:
       - amaru-treasury-tx-api

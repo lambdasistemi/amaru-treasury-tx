@@ -48,5 +48,7 @@ pkgs.mkSpagoDerivation {
     cp dist/index.html $out/
     cp dist/index.js $out/
     cp dist/material.js $out/
+    cp dist/styles.css $out/
+    cp dist/favicon.svg $out/
   '';
 }

@@ -28,6 +28,10 @@ module Amaru.Treasury.Wizard.Swap
 
       -- * Intent assembly
     , buildSwapIntent
+
+      -- * CLI runner
+    , runWizard
+    , sysexitsFor
     ) where
 
 import Control.Monad.IO.Class (liftIO)
@@ -35,17 +39,23 @@ import Control.Monad.Trans.Except
     ( runExceptT
     , throwE
     )
-import Control.Tracer (Tracer, traceWith)
+import Control.Tracer (Tracer (..), traceWith)
+import Data.ByteString.Lazy qualified as BSL
+import Data.Maybe (fromMaybe)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
+import System.Exit (ExitCode (..), exitWith)
 
 import Ouroboros.Network.Magic (NetworkMagic (..))
 
 import Amaru.Treasury.Backend (Backend)
+import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , resolveNetworkName
+    , withLogHandle
     )
 import Amaru.Treasury.Cli.SwapCommon
     ( providerToResolverEnv
@@ -69,6 +79,7 @@ import Amaru.Treasury.IntentJSON
     ( SAction (..)
     , SomeTreasuryIntent (..)
     , SwapInputs (..)
+    , encodeSomeTreasuryIntent
     , tiPayload
     , tiValidityUpperBoundSlot
     )
@@ -91,10 +102,13 @@ import Amaru.Treasury.Tx.SwapWizard
     )
 import Amaru.Treasury.Tx.SwapWizard.Trace
     ( WizardEvent (..)
+    , eventTracer
     )
 import Amaru.Treasury.Wizard.Failure
     ( FieldId (..)
     , WizardFailure (..)
+    , isInput
+    , renderWizardFailure
     )
 import Amaru.Treasury.Wizard.InputControl
     ( renderInputControlError
@@ -448,3 +462,62 @@ buildSwapIntent g opts@WizardOpts{..} backend tr = runExceptT $ do
     liftIO (traceWith tr (WeIntentReady wOptsOut))
 
     pure (SomeTreasuryIntent SSwap intent)
+
+-- ---------------------------------------------------------------------------
+-- CLI runner
+
+{- | Run the swap-wizard CLI subcommand.
+
+The body delegates intent construction to 'buildSwapIntent'
+and handles only the CLI-shell concerns (open log file,
+open backend bracket, write bytes to file/stdout,
+render-and-exit on failure with a sysexits family code).
+
+CLI byte-identity is preserved for the intent.json bytes
+('buildSwapIntent' returns the same typed intent the prior
+inline body produced).  The non-zero exit code on failure
+now follows sysexits.h families per #259 FR-008:
+
+  * 'Input*' failures exit 64 ('EX_USAGE')
+  * 'Resolve*' failures exit 69 ('EX_UNAVAILABLE')
+  * 'Internal*' failures exit 70 ('EX_SOFTWARE')
+
+Stderr text is unchanged ('renderWizardFailure' produces
+the same single-line text the prior @abortTr@ printed via
+'WeAborted').
+-}
+runWizard :: GlobalOpts -> WizardOpts -> IO ()
+runWizard g opts@WizardOpts{..} = do
+    let socket = fromMaybe "(unset)" (goSocketPath g)
+    withLogHandle wOptsLog $ \logH -> do
+        let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
+            tr = eventTracer textTracer
+        withLocalNodeBackend (goNetworkMagic g) socket $
+            \backend -> do
+                result <- buildSwapIntent g opts backend tr
+                case result of
+                    Left wf -> do
+                        traceWith
+                            tr
+                            (WeAborted (renderWizardFailure wf))
+                        exitWith (ExitFailure (sysexitsFor wf))
+                    Right someIntent -> case wOptsOut of
+                        Nothing ->
+                            BSL.putStr
+                                (encodeSomeTreasuryIntent someIntent)
+                        Just fp ->
+                            BSL.writeFile
+                                fp
+                                (encodeSomeTreasuryIntent someIntent)
+
+{- | Map a 'WizardFailure' to its sysexits.h exit code per
+#259 FR-008.  Operators that wrap the CLI in scripts can
+branch on the family without parsing stderr.
+-}
+sysexitsFor :: WizardFailure -> Int
+sysexitsFor wf
+    | isInput wf = 64 -- EX_USAGE
+    | otherwise = case wf of
+        InternalTranslate{} -> 70 -- EX_SOFTWARE
+        InternalEncodeError{} -> 70
+        _ -> 69 -- EX_UNAVAILABLE (Resolve*)

@@ -47,5 +47,6 @@ pkgs.mkSpagoDerivation {
     mkdir -p $out
     cp dist/index.html $out/
     cp dist/index.js $out/
+    cp dist/material.js $out/
   '';
 }

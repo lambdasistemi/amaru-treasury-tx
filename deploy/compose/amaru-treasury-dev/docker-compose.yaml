@@ -1,0 +1,58 @@
+# #239 — Dev variant that serves the static bundle from a
+# host bind-mount instead of the image's read-only layer.
+#
+# Iteration loop:
+#   1. Edit frontend sources.
+#   2. nix build .#frontend
+#   3. scp result/* production:/home/paolino/services/amaru-treasury-dev/static/
+#   4. Reload https://amaru-treasury.dev.plutimus.com/ — no
+#      container restart, no image rebuild.
+#
+# Backend (binary + metadata + recent-txs manifest + build
+# identity) tracks whatever image is currently published; if
+# you need a backend change you must rebuild the image AND
+# the prod compose still controls the immutable production
+# instance at amaru-treasury.plutimus.com.
+
+services:
+  amaru-treasury-dev:
+    image: ghcr.io/lambdasistemi/amaru-treasury-tx-api:${VERSION:-latest}
+    container_name: amaru-treasury-dev
+    restart: unless-stopped
+    read_only: true
+    networks:
+      - web
+    volumes:
+      - /node/mainnet:/n2c:ro
+      - /home/paolino/services/amaru-treasury-dev/static:/srv/static:ro
+    command:
+      - amaru-treasury-tx-api
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --socket
+      - /n2c/node.socket
+      - --metadata
+      - /etc/amaru-treasury/metadata.json
+      - --manifest
+      - /etc/amaru-treasury/recent-txs.json
+      - --build-identity
+      - /etc/amaru-treasury/build-identity.json
+      - --static
+      - /srv/static
+    labels:
+      - traefik.docker.network=web
+      - traefik.http.routers.amaru-treasury-dev.rule=Host(`amaru-treasury.dev.plutimus.com`)
+      - traefik.http.routers.amaru-treasury-dev.tls=true
+      - traefik.http.routers.amaru-treasury-dev.tls.certresolver=le
+      - traefik.http.services.amaru-treasury-dev.loadbalancer.server.port=8080
+    logging:
+      driver: json-file
+      options:
+        max-size: 50m
+        max-file: "10"
+
+networks:
+  web:
+    external: true

@@ -147,7 +147,8 @@ mkServer Handlers{..} =
     inspectH :: ScopeId -> Handler InspectReport
     inspectH scope = liftIO (hInspectReport scope)
 
--- | Bake the 'Handlers' into a WAI 'Application' ready to be
--- run by warp.
+{- | Bake the 'Handlers' into a WAI 'Application' ready to be
+run by warp.
+-}
 mkApplication :: Handlers -> Application
 mkApplication = serve dashboardAPI . mkServer

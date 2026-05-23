@@ -428,13 +428,17 @@ executable amaru-treasury-tx-api
   build-depends:
     , aeson
     , amaru-treasury-tx
-    , base                  <5
+    , async
+    , base                   <5
     , bytestring
+    , cardano-ledger-core
+    , containers
     , optparse-applicative
     , ouroboros-network:api
     , servant-server
     , streaming-commons
     , text
+    , time
     , warp
 
 test-suite unit-tests
@@ -560,12 +564,12 @@ test-suite unit-tests
     , hspec
     , hspec-discover
     , http-client
+    , http-types
     , jsonschema
     , microlens
     , optparse-applicative
     , ouroboros-network:api
     , plutus-core
-    , http-types
     , QuickCheck
     , serialise
     , servant

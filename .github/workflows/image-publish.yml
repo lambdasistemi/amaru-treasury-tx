@@ -27,21 +27,18 @@ jobs:
       - name: Build container image (nix)
         run: nix build --quiet .#image --out-link image-stream
 
-      - name: Log in to ghcr.io
-        run: echo "${{ secrets.GITHUB_TOKEN }}" \
-          | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-      - name: Load image into local docker
-        run: ./image-stream | docker load
-
-      - name: Tag :latest and :<sha>
+      - name: Load, tag, login and push (docker provided via nix)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          docker tag "$IMAGE:latest" "$IMAGE:${{ github.sha }}"
-
-      - name: Push :latest and :<sha>
-        run: |
-          docker push "$IMAGE:latest"
-          docker push "$IMAGE:${{ github.sha }}"
+          nix shell nixpkgs#docker -c bash -euo pipefail -c '
+            ./image-stream | docker load
+            docker tag "$IMAGE:latest" "$IMAGE:${{ github.sha }}"
+            echo "$GITHUB_TOKEN" \
+              | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker push "$IMAGE:latest"
+            docker push "$IMAGE:${{ github.sha }}"
+          '
 
   deploy:
     needs: publish

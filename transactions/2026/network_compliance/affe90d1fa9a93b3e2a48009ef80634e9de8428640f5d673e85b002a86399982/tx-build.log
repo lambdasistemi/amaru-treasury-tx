@@ -1,0 +1,10 @@
+tx-build: intent <- transactions/2026/network_compliance/antithesis-disburse-draft/intent.json
+tx-build: parsed action=Disburse network=mainnet
+tx-build: connecting to /code/cardano-mainnet/ipc/node.socket
+tx-build: required utxos: 10
+tx-build: handshake ok (magic 764824073 matches intent network=mainnet)
+tx-build: built 2269 bytes  fee=820876  total_collateral=1231314
+tx-build: re-evaluated 6 redeemers, 0 failed
+tx-build: cbor -> transactions/2026/network_compliance/antithesis-disburse-draft/tx.cbor.hex
+tx-build: VALIDATION OK
+tx-build: report -> transactions/2026/network_compliance/antithesis-disburse-draft/report.json

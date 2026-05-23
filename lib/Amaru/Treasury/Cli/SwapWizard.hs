@@ -12,6 +12,7 @@ module Amaru.Treasury.Cli.SwapWizard
     , runWizard
     , validateWizardInputControl
     , ChunkSpec (..)
+    , WizardOrder (..)
     , WizardRate (..)
     , WizardRateParameters (..)
     , WizardSwapParameters (..)

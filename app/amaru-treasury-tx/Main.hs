@@ -56,9 +56,6 @@ import Amaru.Treasury.Cli.SwapCancel
 import Amaru.Treasury.Cli.SwapQuote
     ( runSwapQuote
     )
-import Amaru.Treasury.Cli.SwapWizard
-    ( runWizard
-    )
 import Amaru.Treasury.Cli.TreasuryInspect
     ( runTreasuryInspect
     )
@@ -80,6 +77,7 @@ import Amaru.Treasury.Cli.Witness
 import Amaru.Treasury.Tx.Envelope
     ( EnvelopeKind (..)
     )
+import Amaru.Treasury.Wizard.Swap (runWizard)
 
 main :: IO ()
 main = withUtf8 . withUpdateCheckMain $ do

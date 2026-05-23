@@ -9,7 +9,6 @@ License     : Apache-2.0
 module Amaru.Treasury.Cli.SwapWizard
     ( WizardOpts (..)
     , wizardOptsP
-    , runWizard
     , validateWizardInputControl
     , ChunkSpec (..)
     , WizardOrder (..)
@@ -26,7 +25,6 @@ import Control.Tracer (Tracer (..), traceWith)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Char (toLower)
 import Data.Maybe (fromMaybe)
-import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
@@ -47,6 +45,7 @@ import Options.Applicative
     , strOption
     )
 import Ouroboros.Network.Magic (NetworkMagic (..))
+import System.Exit (ExitCode (..), exitWith)
 
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.Cli.Common
@@ -98,10 +97,7 @@ import Amaru.Treasury.Tx.SwapWizard
     , resolveWizardEnvIC
     , wizardToTreasuryIntent
     )
-import Amaru.Treasury.Tx.SwapWizard.Trace
-    ( WizardEvent (..)
-    , eventTracer
-    )
+import Amaru.Treasury.Tx.SwapWizard.Trace (WizardEvent (..))
 import Amaru.Treasury.Wizard.InputControl
     ( ExclusionSet (..)
     , ForcedInclusionSet (..)
@@ -362,90 +358,6 @@ rateToFraction :: Double -> (Integer, Integer)
 rateToFraction r =
     (round (toRational r * 1_000_000), 1_000_000)
 
-resolveWizardSwapParameters
-    :: Tracer IO WizardEvent
-    -> Double
-    -> ChunkSpec
-    -> WizardRate
-    -> IO WizardSwapParameters
-resolveWizardSwapParameters tr usdm chunkSpec = \case
-    WizardMinRate minRate ->
-        let amountLov = usdmToLovelace usdm minRate
-            chunkSize = case chunkSpec of
-                SplitCount n -> amountLov `div` toInteger n
-                ChunkUsdm x -> usdmToLovelace x minRate
-            (rateNum, rateDen) = rateToFraction minRate
-        in  pure
-                WizardSwapParameters
-                    { wspAmountLovelace = amountLov
-                    , wspChunkSizeLovelace = chunkSize
-                    , wspRateNumerator = rateNum
-                    , wspRateDenominator = rateDen
-                    }
-    WizardOverrideRate adaUsdm slippage -> do
-        let observation =
-                SQ.QuoteObservation
-                    { SQ.qoPair = SQ.AdaUsdm
-                    , SQ.qoQuote = toRational adaUsdm
-                    , SQ.qoProvenance = SQ.OperatorOverride
-                    }
-        derived <-
-            case SQ.deriveSwapParameters
-                observation
-                slippage
-                SQ.SwapQuoteRequest
-                    { SQ.sqrRequestedUsdm = toRational usdm
-                    , SQ.sqrChunk = swapQuoteRequestChunk chunkSpec
-                    } of
-                Right value ->
-                    pure value
-                Left err ->
-                    abortTr tr ("derive swap parameters: " <> T.pack (show err))
-        pure
-            WizardSwapParameters
-                { wspAmountLovelace = SQ.dspAmountLovelace derived
-                , wspChunkSizeLovelace = SQ.dspChunkSizeLovelace derived
-                , wspRateNumerator = SQ.dspRateNumerator derived
-                , wspRateDenominator = SQ.dspRateDenominator derived
-                }
-
-resolveWizardRateParameters
-    :: Tracer IO WizardEvent
-    -> WizardRate
-    -> IO WizardRateParameters
-resolveWizardRateParameters tr = \case
-    WizardMinRate minRate ->
-        let (rateNum, rateDen) = rateToFraction minRate
-        in  pure
-                WizardRateParameters
-                    { wrpRateNumerator = rateNum
-                    , wrpRateDenominator = rateDen
-                    }
-    WizardOverrideRate adaUsdm slippage -> do
-        let observation =
-                SQ.QuoteObservation
-                    { SQ.qoPair = SQ.AdaUsdm
-                    , SQ.qoQuote = toRational adaUsdm
-                    , SQ.qoProvenance = SQ.OperatorOverride
-                    }
-        derived <-
-            case SQ.deriveSwapParameters
-                observation
-                slippage
-                SQ.SwapQuoteRequest
-                    { SQ.sqrRequestedUsdm = 1
-                    , SQ.sqrChunk = SQ.SplitInto 1
-                    } of
-                Right value ->
-                    pure value
-                Left err ->
-                    abortTr tr ("derive swap rate: " <> T.pack (show err))
-        pure
-            WizardRateParameters
-                { wrpRateNumerator = SQ.dspRateNumerator derived
-                , wrpRateDenominator = SQ.dspRateDenominator derived
-                }
-
 swapQuoteRequestChunk :: ChunkSpec -> SQ.SwapQuoteRequestChunk
 swapQuoteRequestChunk = \case
     SplitCount n ->
@@ -482,279 +394,3 @@ validateWizardInputControl
     :: WizardOpts -> Either InputControlError ()
 validateWizardInputControl WizardOpts{..} =
     validateInputControl wOptsExcludeSet wOptsForcedSet
-
-runWizard :: GlobalOpts -> WizardOpts -> IO ()
-runWizard g opts@WizardOpts{..} = do
-    let socket = fromMaybe "(unset)" (goSocketPath g)
-    withLogHandle wOptsLog $ \logH -> do
-        let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
-            tr = eventTracer textTracer
-        case validateWizardInputControl opts of
-            Right () -> pure ()
-            Left ce ->
-                abortTr tr (renderInputControlError ce)
-        networkName <- case resolveNetworkName g of
-            Right t -> pure t
-            Left e -> abortTr tr (T.pack e)
-        let NetworkMagic magic = goNetworkMagic g
-        traceWith tr (WeNetwork networkName (fromIntegral magic))
-        traceWith tr (WeMetadata wOptsMetadataPath)
-
-        withLocalNodeBackend (goNetworkMagic g) socket $
-            \backend -> do
-                verified <-
-                    verifyRegistry
-                        backend
-                        wOptsMetadataPath
-                        (Set.singleton wOptsScope)
-                rv <- case verified of
-                    Left e ->
-                        abortTr tr ("verify: " <> T.pack (show e))
-                    Right registry ->
-                        case registryViewFromVerified
-                            wOptsScope
-                            registry of
-                            Left e ->
-                                abortTr
-                                    tr
-                                    ("project: " <> T.pack (show e))
-                            Right view -> pure view
-                traceRegistryView tr wOptsScope rv
-                let renv =
-                        traceResolverEnv tr $
-                            providerToResolverEnv backend
-                (env, params) <-
-                    case wOptsOrder of
-                        FixedUsdm usdm chunkSpec -> do
-                            params <-
-                                resolveWizardSwapParameters
-                                    tr
-                                    usdm
-                                    chunkSpec
-                                    wOptsRate
-                            let ri =
-                                    ResolverInput
-                                        { riNetwork = networkName
-                                        , riWalletAddrBech32 =
-                                            wOptsWalletAddr
-                                        , riScope = wOptsScope
-                                        , riAmountLovelace =
-                                            wspAmountLovelace params
-                                        , riChunkSizeLovelace =
-                                            wspChunkSizeLovelace params
-                                        , riRegistry = rv
-                                        , riValidityHours =
-                                            wOptsValidityHours
-                                        }
-                            er <-
-                                resolveWizardEnvIC
-                                    renv
-                                    wOptsExcludeSet
-                                    wOptsForcedSet
-                                    ri
-                            env <- case er of
-                                Left
-                                    ( ResolverWalletShortfall
-                                            avail
-                                            required
-                                        ) ->
-                                        abortTr
-                                            tr
-                                            ( renderWalletShortfall
-                                                ri
-                                                avail
-                                                required
-                                            )
-                                Left
-                                    ( ResolverWalletShortfallWithExcludes
-                                            avail
-                                            required
-                                            refs
-                                        ) ->
-                                        abortTr
-                                            tr
-                                            ( renderWalletShortfallWithExcludes
-                                                ( renderWalletShortfall
-                                                    ri
-                                                    avail
-                                                    required
-                                                )
-                                                refs
-                                            )
-                                Left
-                                    ( ResolverExtraTxInNotOnWallet
-                                            refs
-                                        ) ->
-                                        abortTr
-                                            tr
-                                            ( renderExtraTxInNotOnWallet
-                                                refs
-                                            )
-                                Left e ->
-                                    abortTr
-                                        tr
-                                        ("resolve: " <> T.pack (show e))
-                                Right (e, outcome) -> do
-                                    emitExclusionLog textTracer outcome
-                                    pure e
-                            pure (env, params)
-                        AllAda split -> do
-                            rateParams <-
-                                resolveWizardRateParameters tr wOptsRate
-                            let rai =
-                                    ResolverAllAdaInput
-                                        { raiNetwork = networkName
-                                        , raiWalletAddrBech32 =
-                                            wOptsWalletAddr
-                                        , raiScope = wOptsScope
-                                        , raiSplit = split
-                                        , raiRateNumerator =
-                                            wrpRateNumerator rateParams
-                                        , raiRateDenominator =
-                                            wrpRateDenominator rateParams
-                                        , raiRegistry = rv
-                                        , raiValidityHours =
-                                            wOptsValidityHours
-                                        }
-                            er <-
-                                resolveWizardEnvAllAdaIC
-                                    renv
-                                    wOptsExcludeSet
-                                    wOptsForcedSet
-                                    rai
-                            (env, plan) <- case er of
-                                Left
-                                    ( ResolverExtraTxInNotOnWallet
-                                            refs
-                                        ) ->
-                                        abortTr
-                                            tr
-                                            ( renderExtraTxInNotOnWallet
-                                                refs
-                                            )
-                                Left
-                                    ( ResolverWalletShortfallWithExcludes
-                                            avail
-                                            required
-                                            refs
-                                        ) ->
-                                        abortTr
-                                            tr
-                                            ( renderWalletShortfallWithExcludes
-                                                ( "wallet shortfall available="
-                                                    <> T.pack
-                                                        (show avail)
-                                                    <> " required="
-                                                    <> T.pack
-                                                        (show required)
-                                                )
-                                                refs
-                                            )
-                                Left e ->
-                                    abortTr
-                                        tr
-                                        ("resolve: " <> T.pack (show e))
-                                Right (e, plan', outcome) -> do
-                                    emitExclusionLog textTracer outcome
-                                    pure (e, plan')
-                            traceAllAdaPlan tr plan split
-                            pure
-                                ( env
-                                , WizardSwapParameters
-                                    { wspAmountLovelace =
-                                        aapAmountLovelace plan
-                                    , wspChunkSizeLovelace =
-                                        aapChunkSizeLovelace plan
-                                    , wspRateNumerator =
-                                        aapRateNumerator plan
-                                    , wspRateDenominator =
-                                        aapRateDenominator plan
-                                    }
-                                )
-                traceEnv tr env
-                let answers =
-                        SwapWizardQ
-                            { wqScope = wOptsScope
-                            , wqAmountLovelace =
-                                wspAmountLovelace params
-                            , wqChunkSizeLovelace =
-                                wspChunkSizeLovelace params
-                            , wqRateNumerator =
-                                wspRateNumerator params
-                            , wqRateDenominator =
-                                wspRateDenominator params
-                            , wqValidityHours =
-                                wOptsValidityHours
-                            , wqRationale =
-                                RationaleAnswers
-                                    { raDescription =
-                                        wOptsDescription
-                                    , raJustification =
-                                        wOptsJustification
-                                    , raDestinationLabel =
-                                        wOptsDestinationLabel
-                                    , raEvent = wOptsEvent
-                                    , raLabel = wOptsLabel
-                                    }
-                            , wqExtraSigners = wOptsSigners
-                            }
-                intent <-
-                    case wizardToTreasuryIntent env answers of
-                        Left we ->
-                            abortTr
-                                tr
-                                ( "translate: "
-                                    <> T.pack
-                                        (show (we :: WizardError))
-                                )
-                        Right i -> pure i
-                let p = tiPayload intent
-                    total = swiAmountLovelace p
-                    cs = swiChunkSizeLovelace p
-                    full = total `div` cs
-                    rem' = total `mod` cs
-                traceWith tr $
-                    WeUpperBoundResolved
-                        (tiValidityUpperBoundSlot intent)
-                traceWith tr $
-                    WeChunksComputed total cs (fromInteger full) rem'
-                traceWith tr (WeIntentReady wOptsOut)
-                let bytes =
-                        encodeSomeTreasuryIntent
-                            (SomeTreasuryIntent SSwap intent)
-                case wOptsOut of
-                    Nothing -> BSL.putStr bytes
-                    Just fp -> BSL.writeFile fp bytes
-
-{- | Emit one log line per excluded ref that matched a
-candidate pool, in exclusion-set input order. Refs that
-did not match any pool ('icoInert') are still logged so
-the operator sees their @--exclude-utxo@ was applied.
--}
-emitExclusionLog
-    :: Tracer IO Text -> InputControlOutcome -> IO ()
-emitExclusionLog textTracer outcome = do
-    mapM_
-        ( traceWith textTracer
-            . uncurry renderExclusionLogLine
-        )
-        (icoHits outcome)
-    mapM_
-        ( \ref ->
-            traceWith
-                textTracer
-                ( "swap-wizard: excluded utxo "
-                    <> outRefText ref
-                    <> " (operator-supplied) [absent]"
-                )
-        )
-        (icoInert outcome)
-
-{- | Render the FR-009 "extra input not found on wallet"
-error, naming every offending outref the operator
-supplied via @--extra-tx-in@.
--}
-renderExtraTxInNotOnWallet :: [OutRef] -> Text
-renderExtraTxInNotOnWallet refs =
-    "swap-wizard: extra input not found on wallet: "
-        <> T.intercalate ", " (map outRefText refs)

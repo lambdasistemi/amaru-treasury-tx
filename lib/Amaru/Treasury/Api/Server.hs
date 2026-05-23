@@ -53,14 +53,20 @@ import Servant.API
     , Get
     , JSON
     , MimeRender (..)
+    , Post
     , QueryParam'
     , Raw
+    , ReqBody
     , Required
     , Strict
     , type (:<|>)
     , type (:>)
     )
 
+import Amaru.Treasury.Api.BuildSwap
+    ( SwapBuildRequest
+    , SwapBuildResponse
+    )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity
     , RecentTxManifest
@@ -97,6 +103,10 @@ type JsonAPI =
                     :> Get '[JSON] RecentTxManifest
                 :<|> "version"
                     :> Get '[JSON] BuildIdentity
+                :<|> "build"
+                    :> "swap"
+                    :> ReqBody '[JSON] SwapBuildRequest
+                    :> Post '[JSON] SwapBuildResponse
            )
 
 -- | Witness for 'JsonAPI'.
@@ -129,6 +139,12 @@ data Handlers = Handlers
     { hInspectReport :: ScopeId -> IO InspectReport
     , hRecentTxs :: RecentTxManifest
     , hBuildIdentity :: BuildIdentity
+    , hBuildSwap :: SwapBuildRequest -> IO SwapBuildResponse
+    -- ^ Build a swap intent from a wire-shape request.  The
+    --   binary's implementation calls
+    --   'Amaru.Treasury.Wizard.Swap.buildSwapIntent' against
+    --   the server's long-lived 'Backend'; tests pass a fixed
+    --   value or a stub.
     , hRawHandler :: Tagged Handler Application
     -- ^ The static-asset fallback for @\/@. In the binary
     --   this is a 'Servant.Server.StaticFiles'
@@ -141,11 +157,15 @@ mkServer Handlers{..} =
     ( inspectH
         :<|> pure hRecentTxs
         :<|> pure hBuildIdentity
+        :<|> buildSwapH
     )
         :<|> hRawHandler
   where
     inspectH :: ScopeId -> Handler InspectReport
     inspectH scope = liftIO (hInspectReport scope)
+
+    buildSwapH :: SwapBuildRequest -> Handler SwapBuildResponse
+    buildSwapH req = liftIO (hBuildSwap req)
 
 {- | Bake the 'Handlers' into a WAI 'Application' ready to be
 run by warp.

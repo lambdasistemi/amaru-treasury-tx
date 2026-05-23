@@ -91,6 +91,7 @@ import Ouroboros.Network.Magic (NetworkMagic (..))
 
 import Cardano.Ledger.Address (Addr)
 
+import Amaru.Treasury.Api.BuildSwap (runBuildSwap)
 import Amaru.Treasury.Api.Server
     ( Handlers (..)
     , mkApplication
@@ -101,6 +102,7 @@ import Amaru.Treasury.Api.Types
     )
 import Amaru.Treasury.Backend (Backend)
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
+import Amaru.Treasury.Cli.Common (GlobalOpts (..))
 import Amaru.Treasury.Cli.TreasuryInspect
     ( runInspectFromBackend
     )
@@ -231,6 +233,12 @@ main = do
     putStrLn $
         "amaru-treasury-tx-api: opening N2C session on "
             <> optsSocket opts
+    let g =
+            GlobalOpts
+                { goSocketPath = Just (optsSocket opts)
+                , goNetworkMagic = mainnetMagic
+                , goNetworkName = Just "mainnet"
+                }
     withLocalNodeBackend mainnetMagic (optsSocket opts) $
         \backend -> do
             cache <- newIORef Map.empty
@@ -253,6 +261,7 @@ main = do
                                 swapAddr
                         , hRecentTxs = manifest
                         , hBuildIdentity = buildId
+                        , hBuildSwap = runBuildSwap g backend
                         , hRawHandler =
                             serveDirectoryFileServer
                                 (optsStatic opts)

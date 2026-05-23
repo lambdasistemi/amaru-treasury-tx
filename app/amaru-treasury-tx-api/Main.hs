@@ -53,6 +53,7 @@ import Data.Word (Word16)
 import Network.Wai
     ( Middleware
     , mapResponseHeaders
+    , pathInfo
     )
 import Network.Wai.Handler.Warp
     ( defaultSettings
@@ -284,7 +285,29 @@ main = do
                             <> show (optsPort opts)
                     runSettings
                         warpSettings
-                        (addFrameAncestors (mkApplication handlers))
+                        ( spaFallback
+                            (addFrameAncestors (mkApplication handlers))
+                        )
+
+-- ---------------------------------------------------------------------------
+-- SPA fallback middleware
+
+{- | Rewrite known SPA routes (currently only @\/build@) to
+@\/@ so the existing static-asset Raw handler returns the
+Halogen bundle's @index.html@.  Without this, a direct GET
+\/build returns a 404 from servant since no route matches.
+
+The list is intentionally tiny; expand only when the SPA
+adds another top-level path.
+-}
+spaFallback :: Middleware
+spaFallback app req respond
+    | pathInfo req `elem` spaPaths =
+        app req{pathInfo = []} respond
+    | otherwise = app req respond
+  where
+    spaPaths :: [[Text]]
+    spaPaths = [["build"]]
 
 -- ---------------------------------------------------------------------------
 -- Response-header middleware

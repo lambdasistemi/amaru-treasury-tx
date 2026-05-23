@@ -84,20 +84,24 @@ renderObject obj =
           ]
       , HH.dl
           [ HP.classes [ HH.ClassName "v-object" ] ]
-          (Array.concatMap renderEntry entries)
+          (map renderEntry entries)
       ]
 
--- | One key/value pair inside an object.  If the value is
--- | itself a compound (object/array), the *value* renderer
--- | already emits a <details>; the key sits next to its
--- | toggle.
-renderEntry :: forall w i. Tuple String Json -> Array (HH.HTML w i)
+-- | One key/value row inside an object. If the value is itself
+-- | a compound (object/array), the value renderer emits a nested
+-- | <details>; the row wrapper keeps adjacent primitive entries
+-- | from visually running together.
+renderEntry :: forall w i. Tuple String Json -> HH.HTML w i
 renderEntry (Tuple k v) =
-  [ HH.dt
+  HH.div
+    [ HP.classes [ HH.ClassName "v-entry" ] ]
+    [ HH.dt
       [ HP.classes [ HH.ClassName "v-key" ] ]
       [ HH.text k ]
-  , HH.dd [] [ renderValue v ]
-  ]
+    , HH.dd
+        [ HP.classes [ HH.ClassName "v-value" ] ]
+        [ renderValue v ]
+    ]
 
 renderStringValue :: forall w i. String -> HH.HTML w i
 renderStringValue s

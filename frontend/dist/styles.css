@@ -39,6 +39,7 @@
      details.json-block + .json-body     outer wrapper around JSON
      .v-node + .v-summary + .v-meta      one collapsible object/array
      .v-object, .v-array                 nested grid / list
+     .v-entry                            one object key/value row
      .v-key                              object key
      .v-null, .v-bool, .v-num, .v-str    primitive types
      .v-txid, .v-addr, .v-policy         linked, resolved values
@@ -509,27 +510,32 @@ details.json-block[open] > .json-body::-webkit-scrollbar-track {
   border-left: 1px solid var(--md-sys-color-outline-variant);
 }
 
-.v-object { display: block; }
-.v-object > .v-key {
-  display: inline-block;
+.v-object {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.v-entry {
+  display: grid;
+  grid-template-columns: minmax(8ch, 18ch) minmax(0, 1fr);
+  column-gap: 8px;
+  align-items: start;
+  min-width: 0;
+}
+.v-entry > .v-key {
   color: var(--md-sys-color-on-surface-variant);
   font-weight: 500;
-  margin-top: 2px;
+  min-width: 0;
   overflow-wrap: anywhere;
 }
-.v-object > .v-key::after {
+.v-entry > .v-key::after {
   content: ":";
   color: var(--md-sys-color-outline);
-  margin-right: 6px;
 }
-.v-object > dd {
-  display: inline;
+.v-entry > .v-value {
   margin: 0;
+  min-width: 0;
   overflow-wrap: anywhere;
-}
-.v-object > dd:has(> .v-node) {
-  display: block;
-  margin-left: 0;
 }
 
 .v-array { list-style: none; padding: 0; margin: 0; }
@@ -567,6 +573,13 @@ details.json-block[open] > .json-body::-webkit-scrollbar-track {
   }
   .scope-grid {
     gap: 16px;
+  }
+  .v-entry {
+    grid-template-columns: 1fr;
+    row-gap: 1px;
+  }
+  .v-entry > .v-value {
+    padding-left: 12px;
   }
   .scope-card {
     padding: 20px 14px 16px;

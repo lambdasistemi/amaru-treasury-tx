@@ -62,14 +62,20 @@ renderStringValue s
         ]
         [ HH.text (shortHex s) ]
   | isBech32Addr s =
-      HH.span
+      HH.a
         [ HP.classes [ HH.ClassName "v-addr" ]
+        , HP.href ("https://cardanoscan.io/address/" <> s)
+        , HP.target "_blank"
+        , HP.rel "noopener"
         , HP.title s
         ]
         [ HH.text (shortAddr s) ]
   | isPolicyHex s =
-      HH.span
+      HH.a
         [ HP.classes [ HH.ClassName "v-policy" ]
+        , HP.href ("https://cardanoscan.io/tokenPolicy/" <> s)
+        , HP.target "_blank"
+        , HP.rel "noopener"
         , HP.title s
         ]
         [ HH.text (shortHex s) ]

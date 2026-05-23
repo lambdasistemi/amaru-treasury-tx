@@ -1,17 +1,20 @@
--- | #239 T013–T021 — top-level Halogen component for the
--- | treasury-inspect dashboard.
+-- | #239 — Halogen renders Material Web Components verbatim.
 -- |
--- | Layout (top to bottom):
--- |   * Site header — title + tagline.
--- |   * Status banner — chain tip slot + last-refreshed
--- |     timestamp + degraded-state hint if any scope failed.
--- |   * Scope cards (4) — per-scope summary numbers
--- |     (lovelace, USDM, UTxO count) plus the full JSON tree
--- |     rendered via JsonView (FR-010a coverage,
--- |     FR-010b resolution).
--- |   * Recent-txs section — last 10 treasury txs as
--- |     cardanoscan links.
--- |   * Footer — docs / source / build-identity chip.
+-- | Visual language: Material 3
+-- | (https://m3.material.io/components). No bespoke styling
+-- | beyond the layout container in dist/index.html.
+-- |
+-- | Components used:
+-- |   * `md-elevated-card`  — scope + recent-txs surfaces
+-- |     (https://material-web.dev/components/card/)
+-- |   * `md-list` + `md-list-item` — kv rows
+-- |     (https://material-web.dev/components/list/)
+-- |   * `md-icon-button`    — theme toggle
+-- |   * `md-divider`        — separators
+-- |   * `md-chip-set` + `md-assist-chip` — status banner
+-- |
+-- | Typography classes (.md-typescale-*) ship from
+-- | dist/material.js via document.adoptedStyleSheets.
 
 module App where
 
@@ -31,9 +34,11 @@ import Effect.Timer (setInterval)
 import Foreign.Object as FO
 import Halogen as H
 import Halogen.HTML as HH
+import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.Subscription as HS
 import JsonView as JsonView
+import Theme as Theme
 
 -- ---------------------------------------------------------------------------
 -- Model
@@ -53,7 +58,7 @@ type State =
   , version :: Maybe Api.BuildIdentity
   , recent :: Maybe Api.RecentTxManifest
   , lastRefresh :: Maybe String
-  -- ^ ISO timestamp of last completed refresh (best-effort).
+  , theme :: Theme.Theme
   }
 
 data Action
@@ -61,6 +66,7 @@ data Action
   | RefreshOne ScopeName
   | RefreshAll
   | LoadStatic
+  | ToggleTheme
 
 data ScopeName
   = CoreDevelopment
@@ -103,6 +109,7 @@ initialState =
   , version: Nothing
   , recent: Nothing
   , lastRefresh: Nothing
+  , theme: Theme.Dark
   }
 
 scopeOf :: State -> ScopeName -> ScopeState
@@ -133,136 +140,172 @@ component =
 
   render :: State -> H.ComponentHTML Action () m
   render st =
-    HH.div
-      [ HP.classes [ HH.ClassName "app" ] ]
-      [ siteHeader
+    HH.div_
+      [ topbar st
+      , siteHeader
       , statusBanner st
-      , HH.main
-          [ HP.classes [ HH.ClassName "site-main" ] ]
-          (map (renderScope st) allScopeNames)
-      , recentTxsSection st
+      , scopeGrid st
       , siteFooter st
       ]
 
-  siteHeader =
-    HH.header
-      [ HP.classes [ HH.ClassName "site-header" ] ]
-      [ HH.h1_ [ HH.text "Amaru Treasury" ]
-      , HH.p
-          [ HP.classes [ HH.ClassName "site-tagline" ] ]
+  topbar st =
+    HH.div
+      [ HP.style
+          "display:flex;align-items:center;\
+          \justify-content:space-between;gap:16px;"
+      ]
+      [ HH.div
+          [ HP.classes [ HH.ClassName "md-typescale-title-large" ]
+          , HP.style
+              "display:flex;align-items:center;gap:8px;\
+              \color:var(--md-sys-color-on-surface);"
+          ]
+          [ HH.text "amaru-treasury" ]
+      , md "md-text-button"
+          [ HE.onClick (\_ -> ToggleTheme) ]
           [ HH.text
-              "Live read-only view across the four registered scopes."
+              ( case st.theme of
+                  Theme.Dark -> "Light"
+                  Theme.Light -> "Dark"
+              )
+          ]
+      ]
+
+  siteHeader =
+    HH.div_
+      [ HH.div
+          [ HP.classes
+              [ HH.ClassName "md-typescale-label-small" ]
+          , HP.style
+              "color:var(--md-sys-color-on-surface-variant);\
+              \text-transform:uppercase;letter-spacing:0.1em;"
+          ]
+          [ HH.text "amaru-treasury.plutimus.com" ]
+      , HH.h1
+          [ HP.classes
+              [ HH.ClassName "md-typescale-display-medium" ]
+          , HP.style "margin:4px 0 8px 0;"
+          ]
+          [ HH.text "Amaru Treasury" ]
+      , HH.p
+          [ HP.classes
+              [ HH.ClassName "md-typescale-body-large" ]
+          , HP.style
+              "margin:0;color:var(--md-sys-color-on-surface-variant);\
+              \max-width:64ch;"
+          ]
+          [ HH.text
+              "Live read-only view across the four registered \
+              \scopes of the Amaru 2026 treasury."
           ]
       ]
 
   statusBanner st =
-    HH.section
-      [ HP.classes [ HH.ClassName "status-banner" ] ]
-      [ HH.div_
-          [ chip "chain tip"
-              ( case firstChainTipSlot st of
-                  Just s -> "slot " <> show s
-                  Nothing -> "—"
-              )
-          , chip "last refresh"
-              (fromMaybe "—" st.lastRefresh)
-          , chip "scopes"
-              ( show (countLoaded st) <> " / "
-                  <> show (Array.length allScopeNames)
-                  <> " loaded"
-              )
-          ]
-      , if anyFailed st then
-          HH.p
-            [ HP.classes [ HH.ClassName "status-hint" ] ]
-            [ HH.text
-                "Some chain queries timed out. \
-                \The upstream cardano-node may still be syncing; \
-                \the page will retry every 30 s."
-            ]
-        else
-          HH.text ""
+    md "md-chip-set"
+      []
+      [ chip "chain tip"
+          ( case firstChainTipSlot st of
+              Just s -> "slot " <> formatThousands s
+              Nothing -> "—"
+          )
+      , chip "last refresh" (fromMaybe "—" st.lastRefresh)
+      , chip "scopes loaded"
+          ( show (countLoaded st) <> " / "
+              <> show (Array.length allScopeNames)
+          )
       ]
 
   chip label_ value_ =
-    HH.span
-      [ HP.classes [ HH.ClassName "chip" ] ]
-      [ HH.span [ HP.classes [ HH.ClassName "chip-label" ] ]
-          [ HH.text label_ ]
-      , HH.span [ HP.classes [ HH.ClassName "chip-value" ] ]
-          [ HH.text value_ ]
+    md "md-assist-chip"
+      [ HP.prop (HH.PropName "label")
+          (label_ <> "  " <> value_)
       ]
+      []
+
+  scopeGrid st =
+    HH.div
+      [ HP.style
+          "display:grid;grid-template-columns:repeat(auto-fit,\
+          \minmax(min(100%,420px),1fr));gap:16px;"
+      ]
+      (map (renderScope st) allScopeNames)
 
   renderScope st name =
     let
       ss = scopeOf st name
       body = case ss of
         Loading ->
-          HH.div
-            [ HP.classes [ HH.ClassName "scope-loading" ] ]
-            [ HH.text "Loading…" ]
+          HH.p
+            [ HP.classes
+                [ HH.ClassName "md-typescale-body-medium" ]
+            , HP.style
+                "color:var(--md-sys-color-on-surface-variant);"
+            ]
+            [ HH.text "Loading live treasury state…" ]
         Failed err ->
-          HH.div
-            [ HP.classes [ HH.ClassName "scope-error" ] ]
+          HH.p
+            [ HP.classes
+                [ HH.ClassName "md-typescale-body-medium" ]
+            , HP.style
+                "color:var(--md-sys-color-error);"
+            ]
             [ HH.text err ]
         Loaded j ->
           HH.div_
             [ scopeSummary name j
+            , scopeKvList name j
+            , md "md-divider" [] []
             , HH.details_
-                [ HH.summary_ [ HH.text "Full inspect JSON" ]
+                [ HH.summary
+                    [ HP.classes
+                        [ HH.ClassName
+                            "md-typescale-label-large"
+                        ]
+                    , HP.style
+                        "cursor:pointer;\
+                        \color:var(--md-sys-color-primary);\
+                        \padding:8px 0;"
+                    ]
+                    [ HH.text "Full inspect JSON" ]
                 , JsonView.render j
                 ]
             ]
     in
-      HH.section
-        [ HP.classes [ HH.ClassName "scope-card" ] ]
-        [ HH.h2_ [ HH.text (scopeTitle name) ]
+      md "md-elevated-card"
+        [ HP.style
+            "padding:20px;display:block;\
+            \background:var(--md-sys-color-surface);\
+            \color:var(--md-sys-color-on-surface);"
+        ]
+        [ HH.h2
+            [ HP.classes
+                [ HH.ClassName "md-typescale-title-large" ]
+            , HP.style "margin:0 0 4px 0;"
+            ]
+            [ HH.text (scopeTitle name) ]
         , HH.div
-            [ HP.classes [ HH.ClassName "scope-id" ] ]
+            [ HP.classes
+                [ HH.ClassName "md-typescale-label-small" ]
+            , HP.style
+                "color:var(--md-sys-color-on-surface-variant);\
+                \margin-bottom:16px;"
+            ]
             [ HH.text (scopeKey name) ]
         , body
         ]
 
-  recentTxsSection st =
-    let
-      entries = fromMaybe [] (map _.rtmEntries st.recent)
-    in
-      HH.section
-        [ HP.classes [ HH.ClassName "recent-txs" ] ]
-        [ HH.h2_ [ HH.text "Recent treasury txs" ]
-        , if Array.null entries then
-            HH.p
-              [ HP.classes [ HH.ClassName "muted" ] ]
-              [ HH.text "(manifest empty)" ]
-          else
-            HH.ul_ (map recentLi entries)
-        ]
-
-  recentLi e =
-    HH.li_
-      [ HH.span
-          [ HP.classes [ HH.ClassName "tx-scope" ] ]
-          [ HH.text e.rteScope ]
-      , HH.text " · "
-      , HH.span
-          [ HP.classes [ HH.ClassName "tx-time" ] ]
-          [ HH.text e.rteSubmittedAt ]
-      , HH.text " · "
-      , HH.a
-          [ HP.href e.rteCardanoscanUrl
-          , HP.target "_blank"
-          , HP.rel "noopener"
-          , HP.title e.rteTxid
-          , HP.classes [ HH.ClassName "tx-link" ]
-          ]
-          [ HH.text (shortHex e.rteTxid) ]
-      ]
-
   siteFooter st =
-    HH.footer
-      [ HP.classes [ HH.ClassName "site-footer" ] ]
+    HH.div
+      [ HP.classes [ HH.ClassName "md-typescale-body-small" ]
+      , HP.style
+          "color:var(--md-sys-color-on-surface-variant);\
+          \display:flex;flex-wrap:wrap;gap:12px;\
+          \justify-content:space-between;\
+          \padding:12px 0;border-top:1px solid \
+          \var(--md-sys-color-outline-variant);"
+      ]
       [ HH.div
-          [ HP.classes [ HH.ClassName "footer-links" ] ]
+          [ HP.style "display:flex;flex-wrap:wrap;gap:12px;" ]
           [ HH.a
               [ HP.href
                   "https://lambdasistemi.github.io/amaru-treasury-tx/"
@@ -270,7 +313,6 @@ component =
               , HP.rel "noopener"
               ]
               [ HH.text "Docs" ]
-          , HH.text " · "
           , HH.a
               [ HP.href
                   "https://github.com/lambdasistemi/amaru-treasury-tx"
@@ -278,21 +320,26 @@ component =
               , HP.rel "noopener"
               ]
               [ HH.text "Source" ]
-          , HH.text " · "
           , HH.a
               [ HP.href "/v1/version"
               , HP.target "_blank"
               ]
               [ HH.text "/v1/version" ]
+          , HH.a
+              [ HP.href "/v1/recent-txs"
+              , HP.target "_blank"
+              ]
+              [ HH.text "/v1/recent-txs" ]
           ]
       , HH.div
-          [ HP.classes [ HH.ClassName "build-id" ] ]
+          [ HP.style
+              "font-family:'Roboto Mono',monospace;font-size:0.75rem;"
+          ]
           [ HH.text
               ( case st.version of
-                  Nothing -> "version pending…"
+                  Nothing -> "build identity loading…"
                   Just v ->
-                    "build "
-                      <> v.biGitCommit
+                    "build " <> v.biGitCommit
                       <> "  ·  metadata "
                       <> shortHex v.biMetadataSha256
                       <> "  ·  "
@@ -308,10 +355,20 @@ component =
     :: Action -> H.HalogenM State Action () output m Unit
   handleAction = case _ of
     Initialize -> do
+      theme <- H.liftEffect Theme.initialTheme
+      H.liftEffect (Theme.applyTheme theme)
+      H.modify_ \s -> s { theme = theme }
       handleAction LoadStatic
       handleAction RefreshAll
       emitter <- H.liftEffect refreshTimer
       void $ H.subscribe emitter
+
+    ToggleTheme -> do
+      st <- H.get
+      let t' = Theme.next st.theme
+      H.liftEffect (Theme.applyTheme t')
+      H.liftEffect (Theme.persistTheme t')
+      H.modify_ \s -> s { theme = t' }
 
     RefreshAll -> do
       handleAction (RefreshOne CoreDevelopment)
@@ -351,11 +408,19 @@ component =
           }
 
 -- ---------------------------------------------------------------------------
--- Helpers
+-- Material-element shim
 
--- | Pretty render of a UTxO count + lovelace + USDM derived
--- | directly from the inspect JSON for a single scope. Falls
--- | back to a placeholder if the JSON shape changes upstream.
+md
+  :: forall r w i
+   . String
+  -> Array (HH.IProp r i)
+  -> Array (HH.HTML w i)
+  -> HH.HTML w i
+md tag = HH.element (HH.ElemName tag)
+
+-- ---------------------------------------------------------------------------
+-- Per-scope summary blocks
+
 scopeSummary :: forall w i. ScopeName -> Json -> HH.HTML w i
 scopeSummary name j =
   let
@@ -373,24 +438,116 @@ scopeSummary name j =
         Nothing -> 0
   in
     HH.div
-      [ HP.classes [ HH.ClassName "scope-summary" ] ]
-      [ summaryStat "ADA"
-          (showAda lovelace)
-      , summaryStat "USDM"
-          (showUsdm usdm)
-      , summaryStat "UTxOs"
-          (show utxoCount)
+      [ HP.style
+          "display:grid;grid-template-columns:repeat(3,1fr);\
+          \gap:8px;margin-bottom:12px;"
+      ]
+      [ stat "ADA" (showAda lovelace)
+      , stat "USDM" (showUsdm usdm)
+      , stat "UTxOs" (formatThousands utxoCount)
       ]
 
-summaryStat :: forall w i. String -> String -> HH.HTML w i
-summaryStat label_ value_ =
+stat :: forall w i. String -> String -> HH.HTML w i
+stat label_ value_ =
   HH.div
-    [ HP.classes [ HH.ClassName "summary-stat" ] ]
-    [ HH.div [ HP.classes [ HH.ClassName "stat-value" ] ]
+    [ HP.style
+        "padding:10px 12px;\
+        \background:var(--md-sys-color-surface-variant);\
+        \color:var(--md-sys-color-on-surface-variant);\
+        \border-radius:12px;"
+    ]
+    [ HH.div
+        [ HP.classes [ HH.ClassName "md-typescale-title-medium" ]
+        , HP.style
+            "font-family:'Roboto Mono',monospace;\
+            \color:var(--md-sys-color-on-surface);"
+        ]
         [ HH.text value_ ]
-    , HH.div [ HP.classes [ HH.ClassName "stat-label" ] ]
+    , HH.div
+        [ HP.classes [ HH.ClassName "md-typescale-label-small" ]
+        , HP.style "text-transform:uppercase;letter-spacing:0.08em;"
+        ]
         [ HH.text label_ ]
     ]
+
+scopeKvList :: forall w i. ScopeName -> Json -> HH.HTML w i
+scopeKvList name j =
+  let
+    section_ = lookupScopeSection (scopeKey name) j
+    addr = readString section_ "treasuryAddress"
+    scriptHash = readString section_ "treasuryScriptHash"
+    pendingCount =
+      case section_ of
+        Just s ->
+          fromMaybe 0
+            ( do
+                a <- Argonaut.toArray =<< FO.lookup "pendingOrders" s
+                pure (Array.length a)
+            )
+        Nothing -> 0
+  in
+    md "md-list"
+      []
+      [ kvLink "treasury address"
+          (shortAddr addr)
+          addr
+          ("https://cardanoscan.io/address/" <> addr)
+      , kvLink "treasury script hash"
+          (shortHex scriptHash)
+          scriptHash
+          ("https://cardanoscan.io/script/" <> scriptHash)
+      , kvItem "pending swap orders"
+          (formatThousands pendingCount) ""
+      , kvLink "view on cardanoscan"
+          "history & balance"
+          ("Recent activity at " <> addr)
+          ("https://cardanoscan.io/address/" <> addr)
+      ]
+
+kvItem
+  :: forall w i
+   . String -> String -> String -> HH.HTML w i
+kvItem label_ value_ titleAttr =
+  md "md-list-item"
+    [ HP.title titleAttr ]
+    [ HH.div
+        [ HP.attr (HH.AttrName "slot") "headline"
+        , HP.style
+            "font-family:'Roboto Mono',monospace;\
+            \overflow-wrap:anywhere;"
+        ]
+        [ HH.text value_ ]
+    , HH.div
+        [ HP.attr (HH.AttrName "slot") "supporting-text" ]
+        [ HH.text label_ ]
+    ]
+
+-- | Like 'kvItem' but the headline value is a clickable
+-- | cardanoscan link.
+kvLink
+  :: forall w i
+   . String -> String -> String -> String -> HH.HTML w i
+kvLink label_ value_ titleAttr href_ =
+  md "md-list-item"
+    [ HP.prop (HH.PropName "type") "link"
+    , HP.prop (HH.PropName "href") href_
+    , HP.prop (HH.PropName "target") "_blank"
+    , HP.title titleAttr
+    ]
+    [ HH.div
+        [ HP.attr (HH.AttrName "slot") "headline"
+        , HP.style
+            "font-family:'Roboto Mono',monospace;\
+            \overflow-wrap:anywhere;color:var(--md-sys-color-primary);"
+        ]
+        [ HH.text value_ ]
+    , HH.div
+        [ HP.attr (HH.AttrName "slot") "supporting-text" ]
+        [ HH.text label_ ]
+    ]
+
+-- ---------------------------------------------------------------------------
+-- JSON read helpers
 
 lookupScopeSection :: String -> Json -> Maybe (FO.Object Json)
 lookupScopeSection key j =
@@ -429,12 +586,18 @@ readNumber (Just obj) path = go obj path
               caseJsonObject 0.0 (\o' -> go o' tail) sub
             Nothing -> 0.0
 
+readString
+  :: Maybe (FO.Object Json) -> String -> String
+readString Nothing _ = ""
+readString (Just obj) key =
+  fromMaybe "" (FO.lookup key obj >>= Argonaut.toString)
+
+-- ---------------------------------------------------------------------------
+-- Formatting
+
 showAda :: Number -> String
 showAda lovelace =
-  let
-    ada = lovelace / 1000000.0
-  in
-    formatThousands (Int.round ada)
+  formatThousands (Int.round (lovelace / 1000000.0))
 
 showUsdm :: Number -> String
 showUsdm n = formatThousands (Int.round (n / 1000000.0))
@@ -471,6 +634,14 @@ shortHex s
         <> "…"
         <> CodePoints.drop (CodePoints.length s - 6) s
 
+shortAddr :: String -> String
+shortAddr s
+  | CodePoints.length s <= 18 = s
+  | otherwise =
+      CodePoints.take 11 s
+        <> "…"
+        <> CodePoints.drop (CodePoints.length s - 6) s
+
 firstChainTipSlot :: State -> Maybe Int
 firstChainTipSlot st =
   Array.findMap (chainTipSlotOf st) allScopeNames
@@ -502,15 +673,6 @@ countLoaded st =
         )
         allScopeNames
     )
-
-anyFailed :: State -> Boolean
-anyFailed st =
-  Array.any
-    ( \n -> case scopeOf st n of
-        Failed _ -> true
-        _ -> false
-    )
-    allScopeNames
 
 refreshTimer :: Effect (HS.Emitter Action)
 refreshTimer = do

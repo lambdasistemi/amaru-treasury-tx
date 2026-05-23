@@ -54,7 +54,9 @@ spec = do
         it "returns 200 + bytes equal to encodeReport stubReport" $ do
             res <-
                 runSession
-                    (WaiTest.srequest (waiGet "/v1/treasury-inspect?scope=core_development"))
+                    ( WaiTest.srequest
+                        (waiGet "/v1/treasury-inspect?scope=core_development")
+                    )
                     (mkApplication stubHandlers)
             WaiTest.simpleStatus res `shouldBe` status200
             WaiTest.simpleBody res `shouldBe` encodeReport stubReport
@@ -80,9 +82,9 @@ spec = do
                     (WaiTest.srequest (waiGet "/v1/recent-txs"))
                     (mkApplication stubHandlers)
             WaiTest.simpleStatus res `shouldBe` status200
-            -- The body parses back to the same manifest. We
-            -- don't assert byte-identity here (aeson Generic
-            -- encoding has no shape guarantee across versions).
+    -- The body parses back to the same manifest. We
+    -- don't assert byte-identity here (aeson Generic
+    -- encoding has no shape guarantee across versions).
 
     describe "GET /v1/version" $
         it "returns the embedded build identity verbatim" $ do

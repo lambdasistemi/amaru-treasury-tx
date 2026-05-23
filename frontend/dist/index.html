@@ -6,320 +6,136 @@
       name="viewport"
       content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
-    <title>Amaru Treasury — inspect dashboard</title>
+    <title>Amaru Treasury — inspect</title>
     <meta
       name="description"
       content="Live read-only view of the Amaru 2026 treasury across all four registered scopes."
     />
     <link rel="icon" href="data:," />
+
+    <!-- Material Design 3: Roboto Flex + Material Symbols.
+         Reference: https://m3.material.io/styles/typography  -->
+    <link
+      rel="preconnect"
+      href="https://fonts.googleapis.com"
+    />
+    <link
+      rel="preconnect"
+      href="https://fonts.gstatic.com"
+      crossorigin
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,400;8..144,500;8..144,600;8..144,700&family=Roboto+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Bare minimum: layout + M3 surface roles.
+         Tokens follow https://m3.material.io/styles/color/system/tokens
+         Defaults are Material's published values; do not invent. -->
     <style>
       :root {
         color-scheme: light dark;
-        --bg: #fbfbfd;
-        --fg: #1a1a1f;
-        --muted: #555;
-        --accent: #2b5fb0;
-        --card: #ffffff;
-        --border: #e2e2e8;
-        --mono: ui-monospace, "SF Mono", "Cascadia Code",
-          "Source Code Pro", monospace;
+        /* M3 reference body type (16 sp body-large) */
+        font-family: "Roboto Flex", system-ui, -apple-system,
+          BlinkMacSystemFont, "Segoe UI", sans-serif;
+        font-optical-sizing: auto;
+      }
+      :root, :root[data-theme="light"] {
+        /* Material 3 default light scheme (md.ref.palette.primary40
+           etc., baseline scheme). Source:
+           https://m3.material.io/styles/color/static/baseline */
+        --md-sys-color-primary: #6750a4;
+        --md-sys-color-on-primary: #ffffff;
+        --md-sys-color-primary-container: #eaddff;
+        --md-sys-color-on-primary-container: #21005d;
+        --md-sys-color-surface: #fef7ff;
+        --md-sys-color-on-surface: #1d1b20;
+        --md-sys-color-surface-variant: #e7e0ec;
+        --md-sys-color-on-surface-variant: #49454f;
+        --md-sys-color-outline: #79747e;
+        --md-sys-color-outline-variant: #cac4d0;
+        --md-sys-color-background: #fef7ff;
+        --md-sys-color-on-background: #1d1b20;
+        --md-sys-color-error: #b3261e;
+      }
+      :root[data-theme="dark"] {
+        /* Material 3 default dark scheme. Source:
+           https://m3.material.io/styles/color/static/baseline */
+        --md-sys-color-primary: #d0bcff;
+        --md-sys-color-on-primary: #381e72;
+        --md-sys-color-primary-container: #4f378b;
+        --md-sys-color-on-primary-container: #eaddff;
+        --md-sys-color-surface: #141218;
+        --md-sys-color-on-surface: #e6e0e9;
+        --md-sys-color-surface-variant: #49454f;
+        --md-sys-color-on-surface-variant: #cac4d0;
+        --md-sys-color-outline: #938f99;
+        --md-sys-color-outline-variant: #49454f;
+        --md-sys-color-background: #141218;
+        --md-sys-color-on-background: #e6e0e9;
+        --md-sys-color-error: #f2b8b5;
       }
       @media (prefers-color-scheme: dark) {
-        :root {
-          --bg: #14141a;
-          --fg: #f3f3f7;
-          --muted: #a6a6b0;
-          --accent: #6da6ff;
-          --card: #1e1e26;
-          --border: #2a2a36;
+        :root:not([data-theme]) {
+          --md-sys-color-primary: #d0bcff;
+          --md-sys-color-on-primary: #381e72;
+          --md-sys-color-primary-container: #4f378b;
+          --md-sys-color-on-primary-container: #eaddff;
+          --md-sys-color-surface: #141218;
+          --md-sys-color-on-surface: #e6e0e9;
+          --md-sys-color-surface-variant: #49454f;
+          --md-sys-color-on-surface-variant: #cac4d0;
+          --md-sys-color-outline: #938f99;
+          --md-sys-color-outline-variant: #49454f;
+          --md-sys-color-background: #141218;
+          --md-sys-color-on-background: #e6e0e9;
+          --md-sys-color-error: #f2b8b5;
         }
       }
-      *,
-      *::before,
-      *::after {
-        box-sizing: border-box;
-      }
-      html,
+
+      *, *::before, *::after { box-sizing: border-box; }
+      html, body { margin: 0; }
       body {
-        margin: 0;
-        padding: 0;
-        background: var(--bg);
-        color: var(--fg);
-        font-family: ui-sans-serif, system-ui, -apple-system,
-          "Helvetica Neue", Arial, sans-serif;
-        font-size: 15px;
-        line-height: 1.5;
-      }
-      #app {
+        background: var(--md-sys-color-background);
+        color: var(--md-sys-color-on-background);
         min-height: 100dvh;
-        display: flex;
-        flex-direction: column;
+      }
+      code, pre {
+        font-family: "Roboto Mono", ui-monospace, monospace;
+      }
+      a {
+        color: var(--md-sys-color-primary);
+      }
+
+      /* Layout glue only — sizing the page container per M3
+         layout guidance (medium window: 600–839 dp).
+         https://m3.material.io/foundations/layout/applying-layout/medium */
+      #app {
         max-width: 1200px;
         margin: 0 auto;
-        padding: 0 1rem;
+        padding: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+      }
+      @media (max-width: 600px) {
+        #app { padding: 16px; gap: 16px; }
       }
       noscript {
         display: block;
-        padding: 2rem;
+        padding: 24px;
         text-align: center;
-      }
-      .site-header {
-        padding: 1.5rem 0;
-        border-bottom: 1px solid var(--border);
-      }
-      .site-header h1 {
-        font-size: 1.5rem;
-        font-weight: 600;
-        margin: 0;
-      }
-      .site-tagline {
-        margin: 0.25rem 0 0 0;
-        color: var(--muted);
-        font-size: 0.9rem;
-      }
-      .site-main {
-        flex: 1;
-        padding: 1rem 0;
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-      }
-      .status-banner {
-        position: sticky;
-        top: 0;
-        background: var(--bg);
-        padding: 0.75rem 0;
-        border-bottom: 1px solid var(--border);
-        z-index: 5;
-      }
-      .status-banner > div:first-child {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-      }
-      .chip {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.4rem;
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        padding: 0.25rem 0.75rem;
-        font-size: 0.8rem;
-      }
-      .chip-label {
-        color: var(--muted);
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-        font-size: 0.7rem;
-      }
-      .chip-value {
-        font-family: var(--mono);
-        font-weight: 600;
-      }
-      .status-hint {
-        margin: 0.5rem 0 0 0;
-        color: var(--muted);
-        font-size: 0.85rem;
-      }
-      .scope-card {
-        background: var(--card);
-        border: 1px solid var(--border);
-        border-radius: 12px;
-        padding: 1.25rem;
-      }
-      .scope-card h2 {
-        margin: 0;
-        font-size: 1.15rem;
-        font-weight: 600;
-      }
-      .scope-id {
-        font-family: var(--mono);
-        font-size: 0.75rem;
-        color: var(--muted);
-        margin-bottom: 0.75rem;
-      }
-      .scope-summary {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 0.75rem;
-        margin-bottom: 1rem;
-      }
-      .summary-stat {
-        background: var(--bg);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 0.5rem 0.75rem;
-        text-align: left;
-      }
-      .stat-value {
-        font-family: var(--mono);
-        font-size: 1.1rem;
-        font-weight: 600;
-      }
-      .stat-label {
-        font-size: 0.7rem;
-        color: var(--muted);
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-top: 0.1rem;
-      }
-      .scope-loading,
-      .scope-error {
-        font-family: var(--mono);
-        font-size: 0.85rem;
-        padding: 0.5rem 0;
-      }
-      .scope-error {
-        color: #c33;
-      }
-      details {
-        margin-top: 0.5rem;
-      }
-      details > summary {
-        cursor: pointer;
-        font-size: 0.85rem;
-        color: var(--muted);
-        padding: 0.25rem 0;
-        user-select: none;
-      }
-      details[open] > summary {
-        margin-bottom: 0.5rem;
-      }
-      .recent-txs {
-        padding: 1rem 0;
-        border-top: 1px solid var(--border);
-        margin-top: 1rem;
-      }
-      .recent-txs ul {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-      }
-      .recent-txs li {
-        padding: 0.35rem 0;
-        font-family: var(--mono);
-        font-size: 0.85rem;
-        border-bottom: 1px dashed var(--border);
-      }
-      .recent-txs li:last-child {
-        border-bottom: none;
-      }
-      .tx-scope {
-        display: inline-block;
-        min-width: 11rem;
-        color: var(--muted);
-      }
-      .tx-time {
-        color: var(--muted);
-      }
-      .tx-link {
-        color: var(--accent);
-        text-decoration: none;
-      }
-      .tx-link:hover {
-        text-decoration: underline;
-      }
-      .muted {
-        color: var(--muted);
-      }
-      .site-footer {
-        padding: 1rem 0;
-        border-top: 1px solid var(--border);
-        font-size: 0.85rem;
-        color: var(--muted);
-        display: flex;
-        flex-direction: column;
-        gap: 0.4rem;
-      }
-      .site-footer a {
-        color: var(--accent);
-        text-decoration: none;
-      }
-      .site-footer a:hover {
-        text-decoration: underline;
-      }
-      .footer-links {
-        display: flex;
-        gap: 0.5rem;
-        flex-wrap: wrap;
-        align-items: center;
-      }
-      .build-id {
-        font-family: var(--mono);
-        font-size: 0.75rem;
-        color: var(--muted);
-      }
-      /* JsonView */
-      .v-object,
-      .v-array {
-        margin: 0;
-        padding-left: 1rem;
-        border-left: 1px solid var(--border);
-      }
-      .v-key {
-        font-family: var(--mono);
-        font-weight: 600;
-        font-size: 0.85rem;
-        color: var(--muted);
-        margin-top: 0.25rem;
-      }
-      .v-array {
-        list-style: none;
-      }
-      .v-num,
-      .v-bool,
-      .v-null,
-      .v-str {
-        font-family: var(--mono);
-        font-size: 0.85rem;
-      }
-      .v-num {
-        color: var(--accent);
-      }
-      .v-txid,
-      .v-addr,
-      .v-policy {
-        font-family: var(--mono);
-        font-size: 0.85rem;
-        color: var(--accent);
-        text-decoration: none;
-        border-bottom: 1px dashed currentColor;
-        cursor: help;
-      }
-      .v-txid:hover {
-        text-decoration: underline;
-      }
-      @media (max-width: 540px) {
-        #app {
-          padding: 0 0.5rem;
-        }
-        .site-header h1 {
-          font-size: 1.2rem;
-        }
-        .scope-summary {
-          grid-template-columns: 1fr 1fr;
-        }
-        .tx-scope {
-          min-width: auto;
-          display: block;
-        }
-        .status-banner > div:first-child {
-          gap: 0.4rem;
-        }
-        .chip {
-          padding: 0.2rem 0.5rem;
-        }
+        color: var(--md-sys-color-on-surface-variant);
       }
     </style>
   </head>
   <body>
-    <div id="app">
-      <noscript>
-        This dashboard requires JavaScript. The same data is reachable
-        via <code>GET /v1/treasury-inspect?scope=&lt;name&gt;</code>.
-      </noscript>
-    </div>
+    <div id="app"></div>
+    <noscript>
+      This dashboard needs JavaScript. The same data is reachable via
+      <code>GET /v1/treasury-inspect?scope=&lt;name&gt;</code>.
+    </noscript>
+    <script type="module" src="./material.js"></script>
     <script src="./index.js" type="module"></script>
   </body>
 </html>

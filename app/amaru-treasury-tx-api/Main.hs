@@ -1,5 +1,7 @@
+{-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeApplications #-}
 
 {- |
 Module      : Main
@@ -25,12 +27,28 @@ Refuses to start against any non-mainnet network magic
 -}
 module Main (main) where
 
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (withAsync)
+import Control.Exception (SomeException, throwIO, try)
+import Control.Monad (forM_, forever)
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as LBS
+import Data.IORef
+    ( IORef
+    , atomicModifyIORef'
+    , newIORef
+    , readIORef
+    )
+import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
 import Data.Streaming.Network (HostPreference)
 import Data.String (IsString (..))
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Time
+    ( UTCTime
+    , getCurrentTime
+    )
 import Data.Word (Word16)
 import Network.Wai.Handler.Warp
     ( defaultSettings
@@ -57,8 +75,17 @@ import Options.Applicative
     )
 import Servant.Server.StaticFiles (serveDirectoryFileServer)
 import System.Exit (die)
+import System.IO
+    ( BufferMode (..)
+    , hSetBuffering
+    , stderr
+    , stdout
+    )
+import System.Timeout (timeout)
 
 import Ouroboros.Network.Magic (NetworkMagic (..))
+
+import Cardano.Ledger.Address (Addr)
 
 import Amaru.Treasury.Api.Server
     ( Handlers (..)
@@ -68,6 +95,7 @@ import Amaru.Treasury.Api.Types
     ( BuildIdentity
     , RecentTxManifest
     )
+import Amaru.Treasury.Backend (Backend)
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.Cli.TreasuryInspect
     ( runInspectFromBackend
@@ -77,6 +105,7 @@ import Amaru.Treasury.Constants
     )
 import Amaru.Treasury.Inspect.Types
     ( DeploymentAnchor (..)
+    , InspectReport
     , Outref (..)
     )
 import Amaru.Treasury.IntentJSON.Common (parseAddr)
@@ -84,6 +113,7 @@ import Amaru.Treasury.Metadata
     ( TreasuryMetadata (..)
     , readMetadataFile
     )
+import Amaru.Treasury.Scope (ScopeId, allScopes, scopeText)
 
 -- ---------------------------------------------------------------------------
 -- CLI
@@ -146,10 +176,23 @@ optsP =
 -- Main
 
 mainnetMagic :: NetworkMagic
-mainnetMagic = NetworkMagic 764824073
+mainnetMagic = NetworkMagic 764_824_073
+
+{- | Server-side per-scope cache. Background loop refreshes
+| every 'cacheTtlSeconds'; handlers read from the IORef
+| instantly. If a refresh fails, the previous successful
+| snapshot is served (stale-while-revalidate).
+-}
+type InspectCache = IORef (Map ScopeId (UTCTime, InspectReport))
+
+-- Sleep between refresh tick starts.
+refreshIntervalSeconds :: Int
+refreshIntervalSeconds = 30
 
 main :: IO ()
 main = do
+    hSetBuffering stdout LineBuffering
+    hSetBuffering stderr LineBuffering
     opts <-
         execParser $
             info
@@ -168,7 +211,8 @@ main = do
             die $
                 "amaru-treasury-tx-api: built-in \
                 \sundaeOrderAddressMainnet failed to \
-                \parse: " <> e
+                \parse: "
+                    <> e
 
     manifest <- readJsonOrDie (optsManifest opts) :: IO RecentTxManifest
     buildId <- readJsonOrDie (optsBuildIdentity opts) :: IO BuildIdentity
@@ -185,27 +229,165 @@ main = do
             <> optsSocket opts
     withLocalNodeBackend mainnetMagic (optsSocket opts) $
         \backend -> do
+            cache <- newIORef Map.empty
+            -- No startup prime: cardano-node post-replay is
+            -- CPU-bound and prime can take minutes. Start
+            -- warp immediately; the background refreshLoop
+            -- fills the cache as queries succeed, handlers
+            -- queue or serve stale until then.
+            putStrLn
+                "amaru-treasury-tx-api: cache deferred to \
+                \background worker"
             let handlers =
                     Handlers
-                        { hInspectReport = \scope ->
-                            runInspectFromBackend
+                        { hInspectReport =
+                            cachedInspect
+                                cache
+                                backend
                                 metadata
                                 anchor
                                 swapAddr
-                                (Just scope)
-                                backend
                         , hRecentTxs = manifest
                         , hBuildIdentity = buildId
                         , hRawHandler =
                             serveDirectoryFileServer
                                 (optsStatic opts)
                         }
-            putStrLn $
-                "amaru-treasury-tx-api: listening on "
-                    <> optsHost opts
-                    <> ":"
-                    <> show (optsPort opts)
-            runSettings warpSettings (mkApplication handlers)
+            -- Background refresh loop. Stays inside the N2C
+            -- session for the lifetime of warp.
+            withAsync
+                ( refreshLoop
+                    backend
+                    metadata
+                    anchor
+                    swapAddr
+                    cache
+                )
+                $ \_ -> do
+                    putStrLn $
+                        "amaru-treasury-tx-api: listening on "
+                            <> optsHost opts
+                            <> ":"
+                            <> show (optsPort opts)
+                    runSettings
+                        warpSettings
+                        (mkApplication handlers)
+
+-- ---------------------------------------------------------------------------
+-- Cache logic
+
+{- | Lookup-or-fill: if the cache has a recent entry, return
+| it; otherwise query the chain inline and store. Used by
+| the request handler.
+-}
+cachedInspect
+    :: InspectCache
+    -> Backend
+    -> TreasuryMetadata
+    -> DeploymentAnchor
+    -> Addr
+    -> ScopeId
+    -> IO InspectReport
+cachedInspect cache backend metadata anchor swapAddr scope = do
+    m <- readIORef cache
+    case Map.lookup scope m of
+        -- Always serve from the cache when anything is there
+        -- (true stale-while-revalidate). The background
+        -- refreshLoop keeps trying to update entries; failed
+        -- refreshes don't invalidate, so the dashboard
+        -- remains responsive even while cardano-node is slow.
+        Just (_, r) -> pure r
+        Nothing -> do
+            -- First-ever request for this scope: query inline
+            -- and remember the result. queryOne caps at
+            -- queryTimeoutSeconds so this can't hang forever.
+            r <- queryOne backend metadata anchor swapAddr scope
+            now <- getCurrentTime
+            atomicModifyIORef' cache $ \cur ->
+                (Map.insert scope (now, r) cur, ())
+            pure r
+
+{- | Query the chain for one scope. Times out after
+| 'queryTimeoutSeconds' so a stale N2C session doesn't
+| block forever — the refresh loop keeps going, the
+| handler returns the previous (stale) cache entry.
+-}
+queryOne
+    :: Backend
+    -> TreasuryMetadata
+    -> DeploymentAnchor
+    -> Addr
+    -> ScopeId
+    -> IO InspectReport
+queryOne backend metadata anchor swapAddr scope = do
+    mr <-
+        timeout (queryTimeoutSeconds * 1_000_000) $
+            runInspectFromBackend
+                metadata
+                anchor
+                swapAddr
+                (Just scope)
+                backend
+    case mr of
+        Just r -> pure r
+        Nothing ->
+            throwIO $
+                userError $
+                    "queryOne: N2C query for "
+                        <> T.unpack (scopeText scope)
+                        <> " timed out after "
+                        <> show queryTimeoutSeconds
+                        <> " s"
+
+queryTimeoutSeconds :: Int
+queryTimeoutSeconds = 60
+
+{- | Refresh every scope, swallowing per-scope exceptions so
+| one failure doesn't take down the loop.
+-}
+refreshAll
+    :: Backend
+    -> TreasuryMetadata
+    -> DeploymentAnchor
+    -> Addr
+    -> InspectCache
+    -> IO ()
+refreshAll backend metadata anchor swapAddr cache =
+    forM_ allScopes $ \scope -> do
+        e <-
+            try @SomeException
+                (queryOne backend metadata anchor swapAddr scope)
+        case e of
+            Right r -> do
+                now <- getCurrentTime
+                atomicModifyIORef' cache $ \cur ->
+                    (Map.insert scope (now, r) cur, ())
+            Left ex ->
+                putStrLn $
+                    "amaru-treasury-tx-api: refresh "
+                        <> T.unpack (scopeText scope)
+                        <> " failed: "
+                        <> show ex
+
+{- | Forever: refresh, sleep, repeat. Refreshes IMMEDIATELY
+| at startup so the cache fills as soon as the chain is
+| reachable.
+-}
+refreshLoop
+    :: Backend
+    -> TreasuryMetadata
+    -> DeploymentAnchor
+    -> Addr
+    -> InspectCache
+    -> IO ()
+refreshLoop backend metadata anchor swapAddr cache = forever do
+    putStrLn "amaru-treasury-tx-api: refresh tick start"
+    refreshAll backend metadata anchor swapAddr cache
+    m <- readIORef cache
+    putStrLn $
+        "amaru-treasury-tx-api: refresh tick done; cache size = "
+            <> show (Map.size m)
+    threadDelay (refreshIntervalSeconds * 1_000_000)
 
 readJsonOrDie :: (Aeson.FromJSON a) => FilePath -> IO a
 readJsonOrDie path = do
@@ -236,10 +418,10 @@ parseAnchorOrDie raw =
                     die $
                         "amaru-treasury-tx-api: \
                         \metadata.scope_owners ix not \
-                        \numeric: " <> T.unpack raw
+                        \numeric: "
+                            <> T.unpack raw
         _ ->
             die $
                 "amaru-treasury-tx-api: \
                 \metadata.scope_owners not txid#ix: "
                     <> T.unpack raw
-

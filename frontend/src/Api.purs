@@ -47,7 +47,7 @@ type RecentTxManifest =
 -- | on an upstream timeout. The server's chain-query path can
 -- | take up to a few seconds; 8 s is a comfortable upper bound.
 clientTimeoutMs :: Milliseconds
-clientTimeoutMs = Milliseconds 8000.0
+clientTimeoutMs = Milliseconds 25000.0
 
 -- | Race an Aff against a fixed timeout. Returns the timeout
 -- | message if the deadline wins.

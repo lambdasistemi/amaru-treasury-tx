@@ -51,6 +51,8 @@ pkgs.dockerTools.streamLayeredImage {
        var/lib/amaru-treasury/static/index.html
     cp ${frontend}/index.js \
        var/lib/amaru-treasury/static/index.js
+    cp ${frontend}/material.js \
+       var/lib/amaru-treasury/static/material.js
     # Mountpoint for the host's N2C socket — created so the
     # bind mount in docker-compose.yaml has a target even if
     # the path is missing on a fresh container.
@@ -76,6 +78,10 @@ pkgs.dockerTools.streamLayeredImage {
       "/var/lib/amaru-treasury/static"
     ];
     ExposedPorts = { "8080/tcp" = { }; };
+    Env = [
+      "LANG=C.UTF-8"
+      "LC_ALL=C.UTF-8"
+    ];
     Labels = {
       "org.opencontainers.image.title" = "amaru-treasury-tx-api";
       "org.opencontainers.image.source" =

@@ -50,6 +50,10 @@ import Data.Time
     , getCurrentTime
     )
 import Data.Word (Word16)
+import Network.Wai
+    ( Middleware
+    , mapResponseHeaders
+    )
 import Network.Wai.Handler.Warp
     ( defaultSettings
     , runSettings
@@ -271,7 +275,30 @@ main = do
                             <> show (optsPort opts)
                     runSettings
                         warpSettings
-                        (mkApplication handlers)
+                        (addFrameAncestors (mkApplication handlers))
+
+-- ---------------------------------------------------------------------------
+-- Response-header middleware
+
+{- | Inject a CSP @frame-ancestors@ directive on every
+response so a design collaborator can embed the dashboard
+in Claude's preview sandbox.  No @X-Frame-Options@ header is
+set (legacy, superseded by @frame-ancestors@); if a reverse
+proxy ever adds one, strip it there.
+
+This is a *dev*-leaning permissive list; tighten for prod.
+-}
+addFrameAncestors :: Middleware
+addFrameAncestors app req respond =
+    app req $ \res ->
+        respond (mapResponseHeaders (cspHeader :) res)
+  where
+    cspHeader =
+        ( "Content-Security-Policy"
+        , "frame-ancestors 'self' \
+          \https://*.claudeusercontent.com \
+          \https://claude.ai"
+        )
 
 -- ---------------------------------------------------------------------------
 -- Cache logic

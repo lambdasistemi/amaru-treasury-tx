@@ -9,125 +9,21 @@
     <title>Amaru Treasury — inspect</title>
     <meta
       name="description"
-      content="Live read-only view of the Amaru 2026 treasury across all four registered scopes."
+      content="Live read-only view of the Amaru 2026 treasury across all five registered scopes."
     />
-    <link rel="icon" href="data:," />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
 
-    <!-- Material Design 3: Roboto Flex + Material Symbols.
-         Reference: https://m3.material.io/styles/typography  -->
-    <link
-      rel="preconnect"
-      href="https://fonts.googleapis.com"
-    />
-    <link
-      rel="preconnect"
-      href="https://fonts.gstatic.com"
-      crossorigin
-    />
+    <!-- M3 typography (Roboto Flex + Roboto Mono).
+         https://m3.material.io/styles/typography  -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,400;8..144,500;8..144,600;8..144,700&family=Roboto+Mono:wght@400;500&display=swap"
       rel="stylesheet"
     />
 
-    <!-- Bare minimum: layout + M3 surface roles.
-         Tokens follow https://m3.material.io/styles/color/system/tokens
-         Defaults are Material's published values; do not invent. -->
-    <style>
-      :root {
-        color-scheme: light dark;
-        /* M3 reference body type (16 sp body-large) */
-        font-family: "Roboto Flex", system-ui, -apple-system,
-          BlinkMacSystemFont, "Segoe UI", sans-serif;
-        font-optical-sizing: auto;
-      }
-      :root, :root[data-theme="light"] {
-        /* Material 3 default light scheme (md.ref.palette.primary40
-           etc., baseline scheme). Source:
-           https://m3.material.io/styles/color/static/baseline */
-        --md-sys-color-primary: #6750a4;
-        --md-sys-color-on-primary: #ffffff;
-        --md-sys-color-primary-container: #eaddff;
-        --md-sys-color-on-primary-container: #21005d;
-        --md-sys-color-surface: #fef7ff;
-        --md-sys-color-on-surface: #1d1b20;
-        --md-sys-color-surface-variant: #e7e0ec;
-        --md-sys-color-on-surface-variant: #49454f;
-        --md-sys-color-outline: #79747e;
-        --md-sys-color-outline-variant: #cac4d0;
-        --md-sys-color-background: #fef7ff;
-        --md-sys-color-on-background: #1d1b20;
-        --md-sys-color-error: #b3261e;
-      }
-      :root[data-theme="dark"] {
-        /* Material 3 default dark scheme. Source:
-           https://m3.material.io/styles/color/static/baseline */
-        --md-sys-color-primary: #d0bcff;
-        --md-sys-color-on-primary: #381e72;
-        --md-sys-color-primary-container: #4f378b;
-        --md-sys-color-on-primary-container: #eaddff;
-        --md-sys-color-surface: #141218;
-        --md-sys-color-on-surface: #e6e0e9;
-        --md-sys-color-surface-variant: #49454f;
-        --md-sys-color-on-surface-variant: #cac4d0;
-        --md-sys-color-outline: #938f99;
-        --md-sys-color-outline-variant: #49454f;
-        --md-sys-color-background: #141218;
-        --md-sys-color-on-background: #e6e0e9;
-        --md-sys-color-error: #f2b8b5;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root:not([data-theme]) {
-          --md-sys-color-primary: #d0bcff;
-          --md-sys-color-on-primary: #381e72;
-          --md-sys-color-primary-container: #4f378b;
-          --md-sys-color-on-primary-container: #eaddff;
-          --md-sys-color-surface: #141218;
-          --md-sys-color-on-surface: #e6e0e9;
-          --md-sys-color-surface-variant: #49454f;
-          --md-sys-color-on-surface-variant: #cac4d0;
-          --md-sys-color-outline: #938f99;
-          --md-sys-color-outline-variant: #49454f;
-          --md-sys-color-background: #141218;
-          --md-sys-color-on-background: #e6e0e9;
-          --md-sys-color-error: #f2b8b5;
-        }
-      }
-
-      *, *::before, *::after { box-sizing: border-box; }
-      html, body { margin: 0; }
-      body {
-        background: var(--md-sys-color-background);
-        color: var(--md-sys-color-on-background);
-        min-height: 100dvh;
-      }
-      code, pre {
-        font-family: "Roboto Mono", ui-monospace, monospace;
-      }
-      a {
-        color: var(--md-sys-color-primary);
-      }
-
-      /* Layout glue only — sizing the page container per M3
-         layout guidance (medium window: 600–839 dp).
-         https://m3.material.io/foundations/layout/applying-layout/medium */
-      #app {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 24px;
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
-      }
-      @media (max-width: 600px) {
-        #app { padding: 16px; gap: 16px; }
-      }
-      noscript {
-        display: block;
-        padding: 24px;
-        text-align: center;
-        color: var(--md-sys-color-on-surface-variant);
-      }
-    </style>
+    <!-- Entire visual surface — see styles.css for taxonomy. -->
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div id="app"></div>

@@ -1,0 +1,11 @@
+{
+  "txId": "affe90d1fa9a93b3e2a48009ef80634e9de8428640f5d673e85b002a86399982",
+  "kind": "disburse",
+  "disbursement": "may-2026-antithesis",
+  "amount_usdm": 400000,
+  "submittedAt": "2026-05-23T15:39:00Z",
+  "submitter": "local-node-n2c",
+  "socket": "/code/cardano-mainnet/ipc/node.socket",
+  "network": "mainnet",
+  "networkMagic": 764824073
+}

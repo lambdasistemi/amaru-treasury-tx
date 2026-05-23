@@ -1,6 +1,6 @@
 # amaru-treasury-tx Development Guidelines
 
-Auto-generated from feature plans. Last updated: 2026-05-22
+Auto-generated from feature plans. Last updated: 2026-05-23
 
 ## Active Technologies
 - Haskell, GHC 9.6+ (matches `cardano-node-clients`). (005-unified-tx-build)
@@ -12,6 +12,8 @@ Auto-generated from feature plans. Last updated: 2026-05-22
 - filesystem only — `report.json` (input), `report.md` (074-report-render)
 - Haskell, GHC 9.6+ via the repository Nix shell. + `cardano-node-clients`, `cardano-tx-tools`, (157-flatten-devnet-cli)
 - filesystem only — `bootstrap-intent.json` (input to (157-flatten-devnet-cli)
+- Haskell, GHC 9.6+ (matches `cardano-node-clients`) + `cardano-node-clients` (Provider IO + N2C), `cardano-tx-tools` (`TxBuild` DSL), `cardano-ledger-conway` (Conway tx body), `plutus-tx` (`ToData`/`FromData`), `aeson` (intent.json), `contra-tracer` (informational logging) (259-swap-wizard-pure)
+- filesystem only — `intent.json` (CLI output, builder input), `report.json` (builder output). No DB. (259-swap-wizard-pure)
 
 - Haskell, GHC 9.6+ (matches `cardano-node-clients`)
 - Cabal + Nix flake (haskell.nix, IOG cache)
@@ -76,6 +78,7 @@ nix run .#lint
 - See the `/haskell` and `/nix` skills for project-wide details.
 
 ## Recent Changes
+- 259-swap-wizard-pure: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`) + `cardano-node-clients` (Provider IO + N2C), `cardano-tx-tools` (`TxBuild` DSL), `cardano-ledger-conway` (Conway tx body), `plutus-tx` (`ToData`/`FromData`), `aeson` (intent.json), `contra-tracer` (informational logging)
 - 157-flatten-devnet-cli: Added Haskell, GHC 9.6+ via the repository Nix shell. + `cardano-node-clients`, `cardano-tx-tools`,
 - 074-report-render: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`).
 

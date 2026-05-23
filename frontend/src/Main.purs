@@ -21,12 +21,20 @@ import Web.HTML.HTMLElement as HTMLElement
 import Web.HTML.Window (document)
 
 import App as App
+import BuildPage as BuildPage
+import Routing (Route(..), currentRoute)
 
 main :: Effect Unit
 main = runHalogenAff do
   host <- liftEffect mountHost
-  _ <- runUI App.component unit host
-  pure unit
+  route <- liftEffect currentRoute
+  case route of
+    RouteInspect -> do
+      _ <- runUI App.component unit host
+      pure unit
+    RouteBuild -> do
+      _ <- runUI BuildPage.component unit host
+      pure unit
 
 mountHost :: Effect HTMLElement
 mountHost = do

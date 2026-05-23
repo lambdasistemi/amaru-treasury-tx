@@ -197,6 +197,23 @@ submission. Always pass `--extra-signer <other-scope>` for swap /
 disburse / withdraw flows. The operator config lists the full
 roster keyed by scope label; pick any other owner from there.
 
+## Reference-set disburses (Principle VIII v2 / v3)
+
+Disbursements carry an on-chain `rationale.references` array binding
+the tx to its off-chain audit chain (engagement contracts,
+address-of-record proofs, invoices, cycle reviews). Drive every
+disburse from a per-cycle manifest + per-disbursement build script —
+never assemble the `--reference-uri / --reference-type /
+--reference-label` trio by hand at the prompt.
+
+See [references/reference-disburses.md](references/reference-disburses.md)
+for the manifest schema, the CC build script as the canonical template,
+the NDA carve-out (P-VIII v3 A), the **NON-NEGOTIABLE
+amount-vs-invoice cross-check before signing**, the rebuild-via-wizard
+rule when an in-flight disburse needs a correction (never
+surgical-edit `intent.json`), and where to find the txId after
+`tx-build`.
+
 ## Companion tools: `cardano-tx-tools`
 
 If a local checkout of [`cardano-tx-tools`](https://github.com/lambdasistemi/cardano-tx-tools)
@@ -270,10 +287,14 @@ See [references/troubleshooting.md](references/troubleshooting.md)
 for:
 
 - TTL pitfall — multi-owner sigs vs default validity horizon
+- Chain horizon overshoot (`ResolverValidityOvershoot` / `HorizonError`) when the local node is behind
 - `OutsideValidityIntervalUTxO` and the rebuild ceremony
 - `tx-validate` false positive: `WithdrawalsNotInRewardsCERTS`
 - Upstream metadata `registry_script.hash` typo (contingency scope)
 - Witness `--expected-key-hash` mismatch — wrong vault or identity
+- System-PATH `amaru-treasury-tx` lags behind the worktree; pin a `nix build` binary via `--binary`
+- txId lives at `result.report.identity.txId` inside `report.json`, not at the top
+- 64-byte cap on `description / justification / destinationLabel / label` — the wizard does NOT auto-chunk these
 
 ## When to escalate to a human
 

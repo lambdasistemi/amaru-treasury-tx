@@ -9,8 +9,16 @@ chain's current horizon" — typically only ~12 h. That's not
 enough for a 4-of-4 owner signature round-trip across timezones;
 one expired tx wastes a whole signing round.
 
-**Always pass `--validity-hours 24` (single round) or
-`--validity-hours 48` (multi-day) when sigs span humans.**
+**Pass `--validity-hours 24` (single round) or `--validity-hours 48`
+(multi-day) when sigs span humans — but watch for horizon overshoot.**
+
+If the local node is behind the network tip, the requested upper-bound
+may exceed the resolver's known chain horizon and the wizard aborts
+with `ResolverValidityOvershoot` / `HorizonError` (the log line names
+the requested slot, the horizon slot, and the tip slot). In that case
+either (a) wait for the node to catch up, (b) drop to a lower
+`--validity-hours`, or (c) omit the flag entirely so the wizard uses
+the longest currently-safe slot.
 
 If a tx has already expired, you'll see this in `tx-validate`:
 
@@ -125,3 +133,41 @@ If `submit` reports `ApplyTxError` other than the
 A failed submission does **not** delete the pre-submission
 archive entry — the unsigned + signed bytes are still useful
 evidence for the diagnosis.
+
+## Wizard binary lags behind the feature you need
+
+A wizard flag (e.g. `--reference-uri`) may exist in the worktree's
+source but not in the operator's system-PATH binary, which can lag
+behind by one or more releases. Symptom: `Invalid option
+"--reference-uri"` (or similar).
+
+Pin the worktree-built binary explicitly:
+
+```bash
+BIN=$(nix build --no-link --print-out-paths .#default)/bin/amaru-treasury-tx
+"$BIN" --version
+scripts/build-<cycle>-<vendor>-disburse.sh --binary "$BIN" ...
+```
+
+Always log the exact `--version` of the binary that produced an
+artefact into the rundir's `build.log` so future runs reproduce
+against the same surface.
+
+## txId is not at the top of `report.json`
+
+After `tx-build`, the unsigned txId lives at
+`result.report.identity.txId` — not at the top level, not in
+`tx.envelope.json`.
+
+```bash
+jq -r '.result.report.identity.txId' "$RUN/report.json"
+```
+
+## Rationale text exceeds 64 bytes
+
+The wizard does NOT auto-chunk
+`description / justification / destinationLabel / label` — only URIs
+and reference labels are auto-chunked. Each of those four fields must
+fit in 64 UTF-8 bytes (the Cardano per-text metadatum cap). If a
+defaulted template would overflow, shorten it in the per-disbursement
+build script before exec, not after.

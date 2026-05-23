@@ -11,6 +11,13 @@ module Amaru.Treasury.Cli.SwapWizard
     , wizardOptsP
     , runWizard
     , validateWizardInputControl
+    , ChunkSpec (..)
+    , WizardRate (..)
+    , WizardRateParameters (..)
+    , WizardSwapParameters (..)
+    , rateToFraction
+    , swapQuoteRequestChunk
+    , usdmToLovelace
     ) where
 
 import Control.Applicative ((<|>))
@@ -127,11 +134,13 @@ data WizardSwapParameters = WizardSwapParameters
     , wspRateNumerator :: !Integer
     , wspRateDenominator :: !Integer
     }
+    deriving (Eq, Show)
 
 data WizardRateParameters = WizardRateParameters
     { wrpRateNumerator :: !Integer
     , wrpRateDenominator :: !Integer
     }
+    deriving (Eq, Show)
 
 {- | Flags for the @swap-wizard@ subcommand.
 Mirrors @specs/002-swap-wizard/contracts/swap-wizard-cli.md §1@.

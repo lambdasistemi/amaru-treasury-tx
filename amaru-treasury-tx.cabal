@@ -224,6 +224,7 @@ library
     Amaru.Treasury.Wizard.Event
     Amaru.Treasury.Wizard.Failure
     Amaru.Treasury.Wizard.InputControl
+    Amaru.Treasury.Wizard.Swap
 
   build-depends:
     , aeson
@@ -539,6 +540,7 @@ test-suite unit-tests
     Amaru.Treasury.Wizard.FailureSpec
     Amaru.Treasury.Wizard.InputControlSpec
     Amaru.Treasury.Wizard.InputControlTestHelpers
+    Amaru.Treasury.Wizard.SwapSpec
     Paths_amaru_treasury_tx
     PlaceholderSpec
 

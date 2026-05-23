@@ -31,6 +31,9 @@ import Network.Wai.Test qualified as WaiTest
 import Servant qualified
 import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
 
+import Amaru.Treasury.Api.BuildSwap
+    ( SwapBuildResponse (..)
+    )
 import Amaru.Treasury.Api.Server
     ( Handlers (..)
     , mkApplication
@@ -129,6 +132,15 @@ stubHandlers =
         { hInspectReport = \_scope -> pure stubReport
         , hRecentTxs = RecentTxManifest []
         , hBuildIdentity = stubBuildIdentity
+        , hBuildSwap = \_ ->
+            pure
+                SwapBuildResponse
+                    { sbrIntentJson = Nothing
+                    , sbrCli = Nothing
+                    , sbrFailureTag = Just "Stub"
+                    , sbrFailureField = Nothing
+                    , sbrFailureReason = Just "stub handler"
+                    }
         , hRawHandler = stubRawHandler
         }
 

@@ -1,0 +1,336 @@
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StrictData #-}
+
+{- |
+Module      : Amaru.Treasury.Api.BuildSwap
+Description : JSON carriers + mapper for @POST /v1/build/swap@
+              (#263).
+Copyright   : (c) Paolo Veronelli, 2026
+License     : Apache-2.0
+
+A shallow request type with primitive fields the operator
+supplies; the mapper translates to 'WizardOpts' before the
+handler calls
+'Amaru.Treasury.Wizard.Swap.buildSwapIntent'.
+
+Keeping the JSON shape distinct from 'WizardOpts' avoids
+chaining @ToJSON@ / @FromJSON@ instances across the wizard
+internals; the HTTP wire contract evolves independently
+from the in-process record.
+-}
+module Amaru.Treasury.Api.BuildSwap
+    ( -- * Request
+      SwapBuildRequest (..)
+    , SwapAmount (..)
+    , SwapChunk (..)
+    , SwapRate (..)
+
+      -- * Response
+    , SwapBuildResponse (..)
+
+      -- * Mapper
+    , mapToWizardOpts
+
+      -- * Handler runner
+    , runBuildSwap
+    ) where
+
+import Control.Tracer (nullTracer)
+import Data.Aeson (FromJSON, ToJSON)
+import Data.ByteString.Lazy qualified as BSL
+import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as Text
+import Data.Word (Word16)
+import GHC.Generics (Generic)
+
+import Amaru.Treasury.Backend (Backend)
+import Amaru.Treasury.Cli.Common (GlobalOpts)
+import Amaru.Treasury.Cli.SwapWizard
+    ( ChunkSpec (..)
+    , WizardOpts (..)
+    , WizardOrder (..)
+    , WizardRate (..)
+    )
+import Amaru.Treasury.IntentJSON (encodeSomeTreasuryIntent)
+import Amaru.Treasury.Scope (ScopeId)
+import Amaru.Treasury.Tx.SwapQuote (SlippageBps (..))
+import Amaru.Treasury.Wizard.Failure
+    ( FieldId (..)
+    , WizardFailure (..)
+    , fieldOf
+    , renderWizardFailure
+    )
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    )
+import Amaru.Treasury.Wizard.Swap (buildSwapIntent)
+
+-- ---------------------------------------------------------------------------
+-- Request
+
+-- | Operator-supplied swap inputs over HTTP.
+data SwapBuildRequest = SwapBuildRequest
+    { sbrScope :: ScopeId
+    , sbrWalletAddr :: Text
+    , sbrMetadataPath :: FilePath
+    , sbrAmount :: SwapAmount
+    , sbrRate :: SwapRate
+    , sbrValidityHours :: Maybe Word16
+    , sbrDescription :: Text
+    , sbrJustification :: Text
+    , sbrDestinationLabel :: Text
+    , sbrEvent :: Maybe Text
+    , sbrLabel :: Maybe Text
+    , sbrSigners :: [Text]
+    }
+    deriving (Eq, Show, Generic)
+    deriving anyclass (FromJSON, ToJSON)
+
+{- | Either a fixed USDM target plus chunking, or all-ADA
+max-spend split into N chunks.
+-}
+data SwapAmount
+    = AmountFixedUsdm Double SwapChunk
+    | AmountAllAda Int
+    deriving (Eq, Show, Generic)
+    deriving anyclass (FromJSON, ToJSON)
+
+{- | Chunk specification mirroring the CLI's @--split@ /
+@--chunk-usdm@ flags.
+-}
+data SwapChunk
+    = ChunkSplit Int
+    | ChunkUsdmEach Double
+    deriving (Eq, Show, Generic)
+    deriving anyclass (FromJSON, ToJSON)
+
+{- | Either an operator-supplied minimum rate, or a quote
+override with slippage in basis points.
+-}
+data SwapRate
+    = RateMin Double
+    | RateOverride Double Integer
+    deriving (Eq, Show, Generic)
+    deriving anyclass (FromJSON, ToJSON)
+
+-- ---------------------------------------------------------------------------
+-- Response
+
+{- | Shape of @POST /v1/build/swap@ response.  On success
+the body carries the encoded intent.json plus a
+copy-pasteable CLI invocation; on failure it carries the
+typed 'WizardFailure'.  Exactly one of the fields is
+'Just'.
+-}
+data SwapBuildResponse = SwapBuildResponse
+    { sbrIntentJson :: Maybe Text
+    -- ^ Pretty-printed @intent.json@ on success.
+    , sbrCli :: Maybe Text
+    -- ^ Equivalent CLI invocation on success.
+    , sbrFailureTag :: Maybe Text
+    -- ^ Constructor name of the 'WizardFailure' on failure.
+    , sbrFailureField :: Maybe FieldId
+    -- ^ The offending field on @Input*@ failures.
+    , sbrFailureReason :: Maybe Text
+    -- ^ Human-readable diagnostic on failure
+    --   ('renderWizardFailure' output).
+    }
+    deriving (Eq, Show, Generic)
+    deriving anyclass (FromJSON, ToJSON)
+
+-- ---------------------------------------------------------------------------
+-- Mapper
+
+{- | Translate a wire-shape 'SwapBuildRequest' into the
+in-process 'WizardOpts' that 'buildSwapIntent' consumes.
+Returns 'Left' on inputs whose translation can fail before
+the wizard runs at all (e.g. nonsensical slippage); other
+validation lives downstream in 'buildSwapIntent' itself.
+
+This mapper does NOT parse outref strings — the slippage
+case is the only translation that materially fails here;
+exclude/extra-tx-in lists default to empty in this slice
+(#263 PR A scope).
+-}
+mapToWizardOpts
+    :: SwapBuildRequest -> Either WizardFailure WizardOpts
+mapToWizardOpts SwapBuildRequest{..} = do
+    order <- case sbrAmount of
+        AmountFixedUsdm usdm chunkSpec ->
+            Right (FixedUsdm usdm (mapChunk chunkSpec))
+        AmountAllAda n
+            | n > 0 -> Right (AllAda n)
+            | otherwise ->
+                Left
+                    ( InputOutOfRange
+                        FieldSplit
+                        ( "all-ada split must be positive, got "
+                            <> T.pack (show n)
+                        )
+                    )
+    rate <- case sbrRate of
+        RateMin minRate
+            | minRate > 0 -> Right (WizardMinRate minRate)
+            | otherwise ->
+                Left
+                    ( InputOutOfRange
+                        FieldRate
+                        ( "min rate must be > 0, got "
+                            <> T.pack (show minRate)
+                        )
+                    )
+        RateOverride adaUsdm bps
+            | bps >= 0 ->
+                Right (WizardOverrideRate adaUsdm (SlippageBps bps))
+            | otherwise ->
+                Left
+                    ( InputOutOfRange
+                        FieldSlippageBps
+                        ( "slippage_bps must be >= 0, got "
+                            <> T.pack (show bps)
+                        )
+                    )
+    Right
+        WizardOpts
+            { wOptsWalletAddr = sbrWalletAddr
+            , wOptsMetadataPath = sbrMetadataPath
+            , wOptsOut = Nothing
+            , wOptsLog = Nothing
+            , wOptsScope = sbrScope
+            , wOptsOrder = order
+            , wOptsRate = rate
+            , wOptsValidityHours = sbrValidityHours
+            , wOptsDescription = sbrDescription
+            , wOptsJustification = sbrJustification
+            , wOptsDestinationLabel = sbrDestinationLabel
+            , wOptsEvent = sbrEvent
+            , wOptsLabel = sbrLabel
+            , wOptsSigners = sbrSigners
+            , wOptsExcludeSet = ExclusionSet []
+            , wOptsForcedSet = ForcedInclusionSet []
+            }
+  where
+    mapChunk :: SwapChunk -> ChunkSpec
+    mapChunk = \case
+        ChunkSplit n -> SplitCount n
+        ChunkUsdmEach x -> ChunkUsdm x
+
+-- ---------------------------------------------------------------------------
+-- Handler runner
+
+{- | Service-side runner used by the @amaru-treasury-tx-api@
+binary.  Maps the wire-shape request to 'WizardOpts', calls
+'buildSwapIntent' against the caller-owned long-lived
+'Backend', and renders the response as 'SwapBuildResponse'.
+
+Failures (whether from the mapper or from 'buildSwapIntent')
+are carried as the @failure*@ fields of the response; the
+HTTP handler returns a 200 with those fields populated.
+Mapping failure families to status codes is deferred to a
+future commit (see #263 PR A scope).
+-}
+runBuildSwap
+    :: GlobalOpts -> Backend -> SwapBuildRequest -> IO SwapBuildResponse
+runBuildSwap g backend req =
+    case mapToWizardOpts req of
+        Left wf -> pure (failureResponse wf)
+        Right opts -> do
+            r <- buildSwapIntent g opts backend nullTracer
+            case r of
+                Left wf -> pure (failureResponse wf)
+                Right someIntent ->
+                    pure
+                        SwapBuildResponse
+                            { sbrIntentJson =
+                                Just
+                                    ( Text.decodeUtf8
+                                        ( BSL.toStrict
+                                            (encodeSomeTreasuryIntent someIntent)
+                                        )
+                                    )
+                            , sbrCli = Just (renderCli req)
+                            , sbrFailureTag = Nothing
+                            , sbrFailureField = Nothing
+                            , sbrFailureReason = Nothing
+                            }
+  where
+    failureResponse :: WizardFailure -> SwapBuildResponse
+    failureResponse wf =
+        SwapBuildResponse
+            { sbrIntentJson = Nothing
+            , sbrCli = Nothing
+            , sbrFailureTag = Just (failureTag wf)
+            , sbrFailureField = fieldOf wf
+            , sbrFailureReason = Just (renderWizardFailure wf)
+            }
+
+{- | The constructor tag of a 'WizardFailure' as a stable
+string — derived by 'show' truncated to the constructor
+name (the wire contract for the family the UI branches
+on).
+-}
+failureTag :: WizardFailure -> Text
+failureTag = \case
+    InputInvalid{} -> "InputInvalid"
+    InputOutOfRange{} -> "InputOutOfRange"
+    InputControl{} -> "InputControl"
+    InputScopeUnsupported{} -> "InputScopeUnsupported"
+    ResolveNetworkUnsupported{} -> "ResolveNetworkUnsupported"
+    ResolveSwapParameters{} -> "ResolveSwapParameters"
+    ResolveRegistryVerify{} -> "ResolveRegistryVerify"
+    ResolveResolver{} -> "ResolveResolver"
+    ResolveValidityHorizon{} -> "ResolveValidityHorizon"
+    InternalTranslate{} -> "InternalTranslate"
+    InternalEncodeError{} -> "InternalEncodeError"
+
+{- | Render the equivalent @amaru-treasury-tx swap-wizard@
+CLI invocation for a request.  Convenience for operators
+who want to reproduce the build locally.
+-}
+renderCli :: SwapBuildRequest -> Text
+renderCli SwapBuildRequest{..} =
+    T.intercalate
+        " \\\n  "
+        ( "amaru-treasury-tx swap-wizard"
+            : ("--scope " <> T.pack (show sbrScope))
+            : ("--wallet-addr " <> sbrWalletAddr)
+            : ("--metadata " <> T.pack sbrMetadataPath)
+            : amountArgs sbrAmount
+                <> rateArgs sbrRate
+                <> validityArgs sbrValidityHours
+                <> [ "--description " <> quote sbrDescription
+                   , "--justification " <> quote sbrJustification
+                   , "--destination-label " <> sbrDestinationLabel
+                   ]
+                <> maybeArg "--event " sbrEvent
+                <> maybeArg "--label " sbrLabel
+                <> map ("--extra-signer " <>) sbrSigners
+        )
+  where
+    amountArgs (AmountFixedUsdm usdm chunk) =
+        ("--usdm " <> T.pack (show usdm)) : chunkArgs chunk
+    amountArgs (AmountAllAda n) =
+        ["--all-ada", "--split " <> T.pack (show n)]
+
+    chunkArgs (ChunkSplit n) = ["--split " <> T.pack (show n)]
+    chunkArgs (ChunkUsdmEach x) = ["--chunk-usdm " <> T.pack (show x)]
+
+    rateArgs (RateMin r) = ["--min-rate " <> T.pack (show r)]
+    rateArgs (RateOverride q bps) =
+        [ "--ada-usdm " <> T.pack (show q)
+        , "--slippage-bps " <> T.pack (show bps)
+        ]
+
+    validityArgs Nothing = []
+    validityArgs (Just h) = ["--validity-hours " <> T.pack (show h)]
+
+    maybeArg _ Nothing = []
+    maybeArg flagP (Just v) = [flagP <> v]
+
+    quote t = "\"" <> t <> "\""

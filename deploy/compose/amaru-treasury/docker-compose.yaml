@@ -7,7 +7,12 @@ services:
     networks:
       - web
     volumes:
-      - /node/mainnet/ipc/node.socket:/n2c/node.socket:ro
+      # The production cardano-node-mainnet compose binds
+      # /node/mainnet (the whole dir) to /ipc and the socket
+      # gets created at /node/mainnet/node.socket — not at
+      # /node/mainnet/ipc/node.socket. Mounting the parent
+      # so cardano-node propagation works.
+      - /node/mainnet:/n2c:ro
     labels:
       - traefik.docker.network=web
       - traefik.http.routers.amaru-treasury.rule=Host(`amaru-treasury.plutimus.com`)

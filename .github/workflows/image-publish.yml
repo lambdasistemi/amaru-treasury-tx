@@ -1,0 +1,62 @@
+name: Image publish + deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: image-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: nixos
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ghcr.io/lambdasistemi/amaru-treasury-tx-api
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: paolino/dev-assets/setup-nix@v0.0.1
+        with:
+          cachix-auth-token: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build container image (nix)
+        run: nix build --quiet .#image --out-link image-stream
+
+      - name: Log in to ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" \
+          | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Load image into local docker
+        run: ./image-stream | docker load
+
+      - name: Tag :latest and :<sha>
+        run: |
+          docker tag "$IMAGE:latest" "$IMAGE:${{ github.sha }}"
+
+      - name: Push :latest and :<sha>
+        run: |
+          docker push "$IMAGE:latest"
+          docker push "$IMAGE:${{ github.sha }}"
+
+  deploy:
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH into production and update amaru-treasury
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.PROD_SSH_HOST }}
+          username: ${{ secrets.PROD_SSH_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: 22
+          script: |
+            set -euo pipefail
+            cd ~/services/amaru-treasury
+            docker compose pull
+            docker compose up -d
+            docker image prune -f

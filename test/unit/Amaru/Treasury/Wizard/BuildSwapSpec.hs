@@ -45,9 +45,10 @@ import Amaru.Treasury.Wizard.Swap
     ( projectBuildError
     )
 
--- | Build a minimal 'BuildError' for a chosen diagnostic, in
---   the @BuildPhaseBuild@ phase of @BuildActionSwap@.  Used
---   to drive 'projectBuildError' in isolation.
+{- | Build a minimal 'BuildError' for a chosen diagnostic, in
+  the @BuildPhaseBuild@ phase of @BuildActionSwap@.  Used
+  to drive 'projectBuildError' in isolation.
+-}
 errAt :: BuildFailurePhase -> BuildDiagnostic -> BuildError
 errAt phase diag =
     BuildError
@@ -171,7 +172,7 @@ spec = describe "Amaru.Treasury.Wizard.Swap.projectBuildError" $ do
               t = case bf of
                 BuildBuildError m -> m
                 _ -> ""
-           in "insufficient" `T.isInfixOf` T.toLower t
+          in  "insufficient" `T.isInfixOf` T.toLower t
                 `shouldBe` True
 
 expectationFailed :: String -> BuildFailure -> a

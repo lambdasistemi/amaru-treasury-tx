@@ -53,6 +53,7 @@ import GHC.Generics (Generic)
 import System.IO (stderr)
 
 import Amaru.Treasury.Backend (Backend)
+import Amaru.Treasury.Build.Trace (renderBuildEvent)
 import Amaru.Treasury.Cli.Common (GlobalOpts)
 import Amaru.Treasury.Cli.SwapWizard
     ( ChunkSpec (..)
@@ -61,13 +62,16 @@ import Amaru.Treasury.Cli.SwapWizard
     , WizardRate (..)
     )
 import Amaru.Treasury.IntentJSON (encodeSomeTreasuryIntent)
-import Amaru.Treasury.Scope (ScopeId)
-import Amaru.Treasury.Tx.SwapQuote (SlippageBps (..))
-import Amaru.Treasury.Build.Trace (renderBuildEvent)
 import Amaru.Treasury.Report
     ( TxBuildSuccess (..)
     , TxCborHex (..)
     )
+import Amaru.Treasury.Scope (ScopeId)
+import Amaru.Treasury.Tx.Envelope
+    ( EnvelopeKind (..)
+    , encodeEnvelope
+    )
+import Amaru.Treasury.Tx.SwapQuote (SlippageBps (..))
 import Amaru.Treasury.Tx.SwapWizard.Trace (renderEvent)
 import Amaru.Treasury.Wizard.Failure
     ( BuildFailure (..)
@@ -153,6 +157,12 @@ data SwapBuildResponse = SwapBuildResponse
     -- ^ Hex-encoded unsigned Conway tx body, present iff
     --   intent assembly AND tx build both succeeded
     --   (#269).
+    , sbrCborEnvelope :: Maybe Text
+    -- ^ Same body wrapped in the cardano-cli text-envelope
+    --   JSON ('@{"type": "Tx ConwayEra", ...}'@) so an
+    --   operator can pipe it straight into
+    --   @cardano-cli transaction witness@ without
+    --   wrapping the hex themselves (#269).
     , sbrReport :: Maybe Text
     -- ^ Pretty-printed @report.json@, present iff tx
     --   build succeeded (#269).
@@ -330,6 +340,7 @@ runBuildSwap g backend req = do
                                 { sbrIntentJson = Just intentJson
                                 , sbrCli = Just (renderCli req)
                                 , sbrCborHex = Nothing
+                                , sbrCborEnvelope = Nothing
                                 , sbrReport = Nothing
                                 , sbrFailureTag = Nothing
                                 , sbrFailureField = Nothing
@@ -393,10 +404,20 @@ runBuildSwap g backend req = do
                             TIO.hPutStrLn
                                 stderr
                                 "amaru-treasury-tx-api: build/swap tx OK"
+                            let bareHex =
+                                    unTxCborHex (tbsTxCbor tbs)
+                                envelopeBytes =
+                                    encodeEnvelope
+                                        Tx
+                                        (Text.encodeUtf8 bareHex)
                             pure
                                 intentOnly
-                                    { sbrCborHex =
-                                        Just (unTxCborHex (tbsTxCbor tbs))
+                                    { sbrCborHex = Just bareHex
+                                    , sbrCborEnvelope =
+                                        Just
+                                            ( Text.decodeUtf8
+                                                envelopeBytes
+                                            )
                                     , sbrReport =
                                         Just
                                             ( Text.decodeUtf8
@@ -416,6 +437,7 @@ runBuildSwap g backend req = do
             { sbrIntentJson = Nothing
             , sbrCli = Nothing
             , sbrCborHex = Nothing
+            , sbrCborEnvelope = Nothing
             , sbrReport = Nothing
             , sbrFailureTag = Just (failureTag wf)
             , sbrFailureField = fieldOf wf

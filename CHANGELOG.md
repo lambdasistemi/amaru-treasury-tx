@@ -4,6 +4,19 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+### Features
+
+* **wizard:** typed `buildSwapTx :: GlobalOpts -> Backend -> SomeTreasuryIntent -> Tracer IO BuildEvent -> IO (Either BuildFailure TxBuildSuccess)` lands as the load-bearing pure-Either tx-build entry point.  CLI keeps byte-identical output via shared `runFromIntentEither`.  Per-variant harness covers every `BuildDiagnostic` constructor reachable from `Build.Swap` ([#269](https://github.com/lambdasistemi/amaru-treasury-tx/issues/269)).
+* **api:** `POST /v1/build/swap` returns both the typed intent JSON AND the built tx CBOR + report in one call.  Extended `SwapBuildResponse` with `sbrCborHex`, `sbrReport`, `sbrBuildFailureTag` (all nullable; existing consumers reading only `sbrIntentJson` keep working).
+* **operate:** `/operate` CBOR + Report tabs populate from the response; status banner surfaces typed `BuildFailure` / `WizardFailure` instead of staying on "Built".  Form-level validation catches the common typo / missing-cosigner cases before the backend round-trip — wallet must be a mainnet bech32, at least one co-signer is required.
+* **wizard:** `sysexitsForBuild :: BuildFailure -> Int` mirrors the existing `sysexitsFor` for `WizardFailure` (same 64/69/70 taxonomy).
+* **wizard:** `Amaru.Treasury.Wizard.Event` re-exports `BuildEvent` + `renderBuildEvent` from the existing `Build.Trace`, giving the swap-wizard tree one stable import path symmetric with `WizardEvent`.
+
+### Fixes
+
+* **docker:** image ships every frontend asset (mirror the whole derivation) instead of a hand-maintained per-file `cp` list — fixes the missing `json-tree.css` 404 on prod after the `browser-json-tree` flake input landed in v0.2.15.0.
+* **jsontree:** dark-mode `--jt-*` token overrides via `[data-theme="dark"]`; copy chip subdued look; `.json-tree-wrapper` background follows the project's sys-color tokens.
+
 ## [0.2.15.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.14.0...v0.2.15.0) (2026-05-24)
 
 ### Features

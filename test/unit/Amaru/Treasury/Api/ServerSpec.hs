@@ -138,6 +138,7 @@ stubHandlers =
                     { sbrIntentJson = Nothing
                     , sbrCli = Nothing
                     , sbrCborHex = Nothing
+                    , sbrCborEnvelope = Nothing
                     , sbrReport = Nothing
                     , sbrFailureTag = Just "Stub"
                     , sbrFailureField = Nothing

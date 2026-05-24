@@ -21,6 +21,8 @@ module App where
 import Prelude
 
 import Api as Api
+import Routing as Routing
+import Shell as Shell
 import Data.Argonaut.Core (Json, caseJsonObject)
 import Data.Argonaut.Core as Argonaut
 import Data.Array as Array
@@ -160,24 +162,13 @@ component =
         ]
 
   topbar st =
-    HH.div
-      [ HP.classes [ HH.ClassName "topbar" ] ]
-      [ HH.div
-          [ HP.classes
-              [ HH.ClassName "md-typescale-title-large"
-              , HH.ClassName "topbar__brand"
-              ]
-          ]
-          [ HH.text "amaru-treasury.dev.plutimus.com" ]
-      , md "md-text-button"
-          [ HE.onClick (\_ -> ToggleTheme) ]
-          [ HH.text
-              ( case st.theme of
-                  Theme.Dark -> "Light"
-                  Theme.Light -> "Dark"
-              )
-          ]
-      ]
+    Shell.topbar Routing.RouteView
+      { themeLabel:
+          case st.theme of
+            Theme.Dark -> "Light"
+            Theme.Light -> "Dark"
+      , onToggleTheme: ToggleTheme
+      }
 
   siteHeader st =
     HH.div

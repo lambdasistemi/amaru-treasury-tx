@@ -1,18 +1,24 @@
-# #239 — Dev variant that serves the static bundle from a
-# host bind-mount instead of the image's read-only layer.
+# #239 / #263 — Dev variant.  Both the static bundle AND the
+# api binary are bind-mounted from the host so the dev loop
+# never needs an image rebuild.
 #
-# Iteration loop:
-#   1. Edit frontend sources.
+# Iteration loop (frontend):
+#   1. Edit PureScript.
 #   2. nix build .#frontend
-#   3. scp result/* production:/home/paolino/services/amaru-treasury-dev/static/
-#   4. Reload https://amaru-treasury.dev.plutimus.com/ — no
-#      container restart, no image rebuild.
+#   3. cp -f result/* /home/paolino/services/amaru-treasury-dev/static/
+#   4. Browser reload — no container action.
 #
-# Backend (binary + metadata + recent-txs manifest + build
-# identity) tracks whatever image is currently published; if
-# you need a backend change you must rebuild the image AND
-# the prod compose still controls the immutable production
-# instance at amaru-treasury.plutimus.com.
+# Iteration loop (backend):
+#   1. Edit Haskell.
+#   2. nix build .#amaru-treasury-tx-api \
+#        --out-link /home/paolino/services/amaru-treasury-dev/api-result
+#   3. cp -f /home/paolino/services/amaru-treasury-dev/api-result/bin/amaru-treasury-tx-api \
+#           /home/paolino/services/amaru-treasury-dev/api-bin/
+#   4. docker restart amaru-treasury-dev   (~3 s)
+#
+# /nix/store on the host is bind-mounted read-only so the
+# binary's RPATH-encoded library paths resolve inside the
+# container.  No image rebuild needed.
 
 services:
   amaru-treasury-dev:
@@ -25,8 +31,10 @@ services:
     volumes:
       - /code/cardano-mainnet/ipc:/n2c:ro
       - /home/paolino/services/amaru-treasury-dev/static:/srv/static:ro
+      - /nix/store:/nix/store:ro
+      - /home/paolino/services/amaru-treasury-dev/api-bin:/srv/api-bin:ro
     command:
-      - amaru-treasury-tx-api
+      - /srv/api-bin/amaru-treasury-tx-api
       - --host
       - 0.0.0.0
       - --port

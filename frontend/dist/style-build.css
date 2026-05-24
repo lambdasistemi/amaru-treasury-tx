@@ -385,4 +385,69 @@ input[type="number"].field__input { -moz-appearance: textfield; }
 .preview-body::-webkit-scrollbar-track { background: transparent; }
 
 /* JSON tree styling lives in `json-tree.css`, shipped by
-   the browser-json-tree flake input. */
+   the browser-json-tree flake input.  The library ships
+   light-mode defaults only; we override the `--jt-*`
+   tokens against the project's sys-color tokens so the
+   tree blends into both themes. */
+.json-tree-wrapper {
+  --jt-bg: var(--md-sys-color-surface-container-high);
+  --jt-fg: var(--md-sys-color-on-surface);
+  --jt-key: var(--md-sys-color-on-surface-variant);
+  --jt-line: var(--md-sys-color-outline-variant);
+  --jt-marker: var(--md-sys-color-outline);
+  --jt-link: var(--md-sys-color-primary);
+  --jt-link-hover: var(--md-sys-color-primary);
+  --jt-null: var(--md-sys-color-on-surface-variant);
+  --jt-bool-num: var(--md-sys-color-primary);
+  --jt-str: var(--md-sys-color-on-surface);
+  --jt-copy-fg: var(--md-sys-color-on-surface-variant);
+  --jt-copy-border: var(--md-sys-color-outline-variant);
+  --jt-copy-hover-fg: var(--md-sys-color-on-surface);
+  --jt-copy-hover-bg:
+    var(--md-sys-color-surface-container-highest);
+  --jt-copy-ok-fg: var(--md-sys-color-on-primary);
+  --jt-copy-ok-bg: var(--md-sys-color-primary);
+  --jt-radius: var(--app-radius);
+}
+
+/* Structure-level "Copy ..." chip — used above the
+   intent.json tree on /operate and per-scope on /view.
+   Subdued look in both themes; sys-color tokens flip
+   automatically.  Don't rely on UA `<button>` defaults
+   (heavy raised chrome, system-font, jarring on dark
+   especially). */
+.v-copy--block {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 4px 10px;
+  font: 500 12px/1.2 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.02em;
+  color: var(--md-sys-color-on-surface-variant);
+  background: transparent;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+.v-copy--block:hover {
+  color: var(--md-sys-color-on-surface);
+  border-color: var(--md-sys-color-outline);
+  background: var(--md-sys-color-surface-container-high);
+}
+.v-copy--block:active {
+  background: var(--md-sys-color-surface-container-highest);
+}
+/* Brief flash when the JsonTreeBehaviour click handler
+   confirms the clipboard write (adds the --ok class for
+   ~700ms). */
+.v-copy--block.v-copy--ok {
+  color: var(--md-sys-color-on-primary);
+  border-color: var(--md-sys-color-primary);
+  background: var(--md-sys-color-primary);
+}
+.v-copy--block.v-copy--ok::after { content: " ✓"; }

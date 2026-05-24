@@ -1,6 +1,6 @@
 # amaru-treasury-tx Development Guidelines
 
-Auto-generated from feature plans. Last updated: 2026-05-23
+Auto-generated from feature plans. Last updated: 2026-05-24
 
 ## Active Technologies
 - Haskell, GHC 9.6+ (matches `cardano-node-clients`). (005-unified-tx-build)
@@ -14,6 +14,8 @@ Auto-generated from feature plans. Last updated: 2026-05-23
 - filesystem only — `bootstrap-intent.json` (input to (157-flatten-devnet-cli)
 - Haskell, GHC 9.6+ (matches `cardano-node-clients`) + `cardano-node-clients` (Provider IO + N2C), `cardano-tx-tools` (`TxBuild` DSL), `cardano-ledger-conway` (Conway tx body), `plutus-tx` (`ToData`/`FromData`), `aeson` (intent.json), `contra-tracer` (informational logging) (259-swap-wizard-pure)
 - filesystem only — `intent.json` (CLI output, builder input), `report.json` (builder output). No DB. (259-swap-wizard-pure)
+- Haskell, GHC 9.6+ (matches `cardano-node-clients`); PureScript / Halogen for the frontend tabs. + `cardano-node-clients` (`TxBuild` DSL, `Backend`/`Provider IO`), `cardano-ledger-conway` (Conway tx body, balancing), `cardano-tx-tools` (`Cardano.Tx.Build`, `setMetadata`), `servant-server` (HTTP endpoint), `aeson` (response shape), `browser-json-tree` flake input (frontend rendering of the Report tab). (270-build-swap-typed)
+- Filesystem only — `intent.json`, `tx.cbor`, `report.json` (CLI output); HTTP response carries the same payloads in-band. No database, no on-disk state for the API. (270-build-swap-typed)
 
 - Haskell, GHC 9.6+ (matches `cardano-node-clients`)
 - Cabal + Nix flake (haskell.nix, IOG cache)
@@ -78,9 +80,9 @@ nix run .#lint
 - See the `/haskell` and `/nix` skills for project-wide details.
 
 ## Recent Changes
+- 270-build-swap-typed: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`); PureScript / Halogen for the frontend tabs. + `cardano-node-clients` (`TxBuild` DSL, `Backend`/`Provider IO`), `cardano-ledger-conway` (Conway tx body, balancing), `cardano-tx-tools` (`Cardano.Tx.Build`, `setMetadata`), `servant-server` (HTTP endpoint), `aeson` (response shape), `browser-json-tree` flake input (frontend rendering of the Report tab).
+- 270-build-swap-typed: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`); PureScript / Halogen for the frontend tabs. + `cardano-node-clients` (`TxBuild` DSL, `Backend`/`Provider IO`), `cardano-ledger-conway` (Conway tx body, balancing), `cardano-tx-tools` (`Cardano.Tx.Build`, `setMetadata`), `servant-server` (HTTP endpoint), `aeson` (response shape), `browser-json-tree` flake input (frontend rendering of the Report tab).
 - 259-swap-wizard-pure: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`) + `cardano-node-clients` (Provider IO + N2C), `cardano-tx-tools` (`TxBuild` DSL), `cardano-ledger-conway` (Conway tx body), `plutus-tx` (`ToData`/`FromData`), `aeson` (intent.json), `contra-tracer` (informational logging)
-- 157-flatten-devnet-cli: Added Haskell, GHC 9.6+ via the repository Nix shell. + `cardano-node-clients`, `cardano-tx-tools`,
-- 074-report-render: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`).
 
   research, data model, contracts, quickstart.
 

@@ -22,6 +22,13 @@ module Amaru.Treasury.Cli.DisburseWizard
     , runContingencyDisburse
     , validateDisburseWizardInputControl
     , validateContingencyDisburseInputControl
+
+      -- * Helpers reused by 'Amaru.Treasury.Wizard.Disburse'
+    , verifyDisburseRegistry
+    , providerToDisburseResolverEnv
+    , traceDisburseRegistryView
+    , traceDisburseResolverEnv
+    , traceDisburseEnv
     ) where
 
 import Control.Applicative ((<|>))

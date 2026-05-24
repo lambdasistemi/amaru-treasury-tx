@@ -3,7 +3,7 @@
 {- |
 Module      : Amaru.Treasury.Wizard.BuildDisburseSpec
 Description : Smoke test for 'Wizard.Disburse.buildDisburseTx'
-              (#277).
+              and 'buildDisburseIntent' (#277).
 Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
@@ -11,12 +11,14 @@ The per-'BuildDiagnostic' coverage is already shared with
 'BuildSwapSpec' (the projection 'projectBuildError' is the
 single point of truth and is exercised there exhaustively
 — see #269 T006).  This spec asserts the disburse entry
-point's compile-time contract:
+points' compile-time contract:
 
   * 'buildDisburseTx' is exported with the documented
     signature.
-  * It plumbs the same 'BuildFailure' / 'TxBuildSuccess'
-    Either as 'buildSwapTx'.
+  * 'buildDisburseIntent' is exported with the documented
+    signature (mirrors 'Wizard.Swap.buildSwapIntent').
+  * Both plumb the same typed failure / success surface as
+    their swap-side counterparts.
 -}
 module Amaru.Treasury.Wizard.BuildDisburseSpec
     ( spec
@@ -28,10 +30,20 @@ import Test.Hspec (Spec, describe, it, shouldBe)
 import Amaru.Treasury.Backend (Backend)
 import Amaru.Treasury.Build.Trace (BuildEvent)
 import Amaru.Treasury.Cli.Common (GlobalOpts)
+import Amaru.Treasury.Cli.DisburseWizard (DisburseWizardOpts)
 import Amaru.Treasury.IntentJSON (SomeTreasuryIntent)
 import Amaru.Treasury.Report (TxBuildSuccess)
-import Amaru.Treasury.Wizard.Disburse (buildDisburseTx)
-import Amaru.Treasury.Wizard.Failure (BuildFailure)
+import Amaru.Treasury.Tx.DisburseWizard.Trace
+    ( DisburseWizardEvent
+    )
+import Amaru.Treasury.Wizard.Disburse
+    ( buildDisburseIntent
+    , buildDisburseTx
+    )
+import Amaru.Treasury.Wizard.Failure
+    ( BuildFailure
+    , WizardFailure
+    )
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Wizard.Disburse" $ do
@@ -54,4 +66,20 @@ spec = describe "Amaru.Treasury.Wizard.Disburse" $ do
             -- Stable smoke value: the helper is referenced
             -- through 'sig' above; this assertion is a
             -- type-witness only.
+            seq sig True `shouldBe` True
+
+    it
+        "exports buildDisburseIntent with the documented \
+        \GlobalOpts -> DisburseWizardOpts -> Backend -> \
+        \Tracer IO DisburseWizardEvent -> IO (Either \
+        \WizardFailure SomeTreasuryIntent) shape (#277)"
+        $ let
+            sig
+                :: GlobalOpts
+                -> DisburseWizardOpts
+                -> Backend
+                -> Tracer IO DisburseWizardEvent
+                -> IO (Either WizardFailure SomeTreasuryIntent)
+            sig = buildDisburseIntent
+          in
             seq sig True `shouldBe` True

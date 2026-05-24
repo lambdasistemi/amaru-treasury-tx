@@ -30,6 +30,11 @@ the same result as a recording tracer.
     phase ('buildDisburseIntent').  Re-exported from the
     existing 'Amaru.Treasury.Tx.DisburseWizard.Trace'
     symmetric with 'WizardEvent' (#277).
+
+  * 'ReorganizeWizardEvent' — reorganize intent-construction
+    phase ('buildReorganizeIntent').  Re-exported from
+    'Amaru.Treasury.Tx.ReorganizeWizard.Trace' symmetric
+    with the swap- and disburse-side events (#280).
 -}
 module Amaru.Treasury.Wizard.Event
     ( -- * Swap intent-construction events
@@ -48,6 +53,11 @@ module Amaru.Treasury.Wizard.Event
     , renderDisburseWizardEventWithPrefix
     , disburseWizardEventTracer
     , disburseEventTracerWithPrefix
+
+      -- * Reorganize intent-construction events (#280)
+    , ReorganizeWizardEvent (..)
+    , renderReorganizeWizardEvent
+    , reorganizeWizardEventTracer
     ) where
 
 import Amaru.Treasury.Build.Trace
@@ -61,6 +71,11 @@ import Amaru.Treasury.Tx.DisburseWizard.Trace
     , disburseWizardEventTracer
     , renderDisburseWizardEvent
     , renderDisburseWizardEventWithPrefix
+    )
+import Amaru.Treasury.Tx.ReorganizeWizard.Trace
+    ( ReorganizeWizardEvent (..)
+    , renderReorganizeWizardEvent
+    , reorganizeWizardEventTracer
     )
 import Amaru.Treasury.Tx.SwapWizard.Trace
     ( WizardEvent (..)

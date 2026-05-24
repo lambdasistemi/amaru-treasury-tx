@@ -537,6 +537,7 @@ test-suite unit-tests
     Amaru.Treasury.UtxoSelectSpec
     Amaru.Treasury.Vault.AgeSpec
     Amaru.Treasury.Vault.WitnessSpec
+    Amaru.Treasury.Wizard.BuildSwapSpec
     Amaru.Treasury.Wizard.EventSpec
     Amaru.Treasury.Wizard.FailureSpec
     Amaru.Treasury.Wizard.InputControlSpec

@@ -137,9 +137,12 @@ stubHandlers =
                 SwapBuildResponse
                     { sbrIntentJson = Nothing
                     , sbrCli = Nothing
+                    , sbrCborHex = Nothing
+                    , sbrReport = Nothing
                     , sbrFailureTag = Just "Stub"
                     , sbrFailureField = Nothing
                     , sbrFailureReason = Just "stub handler"
+                    , sbrBuildFailureTag = Nothing
                     }
         , hRawHandler = stubRawHandler
         }

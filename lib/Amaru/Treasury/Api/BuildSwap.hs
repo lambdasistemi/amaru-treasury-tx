@@ -42,6 +42,7 @@ module Amaru.Treasury.Api.BuildSwap
 import Control.Exception (SomeException, try)
 import Control.Tracer (Tracer (..))
 import Data.Aeson (FromJSON, ToJSON)
+import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as BSL
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -62,18 +63,29 @@ import Amaru.Treasury.Cli.SwapWizard
 import Amaru.Treasury.IntentJSON (encodeSomeTreasuryIntent)
 import Amaru.Treasury.Scope (ScopeId)
 import Amaru.Treasury.Tx.SwapQuote (SlippageBps (..))
+import Amaru.Treasury.Build.Trace (renderBuildEvent)
+import Amaru.Treasury.Report
+    ( TxBuildSuccess (..)
+    , TxCborHex (..)
+    )
 import Amaru.Treasury.Tx.SwapWizard.Trace (renderEvent)
 import Amaru.Treasury.Wizard.Failure
-    ( FieldId (..)
+    ( BuildFailure (..)
+    , FieldId (..)
     , WizardFailure (..)
     , fieldOf
+    , fieldOfBuild
+    , renderBuildFailure
     , renderWizardFailure
     )
 import Amaru.Treasury.Wizard.InputControl
     ( ExclusionSet (..)
     , ForcedInclusionSet (..)
     )
-import Amaru.Treasury.Wizard.Swap (buildSwapIntent)
+import Amaru.Treasury.Wizard.Swap
+    ( buildSwapIntent
+    , buildSwapTx
+    )
 
 -- ---------------------------------------------------------------------------
 -- Request
@@ -137,13 +149,26 @@ data SwapBuildResponse = SwapBuildResponse
     -- ^ Pretty-printed @intent.json@ on success.
     , sbrCli :: Maybe Text
     -- ^ Equivalent CLI invocation on success.
+    , sbrCborHex :: Maybe Text
+    -- ^ Hex-encoded unsigned Conway tx body, present iff
+    --   intent assembly AND tx build both succeeded
+    --   (#269).
+    , sbrReport :: Maybe Text
+    -- ^ Pretty-printed @report.json@, present iff tx
+    --   build succeeded (#269).
     , sbrFailureTag :: Maybe Text
-    -- ^ Constructor name of the 'WizardFailure' on failure.
+    -- ^ Constructor name of the 'WizardFailure' on
+    --   intent-assembly failure.
     , sbrFailureField :: Maybe FieldId
     -- ^ The offending field on @Input*@ failures.
     , sbrFailureReason :: Maybe Text
     -- ^ Human-readable diagnostic on failure
-    --   ('renderWizardFailure' output).
+    --   ('renderWizardFailure' /
+    --   'renderBuildFailure' output).
+    , sbrBuildFailureTag :: Maybe Text
+    -- ^ Constructor name of the 'BuildFailure' on
+    --   tx-build failure (#269); 'Nothing' if intent
+    --   assembly failed OR build succeeded.
     }
     deriving (Eq, Show, Generic)
     deriving anyclass (FromJSON, ToJSON)
@@ -292,30 +317,110 @@ runBuildSwap g backend req = do
                 Right (Right someIntent) -> do
                     TIO.hPutStrLn
                         stderr
-                        "amaru-treasury-tx-api: build/swap OK"
-                    pure
-                        SwapBuildResponse
-                            { sbrIntentJson =
-                                Just
-                                    ( Text.decodeUtf8
-                                        ( BSL.toStrict
-                                            (encodeSomeTreasuryIntent someIntent)
-                                        )
+                        "amaru-treasury-tx-api: build/swap intent OK"
+                    let intentJson =
+                            Text.decodeUtf8
+                                ( BSL.toStrict
+                                    ( encodeSomeTreasuryIntent
+                                        someIntent
                                     )
-                            , sbrCli = Just (renderCli req)
-                            , sbrFailureTag = Nothing
-                            , sbrFailureField = Nothing
-                            , sbrFailureReason = Nothing
-                            }
+                                )
+                        intentOnly =
+                            SwapBuildResponse
+                                { sbrIntentJson = Just intentJson
+                                , sbrCli = Just (renderCli req)
+                                , sbrCborHex = Nothing
+                                , sbrReport = Nothing
+                                , sbrFailureTag = Nothing
+                                , sbrFailureField = Nothing
+                                , sbrFailureReason = Nothing
+                                , sbrBuildFailureTag = Nothing
+                                }
+                    -- #269 — after intent assembly succeeds,
+                    -- run the tx-build stage against the same
+                    -- pre-opened Backend.  Failures populate
+                    -- sbrBuildFailureTag + sbrFailureReason
+                    -- (the data fields stay null); successes
+                    -- populate cborHex + report.
+                    let trB =
+                            Tracer
+                                ( TIO.hPutStrLn stderr
+                                    . ( "amaru-treasury-tx-api: "
+                                            <>
+                                      )
+                                    . renderBuildEvent
+                                )
+                    rb <-
+                        try @SomeException
+                            ( buildSwapTx
+                                g
+                                backend
+                                someIntent
+                                trB
+                            )
+                    case rb of
+                        Left e -> do
+                            TIO.hPutStrLn
+                                stderr
+                                ( "amaru-treasury-tx-api: build/swap tx exception: "
+                                    <> T.pack (show e)
+                                )
+                            pure
+                                intentOnly
+                                    { sbrBuildFailureTag =
+                                        Just "BuildInternalError"
+                                    , sbrFailureReason =
+                                        Just
+                                            ( "uncaught build exception: "
+                                                <> T.pack (show e)
+                                            )
+                                    }
+                        Right (Left bf) -> do
+                            TIO.hPutStrLn
+                                stderr
+                                ( "amaru-treasury-tx-api: build/swap tx typed Left: "
+                                    <> renderBuildFailure bf
+                                )
+                            pure
+                                intentOnly
+                                    { sbrBuildFailureTag =
+                                        Just (buildFailureTag bf)
+                                    , sbrFailureField = fieldOfBuild bf
+                                    , sbrFailureReason =
+                                        Just (renderBuildFailure bf)
+                                    }
+                        Right (Right tbs) -> do
+                            TIO.hPutStrLn
+                                stderr
+                                "amaru-treasury-tx-api: build/swap tx OK"
+                            pure
+                                intentOnly
+                                    { sbrCborHex =
+                                        Just (unTxCborHex (tbsTxCbor tbs))
+                                    , sbrReport =
+                                        Just
+                                            ( Text.decodeUtf8
+                                                ( BSL.toStrict
+                                                    ( Aeson.encode
+                                                        ( tbsReport
+                                                            tbs
+                                                        )
+                                                    )
+                                                )
+                                            )
+                                    }
   where
     failureResponse :: WizardFailure -> SwapBuildResponse
     failureResponse wf =
         SwapBuildResponse
             { sbrIntentJson = Nothing
             , sbrCli = Nothing
+            , sbrCborHex = Nothing
+            , sbrReport = Nothing
             , sbrFailureTag = Just (failureTag wf)
             , sbrFailureField = fieldOf wf
             , sbrFailureReason = Just (renderWizardFailure wf)
+            , sbrBuildFailureTag = Nothing
             }
 
 {- | The constructor tag of a 'WizardFailure' as a stable
@@ -336,6 +441,19 @@ failureTag = \case
     ResolveValidityHorizon{} -> "ResolveValidityHorizon"
     InternalTranslate{} -> "InternalTranslate"
     InternalEncodeError{} -> "InternalEncodeError"
+
+{- | The constructor tag of a 'BuildFailure' as a stable
+string — wire counterpart of 'failureTag' for the
+tx-build side (#269).
+-}
+buildFailureTag :: BuildFailure -> Text
+buildFailureTag = \case
+    BuildInputInvalid{} -> "BuildInputInvalid"
+    BuildResolveParams{} -> "BuildResolveParams"
+    BuildResolveTip{} -> "BuildResolveTip"
+    BuildResolveUtxo{} -> "BuildResolveUtxo"
+    BuildBuildError{} -> "BuildBuildError"
+    BuildInternalError{} -> "BuildInternalError"
 
 {- | Render the equivalent @amaru-treasury-tx swap-wizard@
 CLI invocation for a request.  Convenience for operators

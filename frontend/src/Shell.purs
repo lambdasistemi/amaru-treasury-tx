@@ -97,7 +97,7 @@ topbar active opts =
         [ HP.classes
             [ cn "md-typescale-title-large", cn "topbar__brand" ]
         ]
-        [ HH.text "amaru-treasury.dev.plutimus.com" ]
+        [ HH.text "Amaru Treasury" ]
     , HH.nav [ HP.classes [ cn "topbar__nav" ] ]
         [ navLink RouteView active "/" "View"
         , navLink RouteOperate active "/operate" "Operate"

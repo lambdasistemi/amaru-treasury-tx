@@ -31,6 +31,7 @@ module Amaru.Treasury.Cli.ReorganizeWizard
     , validateOutPath
     , runReorganizeWizardEither
     , runReorganizeWizardLive
+    , mkLiveEnv
     , exitCodeFor
     , runReorganizeWizard
 

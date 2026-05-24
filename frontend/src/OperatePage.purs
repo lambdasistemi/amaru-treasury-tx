@@ -256,11 +256,10 @@ formColumn st =
     , formSection "07" "Extra signers"
         "Other scope owners that must co-sign."
         [ signersPicker st.scope st.extraSigners ]
-    , formSection "08" "Metadata"
-        "Path to journal/2026/metadata.json."
-        [ field "metadata-path" st.metadataPath SetMetadataPath
-            "/etc/amaru-treasury/metadata.json" true
-        ]
+    -- Metadata is baked into the image (single-tenant
+    -- deploy) — no per-request override.  Keeps
+    -- 'state.metadataPath' for the CLI preview, but the
+    -- form no longer pretends it's an operator input.
     , buildActions
     ]
 

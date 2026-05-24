@@ -39,6 +39,7 @@ import Halogen.HTML.Properties as HP
 
 import JsonTree as JsonView
 import Routing (Route(..))
+import Shell as Shell
 import Shell
   ( Scope(..)
   , allScopes
@@ -106,6 +107,24 @@ tabLabel = case _ of
 tabDisabled :: Tab -> Boolean
 tabDisabled = const false
 
+-- | One rationale reference row — historical disburse
+-- | intents (transactions/2026/network_compliance/*) carry
+-- | an array of these as off-chain CIP-1694 evidence
+-- | (typically IPFS CIDs pointing to invoices, contracts,
+-- | proofs).
+type ReferenceRow =
+  { uri :: String
+  , refType :: String
+  , label :: String
+  }
+
+emptyReferenceRow :: ReferenceRow
+emptyReferenceRow =
+  { uri: ""
+  , refType: "Other"
+  , label: ""
+  }
+
 type State =
   { scope :: Scope
   , mode :: TxMode
@@ -120,6 +139,7 @@ type State =
   , beneficiaryAddr :: String
   , disburseUnit :: DisburseUnit
   , disburseAmount :: String
+  , references :: Array ReferenceRow
   , validityHours :: String
   , description :: String
   , justification :: String
@@ -151,6 +171,7 @@ initialState =
   , beneficiaryAddr: ""
   , disburseUnit: UnitUsdm
   , disburseAmount: "1500"
+  , references: []
   , validityHours: ""
   , description: ""
   , justification: ""
@@ -178,6 +199,11 @@ data Action
   | SetBeneficiaryAddr String
   | SetDisburseUnit DisburseUnit
   | SetDisburseAmount String
+  | AddReference
+  | RemoveReference Int
+  | SetReferenceUri Int String
+  | SetReferenceType Int String
+  | SetReferenceLabel Int String
   | SetValidityHours String
   | SetDescription String
   | SetJustification String
@@ -216,6 +242,7 @@ render st =
         [ formColumn st
         , previewColumn st
         ]
+    , Shell.siteFooter { buildIdentityLine: "" }
     ]
 
 siteHeader :: forall m. TxMode -> H.ComponentHTML Action () m
@@ -353,6 +380,63 @@ modeSpecificSections st = case st.mode of
               (validateDisburseAmount st.disburseAmount)
           ]
         )
+    , formSection "08" "References"
+        "Off-chain CIP-1694 evidence (IPFS CIDs for \
+        \invoices, contracts, proofs).  Mirrors the \
+        \rationale.references array in historical \
+        \disburse intents under transactions/2026/."
+        ( referencesPicker st.references
+            <> [ HH.button
+                  [ HP.classes [ cn "btn", cn "btn--ghost" ]
+                  , HE.onClick (\_ -> AddReference)
+                  , HP.type_ HP.ButtonButton
+                  ]
+                  [ HH.text "+ Add reference" ]
+              ]
+        )
+    ]
+
+-- | Render every reference row with three inline inputs
+-- | (URI, @type, label) and a delete button.
+referencesPicker
+  :: forall m
+   . Array ReferenceRow
+  -> Array (H.ComponentHTML Action () m)
+referencesPicker rows =
+  Array.mapWithIndex referenceRow rows
+
+referenceRow
+  :: forall m
+   . Int
+  -> ReferenceRow
+  -> H.ComponentHTML Action () m
+referenceRow i row =
+  HH.div [ HP.classes [ cn "reference-row" ] ]
+    [ field
+        ("ref-uri-" <> show i)
+        row.uri
+        (SetReferenceUri i)
+        "ipfs://bafy…"
+        true
+    , field
+        ("ref-type-" <> show i)
+        row.refType
+        (SetReferenceType i)
+        "Other"
+        false
+    , field
+        ("ref-label-" <> show i)
+        row.label
+        (SetReferenceLabel i)
+        "Invoice INV-635 — ACME"
+        false
+    , HH.button
+        [ HP.classes [ cn "btn", cn "btn--ghost" ]
+        , HE.onClick (\_ -> RemoveReference i)
+        , HP.title "Remove this reference"
+        , HP.type_ HP.ButtonButton
+        ]
+        [ HH.text "×" ]
     ]
 
 -- | Top-of-form Swap | Disburse selector.  Same
@@ -1008,7 +1092,19 @@ disburseRequestJson st =
         ( Argonaut.fromArray
             (map (Argonaut.fromString <<< scopeSlug) st.extraSigners)
         )
-    , Tuple "dbrReferences" (Argonaut.fromArray [])
+    , Tuple "dbrReferences"
+        (Argonaut.fromArray (map referenceJson st.references))
+    ]
+
+-- | Encode one rationale reference row to the wire shape
+-- | RationaleReferenceJSON expects: @{ "uri", "@type",
+-- | "label" }@.
+referenceJson :: ReferenceRow -> Json
+referenceJson r =
+  Argonaut.fromObject $ FO.fromFoldable
+    [ Tuple "uri" (Argonaut.fromString r.uri)
+    , Tuple "@type" (Argonaut.fromString r.refType)
+    , Tuple "label" (Argonaut.fromString r.label)
     ]
 
 amountJson :: State -> Json
@@ -1053,9 +1149,30 @@ taggedContents tag c =
     ]
 
 cliCommand :: State -> String
-cliCommand st = case st.mode of
-  ModeSwap -> swapCliCommand st
-  ModeDisburse -> disburseCliCommand st
+cliCommand st =
+  -- Two-stage pipeline: wizard prints intent.json on stdout,
+  -- tx-build consumes it on stdin and writes tx.cbor +
+  -- report.json.  Using a shell pipe (no temp file) means
+  -- the wizard's last flag-line just needs a trailing pipe
+  -- character; we strip the wizard's existing trailing
+  -- backslash-newline padding and append the pipe + tx-build.
+  case st.mode of
+    ModeSwap ->
+      swapCliCommand st
+        <> " |\n"
+        <> txBuildSegment
+    ModeDisburse ->
+      disburseCliCommand st
+        <> " |\n"
+        <> txBuildSegment
+
+txBuildSegment :: String
+txBuildSegment =
+  Array.intercalate "\n"
+    [ "amaru-treasury-tx tx-build \\"
+    , "  --report report.json \\"
+    , "  > tx.cbor"
+    ]
 
 swapCliCommand :: State -> String
 swapCliCommand st =
@@ -1098,9 +1215,41 @@ disburseCliCommand st =
         , "  --description " <> quote st.description <> " \\"
         , "  --justification " <> quote st.justification <> " \\"
         , "  --destination-label " <> st.destinationLabel
-            <> (if Array.null st.extraSigners then "" else " \\")
+            <>
+              ( if Array.null st.extraSigners && Array.null st.references then
+                  ""
+                else " \\"
+              )
         , signerFlags st.extraSigners
+            <>
+              ( if Array.null st.references then ""
+                else
+                  ( if Array.null st.extraSigners then ""
+                    else " \\\n"
+                  )
+                    <> referenceFlags st.references
+              )
         ]
+    )
+
+referenceFlags :: Array ReferenceRow -> String
+referenceFlags rows =
+  Array.intercalate " \\\n"
+    ( Array.mapWithIndex
+        ( \i r ->
+            let
+              cont =
+                if i == Array.length rows - 1 then "" else ""
+            in
+              cont
+                <> "  --reference-uri "
+                <> quote r.uri
+                <> " \\\n  --reference-type "
+                <> quote r.refType
+                <> " \\\n  --reference-label "
+                <> quote r.label
+        )
+        rows
     )
 
 beneficiaryForCli :: String -> String
@@ -1197,6 +1346,24 @@ handleAction = case _ of
   SetBeneficiaryAddr s -> H.modify_ \st -> st { beneficiaryAddr = s }
   SetDisburseUnit u -> H.modify_ \st -> st { disburseUnit = u }
   SetDisburseAmount s -> H.modify_ \st -> st { disburseAmount = s }
+  AddReference ->
+    H.modify_ \st -> st
+      { references = st.references <> [ emptyReferenceRow ] }
+  RemoveReference i ->
+    H.modify_ \st -> st
+      { references = removeAt i st.references }
+  SetReferenceUri i s ->
+    H.modify_ \st -> st
+      { references = updateAt i (\r -> r { uri = s }) st.references
+      }
+  SetReferenceType i s ->
+    H.modify_ \st -> st
+      { references = updateAt i (\r -> r { refType = s }) st.references
+      }
+  SetReferenceLabel i s ->
+    H.modify_ \st -> st
+      { references = updateAt i (\r -> r { label = s }) st.references
+      }
   SetValidityHours s -> H.modify_ \st -> st { validityHours = s }
   SetDescription s -> H.modify_ \st -> st { description = s }
   SetJustification s -> H.modify_ \st -> st { justification = s }
@@ -1242,6 +1409,23 @@ postBuild endpoint st = do
           [ Tuple "decode_error"
               (Argonaut.fromString (printJsonDecodeError e))
           ]
+
+-- | Replace the element at index @i@ with the result of
+-- | applying @f@ to it.  Out-of-bounds indices are no-ops.
+updateAt
+  :: forall a. Int -> (a -> a) -> Array a -> Array a
+updateAt i f xs =
+  Array.mapWithIndex
+    (\j x -> if j == i then f x else x)
+    xs
+
+-- | Delete the element at index @i@.  Out-of-bounds is a
+-- | no-op.
+removeAt :: forall a. Int -> Array a -> Array a
+removeAt i xs =
+  Array.mapWithIndex Tuple xs
+    # Array.filter (\(Tuple j _) -> j /= i)
+    # map (\(Tuple _ x) -> x)
 
 numberOr :: Number -> String -> Number
 numberOr d s = case Number.fromString s of

@@ -1,7 +1,6 @@
 -- | #263 — minimal client-side routing.  Two routes:
--- | inspect (current dashboard) at `/`, build form at
--- | `/build`. Reads `window.location.pathname` via a tiny
--- | FFI helper; no routing library.
+-- | view (formerly "inspect") at `/` or `/view`, operate
+-- | (formerly "build") at `/operate`.
 
 module Routing
   ( Route(..)
@@ -12,7 +11,7 @@ import Prelude
 
 import Effect (Effect)
 
-data Route = RouteInspect | RouteBuild
+data Route = RouteView | RouteOperate
 
 derive instance eqRoute :: Eq Route
 
@@ -20,7 +19,7 @@ currentRoute :: Effect Route
 currentRoute = do
   p <- _pathname
   pure case p of
-    "/build" -> RouteBuild
-    _ -> RouteInspect
+    "/operate" -> RouteOperate
+    _ -> RouteView
 
 foreign import _pathname :: Effect String

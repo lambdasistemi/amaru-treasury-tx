@@ -55,6 +55,8 @@ pkgs.dockerTools.streamLayeredImage {
        var/lib/amaru-treasury/static/material.js
     cp ${frontend}/styles.css \
        var/lib/amaru-treasury/static/styles.css
+    cp ${frontend}/style-build.css \
+       var/lib/amaru-treasury/static/style-build.css
     cp ${frontend}/favicon.svg \
        var/lib/amaru-treasury/static/favicon.svg
     # Mountpoint for the host's N2C socket — created so the

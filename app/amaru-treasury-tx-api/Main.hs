@@ -307,7 +307,7 @@ spaFallback app req respond
     | otherwise = app req respond
   where
     spaPaths :: [[Text]]
-    spaPaths = [["build"]]
+    spaPaths = [["operate"], ["view"]]
 
 -- ---------------------------------------------------------------------------
 -- Response-header middleware

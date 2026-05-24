@@ -40,14 +40,16 @@ module Amaru.Treasury.Api.BuildSwap
     ) where
 
 import Control.Exception (SomeException, try)
-import Control.Tracer (nullTracer)
+import Control.Tracer (Tracer (..))
 import Data.Aeson (FromJSON, ToJSON)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as Text
+import Data.Text.IO qualified as TIO
 import Data.Word (Word16)
 import GHC.Generics (Generic)
+import System.IO (stderr)
 
 import Amaru.Treasury.Backend (Backend)
 import Amaru.Treasury.Cli.Common (GlobalOpts)
@@ -60,6 +62,7 @@ import Amaru.Treasury.Cli.SwapWizard
 import Amaru.Treasury.IntentJSON (encodeSomeTreasuryIntent)
 import Amaru.Treasury.Scope (ScopeId)
 import Amaru.Treasury.Tx.SwapQuote (SlippageBps (..))
+import Amaru.Treasury.Tx.SwapWizard.Trace (renderEvent)
 import Amaru.Treasury.Wizard.Failure
     ( FieldId (..)
     , WizardFailure (..)
@@ -238,17 +241,39 @@ future commit (see #263 PR A scope).
 -}
 runBuildSwap
     :: GlobalOpts -> Backend -> SwapBuildRequest -> IO SwapBuildResponse
-runBuildSwap g backend req =
+runBuildSwap g backend req = do
+    TIO.hPutStrLn
+        stderr
+        ( "amaru-treasury-tx-api: POST /v1/build/swap scope="
+            <> T.pack (show (sbrScope req))
+        )
     case mapToWizardOpts req of
-        Left wf -> pure (failureResponse wf)
+        Left wf -> do
+            TIO.hPutStrLn
+                stderr
+                ( "amaru-treasury-tx-api: build/swap mapper Left: "
+                    <> renderWizardFailure wf
+                )
+            pure (failureResponse wf)
         Right opts -> do
             -- Catch any IOException that escapes the typed-Either
             -- contract (deep bech32 parses, network drops, etc.)
             -- so the HTTP request always gets a structured body
             -- rather than a 500 + "Something went wrong".
-            r <- try @SomeException (buildSwapIntent g opts backend nullTracer)
+            let tr =
+                    Tracer
+                        ( TIO.hPutStrLn stderr
+                            . ("amaru-treasury-tx-api: " <>)
+                            . renderEvent
+                        )
+            r <- try @SomeException (buildSwapIntent g opts backend tr)
             case r of
-                Left e ->
+                Left e -> do
+                    TIO.hPutStrLn
+                        stderr
+                        ( "amaru-treasury-tx-api: build/swap exception: "
+                            <> T.pack (show e)
+                        )
                     pure
                         ( failureResponse
                             ( ResolveResolver
@@ -257,8 +282,17 @@ runBuildSwap g backend req =
                                 )
                             )
                         )
-                Right (Left wf) -> pure (failureResponse wf)
-                Right (Right someIntent) ->
+                Right (Left wf) -> do
+                    TIO.hPutStrLn
+                        stderr
+                        ( "amaru-treasury-tx-api: build/swap typed Left: "
+                            <> renderWizardFailure wf
+                        )
+                    pure (failureResponse wf)
+                Right (Right someIntent) -> do
+                    TIO.hPutStrLn
+                        stderr
+                        "amaru-treasury-tx-api: build/swap OK"
                     pure
                         SwapBuildResponse
                             { sbrIntentJson =

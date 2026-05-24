@@ -70,11 +70,14 @@ tabLabel = case _ of
   TabCbor -> "CBOR"
   TabReport -> "Report"
 
+-- | Tabs that depend on the tx-build response stay clickable
+-- | even when no data is present yet — the body renders a
+-- | "not built yet" caption.  Disabling them outright was
+-- | the #263 baseline (placeholders for "ships in PR B");
+-- | #269 lands the real data so disabling no longer adds
+-- | signal.
 tabDisabled :: Tab -> Boolean
-tabDisabled = case _ of
-  TabCbor -> true
-  TabReport -> true
-  _ -> false
+tabDisabled = const false
 
 type State =
   { scope :: Scope
@@ -543,12 +546,34 @@ previewBody st = case st.activeTab of
   TabCli ->
     HH.pre [ HP.classes [ cn "cli-block" ] ]
       [ HH.text (cliCommand st) ]
-  TabCbor ->
-    HH.p_
-      [ HH.text "CBOR ships in PR B (buildSwapTx)." ]
-  TabReport ->
-    HH.p_
-      [ HH.text "Report ships in PR B (buildSwapTx)." ]
+  TabCbor -> case cborHexPreview st of
+    Nothing ->
+      HH.p_ [ HH.text "Tx not built yet." ]
+    Just hex ->
+      HH.div
+        [ HP.classes [ cn "json-tree-wrapper" ] ]
+        [ copyBlockButton hex "Copy CBOR"
+        , HH.pre
+            [ HP.classes [ cn "cbor-hex" ] ]
+            [ HH.text hex ]
+        ]
+  TabReport -> case reportPreview st of
+    Nothing ->
+      HH.p_ [ HH.text "Tx not built yet." ]
+    Just r ->
+      HH.div
+        [ HP.classes [ cn "json-tree-wrapper" ] ]
+        [ copyBlockButton
+            (Argonaut.stringify r)
+            "Copy report.json"
+        , JsonView.renderWith
+            ( JsonView.defaultConfig
+                { initiallyOpen = true }
+            )
+            ( Argonaut.fromObject
+                (FO.singleton "details" r)
+            )
+        ]
 
 intentPreview :: State -> Json
 intentPreview st = case st.result of
@@ -565,6 +590,28 @@ serverIntentOr fallback j = case Argonaut.toObject j of
       Just t -> case jsonParser t of
         Right parsed -> parsed
         Left _ -> Argonaut.fromString t
+
+-- | Extract the hex-encoded tx CBOR ('sbrCborHex') from the
+-- | server response, or 'Nothing' if the build hasn't run
+-- | yet / the intent or build failed.
+cborHexPreview :: State -> Maybe String
+cborHexPreview st = case st.result of
+  Result j -> lookupString "sbrCborHex" j
+  _ -> Nothing
+
+-- | Extract the parsed @report.json@ from the server
+-- | response, or 'Nothing'.  The server ships the report as
+-- | a stringified blob (mirrors @sbrIntentJson@); we parse
+-- | it back so 'JsonView.renderWith' can produce the typed
+-- | tree.
+reportPreview :: State -> Maybe Json
+reportPreview st = case st.result of
+  Result j -> do
+    s <- lookupString "sbrReport" j
+    case jsonParser s of
+      Right parsed -> pure parsed
+      Left _ -> pure (Argonaut.fromString s)
+  _ -> Nothing
 
 requestJson :: State -> Json
 requestJson st =

@@ -47,18 +47,13 @@ pkgs.dockerTools.streamLayeredImage {
        etc/amaru-treasury/recent-txs.json
     cp ${buildIdentity}/build-identity.json \
        etc/amaru-treasury/build-identity.json
-    cp ${frontend}/index.html \
-       var/lib/amaru-treasury/static/index.html
-    cp ${frontend}/index.js \
-       var/lib/amaru-treasury/static/index.js
-    cp ${frontend}/material.js \
-       var/lib/amaru-treasury/static/material.js
-    cp ${frontend}/styles.css \
-       var/lib/amaru-treasury/static/styles.css
-    cp ${frontend}/style-build.css \
-       var/lib/amaru-treasury/static/style-build.css
-    cp ${frontend}/favicon.svg \
-       var/lib/amaru-treasury/static/favicon.svg
+    # Ship every file the frontend derivation emits.  The
+    # explicit per-file list previously here meant new
+    # assets (json-tree.css from the browser-json-tree flake
+    # input) silently dropped — bumping the frontend would
+    # require also bumping this list.  Mirror everything
+    # instead.
+    cp -r ${frontend}/. var/lib/amaru-treasury/static/
     # Mountpoint for the host's N2C socket — created so the
     # bind mount in docker-compose.yaml has a target even if
     # the path is missing on a fresh container.

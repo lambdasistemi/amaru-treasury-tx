@@ -19,6 +19,7 @@ whitespace drift can hide.
 -}
 module Amaru.Treasury.Api.ServerSpec (spec) where
 
+import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Tagged (Tagged (..))
@@ -31,6 +32,9 @@ import Network.Wai.Test qualified as WaiTest
 import Servant qualified
 import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
 
+import Amaru.Treasury.Api.BuildDisburse
+    ( DisburseBuildResponse (..)
+    )
 import Amaru.Treasury.Api.BuildSwap
     ( SwapBuildResponse (..)
     )
@@ -50,6 +54,7 @@ import Amaru.Treasury.Inspect.Types
     , Outref (..)
     )
 import Amaru.Treasury.Scope (ScopeId (..))
+import Amaru.Treasury.Wizard.Failure (FieldId (..))
 
 spec :: Spec
 spec = do
@@ -105,6 +110,18 @@ spec = do
                     (mkApplication stubHandlers)
             statusCodeOf res `shouldBe` 404
 
+    describe "DisburseBuildResponse JSON round-trip" $ do
+        let roundtrips r =
+                Aeson.decode (Aeson.encode r) `shouldBe` Just r
+        it "success arm round-trips" $
+            roundtrips disburseSuccessResp
+        it "intent-failure arm round-trips" $
+            roundtrips disburseIntentFailureResp
+        it "build-failure arm round-trips" $
+            roundtrips disburseBuildFailureResp
+        it "internal-error arm round-trips" $
+            roundtrips disburseInternalErrorResp
+
 -- ---------------------------------------------------------------------------
 -- Helpers
 
@@ -145,7 +162,69 @@ stubHandlers =
                     , sbrFailureReason = Just "stub handler"
                     , sbrBuildFailureTag = Nothing
                     }
+        , hBuildDisburse = \_ -> pure disburseIntentFailureResp
         , hRawHandler = stubRawHandler
+        }
+
+-- ---------------------------------------------------------------------------
+-- DisburseBuildResponse fixtures (one per response arm)
+
+disburseSuccessResp :: DisburseBuildResponse
+disburseSuccessResp =
+    DisburseBuildResponse
+        { dbrIntentJson = Just "{\"action\":\"disburse\"}"
+        , dbrCli = Just "amaru-treasury-tx disburse-wizard …"
+        , dbrCborHex = Just "84a40081…"
+        , dbrCborEnvelope =
+            Just
+                "{\"type\":\"Tx ConwayEra\",\"cborHex\":\"84a40081…\"}"
+        , dbrReport = Just "{\"intent_path\":\"intent.json\"}"
+        , dbrFailureTag = Nothing
+        , dbrFailureField = Nothing
+        , dbrFailureReason = Nothing
+        , dbrBuildFailureTag = Nothing
+        }
+
+disburseIntentFailureResp :: DisburseBuildResponse
+disburseIntentFailureResp =
+    DisburseBuildResponse
+        { dbrIntentJson = Nothing
+        , dbrCli = Nothing
+        , dbrCborHex = Nothing
+        , dbrCborEnvelope = Nothing
+        , dbrReport = Nothing
+        , dbrFailureTag = Just "InputInvalid"
+        , dbrFailureField = Just FieldWalletAddr
+        , dbrFailureReason = Just "input wallet_addr: bech32 parse"
+        , dbrBuildFailureTag = Nothing
+        }
+
+disburseBuildFailureResp :: DisburseBuildResponse
+disburseBuildFailureResp =
+    DisburseBuildResponse
+        { dbrIntentJson = Just "{\"action\":\"disburse\"}"
+        , dbrCli = Just "amaru-treasury-tx disburse-wizard …"
+        , dbrCborHex = Nothing
+        , dbrCborEnvelope = Nothing
+        , dbrReport = Nothing
+        , dbrFailureTag = Nothing
+        , dbrFailureField = Nothing
+        , dbrFailureReason = Just "build: insufficient fee"
+        , dbrBuildFailureTag = Just "BuildBuildError"
+        }
+
+disburseInternalErrorResp :: DisburseBuildResponse
+disburseInternalErrorResp =
+    DisburseBuildResponse
+        { dbrIntentJson = Nothing
+        , dbrCli = Nothing
+        , dbrCborHex = Nothing
+        , dbrCborEnvelope = Nothing
+        , dbrReport = Nothing
+        , dbrFailureTag = Just "ResolveResolver"
+        , dbrFailureField = Nothing
+        , dbrFailureReason = Just "uncaught exception: timeout"
+        , dbrBuildFailureTag = Nothing
         }
 
 stubRawHandler :: Tagged Servant.Handler Application

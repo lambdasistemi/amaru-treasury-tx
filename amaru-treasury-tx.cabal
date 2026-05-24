@@ -103,6 +103,7 @@ library
   other-modules:    Paths_amaru_treasury_tx
   exposed-modules:
     Amaru.Treasury
+    Amaru.Treasury.Api.BuildDisburse
     Amaru.Treasury.Api.BuildSwap
     Amaru.Treasury.Api.Server
     Amaru.Treasury.Api.Types

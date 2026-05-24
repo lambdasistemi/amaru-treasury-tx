@@ -63,6 +63,10 @@ import Servant.API
     , type (:>)
     )
 
+import Amaru.Treasury.Api.BuildDisburse
+    ( DisburseBuildRequest
+    , DisburseBuildResponse
+    )
 import Amaru.Treasury.Api.BuildSwap
     ( SwapBuildRequest
     , SwapBuildResponse
@@ -107,6 +111,10 @@ type JsonAPI =
                     :> "swap"
                     :> ReqBody '[JSON] SwapBuildRequest
                     :> Post '[JSON] SwapBuildResponse
+                :<|> "build"
+                    :> "disburse"
+                    :> ReqBody '[JSON] DisburseBuildRequest
+                    :> Post '[JSON] DisburseBuildResponse
            )
 
 -- | Witness for 'JsonAPI'.
@@ -145,6 +153,15 @@ data Handlers = Handlers
     --   'Amaru.Treasury.Wizard.Swap.buildSwapIntent' against
     --   the server's long-lived 'Backend'; tests pass a fixed
     --   value or a stub.
+    , hBuildDisburse
+        :: DisburseBuildRequest
+        -> IO DisburseBuildResponse
+    -- ^ Build a disburse intent + tx from a wire-shape
+    --   request (#277).  Same shape as 'hBuildSwap'; the
+    --   binary's implementation calls
+    --   'Amaru.Treasury.Wizard.Disburse.buildDisburseIntent'
+    --   then 'buildDisburseTx' against the server's
+    --   long-lived 'Backend'.
     , hRawHandler :: Tagged Handler Application
     -- ^ The static-asset fallback for @\/@. In the binary
     --   this is a 'Servant.Server.StaticFiles'
@@ -158,6 +175,7 @@ mkServer Handlers{..} =
         :<|> pure hRecentTxs
         :<|> pure hBuildIdentity
         :<|> buildSwapH
+        :<|> buildDisburseH
     )
         :<|> hRawHandler
   where
@@ -166,6 +184,10 @@ mkServer Handlers{..} =
 
     buildSwapH :: SwapBuildRequest -> Handler SwapBuildResponse
     buildSwapH req = liftIO (hBuildSwap req)
+
+    buildDisburseH
+        :: DisburseBuildRequest -> Handler DisburseBuildResponse
+    buildDisburseH req = liftIO (hBuildDisburse req)
 
 {- | Bake the 'Handlers' into a WAI 'Application' ready to be
 run by warp.

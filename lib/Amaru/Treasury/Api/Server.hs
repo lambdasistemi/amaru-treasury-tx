@@ -67,6 +67,10 @@ import Amaru.Treasury.Api.BuildDisburse
     ( DisburseBuildRequest
     , DisburseBuildResponse
     )
+import Amaru.Treasury.Api.BuildReorganize
+    ( ReorganizeBuildRequest
+    , ReorganizeBuildResponse
+    )
 import Amaru.Treasury.Api.BuildSwap
     ( SwapBuildRequest
     , SwapBuildResponse
@@ -115,6 +119,10 @@ type JsonAPI =
                     :> "disburse"
                     :> ReqBody '[JSON] DisburseBuildRequest
                     :> Post '[JSON] DisburseBuildResponse
+                :<|> "build"
+                    :> "reorganize"
+                    :> ReqBody '[JSON] ReorganizeBuildRequest
+                    :> Post '[JSON] ReorganizeBuildResponse
            )
 
 -- | Witness for 'JsonAPI'.
@@ -162,6 +170,15 @@ data Handlers = Handlers
     --   'Amaru.Treasury.Wizard.Disburse.buildDisburseIntent'
     --   then 'buildDisburseTx' against the server's
     --   long-lived 'Backend'.
+    , hBuildReorganize
+        :: ReorganizeBuildRequest
+        -> IO ReorganizeBuildResponse
+    -- ^ Build a reorganize intent + tx from a wire-shape
+    --   request (#280).  Same shape as 'hBuildDisburse';
+    --   the binary's implementation calls
+    --   'Amaru.Treasury.Wizard.Reorganize.buildReorganizeIntent'
+    --   then 'buildReorganizeTx' against the server's
+    --   long-lived 'Backend'.
     , hRawHandler :: Tagged Handler Application
     -- ^ The static-asset fallback for @\/@. In the binary
     --   this is a 'Servant.Server.StaticFiles'
@@ -176,6 +193,7 @@ mkServer Handlers{..} =
         :<|> pure hBuildIdentity
         :<|> buildSwapH
         :<|> buildDisburseH
+        :<|> buildReorganizeH
     )
         :<|> hRawHandler
   where
@@ -188,6 +206,11 @@ mkServer Handlers{..} =
     buildDisburseH
         :: DisburseBuildRequest -> Handler DisburseBuildResponse
     buildDisburseH req = liftIO (hBuildDisburse req)
+
+    buildReorganizeH
+        :: ReorganizeBuildRequest
+        -> Handler ReorganizeBuildResponse
+    buildReorganizeH req = liftIO (hBuildReorganize req)
 
 {- | Bake the 'Handlers' into a WAI 'Application' ready to be
 run by warp.

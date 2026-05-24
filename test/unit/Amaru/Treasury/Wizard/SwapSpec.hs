@@ -28,8 +28,13 @@ import Amaru.Treasury.Cli.SwapWizard
 import Amaru.Treasury.Tx.SwapQuote
     ( SlippageBps (..)
     )
+import Amaru.Treasury.Wizard.Failure
+    ( BuildFailure (..)
+    , FieldId (..)
+    )
 import Amaru.Treasury.Wizard.Swap
-    ( tryResolveRateParameters
+    ( sysexitsForBuild
+    , tryResolveRateParameters
     , tryResolveSwapParameters
     )
 
@@ -63,6 +68,27 @@ spec = describe "Amaru.Treasury.Wizard.Swap" $ do
                 (WizardOverrideRate 0.0 (SlippageBps 0)) of
                 Left e -> T.null e `shouldBe` False
                 Right _ -> pure ()
+
+    describe "sysexitsForBuild" $ do
+        it "BuildInputInvalid → 64 (EX_USAGE)" $
+            sysexitsForBuild
+                (BuildInputInvalid FieldWalletAddr "bad")
+                `shouldBe` 64
+        it "BuildResolveParams → 69 (EX_UNAVAILABLE)" $
+            sysexitsForBuild (BuildResolveParams "nope")
+                `shouldBe` 69
+        it "BuildResolveTip → 69 (EX_UNAVAILABLE)" $
+            sysexitsForBuild (BuildResolveTip "nope")
+                `shouldBe` 69
+        it "BuildResolveUtxo → 69 (EX_UNAVAILABLE)" $
+            sysexitsForBuild (BuildResolveUtxo "nope")
+                `shouldBe` 69
+        it "BuildBuildError → 70 (EX_SOFTWARE)" $
+            sysexitsForBuild (BuildBuildError "boom")
+                `shouldBe` 70
+        it "BuildInternalError → 70 (EX_SOFTWARE)" $
+            sysexitsForBuild (BuildInternalError "boom")
+                `shouldBe` 70
 
 isRight' :: Either e a -> Bool
 isRight' (Right _) = True

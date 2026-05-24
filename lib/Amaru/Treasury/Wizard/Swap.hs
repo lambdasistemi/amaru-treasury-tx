@@ -32,6 +32,7 @@ module Amaru.Treasury.Wizard.Swap
       -- * CLI runner
     , runWizard
     , sysexitsFor
+    , sysexitsForBuild
     ) where
 
 import Control.Monad.IO.Class (liftIO)
@@ -105,9 +106,11 @@ import Amaru.Treasury.Tx.SwapWizard.Trace
     , eventTracer
     )
 import Amaru.Treasury.Wizard.Failure
-    ( FieldId (..)
+    ( BuildFailure (..)
+    , FieldId (..)
     , WizardFailure (..)
     , isInput
+    , isInputBuild
     , renderWizardFailure
     )
 import Amaru.Treasury.Wizard.InputControl
@@ -521,3 +524,23 @@ sysexitsFor wf
         InternalTranslate{} -> 70 -- EX_SOFTWARE
         InternalEncodeError{} -> 70
         _ -> 69 -- EX_UNAVAILABLE (Resolve*)
+
+{- | Map a 'BuildFailure' to its sysexits.h exit code, same
+taxonomy as 'sysexitsFor' for 'WizardFailure' (#269
+FR-005).  Symmetric so a CLI wrapper that runs intent
+assembly followed by tx-build can dispatch on the same
+exit-code family regardless of which stage failed.
+
+  * 'BuildInputInvalid'  → 64 (EX_USAGE)
+  * 'BuildResolveParams' / 'BuildResolveTip' /
+    'BuildResolveUtxo'   → 69 (EX_UNAVAILABLE)
+  * 'BuildBuildError' /
+    'BuildInternalError' → 70 (EX_SOFTWARE)
+-}
+sysexitsForBuild :: BuildFailure -> Int
+sysexitsForBuild bf
+    | isInputBuild bf = 64 -- EX_USAGE
+    | otherwise = case bf of
+        BuildBuildError{} -> 70 -- EX_SOFTWARE
+        BuildInternalError{} -> 70
+        _ -> 69 -- EX_UNAVAILABLE (BuildResolve*)

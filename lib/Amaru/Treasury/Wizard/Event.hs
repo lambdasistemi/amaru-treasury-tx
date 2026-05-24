@@ -1,6 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE OverloadedStrings #-}
-
 {- |
 Module      : Amaru.Treasury.Wizard.Event
 Description : Stable import path for typed wizard + build
@@ -21,12 +18,16 @@ the same result as a recording tracer.
     stable import path symmetric with
     'Amaru.Treasury.Wizard.Failure'.
 
-  * 'BuildEvent' — tx-build phase ('buildSwapTx').  Mirrors
-    the per-step structure that #269 introduces.  Six
-    constructors, one per discrete pipeline step.
+  * 'BuildEvent' — tx-build phase ('buildSwapTx').
+    Re-exported from the existing
+    'Amaru.Treasury.Build.Trace' which already carries
+    the full per-step taxonomy used by the @tx-build@
+    CLI subcommand.  Adding a parallel sum-type here
+    would have forced consumers to convert; the
+    re-export keeps one canonical surface.
 -}
 module Amaru.Treasury.Wizard.Event
-    ( -- * Intent-construction events (re-exported)
+    ( -- * Intent-construction events
       WizardEvent (..)
     , renderEvent
     , eventTracer
@@ -34,63 +35,16 @@ module Amaru.Treasury.Wizard.Event
       -- * Tx-build events (#269)
     , BuildEvent (..)
     , renderBuildEvent
+    , buildEventTracer
     ) where
 
-import Data.Text (Text)
-import Data.Text qualified as T
-
+import Amaru.Treasury.Build.Trace
+    ( BuildEvent (..)
+    , buildEventTracer
+    , renderBuildEvent
+    )
 import Amaru.Treasury.Tx.SwapWizard.Trace
     ( WizardEvent (..)
     , eventTracer
     , renderEvent
     )
-
-{- | Per-step event emitted along the tx-build pipeline
-('Amaru.Treasury.Wizard.Swap.buildSwapTx').
-
-One constructor per discrete step in the order they
-fire on the happy path.  A consumer that streams them
-to stderr / a UI sees the full life-cycle of one swap
-tx-build call.
--}
-data BuildEvent
-    = -- | About to query the backend for protocol parameters.
-      BeResolvingPParams
-    | -- | About to scan the wallet's UTxO set for fuel + collateral.
-      BeSelectingWalletInputs !Text
-      -- ^ wallet bech32 address
-    | -- | About to construct the sundae order datum.
-      BeBuildingSundaeOrder !Text
-      -- ^ direction: @\"ADA->USDM\"@ or @\"USDM->ADA\"@
-    | -- | About to call the ledger's balancing routine.
-      BeBalancingTx !Int !Int
-      -- ^ input count, output count
-    | -- | About to encode the balanced body to CBOR.
-      BeSerialisingTx
-    | -- | About to assemble the 'Report' value and finalise.
-      BeWritingReport !Text
-      -- ^ txid hex
-    deriving (Eq, Show)
-
-{- | Single-line human-readable render used for stderr
-output by the @tx-build@ CLI wrapper and the api's
-stderr 'Tracer'.
--}
-renderBuildEvent :: BuildEvent -> Text
-renderBuildEvent = \case
-    BeResolvingPParams ->
-        "resolving protocol parameters"
-    BeSelectingWalletInputs addr ->
-        "selecting wallet inputs at " <> addr
-    BeBuildingSundaeOrder direction ->
-        "building sundae order (" <> direction <> ")"
-    BeBalancingTx ins outs ->
-        "balancing tx ("
-            <> T.pack (show ins)
-            <> " in, "
-            <> T.pack (show outs)
-            <> " out)"
-    BeSerialisingTx ->
-        "serialising tx body"
-    BeWritingReport txid ->
-        "writing report for tx " <> txid

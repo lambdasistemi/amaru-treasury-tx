@@ -311,11 +311,20 @@ formColumn st =
                   SetDestinationLabel "core_development" true
               ]
           , formSection "07" "Extra signers"
-              "Other scope owners that must co-sign."
+              ( case st.mode of
+                  ModeReorganize ->
+                    "Reorganize is authorised by the scope owner \
+                    \alone; extra signers are accepted but not \
+                    \required by the permissions script."
+                  _ ->
+                    "Other scope owners that must co-sign."
+              )
               [ signersPicker st.scope st.extraSigners
-              , case validateSigners st.extraSigners of
-                  Just msg -> fieldError msg
-                  Nothing -> HH.text ""
+              , case st.mode of
+                  ModeReorganize -> HH.text ""
+                  _ -> case validateSigners st.extraSigners of
+                    Just msg -> fieldError msg
+                    Nothing -> HH.text ""
               ]
           -- Metadata is baked into the image (single-tenant
           -- deploy) — no per-request override.  Keeps

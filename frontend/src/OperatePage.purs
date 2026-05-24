@@ -69,8 +69,8 @@ derive instance eqRateMode :: Eq RateMode
 -- | posts to.  The page chrome (topbar, scope picker,
 -- | rationale, signers, preview tabs) is shared; only the
 -- | mode-specific sections + request/response prefix
--- | switch (#277).
-data TxMode = ModeSwap | ModeDisburse
+-- | switch (#277 / #280).
+data TxMode = ModeSwap | ModeDisburse | ModeReorganize
 
 derive instance eqTxMode :: Eq TxMode
 
@@ -273,6 +273,7 @@ siteHeader mode =
   title = case mode of
     ModeSwap -> "Build swap transaction"
     ModeDisburse -> "Build disburse transaction"
+    ModeReorganize -> "Build reorganize transaction"
 
 -- ---------------------------------------------------------------------------
 -- Form column
@@ -395,6 +396,15 @@ modeSpecificSections st = case st.mode of
               ]
         )
     ]
+  ModeReorganize ->
+    -- Reorganize has no mode-specific sections: every
+    -- chain-derived input (treasury address, scope-owner
+    -- key, deployed-at references, permissions reward
+    -- account, treasury UTxO set) is resolved by the
+    -- wizard from --metadata and the live N2C backend.
+    -- The shared rationale + validity + signers blocks
+    -- carry the only operator-supplied inputs.
+    []
 
 -- | Render every reference row with three inline inputs
 -- | (URI, @type, label) and a delete button.
@@ -439,9 +449,9 @@ referenceRow i row =
         [ HH.text "×" ]
     ]
 
--- | Top-of-form Swap | Disburse selector.  Same
--- | '.segmented' class the amount/rate sub-selectors use,
--- | so visual weight matches the rest of the form.
+-- | Top-of-form Swap | Disburse | Reorganize selector.
+-- | Same '.segmented' class the amount/rate sub-selectors
+-- | use, so visual weight matches the rest of the form.
 modeSelector :: forall m. TxMode -> H.ComponentHTML Action () m
 modeSelector active =
   segmented
@@ -449,6 +459,8 @@ modeSelector active =
         (Tuple (active == ModeSwap) (SetMode ModeSwap))
     , Tuple "Disburse"
         (Tuple (active == ModeDisburse) (SetMode ModeDisburse))
+    , Tuple "Reorganize"
+        (Tuple (active == ModeReorganize) (SetMode ModeReorganize))
     ]
 
 -- | All form-level validation errors keyed by section.
@@ -458,7 +470,13 @@ formErrors :: State -> Array String
 formErrors st =
   let
     addrErr = validateWalletAddr st.walletAddr
-    signersErr = validateSigners st.extraSigners
+    -- The reorganize wizard derives the only required
+    -- signer from the on-chain scope-owner; extra signers
+    -- are not part of the wire shape, so the shared
+    -- "pick at least one co-signer" hint doesn't apply.
+    signersErr = case st.mode of
+      ModeReorganize -> Nothing
+      _ -> validateSigners st.extraSigners
     modeErrs = case st.mode of
       ModeSwap -> []
       ModeDisburse ->
@@ -466,6 +484,7 @@ formErrors st =
           [ validateBeneficiaryAddr st.beneficiaryAddr
           , validateDisburseAmount st.disburseAmount
           ]
+      ModeReorganize -> []
   in
     Array.catMaybes [ addrErr, signersErr ] <> modeErrs
 
@@ -490,12 +509,14 @@ serverFieldError st fieldId = case st.result of
 
 -- | Wire-side key prefix the active mode's response shape
 -- | uses.  Swap responses carry @sbr*@ fields, disburse
--- | responses carry @dbr*@ fields (mirrors the Haskell
--- | record-field prefixes one-to-one).
+-- | responses carry @dbr*@ fields, reorganize responses
+-- | carry @rbr*@ fields (mirrors the Haskell record-field
+-- | prefixes one-to-one).
 responsePrefix :: TxMode -> String
 responsePrefix = case _ of
   ModeSwap -> "sbr"
   ModeDisburse -> "dbr"
+  ModeReorganize -> "rbr"
 
 -- | Bech32 sanity for the operator wallet input.  Doesn't
 -- | re-implement the full bech32 decoder (the api will
@@ -1039,6 +1060,7 @@ requestJson :: State -> Json
 requestJson st = case st.mode of
   ModeSwap -> swapRequestJson st
   ModeDisburse -> disburseRequestJson st
+  ModeReorganize -> reorganizeRequestJson st
 
 swapRequestJson :: State -> Json
 swapRequestJson st =
@@ -1096,6 +1118,34 @@ disburseRequestJson st =
         (Argonaut.fromArray (map referenceJson st.references))
     ]
 
+-- | Encode the operator inputs into a body matching
+-- | 'Amaru.Treasury.Api.BuildReorganize.ReorganizeBuildRequest'.
+-- | Field names + JSON shape are derived from the Haskell
+-- | record one-to-one (the @rbr*@ Generic encoding).
+-- |
+-- | The reorganize wizard derives every chain-side input
+-- | (treasury address, scope-owner key, deployed-at refs,
+-- | permissions reward account, treasury UTxO set) from
+-- | @--metadata@ + N2C state, so the wire shape is much
+-- | smaller than swap / disburse.  Extra signers and
+-- | references are intentionally not on the wire (the
+-- | translator derives the signer from the on-chain
+-- | scope-owner; #280).
+reorganizeRequestJson :: State -> Json
+reorganizeRequestJson st =
+  Argonaut.fromObject $ FO.fromFoldable
+    [ Tuple "rbrScope" (Argonaut.fromString (scopeSlug st.scope))
+    , Tuple "rbrWalletAddr" (Argonaut.fromString st.walletAddr)
+    , Tuple "rbrMetadataPath" (Argonaut.fromString st.metadataPath)
+    , Tuple "rbrValidityHours" (validityJson st.validityHours)
+    , Tuple "rbrDescription" (maybeStringJson st.description)
+    , Tuple "rbrJustification" (maybeStringJson st.justification)
+    , Tuple "rbrDestinationLabel"
+        (maybeStringJson st.destinationLabel)
+    , Tuple "rbrEvent" Argonaut.jsonNull
+    , Tuple "rbrLabel" Argonaut.jsonNull
+    ]
+
 -- | Encode one rationale reference row to the wire shape
 -- | RationaleReferenceJSON expects: @{ "uri", "@type",
 -- | "label" }@.
@@ -1141,6 +1191,16 @@ validityJson s
       Just n -> Argonaut.fromNumber (Int.toNumber n)
       Nothing -> Argonaut.jsonNull
 
+-- | Encode an operator-supplied text field as @null@ when
+-- | empty, otherwise as the bare string.  Used for the
+-- | optional rationale fields on the reorganize wire (the
+-- | @rbr*@ rationale fields are @Maybe Text@, matching the
+-- | CLI flags which are all optional).
+maybeStringJson :: String -> Json
+maybeStringJson s
+  | s == "" = Argonaut.jsonNull
+  | otherwise = Argonaut.fromString s
+
 taggedContents :: String -> Json -> Json
 taggedContents tag c =
   Argonaut.fromObject $ FO.fromFoldable
@@ -1163,6 +1223,10 @@ cliCommand st =
         <> txBuildSegment
     ModeDisburse ->
       disburseCliCommand st
+        <> " |\n"
+        <> txBuildSegment
+    ModeReorganize ->
+      reorganizeCliCommand st
         <> " |\n"
         <> txBuildSegment
 
@@ -1231,6 +1295,46 @@ disburseCliCommand st =
               )
         ]
     )
+
+-- | CLI preview for the reorganize-wizard subcommand.
+-- | All operator inputs except @--scope@ / @--wallet-addr@
+-- | / @--metadata@ are optional, so we build the line
+-- | array first and use @intercalate " \\\n"@ to render
+-- | proper backslash continuations without having to track
+-- | the "last line" manually.
+reorganizeCliCommand :: State -> String
+reorganizeCliCommand st =
+  Array.intercalate " \\\n"
+    ( Array.filter ((/=) "")
+        [ "amaru-treasury-tx reorganize-wizard"
+        , "  --scope " <> scopeSlug st.scope
+        , "  --wallet-addr " <> walletForCli st.walletAddr
+        , "  --metadata " <> st.metadataPath
+        , validityFlagBare st.validityHours
+        , optionalTextFlag "--description" st.description
+        , optionalTextFlag "--justification" st.justification
+        , optionalTextFlag
+            "--destination-label"
+            st.destinationLabel
+        ]
+    )
+
+-- | Variant of 'validityFlag' without the trailing
+-- | backslash; used by 'reorganizeCliCommand' which adds
+-- | the line continuation via @intercalate@ instead of
+-- | hand-managing it per line.
+validityFlagBare :: String -> String
+validityFlagBare s =
+  if s == "" then "" else "  --validity-hours " <> s
+
+-- | Render @--flag "value"@ when the value is non-empty;
+-- | empty value yields the empty string (filtered out by
+-- | the caller).  No trailing backslash — see
+-- | 'reorganizeCliCommand'.
+optionalTextFlag :: String -> String -> String
+optionalTextFlag flag value_
+  | value_ == "" = ""
+  | otherwise = "  " <> flag <> " " <> quote value_
 
 referenceFlags :: Array ReferenceRow -> String
 referenceFlags rows =
@@ -1385,6 +1489,7 @@ handleAction = case _ of
     r <- H.liftAff case st.mode of
       ModeSwap -> postBuild "/v1/build/swap" st
       ModeDisburse -> postBuild "/v1/build/disburse" st
+      ModeReorganize -> postBuild "/v1/build/reorganize" st
     H.modify_ \s -> s { result = Result r }
 
 -- | POST the active request body to the given endpoint and

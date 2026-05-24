@@ -82,15 +82,6 @@ import Amaru.Treasury.Cli.Common
     , resolveNetworkName
     , withLogHandle
     )
-import Amaru.Treasury.Cli.TxBuild
-    ( requiredUtxos
-    , txBuildReportContext
-    )
-import Amaru.Treasury.Report
-    ( TxBuildSuccess (..)
-    , buildTransactionReport
-    , txCborHexFromBytes
-    )
 import Amaru.Treasury.Cli.SwapCommon
     ( providerToResolverEnv
     , traceEnv
@@ -109,6 +100,10 @@ import Amaru.Treasury.Cli.SwapWizard
     , usdmToLovelace
     , validateWizardInputControl
     )
+import Amaru.Treasury.Cli.TxBuild
+    ( requiredUtxos
+    , txBuildReportContext
+    )
 import Amaru.Treasury.IntentJSON
     ( SAction (..)
     , SomeTreasuryIntent (..)
@@ -118,6 +113,11 @@ import Amaru.Treasury.IntentJSON
     , tiValidityUpperBoundSlot
     )
 import Amaru.Treasury.Registry.Verify (verifyRegistry)
+import Amaru.Treasury.Report
+    ( TxBuildSuccess (..)
+    , buildTransactionReport
+    , txCborHexFromBytes
+    )
 import Amaru.Treasury.Tx.SwapQuote qualified as SQ
 import Amaru.Treasury.Tx.SwapWizard
     ( AllAdaPlan (..)
@@ -657,7 +657,7 @@ projectBuildError :: BuildError -> BuildFailure
 projectBuildError be =
     let msg = renderBuildError be
         phase = bePhase be
-     in case beDiagnostic be of
+    in  case beDiagnostic be of
             DiagnosticMissingUtxos{} ->
                 BuildResolveUtxo msg
             DiagnosticUnsupportedNetwork{} ->

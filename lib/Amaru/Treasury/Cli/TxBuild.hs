@@ -6,8 +6,7 @@ module Amaru.Treasury.Cli.TxBuild
     , txBuildOptsP
     , runTxBuild
 
-      -- * Internal — exported for focused tests + the
-      -- Wizard-side typed entry points (#269).
+      -- * Internal — exported for focused tests + the Wizard-side typed entry points (#269)
     , requiredUtxos
     , txBuildReportContext
     ) where

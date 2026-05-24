@@ -663,13 +663,28 @@ previewBody st = case st.activeTab of
     Nothing ->
       HH.p_ [ HH.text "Tx not built yet." ]
     Just hex ->
-      HH.div
-        [ HP.classes [ cn "json-tree-wrapper" ] ]
-        [ copyBlockButton hex "Copy CBOR"
-        , HH.pre
-            [ HP.classes [ cn "cbor-hex" ] ]
-            [ HH.text hex ]
-        ]
+      let
+        envelope = case cborEnvelopePreview st of
+          Just e -> e
+          Nothing -> hex
+      in
+        HH.div_
+          [ HH.div
+              [ HP.classes [ cn "json-tree-wrapper" ] ]
+              [ copyBlockButton envelope
+                  "Copy CBOR (cardano-cli envelope)"
+              , HH.pre
+                  [ HP.classes [ cn "cbor-hex" ] ]
+                  [ HH.text envelope ]
+              ]
+          , HH.div
+              [ HP.classes [ cn "json-tree-wrapper" ] ]
+              [ copyBlockButton hex "Copy CBOR (bare hex)"
+              , HH.pre
+                  [ HP.classes [ cn "cbor-hex" ] ]
+                  [ HH.text hex ]
+              ]
+          ]
   TabReport -> case reportPreview st of
     Nothing ->
       HH.p_ [ HH.text "Tx not built yet." ]
@@ -710,6 +725,14 @@ serverIntentOr fallback j = case Argonaut.toObject j of
 cborHexPreview :: State -> Maybe String
 cborHexPreview st = case st.result of
   Result j -> lookupString "sbrCborHex" j
+  _ -> Nothing
+
+-- | Extract the cardano-cli text-envelope JSON wrapping
+-- | the same body ('sbrCborEnvelope').  Ready to pipe
+-- | straight into @cardano-cli transaction witness@.
+cborEnvelopePreview :: State -> Maybe String
+cborEnvelopePreview st = case st.result of
+  Result j -> lookupString "sbrCborEnvelope" j
   _ -> Nothing
 
 -- | Extract the parsed @report.json@ from the server

@@ -63,6 +63,29 @@ data RateMode = RateOperator | RateOverride
 
 derive instance eqRateMode :: Eq RateMode
 
+-- | Top-level mode selector — chooses which wizard the
+-- | form drives and which HTTP endpoint the Build button
+-- | posts to.  The page chrome (topbar, scope picker,
+-- | rationale, signers, preview tabs) is shared; only the
+-- | mode-specific sections + request/response prefix
+-- | switch (#277).
+data TxMode = ModeSwap | ModeDisburse
+
+derive instance eqTxMode :: Eq TxMode
+
+-- | Currency selector for the disburse mode's @--unit@
+-- | flag.  Mirrors the CLI's @ada@ / @usdm@ values and the
+-- | wire field 'dbrUnit' on
+-- | 'Amaru.Treasury.Api.BuildDisburse.DisburseBuildRequest'.
+data DisburseUnit = UnitAda | UnitUsdm
+
+derive instance eqDisburseUnit :: Eq DisburseUnit
+
+disburseUnitWire :: DisburseUnit -> String
+disburseUnitWire = case _ of
+  UnitAda -> "ada"
+  UnitUsdm -> "usdm"
+
 data Tab = TabIntent | TabCli | TabCbor | TabReport
 
 derive instance eqTab :: Eq Tab
@@ -85,6 +108,7 @@ tabDisabled = const false
 
 type State =
   { scope :: Scope
+  , mode :: TxMode
   , walletAddr :: String
   , amountMode :: AmountMode
   , usdm :: String
@@ -93,6 +117,9 @@ type State =
   , adaUsdm :: String
   , slippageBps :: String
   , minRate :: String
+  , beneficiaryAddr :: String
+  , disburseUnit :: DisburseUnit
+  , disburseAmount :: String
   , validityHours :: String
   , description :: String
   , justification :: String
@@ -112,6 +139,7 @@ data BuildResult
 initialState :: State
 initialState =
   { scope: CoreDevelopment
+  , mode: ModeSwap
   , walletAddr: ""
   , amountMode: ModeUsdm
   , usdm: "1500"
@@ -120,6 +148,9 @@ initialState =
   , adaUsdm: "0.43"
   , slippageBps: "75"
   , minRate: "0.5"
+  , beneficiaryAddr: ""
+  , disburseUnit: UnitUsdm
+  , disburseAmount: "1500"
   , validityHours: ""
   , description: ""
   , justification: ""
@@ -135,6 +166,7 @@ data Action
   = Initialize
   | ToggleTheme
   | SetScope Scope
+  | SetMode TxMode
   | SetWalletAddr String
   | SetAmountMode AmountMode
   | SetUsdm String
@@ -143,6 +175,9 @@ data Action
   | SetAdaUsdm String
   | SetSlippageBps String
   | SetMinRate String
+  | SetBeneficiaryAddr String
+  | SetDisburseUnit DisburseUnit
+  | SetDisburseAmount String
   | SetValidityHours String
   | SetDescription String
   | SetJustification String
@@ -176,15 +211,15 @@ render st =
   HH.div_
     [ topbar RouteOperate
         { themeLabel: themeLabel st.theme, onToggleTheme: ToggleTheme }
-    , siteHeader
+    , siteHeader st.mode
     , HH.div [ HP.classes [ cn "build-layout" ] ]
         [ formColumn st
         , previewColumn st
         ]
     ]
 
-siteHeader :: forall m. H.ComponentHTML Action () m
-siteHeader =
+siteHeader :: forall m. TxMode -> H.ComponentHTML Action () m
+siteHeader mode =
   HH.div [ HP.classes [ cn "site-header" ] ]
     [ HH.h1
         [ HP.classes
@@ -192,7 +227,7 @@ siteHeader =
             , cn "site-header__title"
             ]
         ]
-        [ HH.text "Build swap transaction" ]
+        [ HH.text title ]
     , HH.p
         [ HP.classes
             [ cn "md-typescale-body-large"
@@ -202,10 +237,15 @@ siteHeader =
         [ HH.text
             "Submit operator-supplied wizard inputs. The \
             \backend returns a typed intent.json plus the \
-            \equivalent CLI invocation. CBOR + report ship \
-            \in a follow-up."
+            \equivalent CLI invocation, the unsigned tx \
+            \CBOR (bare hex + cardano-cli envelope) and the \
+            \report."
         ]
     ]
+  where
+  title = case mode of
+    ModeSwap -> "Build swap transaction"
+    ModeDisburse -> "Build disburse transaction"
 
 -- ---------------------------------------------------------------------------
 -- Form column
@@ -213,17 +253,57 @@ siteHeader =
 formColumn :: forall m. State -> H.ComponentHTML Action () m
 formColumn st =
   HH.div [ HP.classes [ cn "form-column" ] ]
-    [ formSection "01" "Scope"
-        "Choose the registered scope you are spending from."
-        [ scopePicker st.scope ]
-    , formSection "02" "Wallet"
-        "Operator bech32 address — fuel + collateral + change."
-        [ fieldV "wallet" st.walletAddr SetWalletAddr "addr1q…" true
-            ( validateWalletAddr st.walletAddr
-                <|> serverFieldError st "wallet_addr"
-            )
-        ]
-    , formSection "03" "Amount"
+    ( [ modeSelector st.mode
+      , formSection "01" "Scope"
+          "Choose the registered scope you are spending from."
+          [ scopePicker st.scope ]
+      , formSection "02" "Wallet"
+          "Operator bech32 address — fuel + collateral + change."
+          [ fieldV "wallet" st.walletAddr SetWalletAddr "addr1q…" true
+              ( validateWalletAddr st.walletAddr
+                  <|> serverFieldError st "wallet_addr"
+              )
+          ]
+      ]
+        <> modeSpecificSections st
+        <>
+          [ formSection "05" "Validity"
+              "Validity-hours window. Leave blank for the chain horizon."
+              [ field "validity-hours" st.validityHours SetValidityHours
+                  "<chain horizon>" false
+              ]
+          , formSection "06" "Rationale"
+              "Description, justification, and destination label baked \
+              \into the on-chain CIP-1694 rationale tree."
+              [ field "description" st.description SetDescription
+                  "weekly USDM build" false
+              , field "justification" st.justification SetJustification
+                  "operator decision" false
+              , field "destination-label" st.destinationLabel
+                  SetDestinationLabel "core_development" true
+              ]
+          , formSection "07" "Extra signers"
+              "Other scope owners that must co-sign."
+              [ signersPicker st.scope st.extraSigners
+              , case validateSigners st.extraSigners of
+                  Just msg -> fieldError msg
+                  Nothing -> HH.text ""
+              ]
+          -- Metadata is baked into the image (single-tenant
+          -- deploy) — no per-request override.  Keeps
+          -- 'state.metadataPath' for the CLI preview, but the
+          -- form no longer pretends it's an operator input.
+          , buildActions (formErrors st)
+          ]
+    )
+
+-- | Sections 03 + 04 — swap-specific (Amount + Rate) vs
+-- | disburse-specific (Beneficiary + Amount-with-unit).
+modeSpecificSections
+  :: forall m. State -> Array (H.ComponentHTML Action () m)
+modeSpecificSections st = case st.mode of
+  ModeSwap ->
+    [ formSection "03" "Amount"
         "Either a fixed USDM target plus chunk count, or sweep \
         \all wallet ADA."
         ( [ segmentedAmount st.amountMode ]
@@ -249,33 +329,42 @@ formColumn st =
                     ]
               )
         )
-    , formSection "05" "Validity"
-        "Validity-hours window. Leave blank for the chain horizon."
-        [ field "validity-hours" st.validityHours SetValidityHours
-            "<chain horizon>" false
+    ]
+  ModeDisburse ->
+    [ formSection "03" "Beneficiary"
+        "Bech32 mainnet address that receives the disbursement."
+        [ fieldV "beneficiary"
+            st.beneficiaryAddr
+            SetBeneficiaryAddr
+            "addr1q…"
+            true
+            ( validateBeneficiaryAddr st.beneficiaryAddr
+                <|> serverFieldError st "beneficiary_addr"
+            )
         ]
-    , formSection "06" "Rationale"
-        "Description, justification, and destination label baked \
-        \into the on-chain CIP-1694 rationale tree."
-        [ field "description" st.description SetDescription
-            "weekly USDM build" false
-        , field "justification" st.justification SetJustification
-            "operator decision" false
-        , field "destination-label" st.destinationLabel
-            SetDestinationLabel "core_development" true
-        ]
-    , formSection "07" "Extra signers"
-        "Other scope owners that must co-sign."
-        [ signersPicker st.scope st.extraSigners
-        , case validateSigners st.extraSigners of
-            Just msg -> fieldError msg
-            Nothing -> HH.text ""
-        ]
-    -- Metadata is baked into the image (single-tenant
-    -- deploy) — no per-request override.  Keeps
-    -- 'state.metadataPath' for the CLI preview, but the
-    -- form no longer pretends it's an operator input.
-    , buildActions (formErrors st)
+    , formSection "04" "Amount"
+        "Currency selector + amount in the unit's user-facing \
+        \denomination (ADA, not lovelace; USDM, not 1e-6 USDM)."
+        ( [ segmentedDisburseUnit st.disburseUnit
+          , fieldNumV "amount"
+              st.disburseAmount
+              SetDisburseAmount
+              (disburseAmountSuffix st.disburseUnit)
+              (validateDisburseAmount st.disburseAmount)
+          ]
+        )
+    ]
+
+-- | Top-of-form Swap | Disburse selector.  Same
+-- | '.segmented' class the amount/rate sub-selectors use,
+-- | so visual weight matches the rest of the form.
+modeSelector :: forall m. TxMode -> H.ComponentHTML Action () m
+modeSelector active =
+  segmented
+    [ Tuple "Swap"
+        (Tuple (active == ModeSwap) (SetMode ModeSwap))
+    , Tuple "Disburse"
+        (Tuple (active == ModeDisburse) (SetMode ModeDisburse))
     ]
 
 -- | All form-level validation errors keyed by section.
@@ -286,11 +375,18 @@ formErrors st =
   let
     addrErr = validateWalletAddr st.walletAddr
     signersErr = validateSigners st.extraSigners
+    modeErrs = case st.mode of
+      ModeSwap -> []
+      ModeDisburse ->
+        Array.catMaybes
+          [ validateBeneficiaryAddr st.beneficiaryAddr
+          , validateDisburseAmount st.disburseAmount
+          ]
   in
-    Array.catMaybes [ addrErr, signersErr ]
+    Array.catMaybes [ addrErr, signersErr ] <> modeErrs
 
 -- | Pull a server-side typed-failure diagnostic targeted at
--- | the given form-field identifier ('sbrFailureField'
+-- | the given form-field identifier ('@prefix@FailureField'
 -- | matches the supplied @fieldId@ — same snake_case as
 -- | 'Amaru.Treasury.Wizard.Failure.fieldToText').  Returns
 -- | the human-readable diagnostic so the field can
@@ -299,12 +395,23 @@ formErrors st =
 serverFieldError :: State -> String -> Maybe String
 serverFieldError st fieldId = case st.result of
   Result j -> do
-    serverField <- lookupString "sbrFailureField" j
+    let
+      p = responsePrefix st.mode
+    serverField <- lookupString (p <> "FailureField") j
     if serverField == fieldId then
-      lookupString "sbrFailureReason" j
+      lookupString (p <> "FailureReason") j
     else
       Nothing
   _ -> Nothing
+
+-- | Wire-side key prefix the active mode's response shape
+-- | uses.  Swap responses carry @sbr*@ fields, disburse
+-- | responses carry @dbr*@ fields (mirrors the Haskell
+-- | record-field prefixes one-to-one).
+responsePrefix :: TxMode -> String
+responsePrefix = case _ of
+  ModeSwap -> "sbr"
+  ModeDisburse -> "dbr"
 
 -- | Bech32 sanity for the operator wallet input.  Doesn't
 -- | re-implement the full bech32 decoder (the api will
@@ -333,6 +440,37 @@ validateSigners xs
         "the permissions script usually requires at least one \
         \co-signer; tick the other scope owners that must sign"
   | otherwise = Nothing
+
+-- | Mirrors 'validateWalletAddr' for the disburse-mode
+-- | beneficiary input.  Same mainnet bech32 sanity, with
+-- | the diagnostic worded for a beneficiary.
+validateBeneficiaryAddr :: String -> Maybe String
+validateBeneficiaryAddr s
+  | s == "" = Just "beneficiary address is required"
+  | not (String.take 5 s == "addr1") =
+      Just "must be a mainnet bech32 (starts with addr1…)"
+  | String.length s < 50 =
+      Just "address looks truncated"
+  | otherwise = Nothing
+
+-- | Disburse amount must parse to a positive Double.  The
+-- | mapper rejects non-positive amounts server-side too
+-- | ('mapToDisburseWizardOpts' returns 'InputOutOfRange');
+-- | we catch the obvious cases up front so the operator
+-- | doesn't waste a round-trip.
+validateDisburseAmount :: String -> Maybe String
+validateDisburseAmount s
+  | s == "" = Just "amount is required"
+  | otherwise = case Number.fromString s of
+      Nothing -> Just "amount must be a number"
+      Just n
+        | n > 0.0 -> Nothing
+        | otherwise -> Just "amount must be positive"
+
+disburseAmountSuffix :: DisburseUnit -> String
+disburseAmountSuffix = case _ of
+  UnitAda -> "ADA"
+  UnitUsdm -> "USDM"
 
 formSection
   :: forall m
@@ -425,21 +563,49 @@ fieldNum
   -> String
   -> H.ComponentHTML Action () m
 fieldNum label_ value_ action suffix =
+  fieldNumV label_ value_ action suffix Nothing
+
+-- | 'fieldNum' + an optional validation error, with the
+-- | same @data-error="true"@ + caption treatment as
+-- | 'fieldV'.
+fieldNumV
+  :: forall m
+   . String
+  -> String
+  -> (String -> Action)
+  -> String
+  -> Maybe String
+  -> H.ComponentHTML Action () m
+fieldNumV label_ value_ action suffix err =
   HH.label [ HP.classes [ cn "field" ] ]
-    [ HH.span [ HP.classes [ cn "field__label" ] ]
-        [ HH.text label_ ]
-    , HH.div [ HP.classes [ cn "field__num" ] ]
-        [ HH.input
-            [ HP.value value_
-            , HP.type_ HP.InputText
-            , HP.classes
-                [ cn "field__input", cn "field__input--mono" ]
-            , HE.onValueInput action
-            ]
-        , HH.span [ HP.classes [ cn "field__suffix" ] ]
-            [ HH.text suffix ]
-        ]
-    ]
+    ( [ HH.span [ HP.classes [ cn "field__label" ] ]
+          [ HH.text label_ ]
+      , HH.div [ HP.classes [ cn "field__num" ] ]
+          [ HH.input
+              ( [ HP.value value_
+                , HP.type_ HP.InputText
+                , HP.classes
+                    [ cn "field__input"
+                    , cn "field__input--mono"
+                    ]
+                , HE.onValueInput action
+                ]
+                  <> case err of
+                    Just _ ->
+                      [ HP.attr
+                          (HH.AttrName "data-error")
+                          "true"
+                      ]
+                    Nothing -> []
+              )
+          , HH.span [ HP.classes [ cn "field__suffix" ] ]
+              [ HH.text suffix ]
+          ]
+      ]
+        <> case err of
+          Just msg -> [ fieldError msg ]
+          Nothing -> []
+    )
 
 segmentedAmount :: forall m. AmountMode -> H.ComponentHTML Action () m
 segmentedAmount active =
@@ -453,6 +619,16 @@ segmentedRate active =
   segmented
     [ Tuple "Operator min rate" (Tuple (active == RateOperator) (SetRateMode RateOperator))
     , Tuple "Override + slippage" (Tuple (active == RateOverride) (SetRateMode RateOverride))
+    ]
+
+segmentedDisburseUnit
+  :: forall m. DisburseUnit -> H.ComponentHTML Action () m
+segmentedDisburseUnit active =
+  segmented
+    [ Tuple "ADA"
+        (Tuple (active == UnitAda) (SetDisburseUnit UnitAda))
+    , Tuple "USDM"
+        (Tuple (active == UnitUsdm) (SetDisburseUnit UnitUsdm))
     ]
 
 segmented
@@ -565,7 +741,7 @@ previewColumn :: forall m. State -> H.ComponentHTML Action () m
 previewColumn st =
   HH.div [ HP.classes [ cn "preview-column" ] ]
     [ HH.div [ HP.classes [ cn "preview-card" ] ]
-        [ buildStatus st.result
+        [ buildStatus st
         , previewTabs st.activeTab
         , HH.div [ HP.classes [ cn "preview-body" ] ]
             [ previewBody st ]
@@ -578,8 +754,8 @@ previewColumn st =
 -- | preview pane visually identical to the pre-click state
 -- | (intent.json tab shows the request-state preview either
 -- | way).
-buildStatus :: forall m. BuildResult -> H.ComponentHTML Action () m
-buildStatus = case _ of
+buildStatus :: forall m. State -> H.ComponentHTML Action () m
+buildStatus st = case st.result of
   NotStarted ->
     HH.div
       [ HP.classes [ cn "report-status" ]
@@ -598,15 +774,16 @@ buildStatus = case _ of
       ]
   Result j ->
     let
+      p = responsePrefix st.mode
       -- Failure precedence: intent-failure > build-failure
       -- (an intent-failure short-circuits tx-build).
-      iTag = lookupString "sbrFailureTag" j
-      bTag = lookupString "sbrBuildFailureTag" j
-      reason = lookupString "sbrFailureReason" j
-      hasCbor = case lookupString "sbrCborHex" j of
+      iTag = lookupString (p <> "FailureTag") j
+      bTag = lookupString (p <> "BuildFailureTag") j
+      reason = lookupString (p <> "FailureReason") j
+      hasCbor = case lookupString (p <> "CborHex") j of
         Just _ -> true
         Nothing -> false
-      hasIntent = case lookupString "sbrIntentJson" j of
+      hasIntent = case lookupString (p <> "IntentJson") j of
         Just _ -> true
         Nothing -> false
       -- Three terminal states: built, intent-failure,
@@ -726,13 +903,13 @@ previewBody st = case st.activeTab of
 
 intentPreview :: State -> Json
 intentPreview st = case st.result of
-  Result j -> serverIntentOr (requestJson st) j
+  Result j -> serverIntentOr st.mode (requestJson st) j
   _ -> requestJson st
 
-serverIntentOr :: Json -> Json -> Json
-serverIntentOr fallback j = case Argonaut.toObject j of
+serverIntentOr :: TxMode -> Json -> Json -> Json
+serverIntentOr mode fallback j = case Argonaut.toObject j of
   Nothing -> fallback
-  Just o -> case FO.lookup "sbrIntentJson" o of
+  Just o -> case FO.lookup (responsePrefix mode <> "IntentJson") o of
     Nothing -> fallback
     Just s -> case Argonaut.toString s of
       Nothing -> fallback
@@ -740,38 +917,47 @@ serverIntentOr fallback j = case Argonaut.toObject j of
         Right parsed -> parsed
         Left _ -> Argonaut.fromString t
 
--- | Extract the hex-encoded tx CBOR ('sbrCborHex') from the
--- | server response, or 'Nothing' if the build hasn't run
--- | yet / the intent or build failed.
+-- | Extract the hex-encoded tx CBOR ('@prefix@CborHex')
+-- | from the server response, or 'Nothing' if the build
+-- | hasn't run yet / the intent or build failed.
 cborHexPreview :: State -> Maybe String
 cborHexPreview st = case st.result of
-  Result j -> lookupString "sbrCborHex" j
+  Result j -> lookupString (responsePrefix st.mode <> "CborHex") j
   _ -> Nothing
 
 -- | Extract the cardano-cli text-envelope JSON wrapping
--- | the same body ('sbrCborEnvelope').  Ready to pipe
+-- | the same body ('@prefix@CborEnvelope').  Ready to pipe
 -- | straight into @cardano-cli transaction witness@.
 cborEnvelopePreview :: State -> Maybe String
 cborEnvelopePreview st = case st.result of
-  Result j -> lookupString "sbrCborEnvelope" j
+  Result j ->
+    lookupString (responsePrefix st.mode <> "CborEnvelope") j
   _ -> Nothing
 
 -- | Extract the parsed @report.json@ from the server
 -- | response, or 'Nothing'.  The server ships the report as
--- | a stringified blob (mirrors @sbrIntentJson@); we parse
--- | it back so 'JsonView.renderWith' can produce the typed
+-- | a stringified blob (mirrors @IntentJson@); we parse it
+-- | back so 'JsonView.renderWith' can produce the typed
 -- | tree.
 reportPreview :: State -> Maybe Json
 reportPreview st = case st.result of
   Result j -> do
-    s <- lookupString "sbrReport" j
+    s <- lookupString (responsePrefix st.mode <> "Report") j
     case jsonParser s of
       Right parsed -> pure parsed
       Left _ -> pure (Argonaut.fromString s)
   _ -> Nothing
 
+-- | Dispatches to the mode-specific request encoder.  The
+-- | result is what the Build button POSTs and what the
+-- | intent.json preview tab shows in the pre-submit state.
 requestJson :: State -> Json
-requestJson st =
+requestJson st = case st.mode of
+  ModeSwap -> swapRequestJson st
+  ModeDisburse -> disburseRequestJson st
+
+swapRequestJson :: State -> Json
+swapRequestJson st =
   Argonaut.fromObject $ FO.fromFoldable
     [ Tuple "sbrScope" (Argonaut.fromString (scopeSlug st.scope))
     , Tuple "sbrWalletAddr" (Argonaut.fromString st.walletAddr)
@@ -790,6 +976,39 @@ requestJson st =
         ( Argonaut.fromArray
             (map (Argonaut.fromString <<< scopeSlug) st.extraSigners)
         )
+    ]
+
+-- | Encode the operator inputs into a body matching
+-- | 'Amaru.Treasury.Api.BuildDisburse.DisburseBuildRequest'.
+-- | Field names + JSON shape are derived from the Haskell
+-- | record one-to-one (the @dbr*@ Generic encoding).
+disburseRequestJson :: State -> Json
+disburseRequestJson st =
+  Argonaut.fromObject $ FO.fromFoldable
+    [ Tuple "dbrScope" (Argonaut.fromString (scopeSlug st.scope))
+    , Tuple "dbrWalletAddr" (Argonaut.fromString st.walletAddr)
+    , Tuple "dbrBeneficiaryAddr"
+        (Argonaut.fromString st.beneficiaryAddr)
+    , Tuple "dbrMetadataPath" (Argonaut.fromString st.metadataPath)
+    , Tuple "dbrUnit"
+        ( Argonaut.fromString
+            (disburseUnitWire st.disburseUnit)
+        )
+    , Tuple "dbrAmount"
+        (Argonaut.fromNumber (numberOr 0.0 st.disburseAmount))
+    , Tuple "dbrValidityHours" (validityJson st.validityHours)
+    , Tuple "dbrDescription" (Argonaut.fromString st.description)
+    , Tuple "dbrJustification"
+        (Argonaut.fromString st.justification)
+    , Tuple "dbrDestinationLabel"
+        (Argonaut.fromString st.destinationLabel)
+    , Tuple "dbrEvent" Argonaut.jsonNull
+    , Tuple "dbrLabel" Argonaut.jsonNull
+    , Tuple "dbrSigners"
+        ( Argonaut.fromArray
+            (map (Argonaut.fromString <<< scopeSlug) st.extraSigners)
+        )
+    , Tuple "dbrReferences" (Argonaut.fromArray [])
     ]
 
 amountJson :: State -> Json
@@ -834,7 +1053,12 @@ taggedContents tag c =
     ]
 
 cliCommand :: State -> String
-cliCommand st =
+cliCommand st = case st.mode of
+  ModeSwap -> swapCliCommand st
+  ModeDisburse -> disburseCliCommand st
+
+swapCliCommand :: State -> String
+swapCliCommand st =
   Array.intercalate "\n"
     ( Array.filter ((/=) "")
         [ "amaru-treasury-tx swap-wizard \\"
@@ -851,6 +1075,37 @@ cliCommand st =
         , signerFlags st.extraSigners
         ]
     )
+
+-- | CLI preview for the disburse-wizard subcommand.  Same
+-- | sentinel layout as 'swapCliCommand': one flag per line,
+-- | trailing backslashes for shell paste-ability.
+disburseCliCommand :: State -> String
+disburseCliCommand st =
+  Array.intercalate "\n"
+    ( Array.filter ((/=) "")
+        [ "amaru-treasury-tx disburse-wizard \\"
+        , "  --scope " <> scopeSlug st.scope <> " \\"
+        , "  --wallet-addr " <> walletForCli st.walletAddr <> " \\"
+        , "  --beneficiary-addr "
+            <> beneficiaryForCli st.beneficiaryAddr
+            <> " \\"
+        , "  --metadata " <> st.metadataPath <> " \\"
+        , "  --unit "
+            <> disburseUnitWire st.disburseUnit
+            <> " \\"
+        , "  --amount " <> st.disburseAmount <> " \\"
+        , validityFlag st.validityHours
+        , "  --description " <> quote st.description <> " \\"
+        , "  --justification " <> quote st.justification <> " \\"
+        , "  --destination-label " <> st.destinationLabel
+            <> (if Array.null st.extraSigners then "" else " \\")
+        , signerFlags st.extraSigners
+        ]
+    )
+
+beneficiaryForCli :: String -> String
+beneficiaryForCli s =
+  if s == "" then "<beneficiary bech32>" else s
 
 walletForCli :: String -> String
 walletForCli s = if s == "" then "<wallet bech32>" else s
@@ -926,6 +1181,11 @@ handleAction = case _ of
     H.modify_ \s -> s { theme = t' }
   SetScope s -> H.modify_ \st ->
     st { scope = s, destinationLabel = scopeSlug s }
+  SetMode m -> H.modify_ \st ->
+    -- Reset the response on mode switch so a stale
+    -- swap-shaped body doesn't drive the disburse-shaped
+    -- preview helpers (and vice versa).
+    st { mode = m, result = NotStarted }
   SetWalletAddr s -> H.modify_ \st -> st { walletAddr = s }
   SetAmountMode m -> H.modify_ \st -> st { amountMode = m }
   SetUsdm s -> H.modify_ \st -> st { usdm = s }
@@ -934,6 +1194,9 @@ handleAction = case _ of
   SetAdaUsdm s -> H.modify_ \st -> st { adaUsdm = s }
   SetSlippageBps s -> H.modify_ \st -> st { slippageBps = s }
   SetMinRate s -> H.modify_ \st -> st { minRate = s }
+  SetBeneficiaryAddr s -> H.modify_ \st -> st { beneficiaryAddr = s }
+  SetDisburseUnit u -> H.modify_ \st -> st { disburseUnit = u }
+  SetDisburseAmount s -> H.modify_ \st -> st { disburseAmount = s }
   SetValidityHours s -> H.modify_ \st -> st { validityHours = s }
   SetDescription s -> H.modify_ \st -> st { description = s }
   SetJustification s -> H.modify_ \st -> st { justification = s }
@@ -952,13 +1215,20 @@ handleAction = case _ of
   ClickBuild -> do
     st <- H.get
     H.modify_ \s -> s { result = Pending }
-    r <- H.liftAff (postBuildSwap st)
+    r <- H.liftAff case st.mode of
+      ModeSwap -> postBuild "/v1/build/swap" st
+      ModeDisburse -> postBuild "/v1/build/disburse" st
     H.modify_ \s -> s { result = Result r }
 
-postBuildSwap :: State -> Aff Json
-postBuildSwap st = do
+-- | POST the active request body to the given endpoint and
+-- | decode the response as opaque JSON.  Same boilerplate
+-- | regardless of mode; the mode-specific work is the
+-- | request body ('requestJson') and the response prefix
+-- | ('responsePrefix').
+postBuild :: String -> State -> Aff Json
+postBuild endpoint st = do
   res <-
-    AX.post RF.json "/v1/build/swap"
+    AX.post RF.json endpoint
       (Just (RB.json (requestJson st)))
   pure case res of
     Left err ->

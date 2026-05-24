@@ -35,6 +35,9 @@ import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
 import Amaru.Treasury.Api.BuildDisburse
     ( DisburseBuildResponse (..)
     )
+import Amaru.Treasury.Api.BuildReorganize
+    ( ReorganizeBuildResponse (..)
+    )
 import Amaru.Treasury.Api.BuildSwap
     ( SwapBuildResponse (..)
     )
@@ -122,6 +125,18 @@ spec = do
         it "internal-error arm round-trips" $
             roundtrips disburseInternalErrorResp
 
+    describe "ReorganizeBuildResponse JSON round-trip" $ do
+        let roundtrips r =
+                Aeson.decode (Aeson.encode r) `shouldBe` Just r
+        it "success arm round-trips" $
+            roundtrips reorganizeSuccessResp
+        it "intent-failure arm round-trips" $
+            roundtrips reorganizeIntentFailureResp
+        it "build-failure arm round-trips" $
+            roundtrips reorganizeBuildFailureResp
+        it "internal-error arm round-trips" $
+            roundtrips reorganizeInternalErrorResp
+
 -- ---------------------------------------------------------------------------
 -- Helpers
 
@@ -163,6 +178,7 @@ stubHandlers =
                     , sbrBuildFailureTag = Nothing
                     }
         , hBuildDisburse = \_ -> pure disburseIntentFailureResp
+        , hBuildReorganize = \_ -> pure reorganizeIntentFailureResp
         , hRawHandler = stubRawHandler
         }
 
@@ -225,6 +241,67 @@ disburseInternalErrorResp =
         , dbrFailureField = Nothing
         , dbrFailureReason = Just "uncaught exception: timeout"
         , dbrBuildFailureTag = Nothing
+        }
+
+-- ---------------------------------------------------------------------------
+-- ReorganizeBuildResponse fixtures (one per response arm)
+
+reorganizeSuccessResp :: ReorganizeBuildResponse
+reorganizeSuccessResp =
+    ReorganizeBuildResponse
+        { rbrIntentJson = Just "{\"action\":\"reorganize\"}"
+        , rbrCli = Just "amaru-treasury-tx reorganize-wizard …"
+        , rbrCborHex = Just "84a40081…"
+        , rbrCborEnvelope =
+            Just
+                "{\"type\":\"Tx ConwayEra\",\"cborHex\":\"84a40081…\"}"
+        , rbrReport = Just "{\"intent_path\":\"intent.json\"}"
+        , rbrFailureTag = Nothing
+        , rbrFailureField = Nothing
+        , rbrFailureReason = Nothing
+        , rbrBuildFailureTag = Nothing
+        }
+
+reorganizeIntentFailureResp :: ReorganizeBuildResponse
+reorganizeIntentFailureResp =
+    ReorganizeBuildResponse
+        { rbrIntentJson = Nothing
+        , rbrCli = Nothing
+        , rbrCborHex = Nothing
+        , rbrCborEnvelope = Nothing
+        , rbrReport = Nothing
+        , rbrFailureTag = Just "InputInvalid"
+        , rbrFailureField = Just FieldWalletAddr
+        , rbrFailureReason = Just "input wallet_addr: bech32 parse"
+        , rbrBuildFailureTag = Nothing
+        }
+
+reorganizeBuildFailureResp :: ReorganizeBuildResponse
+reorganizeBuildFailureResp =
+    ReorganizeBuildResponse
+        { rbrIntentJson = Just "{\"action\":\"reorganize\"}"
+        , rbrCli = Just "amaru-treasury-tx reorganize-wizard …"
+        , rbrCborHex = Nothing
+        , rbrCborEnvelope = Nothing
+        , rbrReport = Nothing
+        , rbrFailureTag = Nothing
+        , rbrFailureField = Nothing
+        , rbrFailureReason = Just "build: checks failed"
+        , rbrBuildFailureTag = Just "BuildBuildError"
+        }
+
+reorganizeInternalErrorResp :: ReorganizeBuildResponse
+reorganizeInternalErrorResp =
+    ReorganizeBuildResponse
+        { rbrIntentJson = Nothing
+        , rbrCli = Nothing
+        , rbrCborHex = Nothing
+        , rbrCborEnvelope = Nothing
+        , rbrReport = Nothing
+        , rbrFailureTag = Just "ResolveResolver"
+        , rbrFailureField = Nothing
+        , rbrFailureReason = Just "uncaught exception: timeout"
+        , rbrBuildFailureTag = Nothing
         }
 
 stubRawHandler :: Tagged Servant.Handler Application

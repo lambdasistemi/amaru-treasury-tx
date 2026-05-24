@@ -93,6 +93,7 @@ import Ouroboros.Network.Magic (NetworkMagic (..))
 import Cardano.Ledger.Address (Addr)
 
 import Amaru.Treasury.Api.BuildDisburse (runBuildDisburse)
+import Amaru.Treasury.Api.BuildReorganize (runBuildReorganize)
 import Amaru.Treasury.Api.BuildSwap (runBuildSwap)
 import Amaru.Treasury.Api.Server
     ( Handlers (..)
@@ -266,6 +267,8 @@ main = do
                         , hBuildSwap = runBuildSwap g backend
                         , hBuildDisburse =
                             runBuildDisburse g backend
+                        , hBuildReorganize =
+                            runBuildReorganize g backend
                         , hRawHandler =
                             serveDirectoryFileServer
                                 (optsStatic opts)

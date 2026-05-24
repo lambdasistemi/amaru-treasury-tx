@@ -104,6 +104,7 @@ library
   exposed-modules:
     Amaru.Treasury
     Amaru.Treasury.Api.BuildDisburse
+    Amaru.Treasury.Api.BuildReorganize
     Amaru.Treasury.Api.BuildSwap
     Amaru.Treasury.Api.Server
     Amaru.Treasury.Api.Types

@@ -24,11 +24,15 @@
 
     <!-- Entire visual surface — see styles.css for taxonomy. -->
     <link rel="stylesheet" href="./styles.css" />
-    <!-- /operate page chrome (form + preview overlay). -->
-    <link rel="stylesheet" href="./style-build.css" />
-    <!-- Canonical JsonTree layout / theming; ships from the
-         browser-json-tree library at build time. -->
+    <!-- Canonical JsonTree layout / theming from the
+         browser-json-tree library — loads BEFORE
+         style-build.css so the latter's
+         `.json-tree-wrapper { --jt-bg: ... }` overrides
+         win against the library's :root defaults. -->
     <link rel="stylesheet" href="./json-tree.css" />
+    <!-- /operate page chrome (form + preview overlay) +
+         project-side JsonTree theming overrides. -->
+    <link rel="stylesheet" href="./style-build.css" />
   </head>
   <body>
     <div id="app"></div>

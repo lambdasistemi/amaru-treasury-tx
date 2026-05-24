@@ -36,7 +36,7 @@ Layout legend:
 
 ## Phase 2 — Downstream runner module
 
-- [ ] **T002 [H]** **RED** for the runner module. Add
+- [X] **T002 [H]** **RED** for the runner module. Add
   `test/unit/Amaru/Treasury/Api/IndexerSpec.hs` exercising:
   (a) `withApiIndexer` opens a tmpfs RocksDB and starts a
   follower against an in-memory chain-sync fixture,
@@ -47,7 +47,7 @@ Layout legend:
   (d) `snapshotAt` returns the same UTxO set the fixture wrote.
   Observe RED failure (`Variable not in scope: withApiIndexer`).
 
-- [ ] **T003 [H]** **GREEN** for the runner module. Implement
+- [X] **T003 [H]** **GREEN** for the runner module. Implement
   `lib/Amaru/Treasury/Api/Indexer.hs` per
   [data-model.md §"Amaru.Treasury.Api.Indexer"](./data-model.md).
   Add the module to `library` `exposed-modules` in

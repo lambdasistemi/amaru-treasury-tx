@@ -216,17 +216,17 @@ renderEntry opts (Tuple k v)
 renderStringValue :: forall w i. String -> HH.HTML w i
 renderStringValue s
   | isTxidHex s =
-      linkedWithCopy "v-txid"
+      linked "v-txid"
         ("https://cardanoscan.io/transaction/" <> s)
         s
         (shortHex s)
   | isBech32Addr s =
-      linkedWithCopy "v-addr"
+      linked "v-addr"
         ("https://cardanoscan.io/address/" <> s)
         s
         (shortAddr s)
   | isPolicyHex s =
-      linkedWithCopy "v-policy"
+      linked "v-policy"
         ("https://cardanoscan.io/tokenPolicy/" <> s)
         s
         (shortHex s)
@@ -235,38 +235,26 @@ renderStringValue s
         [ HP.classes [ HH.ClassName "v-str" ] ]
         [ HH.text s ]
 
--- | A truncated link to cardanoscan + a small copy
--- | button that grabs the *full* underlying string.
--- | The copy button click is handled by
--- | 'JsonTreeBehaviour' which reads the @data-copy@
--- | attribute and writes it to the clipboard.
-linkedWithCopy
+-- | Truncated link to cardanoscan with the full value as
+-- | the @title@ tooltip.  Bulk copy is offered at the
+-- | structure level (per intent / per scope) — adding a
+-- | copy button to every leaf clutters the tree.
+linked
   :: forall w i
    . String
   -> String
   -> String
   -> String
   -> HH.HTML w i
-linkedWithCopy cls href full short =
-  HH.span
-    [ HP.classes [ HH.ClassName "v-linked" ] ]
-    [ HH.a
-        [ HP.classes [ HH.ClassName cls ]
-        , HP.href href
-        , HP.target "_blank"
-        , HP.rel "noopener"
-        , HP.title full
-        ]
-        [ HH.text short ]
-    , HH.button
-        [ HP.classes [ HH.ClassName "v-copy" ]
-        , HP.attr (HH.AttrName "data-copy") full
-        , HP.attr (HH.AttrName "aria-label") "Copy"
-        , HP.title "Copy full value"
-        , HP.type_ HP.ButtonButton
-        ]
-        [ HH.text "⎘" ]
+linked cls href full short =
+  HH.a
+    [ HP.classes [ HH.ClassName cls ]
+    , HP.href href
+    , HP.target "_blank"
+    , HP.rel "noopener"
+    , HP.title full
     ]
+    [ HH.text short ]
 
 -- ---------------------------------------------------------------------------
 -- Heuristics for "resolve as well as possible"

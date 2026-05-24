@@ -416,6 +416,13 @@ input[type="number"].field__input { -moz-appearance: textfield; }
   color: var(--md-sys-color-on-surface-variant);
   font-weight: 500;
 }
+/* Hanging indent on leaf pairs: when a long value wraps
+   to a second line, the wrapped text starts indented so
+   it can't be mistaken for a new key. */
+.v-pair-leaf {
+  padding-left: 16px;
+  text-indent: -16px;
+}
 .v-pair-leaf > .v-val { overflow-wrap: anywhere; }
 .v-pair-compound > .v-children {
   margin-left: 16px;
@@ -479,6 +486,16 @@ details > summary::marker { display: none; }
   border-color: var(--md-sys-color-primary);
 }
 .v-copy--ok::after { content: " ✓"; }
+
+/* Structure-level copy chip (e.g. "Copy intent.json").
+   Sits above the JSON tree, full-line, slightly more
+   prominent than the per-leaf style. */
+.v-copy--block {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
 
 /* Arrays: each item is a two-column row.  The slim left
    gutter holds a vertical hairline with the 1-based

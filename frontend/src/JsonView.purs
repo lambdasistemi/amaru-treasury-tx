@@ -220,6 +220,12 @@ renderStringValue s
         ("https://cardanoscan.io/transaction/" <> s)
         s
         (shortHex s)
+  | Just { txid, ix } <- parseTxin s =
+      linked "v-txin"
+        ("https://cardanoscan.io/transaction/" <> txid
+            <> "?tab=utxo")
+        s
+        (shortHex txid <> "#" <> ix)
   | isBech32Addr s =
       linked "v-addr"
         ("https://cardanoscan.io/address/" <> s)
@@ -268,11 +274,26 @@ isPolicyHex s = Regex.test rePolicy s
 isBech32Addr :: String -> Boolean
 isBech32Addr s = String.take 5 s == "addr1"
 
+-- | Recognise a Cardano transaction-output reference
+-- | (a.k.a. txin) in the canonical @<txid>#<ix>@ form
+-- | and split it back into its components.
+parseTxin :: String -> Maybe { txid :: String, ix :: String }
+parseTxin s = case String.split (String.Pattern "#") s of
+  [ txid, ix ]
+    | Regex.test reTxid txid
+    , ix /= ""
+    , Regex.test reIndex ix ->
+        Just { txid, ix }
+  _ -> Nothing
+
 reTxid :: Regex.Regex
 reTxid = Regex.unsafeRegex "^[0-9a-f]{64}$" Regex.noFlags
 
 rePolicy :: Regex.Regex
 rePolicy = Regex.unsafeRegex "^[0-9a-f]{56}$" Regex.noFlags
+
+reIndex :: Regex.Regex
+reIndex = Regex.unsafeRegex "^[0-9]+$" Regex.noFlags
 
 shortHex :: String -> String
 shortHex s =

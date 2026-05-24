@@ -575,3 +575,25 @@ details > summary::marker { display: none; }
   border: none;
   min-width: 0;
 }
+
+/* Leaf-value links: txid / addr / policy / txin.  All
+   four use the same affordance — a dotted underline
+   that signals "this is clickable" without the heavy
+   solid underline that distracts in dense JSON trees.
+   The base styles.css implements this with a
+   `border-bottom: 1px dotted` on three of the four;
+   we override it here uniformly via `text-decoration`
+   and explicitly kill the border so we don't stack two
+   parallel lines. */
+.v-txid, .v-addr, .v-policy, .v-txin {
+  text-decoration: underline dotted;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  color: var(--md-sys-color-primary);
+  border-bottom: none;
+}
+.v-txid:hover, .v-addr:hover,
+.v-policy:hover, .v-txin:hover {
+  text-decoration-style: solid;
+  border-bottom: none;
+}

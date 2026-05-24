@@ -476,18 +476,30 @@ buildStatus = case _ of
       ]
   Result j ->
     let
-      tag = lookupString "sbrFailureTag" j
+      -- Failure precedence: intent-failure > build-failure
+      -- (an intent-failure short-circuits tx-build).
+      iTag = lookupString "sbrFailureTag" j
+      bTag = lookupString "sbrBuildFailureTag" j
       reason = lookupString "sbrFailureReason" j
-      ok = case tag of
-        Just _ -> false
-        Nothing -> case lookupString "sbrIntentJson" j of
-          Just _ -> true
-          Nothing -> false
-      label = case ok, tag, reason of
-        true, _, _ -> "intent.json ready"
-        false, Just t, Just r -> t <> ": " <> r
-        false, Just t, Nothing -> t
-        _, _, _ -> "response received"
+      hasCbor = case lookupString "sbrCborHex" j of
+        Just _ -> true
+        Nothing -> false
+      hasIntent = case lookupString "sbrIntentJson" j of
+        Just _ -> true
+        Nothing -> false
+      -- Three terminal states: built, intent-failure,
+      -- build-failure.  "ok" only when the tx CBOR is in
+      -- the response.
+      label = case iTag, bTag, reason of
+        Just t, _, Just r -> "intent: " <> t <> " — " <> r
+        Just t, _, Nothing -> "intent: " <> t
+        Nothing, Just t, Just r -> "build: " <> t <> " — " <> r
+        Nothing, Just t, Nothing -> "build: " <> t
+        Nothing, Nothing, _
+          | hasCbor -> "built"
+          | hasIntent -> "intent ready, tx-build pending"
+          | otherwise -> "response received"
+      ok = hasCbor
     in
       HH.div
         [ HP.classes [ cn "report-status" ]

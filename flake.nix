@@ -69,12 +69,26 @@
         "github:pragma-org/amaru-treasury/fb1937964196b061ddc4f247d2de11a13745d541";
       flake = false;
     };
+
+    # browser-json-tree — typed Halogen JSON tree renderer +
+    # click behaviour, extracted from this repo so other
+    # projects can consume it.  Pinned at the merge commit
+    # of the initial extraction PR so the dashboard's JSON
+    # rendering is reproducible across rebuilds.  Flake is
+    # disabled because we only consume the spago `src/` +
+    # `dist/` payloads; the library's own flake outputs
+    # (purs-overlay etc.) would conflict with ours.
+    browser-json-tree = {
+      url =
+        "github:lambdasistemi/browser-json-tree/970657fd515259d8ba745fbb82a3a43fc9531b08";
+      flake = false;
+    };
   };
 
   outputs = inputs@{ self, nixpkgs, lintNixpkgs, flake-parts
     , haskellNix, hackageNix, iohkNix, CHaP, cardano-node
     , amaru-treasury, purescript-overlay, mkSpagoDerivation
-    , ... }:
+    , browser-json-tree, ... }:
     flake-parts.lib.mkFlake { inherit inputs; } {
       systems = [ "x86_64-linux" "aarch64-darwin" ];
       perSystem = { system, ... }:
@@ -215,6 +229,7 @@
           frontend = import ./nix/frontend.nix {
             pkgs = frontendPkgs;
             src = ./frontend;
+            browserJsonTree = browser-json-tree;
           };
           image = import ./nix/docker.nix {
             inherit pkgs treasuryMetadata recentTxs

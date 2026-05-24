@@ -40,7 +40,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Halogen.Subscription as HS
-import JsonView as JsonView
+import JsonTree as JsonView
 import Theme as Theme
 
 -- ---------------------------------------------------------------------------

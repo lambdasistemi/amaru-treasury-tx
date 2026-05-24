@@ -21,11 +21,13 @@ import Web.HTML.HTMLElement as HTMLElement
 import Web.HTML.Window (document)
 
 import App as App
+import JsonTreeBehaviour as JsonTreeBehaviour
 import OperatePage as OperatePage
 import Routing (Route(..), currentRoute)
 
 main :: Effect Unit
 main = runHalogenAff do
+  liftEffect JsonTreeBehaviour.install
   host <- liftEffect mountHost
   route <- liftEffect currentRoute
   case route of

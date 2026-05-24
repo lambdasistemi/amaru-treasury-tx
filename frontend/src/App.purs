@@ -275,20 +275,20 @@ component =
             [ scopeSummary name j
             , scopeKvList name j
             , md "md-divider" [] []
-            , HH.details
-                [ HP.classes [ HH.ClassName "json-block" ] ]
-                [ HH.summary
-                    [ HP.classes
-                        [ HH.ClassName
-                            "md-typescale-label-large"
-                        ]
-                    ]
-                    [ HH.text "Full inspect JSON" ]
-                , HH.div
-                    [ HP.classes
-                        [ HH.ClassName "json-body" ]
-                    ]
-                    [ JsonView.render j ]
+            -- The JSON tree is rendered under a single
+            -- "details" super-key so the user gets the
+            -- same key-click-to-collapse UX as every
+            -- other compound entry inside the tree
+            -- (instead of a special button + nested
+            -- wrapper).
+            , HH.div
+                [ HP.classes
+                    [ HH.ClassName "json-tree-wrapper" ]
+                ]
+                [ JsonView.render
+                    ( Argonaut.fromObject
+                        (FO.singleton "details" j)
+                    )
                 ]
             ]
     in

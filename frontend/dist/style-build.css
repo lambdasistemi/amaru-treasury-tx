@@ -383,3 +383,178 @@ input[type="number"].field__input { -moz-appearance: textfield; }
 .preview-body::-webkit-scrollbar { width: 8px; height: 8px; }
 .preview-body::-webkit-scrollbar-thumb { background: var(--md-sys-color-outline-variant); border-radius: 4px; }
 .preview-body::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- typed JSON tree (shared with the View page) ---------- */
+/* `white-space: normal` matters: the typed tree has no
+   inter-element whitespace, so inheriting `white-space: pre`
+   from .json-pretty would collapse it onto one line. */
+.json-tree-wrapper {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--md-sys-color-surface-container-high);
+  border-radius: var(--app-radius);
+  overflow: auto;
+  white-space: normal;
+  scrollbar-width: thin;
+  scrollbar-color:
+    var(--md-sys-color-outline-variant) transparent;
+}
+
+/* Classic indented JSON tree.
+   - Leaf entry: "key: value" inline on one row.
+   - Compound entry: "key:" on its own row + children
+     indented underneath.
+   No global column alignment (the 2-col grid version
+   looked tabular / 90s). */
+.v-object {
+  display: block;
+  margin: 0;
+  padding: 0;
+}
+.v-pair { display: block; padding: 1px 0; }
+.v-pair > .v-key {
+  color: var(--md-sys-color-on-surface-variant);
+  font-weight: 500;
+}
+.v-pair-leaf > .v-val { overflow-wrap: anywhere; }
+.v-pair-compound > .v-children {
+  margin-left: 16px;
+  padding-left: 0;
+  border-left: none;
+}
+
+/* Native <details>/<summary> wiring.  Suppress the
+   default disclosure triangle so the key (object) or
+   the number marker (array) is the only visible
+   affordance.  Hover slightly darkens the hit-target. */
+details > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details > summary::-webkit-details-marker { display: none; }
+details > summary::marker { display: none; }
+.v-pair-compound > summary.v-key:hover,
+.v-sep-toggle:hover .v-sep-label {
+  color: var(--md-sys-color-on-surface);
+}
+.v-sep-toggle:hover .v-sep-line,
+.v-sep-toggle:hover .v-sep-line::before,
+.v-sep-toggle:hover .v-sep-line::after {
+  background: var(--md-sys-color-on-surface-variant);
+}
+
+/* Truncated link + copy-full-value button.  The
+   <a> goes to cardanoscan; the small button copies
+   the full underlying string (txid / addr / policy)
+   to the clipboard.  Briefly flips to a check mark
+   on success. */
+.v-linked {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.v-copy {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  padding: 1px 4px;
+  border: 1px solid
+    var(--md-sys-color-outline-variant);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--md-sys-color-outline);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s,
+    border-color 0.15s;
+}
+.v-copy:hover {
+  color: var(--md-sys-color-on-surface);
+  border-color: var(--md-sys-color-outline);
+  background:
+    var(--md-sys-color-surface-container-highest);
+}
+.v-copy--ok {
+  color: var(--md-sys-color-on-primary);
+  background: var(--md-sys-color-primary);
+  border-color: var(--md-sys-color-primary);
+}
+.v-copy--ok::after { content: " ✓"; }
+
+/* Arrays: each item is a two-column row.  The slim left
+   gutter holds a vertical hairline with the 1-based
+   cardinal index centered in the middle of the item's
+   height — effectively the chapter divider rotated 90°
+   so it costs zero vertical space.  The right column
+   holds the element's actual content. */
+.v-array {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+/* Wipe the base `.v-array > li::before { content: "•" }`
+   rule from styles.css (it outranks `.v-item::before` on
+   specificity and would re-introduce the dots). */
+.v-array > li::before { content: none; }
+
+.v-item {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  column-gap: 12px;
+  align-items: stretch;
+  padding: 4px 0;
+}
+/* Compound array items wrap their content in a
+   <details> for native collapse.  `display: contents`
+   makes the <details> invisible to layout so its
+   <summary> + .v-children flow into the parent
+   .v-item grid (summary in the left gutter, children
+   in the right column). */
+.v-item-compound > details { display: contents; }
+
+/* CAD-style dimension bracket: a vertical hairline that
+   spans ~95% of the element's height, capped at both
+   ends with a small 90° tick pointing toward the
+   content (rightward).  The cardinal index sits in the
+   middle, with breathing room on either side.  The line
+   is split into two flex-stretch segments (top + bottom
+   of the label) so the label has its own bounded space
+   rather than masking a continuous bar. */
+.v-sep {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: stretch;
+  user-select: none;
+}
+.v-sep-line {
+  width: 1px;
+  flex: 1 1 auto;
+  min-height: 6px;
+  background: var(--md-sys-color-outline-variant);
+  position: relative;
+}
+.v-sep-line:first-child::before,
+.v-sep-line:last-child::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  width: 6px;
+  height: 1px;
+  background: var(--md-sys-color-outline-variant);
+}
+.v-sep-line:first-child::before { top: 0; }
+.v-sep-line:last-child::after { bottom: 0; }
+.v-sep-label {
+  font-size: 10px;
+  color: var(--md-sys-color-outline);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding: 3px 0;
+}
+.v-item-compound > .v-children {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}

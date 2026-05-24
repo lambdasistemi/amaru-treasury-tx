@@ -3,8 +3,12 @@
 -- | emits collapsed/expanded HTML with cardanoscan links
 -- | for 64-char hex strings (txids) and short-form
 -- | addresses (FR-010b "resolved as well as possible").
-
-module JsonView (render) where
+module JsonView
+    ( render
+    , renderWith
+    , Options
+    , defaultOptions
+    ) where
 
 import Prelude
 
@@ -17,121 +21,252 @@ import Data.String.CodePoints as CodePoints
 import Data.String.Regex (Regex, test) as Regex
 import Data.String.Regex.Flags (noFlags) as Regex
 import Data.String.Regex.Unsafe (unsafeRegex) as Regex
-import Data.Tuple (Tuple(..))
+import Data.Tuple (Tuple(..), snd)
 import Foreign.Object as FO
 import Halogen.HTML as HH
 import Halogen.HTML.Properties as HP
 
--- | Top-level render. Compound values are wrapped in
--- | <details> so the reader can collapse subtrees and
--- | navigate large reports.
-render :: forall w i. Json -> HH.HTML w i
-render = renderValue
+-- | Render-time knobs.  Default: everything starts
+-- | collapsed (the reader expands selectively).  Pages
+-- | that want a fully-expanded inspector by default pass
+-- | @initiallyOpen: true@.
+type Options =
+  { initiallyOpen :: Boolean
+  }
 
-renderValue :: forall w i. Json -> HH.HTML w i
-renderValue j =
+defaultOptions :: Options
+defaultOptions = { initiallyOpen: false }
+
+-- | Emits the @open@ HTML attribute when the caller asked
+-- | for the tree to start expanded.  No type signature —
+-- | the row is inferred from each call site so the same
+-- | helper works for any host element that accepts the
+-- | @open@ property (i.e. <details>).
+openProp opts =
+  if opts.initiallyOpen then
+    [ HP.prop (HH.PropName "open") true ]
+  else []
+
+-- | Top-level render with the default options
+-- | (everything collapsed).
+render :: forall w i. Json -> HH.HTML w i
+render = renderWith defaultOptions
+
+-- | Top-level render with caller-supplied options.
+renderWith :: forall w i. Options -> Json -> HH.HTML w i
+renderWith = renderValue
+
+renderValue :: forall w i. Options -> Json -> HH.HTML w i
+renderValue opts j =
   caseJson
     (\_ -> HH.span [ HP.classes [ HH.ClassName "v-null" ] ] [ HH.text "null" ])
     (\b -> HH.span [ HP.classes [ HH.ClassName "v-bool" ] ] [ HH.text (show b) ])
     (\n -> HH.span [ HP.classes [ HH.ClassName "v-num" ] ] [ HH.text (showNum n) ])
     renderStringValue
-    renderArray
-    renderObject
+    (renderArray opts)
+    (renderObject opts)
     j
 
-renderArray :: forall w i. Array Json -> HH.HTML w i
-renderArray xs =
-  let
-    n = Array.length xs
-    label =
-      "array (" <> show n
-        <> (if n == 1 then " item)" else " items)")
-  in
-    HH.details
-      [ HP.classes [ HH.ClassName "v-node v-array-node" ]
-      , HP.prop (HH.PropName "open") true
-      ]
-      [ HH.summary
-          [ HP.classes [ HH.ClassName "v-summary" ] ]
-          [ HH.span
-              [ HP.classes [ HH.ClassName "v-meta" ] ]
-              [ HH.text label ]
-          ]
-      , HH.ol
-          [ HP.classes [ HH.ClassName "v-array" ] ]
-          (map (\x -> HH.li_ [ renderValue x ]) xs)
-      ]
+-- | True when a 'Json' value is a non-empty object or array
+-- | (i.e. should be rendered as an indented child block
+-- | under its key, rather than inline next to it).
+isCompound :: Json -> Boolean
+isCompound j =
+  caseJson
+    (\_ -> false)
+    (\_ -> false)
+    (\_ -> false)
+    (\_ -> false)
+    (\xs -> not (Array.null xs))
+    (\o -> not (FO.isEmpty o))
+    j
 
-renderObject :: forall w i. FO.Object Json -> HH.HTML w i
-renderObject obj =
-  let
-    entries :: Array (Tuple String Json)
-    entries = FO.toUnfoldable obj
-    n = Array.length entries
-    label =
-      "object (" <> show n
-        <> (if n == 1 then " key)" else " keys)")
-  in
-    HH.details
-      [ HP.classes [ HH.ClassName "v-node v-object-node" ]
-      , HP.prop (HH.PropName "open") true
-      ]
-      [ HH.summary
-          [ HP.classes [ HH.ClassName "v-summary" ] ]
-          [ HH.span
-              [ HP.classes [ HH.ClassName "v-meta" ] ]
-              [ HH.text label ]
-          ]
-      , HH.dl
-          [ HP.classes [ HH.ClassName "v-object" ] ]
-          (Array.concatMap renderEntry entries)
-      ]
+renderArray
+  :: forall w i. Options -> Array Json -> HH.HTML w i
+renderArray opts xs =
+  HH.ol
+    [ HP.classes [ HH.ClassName "v-array" ] ]
+    (Array.mapWithIndex (renderArrayItem opts) xs)
 
--- | One key/value pair inside an object.  If the value is
--- | itself a compound (object/array), the *value* renderer
--- | already emits a <details>; the key sits next to its
--- | toggle.
-renderEntry :: forall w i. Tuple String Json -> Array (HH.HTML w i)
-renderEntry (Tuple k v) =
-  [ HH.dt
-      [ HP.classes [ HH.ClassName "v-key" ] ]
-      [ HH.text k ]
-  , HH.dd [] [ renderValue v ]
+renderArrayItem
+  :: forall w i. Options -> Int -> Json -> HH.HTML w i
+renderArrayItem opts i v
+  | isCompound v =
+      HH.li
+        [ HP.classes
+            [ HH.ClassName "v-item v-item-compound" ]
+        ]
+        [ HH.details (openProp opts)
+            [ arraySepSummary i
+            , HH.div
+                [ HP.classes
+                    [ HH.ClassName "v-children" ]
+                ]
+                [ renderValue opts v ]
+            ]
+        ]
+  | otherwise =
+      HH.li
+        [ HP.classes
+            [ HH.ClassName "v-item v-item-leaf" ]
+        ]
+        [ arraySep i
+        , renderValue opts v
+        ]
+
+-- | CAD-style measurement bracket that introduces each
+-- | array element: a vertical hairline spanning the
+-- | element's height, capped with 90° ticks pointing at
+-- | the content, with the 1-based cardinal index
+-- | centered in the middle.  Used for leaf items where
+-- | no collapse target exists.
+arraySep :: forall w i. Int -> HH.HTML w i
+arraySep i =
+  HH.div
+    [ HP.classes [ HH.ClassName "v-sep" ] ]
+    (arraySepChildren i)
+
+-- | Same marker, wrapped in a <summary> so clicking it
+-- | toggles the <details> wrapper of a compound array
+-- | item.  The 'v-sep-toggle' class flags it for
+-- | cursor / hover styling.
+arraySepSummary :: forall w i. Int -> HH.HTML w i
+arraySepSummary i =
+  HH.summary
+    [ HP.classes
+        [ HH.ClassName "v-sep v-sep-toggle" ]
+    ]
+    (arraySepChildren i)
+
+arraySepChildren :: forall w i. Int -> Array (HH.HTML w i)
+arraySepChildren i =
+  [ HH.span
+      [ HP.classes [ HH.ClassName "v-sep-line" ] ]
+      []
+  , HH.span
+      [ HP.classes [ HH.ClassName "v-sep-label" ] ]
+      [ HH.text (show (i + 1)) ]
+  , HH.span
+      [ HP.classes [ HH.ClassName "v-sep-line" ] ]
+      []
   ]
+
+renderObject
+  :: forall w i. Options -> FO.Object Json -> HH.HTML w i
+renderObject opts obj =
+  HH.div
+    [ HP.classes [ HH.ClassName "v-object" ] ]
+    ( map (renderEntry opts)
+        $ Array.filter (not <<< isEmptyValue <<< snd)
+        $ FO.toUnfoldable obj
+    )
+
+-- | True when the 'Json' value carries no inspection
+-- | signal: JSON @null@, an empty array, or an empty
+-- | object.  Object entries whose value is empty get
+-- | filtered out by 'renderObject' so the tree stays
+-- | scannable.
+isEmptyValue :: Json -> Boolean
+isEmptyValue =
+  caseJson
+    (\_ -> true)
+    (\_ -> false)
+    (\_ -> false)
+    (\_ -> false)
+    Array.null
+    FO.isEmpty
+
+-- | One key/value pair inside an object.  Leaf values
+-- | render inline next to the key on the same row.
+-- | Compound values are wrapped in a native <details>
+-- | with the key as <summary>, so clicking the key
+-- | collapses / expands the nested children.
+renderEntry
+  :: forall w i. Options -> Tuple String Json -> HH.HTML w i
+renderEntry opts (Tuple k v)
+  | isCompound v =
+      HH.details
+        ( [ HP.classes
+              [ HH.ClassName "v-pair v-pair-compound" ]
+          ] <> openProp opts
+        )
+        [ HH.summary
+            [ HP.classes
+                [ HH.ClassName "v-key v-key-toggle" ]
+            ]
+            [ HH.text (k <> ":") ]
+        , HH.div
+            [ HP.classes [ HH.ClassName "v-children" ] ]
+            [ renderValue opts v ]
+        ]
+  | otherwise =
+      HH.div
+        [ HP.classes
+            [ HH.ClassName "v-pair v-pair-leaf" ]
+        ]
+        [ HH.span
+            [ HP.classes [ HH.ClassName "v-key" ] ]
+            [ HH.text (k <> ":") ]
+        , HH.text " "
+        , HH.span
+            [ HP.classes [ HH.ClassName "v-val" ] ]
+            [ renderValue opts v ]
+        ]
 
 renderStringValue :: forall w i. String -> HH.HTML w i
 renderStringValue s
   | isTxidHex s =
-      HH.a
-        [ HP.classes [ HH.ClassName "v-txid" ]
-        , HP.href ("https://cardanoscan.io/transaction/" <> s)
-        , HP.target "_blank"
-        , HP.rel "noopener"
-        , HP.title s
-        ]
-        [ HH.text (shortHex s) ]
+      linkedWithCopy "v-txid"
+        ("https://cardanoscan.io/transaction/" <> s)
+        s
+        (shortHex s)
   | isBech32Addr s =
-      HH.a
-        [ HP.classes [ HH.ClassName "v-addr" ]
-        , HP.href ("https://cardanoscan.io/address/" <> s)
-        , HP.target "_blank"
-        , HP.rel "noopener"
-        , HP.title s
-        ]
-        [ HH.text (shortAddr s) ]
+      linkedWithCopy "v-addr"
+        ("https://cardanoscan.io/address/" <> s)
+        s
+        (shortAddr s)
   | isPolicyHex s =
-      HH.a
-        [ HP.classes [ HH.ClassName "v-policy" ]
-        , HP.href ("https://cardanoscan.io/tokenPolicy/" <> s)
-        , HP.target "_blank"
-        , HP.rel "noopener"
-        , HP.title s
-        ]
-        [ HH.text (shortHex s) ]
+      linkedWithCopy "v-policy"
+        ("https://cardanoscan.io/tokenPolicy/" <> s)
+        s
+        (shortHex s)
   | otherwise =
       HH.span
         [ HP.classes [ HH.ClassName "v-str" ] ]
         [ HH.text s ]
+
+-- | A truncated link to cardanoscan + a small copy
+-- | button that grabs the *full* underlying string.
+-- | The copy button click is handled by
+-- | 'JsonTreeBehaviour' which reads the @data-copy@
+-- | attribute and writes it to the clipboard.
+linkedWithCopy
+  :: forall w i
+   . String
+  -> String
+  -> String
+  -> String
+  -> HH.HTML w i
+linkedWithCopy cls href full short =
+  HH.span
+    [ HP.classes [ HH.ClassName "v-linked" ] ]
+    [ HH.a
+        [ HP.classes [ HH.ClassName cls ]
+        , HP.href href
+        , HP.target "_blank"
+        , HP.rel "noopener"
+        , HP.title full
+        ]
+        [ HH.text short ]
+    , HH.button
+        [ HP.classes [ HH.ClassName "v-copy" ]
+        , HP.attr (HH.AttrName "data-copy") full
+        , HP.attr (HH.AttrName "aria-label") "Copy"
+        , HP.title "Copy full value"
+        , HP.type_ HP.ButtonButton
+        ]
+        [ HH.text "⎘" ]
+    ]
 
 -- ---------------------------------------------------------------------------
 -- Heuristics for "resolve as well as possible"

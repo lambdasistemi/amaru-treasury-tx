@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://amaru-treasury.dev.plutimus.com/contracts/v1/build/swap/response.json",
+  "title": "SwapBuildResponse (#269)",
+  "description": "Extended POST /v1/build/swap response. Adds cborHex + report + buildFailure to the #263 baseline. All new fields are nullable so existing consumers that only read intentJson keep working unchanged.",
+  "type": "object",
+  "required": ["cliCommand"],
+  "additionalProperties": false,
+  "properties": {
+    "intentJson": {
+      "description": "The typed SwapIntent serialised to JSON. Present iff intent assembly succeeded.",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "object" }
+      ]
+    },
+    "intentFailure": {
+      "description": "Typed failure from buildSwapIntent. Present iff intent assembly failed.",
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/FailureTag" }
+      ]
+    },
+    "cborHex": {
+      "description": "Hex-encoded unsigned Conway tx body. Present iff both intent assembly AND tx build succeeded.",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string", "pattern": "^[0-9a-f]+$" }
+      ]
+    },
+    "report": {
+      "description": "Build Report (txid, fee, exUnits per script, redeemer indexes, etc). Present iff tx build succeeded.",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "object" }
+      ]
+    },
+    "buildFailure": {
+      "description": "Typed failure from buildSwapTx. Present iff intent assembly succeeded but tx build failed.",
+      "oneOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/FailureTag" }
+      ]
+    },
+    "internalError": {
+      "description": "Untyped escape hatch for catastrophic failures (try @SomeException backstop). Present iff no other arm matched. Should be empty in production once the typed surface is complete.",
+      "oneOf": [
+        { "type": "null" },
+        { "type": "string" }
+      ]
+    },
+    "cliCommand": {
+      "description": "Copy-paste recipe — the equivalent `amaru-treasury-tx ...` shell invocation for the request body.  Deterministic from the request alone; always populated.",
+      "type": "string"
+    }
+  },
+  "allOf": [
+    {
+      "description": "Exactly one of {intentFailure, buildFailure, internalError} is non-null on a failure; on success all three are null and the success fields are populated.",
+      "oneOf": [
+        {
+          "title": "Success",
+          "properties": {
+            "intentJson":    { "type": "object" },
+            "cborHex":       { "type": "string" },
+            "report":        { "type": "object" },
+            "intentFailure": { "type": "null" },
+            "buildFailure":  { "type": "null" },
+            "internalError": { "type": "null" }
+          },
+          "required": ["intentJson", "cborHex", "report"]
+        },
+        {
+          "title": "IntentFailure",
+          "properties": {
+            "intentJson":    { "type": "null" },
+            "cborHex":       { "type": "null" },
+            "report":        { "type": "null" },
+            "intentFailure": { "$ref": "#/$defs/FailureTag" },
+            "buildFailure":  { "type": "null" },
+            "internalError": { "type": "null" }
+          },
+          "required": ["intentFailure"]
+        },
+        {
+          "title": "BuildFailure",
+          "properties": {
+            "intentJson":    { "type": "object" },
+            "cborHex":       { "type": "null" },
+            "report":        { "type": "null" },
+            "intentFailure": { "type": "null" },
+            "buildFailure":  { "$ref": "#/$defs/FailureTag" },
+            "internalError": { "type": "null" }
+          },
+          "required": ["intentJson", "buildFailure"]
+        },
+        {
+          "title": "InternalError",
+          "properties": {
+            "intentJson":    { "type": "null" },
+            "cborHex":       { "type": "null" },
+            "report":        { "type": "null" },
+            "intentFailure": { "type": "null" },
+            "buildFailure":  { "type": "null" },
+            "internalError": { "type": "string" }
+          },
+          "required": ["internalError"]
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "FailureTag": {
+      "type": "object",
+      "required": ["tag", "detail"],
+      "additionalProperties": false,
+      "properties": {
+        "tag": {
+          "description": "BuildFailure or WizardFailure constructor name, e.g. WalletUnderfunded.",
+          "type": "string"
+        },
+        "field": {
+          "description": "DOM `[data-field]` selector the frontend should highlight; null when no form input maps to the failure.",
+          "oneOf": [
+            { "type": "null" },
+            { "type": "string" }
+          ]
+        },
+        "detail": {
+          "description": "One-line human-readable diagnostic, suitable for the preview status banner.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

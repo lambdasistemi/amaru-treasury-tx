@@ -117,6 +117,23 @@
         "type": "github"
       }
     },
+    "browser-json-tree": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1779619829,
+        "narHash": "sha256-2atg4DFT8Xx6yQOoBFzXbuRZIpq+6mwtz8VULPQRF7U=",
+        "owner": "lambdasistemi",
+        "repo": "browser-json-tree",
+        "rev": "970657fd515259d8ba745fbb82a3a43fc9531b08",
+        "type": "github"
+      },
+      "original": {
+        "owner": "lambdasistemi",
+        "repo": "browser-json-tree",
+        "rev": "970657fd515259d8ba745fbb82a3a43fc9531b08",
+        "type": "github"
+      }
+    },
     "bundlers": {
       "inputs": {
         "nix-appimage": "nix-appimage",
@@ -1844,6 +1861,7 @@
       "inputs": {
         "CHaP": "CHaP",
         "amaru-treasury": "amaru-treasury",
+        "browser-json-tree": "browser-json-tree",
         "bundlers": "bundlers",
         "cardano-node": "cardano-node",
         "dev-assets": "dev-assets",

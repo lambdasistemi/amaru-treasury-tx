@@ -33,7 +33,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 
-import JsonView as JsonView
+import JsonTree as JsonView
 import Routing (Route(..))
 import Shell
   ( Scope(..)
@@ -534,7 +534,9 @@ previewBody st = case st.activeTab of
           (Argonaut.stringify (intentPreview st))
           "Copy intent.json"
       , JsonView.renderWith
-          { initiallyOpen: true }
+          ( JsonView.defaultConfig
+              { initiallyOpen = true }
+          )
           ( Argonaut.fromObject
               (FO.singleton "details" (intentPreview st))
           )

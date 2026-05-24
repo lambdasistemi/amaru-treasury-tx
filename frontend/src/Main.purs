@@ -21,7 +21,7 @@ import Web.HTML.HTMLElement as HTMLElement
 import Web.HTML.Window (document)
 
 import App as App
-import JsonTreeBehaviour as JsonTreeBehaviour
+import JsonTree.Behaviour as JsonTreeBehaviour
 import OperatePage as OperatePage
 import Routing (Route(..), currentRoute)
 

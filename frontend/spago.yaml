@@ -28,6 +28,7 @@ package:
     - now
     - js-timers
     - parallel
+    - browser-json-tree
   bundle:
     module: Main
     outfile: dist/index.js
@@ -41,3 +42,11 @@ package:
 workspace:
   packageSet:
     registry: 72.1.0
+  extraPackages:
+    # browser-json-tree — JsonTree renderer + Behaviour
+    # extracted from this repo.  The actual source is
+    # vendored into `vendor/browser-json-tree/` by
+    # `nix/frontend.nix` from the flake input pinned at
+    # the top-level `flake.nix`.
+    browser-json-tree:
+      path: ./vendor/browser-json-tree

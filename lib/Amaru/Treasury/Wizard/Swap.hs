@@ -29,6 +29,10 @@ module Amaru.Treasury.Wizard.Swap
       -- * Intent assembly
     , buildSwapIntent
 
+      -- * Tx-build (#269)
+    , buildSwapTx
+    , projectBuildError
+
       -- * CLI runner
     , runWizard
     , sysexitsFor
@@ -51,12 +55,41 @@ import System.Exit (ExitCode (..), exitWith)
 
 import Ouroboros.Network.Magic (NetworkMagic (..))
 
+import Control.Exception (SomeException, try)
+
 import Amaru.Treasury.Backend (Backend)
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
+import Amaru.Treasury.Build
+    ( BuildResult (..)
+    , runFromIntentEither
+    )
+import Amaru.Treasury.Build.Error.Render (renderBuildError)
+import Amaru.Treasury.Build.Error.Types
+    ( BuildDiagnostic (..)
+    , BuildError (..)
+    , BuildFailurePhase (..)
+    )
+import Amaru.Treasury.Build.Trace
+    ( BuildEvent (..)
+    , buildEventTracer
+    )
+import Amaru.Treasury.ChainContext
+    ( liveContext
+    , networkFromMagic
+    )
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , resolveNetworkName
     , withLogHandle
+    )
+import Amaru.Treasury.Cli.TxBuild
+    ( requiredUtxos
+    , txBuildReportContext
+    )
+import Amaru.Treasury.Report
+    ( TxBuildSuccess (..)
+    , buildTransactionReport
+    , txCborHexFromBytes
     )
 import Amaru.Treasury.Cli.SwapCommon
     ( providerToResolverEnv
@@ -544,3 +577,109 @@ sysexitsForBuild bf
         BuildBuildError{} -> 70 -- EX_SOFTWARE
         BuildInternalError{} -> 70
         _ -> 69 -- EX_UNAVAILABLE (BuildResolve*)
+
+{- | Pure-Either tx-build entry point (#269).
+
+Wraps the existing 'Amaru.Treasury.Build.runFromIntentEither'
+plus the 'Backend' → 'ChainContext' bridge ('liveContext')
+plus the 'BuildResult' → 'TxBuildSuccess' projection, so a
+non-CLI caller (HTTP handler, REPL, test harness) can drive
+the tx-build path without the host-termination paths the
+CLI wrappers add.
+
+Failures from any stage (UTxO derivation, chain-context
+acquisition, build, balancing) are projected into the
+6-constructor 'BuildFailure' surface from 'Wizard.Failure'
+via 'projectBuildError' so a consumer pattern-matches on
+the wizard-side taxonomy regardless of which inner layer
+raised.
+
+Tracer events are informational only — the @nullTracer@
+result is identical to a recording tracer's.
+-}
+buildSwapTx
+    :: GlobalOpts
+    -> Backend
+    -> SomeTreasuryIntent
+    -> Tracer IO BuildEvent
+    -> IO (Either BuildFailure TxBuildSuccess)
+buildSwapTx g backend some tr = runExceptT $ do
+    required <- case requiredUtxos some of
+        Left e ->
+            throwE (BuildResolveUtxo (T.pack e))
+        Right s -> pure s
+    liftIO
+        ( traceWith
+            tr
+            (BuildEventRequiredUtxos (Set.size required))
+        )
+
+    let magic = goNetworkMagic g
+        network = networkFromMagic magic
+    ctxResult <-
+        liftIO
+            ( try @SomeException
+                (liveContext network backend required)
+            )
+    ctx <- case ctxResult of
+        Left e ->
+            throwE (BuildResolveTip (T.pack (show e)))
+        Right c -> pure c
+
+    result <- liftIO (runFromIntentEither ctx some)
+    br <- case result of
+        Left be -> throwE (projectBuildError be)
+        Right b -> pure b
+
+    pure
+        TxBuildSuccess
+            { tbsTxCbor =
+                txCborHexFromBytes (brCborBytes br)
+            , tbsReport =
+                buildTransactionReport
+                    (txBuildReportContext some magic)
+                    br
+            }
+
+{- | Project a 'BuildError' raised by the underlying
+'Amaru.Treasury.Build' pipeline into the wizard-side
+'BuildFailure' taxonomy.
+
+The collapse is many-to-six: the 11
+'BuildDiagnostic' constructors map onto the 6
+'BuildFailure' variants based on the failure family
+(resolve-side vs build-side vs internal-invariant).
+The human-readable diagnostic text is carried through
+verbatim via 'renderBuildError' so the operator-facing
+message survives the projection.
+-}
+projectBuildError :: BuildError -> BuildFailure
+projectBuildError be =
+    let msg = renderBuildError be
+        phase = bePhase be
+     in case beDiagnostic be of
+            DiagnosticMissingUtxos{} ->
+                BuildResolveUtxo msg
+            DiagnosticUnsupportedNetwork{} ->
+                BuildResolveParams msg
+            DiagnosticUnsupportedAction{} ->
+                BuildInternalError msg
+            DiagnosticTranslateFailed{} ->
+                BuildInternalError msg
+            DiagnosticScriptEvaluationFailed{} ->
+                BuildBuildError msg
+            DiagnosticInsufficientFee{} ->
+                BuildBuildError msg
+            DiagnosticFeeNotConverged ->
+                BuildBuildError msg
+            DiagnosticCollateralShortfall{} ->
+                BuildBuildError msg
+            DiagnosticBumpFeeFailed{} ->
+                BuildBuildError msg
+            DiagnosticChecksFailed{} ->
+                BuildBuildError msg
+            DiagnosticFeeAlignmentFailed{} ->
+                case phase of
+                    BuildPhaseFeeAlignment ->
+                        BuildBuildError msg
+                    _ -> BuildBuildError msg

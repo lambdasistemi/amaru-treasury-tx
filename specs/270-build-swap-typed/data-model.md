@@ -8,7 +8,36 @@ Five new or extended entities. Field shapes are the contract; module placement i
 
 ---
 
-## 1. `BuildFailure` (NEW)
+## 0. Spec correction — existing types reused
+
+Closer audit of the codebase (commit `188c2ca1` baseline) discovered three load-bearing types **already in place** that this plan must reuse rather than reinvent:
+
+| Existing type                                          | Module                                       | Reuse role                                                          |
+|--------------------------------------------------------|----------------------------------------------|---------------------------------------------------------------------|
+| `ActionBuildError { abePhase, abeContext, abeDiagnostic :: BuildDiagnostic }` | `Amaru.Treasury.Build.Error.Types`           | The typed failure already returned by `Build.Swap.runSwapAction`. Take it as `BuildFailure` directly (re-export under that alias from `Wizard.Failure`). |
+| `BuildDiagnostic` (11 constructors: `DiagnosticScriptEvaluationFailed`, `DiagnosticInsufficientFee`, `DiagnosticFeeNotConverged`, `DiagnosticCollateralShortfall`, `DiagnosticChecksFailed`, `DiagnosticBumpFeeFailed`, `DiagnosticMissingUtxos`, `DiagnosticFeeAlignmentFailed`, `DiagnosticTranslateFailed`, `DiagnosticUnsupportedAction`, `DiagnosticUnsupportedNetwork`) | same module | The real per-variant taxonomy the harness covers. **11 constructors, not the 12 I sketched below.** |
+| `TxBuildOutput { txoIntent, txoResult :: TxBuildOutputResult }` + `TxBuildSuccess { tbsTxCbor, tbsReport }` + `BuildFailure { bfCode, bfMessage }` | `Amaru.Treasury.Report`                      | The canonical on-the-wire envelope already emitted as `report.json`. `buildSwapTx` returns the success arm directly; the string-tagged `Report.BuildFailure` is what serialises into `report.json` / `SwapBuildResponse.buildFailure` (`tag := bfCode`, `detail := bfMessage`). |
+
+**Sectional consequences**:
+
+- §1 below — the speculative 12-constructor `BuildFailure` table is dropped. The real surface is the 11 `BuildDiagnostic` constructors above, embedded in `ActionBuildError`.
+- §3 below — `buildSwapTx`'s signature uses `IO (Either ... ...)` (mirroring the existing `buildSwapIntent` shape, NOT `ExceptT`). Concretely:
+  ```haskell
+  buildSwapTx
+    :: GlobalOpts
+    -> Backend
+    -> SwapIntent
+    -> Tracer IO BuildEvent
+    -> IO (Either ActionBuildError TxBuildSuccess)
+  ```
+- §4 below — `failureTagOfBuild :: ActionBuildError -> FailureTag`. Maps the `BuildDiagnostic` constructor to `tag`; carries the operator-facing one-liner from `Render.hs` into `detail`; the `field` reference table at the bottom is keyed by `BuildDiagnostic` constructor.
+- The only ungated exit in `Build.Swap` is the `error "treasury build: unexpected context request"` lambda at line 158 of `lib/Amaru/Treasury/Build/Swap.hs`. The audit task T001 covers replacing it with a typed variant OR proving unreachability + leaving an `error` with a `# NOTE` justification.
+
+The §1 / §3 / §4 text below is left intact for traceability but is **superseded by this section** wherever they conflict.
+
+---
+
+## 1. `BuildFailure` (was new — superseded by §0)
 
 **Module**: `Amaru.Treasury.Wizard.Failure`
 **Purpose**: Sum type returned in the `Left` arm of `buildSwapTx`. One constructor per distinct failure mode in the `Build.Swap` pipeline. Every constructor's payload carries enough data for a UI to highlight the offending step / field.

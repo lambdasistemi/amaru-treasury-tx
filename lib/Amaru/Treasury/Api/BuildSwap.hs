@@ -39,6 +39,7 @@ module Amaru.Treasury.Api.BuildSwap
     , runBuildSwap
     ) where
 
+import Control.Exception (SomeException, try)
 import Control.Tracer (nullTracer)
 import Data.Aeson (FromJSON, ToJSON)
 import Data.ByteString.Lazy qualified as BSL
@@ -241,10 +242,23 @@ runBuildSwap g backend req =
     case mapToWizardOpts req of
         Left wf -> pure (failureResponse wf)
         Right opts -> do
-            r <- buildSwapIntent g opts backend nullTracer
+            -- Catch any IOException that escapes the typed-Either
+            -- contract (deep bech32 parses, network drops, etc.)
+            -- so the HTTP request always gets a structured body
+            -- rather than a 500 + "Something went wrong".
+            r <- try @SomeException (buildSwapIntent g opts backend nullTracer)
             case r of
-                Left wf -> pure (failureResponse wf)
-                Right someIntent ->
+                Left e ->
+                    pure
+                        ( failureResponse
+                            ( ResolveResolver
+                                ( "uncaught exception: "
+                                    <> T.pack (show e)
+                                )
+                            )
+                        )
+                Right (Left wf) -> pure (failureResponse wf)
+                Right (Right someIntent) ->
                     pure
                         SwapBuildResponse
                             { sbrIntentJson =

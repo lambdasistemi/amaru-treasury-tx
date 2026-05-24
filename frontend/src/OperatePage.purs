@@ -12,6 +12,8 @@ module OperatePage (component) where
 
 import Prelude
 
+import Control.Alt ((<|>))
+
 import Affjax.RequestBody as RB
 import Affjax.ResponseFormat as RF
 import Affjax.Web as AX
@@ -217,7 +219,9 @@ formColumn st =
     , formSection "02" "Wallet"
         "Operator bech32 address — fuel + collateral + change."
         [ fieldV "wallet" st.walletAddr SetWalletAddr "addr1q…" true
-            (validateWalletAddr st.walletAddr)
+            ( validateWalletAddr st.walletAddr
+                <|> serverFieldError st "wallet_addr"
+            )
         ]
     , formSection "03" "Amount"
         "Either a fixed USDM target plus chunk count, or sweep \
@@ -284,6 +288,23 @@ formErrors st =
     signersErr = validateSigners st.extraSigners
   in
     Array.catMaybes [ addrErr, signersErr ]
+
+-- | Pull a server-side typed-failure diagnostic targeted at
+-- | the given form-field identifier ('sbrFailureField'
+-- | matches the supplied @fieldId@ — same snake_case as
+-- | 'Amaru.Treasury.Wizard.Failure.fieldToText').  Returns
+-- | the human-readable diagnostic so the field can
+-- | highlight + caption the same way client-side
+-- | validation does.
+serverFieldError :: State -> String -> Maybe String
+serverFieldError st fieldId = case st.result of
+  Result j -> do
+    serverField <- lookupString "sbrFailureField" j
+    if serverField == fieldId then
+      lookupString "sbrFailureReason" j
+    else
+      Nothing
+  _ -> Nothing
 
 -- | Bech32 sanity for the operator wallet input.  Doesn't
 -- | re-implement the full bech32 decoder (the api will

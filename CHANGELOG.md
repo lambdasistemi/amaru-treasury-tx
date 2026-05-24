@@ -4,18 +4,23 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.16.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.15.0...v0.2.16.0) (2026-05-24)
+
 ### Features
 
-* **wizard:** typed `buildSwapTx :: GlobalOpts -> Backend -> SomeTreasuryIntent -> Tracer IO BuildEvent -> IO (Either BuildFailure TxBuildSuccess)` lands as the load-bearing pure-Either tx-build entry point.  CLI keeps byte-identical output via shared `runFromIntentEither`.  Per-variant harness covers every `BuildDiagnostic` constructor reachable from `Build.Swap` ([#269](https://github.com/lambdasistemi/amaru-treasury-tx/issues/269)).
-* **api:** `POST /v1/build/swap` returns both the typed intent JSON AND the built tx CBOR + report in one call.  Extended `SwapBuildResponse` with `sbrCborHex`, `sbrReport`, `sbrBuildFailureTag` (all nullable; existing consumers reading only `sbrIntentJson` keep working).
-* **operate:** `/operate` CBOR + Report tabs populate from the response; status banner surfaces typed `BuildFailure` / `WizardFailure` instead of staying on "Built".  Form-level validation catches the common typo / missing-cosigner cases before the backend round-trip — wallet must be a mainnet bech32, at least one co-signer is required.
-* **wizard:** `sysexitsForBuild :: BuildFailure -> Int` mirrors the existing `sysexitsFor` for `WizardFailure` (same 64/69/70 taxonomy).
-* **wizard:** `Amaru.Treasury.Wizard.Event` re-exports `BuildEvent` + `renderBuildEvent` from the existing `Build.Trace`, giving the swap-wizard tree one stable import path symmetric with `WizardEvent`.
+* **269:** Wizard.Event.BuildEvent + renderBuildEvent (T003) ([fb7930a](https://github.com/lambdasistemi/amaru-treasury-tx/commit/fb7930a44fb0feffec758979c0c82a8bec8dfa29))
+* **269:** sysexitsForBuild :: BuildFailure -> Int (T005) ([638694a](https://github.com/lambdasistemi/amaru-treasury-tx/commit/638694a9b785d6b8af96c8a252ecf8f877cd3c84))
+* **269:** buildSwapTx + projectBuildError + per-variant harness  (T006 + T008) ([18b8eb1](https://github.com/lambdasistemi/amaru-treasury-tx/commit/18b8eb1683fb4ac264cecbbba8b128170836182f))
+* **269:** extend SwapBuildResponse + wire runBuildSwap to buildSwapTx  (US3 backend — T020 + T021 + T022 + T023) ([dba953e](https://github.com/lambdasistemi/amaru-treasury-tx/commit/dba953e58c2af859f2c858390aa2f2c581c2fb1d))
+* **269:** /operate populates CBOR + Report tabs from response  (US3 frontend — T024 + T025 + T026 partial) ([c5b92f7](https://github.com/lambdasistemi/amaru-treasury-tx/commit/c5b92f76195dac3c3ab3bbfa95fee7bdf3604b94))
+* **269:** /operate status banner surfaces typed failure  (US3 — T026) ([7f42a07](https://github.com/lambdasistemi/amaru-treasury-tx/commit/7f42a071fb58d1cf4bf80f8cb44c56f34f3f61e4))
+* **269:** /operate form-level validation — wallet bech32 + co-signers  (US3 — T027 UX) ([ec39c87](https://github.com/lambdasistemi/amaru-treasury-tx/commit/ec39c877381fb14a8beabb340d208e5c61bd70cd))
+* **269:** CBOR tab serves both bare hex + cardano-cli envelope; gate polish ([8064c60](https://github.com/lambdasistemi/amaru-treasury-tx/commit/8064c6017fcc9a98c88a132324f73ad9c9e23f02))
 
-### Fixes
+### Bug Fixes
 
-* **docker:** image ships every frontend asset (mirror the whole derivation) instead of a hand-maintained per-file `cp` list — fixes the missing `json-tree.css` 404 on prod after the `browser-json-tree` flake input landed in v0.2.15.0.
-* **jsontree:** dark-mode `--jt-*` token overrides via `[data-theme="dark"]`; copy chip subdued look; `.json-tree-wrapper` background follows the project's sys-color tokens.
+* **269:** docker image — ship every frontend asset, not a fixed list ([eb9caff](https://github.com/lambdasistemi/amaru-treasury-tx/commit/eb9caff7e799d6765d8549cbc555c9e07bd977c7))
+* **269:** JsonTree styling — dark mode + .v-copy--block chip ([bab912c](https://github.com/lambdasistemi/amaru-treasury-tx/commit/bab912c12c32a71090a1309037b5a86ff09afaf9))
 
 ## [0.2.15.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.14.0...v0.2.15.0) (2026-05-24)
 

@@ -33,6 +33,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 
+import JsonView as JsonView
 import Routing (Route(..))
 import Shell
   ( Scope(..)
@@ -523,8 +524,18 @@ previewTabs active =
 previewBody :: forall m. State -> H.ComponentHTML Action () m
 previewBody st = case st.activeTab of
   TabIntent ->
-    HH.pre [ HP.classes [ cn "json-pretty" ] ]
-      [ HH.text (Argonaut.stringify (intentPreview st)) ]
+    -- Wrap the intent in a single "details" super-key so
+    -- the same collapse UX as the View page applies:
+    -- single click opens one level, double click
+    -- recursively expands the whole subtree.
+    HH.div
+      [ HP.classes [ cn "json-tree-wrapper" ] ]
+      [ JsonView.renderWith
+          { initiallyOpen: true }
+          ( Argonaut.fromObject
+              (FO.singleton "details" (intentPreview st))
+          )
+      ]
   TabCli ->
     HH.pre [ HP.classes [ cn "cli-block" ] ]
       [ HH.text (cliCommand st) ]

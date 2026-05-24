@@ -118,6 +118,25 @@
   pointer-events: none;
 }
 .field__hint { color: var(--md-sys-color-on-surface-variant); font-size: 12px; line-height: 1.45; }
+
+/* Inline form validation — outline the offending input
+   in the error color and surface a one-line caption
+   underneath.  Mirrors the typed-failure highlight that
+   server-side BuildFailure / WizardFailure variants ask
+   the frontend to apply on the matching `[data-field]`. */
+.field__input[data-error="true"],
+.field__input[data-error="true"]:focus {
+  border-color: var(--md-sys-color-error);
+  box-shadow: 0 0 0 3px rgb(186 26 26 / 0.18);
+}
+.field__error {
+  margin-top: 6px;
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: var(--md-sys-color-error);
+  line-height: 1.45;
+}
 input[type="number"].field__input::-webkit-outer-spin-button,
 input[type="number"].field__input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="number"].field__input { -moz-appearance: textfield; }

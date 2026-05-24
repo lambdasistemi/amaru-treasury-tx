@@ -24,6 +24,8 @@ import Data.Either (Either(..))
 import Data.Int as Int
 import Data.Maybe (Maybe(..))
 import Data.Number as Number
+import Data.String as String
+import Data.String.Common (joinWith) as T
 import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
@@ -214,7 +216,9 @@ formColumn st =
         [ scopePicker st.scope ]
     , formSection "02" "Wallet"
         "Operator bech32 address — fuel + collateral + change."
-        [ field "wallet" st.walletAddr SetWalletAddr "addr1q…" true ]
+        [ fieldV "wallet" st.walletAddr SetWalletAddr "addr1q…" true
+            (validateWalletAddr st.walletAddr)
+        ]
     , formSection "03" "Amount"
         "Either a fixed USDM target plus chunk count, or sweep \
         \all wallet ADA."
@@ -258,13 +262,56 @@ formColumn st =
         ]
     , formSection "07" "Extra signers"
         "Other scope owners that must co-sign."
-        [ signersPicker st.scope st.extraSigners ]
+        [ signersPicker st.scope st.extraSigners
+        , case validateSigners st.extraSigners of
+            Just msg -> fieldError msg
+            Nothing -> HH.text ""
+        ]
     -- Metadata is baked into the image (single-tenant
     -- deploy) — no per-request override.  Keeps
     -- 'state.metadataPath' for the CLI preview, but the
     -- form no longer pretends it's an operator input.
-    , buildActions
+    , buildActions (formErrors st)
     ]
+
+-- | All form-level validation errors keyed by section.
+-- | Used by 'buildActions' to disable the Build button and
+-- | by the form to surface inline messages.
+formErrors :: State -> Array String
+formErrors st =
+  let
+    addrErr = validateWalletAddr st.walletAddr
+    signersErr = validateSigners st.extraSigners
+  in
+    Array.catMaybes [ addrErr, signersErr ]
+
+-- | Bech32 sanity for the operator wallet input.  Doesn't
+-- | re-implement the full bech32 decoder (the api will
+-- | validate properly); just catches the common typo cases
+-- | so the operator can't waste a round-trip on an obviously
+-- | malformed input.
+validateWalletAddr :: String -> Maybe String
+validateWalletAddr s
+  | s == "" = Just "wallet address is required"
+  | not (String.take 5 s == "addr1") =
+      Just "must be a mainnet bech32 (starts with addr1…)"
+  | String.length s < 50 =
+      Just "address looks truncated"
+  | otherwise = Nothing
+
+-- | Co-signer threshold sanity.  Single-signer swap txs
+-- | almost always fail the permissions script's multisig
+-- | check (the script wants the scope's full owner set or a
+-- | threshold of them).  Warn upfront so the operator doesn't
+-- | learn this from a Plutus CekError stack-dump after
+-- | spending a backend round-trip.
+validateSigners :: Array Scope -> Maybe String
+validateSigners xs
+  | Array.null xs =
+      Just
+        "the permissions script usually requires at least one \
+        \co-signer; tick the other scope owners that must sign"
+  | otherwise = Nothing
 
 formSection
   :: forall m
@@ -295,20 +342,59 @@ field
   -> Boolean
   -> H.ComponentHTML Action () m
 field label_ value_ action placeholder mono =
+  fieldV label_ value_ action placeholder mono Nothing
+
+-- | 'field' + an optional validation error.  When the
+-- | error is 'Just', the input gets a @data-error="true"@
+-- | attribute (styled red by style-build.css) and the
+-- | error text is shown beneath the input.
+fieldV
+  :: forall m
+   . String
+  -> String
+  -> (String -> Action)
+  -> String
+  -> Boolean
+  -> Maybe String
+  -> H.ComponentHTML Action () m
+fieldV label_ value_ action placeholder mono err =
   HH.label [ HP.classes [ cn "field" ] ]
-    [ HH.span [ HP.classes [ cn "field__label" ] ]
-        [ HH.text label_ ]
-    , HH.input
-        [ HP.value value_
-        , HP.type_ HP.InputText
-        , HP.placeholder placeholder
-        , HP.classes
-            ( [ cn "field__input" ]
-                <> if mono then [ cn "field__input--mono" ] else []
-            )
-        , HE.onValueInput action
-        ]
-    ]
+    ( [ HH.span [ HP.classes [ cn "field__label" ] ]
+          [ HH.text label_ ]
+      , HH.input
+          ( [ HP.value value_
+            , HP.type_ HP.InputText
+            , HP.placeholder placeholder
+            , HP.classes
+                ( [ cn "field__input" ]
+                    <>
+                      if mono then
+                        [ cn "field__input--mono" ]
+                      else []
+                )
+            , HE.onValueInput action
+            ]
+              <> case err of
+                Just _ ->
+                  [ HP.attr
+                      (HH.AttrName "data-error")
+                      "true"
+                  ]
+                Nothing -> []
+          )
+      ]
+        <> case err of
+          Just msg -> [ fieldError msg ]
+          Nothing -> []
+    )
+
+-- | Inline error / warning hint shown beneath a form
+-- | input. Styled by style-build.css via the
+-- | .field__error class.
+fieldError :: forall m. String -> H.ComponentHTML Action () m
+fieldError msg =
+  HH.div [ HP.classes [ cn "field__error" ] ]
+    [ HH.text msg ]
 
 fieldNum
   :: forall m
@@ -421,20 +507,35 @@ signersPicker current selected =
           <> [ HH.text (scopeLong s) ]
       )
 
-buildActions :: forall m. H.ComponentHTML Action () m
-buildActions =
-  HH.div [ HP.classes [ cn "build-actions" ] ]
-    [ HH.button
-        [ HP.classes [ cn "btn", cn "btn--ghost" ]
-        , HE.onClick (\_ -> ClickReset)
-        ]
-        [ HH.text "Reset" ]
-    , HH.button
-        [ HP.classes [ cn "btn", cn "btn--filled" ]
-        , HE.onClick (\_ -> ClickBuild)
-        ]
-        [ HH.text "Build unsigned tx" ]
-    ]
+buildActions
+  :: forall m
+   . Array String
+  -> H.ComponentHTML Action () m
+buildActions errs =
+  let
+    blocked = not (Array.null errs)
+    title = case errs of
+      [] -> "Build unsigned tx"
+      _ ->
+        "fix form errors:\n• "
+          <> T.joinWith "\n• " (map identity errs)
+  in
+    HH.div [ HP.classes [ cn "build-actions" ] ]
+      [ HH.button
+          [ HP.classes [ cn "btn", cn "btn--ghost" ]
+          , HE.onClick (\_ -> ClickReset)
+          ]
+          [ HH.text "Reset" ]
+      , HH.button
+          ( [ HP.classes [ cn "btn", cn "btn--filled" ]
+            , HP.title title
+            , HE.onClick (\_ -> ClickBuild)
+            ]
+              <>
+                if blocked then [ HP.disabled true ] else []
+          )
+          [ HH.text "Build unsigned tx" ]
+      ]
 
 -- ---------------------------------------------------------------------------
 -- Preview column

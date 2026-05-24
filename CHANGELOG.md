@@ -4,6 +4,42 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.15.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.14.0...v0.2.15.0) (2026-05-24)
+
+### Features
+
+* **239:** derive recent-txs manifest at build time ([8611bff](https://github.com/lambdasistemi/amaru-treasury-tx/commit/8611bff509b21a8e910a6618349b146abfb7c819))
+* **239:** bake build identity into the image ([c10a4d2](https://github.com/lambdasistemi/amaru-treasury-tx/commit/c10a4d24ebbd0b80d2b3bfebe7e98ca4c135a3ff))
+* **239:** servant api surface + halogen frontend scaffold ([8279ab1](https://github.com/lambdasistemi/amaru-treasury-tx/commit/8279ab13849b8460d5b249716ea6a1888bc0b5a5))
+* **239:** servant Handlers + mkApplication wired through wai ([ae08f77](https://github.com/lambdasistemi/amaru-treasury-tx/commit/ae08f777c75c182b2c0d0a49c875a5f9185d8e8c))
+* **239:** http binary + docker image + production compose recipe ([95c812f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/95c812fb38350ac3108a3e86a5abe07b7712be4e))
+* **239:** halogen dashboard fetches + renders all four scope JSONs ([b0ad2b7](https://github.com/lambdasistemi/amaru-treasury-tx/commit/b0ad2b77d059ff6f4479789f0b835c268c5bb6c5))
+* **239:** typed JsonView with txid/policy/address resolution + lambdasistemi CSS ([3f3d87e](https://github.com/lambdasistemi/amaru-treasury-tx/commit/3f3d87eda8f534214818e37ea80bc4a763fabb5d))
+* **239:** 30 s auto-refresh tick (FR-012) ([06b3005](https://github.com/lambdasistemi/amaru-treasury-tx/commit/06b300573adf67fdf395df0dcf1ab96106b0cb85))
+* **239:** polish dashboard — status banner, summary stat cards, request timeout ([5ac9e6e](https://github.com/lambdasistemi/amaru-treasury-tx/commit/5ac9e6ec35168350fc217cfbf5d61db60ad4ffea))
+* **239:** Material Web Components UI + server-side cache + dev variant ([0c1d7e6](https://github.com/lambdasistemi/amaru-treasury-tx/commit/0c1d7e6121db8cc045bb912db200236b04ea6af7))
+* **scripts:** build-may-antithesis-disburse.sh ([857efa0](https://github.com/lambdasistemi/amaru-treasury-tx/commit/857efa0bd69907e456a099e7031497a33ddf0874))
+* **transactions:** submit may Antithesis 400 000 USDM disburse + archive ([bdee6fa](https://github.com/lambdasistemi/amaru-treasury-tx/commit/bdee6fa45feb903fb525ab4e09bd3f4716ff98b0))
+* **259:** typed WizardFailure / BuildFailure / FieldId ([c8d7d5a](https://github.com/lambdasistemi/amaru-treasury-tx/commit/c8d7d5a0dff83aa1e9c116eda469bca0dc675f12))
+* **259:** Wizard.Event re-export shim for typed tracer events ([9b396b8](https://github.com/lambdasistemi/amaru-treasury-tx/commit/9b396b8ed31dd42d5f933758ef11021fc0c59883))
+* **259:** pure-Either tryResolveSwap/RateParameters helpers + buildSwapIntent stub ([b9dd6d2](https://github.com/lambdasistemi/amaru-treasury-tx/commit/b9dd6d2ee1c5a4e30a8a95f00813b5bb9261216a))
+* **259:** buildSwapIntent body — 240-line port with typed failures ([b6d5b00](https://github.com/lambdasistemi/amaru-treasury-tx/commit/b6d5b00e9baa1af02b9a3675b2ae68321b575d0b))
+* **259:** rewire runWizard through buildSwapIntent + sysexits exit codes ([cd7eddd](https://github.com/lambdasistemi/amaru-treasury-tx/commit/cd7eddd34d3f7da2bbc335de0f9ce90ada023357))
+* **263:** POST /v1/build/swap — HTTP wrapper around buildSwapIntent ([af781b4](https://github.com/lambdasistemi/amaru-treasury-tx/commit/af781b4889de448ae2c0017334a814198bee647b))
+* **263:** SPA fallback so direct loads of /build serve index.html ([da71458](https://github.com/lambdasistemi/amaru-treasury-tx/commit/da71458bb23914d9420219904d8da9b97a88cb8e))
+* **263:** /build page — minimal form + POST loop ([49bd78a](https://github.com/lambdasistemi/amaru-treasury-tx/commit/49bd78a3d96e543be9f2808c6f3605d8cb32cedd))
+* **263:** catch uncaught exceptions in runBuildSwap (#265 follow-up) ([bfe48df](https://github.com/lambdasistemi/amaru-treasury-tx/commit/bfe48df6511505d598e97036404a77e0ae3319b0))
+* **263:** rename Build→Operate, share chrome via Shell, adopt real design CSS ([3f6c9ad](https://github.com/lambdasistemi/amaru-treasury-tx/commit/3f6c9adb211b4950abe8d56bcfa8c08d1152f2d7))
+* **263:** JsonView tree — CAD brackets, recursive dblclick, copy buttons ([dcaf6b5](https://github.com/lambdasistemi/amaru-treasury-tx/commit/dcaf6b534dabe57fc3d457a3674b7aaae7212006))
+* **263:** structure-level copy + hanging-indent wrapped values ([f4d58e3](https://github.com/lambdasistemi/amaru-treasury-tx/commit/f4d58e39dc78aa5081f11d60238bdf547dc9059d))
+
+### Bug Fixes
+
+* **239:** bind /node/mainnet (not /node/mainnet/ipc) — production cardano-node creates the socket at /node/mainnet/node.socket ([09f592b](https://github.com/lambdasistemi/amaru-treasury-tx/commit/09f592b387a67316e67974c1505c2290dc9ab527))
+* **transactions:** correctly-redacted Antithesis invoice CID ([1dfbe26](https://github.com/lambdasistemi/amaru-treasury-tx/commit/1dfbe26cfc9137aba45aa007dcc37b0bf247f95f))
+* **239:** drop redundant cardanoscan row + add missing Contingency scope card ([59a5db7](https://github.com/lambdasistemi/amaru-treasury-tx/commit/59a5db7c461263f4393b029992122da7ca9b4a57))
+* **263:** JsonView txin links + dedupe link underline ([a144a53](https://github.com/lambdasistemi/amaru-treasury-tx/commit/a144a53bdd82fcb87c21220bdc239d7d04514340))
+
 ## [0.2.14.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.12.0...v0.2.14.0) (2026-05-22)
 
 ### Features

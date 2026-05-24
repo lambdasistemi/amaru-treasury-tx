@@ -285,7 +285,19 @@ component =
                 [ HP.classes
                     [ HH.ClassName "json-tree-wrapper" ]
                 ]
-                [ JsonView.render
+                [ HH.button
+                    [ HP.classes
+                        [ HH.ClassName
+                            "v-copy v-copy--block"
+                        ]
+                    , HP.attr
+                        (HH.AttrName "data-copy")
+                        (Argonaut.stringify j)
+                    , HP.title "Copy inspect JSON"
+                    , HP.type_ HP.ButtonButton
+                    ]
+                    [ HH.text "⎘ Copy inspect JSON" ]
+                , JsonView.render
                     ( Argonaut.fromObject
                         (FO.singleton "details" j)
                     )

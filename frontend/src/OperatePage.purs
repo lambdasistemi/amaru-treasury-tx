@@ -530,7 +530,10 @@ previewBody st = case st.activeTab of
     -- recursively expands the whole subtree.
     HH.div
       [ HP.classes [ cn "json-tree-wrapper" ] ]
-      [ JsonView.renderWith
+      [ copyBlockButton
+          (Argonaut.stringify (intentPreview st))
+          "Copy intent.json"
+      , JsonView.renderWith
           { initiallyOpen: true }
           ( Argonaut.fromObject
               (FO.singleton "details" (intentPreview st))
@@ -683,6 +686,22 @@ boolAttr false = "false"
 
 cn :: String -> HH.ClassName
 cn = HH.ClassName
+
+-- | Structure-level copy-to-clipboard button.  Renders
+-- | as a small chip above a preview block; the click is
+-- | picked up by 'JsonTreeBehaviour' which reads the
+-- | @data-copy@ attribute and writes it to the system
+-- | clipboard.
+copyBlockButton
+  :: forall m. String -> String -> H.ComponentHTML Action () m
+copyBlockButton payload label =
+  HH.button
+    [ HP.classes [ cn "v-copy v-copy--block" ]
+    , HP.attr (HH.AttrName "data-copy") payload
+    , HP.title label
+    , HP.type_ HP.ButtonButton
+    ]
+    [ HH.text ("⎘ " <> label) ]
 
 -- ---------------------------------------------------------------------------
 -- Handlers

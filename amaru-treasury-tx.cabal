@@ -222,6 +222,7 @@ library
     Amaru.Treasury.Vault.Age
     Amaru.Treasury.Vault.Witness
     Amaru.Treasury.Wizard.Common
+    Amaru.Treasury.Wizard.Disburse
     Amaru.Treasury.Wizard.Event
     Amaru.Treasury.Wizard.Failure
     Amaru.Treasury.Wizard.InputControl
@@ -537,6 +538,7 @@ test-suite unit-tests
     Amaru.Treasury.UtxoSelectSpec
     Amaru.Treasury.Vault.AgeSpec
     Amaru.Treasury.Vault.WitnessSpec
+    Amaru.Treasury.Wizard.BuildDisburseSpec
     Amaru.Treasury.Wizard.BuildSwapSpec
     Amaru.Treasury.Wizard.EventSpec
     Amaru.Treasury.Wizard.FailureSpec

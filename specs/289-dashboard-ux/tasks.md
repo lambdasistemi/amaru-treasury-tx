@@ -61,10 +61,10 @@ Eight bisect-safe slices.  Each commit body trailer: `Tasks: T289-S<n>`.  Persis
 
 ## Slice H — Theme palette + hero scale
 
-- [ ] T289-S8 [US8] Refine `frontend/dist/styles.css` + `dist/style-build.css` theme tokens — narrower hue range, higher contrast on text/control pairs (target WCAG AA on body text; AAA on critical numeric values like balances).
-- [ ] T289-S8 [US8] Reduce hero spacing on `/` so the per-scope cards appear in the first fold on desktop (1280 px viewport) AND mobile (390 px viewport).  Set concrete `max-height` budgets in the smoke proof.
-- [ ] T289-S8 Smoke proof in `WIP.md`: contrast checks via Playwright + axe-core or a small JS check (every text/background pair ≥ 4.5:1).  Hero height ≤ specified budget at each viewport.
-- [ ] T289-S8 Commit: `feat(289): theme palette refinement + reduced hero scale` with `Tasks: T289-S8` trailer.
+- [X] T289-S8 [US8] Refine `frontend/dist/styles.css` + `dist/style-build.css` theme tokens — narrower hue range, higher contrast on text/control pairs (target WCAG AA on body text; AAA on critical numeric values like balances).
+- [X] T289-S8 [US8] Reduce hero spacing on `/` so the per-scope cards appear in the first fold on desktop (1280 px viewport) AND mobile (390 px viewport).  Set concrete `max-height` budgets in the smoke proof.
+- [X] T289-S8 Smoke proof in `WIP.md`: contrast checks via Playwright + axe-core or a small JS check (every text/background pair ≥ 4.5:1).  Hero height ≤ specified budget at each viewport.
+- [X] T289-S8 Commit: `feat(289): theme palette refinement + reduced hero scale` with `Tasks: T289-S8` trailer.
 
 ## Dependencies
 

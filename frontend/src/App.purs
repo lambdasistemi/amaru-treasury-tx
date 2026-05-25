@@ -215,16 +215,22 @@ component =
   siteHeader st =
     HH.div
       [ HP.classes [ HH.ClassName "site-header" ] ]
+      -- #289 slice H — shrunk hero scale: heading drops from
+      -- `display-medium` to `headline-medium`, lede drops from
+      -- `body-large` to `body-medium`, and the `.site-header`
+      -- CSS slashes its padding so the per-scope cards land
+      -- in the first viewport fold (≤ 800 px desktop /
+      -- ≤ 700 px mobile).
       [ HH.h1
           [ HP.classes
-              [ HH.ClassName "md-typescale-display-medium"
+              [ HH.ClassName "md-typescale-headline-medium"
               , HH.ClassName "site-header__title"
               ]
           ]
           [ HH.text "Amaru Treasury" ]
       , HH.p
           [ HP.classes
-              [ HH.ClassName "md-typescale-body-large"
+              [ HH.ClassName "md-typescale-body-medium"
               , HH.ClassName "site-header__lede"
               ]
           ]

@@ -89,6 +89,13 @@ trailers should use the task IDs below, for example `Tasks: T286001`.
 - [X] T286024 Commit Slice 4 docs/metadata changes and push. Keep the PR in
   draft until behavior slices and gate evidence are reviewed.
 
+## Slice 5 - CD deploy smoke
+
+- [X] T286025 Add a post-deploy smoke to the image publish workflow that
+  checks the production HTTP boundary after `docker compose up -d`.
+- [X] T286026 Verify the deploy smoke wiring locally, run the branch gate,
+  update PR metadata, and push.
+
 ## Dependencies
 
 ```text
@@ -96,6 +103,7 @@ Slice 1 blocks all behavior work.
 Slice 2 depends on Slice 1.
 Slice 3 depends on Slice 1 and can run after or alongside review of Slice 2.
 Slice 4 depends on Slices 2 and 3 for accurate docs.
+Slice 5 depends on Slice 3 and Slice 4 for the final API startup contract.
 ```
 
 ## Parallelization Notes

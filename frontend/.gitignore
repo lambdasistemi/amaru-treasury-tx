@@ -5,3 +5,9 @@ package-lock.json
 dist/index.js
 dist/deps.js
 dist/bundle.js
+# #289 slice A — Playwright artefacts are local-only; the
+# `responsive.spec.ts` harness is committed, the
+# screenshots it captures are not.
+test/playwright/screenshots/
+test/playwright/test-results/
+test/playwright/playwright-report/

@@ -7,12 +7,12 @@ Eight bisect-safe slices.  Each commit body trailer: `Tasks: T289-S<n>`.  Persis
 
 ## Slice A — Mobile topbar + Playwright responsive smoke
 
-- [ ] T289-S1 [US1] Fix the topbar (in `frontend/src/Shell.purs`) so it doesn't overflow at 320 px / 390 px viewports.  Pattern: `flex-wrap` if the link set is short enough, OR collapse to a hamburger drawer below `600 px`.  Driver picks based on link count + theme-toggle width.
-- [ ] T289-S1 [US1] Add accessible names: every topbar link + the theme toggle carries `aria-label`.
-- [ ] T289-S1 [US9] Add `frontend/test/playwright/responsive.spec.ts` (or extend the existing Playwright harness) covering `/`, `/operate`, `/books` at 320 / 390 / 1024 / 1280 px.  Assert `document.documentElement.scrollWidth <= clientWidth` at every viewport on every page.  Capture screenshots into `frontend/test/playwright/screenshots/`.
-- [ ] T289-S1 [US9] Wire the responsive smoke into the dev-side smoke recipe (deploy + Playwright run).  Document the deploy ritual in `WIP.md`.
-- [ ] T289-S1 Smoke proof in `WIP.md`: scrollWidth ≤ clientWidth at every viewport.  Topbar links visible and keyboard-focusable.
-- [ ] T289-S1 Commit: `feat(289): mobile topbar + Playwright responsive smoke harness` with `Tasks: T289-S1` trailer.
+- [X] T289-S1 [US1] Fix the topbar (in `frontend/src/Shell.purs`) so it doesn't overflow at 320 px / 390 px viewports.  Pattern: `flex-wrap` if the link set is short enough, OR collapse to a hamburger drawer below `600 px`.  Driver picks based on link count + theme-toggle width.
+- [X] T289-S1 [US1] Add accessible names: every topbar link + the theme toggle carries `aria-label`.
+- [X] T289-S1 [US9] Add `frontend/test/playwright/responsive.spec.ts` (or extend the existing Playwright harness) covering `/`, `/operate`, `/books` at 320 / 390 / 1024 / 1280 px.  Assert `document.documentElement.scrollWidth <= clientWidth` at every viewport on every page.  Capture screenshots into `frontend/test/playwright/screenshots/`.
+- [X] T289-S1 [US9] Wire the responsive smoke into the dev-side smoke recipe (deploy + Playwright run).  Document the deploy ritual in `WIP.md`.
+- [X] T289-S1 Smoke proof in `WIP.md`: scrollWidth ≤ clientWidth at every viewport.  Topbar links visible and keyboard-focusable.
+- [X] T289-S1 Commit: `feat(289): mobile topbar + Playwright responsive smoke harness` with `Tasks: T289-S1` trailer.
 
 ## Slice B — `/operate` sticky action bar
 

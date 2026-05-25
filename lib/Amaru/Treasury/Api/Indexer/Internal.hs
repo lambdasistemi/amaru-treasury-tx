@@ -19,6 +19,7 @@ module Amaru.Treasury.Api.Indexer.Internal
     ( setReadinessForTest
     ) where
 
+import Control.Concurrent.Async (cancel)
 import Control.Concurrent.STM (atomically, writeTVar)
 
 import Amaru.Treasury.Api.Indexer
@@ -26,11 +27,34 @@ import Amaru.Treasury.Api.Indexer
     , Readiness
     )
 
-{- | Atomically replace the readiness 'TVar' contents.
-Used by the unit suite to step the readiness state
-machine through the transitions the real chain-sync
-follower (Slice 3) will drive.
+{- | Deterministically replace the readiness 'TVar'
+contents. Cancels the in-process bridge thread first so
+the upstream follower can no longer mirror its
+@Follower.Readiness@ over the test's write.
+
+The race motivation: 'withApiIndexer' spawns a
+'bridgeReadiness' thread that wakes on every upstream
+readiness change and projects it into 'aiReadiness'.
+Tests that open 'withApiIndexer' against a missing-socket
+config get the supervisor's probe loop emitting
+@UpstreamDisconnected@ events, which the bridge projects
+to @rUpstreamUp = False@ — overwriting any test write
+that asked for 'Ready' or 'Lagging'. The fix is to kill
+the bridge before the test writes; after that, the
+'TVar' reflects exactly what the test injected for the
+remainder of the action.
+
+The cancel is idempotent ('Control.Concurrent.Async.cancel'
+on an already-finished 'Async' is a no-op), so calling
+'setReadinessForTest' multiple times in one test is
+safe — only the first call actually kills the bridge.
+
+Production code MUST NOT call this helper. Cancelling
+the bridge in a long-running container would freeze the
+readiness gate at whatever value the bridge last
+mirrored, defeating the FR-009 lag-503 contract.
 -}
 setReadinessForTest :: ApiIndexer -> Readiness -> IO ()
-setReadinessForTest apiIdx r =
+setReadinessForTest apiIdx r = do
+    cancel (aiBridge apiIdx)
     atomically $ writeTVar (aiReadiness apiIdx) r

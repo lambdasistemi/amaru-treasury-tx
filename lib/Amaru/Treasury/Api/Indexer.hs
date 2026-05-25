@@ -52,6 +52,9 @@ module Amaru.Treasury.Api.Indexer
       -- * Read operations
     , snapshotAt
     , snapshotUtxosAt
+
+      -- * Internal helpers (exposed for tests)
+    , toChainSyncCfg
     ) where
 
 import Cardano.Crypto.Hash.Class (hashFromBytes)
@@ -103,6 +106,7 @@ import Control.Concurrent.STM
     , retry
     , writeTVar
     )
+import Control.Monad (void)
 import Control.Tracer (Tracer)
 import Data.ByteString qualified as BS
 import Data.Maybe (fromMaybe)
@@ -160,6 +164,14 @@ data IndexerConfig = IndexerConfig
     -- reconnect attempt. Default
     -- 'Cardano.Node.Client.N2C.Probe.defaultProbeConfig'
     -- (chain-replay-tolerant; unbounded total timeout).
+    , icInterestSet :: !Follower.InterestSet
+    -- ^ Apply-time address filter (issue #158). The API
+    -- container constructs an 'IndexAddressSet' from the
+    -- 4 treasury scope addresses plus the SundaeSwap
+    -- order address, so the embedded indexer's RocksDB
+    -- stays bounded to the addresses the dashboard ever
+    -- queries. Tests typically pass 'IndexAll' to keep
+    -- the fixture surface minimal.
     }
 
 {- | Live readiness snapshot. The follower's bridge
@@ -231,6 +243,16 @@ data ApiIndexer = ApiIndexer
     -- ^ The upstream follower's supervised chain-sync
     -- thread. 'link'ed inside 'withApiIndexer'; callers
     -- typically don't need to link it again.
+    , aiBridge :: !(Async ())
+    -- ^ The 'bridgeReadiness' thread that mirrors the
+    -- upstream 'Follower.Readiness' into 'aiReadiness'.
+    -- Exposed so the test helper
+    -- 'Amaru.Treasury.Api.Indexer.Internal.setReadinessForTest'
+    -- can 'cancel' it before injecting a deterministic
+    -- readiness value — otherwise the bridge can
+    -- overwrite the test's write between the helper
+    -- returning and the handler reading.
+    -- Production handlers MUST NOT cancel this.
     , aiConfig :: !IndexerConfig
     -- ^ The configuration this indexer was opened with.
     }
@@ -274,9 +296,10 @@ withApiIndexer tracer cfg action = do
             handle
             $ \fh ->
                 withAsync
-                    ( bridgeReadiness
-                        (fhReadiness fh)
-                        readinessVar
+                    ( void $
+                        bridgeReadiness
+                            (fhReadiness fh)
+                            readinessVar
                     )
                     $ \bridge -> do
                         link bridge
@@ -286,6 +309,7 @@ withApiIndexer tracer cfg action = do
                                 { aiHandle = handle
                                 , aiReadiness = readinessVar
                                 , aiFollower = fhAsync fh
+                                , aiBridge = bridge
                                 , aiConfig = cfg
                                 }
 
@@ -304,6 +328,7 @@ toChainSyncCfg cfg =
         , csSecurityParamK = icSecurityParamK cfg
         , csReconnectPolicy = icReconnectPolicy cfg
         , csProbeConfig = icProbeConfig cfg
+        , csInterestSet = icInterestSet cfg
         }
 
 {- | Long-running bridge: block on changes to the

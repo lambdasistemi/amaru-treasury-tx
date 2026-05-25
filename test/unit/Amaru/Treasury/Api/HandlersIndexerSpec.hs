@@ -35,6 +35,7 @@ import Cardano.Node.Client.N2C.Probe (defaultProbeConfig)
 import Cardano.Node.Client.N2C.Reconnect (defaultReconnectPolicy)
 import Cardano.Node.Client.N2C.Trace (nullN2CTracer)
 import Cardano.Node.Client.Provider (Provider (..))
+import Cardano.Node.Client.UTxOIndexer.Follower (InterestSet (..))
 import Cardano.Node.Client.UTxOIndexer.Types qualified as Indexer
 import Cardano.Slotting.Slot (SlotNo (..))
 import Data.Aeson qualified as Aeson
@@ -315,6 +316,7 @@ withTestIndexer action =
                 , icSecurityParamK = 2160
                 , icReconnectPolicy = defaultReconnectPolicy
                 , icProbeConfig = defaultProbeConfig
+                , icInterestSet = IndexAll
                 }
             action
 

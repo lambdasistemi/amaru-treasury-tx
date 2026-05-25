@@ -36,6 +36,10 @@ import Cardano.Node.Client.N2C.Reconnect
     ( defaultReconnectPolicy
     )
 import Cardano.Node.Client.N2C.Trace (nullN2CTracer)
+import Cardano.Node.Client.UTxOIndexer.Follower
+    ( ChainSyncConfig (..)
+    , InterestSet (..)
+    )
 import Cardano.Node.Client.UTxOIndexer.Indexer qualified as Indexer
 import Cardano.Node.Client.UTxOIndexer.IndexerOp (UtxoOp (..))
 import Cardano.Node.Client.UTxOIndexer.Types
@@ -47,6 +51,7 @@ import Cardano.Node.Client.UTxOIndexer.Types
     )
 import Control.Concurrent.Async qualified as Async
 import Data.ByteString qualified as B
+import Data.Set qualified as Set
 import Data.Time.Clock (getCurrentTime)
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.IO.Temp (withSystemTempDirectory)
@@ -66,6 +71,7 @@ import Amaru.Treasury.Api.Indexer
     , Readiness (..)
     , ReadyState (..)
     , checkReady
+    , toChainSyncCfg
     , waitReady
     , withApiIndexer
     )
@@ -195,6 +201,32 @@ spec = describe "Amaru.Treasury.Api.Indexer" $ do
                             "waitReady did not finish within\
                             \ 1 s of the readiness flip"
 
+    describe "toChainSyncCfg"
+        $ it
+            "threads icInterestSet through to the upstream\
+            \ ChainSyncConfig (#158 plumbing)"
+        $ do
+            let addr = Address "addr-interest-set"
+                cfg =
+                    IndexerConfig
+                        { icDbPath = "/tmp/unused"
+                        , icSocketPath = "/tmp/unused.sock"
+                        , icNetworkMagic = NetworkMagic 42
+                        , icStartSlot = SlotNo 0
+                        , icLagThresholdSlots = 60
+                        , icByronEpochSlots = 86_400
+                        , icSecurityParamK = 2160
+                        , icReconnectPolicy =
+                            defaultReconnectPolicy
+                        , icProbeConfig = defaultProbeConfig
+                        , icInterestSet =
+                            IndexAddressSet
+                                (Set.singleton addr)
+                        }
+            csInterestSet (toChainSyncCfg cfg)
+                `shouldBe` IndexAddressSet
+                    (Set.singleton addr)
+
 -- ---------------------------------------------------------------------------
 -- Helpers
 
@@ -218,5 +250,6 @@ withTmpIndexer action =
                 , icSecurityParamK = 2160
                 , icReconnectPolicy = defaultReconnectPolicy
                 , icProbeConfig = defaultProbeConfig
+                , icInterestSet = IndexAll
                 }
             action

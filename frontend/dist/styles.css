@@ -132,8 +132,10 @@ html {
 }
 html, body { margin: 0; }
 body {
+  /* #289 slice H — shorter hero tint (was 360px) so the
+     gradient doesn't bleed into the first scope card. */
   background:
-    linear-gradient(180deg, var(--app-hero-tint), transparent 360px),
+    linear-gradient(180deg, var(--app-hero-tint), transparent 220px),
     var(--md-sys-color-background);
   color: var(--md-sys-color-on-background);
   min-height: 100dvh;
@@ -148,16 +150,19 @@ a {
 #app {
   width: min(100%, var(--app-shell-max));
   margin: 0 auto;
-  padding: 28px;
+  /* #289 slice H — slimmer outer padding so the hero +
+     status row + first scope card all fit in the first
+     viewport fold. */
+  padding: 16px 28px 28px;
 }
 #app > div {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 14px;
 }
 @media (max-width: 600px) {
-  #app { padding: 20px 14px; }
-  #app > div { gap: 18px; }
+  #app { padding: 12px 14px 20px; }
+  #app > div { gap: 10px; }
 }
 noscript {
   display: block;
@@ -202,13 +207,21 @@ md-text-button {
 }
 
 /* ---------- Site header ---------- */
+/* #289 slice H — compact hero.  The page used to lead with
+   a 60-pt display-medium heading + a 16-pt lede on a
+   centered-stack layout that pushed the per-scope cards
+   below the first viewport fold on both desktop and
+   mobile.  The new layout keeps the brand + lede but on a
+   single visual band: smaller heading, smaller lede,
+   tighter padding, no decorative gap.  Per-scope cards
+   land in the first 800 px (desktop) / 700 px (mobile). */
 .site-header {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 10px;
-  padding: 8px 0 4px 0;
+  gap: 4px;
+  padding: 4px 0 0 0;
 }
 .site-header__eyebrow {
   color: var(--md-sys-color-on-surface-variant);
@@ -217,8 +230,9 @@ md-text-button {
   font-weight: 700;
 }
 .site-header__title {
-  margin: 6px 0 10px 0;
+  margin: 0;
   color: var(--md-sys-color-on-background);
+  font-weight: 700;
 }
 .site-header__lede {
   margin: 0;
@@ -278,7 +292,11 @@ md-assist-chip {
   opacity: 0.75;
 }
 .status-row__value {
-  color: var(--md-sys-color-on-surface);
+  /* #289 slice H — chain-tip slot and the refreshed clock
+     are critical operational numerics; use the strongest
+     on-surface token + heavier weight for AAA contrast. */
+  color: var(--md-sys-color-on-background);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 .status-row__scopes {
@@ -444,7 +462,12 @@ a.copy-row__value:hover {
 .totals__value {
   font-family: "Roboto Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
-  color: var(--md-sys-color-on-surface);
+  /* #289 slice H — total ADA / USDM / UTxOs are critical
+     operational numerics.  Force the strongest text token
+     against the totals-strip surface for AAA contrast
+     (≥ 7:1). */
+  color: var(--md-sys-color-on-background);
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 .totals__label {
@@ -552,7 +575,11 @@ a.copy-row__value:hover {
 .stat-tile__value {
   font-family: "Roboto Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
-  color: var(--md-sys-color-on-surface);
+  /* #289 slice H — per-scope balances are the most
+     glanced-at numbers on the page; force the strongest
+     contrast against the stat-tile surface (AAA). */
+  color: var(--md-sys-color-on-background);
+  font-weight: 600;
   overflow-wrap: anywhere;
 }
 .stat-tile__label {

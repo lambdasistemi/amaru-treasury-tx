@@ -513,28 +513,31 @@ namedEntryRow st key entry =
       [ HH.input
           [ HP.value nameForDisplay
           , HP.type_ HP.InputText
-          , HP.classes [ cn "field__input" ]
           , HP.placeholder "name"
           , HE.onFocus (\_ -> StartRename eid (entryName entry))
           , HE.onValueInput UpdateDraftName
           , HE.onBlur (\_ -> CommitRename)
           , HE.onKeyDown RenameKeyDown
-          , HP.style "flex:1 1 auto;min-width:8rem"
+          , HP.style
+              "flex:1 1 auto;min-width:8rem;\
+              \background:transparent;\
+              \border:1px solid transparent;\
+              \border-radius:4px;\
+              \padding:.4rem .55rem;\
+              \color:inherit;font:inherit;outline:none"
           ]
       , HH.a
           [ HP.href (namedLinkHref key tv)
           , HP.target "_blank"
           , HP.rel "noopener noreferrer"
           , HP.title tv
-          , HP.classes
-              [ cn "field__input"
-              , cn "field__input--mono"
-              ]
           , HP.style
               "flex:0 1 16rem;min-width:0;\
               \overflow:hidden;text-overflow:ellipsis;\
-              \white-space:nowrap;padding:.5rem;\
-              \background:transparent;text-decoration:underline"
+              \white-space:nowrap;padding:.4rem .25rem;\
+              \font-family:'Roboto Mono',ui-monospace,monospace;\
+              \font-size:13px;\
+              \text-decoration:underline;color:inherit"
           ]
           [ HH.text tv ]
       , copyButton (st.recentlyCopied == Just tv) tv (copyLabel key)
@@ -1088,7 +1091,9 @@ dialogFooter st =
 rowStyle :: Boolean -> String
 rowStyle confirming =
   "display:flex;gap:.5rem;align-items:center;\
-  \border-radius:4px;padding:.1rem .25rem;\
+  \padding:.25rem .25rem;\
+  \border-bottom:1px solid \
+  \var(--md-sys-color-outline-variant,#44474e);\
   \transition:background .15s ease" <>
     if confirming then ";background:rgba(186,26,26,.18)"
     else ""

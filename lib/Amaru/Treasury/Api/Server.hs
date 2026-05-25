@@ -35,13 +35,28 @@ module Amaru.Treasury.Api.Server
     , Handlers (..)
     , mkServer
     , mkApplication
+
+      -- * Indexer-served handler (#242)
+    , mkInspectHandler
+
+      -- * Readiness gate (#242)
+    , withLagGuard
     ) where
 
+import Cardano.Ledger.Address (Addr)
+import Cardano.Node.Client.Provider (Provider (..))
+import Control.Concurrent.STM (readTVarIO)
 import Control.Monad.IO.Class (liftIO)
+import Data.Aeson ((.=))
+import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy qualified as LBS
 import Data.Proxy (Proxy (..))
 import Data.Tagged (Tagged)
+import Data.Text (Text)
+import Data.Word (Word64)
 import Network.HTTP.Media ((//))
-import Network.Wai (Application)
+import Network.HTTP.Types (status503)
+import Network.Wai (Application, Middleware, responseLBS)
 import Servant
     ( Handler
     , Server
@@ -63,6 +78,8 @@ import Servant.API
     , type (:>)
     )
 
+import Cardano.Node.Client.UTxOIndexer.Types (SlotNo (..))
+
 import Amaru.Treasury.Api.BuildDisburse
     ( DisburseBuildRequest
     , DisburseBuildResponse
@@ -75,12 +92,24 @@ import Amaru.Treasury.Api.BuildSwap
     ( SwapBuildRequest
     , SwapBuildResponse
     )
+import Amaru.Treasury.Api.Indexer
+    ( ApiIndexer (..)
+    , Readiness (..)
+    , ReadyState (..)
+    , checkReady
+    , snapshotUtxosAt
+    )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity
     , RecentTxManifest
     )
+import Amaru.Treasury.Cli.TreasuryInspect (runInspectFromBackend)
 import Amaru.Treasury.Inspect.Render (encodeReport)
-import Amaru.Treasury.Inspect.Types (InspectReport)
+import Amaru.Treasury.Inspect.Types
+    ( DeploymentAnchor
+    , InspectReport
+    )
+import Amaru.Treasury.Metadata (TreasuryMetadata)
 import Amaru.Treasury.Scope (ScopeId)
 
 {- | A servant content type that emits an 'InspectReport' via
@@ -217,3 +246,124 @@ run by warp.
 -}
 mkApplication :: Handlers -> Application
 mkApplication = serve dashboardAPI . mkServer
+
+-- ---------------------------------------------------------------------------
+-- Indexer-served inspect handler (#242)
+
+{- | Build the @\/v1\/treasury-inspect@ handler closure that
+the API container uses post-#242. The handler reads
+treasury / swap-order UTxOs from the embedded indexer (via
+'snapshotUtxosAt') instead of from the production node, and
+sources only the @chain_tip@ field from the existing
+'Provider IO' session (via the unchanged 'nowTip' field —
+FR-005).
+
+Implementation strategy: rather than touch the existing
+'runInspectFromBackend' (out of #242 Slice 2's owned set), we
+construct a thin **synthetic** 'Provider' that:
+
+* delegates 'nowTip' to the caller's real provider,
+* routes 'queryUTxOs' through the in-process indexer,
+* /traps/ 'queryUTxOByTxIn' with a defensive 'error' call so
+  any future code path that smuggles a UTxO query back to the
+  node socket on the request hot path fails LOUDLY at first
+  invocation (FR-002 / FR-004 invariant).
+
+The rest of the 'Provider' fields are inherited from the
+real provider; they aren't touched by
+'runInspectFromBackend''s read path, so this is harmless.
+-}
+mkInspectHandler
+    :: ApiIndexer
+    -> Provider IO
+    -> TreasuryMetadata
+    -> DeploymentAnchor
+    -> Addr
+    -- ^ swap-order address
+    -> ScopeId
+    -> Handler InspectReport
+mkInspectHandler apiIdx realProvider metadata anchor swapAddr scope =
+    liftIO $
+        runInspectFromBackend
+            metadata
+            anchor
+            swapAddr
+            (Just scope)
+            (indexerProvider apiIdx realProvider)
+
+{- | Build the synthetic 'Provider' described in
+'mkInspectHandler''s Haddock: real provider for 'nowTip',
+indexer-backed 'queryUTxOs', and a loud trap on
+'queryUTxOByTxIn'.
+-}
+indexerProvider :: ApiIndexer -> Provider IO -> Provider IO
+indexerProvider apiIdx realProvider =
+    realProvider
+        { queryUTxOs = snapshotUtxosAt apiIdx
+        , queryUTxOByTxIn = \_ ->
+            error
+                "BUG: amaru-treasury-tx-api request hot \
+                \path issued queryUTxOByTxIn; this code \
+                \path should be indexer-served per #242 \
+                \(FR-004 invariant)."
+        }
+
+-- ---------------------------------------------------------------------------
+-- Readiness gate (#242)
+
+{- | WAI middleware that short-circuits every request with
+HTTP 503 + structured JSON body when the embedded
+indexer's readiness verdict is 'Lagging'.
+
+The 503 body shape matches @contracts/api-extension.md@:
+@{error,processed_slot,tip_slot,lag_slots,threshold_slots,
+updated_at}@ with @additionalProperties: false@. The
+response is set @Content-Type: application/json;
+charset=utf-8@; @Accept@-negotiation is intentionally
+skipped — the 503 body is JSON regardless of what the
+client asked for, mirroring the spec's intake decision
+("dashboard frontend detects the 503 status and surfaces
+an error state").
+
+When the verdict is 'Pending' or 'Ready', the request is
+passed through unchanged. 'Pending' is supposed to be
+prevented from being observed by external clients because
+warp doesn't bind until 'waitReady' returns; the
+middleware nonetheless treats 'Pending' as "let through"
+(a defence-in-depth choice — the contract is silent on
+what to do during pre-bind probes).
+-}
+withLagGuard :: ApiIndexer -> Middleware
+withLagGuard apiIdx app req respond = do
+    state <- checkReady apiIdx
+    case state of
+        Lagging lag threshold -> do
+            r <- readTVarIO (aiReadiness apiIdx)
+            let body = encodeLaggingBody r lag threshold
+                hdrs =
+                    [
+                        ( "Content-Type"
+                        , "application/json; charset=utf-8"
+                        )
+                    ]
+            respond (responseLBS status503 hdrs body)
+        _ -> app req respond
+
+{- | Encode the HTTP 503 body the lag-guard returns. The
+schema is fixed by @contracts/api-extension.md@; consumers
+can rely on the field set being exactly the six listed
+keys and on @additionalProperties: false@. Tests pin this
+shape directly via @aeson-keymap@ lookups.
+-}
+encodeLaggingBody
+    :: Readiness -> Word64 -> Word64 -> LBS.ByteString
+encodeLaggingBody r lag threshold =
+    Aeson.encode $
+        Aeson.object
+            [ "error" .= ("indexer_lagging" :: Text)
+            , "processed_slot" .= unSlotNo (rProcessedSlot r)
+            , "tip_slot" .= unSlotNo (rTipSlot r)
+            , "lag_slots" .= lag
+            , "threshold_slots" .= threshold
+            , "updated_at" .= rUpdatedAt r
+            ]

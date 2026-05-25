@@ -27,11 +27,15 @@ source-repository-package
   --sha256: 1sr2r7xnl0q0a6jf4mfvvf37wn4cxf5s15bjra9am8z9a1rh6c80
 
 -- Provider, Submitter, N2C, and devnet helpers remain in cardano-node-clients.
+-- Pinned to cardano-node-clients#157 branch tip for the new
+-- Cardano.Node.Client.UTxOIndexer.Follower module
+-- (withChainSyncFollower); will re-pin to the merged commit
+-- before this PR is marked ready.
 source-repository-package
   type: git
   location: https://github.com/lambdasistemi/cardano-node-clients
-  tag: 38fc1917ba475b90edd974576e1c71790d165532
-  --sha256: 09i3ysv7650imhd4b26cwybjckfs8qfv75kh1r6511zyjvmxykrh
+  tag: bb0b8c38755815058c471cdfb05ea701a72d1e05
+  --sha256: 122f4xa5wz5ia1rfvjmxlcncgyaj1rlzw1v92bcyh64brnzr0alx
 
 -- Mirrored from cardano-node-clients/cabal.project (SRPs are not transitive
 -- in cabal; see https://cabal.readthedocs.io/en/3.10/cabal-project.html).

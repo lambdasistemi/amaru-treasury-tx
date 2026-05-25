@@ -15,7 +15,7 @@ module Amaru.Treasury.Config.OptEnv
     ) where
 
 import Data.Text (Text)
-import Data.Word (Word32)
+import Data.Word (Word32, Word64)
 import OptEnvConf
     ( Parser
     , auto
@@ -55,6 +55,9 @@ treasuryConfigOverridesParser =
         <*> optional (subConfig "api" apiManifestSetting)
         <*> optional (subConfig "api" apiBuildIdentitySetting)
         <*> optional (subConfig "api" apiStaticSetting)
+        <*> optional (subConfig "api" apiIndexerDbSetting)
+        <*> optional (subConfig "api" apiIndexerLagThresholdSlotsSetting)
+        <*> optional (subConfig "api" apiIndexerStartSlotSetting)
 
 -- | Settings parser wrapped in YAML config loading.
 treasuryConfigWithYamlParser :: Parser TreasuryConfigOverrides
@@ -204,4 +207,38 @@ apiStaticSetting =
         , conf "static"
         , metavar "PATH"
         , help "API static asset directory"
+        ]
+
+apiIndexerDbSetting :: Parser FilePath
+apiIndexerDbSetting =
+    strOption
+        [ long "api-indexer-db"
+        , env "AMARU_TREASURY_API_INDEXER_DB"
+        , conf "indexerDb"
+        , metavar "PATH"
+        , help "API embedded indexer RocksDB directory"
+        ]
+
+apiIndexerLagThresholdSlotsSetting :: Parser Word64
+apiIndexerLagThresholdSlotsSetting =
+    setting
+        [ option
+        , reader auto
+        , long "api-indexer-lag-threshold-slots"
+        , env "AMARU_TREASURY_API_INDEXER_LAG_THRESHOLD_SLOTS"
+        , conf "indexerLagThresholdSlots"
+        , metavar "SLOTS"
+        , help "API embedded indexer lag threshold"
+        ]
+
+apiIndexerStartSlotSetting :: Parser Word64
+apiIndexerStartSlotSetting =
+    setting
+        [ option
+        , reader auto
+        , long "api-indexer-start-slot"
+        , env "AMARU_TREASURY_API_INDEXER_START_SLOT"
+        , conf "indexerStartSlot"
+        , metavar "SLOT"
+        , help "API embedded indexer cold-boot start slot"
         ]

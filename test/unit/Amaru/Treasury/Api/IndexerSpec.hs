@@ -31,6 +31,10 @@ slice brief:
 -}
 module Amaru.Treasury.Api.IndexerSpec (spec) where
 
+import Cardano.Node.Client.N2C.Probe (defaultProbeConfig)
+import Cardano.Node.Client.N2C.Reconnect
+    ( defaultReconnectPolicy
+    )
 import Cardano.Node.Client.N2C.Trace (nullN2CTracer)
 import Cardano.Node.Client.UTxOIndexer.Indexer qualified as Indexer
 import Cardano.Node.Client.UTxOIndexer.IndexerOp (UtxoOp (..))
@@ -206,9 +210,13 @@ withTmpIndexer action =
             nullN2CTracer
             IndexerConfig
                 { icDbPath = dir
-                , icSocketPath = "/dev/null"
+                , icSocketPath = dir <> "/missing.sock"
                 , icNetworkMagic = NetworkMagic 42
                 , icStartSlot = SlotNo 0
                 , icLagThresholdSlots = 60
+                , icByronEpochSlots = 86_400
+                , icSecurityParamK = 2160
+                , icReconnectPolicy = defaultReconnectPolicy
+                , icProbeConfig = defaultProbeConfig
                 }
             action

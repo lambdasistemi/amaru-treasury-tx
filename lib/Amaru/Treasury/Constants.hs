@@ -28,8 +28,12 @@ module Amaru.Treasury.Constants
       -- * Min-UTxO deposit on swap-order outputs
     , minUtxoDepositLovelace
     , nativeAssetMinUtxoDepositLovelace
+
+      -- * Embedded indexer cold-boot
+    , mainnetIndexerStartSlot
     ) where
 
+import Cardano.Node.Client.UTxOIndexer.Types (SlotNo (..))
 import Data.Aeson
     ( FromJSON (..)
     , ToJSON (..)
@@ -113,3 +117,19 @@ minUtxoDepositLovelace = 2_000_000
 -- | Observed minimum lovelace floor for treasury outputs carrying USDM.
 nativeAssetMinUtxoDepositLovelace :: Integer
 nativeAssetMinUtxoDepositLovelace = 2_306_000
+
+{- | Mainnet cold-boot starting slot for the embedded
+@utxo-indexer-lib@ follower used by
+@amaru-treasury-tx-api@.
+
+Picked a few epochs before the earliest Amaru 2026
+treasury deployment so the cold-sync skips irrelevant
+pre-deployment history but still captures every
+@deployed_at@ TxIn. Operators may override at the CLI
+via @--indexer-start-slot SLOT@; the constant is the
+fallback default. See
+[research.md §1](../../specs/242-api-indexer-embed/research.md)
+for the rationale and how to update.
+-}
+mainnetIndexerStartSlot :: SlotNo
+mainnetIndexerStartSlot = SlotNo 149_000_000

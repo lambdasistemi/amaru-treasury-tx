@@ -63,7 +63,7 @@ Layout legend:
 
 ## Phase 3 — Wire-up + cache removal (the behaviour-changing slice)
 
-- [ ] **T004 [H]** **RED** for the integrated handler. Add a
+- [X] **T004 [H]** **RED** for the integrated handler. Add a
   fixture-backed test asserting that
   `inspectScope`-equivalent code paths, given an `ApiIndexer`
   populated with a known UTxO set + a mocked
@@ -72,7 +72,7 @@ Layout legend:
   chain state. The test fails because the handler is still
   reading from `cachedInspect`.
 
-- [ ] **T005 [H]** **GREEN** for the integrated handler. Single
+- [X] **T005 [H]** **GREEN** for the integrated handler. Single
   commit covering:
   - extend `Amaru.Treasury.Api.Server.Handlers` with
     `ApiIndexer` per [data-model.md §"Amaru.Treasury.Api.Server"](./data-model.md),

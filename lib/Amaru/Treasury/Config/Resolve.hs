@@ -85,6 +85,14 @@ envTreasuryConfigOverrides envs =
             lookupString "AMARU_TREASURY_API_BUILD_IDENTITY"
         , tcoApiStatic =
             lookupString "AMARU_TREASURY_API_STATIC"
+        , tcoApiIndexerDb =
+            lookupString "AMARU_TREASURY_API_INDEXER_DB"
+        , tcoApiIndexerLagThresholdSlots =
+            lookupString "AMARU_TREASURY_API_INDEXER_LAG_THRESHOLD_SLOTS"
+                >>= readMaybe
+        , tcoApiIndexerStartSlot =
+            lookupString "AMARU_TREASURY_API_INDEXER_START_SLOT"
+                >>= readMaybe
         }
   where
     lookupString key = lookup key envs

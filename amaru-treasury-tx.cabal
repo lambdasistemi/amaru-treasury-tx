@@ -277,6 +277,7 @@ library
     , http-client
     , http-conduit
     , http-media
+    , http-types
     , memory
     , microlens
     , opt-env-conf
@@ -452,9 +453,11 @@ executable amaru-treasury-tx-api
     , aeson
     , amaru-treasury-tx
     , async
-    , base                   <5
+    , base                                   <5
     , bytestring
     , cardano-ledger-core
+    , cardano-node-clients
+    , cardano-node-clients:utxo-indexer-lib
     , containers
     , opt-env-conf
     , optparse-applicative
@@ -475,6 +478,7 @@ test-suite unit-tests
   autogen-modules:    Paths_amaru_treasury_tx
   other-modules:
     Amaru.Treasury.Api.ConfigSpec
+    Amaru.Treasury.Api.HandlersIndexerSpec
     Amaru.Treasury.Api.IndexerSpec
     Amaru.Treasury.Api.ServerSpec
     Amaru.Treasury.Api.TypesSpec

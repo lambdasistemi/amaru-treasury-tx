@@ -59,6 +59,9 @@ spec = describe "Amaru.Treasury.Config.File" $ do
                             , acBuildIdentity =
                                 Just "build-identity.json"
                             , acStatic = Just "frontend/dist"
+                            , acIndexerDb = Just "indexer-db"
+                            , acIndexerLagThresholdSlots = Just 42
+                            , acIndexerStartSlot = Just 123
                             }
                     }
 
@@ -89,7 +92,10 @@ fullConfigYaml =
     \api:\n\
     \  manifest: recent-txs.json\n\
     \  buildIdentity: build-identity.json\n\
-    \  static: frontend/dist\n"
+    \  static: frontend/dist\n\
+    \  indexerDb: indexer-db\n\
+    \  indexerLagThresholdSlots: 42\n\
+    \  indexerStartSlot: 123\n"
 
 profileOnlyYaml :: ByteString
 profileOnlyYaml =

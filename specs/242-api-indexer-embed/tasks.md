@@ -171,7 +171,44 @@ Layout legend:
   (see spec.md §"Deliverables" Doc3). Commit:
   `docs(242): asciinema cast + plugin wiring for api container`.
 
-## Phase 7 — PR finalization
+## Phase 8 — Live-mainnet boot bug fix (post-finalize regression)
+
+- [ ] **T014 [H]** Fix `icByronEpochSlots = 21_600` (was `86_400`,
+  caused `ApplyConflict {acSlot = 0, acExistingBlockHash =
+  "89d9b5a5b8ddc802..."}` on every chain-sync reconnect — discovered
+  2026-05-25T16:23Z during dev validation, container never binds warp,
+  traefik 502). Mainnet Byron `EpochSlots = 10·k = 21_600` per
+  `byron-genesis.json` `protocolConsts.k = 2160`; wrong value made the
+  Byron CBOR decoder reconstruct a different block at slot 0 than what
+  the chain-sync server returned. Add a unit test in
+  `test/unit/Amaru/Treasury/Api/IndexerSpec.hs` asserting the default
+  `icByronEpochSlots == 21_600`. RED: fails with current 86_400.
+  GREEN: change `app/amaru-treasury-tx-api/Main.hs:278` from `86_400`
+  to `21_600`; update comment at
+  `lib/Amaru/Treasury/Api/Indexer.hs:149-152`.
+
+  **Live-validation gate (mandatory before navigator NAVIGATOR-VERIFIED)**:
+  rebuild + redeploy to `/home/paolino/services/amaru-treasury-dev`
+  using the dev iteration loop (per
+  `deploy/compose/amaru-treasury-dev/docker-compose.yaml` header
+  comment), with `--indexer-start-slot 175000000` injected into the
+  command list to bound cold-sync window. URL
+  `https://amaru-treasury.dev.plutimus.com/api/inspect` must
+  transition `502 → 503 → 200` within 10 min, and container logs must
+  show `event=connected` + `applied slot N` lines (no more
+  `ApplyConflict`). On NAVIGATOR-VERIFIED, leave the new compose +
+  binary in place so dev runs the fixed build going forward.
+
+  **Fold T014 into one bisect-safe commit.** Commit:
+  `fix(242): use mainnet Byron EpochSlots = 21_600`. Tasks trailer:
+  `Tasks: T014`. Worker pair (re-briefed in-place).
+
+  **Owned files**:
+  - `app/amaru-treasury-tx-api/Main.hs`
+  - `lib/Amaru/Treasury/Api/Indexer.hs`
+  - `test/unit/Amaru/Treasury/Api/IndexerSpec.hs`
+
+## Phase 7 — PR finalization (re-do after T014 lands)
 
 - [ ] **T013 [O]** Edit GitHub issue #242 body via
   `gh issue edit 242 --body-file …` to replace the wizard

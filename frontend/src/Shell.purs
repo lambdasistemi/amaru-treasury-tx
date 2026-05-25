@@ -101,6 +101,7 @@ topbar active opts =
     , HH.nav [ HP.classes [ cn "topbar__nav" ] ]
         [ navLink RouteView active "/" "View"
         , navLink RouteOperate active "/operate" "Operate"
+        , navLink RouteBooks active "/books" "Books"
         ]
     , HH.button
         [ HP.classes [ cn "topbar__theme-btn" ]

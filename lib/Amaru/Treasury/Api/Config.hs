@@ -363,7 +363,8 @@ apiPath
     -> (ApiConfig -> Maybe FilePath)
     -> Maybe TreasuryConfig
     -> Maybe FilePath
-apiPath = apiValue
+apiPath cliOverrides envOverrides overrideField apiField config =
+    apiValue cliOverrides envOverrides overrideField apiField config
 
 apiValue
     :: TreasuryConfigOverrides

@@ -294,13 +294,15 @@ render st =
           }
       , siteHeader
       , HH.div
-          [ HP.classes [ cn "build-layout" ]
-          , HP.style "flex-direction:column;gap:1rem"
+          [ HP.style
+              "display:flex;flex-direction:column;\
+              \gap:1rem;width:100%;max-width:1100px;\
+              \margin:0 auto;padding:1rem 1.25rem 2rem;\
+              \box-sizing:border-box"
           ]
           ( [ topOfPageActions ]
               <> emptyStateNotice st
-              <> namedCardSection st
-              <> freeTextCardSection st
+              <> booksGroupSection st
           )
       , Shell.siteFooter { buildIdentityLine: "" }
       ]
@@ -383,15 +385,95 @@ emptyStateNotice st
   | otherwise = []
 
 -- ---------------------------------------------------------------------------
--- Named cards
+-- Card grouping (slice F)
+--
+-- Cards render under four semantic group headers in a fixed
+-- order.  The grouping reflects how operators actually use
+-- the fields — wallet identities, the three reference-row
+-- columns, the rationale-text trio, and the numeric build
+-- parameters.  Same per-card render path; only the
+-- WRAPPING changes from "flat list" to "group-then-cards".
 
-namedCardSection
+data BooksGroup
+  = Identities
+  | References
+  | RationaleText
+  | BuildParameters
+
+allGroups :: Array BooksGroup
+allGroups =
+  [ Identities
+  , References
+  , RationaleText
+  , BuildParameters
+  ]
+
+groupTitle :: BooksGroup -> String
+groupTitle = case _ of
+  Identities -> "Identities"
+  References -> "References"
+  RationaleText -> "Rationale text"
+  BuildParameters -> "Build parameters"
+
+groupContents :: BooksGroup -> Array BookKey
+groupContents = case _ of
+  Identities ->
+    [ N WalletsBook ]
+  References ->
+    [ N ReferenceUrisBook
+    , F ReferenceTypesBook
+    , F ReferenceLabelsBook
+    ]
+  RationaleText ->
+    [ F DescriptionsBook
+    , F JustificationsBook
+    , F DestinationLabelsBook
+    ]
+  BuildParameters ->
+    [ F ValidityHoursBook
+    , F SlippageBpsBook
+    , F SplitCountsBook
+    ]
+
+booksGroupSection
   :: forall m
    . State -> Array (H.ComponentHTML Action () m)
-namedCardSection st =
-  [ namedCard st WalletsBook
-  , namedCard st ReferenceUrisBook
+booksGroupSection st =
+  Array.concatMap (renderGroup st) allGroups
+
+renderGroup
+  :: forall m
+   . State
+  -> BooksGroup
+  -> Array (H.ComponentHTML Action () m)
+renderGroup st g =
+  [ HH.h2
+      [ HP.classes
+          [ cn "md-typescale-headline-small"
+          , cn "books-group"
+          ]
+      , HP.style
+          "margin:2rem 0 .75rem 0;\
+          \padding-bottom:.4rem;\
+          \border-bottom:1px solid \
+          \var(--md-sys-color-outline-variant,#44474e);\
+          \letter-spacing:.01em"
+      ]
+      [ HH.text (groupTitle g) ]
   ]
+    <> map (renderCard st) (groupContents g)
+
+renderCard
+  :: forall m
+   . State
+  -> BookKey
+  -> H.ComponentHTML Action () m
+renderCard st = case _ of
+  N nk -> namedCard st nk
+  F fk -> freeTextCard st fk
+
+-- ---------------------------------------------------------------------------
+-- Named cards
 
 namedCard
   :: forall m
@@ -426,8 +508,7 @@ namedEntryRow st key entry =
       _ -> entryName entry
   in
     HH.div
-      [ HP.classes [ cn "reference-row" ]
-      , HP.style (rowStyle (st.confirmingRemove == Just target))
+      [ HP.style (rowStyle (st.confirmingRemove == Just target))
       ]
       [ HH.input
           [ HP.value nameForDisplay
@@ -438,7 +519,7 @@ namedEntryRow st key entry =
           , HE.onValueInput UpdateDraftName
           , HE.onBlur (\_ -> CommitRename)
           , HE.onKeyDown RenameKeyDown
-          , HP.style "flex:1"
+          , HP.style "flex:1 1 auto;min-width:8rem"
           ]
       , HH.a
           [ HP.href (namedLinkHref key tv)
@@ -450,12 +531,12 @@ namedEntryRow st key entry =
               , cn "field__input--mono"
               ]
           , HP.style
-              "flex:1.4;display:block;\
+              "flex:0 1 16rem;min-width:0;\
               \overflow:hidden;text-overflow:ellipsis;\
               \white-space:nowrap;padding:.5rem;\
               \background:transparent;text-decoration:underline"
           ]
-          [ HH.text (truncate tv) ]
+          [ HH.text tv ]
       , copyButton (st.recentlyCopied == Just tv) tv (copyLabel key)
       , deleteCluster st target (removeLabel key)
       ]
@@ -544,21 +625,6 @@ entryName = case _ of
 -- ---------------------------------------------------------------------------
 -- Free-text cards
 
-freeTextCardSection
-  :: forall m
-   . State -> Array (H.ComponentHTML Action () m)
-freeTextCardSection st =
-  map (freeTextCard st)
-    [ DescriptionsBook
-    , JustificationsBook
-    , DestinationLabelsBook
-    , ValidityHoursBook
-    , SlippageBpsBook
-    , SplitCountsBook
-    , ReferenceTypesBook
-    , ReferenceLabelsBook
-    ]
-
 freeTextCard
   :: forall m
    . State
@@ -589,16 +655,14 @@ freeTextRow st key value =
     target = RemoveFreeTextT key value
   in
     HH.div
-      [ HP.classes [ cn "reference-row" ]
-      , HP.style (rowStyle (st.confirmingRemove == Just target))
+      [ HP.style (rowStyle (st.confirmingRemove == Just target))
       ]
       [ HH.span
           [ HP.classes [ cn "field__input" ]
           , HP.style
-              "flex:1;display:block;padding:.5rem;\
-              \overflow:hidden;text-overflow:ellipsis;\
-              \white-space:nowrap;background:transparent"
-          , HP.title value
+              "flex:1 1 auto;min-width:0;display:block;\
+              \padding:.5rem;background:transparent;\
+              \overflow-wrap:anywhere;word-break:break-word"
           ]
           [ HH.text value ]
       , copyButton (st.recentlyCopied == Just value) value
@@ -734,18 +798,6 @@ emptyCardCaption msg =
     , HP.style "opacity:.65"
     ]
     [ HH.text msg ]
-
--- | Display-only truncation for the typed-value cell on a
--- | named row.  Same shape `Shell.Book.deriveDefaultName`
--- | uses for placeholders, but inlined here to avoid
--- | exposing it from the sealed module.
-truncate :: String -> String
-truncate s
-  | String.length s > 18 =
-      String.take 8 s
-        <> "…"
-        <> String.drop (String.length s - 6) s
-  | otherwise = s
 
 -- ---------------------------------------------------------------------------
 -- Export/import action rows (slice D)
@@ -1035,8 +1087,8 @@ dialogFooter st =
 
 rowStyle :: Boolean -> String
 rowStyle confirming =
-  "gap:.5rem;align-items:center;border-radius:4px;\
-  \padding:.1rem .25rem;\
+  "display:flex;gap:.5rem;align-items:center;\
+  \border-radius:4px;padding:.1rem .25rem;\
   \transition:background .15s ease" <>
     if confirming then ";background:rgba(186,26,26,.18)"
     else ""

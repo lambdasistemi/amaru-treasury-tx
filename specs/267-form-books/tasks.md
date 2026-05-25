@@ -7,13 +7,13 @@ Four bisect-safe slices.  Each lands as ONE commit with body trailer `Tasks: T26
 
 ## Slice A — `Shell.Book` foundation
 
-- [ ] T267-S1 [US1, US2] Implement `frontend/src/Shell/Book.purs` (typed two-shape API: `BookKey` GADT-style sum discriminating named-wallets / named-reference_uris / free-text; `loadNamed` / `loadFreeText` / `recordNamed` / `recordFreeText` / `renameNamed` / `addNamed` / `removeNamed` / `removeFreeText` / `clear`).  Per-book wire shape IS storage shape (no inner envelope).  Cap=25, dedup-on-typed-value (named) / dedup-on-string (free-text), move-to-front, empty-trim silent-skip per FR-004 / FR-011 / FR-016.
+- [X] T267-S1 [US1, US2] Implement `frontend/src/Shell/Book.purs` (typed two-shape API: `BookKey` GADT-style sum discriminating named-wallets / named-reference_uris / free-text; `loadNamed` / `loadFreeText` / `recordNamed` / `recordFreeText` / `renameNamed` / `addNamed` / `removeNamed` / `removeFreeText` / `clear`).  Per-book wire shape IS storage shape (no inner envelope).  Cap=25, dedup-on-typed-value (named) / dedup-on-string (free-text), move-to-front, empty-trim silent-skip per FR-004 / FR-011 / FR-016.
 
-- [ ] T267-S1 [US1, US2] Implement `frontend/src/Shell/Book.js` FFI for `localStorage.getItem` / `setItem` / `removeItem`.
+- [X] T267-S1 [US1, US2] Implement `frontend/src/Shell/Book.js` FFI for `localStorage.getItem` / `setItem` / `removeItem`.
 
-- [ ] T267-S1 Proof: smoke recipe in `WIP.md` covering the round-trip for one named book + one free-text book + an invalid-shape on-disk value (must reset to empty).  Frontend has no test harness — documented exception per resolve-ticket protocol.
+- [X] T267-S1 Proof: smoke recipe in `WIP.md` covering the round-trip for one named book + one free-text book + an invalid-shape on-disk value (must reset to empty).  Frontend has no test harness — documented exception per resolve-ticket protocol.
 
-- [ ] T267-S1 Commit: `feat(267): Shell.Book — typed named/free-text per-field history persisted in localStorage` with `Tasks: T267-S1` trailer.
+- [X] T267-S1 Commit: `feat(267): Shell.Book — typed named/free-text per-field history persisted in localStorage` with `Tasks: T267-S1` trailer.
 
 ## Slice B — `/operate` integration
 

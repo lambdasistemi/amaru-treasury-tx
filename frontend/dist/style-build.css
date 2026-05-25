@@ -291,6 +291,26 @@ input[type="number"].field__input { -moz-appearance: textfield; }
     z-index: auto;
   }
 }
+
+/* #289 slice C — WCAG 2.1 SC 2.5.5: every interactive
+   target on /operate must be ≥ 44×44 px.  Inputs already
+   exceed this via padding; buttons / chips / pills /
+   preview-tabs / per-block-copy buttons needed a floor.
+   `box-sizing: border-box` so the min-* dimensions include
+   borders + padding rather than adding to them.  Topbar +
+   footer chrome (slice A's territory + slice H's pending
+   palette pass) intentionally NOT covered by this rule. */
+.btn,
+.segmented__option,
+.scope-pill,
+.signer-chip,
+.preview-tab,
+.v-copy,
+.field__input {
+  min-height: 44px;
+  min-width: 44px;
+  box-sizing: border-box;
+}
 .btn {
   border: 1px solid transparent;
   border-radius: var(--app-radius);

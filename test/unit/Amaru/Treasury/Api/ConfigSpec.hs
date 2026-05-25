@@ -85,9 +85,10 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                     , "build-env.json"
                     )
                 , ("AMARU_TREASURY_API_STATIC", "static-env")
-                , ( "AMARU_TREASURY_API_INDEXER_DB"
-                  , "indexer-env"
-                  )
+                ,
+                    ( "AMARU_TREASURY_API_INDEXER_DB"
+                    , "indexer-env"
+                    )
                 ]
                 []
 
@@ -244,9 +245,10 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                     , "build-env.json"
                     )
                 , ("AMARU_TREASURY_API_STATIC", "static-env")
-                , ( "AMARU_TREASURY_API_INDEXER_DB"
-                  , "indexer-env"
-                  )
+                ,
+                    ( "AMARU_TREASURY_API_INDEXER_DB"
+                    , "indexer-env"
+                    )
                 ]
                 []
 

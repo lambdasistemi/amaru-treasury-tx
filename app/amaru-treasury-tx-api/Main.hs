@@ -61,23 +61,6 @@ import Network.Wai.Handler.Warp
     , setHost
     , setPort
     )
-import Options.Applicative
-    ( Parser
-    , auto
-    , execParser
-    , fullDesc
-    , help
-    , helper
-    , info
-    , long
-    , metavar
-    , option
-    , progDesc
-    , short
-    , strOption
-    , value
-    , (<**>)
-    )
 import Servant.Server.StaticFiles (serveDirectoryFileServer)
 import System.Exit (die)
 import System.IO
@@ -88,13 +71,15 @@ import System.IO
     )
 import System.Timeout (timeout)
 
-import Ouroboros.Network.Magic (NetworkMagic (..))
-
 import Cardano.Ledger.Address (Addr)
 
 import Amaru.Treasury.Api.BuildDisburse (runBuildDisburse)
 import Amaru.Treasury.Api.BuildReorganize (runBuildReorganize)
 import Amaru.Treasury.Api.BuildSwap (runBuildSwap)
+import Amaru.Treasury.Api.Config
+    ( ApiRuntimeConfig (..)
+    , execApiConfig
+    )
 import Amaru.Treasury.Api.Server
     ( Handlers (..)
     , mkApplication
@@ -125,67 +110,7 @@ import Amaru.Treasury.Metadata
 import Amaru.Treasury.Scope (ScopeId, allScopes, scopeText)
 
 -- ---------------------------------------------------------------------------
--- CLI
-
-data Opts = Opts
-    { optsHost :: String
-    , optsPort :: Int
-    , optsSocket :: FilePath
-    , optsMetadata :: FilePath
-    , optsManifest :: FilePath
-    , optsBuildIdentity :: FilePath
-    , optsStatic :: FilePath
-    }
-    deriving (Show)
-
-optsP :: Parser Opts
-optsP =
-    Opts
-        <$> strOption
-            ( long "host"
-                <> metavar "ADDR"
-                <> help "Bind host (default 0.0.0.0)"
-                <> value "0.0.0.0"
-            )
-        <*> option
-            auto
-            ( long "port"
-                <> short 'p'
-                <> metavar "PORT"
-                <> help "TCP port (default 8080)"
-                <> value 8080
-            )
-        <*> strOption
-            ( long "socket"
-                <> metavar "PATH"
-                <> help "Cardano N2C socket path"
-            )
-        <*> strOption
-            ( long "metadata"
-                <> metavar "PATH"
-                <> help "journal/2026/metadata.json (baked in)"
-            )
-        <*> strOption
-            ( long "manifest"
-                <> metavar "PATH"
-                <> help "recent-txs.json (baked in)"
-            )
-        <*> strOption
-            ( long "build-identity"
-                <> metavar "PATH"
-                <> help "build-identity.json (baked in)"
-            )
-        <*> strOption
-            ( long "static"
-                <> metavar "DIR"
-                <> help "Halogen bundle directory (baked in)"
-            )
-
--- ---------------------------------------------------------------------------
 -- Main
-
-mainnetMagic :: NetworkMagic
-mainnetMagic = NetworkMagic 764_824_073
 
 {- | Server-side per-scope cache. Background loop refreshes
 | every 'cacheTtlSeconds'; handlers read from the IORef
@@ -202,17 +127,9 @@ main :: IO ()
 main = do
     hSetBuffering stdout LineBuffering
     hSetBuffering stderr LineBuffering
-    opts <-
-        execParser $
-            info
-                (optsP <**> helper)
-                ( fullDesc
-                    <> progDesc
-                        "Run the amaru-treasury read-only \
-                        \HTTP dashboard backend."
-                )
+    opts <- execApiConfig
 
-    metadata <- readMetadataFile (optsMetadata opts)
+    metadata <- readMetadataFile (arcMetadata opts)
     anchor <- parseAnchorOrDie (tmScopeOwners metadata)
     swapAddr <- case parseAddr sundaeOrderAddressMainnet of
         Right a -> pure a
@@ -223,26 +140,21 @@ main = do
                 \parse: "
                     <> e
 
-    manifest <- readJsonOrDie (optsManifest opts) :: IO RecentTxManifest
-    buildId <- readJsonOrDie (optsBuildIdentity opts) :: IO BuildIdentity
+    manifest <- readJsonOrDie (arcManifest opts) :: IO RecentTxManifest
+    buildId <- readJsonOrDie (arcBuildIdentity opts) :: IO BuildIdentity
 
     let host :: HostPreference
-        host = fromString (optsHost opts)
+        host = fromString (arcHost opts)
         warpSettings =
             setHost host
-                . setPort (optsPort opts)
+                . setPort (arcPort opts)
                 $ defaultSettings
 
     putStrLn $
         "amaru-treasury-tx-api: opening N2C session on "
-            <> optsSocket opts
-    let g =
-            GlobalOpts
-                { goSocketPath = Just (optsSocket opts)
-                , goNetworkMagic = mainnetMagic
-                , goNetworkName = Just "mainnet"
-                }
-    withLocalNodeBackend mainnetMagic (optsSocket opts) $
+            <> arcSocket opts
+    let g = arcGlobalOpts opts
+    withLocalNodeBackend (goNetworkMagic g) (arcSocket opts) $
         \backend -> do
             cache <- newIORef Map.empty
             -- No startup prime: cardano-node post-replay is
@@ -271,7 +183,7 @@ main = do
                             runBuildReorganize g backend
                         , hRawHandler =
                             serveDirectoryFileServer
-                                (optsStatic opts)
+                                (arcStatic opts)
                         }
             -- Background refresh loop. Stays inside the N2C
             -- session for the lifetime of warp.
@@ -286,9 +198,9 @@ main = do
                 $ \_ -> do
                     putStrLn $
                         "amaru-treasury-tx-api: listening on "
-                            <> optsHost opts
+                            <> arcHost opts
                             <> ":"
-                            <> show (optsPort opts)
+                            <> show (arcPort opts)
                     runSettings
                         warpSettings
                         ( spaFallback

@@ -470,6 +470,7 @@ test-suite unit-tests
   default-language:   GHC2021
   autogen-modules:    Paths_amaru_treasury_tx
   other-modules:
+    Amaru.Treasury.Api.ConfigSpec
     Amaru.Treasury.Api.ServerSpec
     Amaru.Treasury.Api.TypesSpec
     Amaru.Treasury.AuxDataSpec

@@ -56,21 +56,21 @@ trailers should use the task IDs below, for example `Tasks: T286001`.
 
 ## Slice 3 - API entry point
 
-- [ ] T286015 RED: add `Amaru.Treasury.Api.ConfigSpec` for API startup
+- [X] T286015 RED: add `Amaru.Treasury.Api.ConfigSpec` for API startup
   config-only success, env-only success, CLI-overrides-config, missing
   required field diagnostics, and old flag-only invocation.
-- [ ] T286016 GREEN: implement `Amaru.Treasury.Api.Config` as the only API
+- [X] T286016 GREEN: implement `Amaru.Treasury.Api.Config` as the only API
   adapter from the shared config modules into the server startup option
   record.
-- [ ] T286017 GREEN: migrate `app/amaru-treasury-tx-api/Main.hs` to consume
+- [X] T286017 GREEN: migrate `app/amaru-treasury-tx-api/Main.hs` to consume
   `Api.Config` for `--socket`, `--metadata`, `--manifest`,
   `--build-identity`, and `--static`, while preserving `--host` and
   `--port` behavior.
-- [ ] T286018 GREEN: document and test API-specific env variables:
+- [X] T286018 GREEN: document and test API-specific env variables:
   `AMARU_TREASURY_API_MANIFEST`,
   `AMARU_TREASURY_API_BUILD_IDENTITY`, and
   `AMARU_TREASURY_API_STATIC`.
-- [ ] T286019 Run focused API tests, run `./gate.sh` if dependency fetch
+- [X] T286019 Run focused API tests, run `./gate.sh` if dependency fetch
   permits, record evidence in `WIP.md`, and commit Slice 3.
 
 ## Slice 4 - Operator docs, PR metadata, and final draft state

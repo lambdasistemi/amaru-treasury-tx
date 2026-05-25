@@ -56,7 +56,28 @@ Four bisect-safe slices.  Each lands as ONE commit with body trailer `Tasks: T26
 
 - [X] T267-S4 Commit: `feat(267): /books import/export — bundle + per-book, file + clipboard transports` with `Tasks: T267-S4` trailer.
 
+## Slice E — `/books` row polish
+
+Operator-side feedback after the four shipping slices merged: the per-row `×` is unclear, addresses should link out, every value should be one-tap copyable, and accidental clicks on the trash should be impossible.
+
+- [X] T267-S5 [US3] Replace the `×` text glyph on every entry row (named + free-text) with a Material trash icon-button (`<md-icon-button><md-icon>delete</md-icon></md-icon-button>`) carrying `aria-label="Remove …"` for screen readers.
+
+- [X] T267-S5 [US3] Guard the per-row delete — clicking the trash icon flips the row into an inline confirm state (red-tinted background, `check` + `close` icon-buttons in place of the trash).  `check` actually removes; `close` reverts.  No modal; the operator stays on the same scroll position.  State extension: `confirmingRemove :: Maybe RemoveTarget` plus `RequestRemove` / `ConfirmRemove` / `CancelRemove` actions.
+
+- [X] T267-S5 [US3] Add a copy icon-button (`content_copy`) between the value cell and the trash on every row.  Named rows copy the typed value (`address` / `cid`); free-text rows copy the string.  After a successful copy the icon flips to `check` for ~1 s then reverts — a snackbar-free "copied!" affordance.
+
+- [X] T267-S5 [US3] Linkify the typed-value cell on named rows: `wallets` → `https://cardanoscan.io/address/<bech32>`; `reference_uris` → `https://ipfs.io/ipfs/<cid>` when the value is a bare CID, or the value's own URL when it already carries an `ipfs://` / `http(s)://` scheme.  `<a target="_blank" rel="noopener noreferrer">`.  Truncated display + `title=full` stay.  Free-text rows are NOT linkified.
+
+- [X] T267-S5 [US3] Promote `_writeClipboard` out of `BooksPage.js` into `Shell/Clipboard.purs` + `Shell/Clipboard.js` so the copy button can reuse the FFI without re-declaring the foreign import.
+
+- [X] T267-S5 Amend `spec.md` in the SAME commit: FR-007 (icon-button + copy + clickable typed values), FR-008 (read-only typed-value link — change typed value via delete + re-add), FR-010 (per-entry trash is guarded; `Clear all` keeps its existing confirm).
+
+- [X] T267-S5 Smoke proof in `WIP.md`: deploy, plant a wallet + a description, navigate `/books`; confirm icon trash visible (not `×`), guarded delete (cancel keeps entry, confirm removes), copy button copies the typed value + flashes `check`, wallet `<a>` carries Cardanoscan href + `target="_blank"`, reference URI `<a>` carries the IPFS gateway href.
+
+- [X] T267-S5 Commit: `feat(267): /books row polish — icon trash (guarded), copy, clickable typed values` with `Tasks: T267-S5` trailer.
+
 ## Dependencies
 
 - Slice A blocks B, C, D.
 - B / C / D are independent of each other once A is in.  Default execution order B → C → D for the obvious smoke flow (data needs to exist before the /books UI is meaningful, and /books needs to exist before import/export has a host).
+- Slice E lands after the original four are merged, on a re-opened draft of the same PR (polish).

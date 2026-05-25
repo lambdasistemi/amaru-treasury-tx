@@ -21,7 +21,7 @@ module BooksPage (component) where
 
 import Prelude
 
-import Data.Argonaut.Core (stringify)
+import Data.Argonaut.Core (jsonEmptyObject, stringify)
 import Data.Argonaut.Parser (jsonParser)
 import Data.Array as Array
 import Data.DateTime (date, time, day, hour, minute, month, second, year)
@@ -147,6 +147,12 @@ namedEntries :: NamedBookKey -> Books -> Array NamedEntry
 namedEntries k b = case k of
   WalletsBook -> b.wallets
   ReferencesBook -> b.references
+  -- #288 slice A: the new books aren't wired into the
+  -- 'Books' record yet (slice C extends the type + reader).
+  -- Iterating BooksPage with these keys returns the empty
+  -- array until slice C lands.
+  OperateDraftsBook -> []
+  OperateHistoryBook -> []
 
 -- ---------------------------------------------------------------------------
 -- Component state
@@ -596,6 +602,13 @@ namedAddEditor st key =
         , draftValueInput st "ipfs://bafy…"
         , draftTypeInput st "Other"
         ]
+      -- #288 slice A: snapshot books are populated via
+      -- /operate's `Save as draft…` editor (slice B) and
+      -- the on-Build auto-append (slice B); /books has no
+      -- Add-new affordance for them, so this branch is
+      -- unreachable until slice C wires it.
+      OperateDraftsBook -> []
+      OperateHistoryBook -> []
     actions =
       [ HH.button
           [ HP.classes [ cn "btn", cn "btn--primary" ]
@@ -689,6 +702,11 @@ namedHeader :: NamedBookKey -> String
 namedHeader = case _ of
   WalletsBook -> "Wallets"
   ReferencesBook -> "References"
+  -- #288 slice A: Drafts / History card headers are rendered
+  -- by slice C; these labels are the canonical names from
+  -- the spec so iterating taxonomy helpers stays stable.
+  OperateDraftsBook -> "Drafts"
+  OperateHistoryBook -> "History"
 
 namedEmpty :: NamedBookKey -> String
 namedEmpty = case _ of
@@ -698,16 +716,27 @@ namedEmpty = case _ of
   ReferencesBook ->
     "No references yet.  Click + Add new or submit a \
     \build on /operate."
+  -- #288 slice A: empty-state captions for the new cards
+  -- are slice C's responsibility (FR-004 / FR-011).  These
+  -- placeholders are never reached in slice A because the
+  -- new books aren't iterated by /books yet.
+  OperateDraftsBook -> ""
+  OperateHistoryBook -> ""
 
 namedValuePlaceholder :: NamedBookKey -> String
 namedValuePlaceholder = case _ of
   WalletsBook -> "addr1q…"
   ReferencesBook -> "ipfs://bafy…"
+  -- #288 slice A: snapshot books have no manual value
+  -- input on /books; populated via /operate.
+  OperateDraftsBook -> ""
+  OperateHistoryBook -> ""
 
 entryName :: NamedEntry -> String
 entryName = case _ of
   WalletE w -> w.name
   ReferenceE r -> r.name
+  OperateSnapshotE s -> s.name
 
 -- ---------------------------------------------------------------------------
 -- Free-text cards
@@ -1185,6 +1214,10 @@ namedLinkHref key value = case key of
   ReferencesBook ->
     if hasUriScheme value then value
     else "https://ipfs.io/ipfs/" <> value
+  -- #288 slice A: snapshot entries have no clickable URI;
+  -- slice C renders them with a non-link summary span.
+  OperateDraftsBook -> ""
+  OperateHistoryBook -> ""
 
 hasUriScheme :: String -> Boolean
 hasUriScheme v =
@@ -1196,11 +1229,17 @@ copyLabel :: NamedBookKey -> String
 copyLabel = case _ of
   WalletsBook -> "Copy wallet address"
   ReferencesBook -> "Copy reference URI"
+  -- #288 slice A: snapshot copy labels finalised in slice C.
+  OperateDraftsBook -> "Copy draft snapshot"
+  OperateHistoryBook -> "Copy history snapshot"
 
 removeLabel :: NamedBookKey -> String
 removeLabel = case _ of
   WalletsBook -> "Remove wallet entry"
   ReferencesBook -> "Remove reference entry"
+  -- #288 slice A: snapshot remove labels finalised in slice C.
+  OperateDraftsBook -> "Remove draft"
+  OperateHistoryBook -> "Remove history entry"
 
 -- | One copy icon-button.  Renders `content_copy` by
 -- | default; when 'recently' is true it temporarily shows
@@ -1695,3 +1734,13 @@ mkNamedEntry d =
           , uri: d.value
           , refType: d.refType
           }
+      -- #288 slice A: the /books `Add new` button isn't
+      -- rendered for snapshot books (no manual entry).
+      -- Slice C wires the real path; this branch is dead
+      -- code in slice A but keeps mkNamedEntry total.
+      OperateDraftsBook ->
+        OperateSnapshotE
+          { name, snapshot: jsonEmptyObject }
+      OperateHistoryBook ->
+        OperateSnapshotE
+          { name, snapshot: jsonEmptyObject }

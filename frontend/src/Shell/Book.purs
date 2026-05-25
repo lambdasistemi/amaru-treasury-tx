@@ -30,12 +30,16 @@ module Shell.Book
   , BookKey(..)
   , WalletEntry
   , ReferenceEntry
+  , OperateSnapshotEntry
   , NamedEntry(..)
   , namedTypedValue
   , deriveDefaultName
   , storageKey
-  , maxEntries
+  , bookCap
+  , autoSaveName
   , loadNamed
+  , loadNamedVisible
+  , loadAutoSave
   , loadFreeText
   , recordNamed
   , recordFreeText
@@ -67,15 +71,19 @@ import Foreign.Object as FO
 -- ---------------------------------------------------------------------------
 -- Book taxonomy
 
--- | Books holding cryptographic / identity material.
--- | Each entry carries a `name` plus typed payload
--- | field(s): `address` for wallets; the compound
--- | `{label, uri, type}` triple for references (one
--- | indivisible on-chain CIP-1694 `body.references[]`
--- | entry, slice G).
+-- | Books holding cryptographic / identity material OR
+-- | structured snapshots.  The legacy two books (`wallets`,
+-- | `references`) carry a `name` plus a typed payload field
+-- | (`address` / the indivisible `{label, uri, type}`
+-- | triple).  The #288 books (`operate_drafts`,
+-- | `operate_history`) carry a `name` plus an opaque
+-- | `snapshot :: Json` whose typed shape is OperatePage's
+-- | concern, not this layer's.
 data NamedBookKey
   = WalletsBook
   | ReferencesBook
+  | OperateDraftsBook
+  | OperateHistoryBook
 
 derive instance eqNamedBookKey :: Eq NamedBookKey
 
@@ -123,31 +131,59 @@ type ReferenceEntry =
   , refType :: String
   }
 
+-- | One row in either `operate_drafts` or `operate_history`.
+-- | `name` is an operator-chosen label for drafts and a UTC
+-- | ISO timestamp (`YYYY-MM-DD HH:MM:SS Z`) for history.
+-- | `snapshot` is the entire /operate form state, kept
+-- | opaque at this layer (typed shape is OperatePage's
+-- | concern; we never look inside).
+type OperateSnapshotEntry =
+  { name :: String
+  , snapshot :: Json
+  }
+
 -- | A row from any named book.  The constructor selects
 -- | the per-book entry shape so callers can pattern-match
 -- | without re-checking the originating key.
 data NamedEntry
   = WalletE WalletEntry
   | ReferenceE ReferenceEntry
+  | OperateSnapshotE OperateSnapshotEntry
 
 -- | Project the typed-value field from a named entry —
--- | `address` for wallets, `uri` for references.  Used by
--- | every dedup / lookup / remove path so the "what does
--- | identity mean for this book" rule lives in exactly
--- | one place.
+-- | `address` for wallets, `uri` for references, and the
+-- | entry `name` for snapshot entries (operate_drafts /
+-- | operate_history have no typed primitive; dedup-on-name
+-- | is the rule per FR-008).  Used by every dedup / lookup
+-- | / remove path so the "what does identity mean for this
+-- | book" rule lives in exactly one place.
 namedTypedValue :: NamedEntry -> String
 namedTypedValue = case _ of
   WalletE w -> w.address
   ReferenceE r -> r.uri
+  OperateSnapshotE s -> s.name
 
 -- ---------------------------------------------------------------------------
 -- Constants + key helpers
 
--- | Maximum entries kept per book.  Older values are
+-- | Per-book maximum entry count.  Older values are
 -- | dropped (tail-pruned) once a `record*` / `addNamed`
--- | call pushes the count past this cap.
-maxEntries :: Int
-maxEntries = 25
+-- | call pushes the count past this cap.  Drafts and the
+-- | legacy identity books cap at 25; auto-captured history
+-- | gets a wider 100-entry window so an operator can pull a
+-- | build from many months back.
+bookCap :: BookKey -> Int
+bookCap = case _ of
+  N OperateHistoryBook -> 100
+  _ -> 25
+
+-- | Reserved entry `name` used by `operate_drafts` for the
+-- | auto-save slot (debounced overwrite on every /operate
+-- | form-field change).  Excluded from `Drafts ▾` pickers
+-- | and from /books listings via 'loadNamedVisible'; cleared
+-- | by /operate on successful Build response.
+autoSaveName :: String
+autoSaveName = "__autosave__"
 
 storagePrefix :: String
 storagePrefix = "amaru-treasury.book."
@@ -156,6 +192,8 @@ namedSuffix :: NamedBookKey -> String
 namedSuffix = case _ of
   WalletsBook -> "wallets"
   ReferencesBook -> "references"
+  OperateDraftsBook -> "operate_drafts"
+  OperateHistoryBook -> "operate_history"
 
 freeTextSuffix :: FreeTextBookKey -> String
 freeTextSuffix = case _ of
@@ -215,6 +253,26 @@ loadNamed key = do
     Right json -> case key of
       WalletsBook -> decodeWallets json
       ReferencesBook -> decodeReferences json
+      OperateDraftsBook -> decodeSnapshots json
+      OperateHistoryBook -> decodeSnapshots json
+
+-- | Same as 'loadNamed' but drops the reserved auto-save
+-- | slot ('autoSaveName').  This is the listing source for
+-- | the `Drafts ▾` / `History ▾` pickers on /operate and
+-- | for the corresponding cards on /books.
+loadNamedVisible :: NamedBookKey -> Effect (Array NamedEntry)
+loadNamedVisible key =
+  Array.filter (\e -> namedTypedValue e /= autoSaveName)
+    <$> loadNamed key
+
+-- | Return the auto-save slot for a named book, if present.
+-- | Used by /operate's `Initialize` handler to restore
+-- | in-progress form state across route navigation + page
+-- | reload (FR-002).
+loadAutoSave :: NamedBookKey -> Effect (Maybe NamedEntry)
+loadAutoSave key =
+  Array.find (\e -> namedTypedValue e == autoSaveName)
+    <$> loadNamed key
 
 -- | Read a free-text book.  Same atomic-reset semantics
 -- | on invalid on-disk shape as 'loadNamed'.
@@ -255,6 +313,25 @@ decodeReferenceEntry j = do
   refType <- FO.lookup "type" obj >>= Argonaut.toString
   pure { name, label, uri, refType }
 
+-- | Decode the bare `[{name, snapshot}, …]` wire shape used
+-- | by both `operate_drafts` and `operate_history`.  The
+-- | `snapshot` value is kept as raw `Json` — its typed
+-- | shape is OperatePage's concern (slice B).  Atomic-reset
+-- | (FR-006): one malformed entry discards the whole book.
+decodeSnapshots :: Json -> Array NamedEntry
+decodeSnapshots j = case Argonaut.toArray j of
+  Nothing -> []
+  Just arr -> case traverse decodeSnapshotEntry arr of
+    Nothing -> []
+    Just es -> map OperateSnapshotE es
+
+decodeSnapshotEntry :: Json -> Maybe OperateSnapshotEntry
+decodeSnapshotEntry j = do
+  obj <- Argonaut.toObject j
+  name <- FO.lookup "name" obj >>= Argonaut.toString
+  snapshot <- FO.lookup "snapshot" obj
+  pure { name, snapshot }
+
 -- ---------------------------------------------------------------------------
 -- Record (auto-name on build)
 
@@ -283,7 +360,7 @@ recordNamed key value
           Just e -> e
           Nothing -> defaultEntry key value
         merged =
-          Array.take maxEntries (Array.cons entry without)
+          Array.take (bookCap (N key)) (Array.cons entry without)
       writeNamed key merged
 
 -- | Record the operator-supplied string into a free-text
@@ -297,7 +374,7 @@ recordFreeText key value
       let
         deduped = Array.filter (_ /= value) existing
         merged =
-          Array.take maxEntries (Array.cons value deduped)
+          Array.take (bookCap (F key)) (Array.cons value deduped)
       writeFreeText key merged
 
 defaultEntry :: NamedBookKey -> String -> NamedEntry
@@ -315,6 +392,17 @@ defaultEntry key value = case key of
       , uri: value
       , refType: ""
       }
+  OperateDraftsBook ->
+    -- The snapshot books are never written via 'recordNamed'
+    -- (slice B uses 'addNamed' with the full snapshot).
+    -- This branch is defensive: the entry name is the
+    -- caller-supplied value (treated as the dedup key) and
+    -- the snapshot is an empty JSON object.
+    OperateSnapshotE
+      { name: value, snapshot: Argonaut.jsonEmptyObject }
+  OperateHistoryBook ->
+    OperateSnapshotE
+      { name: value, snapshot: Argonaut.jsonEmptyObject }
 
 -- ---------------------------------------------------------------------------
 -- Rename / add / remove
@@ -335,6 +423,7 @@ renameNamed key value newName = do
   withName n = case _ of
     WalletE w -> WalletE (w { name = n })
     ReferenceE r -> ReferenceE (r { name = n })
+    OperateSnapshotE s -> OperateSnapshotE (s { name = n })
 
 -- | Insert a fully-formed named entry at position 0.
 -- | Dedup-on-typed-value: if an existing entry has the
@@ -351,7 +440,7 @@ addNamed key entry = do
         (\e -> namedTypedValue e /= v)
         existing
     merged =
-      Array.take maxEntries (Array.cons entry without)
+      Array.take (bookCap (N key)) (Array.cons entry without)
   writeNamed key merged
 
 -- | Delete the named entry whose typed value equals the
@@ -383,19 +472,19 @@ clear = _remove <<< storageKey
 -- | the `/books` import path (slice D) — the import's
 -- | merge logic produces the final array; this writes it
 -- | directly without per-entry `addNamed` round-trips.
--- | Cap defensively at `maxEntries` in case the caller's
--- | merge mis-counted.
+-- | Cap defensively at the per-book cap in case the
+-- | caller's merge mis-counted.
 replaceNamed
   :: NamedBookKey -> Array NamedEntry -> Effect Unit
 replaceNamed key xs =
-  writeNamed key (Array.take maxEntries xs)
+  writeNamed key (Array.take (bookCap (N key)) xs)
 
 -- | Overwrite a free-text book wholesale.  Same use-case
 -- | + defensive cap as 'replaceNamed'.
 replaceFreeText
   :: FreeTextBookKey -> Array String -> Effect Unit
 replaceFreeText key xs =
-  writeFreeText key (Array.take maxEntries xs)
+  writeFreeText key (Array.take (bookCap (F key)) xs)
 
 -- ---------------------------------------------------------------------------
 -- Write helpers (per-shape encoders)
@@ -416,6 +505,17 @@ encodeNamedJson :: NamedEntry -> Json
 encodeNamedJson = case _ of
   WalletE w -> encodeJson w
   ReferenceE r -> encodeReferenceEntry r
+  OperateSnapshotE s -> encodeSnapshotEntry s
+
+-- | Encoder for the `{name, snapshot}` snapshot-entry wire
+-- | shape shared by `operate_drafts` and `operate_history`.
+-- | The `snapshot` is emitted as-is (it is already `Json`).
+encodeSnapshotEntry :: OperateSnapshotEntry -> Json
+encodeSnapshotEntry s =
+  Argonaut.fromObject $ FO.fromFoldable
+    [ Tuple "name" (Argonaut.fromString s.name)
+    , Tuple "snapshot" s.snapshot
+    ]
 
 -- | Custom encoder for 'ReferenceEntry'.  Renames the PS
 -- | field `refType` to the on-disk / wire key @"type"@.

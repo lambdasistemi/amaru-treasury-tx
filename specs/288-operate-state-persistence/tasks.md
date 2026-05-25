@@ -7,17 +7,17 @@ Three bisect-safe slices on PR [#290](https://github.com/lambdasistemi/amaru-tre
 
 ## Slice A — `Shell.Book` foundation
 
-- [ ] T288-S1 [US1, US2, US5] Extend `frontend/src/Shell/Book.purs`: add `OperateDraftsBook` AND `OperateHistoryBook` to `NamedBookKey`.  Add `OperateSnapshotEntry :: { name :: String, snapshot :: Json }` record type used by BOTH books — `snapshot` stays as Argonaut `Json` (typed shape is `OperatePage`'s concern, not `Shell.Book`'s).  Wire encoders/decoders so the on-disk shape per book is `[{name, snapshot}, …]`.
+- [X] T288-S1 [US1, US2, US5] Extend `frontend/src/Shell/Book.purs`: add `OperateDraftsBook` AND `OperateHistoryBook` to `NamedBookKey`.  Add `OperateSnapshotEntry :: { name :: String, snapshot :: Json }` record type used by BOTH books — `snapshot` stays as Argonaut `Json` (typed shape is `OperatePage`'s concern, not `Shell.Book`'s).  Wire encoders/decoders so the on-disk shape per book is `[{name, snapshot}, …]`.
 
-- [ ] T288-S1 Per-book cap: promote `maxEntries :: Int = 25` to `bookCap :: BookKey -> Int` returning `25` for `WalletsBook` / `ReferencesBook` / `OperateDraftsBook` and `100` for `OperateHistoryBook`.  Every `record*` / `addNamed` call uses `bookCap` instead of the constant.
+- [X] T288-S1 Per-book cap: promote `maxEntries :: Int = 25` to `bookCap :: BookKey -> Int` returning `25` for `WalletsBook` / `ReferencesBook` / `OperateDraftsBook` and `100` for `OperateHistoryBook`.  Every `record*` / `addNamed` call uses `bookCap` instead of the constant.
 
-- [ ] T288-S1 [US4] Expose two query helpers:
+- [X] T288-S1 [US4] Expose two query helpers:
   - `loadNamedVisible :: NamedBookKey -> Effect (Array NamedEntry)` — same as `loadNamed` but filters out entries whose `name` matches the reserved auto-save marker (`__autosave__`).  Used by `Drafts ▾` and the /books `Drafts` card.
   - `loadAutoSave :: NamedBookKey -> Effect (Maybe NamedEntry)` — returns the `__autosave__` entry if present.  Used by /operate Initialize.
 
-- [ ] T288-S1 Smoke proof in `WIP.md`: pre-plant `localStorage.book.operate_drafts` with one named entry + one `__autosave__` entry → reload → `loadNamedVisible OperateDraftsBook` returns the named entry only; `loadAutoSave OperateDraftsBook` returns the auto-save entry.  Plant 102 entries in `localStorage.book.operate_history` → reload → load returns exactly 100 (tail dropped).
+- [X] T288-S1 Smoke proof in `WIP.md`: pre-plant `localStorage.book.operate_drafts` with one named entry + one `__autosave__` entry → reload → `loadNamedVisible OperateDraftsBook` returns the named entry only; `loadAutoSave OperateDraftsBook` returns the auto-save entry.  Plant 102 entries in `localStorage.book.operate_history` → reload → load returns exactly 100 (tail dropped).
 
-- [ ] T288-S1 Commit: `feat(288): Shell.Book — operate_drafts + operate_history + auto-save helpers + per-book cap` with `Tasks: T288-S1` trailer.
+- [X] T288-S1 Commit: `feat(288): Shell.Book — operate_drafts + operate_history + auto-save helpers + per-book cap` with `Tasks: T288-S1` trailer.
 
 ## Slice B — /operate integration
 

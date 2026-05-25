@@ -4,11 +4,13 @@
 # the orchestrator accepts the commit, and the finalization audit
 # re-runs it at HEAD.
 #
-# Will grow during plan/tasks to add:
-#   - a focused unit pattern for the indexer runner module,
-#   - a live-boundary smoke that issues an HTTP request to a running
-#     api container and asserts zero GetUTxOByAddress on the node
-#     socket trace.
+# Live-boundary devnet smoke is opt-in, NOT auto-gated. Run it via
+#   nix develop -c just devnet-api-smoke
+# with E2E_GENESIS_DIR + DEVNET_SMOKE_METADATA set. The byte-level
+# N2C socket recorder that would prove "zero GetUTxOByAddress on
+# the wire" is a deferred follow-up; the FR-004 invariant is
+# currently proved at the Provider boundary by the unit suite
+# (test/unit/Amaru/Treasury/Api/HandlersIndexerSpec.hs trappedProvider).
 # See gate-script skill ("Extended by the orchestrator").
 set -euo pipefail
 

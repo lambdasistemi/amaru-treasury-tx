@@ -126,7 +126,7 @@ Layout legend:
 
 ## Phase 5 — Live-boundary devnet smoke
 
-- [ ] **T009 [H]** **RED** + **GREEN** in one commit. Write
+- [X] **T009 [H]** **RED** + **GREEN** in one commit. Write
   `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs` per
   [research.md §6](./research.md). The smoke boots the
   container against a devnet node with N2C trace recording,
@@ -140,7 +140,7 @@ Layout legend:
   (d) HTTP 200 returns within ~1 lag-threshold after
   follower resume.
 
-- [ ] **T010 [F]** Extend `./gate.sh` to run the smoke. Single
+- [X] **T010 [F]** Extend `./gate.sh` to run the smoke. Single
   commit. Subject:
   `chore: extend gate.sh with devnet indexer smoke`.
 

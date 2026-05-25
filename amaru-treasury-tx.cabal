@@ -719,6 +719,7 @@ test-suite devnet-tests
   main-is:            Spec.hs
   default-language:   GHC2021
   other-modules:
+    Amaru.Treasury.Api.IndexerSmokeSpec
     Amaru.Treasury.Devnet.MixedUtxoSmoke
     Amaru.Treasury.Devnet.SmokeSpec
 
@@ -726,7 +727,7 @@ test-suite devnet-tests
     , aeson
     , amaru-treasury-tx
     , async
-    , base                         <5
+    , base                                   <5
     , base16-bytestring
     , bech32
     , bytestring
@@ -738,6 +739,7 @@ test-suite devnet-tests
     , cardano-ledger-mary
     , cardano-node-clients
     , cardano-node-clients:devnet
+    , cardano-node-clients:utxo-indexer-lib
     , cardano-slotting
     , cardano-tx-tools
     , containers
@@ -745,12 +747,20 @@ test-suite devnet-tests
     , filepath
     , hspec
     , hspec-discover
+    , http-client
+    , http-types
     , microlens
+    , network
     , ouroboros-network:api
     , plutus-core
+    , servant-server
+    , tagged
+    , temporary
     , text
     , time
     , transformers
     , unix
+    , wai
+    , warp
 
   build-tool-depends: hspec-discover:hspec-discover

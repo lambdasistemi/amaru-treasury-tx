@@ -26,17 +26,6 @@ export const _downloadText = (filename) => (content) => () => {
   }
 };
 
-// Best-effort clipboard write via navigator.clipboard.
-// Silently no-ops on browsers that gate the API behind
-// HTTPS-only or focus-policy restrictions.
-export const _writeClipboard = (text) => () => {
-  try {
-    navigator.clipboard?.writeText(text).catch(() => {});
-  } catch {
-    /* non-fatal */
-  }
-};
-
 // Asynchronously read the first selected file from a
 // <input type="file"> identified by CSS selector and pass
 // its contents to onSuccess.  Empty selection resolves

@@ -30,8 +30,9 @@ import Data.Either (Either(..))
 import Data.Enum (fromEnum)
 import Data.Maybe (Maybe(..))
 import Data.String as String
+import Data.Time.Duration (Milliseconds(..))
 import Effect (Effect)
-import Effect.Aff (Aff, makeAff, nonCanceler)
+import Effect.Aff (Aff, delay, makeAff, nonCanceler)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Exception (Error)
 import Effect.Now (now)
@@ -50,6 +51,7 @@ import Shell
   , toggleThemeEff
   , topbar
   )
+import Shell.Clipboard as Clipboard
 import Shell.Book
   ( BookKey(..)
   , FreeTextBookKey(..)
@@ -169,6 +171,16 @@ data EditingId = EditingId NamedBookKey String
 
 derive instance eqEditingId :: Eq EditingId
 
+-- | Identifies one row whose trash icon was just clicked
+-- | and is awaiting an explicit confirm (slice E's guarded
+-- | delete).  The String is the entry's typed value for
+-- | named rows, or the string content for free-text rows.
+data RemoveTarget
+  = RemoveNamedT NamedBookKey String
+  | RemoveFreeTextT FreeTextBookKey String
+
+derive instance eqRemoveTarget :: Eq RemoveTarget
+
 type ImportPreview =
   { afterBooks :: Books
   , diffRows :: Array DiffRow
@@ -201,6 +213,8 @@ type State =
   , clearConfirm :: Maybe FreeTextBookKey
   , theme :: Theme.Theme
   , importDialog :: ImportDialogState
+  , confirmingRemove :: Maybe RemoveTarget
+  , recentlyCopied :: Maybe String
   }
 
 initialState :: State
@@ -213,6 +227,8 @@ initialState =
   , clearConfirm: Nothing
   , theme: Theme.Dark
   , importDialog: emptyImportDialog
+  , confirmingRemove: Nothing
+  , recentlyCopied: Nothing
   }
 
 data Action
@@ -223,8 +239,11 @@ data Action
   | CommitRename
   | CancelRename
   | RenameKeyDown KeyboardEvent
-  | RemoveNamedEntry NamedBookKey String
-  | RemoveFreeTextEntry FreeTextBookKey String
+  | RequestRemove RemoveTarget
+  | CancelRemove
+  | ConfirmRemove
+  | CopyValue String
+  | ClearCopiedFlag String
   | RequestClearFreeText FreeTextBookKey
   | ConfirmClearFreeText
   | CancelClearFreeText
@@ -401,13 +420,14 @@ namedEntryRow st key entry =
   let
     tv = namedTypedValue entry
     eid = EditingId key tv
+    target = RemoveNamedT key tv
     nameForDisplay = case st.editing of
       Just other | other == eid -> st.draftName
       _ -> entryName entry
   in
     HH.div
       [ HP.classes [ cn "reference-row" ]
-      , HP.style "align-items:center;gap:.5rem"
+      , HP.style (rowStyle (st.confirmingRemove == Just target))
       ]
       [ HH.input
           [ HP.value nameForDisplay
@@ -420,23 +440,24 @@ namedEntryRow st key entry =
           , HE.onKeyDown RenameKeyDown
           , HP.style "flex:1"
           ]
-      , HH.span
-          [ HP.classes [ cn "field__input", cn "field__input--mono" ]
+      , HH.a
+          [ HP.href (namedLinkHref key tv)
+          , HP.target "_blank"
+          , HP.rel "noopener noreferrer"
           , HP.title tv
+          , HP.classes
+              [ cn "field__input"
+              , cn "field__input--mono"
+              ]
           , HP.style
               "flex:1.4;display:block;\
               \overflow:hidden;text-overflow:ellipsis;\
               \white-space:nowrap;padding:.5rem;\
-              \background:transparent;cursor:default"
+              \background:transparent;text-decoration:underline"
           ]
           [ HH.text (truncate tv) ]
-      , HH.button
-          [ HP.classes [ cn "btn", cn "btn--ghost" ]
-          , HE.onClick (\_ -> RemoveNamedEntry key tv)
-          , HP.type_ HP.ButtonButton
-          , HP.title "Remove this entry"
-          ]
-          [ HH.text "×" ]
+      , copyButton (st.recentlyCopied == Just tv) tv (copyLabel key)
+      , deleteCluster st target (removeLabel key)
       ]
 
 namedFooter
@@ -551,7 +572,7 @@ freeTextCard st key =
       ( if Array.null entries then
           [ emptyCardCaption (freeTextEmpty key) ]
         else
-          map (freeTextRow key) entries
+          map (freeTextRow st key) entries
       )
       [ freeTextFooter st key (Array.length entries)
       , perCardExport (F key)
@@ -559,31 +580,32 @@ freeTextCard st key =
 
 freeTextRow
   :: forall m
-   . FreeTextBookKey
+   . State
+  -> FreeTextBookKey
   -> String
   -> H.ComponentHTML Action () m
-freeTextRow key value =
-  HH.div
-    [ HP.classes [ cn "reference-row" ]
-    , HP.style "gap:.5rem;align-items:center"
-    ]
-    [ HH.span
-        [ HP.classes [ cn "field__input" ]
-        , HP.style
-            "flex:1;display:block;padding:.5rem;\
-            \overflow:hidden;text-overflow:ellipsis;\
-            \white-space:nowrap;background:transparent"
-        , HP.title value
-        ]
-        [ HH.text value ]
-    , HH.button
-        [ HP.classes [ cn "btn", cn "btn--ghost" ]
-        , HE.onClick (\_ -> RemoveFreeTextEntry key value)
-        , HP.type_ HP.ButtonButton
-        , HP.title "Remove this entry"
-        ]
-        [ HH.text "×" ]
-    ]
+freeTextRow st key value =
+  let
+    target = RemoveFreeTextT key value
+  in
+    HH.div
+      [ HP.classes [ cn "reference-row" ]
+      , HP.style (rowStyle (st.confirmingRemove == Just target))
+      ]
+      [ HH.span
+          [ HP.classes [ cn "field__input" ]
+          , HP.style
+              "flex:1;display:block;padding:.5rem;\
+              \overflow:hidden;text-overflow:ellipsis;\
+              \white-space:nowrap;background:transparent"
+          , HP.title value
+          ]
+          [ HH.text value ]
+      , copyButton (st.recentlyCopied == Just value) value
+          ("Copy " <> freeTextSingular key)
+      , deleteCluster st target
+          ("Remove " <> freeTextSingular key <> " entry")
+      ]
 
 freeTextFooter
   :: forall m
@@ -1006,6 +1028,107 @@ dialogFooter st =
       )
   ]
 
+-- ---------------------------------------------------------------------------
+-- Per-row affordances (slice E): clickable typed value,
+-- copy icon-button (with 1s "✓" flash), guarded trash icon
+-- that flips the row into a check / cancel pair.
+
+rowStyle :: Boolean -> String
+rowStyle confirming =
+  "gap:.5rem;align-items:center;border-radius:4px;\
+  \padding:.1rem .25rem;\
+  \transition:background .15s ease" <>
+    if confirming then ";background:rgba(186,26,26,.18)"
+    else ""
+
+-- | External-link URL for a named book entry.  Wallets go
+-- | to Cardanoscan; reference URIs pass through if they
+-- | already carry an `ipfs://` / `http(s)://` scheme,
+-- | otherwise are sniffed as a bare CID and routed via the
+-- | public IPFS gateway (best-effort — operators can swap
+-- | the gateway by storing a full URL instead of a CID).
+namedLinkHref :: NamedBookKey -> String -> String
+namedLinkHref key value = case key of
+  WalletsBook ->
+    "https://cardanoscan.io/address/" <> value
+  ReferenceUrisBook ->
+    if hasUriScheme value then value
+    else "https://ipfs.io/ipfs/" <> value
+
+hasUriScheme :: String -> Boolean
+hasUriScheme v =
+  String.take 7 v == "ipfs://"
+    || String.take 8 v == "https://"
+    || String.take 7 v == "http://"
+
+copyLabel :: NamedBookKey -> String
+copyLabel = case _ of
+  WalletsBook -> "Copy wallet address"
+  ReferenceUrisBook -> "Copy CID"
+
+removeLabel :: NamedBookKey -> String
+removeLabel = case _ of
+  WalletsBook -> "Remove wallet entry"
+  ReferenceUrisBook -> "Remove reference URI"
+
+-- | One copy icon-button.  Renders `content_copy` by
+-- | default; when 'recently' is true it temporarily shows
+-- | `check` to confirm the clipboard write landed.
+copyButton
+  :: forall m
+   . Boolean
+  -> String
+  -> String
+  -> H.ComponentHTML Action () m
+copyButton recently val ariaLabel =
+  mdIconButton
+    (if recently then "check" else "content_copy")
+    ariaLabel
+    (CopyValue val)
+
+-- | Trash icon-button OR the confirm/cancel pair, depending
+-- | on whether 'state.confirmingRemove' targets THIS row.
+deleteCluster
+  :: forall m
+   . State
+  -> RemoveTarget
+  -> String
+  -> H.ComponentHTML Action () m
+deleteCluster st target ariaLabel
+  | st.confirmingRemove == Just target =
+      HH.span
+        [ HP.style "display:inline-flex;gap:.1rem" ]
+        [ mdIconButton "check"
+            ("Confirm: " <> ariaLabel)
+            ConfirmRemove
+        , mdIconButton "close"
+            ("Cancel: " <> ariaLabel)
+            CancelRemove
+        ]
+  | otherwise =
+      mdIconButton "delete" ariaLabel (RequestRemove target)
+
+-- | Thin Halogen wrapper for Material Web's
+-- | `<md-icon-button>` + `<md-icon>` pair.  Plain `<button>`
+-- | doesn't work here because MWC's icon-button registers
+-- | as a custom element with its own click affordance and
+-- | ripple — we'd lose the MD styling.
+mdIconButton
+  :: forall m
+   . String
+  -> String
+  -> Action
+  -> H.ComponentHTML Action () m
+mdIconButton iconName ariaLabel action =
+  HH.element (HH.ElemName "md-icon-button")
+    [ HP.attr (HH.AttrName "aria-label") ariaLabel
+    , HP.title ariaLabel
+    , HE.onClick (\_ -> action)
+    ]
+    [ HH.element (HH.ElemName "md-icon") []
+        [ HH.text iconName ]
+    ]
+
 cn :: String -> HH.ClassName
 cn = HH.ClassName
 
@@ -1055,21 +1178,48 @@ handleAction = case _ of
     "Escape" -> handleAction CancelRename
     _ -> pure unit
 
-  RemoveNamedEntry key value -> do
-    H.liftEffect (removeNamed key value)
-    books' <- H.liftEffect loadAllBooks
-    H.modify_ \s -> s
-      { books = books'
-      , editing = case s.editing of
-          Just (EditingId k v)
-            | k == key && v == value -> Nothing
-          other -> other
-      }
+  RequestRemove target ->
+    H.modify_ \s -> s { confirmingRemove = Just target }
 
-  RemoveFreeTextEntry key value -> do
-    H.liftEffect (removeFreeText key value)
-    books' <- H.liftEffect loadAllBooks
-    H.modify_ \s -> s { books = books' }
+  CancelRemove ->
+    H.modify_ \s -> s { confirmingRemove = Nothing }
+
+  ConfirmRemove -> do
+    st <- H.get
+    case st.confirmingRemove of
+      Just (RemoveNamedT key value) -> do
+        H.liftEffect (removeNamed key value)
+        books' <- H.liftEffect loadAllBooks
+        H.modify_ \s -> s
+          { books = books'
+          , confirmingRemove = Nothing
+          , editing = case s.editing of
+              Just (EditingId k v)
+                | k == key && v == value -> Nothing
+              other -> other
+          }
+      Just (RemoveFreeTextT key value) -> do
+        H.liftEffect (removeFreeText key value)
+        books' <- H.liftEffect loadAllBooks
+        H.modify_ \s -> s
+          { books = books'
+          , confirmingRemove = Nothing
+          }
+      Nothing -> pure unit
+
+  CopyValue val -> do
+    H.liftEffect (Clipboard.writeText val)
+    H.modify_ \s -> s { recentlyCopied = Just val }
+    _ <- H.fork do
+      H.liftAff (delay (Milliseconds 1000.0))
+      handleAction (ClearCopiedFlag val)
+    pure unit
+
+  ClearCopiedFlag val ->
+    H.modify_ \s ->
+      if s.recentlyCopied == Just val then
+        s { recentlyCopied = Nothing }
+      else s
 
   RequestClearFreeText key ->
     H.modify_ \s -> s { clearConfirm = Just key }

@@ -106,6 +106,7 @@ library
     Amaru.Treasury.Api.BuildDisburse
     Amaru.Treasury.Api.BuildReorganize
     Amaru.Treasury.Api.BuildSwap
+    Amaru.Treasury.Api.Config
     Amaru.Treasury.Api.Server
     Amaru.Treasury.Api.Types
     Amaru.Treasury.AuxData
@@ -136,6 +137,7 @@ library
     Amaru.Treasury.Cli
     Amaru.Treasury.Cli.AttachWitness
     Amaru.Treasury.Cli.Common
+    Amaru.Treasury.Cli.Config
     Amaru.Treasury.Cli.DisburseWizard
     Amaru.Treasury.Cli.Envelope
     Amaru.Treasury.Cli.GovernanceWithdrawalInitWizard
@@ -156,6 +158,11 @@ library
     Amaru.Treasury.Cli.Vault
     Amaru.Treasury.Cli.WithdrawWizard
     Amaru.Treasury.Cli.Witness
+    Amaru.Treasury.Config
+    Amaru.Treasury.Config.File
+    Amaru.Treasury.Config.OptEnv
+    Amaru.Treasury.Config.Resolve
+    Amaru.Treasury.Config.Types
     Amaru.Treasury.Constants
     Amaru.Treasury.Devnet.DisburseSubmit
     Amaru.Treasury.Devnet.GovernanceWithdrawalInit
@@ -269,6 +276,7 @@ library
     , http-media
     , memory
     , microlens
+    , opt-env-conf
     , optparse-applicative
     , ouroboros-consensus
     , ouroboros-consensus:cardano
@@ -286,6 +294,7 @@ library
     , unix
     , wai
     , warp
+    , yaml
 
 executable amaru-treasury-tx
   import:           warnings
@@ -310,6 +319,7 @@ executable amaru-treasury-tx
     , contra-tracer
     , directory
     , microlens
+    , opt-env-conf
     , optparse-applicative
     , ouroboros-network:api
     , text
@@ -442,6 +452,7 @@ executable amaru-treasury-tx-api
     , bytestring
     , cardano-ledger-core
     , containers
+    , opt-env-conf
     , optparse-applicative
     , ouroboros-network:api
     , servant-server
@@ -489,6 +500,8 @@ test-suite unit-tests
     Amaru.Treasury.Cli.VaultSpec
     Amaru.Treasury.Cli.WithdrawWizardInputControlSpec
     Amaru.Treasury.Cli.WitnessSpec
+    Amaru.Treasury.Config.FileSpec
+    Amaru.Treasury.Config.ResolveSpec
     Amaru.Treasury.ConstantsSpec
     Amaru.Treasury.Devnet.DisburseSubmitSpec
     Amaru.Treasury.Devnet.GovernanceWithdrawalInitSpec
@@ -583,6 +596,7 @@ test-suite unit-tests
     , http-types
     , jsonschema
     , microlens
+    , opt-env-conf
     , optparse-applicative
     , ouroboros-network:api
     , plutus-core

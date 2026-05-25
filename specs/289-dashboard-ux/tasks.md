@@ -47,10 +47,10 @@ Eight bisect-safe slices.  Each commit body trailer: `Tasks: T289-S<n>`.  Persis
 
 ## Slice F — Dashboard copy actions
 
-- [ ] T289-S6 [US6] Every long-string value (treasury addresses, txids, references) on `/` renders a copy icon-button DOM-adjacent to the value.  Reuse `Shell.Clipboard` from #267 (slice E).
-- [ ] T289-S6 [US6] Copy feedback: icon swaps to `check` for 1 s then reverts.  Clipboard failures render an inline `Copy failed` line directly below the button (the existing `_writeClipboard` swallows errors; this slice adds a status return to surface them).
-- [ ] T289-S6 Smoke proof in `WIP.md`: monkey-patch `navigator.clipboard.writeText` to capture the call; verify the value is exactly the displayed value (not truncated).  Visual check at 390 px: copy button + value fit on one row.
-- [ ] T289-S6 Commit: `feat(289): / dashboard copy actions colocated + immediate feedback` with `Tasks: T289-S6` trailer.
+- [X] T289-S6 [US6] Every long-string value (treasury addresses, txids, references) on `/` renders a copy icon-button DOM-adjacent to the value.  Reuse `Shell.Clipboard` from #267 (slice E).
+- [X] T289-S6 [US6] Copy feedback: icon swaps to `check` for 1 s then reverts.  Clipboard failures render an inline `Copy failed` line directly below the button (the existing `_writeClipboard` swallows errors; this slice adds a status return to surface them).
+- [X] T289-S6 Smoke proof in `WIP.md`: monkey-patch `navigator.clipboard.writeText` to capture the call; verify the value is exactly the displayed value (not truncated).  Visual check at 390 px: copy button + value fit on one row.
+- [X] T289-S6 Commit: `feat(289): / dashboard copy actions colocated + immediate feedback` with `Tasks: T289-S6` trailer.
 
 ## Slice G — `/books` empty-state cleanup
 

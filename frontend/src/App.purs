@@ -31,13 +31,17 @@ import Data.Either (Either(..))
 import Data.Foldable (sum, traverse_)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Set (Set)
+import Data.Set as Set
 import Data.String.CodePoints as CodePoints
 import Data.Time.Duration (Milliseconds(..))
 import Effect (Effect)
+import Effect.Aff (delay)
 import Effect.Aff.Class (class MonadAff)
 import Effect.Now (now)
 import Effect.Timer (setInterval)
 import Foreign.Object as FO
+import Shell.Clipboard as Clipboard
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
@@ -75,6 +79,15 @@ type State =
   -- updates without re-running the chain query.
   , clockNow :: Maybe Instant
   , theme :: Theme.Theme
+  -- #289 slice F — transient per-value flags for the
+  -- dashboard copy buttons.  Both indexed by the full
+  -- value string (the natural unique key — the same string
+  -- is the clipboard payload).  An entry in 'copiedKeys'
+  -- means the icon stays a check-mark for ~1 s; an entry
+  -- in 'failedKeys' means the "Copy failed" caption is
+  -- visible below the button for ~3 s.
+  , copiedKeys :: Set String
+  , failedKeys :: Set String
   }
 
 data Action
@@ -88,6 +101,14 @@ data Action
   -- 30 s chain refresh so the "x s ago" label updates
   -- every second.
   | TickNow
+  -- #289 slice F — colocated copy buttons for long-string
+  -- values on the dashboard.  'CopyValue' invokes the
+  -- clipboard FFI and dispatches one of the
+  -- 'ClearCopied' / 'ClearFailed' actions after the
+  -- feedback timeout elapses.
+  | CopyValue String
+  | ClearCopied String
+  | ClearFailed String
 
 data ScopeName
   = CoreDevelopment
@@ -137,6 +158,8 @@ initialState =
   , lastRefreshAt: Nothing
   , clockNow: Nothing
   , theme: Theme.Dark
+  , copiedKeys: Set.empty
+  , failedKeys: Set.empty
   }
 
 scopeOf :: State -> ScopeName -> ScopeState
@@ -334,7 +357,7 @@ component =
         Loaded j ->
           HH.div_
             [ scopeSummary name j
-            , scopeKvList name j
+            , scopeKvList st name j
             , md "md-divider" [] []
             -- The JSON tree is rendered under a single
             -- "details" super-key so the user gets the
@@ -484,6 +507,33 @@ component =
       t <- H.liftEffect now
       H.modify_ \s -> s { clockNow = Just t }
 
+    CopyValue val -> do
+      ok <- H.liftAff (Clipboard.writeTextWithResult val)
+      if ok then do
+        H.modify_ \s -> s
+          { copiedKeys = Set.insert val s.copiedKeys
+          , failedKeys = Set.delete val s.failedKeys
+          }
+        _ <- H.fork do
+          H.liftAff (delay (Milliseconds 1000.0))
+          handleAction (ClearCopied val)
+        pure unit
+      else do
+        H.modify_ \s -> s
+          { failedKeys = Set.insert val s.failedKeys
+          , copiedKeys = Set.delete val s.copiedKeys
+          }
+        _ <- H.fork do
+          H.liftAff (delay (Milliseconds 3000.0))
+          handleAction (ClearFailed val)
+        pure unit
+
+    ClearCopied val ->
+      H.modify_ \s -> s { copiedKeys = Set.delete val s.copiedKeys }
+
+    ClearFailed val ->
+      H.modify_ \s -> s { failedKeys = Set.delete val s.failedKeys }
+
     LoadStatic -> do
       v <- H.liftAff Api.fetchVersion
       case v of
@@ -572,8 +622,8 @@ stat label_ value_ =
         [ HH.text label_ ]
     ]
 
-scopeKvList :: forall w i. ScopeName -> Json -> HH.HTML w i
-scopeKvList name j =
+scopeKvList :: forall w. State -> ScopeName -> Json -> HH.HTML w Action
+scopeKvList st name j =
   let
     section_ = lookupScopeSection (scopeKey name) j
     addr = readString section_ "treasuryAddress"
@@ -590,16 +640,99 @@ scopeKvList name j =
   in
     md "md-list"
       []
-      [ kvLink "treasury address"
-          (shortAddr addr)
-          addr
-          ("https://cardanoscan.io/address/" <> addr)
-      , kvLink "treasury script hash"
-          (shortHex scriptHash)
-          scriptHash
-          ("https://cardanoscan.io/script/" <> scriptHash)
+      [ copyRow
+          { label: "treasury address"
+          , truncated: shortAddr addr
+          , full: addr
+          , href: Just ("https://cardanoscan.io/address/" <> addr)
+          , copied: Set.member addr st.copiedKeys
+          , failed: Set.member addr st.failedKeys
+          }
+      , copyRow
+          { label: "treasury script hash"
+          , truncated: shortHex scriptHash
+          , full: scriptHash
+          , href: Just ("https://cardanoscan.io/script/" <> scriptHash)
+          , copied: Set.member scriptHash st.copiedKeys
+          , failed: Set.member scriptHash st.failedKeys
+          }
       , kvItem "pending swap orders"
           (formatThousands pendingCount) ""
+      ]
+
+-- | #289 slice F — colocated copy-button row for any
+-- | long-string value on the dashboard.  Renders the
+-- | truncated display + optional cardanoscan link + a
+-- | sibling copy icon-button + an inline failure caption.
+-- | Replaces the old `md-list-item type="link"` row for the
+-- | per-scope treasury address / script-hash entries: the
+-- | typed-link semantic conflicted with placing an
+-- | interactive child inside (Material Web's type=link
+-- | swallows clicks before they reach the button).
+copyRow
+  :: forall w
+   . { label :: String
+     , truncated :: String
+     , full :: String
+     , href :: Maybe String
+     , copied :: Boolean
+     , failed :: Boolean
+     }
+  -> HH.HTML w Action
+copyRow cfg =
+  let
+    valueNode = case cfg.href of
+      Just h ->
+        HH.a
+          [ HP.title cfg.full
+          , HP.classes
+              [ HH.ClassName "copy-row__value"
+              , HH.ClassName "mono"
+              ]
+          , HP.href h
+          , HP.target "_blank"
+          , HP.rel "noopener"
+          ]
+          [ HH.text cfg.truncated ]
+      Nothing ->
+        HH.span
+          [ HP.title cfg.full
+          , HP.classes
+              [ HH.ClassName "copy-row__value"
+              , HH.ClassName "mono"
+              ]
+          ]
+          [ HH.text cfg.truncated ]
+    icon = if cfg.copied then "✓" else "⎘"
+    btnLabel = "Copy " <> cfg.label
+  in
+    HH.div
+      [ HP.classes [ HH.ClassName "copy-row" ] ]
+      [ HH.div
+          [ HP.classes [ HH.ClassName "copy-row__label" ] ]
+          [ HH.text cfg.label ]
+      , valueNode
+      , HH.button
+          [ HP.classes [ HH.ClassName "copy-icon-btn" ]
+          , HP.attr (HH.AttrName "data-state")
+              ( if cfg.copied then "copied"
+                else if cfg.failed then "failed"
+                else "idle"
+              )
+          , HP.attr (HH.AttrName "aria-label") btnLabel
+          , HP.title btnLabel
+          , HP.type_ HP.ButtonButton
+          , HE.onClick (\_ -> CopyValue cfg.full)
+          ]
+          [ HH.text icon ]
+      , if cfg.failed then
+          HH.div
+            [ HP.classes
+                [ HH.ClassName "copy-row__failed" ]
+            , HP.attr (HH.AttrName "role") "status"
+            ]
+            [ HH.text "Copy failed" ]
+        else HH.text ""
       ]
 
 kvItem

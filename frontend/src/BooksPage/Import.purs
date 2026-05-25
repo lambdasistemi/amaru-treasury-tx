@@ -47,6 +47,7 @@ import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.String as String
 import Data.String.Common (joinWith)
+import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Foreign.Object as FO
 
@@ -55,7 +56,7 @@ import Shell.Book
   , FreeTextBookKey(..)
   , NamedBookKey(..)
   , NamedEntry(..)
-  , ReferenceUriEntry
+  , ReferenceEntry
   , WalletEntry
   )
 
@@ -66,15 +67,13 @@ import Shell.Book
 
 type Books =
   { wallets :: Array NamedEntry
-  , referenceUris :: Array NamedEntry
+  , references :: Array NamedEntry
   , descriptions :: Array String
   , justifications :: Array String
   , destinationLabels :: Array String
   , validityHours :: Array String
   , slippageBps :: Array String
   , splitCounts :: Array String
-  , referenceTypes :: Array String
-  , referenceLabels :: Array String
   }
 
 -- ---------------------------------------------------------------------------
@@ -83,20 +82,18 @@ type Books =
 data ImportPayload
   = BundlePayload BundleData
   | BareNamedWallets (Array WalletEntry)
-  | BareNamedRefUris (Array ReferenceUriEntry)
+  | BareNamedReferences (Array ReferenceEntry)
   | BareFreeText (Array String)
 
 type BundleData =
   { wallets :: Array WalletEntry
-  , referenceUris :: Array ReferenceUriEntry
+  , references :: Array ReferenceEntry
   , descriptions :: Array String
   , justifications :: Array String
   , destinationLabels :: Array String
   , validityHours :: Array String
   , slippageBps :: Array String
   , splitCounts :: Array String
-  , referenceTypes :: Array String
-  , referenceLabels :: Array String
   , warnings :: Array String
   }
 
@@ -138,10 +135,18 @@ parseBareArray
 parseBareArray arr
   | Array.null arr = Left EmptyImport
   | otherwise =
-      case asWalletEntries arr of
-        Just xs -> Right (BareNamedWallets xs)
-        Nothing -> case asRefUriEntries arr of
-          Just xs -> Right (BareNamedRefUris xs)
+      -- References go FIRST: a ReferenceEntry has all the
+      -- WalletEntry fields except 'address' is replaced by
+      -- 'uri', and references additionally has 'label' +
+      -- 'type'.  Checking references before wallets means
+      -- a `{name, address, uri, label, type}` blob would
+      -- route to references (correct).  Wallets vs free
+      -- text are mutually exclusive by shape so order
+      -- doesn't matter for them.
+      case asReferenceEntries arr of
+        Just xs -> Right (BareNamedReferences xs)
+        Nothing -> case asWalletEntries arr of
+          Just xs -> Right (BareNamedWallets xs)
           Nothing -> case asStrings arr of
             Just xs -> Right (BareFreeText xs)
             Nothing -> Left UnknownShape
@@ -152,12 +157,24 @@ asWalletEntries arr = case decodeJson (Argonaut.fromArray arr) of
     | not (Array.null xs) -> Just xs
   _ -> Nothing
 
-asRefUriEntries
-  :: Array Json -> Maybe (Array ReferenceUriEntry)
-asRefUriEntries arr = case decodeJson (Argonaut.fromArray arr) of
-  Right (xs :: Array ReferenceUriEntry)
-    | not (Array.null xs) -> Just xs
+-- | A bare array is a 'references' payload when EVERY entry
+-- | decodes via 'decodeReferenceEntry' (i.e. carries
+-- | @name@, @label@, @uri@, @type@ — all strings).  All-or-
+-- | nothing per the FR-011 spirit.
+asReferenceEntries
+  :: Array Json -> Maybe (Array ReferenceEntry)
+asReferenceEntries arr = case traverse decodeReferenceEntry arr of
+  Just xs | not (Array.null xs) -> Just xs
   _ -> Nothing
+
+decodeReferenceEntry :: Json -> Maybe ReferenceEntry
+decodeReferenceEntry j = do
+  obj <- Argonaut.toObject j
+  name <- FO.lookup "name" obj >>= Argonaut.toString
+  label <- FO.lookup "label" obj >>= Argonaut.toString
+  uri <- FO.lookup "uri" obj >>= Argonaut.toString
+  refType <- FO.lookup "type" obj >>= Argonaut.toString
+  pure { name, label, uri, refType }
 
 asStrings :: Array Json -> Maybe (Array String)
 asStrings arr = case decodeJson (Argonaut.fromArray arr) of
@@ -206,30 +223,26 @@ decodeBundleBooks obj =
         ]
   in
     { wallets: namedAt "wallets" obj
-    , referenceUris: refsAt "reference_uris" obj
+    , references: referencesAt "references" obj
     , descriptions: stringsAt "descriptions" obj
     , justifications: stringsAt "justifications" obj
     , destinationLabels: stringsAt "destination_labels" obj
     , validityHours: stringsAt "validity_hours" obj
     , slippageBps: stringsAt "slippage_bps" obj
     , splitCounts: stringsAt "split_counts" obj
-    , referenceTypes: stringsAt "reference_types" obj
-    , referenceLabels: stringsAt "reference_labels" obj
     , warnings
     }
 
 knownKeys :: Array String
 knownKeys =
   [ "wallets"
-  , "reference_uris"
+  , "references"
   , "descriptions"
   , "justifications"
   , "destination_labels"
   , "validity_hours"
   , "slippage_bps"
   , "split_counts"
-  , "reference_types"
-  , "reference_labels"
   ]
 
 namedAt :: String -> FO.Object Json -> Array WalletEntry
@@ -239,11 +252,13 @@ namedAt k obj = case FO.lookup k obj of
     Left _ -> []
   Nothing -> []
 
-refsAt :: String -> FO.Object Json -> Array ReferenceUriEntry
-refsAt k obj = case FO.lookup k obj of
-  Just j -> case decodeJson j of
-    Right (xs :: Array ReferenceUriEntry) -> xs
-    Left _ -> []
+referencesAt :: String -> FO.Object Json -> Array ReferenceEntry
+referencesAt k obj = case FO.lookup k obj of
+  Just j -> case Argonaut.toArray j of
+    Nothing -> []
+    Just arr -> case traverse decodeReferenceEntry arr of
+      Just rs -> rs
+      Nothing -> []
   Nothing -> []
 
 stringsAt :: String -> FO.Object Json -> Array String
@@ -273,10 +288,10 @@ merge payload mDest books = case payload of
       ( books
           { wallets =
               mergeNamedWallets bd.wallets books.wallets
-          , referenceUris =
-              mergeNamedRefUris
-                bd.referenceUris
-                books.referenceUris
+          , references =
+              mergeNamedReferences
+                bd.references
+                books.references
           , descriptions =
               mergeStrings bd.descriptions books.descriptions
           , justifications =
@@ -295,14 +310,6 @@ merge payload mDest books = case payload of
               mergeStrings bd.slippageBps books.slippageBps
           , splitCounts =
               mergeStrings bd.splitCounts books.splitCounts
-          , referenceTypes =
-              mergeStrings
-                bd.referenceTypes
-                books.referenceTypes
-          , referenceLabels =
-              mergeStrings
-                bd.referenceLabels
-                books.referenceLabels
           }
       )
 
@@ -312,11 +319,11 @@ merge payload mDest books = case payload of
           { wallets = mergeNamedWallets xs books.wallets }
       )
 
-  BareNamedRefUris xs ->
+  BareNamedReferences xs ->
     Right
       ( books
-          { referenceUris =
-              mergeNamedRefUris xs books.referenceUris
+          { references =
+              mergeNamedReferences xs books.references
           }
       )
 
@@ -343,13 +350,6 @@ mergeFreeTextAt key xs b = case key of
     b { slippageBps = mergeStrings xs b.slippageBps }
   SplitCountsBook ->
     b { splitCounts = mergeStrings xs b.splitCounts }
-  ReferenceTypesBook ->
-    b { referenceTypes = mergeStrings xs b.referenceTypes }
-  ReferenceLabelsBook ->
-    b
-      { referenceLabels =
-          mergeStrings xs b.referenceLabels
-      }
 
 cap :: Int
 cap = 25
@@ -391,32 +391,32 @@ mergeNamedWallets imported local =
   in
     Array.take cap (asNamed <> keptLocal)
 
-mergeNamedRefUris
-  :: Array ReferenceUriEntry
+mergeNamedReferences
+  :: Array ReferenceEntry
   -> Array NamedEntry
   -> Array NamedEntry
-mergeNamedRefUris imported local =
+mergeNamedReferences imported local =
   let
     cleaned =
       Array.filter
-        (\e -> String.trim e.cid /= "")
+        (\e -> String.trim e.uri /= "")
         imported
     deduped =
-      dedupBy (\a b -> a.cid == b.cid) cleaned
-    cids = map _.cid deduped
+      dedupBy (\a b -> a.uri == b.uri) cleaned
+    uris = map _.uri deduped
     keptLocal =
       Array.filter
-        ( \e -> not (Array.elem (namedTypedValue e) cids)
+        ( \e -> not (Array.elem (namedTypedValue e) uris)
         )
         local
-    asNamed = map ReferenceUriE deduped
+    asNamed = map ReferenceE deduped
   in
     Array.take cap (asNamed <> keptLocal)
 
 namedTypedValue :: NamedEntry -> String
 namedTypedValue = case _ of
   WalletE w -> w.address
-  ReferenceUriE r -> r.cid
+  ReferenceE r -> r.uri
 
 dedupBy
   :: forall a
@@ -451,9 +451,9 @@ diff before after =
     , beforeCount: Array.length before.wallets
     , afterCount: Array.length after.wallets
     }
-  , { book: N ReferenceUrisBook
-    , beforeCount: Array.length before.referenceUris
-    , afterCount: Array.length after.referenceUris
+  , { book: N ReferencesBook
+    , beforeCount: Array.length before.references
+    , afterCount: Array.length after.references
     }
   , { book: F DescriptionsBook
     , beforeCount: Array.length before.descriptions
@@ -479,14 +479,6 @@ diff before after =
     , beforeCount: Array.length before.splitCounts
     , afterCount: Array.length after.splitCounts
     }
-  , { book: F ReferenceTypesBook
-    , beforeCount: Array.length before.referenceTypes
-    , afterCount: Array.length after.referenceTypes
-    }
-  , { book: F ReferenceLabelsBook
-    , beforeCount: Array.length before.referenceLabels
-    , afterCount: Array.length after.referenceLabels
-    }
   ]
 
 -- ---------------------------------------------------------------------------
@@ -506,8 +498,8 @@ encodeBundleJson b =
                 ( FO.fromFoldable
                     [ Tuple "wallets"
                         (encodeNamedBookJson b.wallets)
-                    , Tuple "reference_uris"
-                        (encodeNamedBookJson b.referenceUris)
+                    , Tuple "references"
+                        (encodeNamedBookJson b.references)
                     , Tuple "descriptions"
                         ( encodeFreeTextBookJson
                             b.descriptions
@@ -532,30 +524,30 @@ encodeBundleJson b =
                         ( encodeFreeTextBookJson
                             b.splitCounts
                         )
-                    , Tuple "reference_types"
-                        ( encodeFreeTextBookJson
-                            b.referenceTypes
-                        )
-                    , Tuple "reference_labels"
-                        ( encodeFreeTextBookJson
-                            b.referenceLabels
-                        )
                     ]
                 )
             )
         ]
     )
 
--- | Per-card export: a bare array of @{name, address}@ or
--- | @{name, cid}@ entries.  Both shapes encode the same
--- | way — `encodeJson` pulls the record's fields verbatim.
+-- | Per-card export: a bare array of named-book entries.
+-- | Wallets encode via the auto-derived `encodeJson` (field
+-- | names match the wire keys); references encode through a
+-- | hand-rolled object so the PS-side `refType` field
+-- | becomes the wire-side @"type"@ key.
 encodeNamedBookJson :: Array NamedEntry -> Json
 encodeNamedBookJson =
   Argonaut.fromArray <<< map oneNamed
   where
   oneNamed = case _ of
     WalletE w -> encodeJson w
-    ReferenceUriE r -> encodeJson r
+    ReferenceE r ->
+      Argonaut.fromObject $ FO.fromFoldable
+        [ Tuple "name" (Argonaut.fromString r.name)
+        , Tuple "label" (Argonaut.fromString r.label)
+        , Tuple "uri" (Argonaut.fromString r.uri)
+        , Tuple "type" (Argonaut.fromString r.refType)
+        ]
 
 -- | Per-card free-text export: a bare 'Array String'.
 encodeFreeTextBookJson :: Array String -> Json
@@ -573,17 +565,15 @@ allFreeTextKeys =
   , ValidityHoursBook
   , SlippageBpsBook
   , SplitCountsBook
-  , ReferenceTypesBook
-  , ReferenceLabelsBook
   ]
 
 allNamedKeys :: Array NamedBookKey
-allNamedKeys = [ WalletsBook, ReferenceUrisBook ]
+allNamedKeys = [ WalletsBook, ReferencesBook ]
 
 namedSuffix :: NamedBookKey -> String
 namedSuffix = case _ of
   WalletsBook -> "wallets"
-  ReferenceUrisBook -> "reference_uris"
+  ReferencesBook -> "references"
 
 freeTextSuffix :: FreeTextBookKey -> String
 freeTextSuffix = case _ of
@@ -593,8 +583,6 @@ freeTextSuffix = case _ of
   ValidityHoursBook -> "validity_hours"
   SlippageBpsBook -> "slippage_bps"
   SplitCountsBook -> "split_counts"
-  ReferenceTypesBook -> "reference_types"
-  ReferenceLabelsBook -> "reference_labels"
 
 freeTextSuffixToKey :: String -> Maybe FreeTextBookKey
 freeTextSuffixToKey = case _ of
@@ -604,6 +592,4 @@ freeTextSuffixToKey = case _ of
   "validity_hours" -> Just ValidityHoursBook
   "slippage_bps" -> Just SlippageBpsBook
   "split_counts" -> Just SplitCountsBook
-  "reference_types" -> Just ReferenceTypesBook
-  "reference_labels" -> Just ReferenceLabelsBook
   _ -> Nothing

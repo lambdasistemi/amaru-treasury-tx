@@ -3,9 +3,12 @@
 -- |
 -- |   * **Named** books for cryptographic / identity
 -- |     material — `wallets` holds `{name, address}` rows
--- |     (Lace contact-book convention), `reference_uris`
--- |     holds `{name, cid}` rows (IPFS Pinning Service
--- |     `Pin` convention).
+-- |     (Lace contact-book convention), `references` holds
+-- |     `{name, label, uri, type}` rows (one indivisible
+-- |     CIP-1694 `body.references[]` triple per entry —
+-- |     slice G replaced the original three split books
+-- |     after operator feedback that mismatching label /
+-- |     type / uri across rows was too easy).
 -- |   * **Free-text** books for prose — plain `Array
 -- |     String`.
 -- |
@@ -26,9 +29,10 @@ module Shell.Book
   , FreeTextBookKey(..)
   , BookKey(..)
   , WalletEntry
-  , ReferenceUriEntry
+  , ReferenceEntry
   , NamedEntry(..)
   , namedTypedValue
+  , deriveDefaultName
   , storageKey
   , maxEntries
   , loadNamed
@@ -47,6 +51,7 @@ module Shell.Book
 import Prelude
 
 import Data.Argonaut.Core (Json, fromArray, stringify)
+import Data.Argonaut.Core as Argonaut
 import Data.Argonaut.Decode (decodeJson)
 import Data.Argonaut.Encode (encodeJson)
 import Data.Argonaut.Parser (jsonParser)
@@ -54,18 +59,23 @@ import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.String as String
+import Data.Traversable (traverse)
+import Data.Tuple (Tuple(..))
 import Effect (Effect)
+import Foreign.Object as FO
 
 -- ---------------------------------------------------------------------------
 -- Book taxonomy
 
 -- | Books holding cryptographic / identity material.
--- | Each entry carries a `name` plus exactly one typed
--- | value field (`address` for wallets, `cid` for IPFS
--- | references).
+-- | Each entry carries a `name` plus typed payload
+-- | field(s): `address` for wallets; the compound
+-- | `{label, uri, type}` triple for references (one
+-- | indivisible on-chain CIP-1694 `body.references[]`
+-- | entry, slice G).
 data NamedBookKey
   = WalletsBook
-  | ReferenceUrisBook
+  | ReferencesBook
 
 derive instance eqNamedBookKey :: Eq NamedBookKey
 
@@ -79,8 +89,6 @@ data FreeTextBookKey
   | ValidityHoursBook
   | SlippageBpsBook
   | SplitCountsBook
-  | ReferenceTypesBook
-  | ReferenceLabelsBook
 
 derive instance eqFreeTextBookKey :: Eq FreeTextBookKey
 
@@ -103,11 +111,16 @@ type WalletEntry =
   , address :: String
   }
 
--- | One row in the `reference_uris` book.  Matches the
--- | IPFS Pinning Service `Pin` shape one-to-one.
-type ReferenceUriEntry =
+-- | One row in the `references` book.  Carries the whole
+-- | indivisible CIP-1694 `body.references[]` triple plus
+-- | a friendly `name`.  The PS-side field `refType` maps
+-- | to the wire JSON key @"type"@ (encoded / decoded
+-- | explicitly because @type@ is a PS keyword).
+type ReferenceEntry =
   { name :: String
-  , cid :: String
+  , label :: String
+  , uri :: String
+  , refType :: String
   }
 
 -- | A row from any named book.  The constructor selects
@@ -115,17 +128,17 @@ type ReferenceUriEntry =
 -- | without re-checking the originating key.
 data NamedEntry
   = WalletE WalletEntry
-  | ReferenceUriE ReferenceUriEntry
+  | ReferenceE ReferenceEntry
 
 -- | Project the typed-value field from a named entry —
--- | `address` for wallets, `cid` for reference_uris.
--- | Used by every dedup / lookup / remove path so the
--- | "what does identity mean for this book" rule lives in
--- | exactly one place.
+-- | `address` for wallets, `uri` for references.  Used by
+-- | every dedup / lookup / remove path so the "what does
+-- | identity mean for this book" rule lives in exactly
+-- | one place.
 namedTypedValue :: NamedEntry -> String
 namedTypedValue = case _ of
   WalletE w -> w.address
-  ReferenceUriE r -> r.cid
+  ReferenceE r -> r.uri
 
 -- ---------------------------------------------------------------------------
 -- Constants + key helpers
@@ -142,7 +155,7 @@ storagePrefix = "amaru-treasury.book."
 namedSuffix :: NamedBookKey -> String
 namedSuffix = case _ of
   WalletsBook -> "wallets"
-  ReferenceUrisBook -> "reference_uris"
+  ReferencesBook -> "references"
 
 freeTextSuffix :: FreeTextBookKey -> String
 freeTextSuffix = case _ of
@@ -152,8 +165,6 @@ freeTextSuffix = case _ of
   ValidityHoursBook -> "validity_hours"
   SlippageBpsBook -> "slippage_bps"
   SplitCountsBook -> "split_counts"
-  ReferenceTypesBook -> "reference_types"
-  ReferenceLabelsBook -> "reference_labels"
 
 bookKeySuffix :: BookKey -> String
 bookKeySuffix = case _ of
@@ -203,7 +214,7 @@ loadNamed key = do
     Left _ -> []
     Right json -> case key of
       WalletsBook -> decodeWallets json
-      ReferenceUrisBook -> decodeRefUris json
+      ReferencesBook -> decodeReferences json
 
 -- | Read a free-text book.  Same atomic-reset semantics
 -- | on invalid on-disk shape as 'loadNamed'.
@@ -221,10 +232,28 @@ decodeWallets j = case decodeJson j of
   Left _ -> []
   Right (xs :: Array WalletEntry) -> map WalletE xs
 
-decodeRefUris :: Json -> Array NamedEntry
-decodeRefUris j = case decodeJson j of
-  Left _ -> []
-  Right (xs :: Array ReferenceUriEntry) -> map ReferenceUriE xs
+-- | Decode the bare `[{name, label, uri, type}, …]`
+-- | references wire shape.  Atomic-reset (FR-011): a
+-- | single malformed entry discards the whole book.
+decodeReferences :: Json -> Array NamedEntry
+decodeReferences j = case Argonaut.toArray j of
+  Nothing -> []
+  Just arr -> case traverse decodeReferenceEntry arr of
+    Nothing -> []
+    Just rs -> map ReferenceE rs
+
+-- | Per-entry decoder for the references wire shape.
+-- | Returns 'Nothing' on any missing field or non-string
+-- | value — the caller (`decodeReferences`) atomic-resets
+-- | the book if ANY entry returns 'Nothing'.
+decodeReferenceEntry :: Json -> Maybe ReferenceEntry
+decodeReferenceEntry j = do
+  obj <- Argonaut.toObject j
+  name <- FO.lookup "name" obj >>= Argonaut.toString
+  label <- FO.lookup "label" obj >>= Argonaut.toString
+  uri <- FO.lookup "uri" obj >>= Argonaut.toString
+  refType <- FO.lookup "type" obj >>= Argonaut.toString
+  pure { name, label, uri, refType }
 
 -- ---------------------------------------------------------------------------
 -- Record (auto-name on build)
@@ -275,8 +304,17 @@ defaultEntry :: NamedBookKey -> String -> NamedEntry
 defaultEntry key value = case key of
   WalletsBook ->
     WalletE { name: deriveDefaultName value, address: value }
-  ReferenceUrisBook ->
-    ReferenceUriE { name: deriveDefaultName value, cid: value }
+  ReferencesBook ->
+    -- 'recordNamed' for references takes the URI only;
+    -- label + type are left empty.  Callers that have
+    -- the full triple should use 'addNamed' so the whole
+    -- entry lands at once.
+    ReferenceE
+      { name: deriveDefaultName value
+      , label: ""
+      , uri: value
+      , refType: ""
+      }
 
 -- ---------------------------------------------------------------------------
 -- Rename / add / remove
@@ -296,7 +334,7 @@ renameNamed key value newName = do
 
   withName n = case _ of
     WalletE w -> WalletE (w { name = n })
-    ReferenceUriE r -> ReferenceUriE (r { name = n })
+    ReferenceE r -> ReferenceE (r { name = n })
 
 -- | Insert a fully-formed named entry at position 0.
 -- | Dedup-on-typed-value: if an existing entry has the
@@ -377,7 +415,18 @@ encodeNamedArray =
 encodeNamedJson :: NamedEntry -> Json
 encodeNamedJson = case _ of
   WalletE w -> encodeJson w
-  ReferenceUriE r -> encodeJson r
+  ReferenceE r -> encodeReferenceEntry r
+
+-- | Custom encoder for 'ReferenceEntry'.  Renames the PS
+-- | field `refType` to the on-disk / wire key @"type"@.
+encodeReferenceEntry :: ReferenceEntry -> Json
+encodeReferenceEntry r =
+  Argonaut.fromObject $ FO.fromFoldable
+    [ Tuple "name" (Argonaut.fromString r.name)
+    , Tuple "label" (Argonaut.fromString r.label)
+    , Tuple "uri" (Argonaut.fromString r.uri)
+    , Tuple "type" (Argonaut.fromString r.refType)
+    ]
 
 -- ---------------------------------------------------------------------------
 -- FFI

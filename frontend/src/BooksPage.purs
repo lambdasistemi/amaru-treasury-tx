@@ -81,68 +81,58 @@ import Web.UIEvent.KeyboardEvent as KE
 
 type Books =
   { wallets :: Array NamedEntry
-  , referenceUris :: Array NamedEntry
+  , references :: Array NamedEntry
   , descriptions :: Array String
   , justifications :: Array String
   , destinationLabels :: Array String
   , validityHours :: Array String
   , slippageBps :: Array String
   , splitCounts :: Array String
-  , referenceTypes :: Array String
-  , referenceLabels :: Array String
   }
 
 emptyBooks :: Books
 emptyBooks =
   { wallets: []
-  , referenceUris: []
+  , references: []
   , descriptions: []
   , justifications: []
   , destinationLabels: []
   , validityHours: []
   , slippageBps: []
   , splitCounts: []
-  , referenceTypes: []
-  , referenceLabels: []
   }
 
 loadAllBooks :: Effect Books
 loadAllBooks = do
   ws <- loadNamed WalletsBook
-  rs <- loadNamed ReferenceUrisBook
+  rs <- loadNamed ReferencesBook
   ds <- loadFreeText DescriptionsBook
   js <- loadFreeText JustificationsBook
   dl <- loadFreeText DestinationLabelsBook
   vh <- loadFreeText ValidityHoursBook
   sb <- loadFreeText SlippageBpsBook
   sc <- loadFreeText SplitCountsBook
-  rt <- loadFreeText ReferenceTypesBook
-  rl <- loadFreeText ReferenceLabelsBook
   pure
     { wallets: ws
-    , referenceUris: rs
+    , references: rs
     , descriptions: ds
     , justifications: js
     , destinationLabels: dl
     , validityHours: vh
     , slippageBps: sb
     , splitCounts: sc
-    , referenceTypes: rt
-    , referenceLabels: rl
     }
 
 allBooksEmpty :: Books -> Boolean
 allBooksEmpty b =
   Array.null b.wallets
-    && Array.null b.referenceUris
+    && Array.null b.references
     && Array.null b.descriptions
     && Array.null b.justifications
     && Array.null b.destinationLabels
     && Array.null b.validityHours
     && Array.null b.slippageBps
     && Array.null b.splitCounts
-    && Array.null b.referenceTypes
-    && Array.null b.referenceLabels
 
 freeTextEntries :: FreeTextBookKey -> Books -> Array String
 freeTextEntries k b = case k of
@@ -152,13 +142,11 @@ freeTextEntries k b = case k of
   ValidityHoursBook -> b.validityHours
   SlippageBpsBook -> b.slippageBps
   SplitCountsBook -> b.splitCounts
-  ReferenceTypesBook -> b.referenceTypes
-  ReferenceLabelsBook -> b.referenceLabels
 
 namedEntries :: NamedBookKey -> Books -> Array NamedEntry
 namedEntries k b = case k of
   WalletsBook -> b.wallets
-  ReferenceUrisBook -> b.referenceUris
+  ReferencesBook -> b.references
 
 -- ---------------------------------------------------------------------------
 -- Component state
@@ -210,6 +198,8 @@ type State =
   , adding :: Maybe NamedBookKey
   , draftName :: String
   , draftValue :: String
+  , draftLabel :: String
+  , draftType :: String
   , clearConfirm :: Maybe FreeTextBookKey
   , theme :: Theme.Theme
   , importDialog :: ImportDialogState
@@ -224,6 +214,8 @@ initialState =
   , adding: Nothing
   , draftName: ""
   , draftValue: ""
+  , draftLabel: ""
+  , draftType: ""
   , clearConfirm: Nothing
   , theme: Theme.Dark
   , importDialog: emptyImportDialog
@@ -249,6 +241,8 @@ data Action
   | CancelClearFreeText
   | OpenAddNamed NamedBookKey
   | UpdateDraftValue String
+  | UpdateDraftLabel String
+  | UpdateDraftType String
   | CommitAdd
   | CancelAdd
   | AddKeyDown KeyboardEvent
@@ -420,10 +414,7 @@ groupContents = case _ of
   Identities ->
     [ N WalletsBook ]
   References ->
-    [ N ReferenceUrisBook
-    , F ReferenceTypesBook
-    , F ReferenceLabelsBook
-    ]
+    [ N ReferencesBook ]
   RationaleText ->
     [ F DescriptionsBook
     , F JustificationsBook
@@ -506,43 +497,70 @@ namedEntryRow st key entry =
     nameForDisplay = case st.editing of
       Just other | other == eid -> st.draftName
       _ -> entryName entry
+    -- Slice G: references show an extra label cell
+    -- between the name input and the URI link.  Wallets
+    -- have no label, so the wallet row stays as
+    -- [name|link|copy|trash].
+    extraCells = case entry of
+      ReferenceE r ->
+        [ HH.span
+            [ HP.title r.label
+            , HP.style
+                "flex:0 1 12rem;min-width:0;\
+                \overflow:hidden;text-overflow:ellipsis;\
+                \white-space:nowrap;padding:.4rem .25rem;\
+                \opacity:.85;font-size:13px"
+            ]
+            [ HH.text
+                ( if r.label == "" then "—" else r.label )
+            ]
+        ]
+      _ -> []
   in
     HH.div
       [ HP.style (rowStyle (st.confirmingRemove == Just target))
       ]
-      [ HH.input
-          [ HP.value nameForDisplay
-          , HP.type_ HP.InputText
-          , HP.placeholder "name"
-          , HE.onFocus (\_ -> StartRename eid (entryName entry))
-          , HE.onValueInput UpdateDraftName
-          , HE.onBlur (\_ -> CommitRename)
-          , HE.onKeyDown RenameKeyDown
-          , HP.style
-              "flex:1 1 auto;min-width:8rem;\
-              \background:transparent;\
-              \border:1px solid transparent;\
-              \border-radius:4px;\
-              \padding:.4rem .55rem;\
-              \color:inherit;font:inherit;outline:none"
-          ]
-      , HH.a
-          [ HP.href (namedLinkHref key tv)
-          , HP.target "_blank"
-          , HP.rel "noopener noreferrer"
-          , HP.title tv
-          , HP.style
-              "flex:0 1 16rem;min-width:0;\
-              \overflow:hidden;text-overflow:ellipsis;\
-              \white-space:nowrap;padding:.4rem .25rem;\
-              \font-family:'Roboto Mono',ui-monospace,monospace;\
-              \font-size:13px;\
-              \text-decoration:underline;color:inherit"
-          ]
-          [ HH.text tv ]
-      , copyButton (st.recentlyCopied == Just tv) tv (copyLabel key)
-      , deleteCluster st target (removeLabel key)
-      ]
+      ( [ HH.input
+            [ HP.value nameForDisplay
+            , HP.type_ HP.InputText
+            , HP.placeholder "name"
+            , HE.onFocus (\_ -> StartRename eid (entryName entry))
+            , HE.onValueInput UpdateDraftName
+            , HE.onBlur (\_ -> CommitRename)
+            , HE.onKeyDown RenameKeyDown
+            , HP.style
+                "flex:1 1 auto;min-width:8rem;\
+                \background:transparent;\
+                \border:1px solid transparent;\
+                \border-radius:4px;\
+                \padding:.4rem .55rem;\
+                \color:inherit;font:inherit;outline:none"
+            ]
+        ]
+          <> extraCells
+          <>
+            [ HH.a
+                [ HP.href (namedLinkHref key tv)
+                , HP.target "_blank"
+                , HP.rel "noopener noreferrer"
+                , HP.title tv
+                , HP.style
+                    "flex:0 1 14rem;min-width:0;\
+                    \overflow:hidden;text-overflow:ellipsis;\
+                    \white-space:nowrap;\
+                    \padding:.4rem .25rem;\
+                    \font-family:'Roboto Mono',ui-monospace,monospace;\
+                    \font-size:13px;\
+                    \text-decoration:underline;color:inherit"
+                ]
+                [ HH.text tv ]
+            , copyButton
+                (st.recentlyCopied == Just tv)
+                tv
+                (copyLabel key)
+            , deleteCluster st target (removeLabel key)
+            ]
+      )
 
 namedFooter
   :: forall m
@@ -565,65 +583,131 @@ namedAddEditor
   -> NamedBookKey
   -> H.ComponentHTML Action () m
 namedAddEditor st key =
-  HH.div
-    [ HP.classes [ cn "reference-row" ]
-    , HP.style "gap:.5rem;align-items:center"
+  let
+    fields = case key of
+      WalletsBook ->
+        [ draftNameInput st "Friendly name"
+        , draftValueInput st (namedValuePlaceholder key)
+        ]
+      ReferencesBook ->
+        [ draftNameInput st "Friendly name"
+        , draftLabelInput st
+            "Contract - CRYPTO ACCOUNTING GROUP"
+        , draftValueInput st "ipfs://bafy…"
+        , draftTypeInput st "Other"
+        ]
+    actions =
+      [ HH.button
+          [ HP.classes [ cn "btn", cn "btn--primary" ]
+          , HE.onClick (\_ -> CommitAdd)
+          , HP.type_ HP.ButtonButton
+          ]
+          [ HH.text "Save" ]
+      , HH.button
+          [ HP.classes [ cn "btn", cn "btn--ghost" ]
+          , HE.onClick (\_ -> CancelAdd)
+          , HP.type_ HP.ButtonButton
+          ]
+          [ HH.text "Cancel" ]
+      ]
+  in
+    HH.div
+      [ HP.style
+          "display:flex;flex-wrap:wrap;\
+          \gap:.5rem;align-items:center;\
+          \padding:.5rem .25rem;\
+          \border-top:1px solid \
+          \var(--md-sys-color-outline-variant,#44474e)"
+      ]
+      (fields <> actions)
+
+draftNameInput
+  :: forall m
+   . State
+  -> String
+  -> H.ComponentHTML Action () m
+draftNameInput st placeholder =
+  HH.input
+    [ HP.value st.draftName
+    , HP.type_ HP.InputText
+    , HP.classes [ cn "field__input" ]
+    , HP.placeholder placeholder
+    , HE.onValueInput UpdateDraftName
+    , HE.onKeyDown AddKeyDown
+    , HP.style "flex:1 1 12rem;min-width:8rem"
     ]
-    [ HH.input
-        [ HP.value st.draftName
-        , HP.type_ HP.InputText
-        , HP.classes [ cn "field__input" ]
-        , HP.placeholder "Friendly name"
-        , HE.onValueInput UpdateDraftName
-        , HE.onKeyDown AddKeyDown
-        , HP.style "flex:1"
-        ]
-    , HH.input
-        [ HP.value st.draftValue
-        , HP.type_ HP.InputText
-        , HP.classes [ cn "field__input", cn "field__input--mono" ]
-        , HP.placeholder (namedValuePlaceholder key)
-        , HE.onValueInput UpdateDraftValue
-        , HE.onKeyDown AddKeyDown
-        , HP.style "flex:1.4"
-        ]
-    , HH.button
-        [ HP.classes [ cn "btn", cn "btn--primary" ]
-        , HE.onClick (\_ -> CommitAdd)
-        , HP.type_ HP.ButtonButton
-        ]
-        [ HH.text "Save" ]
-    , HH.button
-        [ HP.classes [ cn "btn", cn "btn--ghost" ]
-        , HE.onClick (\_ -> CancelAdd)
-        , HP.type_ HP.ButtonButton
-        ]
-        [ HH.text "Cancel" ]
+
+draftValueInput
+  :: forall m
+   . State
+  -> String
+  -> H.ComponentHTML Action () m
+draftValueInput st placeholder =
+  HH.input
+    [ HP.value st.draftValue
+    , HP.type_ HP.InputText
+    , HP.classes [ cn "field__input", cn "field__input--mono" ]
+    , HP.placeholder placeholder
+    , HE.onValueInput UpdateDraftValue
+    , HE.onKeyDown AddKeyDown
+    , HP.style "flex:1 1 14rem;min-width:8rem"
+    ]
+
+draftLabelInput
+  :: forall m
+   . State
+  -> String
+  -> H.ComponentHTML Action () m
+draftLabelInput st placeholder =
+  HH.input
+    [ HP.value st.draftLabel
+    , HP.type_ HP.InputText
+    , HP.classes [ cn "field__input" ]
+    , HP.placeholder placeholder
+    , HE.onValueInput UpdateDraftLabel
+    , HE.onKeyDown AddKeyDown
+    , HP.style "flex:1 1 12rem;min-width:8rem"
+    ]
+
+draftTypeInput
+  :: forall m
+   . State
+  -> String
+  -> H.ComponentHTML Action () m
+draftTypeInput st placeholder =
+  HH.input
+    [ HP.value st.draftType
+    , HP.type_ HP.InputText
+    , HP.classes [ cn "field__input" ]
+    , HP.placeholder placeholder
+    , HE.onValueInput UpdateDraftType
+    , HE.onKeyDown AddKeyDown
+    , HP.style "flex:0 1 8rem;min-width:6rem"
     ]
 
 namedHeader :: NamedBookKey -> String
 namedHeader = case _ of
   WalletsBook -> "Wallets"
-  ReferenceUrisBook -> "Reference URIs"
+  ReferencesBook -> "References"
 
 namedEmpty :: NamedBookKey -> String
 namedEmpty = case _ of
   WalletsBook ->
     "No wallets yet.  Click + Add new or submit a build on \
     \/operate."
-  ReferenceUrisBook ->
-    "No reference URIs yet.  Click + Add new or submit a \
+  ReferencesBook ->
+    "No references yet.  Click + Add new or submit a \
     \build on /operate."
 
 namedValuePlaceholder :: NamedBookKey -> String
 namedValuePlaceholder = case _ of
   WalletsBook -> "addr1q…"
-  ReferenceUrisBook -> "bafy… (CID)"
+  ReferencesBook -> "ipfs://bafy…"
 
 entryName :: NamedEntry -> String
 entryName = case _ of
   WalletE w -> w.name
-  ReferenceUriE r -> r.name
+  ReferenceE r -> r.name
 
 -- ---------------------------------------------------------------------------
 -- Free-text cards
@@ -726,8 +810,6 @@ freeTextHeader = case _ of
   ValidityHoursBook -> "Validity hours"
   SlippageBpsBook -> "Slippage (bps)"
   SplitCountsBook -> "Split counts"
-  ReferenceTypesBook -> "Reference @types"
-  ReferenceLabelsBook -> "Reference labels"
 
 freeTextSingular :: FreeTextBookKey -> String
 freeTextSingular = case _ of
@@ -737,8 +819,6 @@ freeTextSingular = case _ of
   ValidityHoursBook -> "validity-hours entries"
   SlippageBpsBook -> "slippage entries"
   SplitCountsBook -> "split counts"
-  ReferenceTypesBook -> "reference @types"
-  ReferenceLabelsBook -> "reference labels"
 
 freeTextEmpty :: FreeTextBookKey -> String
 freeTextEmpty = case _ of
@@ -760,12 +840,6 @@ freeTextEmpty = case _ of
   SplitCountsBook ->
     "No split counts yet.  Submit a build on /operate to \
     \record entries."
-  ReferenceTypesBook ->
-    "No reference @types yet.  Submit a build on /operate \
-    \to record entries."
-  ReferenceLabelsBook ->
-    "No reference labels yet.  Submit a build on /operate \
-    \to record entries."
 
 -- ---------------------------------------------------------------------------
 -- Card chrome + small helpers
@@ -1108,7 +1182,7 @@ namedLinkHref :: NamedBookKey -> String -> String
 namedLinkHref key value = case key of
   WalletsBook ->
     "https://cardanoscan.io/address/" <> value
-  ReferenceUrisBook ->
+  ReferencesBook ->
     if hasUriScheme value then value
     else "https://ipfs.io/ipfs/" <> value
 
@@ -1121,12 +1195,12 @@ hasUriScheme v =
 copyLabel :: NamedBookKey -> String
 copyLabel = case _ of
   WalletsBook -> "Copy wallet address"
-  ReferenceUrisBook -> "Copy CID"
+  ReferencesBook -> "Copy reference URI"
 
 removeLabel :: NamedBookKey -> String
 removeLabel = case _ of
   WalletsBook -> "Remove wallet entry"
-  ReferenceUrisBook -> "Remove reference URI"
+  ReferencesBook -> "Remove reference entry"
 
 -- | One copy icon-button.  Renders `content_copy` by
 -- | default; when 'recently' is true it temporarily shows
@@ -1301,17 +1375,32 @@ handleAction = case _ of
       { adding = Just key
       , draftName = ""
       , draftValue = ""
+      , draftLabel = ""
+      , draftType = ""
       }
 
   UpdateDraftValue s ->
     H.modify_ \st -> st { draftValue = s }
+
+  UpdateDraftLabel s ->
+    H.modify_ \st -> st { draftLabel = s }
+
+  UpdateDraftType s ->
+    H.modify_ \st -> st { draftType = s }
 
   CommitAdd -> do
     st <- H.get
     case st.adding of
       Just key
         | String.trim st.draftValue /= "" -> do
-            let entry = mkNamedEntry key st.draftName st.draftValue
+            let
+              entry = mkNamedEntry
+                { key
+                , rawName: st.draftName
+                , value: st.draftValue
+                , label: st.draftLabel
+                , refType: st.draftType
+                }
             H.liftEffect (addNamed key entry)
             books' <- H.liftEffect loadAllBooks
             H.modify_ \s -> s
@@ -1319,6 +1408,8 @@ handleAction = case _ of
               , adding = Nothing
               , draftName = ""
               , draftValue = ""
+              , draftLabel = ""
+              , draftType = ""
               }
       _ -> pure unit
 
@@ -1327,6 +1418,8 @@ handleAction = case _ of
       { adding = Nothing
       , draftName = ""
       , draftValue = ""
+      , draftLabel = ""
+      , draftType = ""
       }
 
   AddKeyDown ev -> case KE.key ev of
@@ -1345,7 +1438,7 @@ handleAction = case _ of
   CopyAll -> do
     st <- H.get
     H.liftEffect
-      ( _writeClipboard
+      ( Clipboard.writeText
           (stringify (Import.encodeBundleJson st.books))
       )
 
@@ -1377,14 +1470,14 @@ handleAction = case _ of
     st <- H.get
     H.liftEffect case key of
       N nk ->
-        _writeClipboard
+        Clipboard.writeText
           ( stringify
               ( Import.encodeNamedBookJson
                   (namedEntries nk st.books)
               )
           )
       F fk ->
-        _writeClipboard
+        Clipboard.writeText
           ( stringify
               ( Import.encodeFreeTextBookJson
                   (freeTextEntries fk st.books)
@@ -1495,7 +1588,7 @@ handleAction = case _ of
         let after = preview.afterBooks
         H.liftEffect do
           replaceNamed WalletsBook after.wallets
-          replaceNamed ReferenceUrisBook after.referenceUris
+          replaceNamed ReferencesBook after.references
           replaceFreeText
             DescriptionsBook
             after.descriptions
@@ -1514,12 +1607,6 @@ handleAction = case _ of
           replaceFreeText
             SplitCountsBook
             after.splitCounts
-          replaceFreeText
-            ReferenceTypesBook
-            after.referenceTypes
-          replaceFreeText
-            ReferenceLabelsBook
-            after.referenceLabels
         books' <- H.liftEffect loadAllBooks
         H.modify_ \s -> s
           { books = books'
@@ -1540,8 +1627,6 @@ readFileAff selector = makeAff \cb -> do
 
 foreign import _downloadText
   :: String -> String -> Effect Unit
-
-foreign import _writeClipboard :: String -> Effect Unit
 
 foreign import _readFileFromInput
   :: String
@@ -1580,17 +1665,33 @@ pad2 n
   | n < 10 = "0" <> show n
   | otherwise = show n
 
--- | Build a 'NamedEntry' for 'addNamed' given the key.  If
--- | the operator left the name blank we fall back to the
--- | typed value so the dropdown still has a label.
+-- | Build a 'NamedEntry' for 'addNamed' given the key +
+-- | the four possible draft fields.  Wallets only consume
+-- | `rawName` + `value`; references consume the full
+-- | triple (`label`, `value` aka uri, `refType`) too.
+-- | A blank name falls back to the typed value so the
+-- | dropdown still has something to display.
 mkNamedEntry
-  :: NamedBookKey -> String -> String -> NamedEntry
-mkNamedEntry key rawName value =
+  :: { key :: NamedBookKey
+     , rawName :: String
+     , value :: String
+     , label :: String
+     , refType :: String
+     }
+  -> NamedEntry
+mkNamedEntry d =
   let
     name =
-      if String.trim rawName == "" then value
-      else rawName
+      if String.trim d.rawName == "" then d.value
+      else d.rawName
   in
-    case key of
-      WalletsBook -> WalletE { name, address: value }
-      ReferenceUrisBook -> ReferenceUriE { name, cid: value }
+    case d.key of
+      WalletsBook ->
+        WalletE { name, address: d.value }
+      ReferencesBook ->
+        ReferenceE
+          { name
+          , label: d.label
+          , uri: d.value
+          , refType: d.refType
+          }

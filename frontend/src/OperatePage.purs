@@ -46,6 +46,8 @@ import Shell.Book
   ( FreeTextBookKey(..)
   , NamedBookKey(..)
   , NamedEntry(..)
+  , addNamed
+  , deriveDefaultName
   , loadFreeText
   , loadNamed
   , namedTypedValue
@@ -140,37 +142,32 @@ emptyReferenceRow =
   }
 
 -- | #267 — operator history "books" cached in component
--- | state.  Two shapes: 'wallets' and 'referenceUris' are
--- | named books ('Shell.Book.NamedEntry' with `name + typed
--- | value`); the rest are free-text 'Array String' lists.
--- | Loaded at 'Initialize' and refreshed after every
--- | 'ClickBuild' so dropdowns reflect freshly-recorded
--- | entries without a page refresh.
+-- | state.  Two named books ('wallets' + 'references') and
+-- | six free-text books.  Loaded at 'Initialize' and
+-- | refreshed after every 'ClickBuild' so dropdowns
+-- | reflect freshly-recorded entries without a page
+-- | refresh.
 type Books =
   { wallets :: Array NamedEntry
-  , referenceUris :: Array NamedEntry
+  , references :: Array NamedEntry
   , descriptions :: Array String
   , justifications :: Array String
   , destinationLabels :: Array String
   , validityHours :: Array String
   , slippageBps :: Array String
   , splitCounts :: Array String
-  , referenceTypes :: Array String
-  , referenceLabels :: Array String
   }
 
 emptyBooks :: Books
 emptyBooks =
   { wallets: []
-  , referenceUris: []
+  , references: []
   , descriptions: []
   , justifications: []
   , destinationLabels: []
   , validityHours: []
   , slippageBps: []
   , splitCounts: []
-  , referenceTypes: []
-  , referenceLabels: []
   }
 
 -- | Load every per-field book in one pass.  Called by
@@ -178,26 +175,22 @@ emptyBooks =
 loadAllBooks :: Effect Books
 loadAllBooks = do
   ws <- loadNamed WalletsBook
-  rs <- loadNamed ReferenceUrisBook
+  rs <- loadNamed ReferencesBook
   ds <- loadFreeText DescriptionsBook
   js <- loadFreeText JustificationsBook
   dl <- loadFreeText DestinationLabelsBook
   vh <- loadFreeText ValidityHoursBook
   sb <- loadFreeText SlippageBpsBook
   sc <- loadFreeText SplitCountsBook
-  rt <- loadFreeText ReferenceTypesBook
-  rl <- loadFreeText ReferenceLabelsBook
   pure
     { wallets: ws
-    , referenceUris: rs
+    , references: rs
     , descriptions: ds
     , justifications: js
     , destinationLabels: dl
     , validityHours: vh
     , slippageBps: sb
     , splitCounts: sc
-    , referenceTypes: rt
-    , referenceLabels: rl
     }
 
 -- | Record every operator-supplied field that has a book.
@@ -205,7 +198,10 @@ loadAllBooks = do
 -- | (success OR failure — the operator's intent is the
 -- | same either way).  'Shell.Book' drops empty /
 -- | whitespace values on its own, so per-mode branches
--- | don't need to filter.
+-- | don't need to filter.  Reference rows are recorded
+-- | via the local 'recordSubmittedReference' helper which
+-- | preserves the on-collision entry verbatim (URI is the
+-- | dedup key; label + type stay locally as they were).
 recordSubmittedBooks :: State -> Effect Unit
 recordSubmittedBooks st = do
   recordNamed WalletsBook st.walletAddr
@@ -219,20 +215,47 @@ recordSubmittedBooks st = do
       recordFreeText SlippageBpsBook st.slippageBps
     ModeDisburse -> do
       recordNamed WalletsBook st.beneficiaryAddr
-      for_ st.references \r -> do
-        recordNamed ReferenceUrisBook r.uri
-        recordFreeText ReferenceTypesBook r.refType
-        recordFreeText ReferenceLabelsBook r.label
+      for_ st.references recordSubmittedReference
     ModeReorganize -> pure unit
 
+-- | Record one reference triple submitted via the
+-- | reference row on '/operate'.  Dedup-on-URI: if a
+-- | local entry already has the same URI, the whole
+-- | existing entry (name + label + type) is preserved and
+-- | the new submission is ignored — matches the slice E
+-- | rule "the typed value link is read-only on /books;
+-- | operators change typed values by deleting + re-adding"
+-- | (and the named-book identity contract from FR-004).
+recordSubmittedReference
+  :: { uri :: String, refType :: String, label :: String }
+  -> Effect Unit
+recordSubmittedReference r
+  | String.trim r.uri == "" = pure unit
+  | otherwise = do
+      existing <- loadNamed ReferencesBook
+      let
+        already =
+          Array.any
+            (\e -> namedTypedValue e == r.uri)
+            existing
+      when (not already) do
+        addNamed ReferencesBook
+          ( ReferenceE
+              { name: deriveDefaultName r.uri
+              , label: r.label
+              , uri: r.uri
+              , refType: r.refType
+              }
+          )
+
 -- | Identity for one of the three named-input slots on the
--- | form.  'ReferenceUriSlot' carries the row index so the
+-- | form.  'ReferenceSlot' carries the row index so the
 -- | dynamically-added reference rows each get their own
 -- | independent dropdown.
 data NamedDropdownId
   = WalletSlot
   | BeneficiarySlot
-  | ReferenceUriSlot Int
+  | ReferenceSlot Int
 
 derive instance eqNamedDropdownId :: Eq NamedDropdownId
 
@@ -330,7 +353,7 @@ data Action
   | ClickBuild
   | BooksLoaded Books
   | ToggleNamedDropdown NamedDropdownId
-  | PickNamed NamedDropdownId String
+  | PickNamed NamedDropdownId NamedEntry
   | NamedInputKeyDown KeyboardEvent
 
 -- ---------------------------------------------------------------------------
@@ -594,10 +617,11 @@ modeSpecificSections st = case st.mode of
     -- carry the only operator-supplied inputs.
     []
 
--- | Render every reference row with three inline inputs
--- | (URI, @type, label) and a delete button.  Takes the
--- | full state so each row can pull its named-book panel
--- | state and its free-text books in one shot.
+-- | Render every reference row with the slice-G compound
+-- | named widget for the URI (picking fills label + type
+-- | too) plus plain text inputs for label + type so the
+-- | operator can still hand-type a fresh reference.  The
+-- | per-row trash stays.
 referencesPicker
   :: forall m
    . State
@@ -614,25 +638,21 @@ referenceRow
 referenceRow st i row =
   HH.div [ HP.classes [ cn "reference-row" ] ]
     [ namedField
-        (ReferenceUriSlot i)
+        (ReferenceSlot i)
         st.openNamedDropdown
-        st.books.referenceUris
+        st.books.references
         ("ref-uri-" <> show i)
         row.uri
         (SetReferenceUri i)
         "ipfs://bafy…"
         true
-    , freeTextField
-        "reference_types"
-        st.books.referenceTypes
+    , plainField
         ("ref-type-" <> show i)
         row.refType
         (SetReferenceType i)
         "Other"
         false
-    , freeTextField
-        "reference_labels"
-        st.books.referenceLabels
+    , plainField
         ("ref-label-" <> show i)
         row.label
         (SetReferenceLabel i)
@@ -645,6 +665,37 @@ referenceRow st i row =
         , HP.type_ HP.ButtonButton
         ]
         [ HH.text "×" ]
+    ]
+
+-- | Plain text input with no `<datalist>` companion.
+-- | Used by the slice-G reference row's label + type
+-- | cells now that those books are gone (label + type are
+-- | filled by the picker or hand-typed alongside a fresh
+-- | URI).
+plainField
+  :: forall m
+   . String
+  -> String
+  -> (String -> Action)
+  -> String
+  -> Boolean
+  -> H.ComponentHTML Action () m
+plainField _label value_ action placeholder mono =
+  HH.label [ HP.classes [ cn "field" ] ]
+    [ HH.span [ HP.classes [ cn "field__label" ] ]
+        [ HH.text _label ]
+    , HH.input
+        [ HP.value value_
+        , HP.type_ HP.InputText
+        , HP.placeholder placeholder
+        , HP.classes
+            ( [ cn "field__input" ]
+                <>
+                  if mono then [ cn "field__input--mono" ]
+                  else []
+            )
+        , HE.onValueInput action
+        ]
     ]
 
 -- | Top-of-form Swap | Disburse | Reorganize selector.
@@ -1197,7 +1248,7 @@ namedDropdownRow slot entry =
         "justify-content:flex-start;text-align:left;\
         \padding:.4rem .6rem;border:0;background:transparent"
     , HE.onClick
-        (\_ -> PickNamed slot (namedTypedValue entry))
+        (\_ -> PickNamed slot entry)
     ]
     [ HH.text (namedEntryName entry) ]
 
@@ -1208,7 +1259,7 @@ namedDropdownRow slot entry =
 namedEntryName :: NamedEntry -> String
 namedEntryName = case _ of
   WalletE w -> w.name
-  ReferenceUriE r -> r.name
+  ReferenceE r -> r.name
 
 -- | Transparent full-viewport backdrop rendered while any
 -- | named dropdown is open.  Clicking it dispatches a
@@ -2027,20 +2078,32 @@ handleAction = case _ of
           if s.openNamedDropdown == Just slot then Nothing
           else Just slot
       }
-  PickNamed slot value -> H.modify_ \s -> case slot of
+  PickNamed slot entry -> H.modify_ \s -> case slot of
     WalletSlot ->
-      s { walletAddr = value, openNamedDropdown = Nothing }
+      s
+        { walletAddr = namedTypedValue entry
+        , openNamedDropdown = Nothing
+        }
     BeneficiarySlot ->
       s
-        { beneficiaryAddr = value
+        { beneficiaryAddr = namedTypedValue entry
         , openNamedDropdown = Nothing
         }
-    ReferenceUriSlot i ->
-      s
-        { references =
-            updateAt i (\r -> r { uri = value }) s.references
-        , openNamedDropdown = Nothing
-        }
+    ReferenceSlot i -> case entry of
+      ReferenceE r ->
+        s
+          { references =
+              updateAt i
+                ( \existing -> existing
+                    { uri = r.uri
+                    , refType = r.refType
+                    , label = r.label
+                    }
+                )
+                s.references
+          , openNamedDropdown = Nothing
+          }
+      _ -> s { openNamedDropdown = Nothing }
   NamedInputKeyDown ev -> case KE.key ev of
     "Escape" ->
       H.modify_ \s -> s { openNamedDropdown = Nothing }

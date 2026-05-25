@@ -8,28 +8,28 @@ trailers should use the task IDs below, for example `Tasks: T286001`.
 
 ## Slice 1 - Shared config modules and precedence resolver
 
-- [ ] T286001 Research the `opt-env-conf` test/run API enough to choose how
+- [X] T286001 Research the `opt-env-conf` test/run API enough to choose how
   unit tests will drive arg/env/YAML resolution. Record any limitation in
   `WIP.md`.
-- [ ] T286002 Add the `opt-env-conf` dependency to the library, CLI, API,
+- [X] T286002 Add the `opt-env-conf` dependency to the library, CLI, API,
   and unit-test Cabal stanzas that need it. Keep `optparse-applicative`
   only where still required by legacy command parsers or tests.
-- [ ] T286003 Add module skeletons and Cabal exposure for
+- [X] T286003 Add module skeletons and Cabal exposure for
   `Amaru.Treasury.Config`, `Config.Types`, `Config.File`,
   `Config.OptEnv`, `Config.Resolve`, `Cli.Config`, and `Api.Config`.
-- [ ] T286004 RED: add focused tests for `Config.File` covering YAML
+- [X] T286004 RED: add focused tests for `Config.File` covering YAML
   profile decoding, malformed YAML, missing profile map, and optional API
   section decoding.
-- [ ] T286005 RED: add focused tests for `Config.Resolve` covering
+- [X] T286005 RED: add focused tests for `Config.Resolve` covering
   config-only success, env-only success, CLI-overrides-config, socket env
   aliasing, unknown profile, and missing required field diagnostics.
-- [ ] T286006 GREEN: implement `Config.Types`, `Config.File`, and
+- [X] T286006 GREEN: implement `Config.Types`, `Config.File`, and
   `Config.Resolve` with pure precedence helpers where possible.
-- [ ] T286007 GREEN: implement `Config.OptEnv` with the shared
+- [X] T286007 GREEN: implement `Config.OptEnv` with the shared
   `opt-env-conf` settings for config path, profile, network, socket,
   metadata, default scope, tenant id, wallet address, swap-order address,
   and API-specific paths.
-- [ ] T286008 Run focused config tests, run `./gate.sh` if dependency fetch
+- [X] T286008 Run focused config tests, run `./gate.sh` if dependency fetch
   permits, record evidence in `WIP.md`, and commit Slice 1.
 
 ## Slice 2 - CLI entry point and `treasury-inspect`

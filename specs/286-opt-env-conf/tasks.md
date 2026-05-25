@@ -75,18 +75,18 @@ trailers should use the task IDs below, for example `Tasks: T286001`.
 
 ## Slice 4 - Operator docs, PR metadata, and final draft state
 
-- [ ] T286020 Update `docs/quickstart.md` and `docs/inspect.md` with a
+- [X] T286020 Update `docs/quickstart.md` and `docs/inspect.md` with a
   minimal `treasury.yaml`, `--config` / `--profile` examples, env names,
   precedence, `CARDANO_NODE_SOCKET_PATH` compatibility, and the `tenantId`
   reserved-for-indexer note.
-- [ ] T286021 Update API deployment/operator docs or inline help examples
+- [X] T286021 Update API deployment/operator docs or inline help examples
   for `amaru-treasury-tx-api --config treasury.yaml --profile acme`.
-- [ ] T286022 Update PR #287 body with completed acceptance evidence,
+- [X] T286022 Update PR #287 body with completed acceptance evidence,
   remaining dependency/gate caveats if any, and links to issue #286 and
   parent epic #241.
-- [ ] T286023 Run final focused tests and `./gate.sh` if dependency fetch
+- [X] T286023 Run final focused tests and `./gate.sh` if dependency fetch
   permits; record the exact pass/fail evidence in `WIP.md`.
-- [ ] T286024 Commit Slice 4 docs/metadata changes and push. Keep the PR in
+- [X] T286024 Commit Slice 4 docs/metadata changes and push. Keep the PR in
   draft until behavior slices and gate evidence are reviewed.
 
 ## Dependencies

@@ -92,8 +92,31 @@ Operator-side feedback after slice E: the flat list of ten cards reads as a "mes
 
 - [X] T267-S6 Commit: `feat(267): /books — group cards by semantics (Identities, References, Rationale, Build parameters)` with `Tasks: T267-S6` trailer.
 
+## Slice G — References compound book
+
+Operator-side feedback after slices A-F merged: the three independent reference books (`reference_uris`, `reference_types`, `reference_labels`) let an operator mismatch label / type / uri across rows.  Each on-chain `body.references[]` entry is one indivisible triple; the books should mirror that.
+
+- [X] T267-S7 [US1] In `Shell.Book`: replace `ReferenceUrisBook` (named, `{name, cid}`) with `ReferencesBook` (named, `{name, label, uri, type}`); drop `ReferenceTypesBook` + `ReferenceLabelsBook` from the free-text taxonomy.  The PS-side field `refType` maps to the wire JSON key `"type"` (PS keyword avoidance).  Custom encode/decode in `Shell.Book` carries the rename; auto-derived `encodeJson` is replaced by a hand-rolled `FO.fromFoldable` object.
+
+- [X] T267-S7 [US1] In `Shell.Book` (sealed-API exception authorised by the brief): export `deriveDefaultName` so `OperatePage` can derive the auto-name for a freshly-typed reference URI without re-implementing the truncation rule.
+
+- [X] T267-S7 [US1] `OperatePage`: collapse the three-input reference row to a single named widget backed by the `references` book.  Picking an entry from the ▾ panel fills all three underlying inputs (`uri`, `refType`, `label`) via `PickNamed (ReferenceSlot i) (ReferenceE r)` — the action's payload becomes a whole `NamedEntry` rather than just the typed value so the handler can read every field.  Type + label inputs stay visible + editable (free-text, no datalist).  `recordSubmittedBooks` records the supplied triple to the `references` book via a local helper that uses URI as the dedup key and preserves the whole existing entry on collision.
+
+- [X] T267-S7 [US3] `/books`: collapse the three reference cards into one card titled `References`, rendered inside the `References` group from slice F.  Each row carries `[name input | label cell (title=full) | URI link (title=full, ellipsis) | copy | trash]`.  `Add new` opens a four-field inline editor (name + label + URI + type) + Save / Cancel.  State extended with `draftLabel` and `draftType`; the existing `draftName` + `draftValue` cover the other two.
+
+- [X] T267-S7 [US4] `BooksPage.Import`: bundle wire shape drops `reference_uris` / `reference_types` / `reference_labels` and gains `references` (array of triples).  Bundle `kind` stays `amaru.book.bundle.v1` — the wire shape IS its schema; missing keys are silently treated as empty.  Auto-dispatch on bare-array import sniffs `{name, label, uri, type}` ahead of `{name, address}` ahead of `String[]`.
+
+- [X] T267-S7 Atomic-reset migration (FR-011 spirit): no code-side migration is added.  Old `reference_uris` / `reference_types` / `reference_labels` keys in `localStorage` are simply ignored on slice-G load.  Operators re-import the refreshed sample bundle (`/tmp/amaru-treasury-books-sample.json`, prepared as part of this slice's smoke) to repopulate the new `references` book.
+
+- [X] T267-S7 Amend `spec.md` in the SAME commit: rewrite the Field → book mapping (drop three rows, add one); update FR-002 / FR-005 / FR-007 / FR-009 / FR-011 / FR-015 to reflect the new taxonomy and entry shape.
+
+- [X] T267-S7 Smoke proof in `WIP.md`: deploy; navigate `/books`; confirm the References section has ONE card; `+ Add new` opens the four-field editor; saved entry shows up as `[name|label|URI|copy|trash]`; `localStorage.book.references` is the bare `[{name, label, uri, type}]` shape.  `/operate` Disburse mode: focus the reference row's ▾ → entries appear by `name`; picking fills uri + type + label simultaneously; submitting Build records the triple via the local helper.
+
+- [X] T267-S7 Commit: `feat(267): collapse references into one compound named book` with `Tasks: T267-S7` trailer.
+
 ## Dependencies
 
 - Slice A blocks B, C, D.
 - B / C / D are independent of each other once A is in.  Default execution order B → C → D for the obvious smoke flow (data needs to exist before the /books UI is meaningful, and /books needs to exist before import/export has a host).
 - Slice E lands after the original four are merged, on a re-opened draft of the same PR (polish).
+- Slice F (semantic grouping) lands after E.  Slice G (references compound book) lands after F on the same draft PR — same precedent.

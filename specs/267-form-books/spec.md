@@ -30,15 +30,13 @@ An entry is a plain `String`.
 |---|---|---|
 | Wallet bech32 | `wallets` | **Named** |
 | Beneficiary bech32 | `wallets` | **Named** (shared book with Wallet — same address shape) |
-| Reference URI (IPFS CID) | `reference_uris` | **Named** |
+| Reference (URI + @type + label) | `references` | **Named** (one indivisible CIP-1694 `body.references[]` triple per entry — slice G; picking a reference fills the URI / @type / label inputs together) |
 | Description | `descriptions` | Free-text |
 | Justification | `justifications` | Free-text |
 | Destination label | `destination_labels` | Free-text |
 | Validity hours | `validity_hours` | Free-text |
 | Slippage bps | `slippage_bps` | Free-text |
 | Split count | `split_counts` | Free-text |
-| Reference @type | `reference_types` | Free-text |
-| Reference label | `reference_labels` | Free-text |
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -135,40 +133,45 @@ Operator wants to seed a fresh browser (or backup before clearing site data) wit
 
 - **FR-001**: Every operator-supplied text/number input in the Field → book mapping table renders a dropdown of historical values.
 
-- **FR-002**: Named books store entries with **per-book typed field names**:
+- **FR-002**: Named books store entries with **per-book typed field shapes**:
   - `wallets`: `{ name :: String, address :: String }` (Lace / Eternl contact-book convention).
-  - `reference_uris`: `{ name :: String, cid :: String }` (IPFS Pinning Service API convention).
+  - `references`: `{ name :: String, label :: String, uri :: String, type :: String }` (one indivisible CIP-1694 `body.references[]` triple per entry — slice G; the operator never picks a `label` for one row and a `uri` for another, eliminating the slice-D-era mismatch risk).
 
-  Free-text books store entries as plain `String`.  The dropdown always shows the human-facing field (`name` on named books, the string itself on free-text); picking substitutes the typed cryptographic field (`address` / `cid`) for named, or the string itself for free-text.
+  Free-text books store entries as plain `String`.  The dropdown always shows the human-facing field (`name` on named books, the string itself on free-text); picking a named entry substitutes the cryptographic / addressable field(s) — `address` for wallets, the whole `{uri, label, type}` triple for references — into the matching form inputs.
 
 - **FR-003**: Wallet and Beneficiary inputs share the `wallets` (named) book.
 
 - **FR-004**: On `ClickBuild` (regardless of backend response), every supplied non-empty field value is recorded to its book.  Named books record `{ name = deriveDefaultName submittedValue, <addr|cid> = submittedValue }` where `deriveDefaultName` produces a truncated `…`-marked stand-in (e.g. `"addr1qABC…znjcrz"`).  Dedup-on-typed-value: if a named entry with the same `address` (resp. `cid`) already exists, move-to-front and preserve its existing **name** rather than overwriting with the derived default.
 
 - **FR-005**: A new `Shell.Book` module exposes:
-  - `loadNamed   :: NamedBookKey   -> Effect (Array NamedEntry)`  -- `NamedEntry` is a per-book record with `name` plus the book-typed value field
+  - `NamedBookKey = WalletsBook | ReferencesBook`
+  - `NamedEntry = WalletE { name, address } | ReferenceE { name, label, uri, refType }`  -- the PS field `refType` maps to the wire JSON key `"type"` (PS keyword avoidance).
+  - `loadNamed   :: NamedBookKey   -> Effect (Array NamedEntry)`
   - `loadFreeText :: FreeTextBookKey -> Effect (Array String)`
-  - `recordNamed   :: NamedBookKey   -> String -> Effect Unit`  -- typed-value only; auto-name on insert
+  - `recordNamed   :: NamedBookKey   -> String -> Effect Unit`  -- typed-value only; auto-name on insert.  For references the value is the URI; label + type are left empty on the entry built by `recordNamed`, so callers that have the full triple (the `/operate` reference row) instead consume their own local helper that builds the `ReferenceE` directly and calls `addNamed`.
   - `recordFreeText :: FreeTextBookKey -> String -> Effect Unit`
   - `renameNamed :: NamedBookKey -> String -> String -> Effect Unit` -- typed-value → new-name
   - `addNamed   :: NamedBookKey -> NamedEntry -> Effect Unit` -- manual create
   - `removeNamed   :: NamedBookKey   -> String -> Effect Unit` -- by typed value
   - `removeFreeText :: FreeTextBookKey -> String -> Effect Unit` -- by string
+  - `replaceNamed :: NamedBookKey -> Array NamedEntry -> Effect Unit` -- wholesale overwrite, used by import.
+  - `replaceFreeText :: FreeTextBookKey -> Array String -> Effect Unit`
   - `clear         :: BookKey         -> Effect Unit` -- works on either shape
+  - `deriveDefaultName :: String -> String` -- first 8 + … + last 6 truncation; exported so the `/operate` reference-row helper can derive the auto-name for a freshly-typed URI.
 
   All operations are total — they degrade to no-ops on localStorage failure.
 
 - **FR-006**: A new `/books` route is added to the SPA router.  The topbar nav gains a third link `Books` between Operate and the theme toggle, with the same `aria-current="page"` affordance as the other links.
 
-- **FR-007**: The `/books` page renders one card per book defined in the Field → book mapping table, **grouped under four semantic section headers** in this fixed order: **Identities** (`wallets`), **References** (`reference_uris`, `reference_types`, `reference_labels`), **Rationale text** (`descriptions`, `justifications`, `destination_labels`), **Build parameters** (`validity_hours`, `slippage_bps`, `split_counts`).  Each entry row carries a Material **copy icon-button** and a Material **trash icon-button**.  Named cards additionally render the typed value as an external `<a target="_blank" rel="noopener noreferrer">` link — `cardanoscan.io/address/<bech32>` for `wallets`; for `reference_uris`, pass-through if the value already carries an `ipfs://` / `http(s)://` scheme, otherwise route through the public IPFS gateway (`https://ipfs.io/ipfs/<cid>`).  Free-text cards render the text inline (no link wrap).  Cards also carry an `Add new` button (named only) and a `Clear all` button (free-text only) below the rows.
+- **FR-007**: The `/books` page renders one card per book defined in the Field → book mapping table, **grouped under four semantic section headers** in this fixed order: **Identities** (`wallets`), **References** (`references` — one compound card carrying the indivisible URI + @type + label triple per row), **Rationale text** (`descriptions`, `justifications`, `destination_labels`), **Build parameters** (`validity_hours`, `slippage_bps`, `split_counts`).  Each entry row carries a Material **copy icon-button** and a Material **trash icon-button**.  Named cards additionally render the typed value as an external `<a target="_blank" rel="noopener noreferrer">` link — `cardanoscan.io/address/<bech32>` for `wallets`; for `references`, pass-through if the value already carries an `ipfs://` / `http(s)://` scheme, otherwise route through the public IPFS gateway (`https://ipfs.io/ipfs/<cid>`).  References rows additionally render the `label` as a read-only cell between the name input and the URI link (full label on hover via `title`).  Free-text cards render the text inline (no link wrap).  Cards also carry an `Add new` button (named only) and a `Clear all` button (free-text only) below the rows.
 
 - **FR-008**: Renaming a named entry commits on blur or Enter — no Save button.  The renamed entry is reflected in `/operate`'s dropdown on the next render.  The typed value's link is **read-only** on `/books` — operators change a typed value by deleting the entry (guarded — see FR-010) and adding a fresh one via `Add new`.  Why: the value represents a real on-chain entity (a wallet, an IPFS document); silently editing it under an existing friendly name (e.g. "CAG payee" suddenly pointing at a different address) is exactly the kind of stale-state-with-trusted-label footgun named books are supposed to prevent.
 
-- **FR-009**: `Add new` on a named card opens an inline editor with two text fields (name + value) and a Save / Cancel pair.  Save calls `addNamed`; the entry appears in the card and in `/operate`'s dropdown.
+- **FR-009**: `Add new` on a named card opens an inline editor with the per-shape fields plus a Save / Cancel pair.  Wallets: two fields (name + address).  References: four fields (name + label + URI + @type).  Save calls `addNamed`; the entry appears in the card and in `/operate`'s dropdown immediately.
 
 - **FR-010**: Per-entry deletion is **guarded** — clicking the trash icon flips the row into an inline confirm state (red-tinted background, `check` + `close` icon-buttons replacing the trash) rather than removing immediately.  Only the `check` icon actually removes the entry; `close` reverts the row.  This applies to both named and free-text rows.  Bulk operations (`Clear all` on free-text cards) keep their existing inline confirm prompt.
 
-- **FR-011**: Each book caps at 25 entries (named: 25 named-entry records; free-text: 25 strings).  Cap enforced on `record*` and `addNamed`.  The on-disk shape per book is the **wire shape** (no internal envelope) — `[ { name, address }, … ]` for `wallets`, `[ { name, cid }, … ]` for `reference_uris`, `[ "…", … ]` for free-text.  An unrecognised entry shape (missing required field, wrong primitive type) for a given book discards the entire on-disk value and resets the book to empty — no per-entry partial recovery, no migration logic.
+- **FR-011**: Each book caps at 25 entries (named: 25 named-entry records; free-text: 25 strings).  Cap enforced on `record*` and `addNamed`.  The on-disk shape per book is the **wire shape** (no internal envelope) — `[ { name, address }, … ]` for `wallets`, `[ { name, label, uri, type }, … ]` for `references`, `[ "…", … ]` for free-text.  An unrecognised entry shape (missing required field, wrong primitive type) for a given book discards the entire on-disk value and resets the book to empty — no per-entry partial recovery, no migration logic.  Slice G dropped the earlier three split books (`reference_uris`, `reference_types`, `reference_labels`); operators with old data on those keys see the entries ignored via the same atomic-reset rule and re-import a refreshed sample bundle to repopulate the new `references` book.
 
 - **FR-012**: Books that have zero entries on the `/books` page render as a placeholder card (so all booked fields are visible to the operator) rather than being hidden.
 
@@ -187,8 +190,8 @@ Operator wants to seed a fresh browser (or backup before clearing site data) wit
   // wallets (per-card export — drops into a Lace contact-book import as-is)
   [ { "name": "Ledger wallet", "address": "addr1qABC…" }, … ]
 
-  // reference_uris (per-card export — matches the IPFS Pinning Service API `pins` array shape)
-  [ { "name": "Antithesis INV-635", "cid": "bafy…" }, … ]
+  // references (per-card export — one compound CIP-1694 reference per entry; slice G)
+  [ { "name": "Contract - CAG", "label": "Contract - CRYPTO ACCOUNTING GROUP", "uri": "ipfs://bafy…", "type": "Other" }, … ]
 
   // any free-text book (descriptions, justifications, …) — bare Array String
   [ "Weekly USDM build", "Monthly buffer top-up", … ]
@@ -200,10 +203,10 @@ Operator wants to seed a fresh browser (or backup before clearing site data) wit
   {
     "kind": "amaru.book.bundle.v1",
     "books": {
-      "wallets":          [ { "name": "Ledger wallet", "address": "addr1qABC…" } ],
-      "reference_uris":   [ { "name": "Antithesis INV-635", "cid": "bafy…" } ],
-      "descriptions":     [ "Weekly USDM build" ],
-      "…":                [ … ]
+      "wallets":      [ { "name": "Ledger wallet", "address": "addr1qABC…" } ],
+      "references":   [ { "name": "Contract - CAG", "label": "Contract - CRYPTO ACCOUNTING GROUP", "uri": "ipfs://bafy…", "type": "Other" } ],
+      "descriptions": [ "Weekly USDM build" ],
+      "…":            [ … ]
     }
   }
   ```

@@ -702,6 +702,7 @@ genReorganizeInputs = do
             , riScopesDeployedAt = scopesDeployedAt
             , riScopeOwnerSigner = scopeOwnerSigner
             , riUpperBound = upperBound
+            , riSplitNativeAssets = False
             }
 
 genIntent

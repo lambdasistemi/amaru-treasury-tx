@@ -272,6 +272,9 @@
                 "scopesDeployedAt": {
                     "$ref": "#/$defs/txIn"
                 },
+                "splitNativeAssets": {
+                    "type": "boolean"
+                },
                 "treasuryAddress": {
                     "$ref": "#/$defs/bech32Address"
                 },

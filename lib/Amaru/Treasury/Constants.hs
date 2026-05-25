@@ -27,6 +27,7 @@ module Amaru.Treasury.Constants
 
       -- * Min-UTxO deposit on swap-order outputs
     , minUtxoDepositLovelace
+    , nativeAssetMinUtxoDepositLovelace
     ) where
 
 import Data.Aeson
@@ -108,3 +109,7 @@ sundaeOrderScriptRefMainnet =
 -- | Minimum lovelace deposit on swap-order outputs.
 minUtxoDepositLovelace :: Integer
 minUtxoDepositLovelace = 2_000_000
+
+-- | Observed minimum lovelace floor for treasury outputs carrying USDM.
+nativeAssetMinUtxoDepositLovelace :: Integer
+nativeAssetMinUtxoDepositLovelace = 2_306_000

@@ -28,14 +28,19 @@ module Amaru.Treasury.Wizard.BuildReorganizeSpec
 import Control.Tracer (Tracer)
 import Test.Hspec (Spec, describe, it, shouldBe)
 
+import Amaru.Treasury.Api.BuildReorganize
+    ( ReorganizeBuildRequest (..)
+    , mapToReorganizeWizardOpts
+    )
 import Amaru.Treasury.Backend (Backend)
 import Amaru.Treasury.Build.Trace (BuildEvent)
 import Amaru.Treasury.Cli.Common (GlobalOpts)
 import Amaru.Treasury.Cli.ReorganizeWizard
-    ( ReorganizeWizardOpts
+    ( ReorganizeWizardOpts (..)
     )
 import Amaru.Treasury.IntentJSON (SomeTreasuryIntent)
 import Amaru.Treasury.Report (TxBuildSuccess)
+import Amaru.Treasury.Scope (ScopeId (CoreDevelopment))
 import Amaru.Treasury.Tx.ReorganizeWizard.Trace
     ( ReorganizeWizardEvent
     )
@@ -86,3 +91,25 @@ spec = describe "Amaru.Treasury.Wizard.Reorganize" $ do
             sig = buildReorganizeIntent
           in
             seq sig True `shouldBe` True
+
+    it "maps HTTP split-native-assets into the wizard opts" $
+        case mapToReorganizeWizardOpts splitNativeAssetsRequest of
+            Left err ->
+                fail ("expected mapper success, got: " <> show err)
+            Right opts ->
+                rwoSplitNativeAssets opts `shouldBe` True
+
+splitNativeAssetsRequest :: ReorganizeBuildRequest
+splitNativeAssetsRequest =
+    ReorganizeBuildRequest
+        { rbrScope = CoreDevelopment
+        , rbrWalletAddr = "addr1qexample"
+        , rbrMetadataPath = "/etc/amaru-treasury/metadata.json"
+        , rbrValidityHours = Nothing
+        , rbrDescription = Nothing
+        , rbrJustification = Nothing
+        , rbrDestinationLabel = Nothing
+        , rbrEvent = Nothing
+        , rbrLabel = Nothing
+        , rbrSplitNativeAssets = Just True
+        }

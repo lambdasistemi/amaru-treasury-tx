@@ -110,6 +110,7 @@ import Amaru.Treasury.Cli.SwapWizard
     )
 import Amaru.Treasury.Constants
     ( minUtxoDepositLovelace
+    , nativeAssetMinUtxoDepositLovelace
     , sundaeOrderAddressMainnet
     , sundaeProtocolFeeLovelace
     , sundaeUsdmPoolHex
@@ -448,7 +449,7 @@ spec = describe "SwapWizard" $ do
                 aapImpliedUsdm plan
                     `shouldBe` ceilingDiv (expectedAmount * rateNum) rateDen
 
-        it "ignores token-bearing treasury UTxOs in all-ADA mode" $ do
+        it "includes token-bearing treasury UTxOs in all-ADA mode" $ do
             nc <- expectRight (networkConstants "mainnet")
             let Right plan =
                     planAllAda
@@ -458,8 +459,11 @@ spec = describe "SwapWizard" $ do
                         [ ("token-bearing#0", 999_000_000, True)
                         , ("pure#1", 10_000_000, False)
                         ]
-            aapSelectedTreasuryUtxos plan `shouldBe` ["pure#1"]
-            aapAvailableLovelace plan `shouldBe` 10_000_000
+            aapSelectedTreasuryUtxos plan
+                `shouldBe` ["token-bearing#0", "pure#1"]
+            aapAvailableLovelace plan `shouldBe` 1_009_000_000
+            aapLeftoverLovelace plan
+                `shouldBe` nativeAssetMinUtxoDepositLovelace
 
         it
             "rejects a pure ADA balance that cannot cover overhead, leftover, and one lovelace"
@@ -840,7 +844,11 @@ spec = describe "SwapWizard" $ do
                             , reEnvQueryTreasuryUtxos = \_ ->
                                 pure
                                     [ (treasuryRef, available, False)
-                                    , ("token-bearing#1", 10_000_000, True)
+                                    ,
+                                        ( "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#1"
+                                        , 10_000_000
+                                        , True
+                                        )
                                     ]
                             , reEnvComputeUpperBound = \_ ->
                                 pure (Right 186364542)
@@ -862,11 +870,14 @@ spec = describe "SwapWizard" $ do
                     Left e -> expectationFailure' (show e)
                     Right (env', plan) -> do
                         aapSelectedTreasuryUtxos plan
-                            `shouldBe` [treasuryRef]
+                            `shouldBe` [ treasuryRef
+                                       , "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#1"
+                                       ]
                         aapAmountLovelace plan
                             `shouldBe` available
+                                + 10_000_000
                                 - ncExtraPerChunkLovelace nc
-                                - minUtxoDepositLovelace
+                                - nativeAssetMinUtxoDepositLovelace
                         let allAdaAnswers =
                                 answers
                                     { wqAmountLovelace =

@@ -118,6 +118,7 @@ import Cardano.Node.Client.Validity qualified as Validity
 
 import Amaru.Treasury.Constants
     ( minUtxoDepositLovelace
+    , nativeAssetMinUtxoDepositLovelace
     , sundaeOrderAddressMainnet
     , sundaeProtocolFeeLovelace
     , sundaeUsdmPoolHex
@@ -996,10 +997,12 @@ selectTreasury inputs target
 
 {- | Compute the max-spend plan for @--all-ada@.
 
-Only pure ADA treasury UTxOs are eligible. The selected amount
-reserves the existing minimum treasury leftover and the per-order
-overhead for the requested split count before deriving chunk size
-and implied USDM.
+Every treasury fund UTxO is eligible, including UTxOs that also
+carry native assets. The selected amount reserves the existing
+minimum treasury leftover and the per-order overhead for the
+requested split count before deriving chunk size and implied USDM.
+Native assets are preserved later by the tx-build runner from the
+selected input values.
 -}
 planAllAda
     :: NetworkConstants
@@ -1010,7 +1013,7 @@ planAllAda
 planAllAda nc split (rateNum, rateDen) inputs
     | split <= 0 = Left (AllAdaSplitNotPositive split)
     | rateDen == 0 = Left AllAdaRateDenominatorZero
-    | null pureInputs = Left AllAdaNoPureTreasuryUtxos
+    | null selectedInputs = Left AllAdaNoPureTreasuryUtxos
     | available < minimumForOneLovelace =
         Left
             ( AllAdaInsufficientLovelace
@@ -1029,14 +1032,14 @@ planAllAda nc split (rateNum, rateDen) inputs
         Right
             AllAdaPlan
                 { aapSelectedTreasuryUtxos =
-                    [ref | (ref, _, _) <- pureInputs]
+                    [ref | (ref, _, _) <- selectedInputs]
                 , aapAvailableLovelace = available
                 , aapAmountLovelace = amount
                 , aapChunkSizeLovelace = chunkSize
                 , aapChunkCount = chunkCount
                 , aapExtraPerChunkLovelace = extraPerChunk
                 , aapOverheadLovelace = overhead
-                , aapLeftoverLovelace = minUtxoDepositLovelace
+                , aapLeftoverLovelace = leftoverFloor
                 , aapImpliedUsdm =
                     impliedUsdmFor
                         (rateNum, rateDen)
@@ -1045,25 +1048,27 @@ planAllAda nc split (rateNum, rateDen) inputs
                 , aapRateDenominator = rateDen
                 }
   where
-    pureInputs =
+    selectedInputs =
         L.sortBy
             (flip compare `on` snd3)
-            [ input
-            | input@(_, _, hasNativeAssets) <- inputs
-            , not hasNativeAssets
-            ]
-    available = sum [lovelace | (_, lovelace, _) <- pureInputs]
+            inputs
+    available = sum [lovelace | (_, lovelace, _) <- selectedInputs]
     splitCount = toInteger split
     extraPerChunk = ncExtraPerChunkLovelace nc
     overhead = splitCount * extraPerChunk
+    leftoverFloor =
+        if any hasNativeAsset selectedInputs
+            then nativeAssetMinUtxoDepositLovelace
+            else minUtxoDepositLovelace
     minimumForOneLovelace =
-        overhead + minUtxoDepositLovelace + 1
+        overhead + leftoverFloor + 1
     minimumForRequestedSplit =
-        overhead + minUtxoDepositLovelace + splitCount
-    amount = available - overhead - minUtxoDepositLovelace
+        overhead + leftoverFloor + splitCount
+    amount = available - overhead - leftoverFloor
     chunkSize = amount `div` splitCount
     chunkCount = chunkCountFor amount chunkSize
     snd3 (_, l, _) = l
+    hasNativeAsset (_, _, flag) = flag
 
 {- | Sum per-chunk USDM datum amounts using the same ceiling
 arithmetic as 'Amaru.Treasury.IntentJSON.mkChunks'.

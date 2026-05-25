@@ -78,8 +78,7 @@ import Cardano.Tx.Build (draft)
 import PlutusCore.Data (Data (..))
 
 import Amaru.Treasury.Tx.Swap
-    ( LeftoverAsset (..)
-    , SwapIntent (..)
+    ( SwapIntent (..)
     , SwapOrderDatumParams (..)
     , SwapOrderOut (..)
     , swapOrderDatum
@@ -155,7 +154,7 @@ intent =
         , siTreasuryUtxos = [mkTxIn 1]
         , siTreasuryAddress = scriptAddr 10
         , siTreasuryLeftoverLovelace = Coin 1_000_000_000_000
-        , siTreasuryLeftoverAsset = Nothing
+        , siTreasuryLeftoverAssets = MultiAsset Map.empty
         , siRedeemerAmountLovelace = Coin 33_163_265_306
         , siPermissionsRewardAccount = permissionsRewardAcct 11
         , siScopesDeployedAt = mkTxIn 2
@@ -229,17 +228,14 @@ spec = describe "Amaru.Treasury.Tx.Swap" $ do
     it "leftover with native asset carries the asset" $
         let withAsset =
                 intent
-                    { siTreasuryLeftoverAsset =
-                        Just
-                            ( LeftoverAsset
-                                ( PolicyID
-                                    (ScriptHash (mkHash28 99))
+                    { siTreasuryLeftoverAssets =
+                        MultiAsset $
+                            Map.singleton
+                                (PolicyID (ScriptHash (mkHash28 99)))
+                                ( Map.singleton
+                                    (AssetName (SBS.toShort "USDM"))
+                                    42
                                 )
-                                ( AssetName
-                                    (SBS.toShort "USDM")
-                                )
-                                42
-                            )
                     }
             tx2 = draft emptyPParams (swapProgram withAsset)
             body2 = tx2 ^. bodyTxL

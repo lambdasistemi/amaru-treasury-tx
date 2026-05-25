@@ -23,7 +23,6 @@ module Amaru.Treasury.Tx.Swap
     ( -- * Intent
       SwapIntent (..)
     , SwapOrderOut (..)
-    , LeftoverAsset (..)
 
       -- * Program
     , swapProgram
@@ -38,10 +37,8 @@ import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Hashes (KeyHash)
 import Cardano.Ledger.Keys (KeyRole (..))
 import Cardano.Ledger.Mary.Value
-    ( AssetName
-    , MaryValue (..)
+    ( MaryValue (..)
     , MultiAsset (..)
-    , PolicyID
     )
 import Cardano.Ledger.TxIn (TxIn)
 import Control.Monad (forM_, void)
@@ -79,13 +76,6 @@ data SwapOrderOut = SwapOrderOut
     -- ^ inline 'Data' describing the SundaeSwap order
     }
 
--- | Optional native-asset addendum for the leftover treasury output.
-data LeftoverAsset = LeftoverAsset
-    { laPolicy :: !PolicyID
-    , laAsset :: !AssetName
-    , laQuantity :: !Integer
-    }
-
 {- | Resolved inputs for a multi-output @swap@ tx.
 
 Mirrors swap.sh's argument layout: chunk sizes have
@@ -121,9 +111,9 @@ data SwapIntent = SwapIntent
     -- ^ treasury contract address (leftover destination)
     , siTreasuryLeftoverLovelace :: !Coin
     -- ^ leftover lovelace returned to the treasury
-    , siTreasuryLeftoverAsset :: !(Maybe LeftoverAsset)
-    -- ^ optional USDM (or other native asset) bundled
-    --     with the leftover treasury output
+    , siTreasuryLeftoverAssets :: !MultiAsset
+    -- ^ native assets bundled with the leftover treasury
+    --     output
     , siRedeemerAmountLovelace :: !Coin
     -- ^ ADA quantity recorded in the Sundae @Disburse@
     --     redeemer (= sum of swap-order chunks)
@@ -186,19 +176,9 @@ swapProgram si = do
                 val
                 (RawPlutusData (soDatum so))
     let leftoverValue =
-            case siTreasuryLeftoverAsset si of
-                Nothing ->
-                    lovelaceValue
-                        (siTreasuryLeftoverLovelace si)
-                Just la ->
-                    MaryValue
-                        (siTreasuryLeftoverLovelace si)
-                        ( MultiAsset $
-                            Map.singleton (laPolicy la) $
-                                Map.singleton
-                                    (laAsset la)
-                                    (laQuantity la)
-                        )
+            MaryValue
+                (siTreasuryLeftoverLovelace si)
+                (siTreasuryLeftoverAssets si)
     _ <- payTo (siTreasuryAddress si) leftoverValue
     forM_ (siSigners si) requireSignature
     validTo (siUpperBound si)

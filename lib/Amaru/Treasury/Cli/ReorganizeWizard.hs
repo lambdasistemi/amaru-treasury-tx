@@ -155,6 +155,8 @@ data ReorganizeWizardOpts = ReorganizeWizardOpts
     --     wallet auto-pick (largest pure-ADA at @--wallet-addr@,
     --     same shape as @disburse-wizard@ / @withdraw-wizard@ /
     --     @swap-wizard@).
+    , rwoSplitNativeAssets :: !Bool
+    -- ^ Opt-in split mode for mixed ADA/native-asset treasury UTxOs.
     }
     deriving stock (Eq, Show)
 
@@ -187,6 +189,14 @@ reorganizeWizardOptsP =
                         \wizard auto-picks the largest pure-ADA UTxO \
                         \at --wallet-addr (sibling-wizard parity)."
                 )
+            )
+        <*> flag
+            False
+            True
+            ( long "split-native-assets"
+                <> help
+                    "Split mixed treasury UTxOs into pure-ADA and \
+                    \native-asset treasury outputs."
             )
 
 commonFlagsP :: Parser CommonFlags
@@ -573,7 +583,7 @@ putting the projection in @Tx@ would force a circular
 import.
 -}
 optsToAnswers :: ReorganizeWizardOpts -> ReorganizeWizardAnswers
-optsToAnswers ReorganizeWizardOpts{rwoCommon = cf, rwoFundingSeedTxIn = txin} =
+optsToAnswers opts =
     ReorganizeWizardAnswers
         { rwaWalletAddr = cfWalletAddr cf
         , rwaMetadataPath = cfMetadataPath cf
@@ -584,5 +594,8 @@ optsToAnswers ReorganizeWizardOpts{rwoCommon = cf, rwoFundingSeedTxIn = txin} =
         , rwaDestinationLabel = cfDestinationLabel cf
         , rwaEvent = cfEvent cf
         , rwaLabel = cfLabel cf
-        , rwaFundingSeedTxIn = txin
+        , rwaFundingSeedTxIn = rwoFundingSeedTxIn opts
+        , rwaSplitNativeAssets = rwoSplitNativeAssets opts
         }
+  where
+    cf = rwoCommon opts

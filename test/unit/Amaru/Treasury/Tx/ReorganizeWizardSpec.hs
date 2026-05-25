@@ -14,6 +14,8 @@ round-trip property.
 -}
 module Amaru.Treasury.Tx.ReorganizeWizardSpec (spec) where
 
+import Data.ByteString (ByteString)
+import Data.ByteString.Short qualified as SBS
 import Data.Functor.Identity (Identity (..))
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Map.Strict qualified as Map
@@ -33,13 +35,24 @@ import Cardano.Ledger.Address
     ( AccountAddress (..)
     , AccountId (..)
     )
+import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Credential (Credential (..))
 import Cardano.Ledger.Hashes (ScriptHash (..))
+import Cardano.Ledger.Mary.Value
+    ( AssetName (..)
+    , MaryValue (..)
+    , MultiAsset (..)
+    , PolicyID (..)
+    )
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Slotting.Slot (SlotNo (..))
 
 import Cardano.Node.Client.Validity qualified as Validity
 
+import Amaru.Treasury.Constants
+    ( minUtxoDepositLovelace
+    , nativeAssetMinUtxoDepositLovelace
+    )
 import Amaru.Treasury.IntentJSON
     ( ReorganizeInputs (..)
     , SAction (..)
@@ -48,6 +61,7 @@ import Amaru.Treasury.IntentJSON
     , WalletJSON (..)
     , decodeTreasuryIntent
     , encodeSomeTreasuryIntent
+    , translateIntent
     )
 import Amaru.Treasury.IntentJSON.Common
     ( decodeHexBytes
@@ -61,6 +75,9 @@ import Amaru.Treasury.Metadata
     , TreasuryMetadata (..)
     )
 import Amaru.Treasury.Scope (ScopeId (..))
+import Amaru.Treasury.Tx.Reorganize
+    ( reorganizeTreasuryOutputValues
+    )
 import Amaru.Treasury.Tx.ReorganizeWizard
     ( ReorganizeEnv (..)
     , ReorganizeError (..)
@@ -214,11 +231,78 @@ spec = describe "ReorganizeWizard" $ do
                             ) -> True
                     _ -> False
 
-    describe "reorganizeToIntent" $
+    describe "reorganizeToIntent" $ do
         it
             "maps the resolved env to SReorganize intent JSON \
             \and round-trips"
             happyTranslator
+
+        it "carries --split-native-assets into the payload" $ do
+            SomeTreasuryIntent SReorganize ti <-
+                buildHappyIntent
+                    sampleAnswers{rwaSplitNativeAssets = True}
+            riSplitNativeAssets (tiPayload ti) `shouldBe` True
+
+        it "splits mixed value into pure-ADA and native-asset outputs" $ do
+            SomeTreasuryIntent SReorganize ti <-
+                buildHappyIntent
+                    sampleAnswers{rwaSplitNativeAssets = True}
+            (_, intent) <-
+                case translateIntent SReorganize ti of
+                    Right translated -> pure translated
+                    Left e ->
+                        expectationFailure e >> error "unreachable"
+            let assets =
+                    MultiAsset $
+                        Map.singleton
+                            (PolicyID (ScriptHash (mkHash28 assetPolicyBytes)))
+                            ( Map.singleton
+                                (AssetName (SBS.toShort "USDM"))
+                                42
+                            )
+                preserved =
+                    MaryValue (Coin 120_000_000) assets
+            reorganizeTreasuryOutputValues intent preserved
+                `shouldBe` [ MaryValue
+                                ( Coin
+                                    ( 120_000_000
+                                        - nativeAssetMinUtxoDepositLovelace
+                                    )
+                                )
+                                (MultiAsset Map.empty)
+                           , MaryValue
+                                (Coin nativeAssetMinUtxoDepositLovelace)
+                                assets
+                           ]
+
+        it "keeps mixed value unsplit when the pure ADA side would be dust" $ do
+            SomeTreasuryIntent SReorganize ti <-
+                buildHappyIntent
+                    sampleAnswers{rwaSplitNativeAssets = True}
+            (_, intent) <-
+                case translateIntent SReorganize ti of
+                    Right translated -> pure translated
+                    Left e ->
+                        expectationFailure e >> error "unreachable"
+            let assets =
+                    MultiAsset $
+                        Map.singleton
+                            (PolicyID (ScriptHash (mkHash28 assetPolicyBytes)))
+                            ( Map.singleton
+                                (AssetName (SBS.toShort "USDM"))
+                                42
+                            )
+                preserved =
+                    MaryValue
+                        ( Coin
+                            ( nativeAssetMinUtxoDepositLovelace
+                                + minUtxoDepositLovelace
+                                - 1
+                            )
+                        )
+                        assets
+            reorganizeTreasuryOutputValues intent preserved
+                `shouldBe` [preserved]
 
 resolveWith
     :: ReorganizeResolverEnv Identity
@@ -235,18 +319,7 @@ resolveWithInput env input =
 
 happyTranslator :: IO ()
 happyTranslator = do
-    resolved <-
-        case resolveWith happyResolverEnv of
-            Right env -> pure env
-            Left e ->
-                expectationFailure ("resolveReorganize failed: " <> show e)
-                    >> error "unreachable"
-    intent <-
-        case reorganizeToIntent resolved sampleAnswers of
-            Right i -> pure i
-            Left e ->
-                expectationFailure ("reorganizeToIntent failed: " <> show e)
-                    >> error "unreachable"
+    intent <- buildHappyIntent sampleAnswers
     decodeTreasuryIntent (encodeSomeTreasuryIntent intent)
         `shouldBe` Right intent
     case intent of
@@ -266,6 +339,20 @@ happyTranslator = do
             riPermissionsRewardAccount payload
                 `shouldBe` expectedPermissionsRewardAccount
         _ -> expectationFailure "expected SReorganize intent"
+
+buildHappyIntent :: ReorganizeWizardAnswers -> IO SomeTreasuryIntent
+buildHappyIntent ans = do
+    resolved <-
+        case resolveWith happyResolverEnv of
+            Right env -> pure env
+            Left e ->
+                expectationFailure ("resolveReorganize failed: " <> show e)
+                    >> error "unreachable"
+    case reorganizeToIntent resolved ans of
+        Right i -> pure i
+        Left e ->
+            expectationFailure ("reorganizeToIntent failed: " <> show e)
+                >> error "unreachable"
 
 sampleInput :: ReorganizeResolverInput
 sampleInput =
@@ -290,6 +377,7 @@ sampleAnswers =
         , rwaEvent = Nothing
         , rwaLabel = Nothing
         , rwaFundingSeedTxIn = Just fundingSeedTxIn
+        , rwaSplitNativeAssets = False
         }
 
 happyResolverEnv :: ReorganizeResolverEnv Identity
@@ -307,19 +395,6 @@ happyResolverEnv =
                     ]
         , sreComputeUpperBound =
             \_ -> Identity (Right sampleUpperBound)
-        }
-
-effectMustNotRunResolverEnv :: ReorganizeResolverEnv Identity
-effectMustNotRunResolverEnv =
-    ReorganizeResolverEnv
-        { sreReadMetadata =
-            \_ -> error "sreReadMetadata must not run"
-        , sreQueryWalletUtxos =
-            \_ -> error "sreQueryWalletUtxos must not run"
-        , sreQueryTreasuryUtxos =
-            \_ -> error "sreQueryTreasuryUtxos must not run"
-        , sreComputeUpperBound =
-            \_ -> error "sreComputeUpperBound must not run"
         }
 
 sampleMetadata :: TreasuryMetadata
@@ -418,6 +493,15 @@ parsedTreasuryTxRefB =
 
 sampleUpperBound :: Word64
 sampleUpperBound = 1_000_100
+
+assetPolicyBytes :: ByteString
+assetPolicyBytes =
+    unsafeRight
+        "asset policy"
+        ( decodeHexBytes
+            28
+            "11111111111111111111111111111111111111111111111111111111"
+        )
 
 txRef :: Text -> Integer -> Text
 txRef nibble ix =

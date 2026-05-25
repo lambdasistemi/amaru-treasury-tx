@@ -726,6 +726,10 @@ data ReorganizeInputs = ReorganizeInputs
     -- ^ scope-owner key hash required as signer
     , riUpperBound :: !SlotNo
     -- ^ @invalid_hereafter@ slot
+    , riSplitNativeAssets :: !Bool
+    -- ^ opt-in reorganize mode: split mixed treasury
+    --   inputs into pure-ADA and native-asset treasury
+    --   outputs at build time
     }
     deriving stock (Eq, Show)
 
@@ -749,6 +753,7 @@ instance FromJSON ReorganizeInputs where
         scopesDeployedAtText <- o .: "scopesDeployedAt"
         scopeOwnerSignerText <- o .: "scopeOwnerSigner"
         upperBound <- o .: "upperBound"
+        splitNativeAssets <- o .:? "splitNativeAssets" .!= False
         ReorganizeInputs
             <$> parseLedgerField
                 "walletUtxo"
@@ -778,10 +783,11 @@ instance FromJSON ReorganizeInputs where
                 "scopeOwnerSigner"
                 (parseGuardKeyHash scopeOwnerSignerText)
             <*> pure (SlotNo (upperBound :: Word64))
+            <*> pure splitNativeAssets
 
 instance ToJSON ReorganizeInputs where
     toJSON ReorganizeInputs{..} =
-        object
+        object $
             [ "walletUtxo" .= renderTxIn riWalletUtxo
             , "treasuryUtxos"
                 .= fmap renderTxIn (NE.toList riTreasuryUtxos)
@@ -800,6 +806,9 @@ instance ToJSON ReorganizeInputs where
                 .= renderGuardKeyHash riScopeOwnerSigner
             , "upperBound" .= renderSlotNo riUpperBound
             ]
+                <> [ "splitNativeAssets" .= True
+                   | riSplitNativeAssets
+                   ]
 
 parseLedgerField :: String -> Either String a -> Parser a
 parseLedgerField fieldName =
@@ -1903,7 +1912,7 @@ translateSwap ti = do
                 , siTreasuryAddress = treasuryAddr
                 , siTreasuryLeftoverLovelace =
                     Coin (sjTreasuryLeftoverLovelace scope)
-                , siTreasuryLeftoverAsset = Nothing
+                , siTreasuryLeftoverAssets = MultiAsset Map.empty
                 , siRedeemerAmountLovelace =
                     Coin
                         ( swiAmountLovelace sw
@@ -2192,6 +2201,8 @@ translateReorganize ti = do
                 , rgiScopeOwnerSigner =
                     riScopeOwnerSigner inputs
                 , rgiUpperBound = riUpperBound inputs
+                , rgiSplitNativeAssets =
+                    riSplitNativeAssets inputs
                 }
     pure (shared, intent)
 

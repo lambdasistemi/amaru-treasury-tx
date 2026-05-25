@@ -222,6 +222,7 @@ optionalFlagNames =
     , "--event"
     , "--label"
     , "--force"
+    , "--split-native-assets"
     ]
 
 -- ----------------------------------------------------
@@ -293,6 +294,16 @@ us3MissingFlagSpec = do
                             <> show
                                 (renderFailureBody other)
                         )
+
+    it "accepts --split-native-assets as an opt-in flag" $
+        case parseArgs (fullArgv <> ["--split-native-assets"]) of
+            Success opts ->
+                rwoSplitNativeAssets opts `shouldBe` True
+            other ->
+                expectationFailure
+                    ( "expected Success on --split-native-assets, got: "
+                        <> show (renderFailureBody other)
+                    )
 
 -- ----------------------------------------------------
 -- US4 — --out parent missing rejected before work

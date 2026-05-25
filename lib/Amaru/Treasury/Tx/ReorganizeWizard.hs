@@ -142,6 +142,9 @@ data ReorganizeWizardAnswers = ReorganizeWizardAnswers
     --     When 'Nothing', the resolver's wallet auto-pick (the same
     --     'selectWallet' biggest-pure-ADA selector every other
     --     wizard uses) is forwarded into the emitted intent.
+    , rwaSplitNativeAssets :: !Bool
+    -- ^ Split mixed treasury value into a pure-ADA treasury
+    --     output plus a native-asset treasury output.
     }
     deriving stock (Eq, Show)
 
@@ -728,6 +731,8 @@ reorganizeToIntent env ans = do
                         , riScopeOwnerSigner = ownerKeyHash
                         , riUpperBound =
                             SlotNo (reUpperBoundSlot env)
+                        , riSplitNativeAssets =
+                            rwaSplitNativeAssets ans
                         }
                 }
     Right (SomeTreasuryIntent SReorganize intent)

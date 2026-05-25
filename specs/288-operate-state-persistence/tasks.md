@@ -21,23 +21,23 @@ Three bisect-safe slices on PR [#290](https://github.com/lambdasistemi/amaru-tre
 
 ## Slice B — /operate integration
 
-- [ ] T288-S2 [US1] Extend `OperatePage.purs` State with `pickedDraftName :: Maybe String` and `saveDialog :: Maybe SaveDraftState`.
+- [X] T288-S2 [US1] Extend `OperatePage.purs` State with `pickedDraftName :: Maybe String` and `saveDialog :: Maybe SaveDraftState`.
 
-- [ ] T288-S2 [US1] On every form-mutation action (every `SetWallet`, `SetDescription`, …), schedule a debounced (300 ms) auto-save: serialize the current form state into a `snapshot` Json blob and call `addNamed OperateDraftsBook { name: "__autosave__", snapshot }`.
+- [X] T288-S2 [US1] On every form-mutation action (every `SetWallet`, `SetDescription`, …), schedule a debounced (300 ms) auto-save: serialize the current form state into a `snapshot` Json blob and call `addNamed OperateDraftsBook { name: "__autosave__", snapshot }`.
 
-- [ ] T288-S2 [US1] On Initialize: call `loadAutoSave OperateDraftsBook`; if present, restore the snapshot into State.  No-op if absent.  This survives both route navigation (Halogen re-mounts /operate) and full reload.
+- [X] T288-S2 [US1] On Initialize: call `loadAutoSave OperateDraftsBook`; if present, restore the snapshot into State.  No-op if absent.  This survives both route navigation (Halogen re-mounts /operate) and full reload.
 
-- [ ] T288-S2 [US2] Add the `Drafts ▾` picker (Halogen widget, same shape as the named-book widget on the wallet input) at the top of /operate, before the mode toggle.  Picking an entry calls `loadNamedVisible OperateDraftsBook`, finds the entry by name, restores its snapshot into State.
+- [X] T288-S2 [US2] Add the `Drafts ▾` picker (Halogen widget, same shape as the named-book widget on the wallet input) at the top of /operate, before the mode toggle.  Picking an entry calls `loadNamedVisible OperateDraftsBook`, finds the entry by name, restores its snapshot into State.
 
-- [ ] T288-S2 [US2] Add the `Save as draft…` button next to the picker.  Clicking opens an inline editor (one-input panel with name field + Save + Cancel).  Save validates non-empty, then calls `addNamed OperateDraftsBook { name, snapshot: <current state> }`.  If the name collides with an existing entry, the editor shows `Will overwrite existing draft '<name>'` BEFORE the operator confirms.
+- [X] T288-S2 [US2] Add the `Save as draft…` button next to the picker.  Clicking opens an inline editor (one-input panel with name field + Save + Cancel).  Save validates non-empty, then calls `addNamed OperateDraftsBook { name, snapshot: <current state> }`.  If the name collides with an existing entry, the editor shows `Will overwrite existing draft '<name>'` BEFORE the operator confirms.
 
-- [ ] T288-S2 [US5] Add the `History ▾` picker next to `Drafts ▾`.  Lists every entry from `loadNamedVisible OperateHistoryBook` (auto-save filter is a no-op here, but reuses the same plumbing).  Newest-first order is enforced by `addNamed` (insert at head + dedup).  Picking an entry restores the snapshot identically to picking a draft — same `pickedDraftName` State plumbing.
+- [X] T288-S2 [US5] Add the `History ▾` picker next to `Drafts ▾`.  Lists every entry from `loadNamedVisible OperateHistoryBook` (auto-save filter is a no-op here, but reuses the same plumbing).  Newest-first order is enforced by `addNamed` (insert at head + dedup).  Picking an entry restores the snapshot identically to picking a draft — same `pickedDraftName` State plumbing.
 
-- [ ] T288-S2 [US1, US5] On successful Build response (where /operate shows the CBOR + Report tabs): (a) clear the auto-save slot via `removeNamed OperateDraftsBook "__autosave__"`; AND (b) append a fresh entry to `OperateHistoryBook` via `addNamed OperateHistoryBook { name: <UTC ISO timestamp Z>, snapshot: <current state> }`.  Use `Effect.Now` for the timestamp; format as `YYYY-MM-DD HH:MM:SS Z` (second precision).  Named drafts NOT cleared.
+- [X] T288-S2 [US1, US5] On successful Build response (where /operate shows the CBOR + Report tabs): (a) clear the auto-save slot via `removeNamed OperateDraftsBook "__autosave__"`; AND (b) append a fresh entry to `OperateHistoryBook` via `addNamed OperateHistoryBook { name: <UTC ISO timestamp Z>, snapshot: <current state> }`.  Use `Effect.Now` for the timestamp; format as `YYYY-MM-DD HH:MM:SS Z` (second precision).  Named drafts NOT cleared.
 
-- [ ] T288-S2 Smoke proof in `WIP.md`: deploy, plant some form values, navigate /operate → /books → /operate — fields restored.  Reload page — fields still restored.  Click `Save as draft…`, name `Test`, save — `localStorage.book.operate_drafts` has `[{name: "Test", snapshot: {…}}, {name: "__autosave__", snapshot: {…}}]`.  Refresh, `Drafts ▾` shows only `Test`.  Click Build (Reorganize mode for the dev path) → response lands → `localStorage.book.operate_history` has one entry whose `name` matches the regex `^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} Z$`; `__autosave__` is gone; `Test` is still present.  `History ▾` shows the timestamp.  Pick it → form repopulates from the historical snapshot.
+- [X] T288-S2 Smoke proof in `WIP.md`: deploy, plant some form values, navigate /operate → /books → /operate — fields restored.  Reload page — fields still restored.  Click `Save as draft…`, name `Test`, save — `localStorage.book.operate_drafts` has `[{name: "Test", snapshot: {…}}, {name: "__autosave__", snapshot: {…}}]`.  Refresh, `Drafts ▾` shows only `Test`.  Click Build (Reorganize mode for the dev path) → response lands → `localStorage.book.operate_history` has one entry whose `name` matches the regex `^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} Z$`; `__autosave__` is gone; `Test` is still present.  `History ▾` shows the timestamp.  Pick it → form repopulates from the historical snapshot.
 
-- [ ] T288-S2 Commit: `feat(288): /operate auto-save + Drafts picker + Save as draft + History picker + on-build history append` with `Tasks: T288-S2` trailer.
+- [X] T288-S2 Commit: `feat(288): /operate auto-save + Drafts picker + Save as draft + History picker + on-build history append` with `Tasks: T288-S2` trailer.
 
 ## Slice C — /books integration + bundle import/export
 

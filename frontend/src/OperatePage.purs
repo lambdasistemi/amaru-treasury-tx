@@ -22,17 +22,24 @@ import Data.Argonaut.Core as Argonaut
 import Data.Argonaut.Decode (decodeJson, printJsonDecodeError)
 import Data.Argonaut.Parser (jsonParser)
 import Data.Array as Array
+import Data.DateTime (date, time, day, hour, minute, month, second, year)
+import Data.DateTime.Instant (toDateTime)
 import Data.Either (Either(..))
+import Data.Enum (fromEnum)
 import Data.Foldable (for_)
 import Data.Int as Int
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Number as Number
 import Data.String as String
 import Data.String.Common (joinWith) as T
+import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, Fiber, delay, forkAff, killFiber)
 import Effect.Aff.Class (class MonadAff)
+import Effect.Class (liftEffect)
+import Effect.Exception (error)
+import Effect.Now (now)
 import Foreign.Object as FO
 import Halogen as H
 import Halogen.HTML as HH
@@ -47,12 +54,16 @@ import Shell.Book
   , NamedBookKey(..)
   , NamedEntry(..)
   , addNamed
+  , autoSaveName
   , deriveDefaultName
+  , loadAutoSave
   , loadFreeText
   , loadNamed
+  , loadNamedVisible
   , namedTypedValue
   , recordFreeText
   , recordNamed
+  , removeNamed
   )
 import Web.UIEvent.KeyboardEvent (KeyboardEvent)
 import Web.UIEvent.KeyboardEvent as KE
@@ -259,6 +270,17 @@ data NamedDropdownId
 
 derive instance eqNamedDropdownId :: Eq NamedDropdownId
 
+-- | #288 — inline `Save as draft…` editor state.  Rendered
+-- | beside the `Drafts ▾` picker (NOT a modal); operator
+-- | types a name and confirms.  'collision' is recomputed
+-- | on every keystroke against the live `drafts` cache so
+-- | the warning line renders BEFORE the operator clicks
+-- | Save (FR-008).
+type SaveDraftState =
+  { nameDraft :: String
+  , collision :: Boolean
+  }
+
 type State =
   { scope :: Scope
   , mode :: TxMode
@@ -285,6 +307,19 @@ type State =
   , theme :: Theme.Theme
   , books :: Books
   , openNamedDropdown :: Maybe NamedDropdownId
+  -- #288 — operator-named drafts cache + dropdown +
+  -- last-picked name (drives `Drafts ▾` / `History ▾` and
+  -- the on-build history append).
+  , drafts :: Array NamedEntry
+  , history :: Array NamedEntry
+  , draftsDropdownOpen :: Boolean
+  , historyDropdownOpen :: Boolean
+  , pickedDraftName :: Maybe String
+  , saveDialog :: Maybe SaveDraftState
+  -- Active debounced auto-save fiber (300 ms after the last
+  -- form-mutation action).  Killed + re-scheduled on every
+  -- mutation so rapid typing collapses into a single write.
+  , autoSaveFiber :: Maybe (Fiber Unit)
   }
 
 data BuildResult
@@ -319,6 +354,13 @@ initialState =
   , theme: Theme.Dark
   , books: emptyBooks
   , openNamedDropdown: Nothing
+  , drafts: []
+  , history: []
+  , draftsDropdownOpen: false
+  , historyDropdownOpen: false
+  , pickedDraftName: Nothing
+  , saveDialog: Nothing
+  , autoSaveFiber: Nothing
   }
 
 data Action
@@ -355,6 +397,15 @@ data Action
   | ToggleNamedDropdown NamedDropdownId
   | PickNamed NamedDropdownId NamedEntry
   | NamedInputKeyDown KeyboardEvent
+  -- #288 — slice-B operator drafts + history surface.
+  | ToggleDraftsDropdown
+  | ToggleHistoryDropdown
+  | PickDraft String
+  | PickHistoryEntry String
+  | OpenSaveDraft
+  | SetSaveDraftName String
+  | ConfirmSaveDraft
+  | CancelSaveDraft
 
 -- ---------------------------------------------------------------------------
 -- Component
@@ -428,7 +479,8 @@ siteHeader mode =
 formColumn :: forall m. State -> H.ComponentHTML Action () m
 formColumn st =
   HH.div [ HP.classes [ cn "form-column" ] ]
-    ( [ modeSelector st.mode
+    ( [ draftsBar st
+      , modeSelector st.mode
       , formSection "01" "Scope"
           "Choose the registered scope you are spending from."
           [ scopePicker st.scope ]
@@ -1993,6 +2045,415 @@ copyBlockButton payload label =
     [ HH.text ("⎘ " <> label) ]
 
 -- ---------------------------------------------------------------------------
+-- #288 — drafts / history bar + snapshot serialization
+
+-- | Top-of-/operate bar carrying the `Drafts ▾` picker, the
+-- | `Save as draft…` button (and its inline editor), and the
+-- | `History ▾` picker.  Sits above the mode selector so the
+-- | operator picks a starting point BEFORE choosing the
+-- | transaction mode — the snapshot itself carries the mode.
+draftsBar :: forall m. State -> H.ComponentHTML Action () m
+draftsBar st =
+  HH.div
+    [ HP.classes [ cn "drafts-bar" ]
+    , HP.style
+        "display:flex;gap:.5rem;flex-wrap:wrap;\
+        \align-items:center;margin-bottom:.75rem"
+    ]
+    ( [ pickerBlock
+          { open: st.draftsDropdownOpen
+          , toggle: ToggleDraftsDropdown
+          , label: "Drafts ▾"
+          , entries: st.drafts
+          , onPick: PickDraft
+          , empty: "(no saved drafts yet)"
+          , picked: st.pickedDraftName
+          }
+      , saveAsDraftBlock st
+      , pickerBlock
+          { open: st.historyDropdownOpen
+          , toggle: ToggleHistoryDropdown
+          , label: "History ▾"
+          , entries: st.history
+          , onPick: PickHistoryEntry
+          , empty: "(no history yet — every successful Build appears here)"
+          , picked: st.pickedDraftName
+          }
+      ]
+    )
+
+-- | One picker button + dropdown panel.  Same shape used
+-- | by both `Drafts ▾` and `History ▾`; only the action
+-- | wiring differs.
+pickerBlock
+  :: forall m
+   . { open :: Boolean
+     , toggle :: Action
+     , label :: String
+     , entries :: Array NamedEntry
+     , onPick :: String -> Action
+     , empty :: String
+     , picked :: Maybe String
+     }
+  -> H.ComponentHTML Action () m
+pickerBlock cfg =
+  HH.div
+    [ HP.style "position:relative" ]
+    ( [ HH.button
+          [ HP.classes [ cn "btn", cn "btn--ghost" ]
+          , HP.type_ HP.ButtonButton
+          , HE.onClick (\_ -> cfg.toggle)
+          ]
+          [ HH.text cfg.label ]
+      ]
+        <>
+          if cfg.open then
+            [ HH.div
+                [ HP.style
+                    "position:absolute;top:100%;left:0;\
+                    \z-index:25;\
+                    \background:var(--md-sys-color-surface-container,\
+                    \#22252b);\
+                    \border:1px solid var(--md-sys-color-outline-variant,\
+                    \#44474e);\
+                    \border-radius:4px;padding:.25rem;\
+                    \display:flex;flex-direction:column;\
+                    \min-width:14rem;max-height:18rem;\
+                    \overflow:auto;\
+                    \box-shadow:0 6px 16px rgba(0,0,0,.25);\
+                    \margin-top:.25rem"
+                ]
+                if Array.null cfg.entries then
+                  [ HH.div
+                      [ HP.style "padding:.5rem;opacity:.6" ]
+                      [ HH.text cfg.empty ]
+                  ]
+                else
+                  map (pickerRow cfg.onPick cfg.picked) cfg.entries
+            ]
+          else []
+    )
+
+pickerRow
+  :: forall m
+   . (String -> Action)
+  -> Maybe String
+  -> NamedEntry
+  -> H.ComponentHTML Action () m
+pickerRow onPick picked entry =
+  let
+    nm = namedEntryName entry
+    isPicked = picked == Just nm
+  in
+    HH.button
+      [ HP.classes [ cn "btn", cn "btn--ghost" ]
+      , HP.type_ HP.ButtonButton
+      , HP.style
+          ( "justify-content:flex-start;text-align:left;\
+            \padding:.4rem .6rem;border:0;background:transparent"
+              <>
+                if isPicked then ";font-weight:600"
+                else ""
+          )
+      , HE.onClick (\_ -> onPick nm)
+      ]
+      [ HH.text nm ]
+
+-- | `Save as draft…` toggle + inline editor.  Renders the
+-- | button when 'saveDialog' is 'Nothing'; replaces it with
+-- | a one-input panel (name field + Save + Cancel + the
+-- | collision-warning caption) when the operator has opened
+-- | the editor.
+saveAsDraftBlock :: forall m. State -> H.ComponentHTML Action () m
+saveAsDraftBlock st = case st.saveDialog of
+  Nothing ->
+    HH.button
+      [ HP.classes [ cn "btn", cn "btn--ghost" ]
+      , HP.type_ HP.ButtonButton
+      , HE.onClick (\_ -> OpenSaveDraft)
+      ]
+      [ HH.text "Save as draft…" ]
+  Just dlg ->
+    HH.div
+      [ HP.style
+          "display:flex;flex-direction:column;gap:.25rem"
+      ]
+      [ HH.div
+          [ HP.style
+              "display:flex;gap:.25rem;align-items:center"
+          ]
+          [ HH.input
+              [ HP.value dlg.nameDraft
+              , HP.type_ HP.InputText
+              , HP.placeholder "draft name"
+              , HP.classes [ cn "field__input" ]
+              , HE.onValueInput SetSaveDraftName
+              , HP.style "min-width:12rem"
+              ]
+          , HH.button
+              ( [ HP.classes [ cn "btn", cn "btn--primary" ]
+                , HP.type_ HP.ButtonButton
+                , HE.onClick (\_ -> ConfirmSaveDraft)
+                ]
+                  <>
+                    if String.trim dlg.nameDraft == "" then
+                      [ HP.disabled true ]
+                    else []
+              )
+              [ HH.text "Save" ]
+          , HH.button
+              [ HP.classes [ cn "btn", cn "btn--ghost" ]
+              , HP.type_ HP.ButtonButton
+              , HE.onClick (\_ -> CancelSaveDraft)
+              ]
+              [ HH.text "Cancel" ]
+          ]
+      , if dlg.collision then
+          HH.div
+            [ HP.classes [ cn "field__error" ]
+            , HP.style "font-size:12px;opacity:.85"
+            ]
+            [ HH.text
+                ( "Will overwrite existing draft '"
+                    <> dlg.nameDraft
+                    <> "'"
+                )
+            ]
+        else HH.text ""
+      ]
+
+-- ---------------------------------------------------------------------------
+-- #288 — snapshot serialization (State <-> Json round-trip)
+--
+-- The snapshot carries every operator-visible form field
+-- regardless of current mode so a Disburse snapshot
+-- restored in Swap mode doesn't lose the Disburse-only
+-- inputs when the operator flips modes back (FR-001).
+-- Decode is best-effort: missing fields keep the current
+-- State value, matching the brief's `.?=` semantics.
+
+modeWire :: TxMode -> String
+modeWire = case _ of
+  ModeSwap -> "swap"
+  ModeDisburse -> "disburse"
+  ModeReorganize -> "reorganize"
+
+modeFromWire :: String -> Maybe TxMode
+modeFromWire = case _ of
+  "swap" -> Just ModeSwap
+  "disburse" -> Just ModeDisburse
+  "reorganize" -> Just ModeReorganize
+  _ -> Nothing
+
+amountModeWire :: AmountMode -> String
+amountModeWire = case _ of
+  ModeUsdm -> "usdm"
+  ModeAllAda -> "all_ada"
+
+amountModeFromWire :: String -> Maybe AmountMode
+amountModeFromWire = case _ of
+  "usdm" -> Just ModeUsdm
+  "all_ada" -> Just ModeAllAda
+  _ -> Nothing
+
+rateModeWire :: RateMode -> String
+rateModeWire = case _ of
+  RateOperator -> "operator"
+  RateOverride -> "override"
+
+rateModeFromWire :: String -> Maybe RateMode
+rateModeFromWire = case _ of
+  "operator" -> Just RateOperator
+  "override" -> Just RateOverride
+  _ -> Nothing
+
+disburseUnitFromWire :: String -> Maybe DisburseUnit
+disburseUnitFromWire = case _ of
+  "ada" -> Just UnitAda
+  "usdm" -> Just UnitUsdm
+  _ -> Nothing
+
+scopeFromSlug :: String -> Maybe Scope
+scopeFromSlug s = Array.find (\sc -> scopeSlug sc == s) allScopes
+
+-- | Project every operator-visible field into a single
+-- | `Json` blob (FR-001 shape, augmented with the
+-- | mode-specific fields so cross-mode round-trips don't
+-- | drop input).  All values are strings on the wire so
+-- | the JSON tree stays uniform; numeric parsing happens
+-- | at submit-time as it does today.
+snapshotState :: State -> Json
+snapshotState s =
+  Argonaut.fromObject $ FO.fromFoldable
+    [ Tuple "mode" (Argonaut.fromString (modeWire s.mode))
+    , Tuple "scope" (Argonaut.fromString (scopeSlug s.scope))
+    , Tuple "walletAddr" (Argonaut.fromString s.walletAddr)
+    , Tuple "amountMode"
+        (Argonaut.fromString (amountModeWire s.amountMode))
+    , Tuple "usdm" (Argonaut.fromString s.usdm)
+    , Tuple "split" (Argonaut.fromString s.split)
+    , Tuple "rateMode"
+        (Argonaut.fromString (rateModeWire s.rateMode))
+    , Tuple "adaUsdm" (Argonaut.fromString s.adaUsdm)
+    , Tuple "slippageBps" (Argonaut.fromString s.slippageBps)
+    , Tuple "minRate" (Argonaut.fromString s.minRate)
+    , Tuple "beneficiaryAddr"
+        (Argonaut.fromString s.beneficiaryAddr)
+    , Tuple "disburseUnit"
+        ( Argonaut.fromString
+            (disburseUnitWire s.disburseUnit)
+        )
+    , Tuple "disburseAmount"
+        (Argonaut.fromString s.disburseAmount)
+    , Tuple "references"
+        ( Argonaut.fromArray
+            (map snapshotReference s.references)
+        )
+    , Tuple "validityHours"
+        (Argonaut.fromString s.validityHours)
+    , Tuple "description" (Argonaut.fromString s.description)
+    , Tuple "justification"
+        (Argonaut.fromString s.justification)
+    , Tuple "destinationLabel"
+        (Argonaut.fromString s.destinationLabel)
+    , Tuple "extraSigners"
+        ( Argonaut.fromArray
+            ( map (Argonaut.fromString <<< scopeSlug)
+                s.extraSigners
+            )
+        )
+    ]
+
+snapshotReference :: ReferenceRow -> Json
+snapshotReference r =
+  Argonaut.fromObject $ FO.fromFoldable
+    [ Tuple "uri" (Argonaut.fromString r.uri)
+    , Tuple "refType" (Argonaut.fromString r.refType)
+    , Tuple "label" (Argonaut.fromString r.label)
+    ]
+
+-- | Best-effort merge of a snapshot blob into the current
+-- | State: each known key overwrites its target if it
+-- | decodes to the expected primitive, otherwise the
+-- | existing State value is preserved.  Returns the
+-- | original State unchanged when the blob isn't a JSON
+-- | object at the top level.
+restoreSnapshot :: Json -> State -> State
+restoreSnapshot j st = case Argonaut.toObject j of
+  Nothing -> st
+  Just o ->
+    let
+      getS k = FO.lookup k o >>= Argonaut.toString
+      ovr k v = fromMaybe v (getS k)
+      modeP = getS "mode" >>= modeFromWire
+      scopeP = getS "scope" >>= scopeFromSlug
+      amountP = getS "amountMode" >>= amountModeFromWire
+      rateP = getS "rateMode" >>= rateModeFromWire
+      unitP = getS "disburseUnit" >>= disburseUnitFromWire
+      refsP = do
+        arr <- FO.lookup "references" o >>= Argonaut.toArray
+        pure (Array.mapMaybe restoreReference arr)
+      signersP = do
+        arr <- FO.lookup "extraSigners" o >>= Argonaut.toArray
+        pure
+          ( Array.mapMaybe
+              ( \v -> Argonaut.toString v >>= scopeFromSlug
+              )
+              arr
+          )
+    in
+      st
+        { mode = fromMaybe st.mode modeP
+        , scope = fromMaybe st.scope scopeP
+        , walletAddr = ovr "walletAddr" st.walletAddr
+        , amountMode = fromMaybe st.amountMode amountP
+        , usdm = ovr "usdm" st.usdm
+        , split = ovr "split" st.split
+        , rateMode = fromMaybe st.rateMode rateP
+        , adaUsdm = ovr "adaUsdm" st.adaUsdm
+        , slippageBps = ovr "slippageBps" st.slippageBps
+        , minRate = ovr "minRate" st.minRate
+        , beneficiaryAddr = ovr "beneficiaryAddr" st.beneficiaryAddr
+        , disburseUnit = fromMaybe st.disburseUnit unitP
+        , disburseAmount = ovr "disburseAmount" st.disburseAmount
+        , references = fromMaybe st.references refsP
+        , validityHours = ovr "validityHours" st.validityHours
+        , description = ovr "description" st.description
+        , justification = ovr "justification" st.justification
+        , destinationLabel = ovr "destinationLabel" st.destinationLabel
+        , extraSigners = fromMaybe st.extraSigners signersP
+        }
+
+restoreReference :: Json -> Maybe ReferenceRow
+restoreReference j = do
+  o <- Argonaut.toObject j
+  let getS k = FO.lookup k o >>= Argonaut.toString
+  uri <- getS "uri"
+  refType <- getS "refType"
+  label <- getS "label"
+  pure { uri, refType, label }
+
+-- | UTC ISO timestamp with second precision, formatted as
+-- | `YYYY-MM-DD HH:MM:SS Z` — the wire name for entries in
+-- | the `operate_history` book (FR-007 / FR-009).  Mirrors
+-- | 'BooksPage.utcTimestamp' but with spaces + a trailing
+-- | `Z` rather than the filename-safe `T…-…Z` shape.
+timestampZ :: Effect String
+timestampZ = do
+  inst <- now
+  let
+    dt = toDateTime inst
+    d = date dt
+    t = time dt
+    yy = show (fromEnum (year d))
+    mm = padTwo (fromEnum (month d))
+    dd = padTwo (fromEnum (day d))
+    hh = padTwo (fromEnum (hour t))
+    mi = padTwo (fromEnum (minute t))
+    ss = padTwo (fromEnum (second t))
+  pure
+    ( yy <> "-" <> mm <> "-" <> dd <> " "
+        <> hh
+        <> ":"
+        <> mi
+        <> ":"
+        <> ss
+        <> " Z"
+    )
+
+padTwo :: Int -> String
+padTwo n
+  | n < 10 = "0" <> show n
+  | otherwise = show n
+
+-- | Schedule a 300 ms debounced write of the current State
+-- | into the `__autosave__` slot of `operate_drafts`.  Any
+-- | previously-scheduled (still-pending) fiber is killed
+-- | first so rapid typing collapses to exactly one write.
+-- | Snapshot capture happens at scheduling time, but rapid
+-- | kills mean the snapshot that actually lands is always
+-- | from the LAST keystroke before the 300 ms window
+-- | elapses.
+scheduleAutoSave
+  :: forall output m
+   . MonadAff m
+  => H.HalogenM State Action () output m Unit
+scheduleAutoSave = do
+  st <- H.get
+  case st.autoSaveFiber of
+    Just fib ->
+      H.liftAff (killFiber (error "supersede") fib)
+    Nothing -> pure unit
+  let snap = snapshotState st
+  fib <- H.liftAff $ forkAff do
+    delay (Milliseconds 300.0)
+    liftEffect $ addNamed OperateDraftsBook
+      ( OperateSnapshotE
+          { name: autoSaveName, snapshot: snap }
+      )
+  H.modify_ _ { autoSaveFiber = Just fib }
+
+-- ---------------------------------------------------------------------------
 -- Handlers
 
 handleAction
@@ -2004,62 +2465,130 @@ handleAction = case _ of
   Initialize -> do
     t <- H.liftEffect initialTheme
     books <- H.liftEffect loadAllBooks
-    H.modify_ \s -> s { theme = t, books = books }
+    drafts' <- H.liftEffect (loadNamedVisible OperateDraftsBook)
+    history' <- H.liftEffect (loadNamedVisible OperateHistoryBook)
+    H.modify_ \s -> s
+      { theme = t
+      , books = books
+      , drafts = drafts'
+      , history = history'
+      }
+    -- Restore from the auto-save slot if present.  Halogen
+    -- re-mounts /operate on every route entry, so this
+    -- covers BOTH route swaps (Books → Operate → Books → …)
+    -- AND full F5 reload (FR-002, US1).
+    mAuto <- H.liftEffect (loadAutoSave OperateDraftsBook)
+    case mAuto of
+      Just (OperateSnapshotE e) ->
+        H.modify_ (restoreSnapshot e.snapshot)
+      _ -> pure unit
   ToggleTheme -> do
     st <- H.get
     t' <- H.liftEffect (toggleThemeEff st.theme)
     H.modify_ \s -> s { theme = t' }
-  SetScope s -> H.modify_ \st ->
-    st { scope = s, destinationLabel = scopeSlug s }
-  SetMode m -> H.modify_ \st ->
+  SetScope s -> do
+    H.modify_ \st -> st { scope = s, destinationLabel = scopeSlug s }
+    scheduleAutoSave
+  SetMode m -> do
     -- Reset the response on mode switch so a stale
     -- swap-shaped body doesn't drive the disburse-shaped
     -- preview helpers (and vice versa).
-    st { mode = m, result = NotStarted }
-  SetWalletAddr s -> H.modify_ \st -> st { walletAddr = s }
-  SetAmountMode m -> H.modify_ \st -> st { amountMode = m }
-  SetUsdm s -> H.modify_ \st -> st { usdm = s }
-  SetSplit s -> H.modify_ \st -> st { split = s }
-  SetRateMode m -> H.modify_ \st -> st { rateMode = m }
-  SetAdaUsdm s -> H.modify_ \st -> st { adaUsdm = s }
-  SetSlippageBps s -> H.modify_ \st -> st { slippageBps = s }
-  SetMinRate s -> H.modify_ \st -> st { minRate = s }
-  SetBeneficiaryAddr s -> H.modify_ \st -> st { beneficiaryAddr = s }
-  SetDisburseUnit u -> H.modify_ \st -> st { disburseUnit = u }
-  SetDisburseAmount s -> H.modify_ \st -> st { disburseAmount = s }
-  AddReference ->
+    H.modify_ \st -> st { mode = m, result = NotStarted }
+    scheduleAutoSave
+  SetWalletAddr s -> do
+    H.modify_ \st -> st { walletAddr = s }
+    scheduleAutoSave
+  SetAmountMode m -> do
+    H.modify_ \st -> st { amountMode = m }
+    scheduleAutoSave
+  SetUsdm s -> do
+    H.modify_ \st -> st { usdm = s }
+    scheduleAutoSave
+  SetSplit s -> do
+    H.modify_ \st -> st { split = s }
+    scheduleAutoSave
+  SetRateMode m -> do
+    H.modify_ \st -> st { rateMode = m }
+    scheduleAutoSave
+  SetAdaUsdm s -> do
+    H.modify_ \st -> st { adaUsdm = s }
+    scheduleAutoSave
+  SetSlippageBps s -> do
+    H.modify_ \st -> st { slippageBps = s }
+    scheduleAutoSave
+  SetMinRate s -> do
+    H.modify_ \st -> st { minRate = s }
+    scheduleAutoSave
+  SetBeneficiaryAddr s -> do
+    H.modify_ \st -> st { beneficiaryAddr = s }
+    scheduleAutoSave
+  SetDisburseUnit u -> do
+    H.modify_ \st -> st { disburseUnit = u }
+    scheduleAutoSave
+  SetDisburseAmount s -> do
+    H.modify_ \st -> st { disburseAmount = s }
+    scheduleAutoSave
+  AddReference -> do
     H.modify_ \st -> st
       { references = st.references <> [ emptyReferenceRow ] }
-  RemoveReference i ->
+    scheduleAutoSave
+  RemoveReference i -> do
     H.modify_ \st -> st
       { references = removeAt i st.references }
-  SetReferenceUri i s ->
+    scheduleAutoSave
+  SetReferenceUri i s -> do
     H.modify_ \st -> st
       { references = updateAt i (\r -> r { uri = s }) st.references
       }
-  SetReferenceType i s ->
+    scheduleAutoSave
+  SetReferenceType i s -> do
     H.modify_ \st -> st
       { references = updateAt i (\r -> r { refType = s }) st.references
       }
-  SetReferenceLabel i s ->
+    scheduleAutoSave
+  SetReferenceLabel i s -> do
     H.modify_ \st -> st
       { references = updateAt i (\r -> r { label = s }) st.references
       }
-  SetValidityHours s -> H.modify_ \st -> st { validityHours = s }
-  SetDescription s -> H.modify_ \st -> st { description = s }
-  SetJustification s -> H.modify_ \st -> st { justification = s }
-  SetDestinationLabel s -> H.modify_ \st -> st { destinationLabel = s }
-  ToggleSigner s -> H.modify_ \st ->
-    st
-      { extraSigners =
-          if Array.elem s st.extraSigners then
-            Array.filter (notEq s) st.extraSigners
-          else
-            st.extraSigners <> [ s ]
-      }
+    scheduleAutoSave
+  SetValidityHours s -> do
+    H.modify_ \st -> st { validityHours = s }
+    scheduleAutoSave
+  SetDescription s -> do
+    H.modify_ \st -> st { description = s }
+    scheduleAutoSave
+  SetJustification s -> do
+    H.modify_ \st -> st { justification = s }
+    scheduleAutoSave
+  SetDestinationLabel s -> do
+    H.modify_ \st -> st { destinationLabel = s }
+    scheduleAutoSave
+  ToggleSigner s -> do
+    H.modify_ \st ->
+      st
+        { extraSigners =
+            if Array.elem s st.extraSigners then
+              Array.filter (notEq s) st.extraSigners
+            else
+              st.extraSigners <> [ s ]
+        }
+    scheduleAutoSave
   SetMetadataPath s -> H.modify_ \st -> st { metadataPath = s }
   SetTab t -> H.modify_ \st -> st { activeTab = t }
-  ClickReset -> H.put initialState
+  ClickReset -> do
+    -- Reset is an operator-initiated abandon of the
+    -- current draft: kill any pending auto-save fiber so
+    -- it doesn't write the just-cleared values back, and
+    -- explicitly wipe the auto-save slot.  Named drafts +
+    -- history are preserved (they're not transient state).
+    st <- H.get
+    case st.autoSaveFiber of
+      Just fib -> H.liftAff (killFiber (error "reset") fib)
+      Nothing -> pure unit
+    H.liftEffect $ removeNamed OperateDraftsBook autoSaveName
+    drafts' <- H.liftEffect (loadNamedVisible OperateDraftsBook)
+    history' <- H.liftEffect (loadNamedVisible OperateHistoryBook)
+    H.put (initialState { drafts = drafts', history = history' })
   ClickBuild -> do
     st <- H.get
     H.modify_ \s -> s { result = Pending }
@@ -2076,6 +2605,24 @@ handleAction = case _ of
     H.liftEffect (recordSubmittedBooks st)
     books' <- H.liftEffect loadAllBooks
     H.modify_ \s -> s { result = Result r, books = books' }
+    -- #288 — successful build (response carries the tx
+    -- CBOR) clears the auto-save slot AND appends a fresh
+    -- timestamped entry to operate_history (FR-007).
+    -- Failure paths leave both books untouched.
+    let p = responsePrefix st.mode
+    case lookupString (p <> "CborHex") r of
+      Just _ -> do
+        H.liftEffect $ removeNamed OperateDraftsBook autoSaveName
+        ts <- H.liftEffect timestampZ
+        H.liftEffect $ addNamed OperateHistoryBook
+          ( OperateSnapshotE
+              { name: ts, snapshot: snapshotState st }
+          )
+        drafts'' <- H.liftEffect (loadNamedVisible OperateDraftsBook)
+        history'' <- H.liftEffect (loadNamedVisible OperateHistoryBook)
+        H.modify_ \s -> s
+          { drafts = drafts'', history = history'' }
+      Nothing -> pure unit
   BooksLoaded books -> H.modify_ \s -> s { books = books }
   ToggleNamedDropdown slot -> H.modify_ \s ->
     s
@@ -2083,36 +2630,106 @@ handleAction = case _ of
           if s.openNamedDropdown == Just slot then Nothing
           else Just slot
       }
-  PickNamed slot entry -> H.modify_ \s -> case slot of
-    WalletSlot ->
-      s
-        { walletAddr = namedTypedValue entry
-        , openNamedDropdown = Nothing
-        }
-    BeneficiarySlot ->
-      s
-        { beneficiaryAddr = namedTypedValue entry
-        , openNamedDropdown = Nothing
-        }
-    ReferenceSlot i -> case entry of
-      ReferenceE r ->
+  PickNamed slot entry -> do
+    H.modify_ \s -> case slot of
+      WalletSlot ->
         s
-          { references =
-              updateAt i
-                ( \existing -> existing
-                    { uri = r.uri
-                    , refType = r.refType
-                    , label = r.label
-                    }
-                )
-                s.references
+          { walletAddr = namedTypedValue entry
           , openNamedDropdown = Nothing
           }
-      _ -> s { openNamedDropdown = Nothing }
+      BeneficiarySlot ->
+        s
+          { beneficiaryAddr = namedTypedValue entry
+          , openNamedDropdown = Nothing
+          }
+      ReferenceSlot i -> case entry of
+        ReferenceE r ->
+          s
+            { references =
+                updateAt i
+                  ( \existing -> existing
+                      { uri = r.uri
+                      , refType = r.refType
+                      , label = r.label
+                      }
+                  )
+                  s.references
+            , openNamedDropdown = Nothing
+            }
+        _ -> s { openNamedDropdown = Nothing }
+    scheduleAutoSave
   NamedInputKeyDown ev -> case KE.key ev of
     "Escape" ->
       H.modify_ \s -> s { openNamedDropdown = Nothing }
     _ -> pure unit
+  -- #288 slice-B — drafts + history pickers.
+  ToggleDraftsDropdown ->
+    H.modify_ \s -> s
+      { draftsDropdownOpen = not s.draftsDropdownOpen
+      , historyDropdownOpen = false
+      }
+  ToggleHistoryDropdown ->
+    H.modify_ \s -> s
+      { historyDropdownOpen = not s.historyDropdownOpen
+      , draftsDropdownOpen = false
+      }
+  PickDraft name -> do
+    st <- H.get
+    case Array.find (\e -> namedEntryName e == name) st.drafts of
+      Just (OperateSnapshotE entry) -> do
+        H.modify_ \s -> (restoreSnapshot entry.snapshot s)
+          { pickedDraftName = Just name
+          , draftsDropdownOpen = false
+          }
+        -- The restored state IS the operator's current
+        -- working set; mirror it to __autosave__ so a
+        -- subsequent route swap restores from this draft
+        -- (not from whatever was in the slot before the
+        -- pick).
+        scheduleAutoSave
+      _ -> H.modify_ _ { draftsDropdownOpen = false }
+  PickHistoryEntry name -> do
+    st <- H.get
+    case Array.find (\e -> namedEntryName e == name) st.history of
+      Just (OperateSnapshotE entry) -> do
+        H.modify_ \s -> (restoreSnapshot entry.snapshot s)
+          { pickedDraftName = Just name
+          , historyDropdownOpen = false
+          }
+        scheduleAutoSave
+      _ -> H.modify_ _ { historyDropdownOpen = false }
+  OpenSaveDraft ->
+    H.modify_ \s -> s
+      { saveDialog = Just { nameDraft: "", collision: false }
+      , draftsDropdownOpen = false
+      , historyDropdownOpen = false
+      }
+  SetSaveDraftName n -> H.modify_ \s ->
+    let
+      collision =
+        Array.any (\e -> namedEntryName e == n) s.drafts
+    in
+      s { saveDialog = Just { nameDraft: n, collision } }
+  ConfirmSaveDraft -> do
+    st <- H.get
+    case st.saveDialog of
+      Just dlg
+        | String.trim dlg.nameDraft /= "" -> do
+            H.liftEffect $ addNamed OperateDraftsBook
+              ( OperateSnapshotE
+                  { name: dlg.nameDraft
+                  , snapshot: snapshotState st
+                  }
+              )
+            drafts' <- H.liftEffect
+              (loadNamedVisible OperateDraftsBook)
+            H.modify_ \s -> s
+              { drafts = drafts'
+              , saveDialog = Nothing
+              , pickedDraftName = Just dlg.nameDraft
+              }
+      _ -> pure unit
+  CancelSaveDraft -> H.modify_ \s -> s { saveDialog = Nothing }
 
 -- | POST the active request body to the given endpoint and
 -- | decode the response as opaque JSON.  Same boilerplate

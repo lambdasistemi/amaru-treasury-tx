@@ -242,6 +242,96 @@ md-assist-chip {
   --md-assist-chip-container-height: 36px;
 }
 
+/* ---------- #289 slice E — dashboard status row ---------- */
+/* Plain flex row above the totals strip + scope grid.
+   Tip + refresh sit on the left; one chip per scope on
+   the right.  Wraps to two visual lines on narrow viewports
+   (mobile-390 puts the chips on row 2). */
+.status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  padding: 8px 12px;
+  background: var(--md-sys-color-surface-container-lowest, transparent);
+  border: 1px solid var(--md-sys-color-outline-variant, #44474e);
+  border-radius: var(--app-radius);
+  font: 500 12px/1.2 "Roboto Mono", ui-monospace, monospace;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.status-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  align-items: center;
+}
+.status-row__pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-row__label {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--md-sys-color-on-surface-variant);
+  opacity: 0.75;
+}
+.status-row__value {
+  color: var(--md-sys-color-on-surface);
+  font-variant-numeric: tabular-nums;
+}
+.status-row__scopes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+}
+.scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--app-radius);
+  border: 1px solid var(--md-sys-color-outline-variant, #44474e);
+  font-size: 11px;
+  line-height: 1.2;
+}
+.scope-chip__name {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.scope-chip__state {
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+}
+.scope-chip[data-state="fresh"] {
+  background: var(--md-sys-color-surface-container-low, #1c1f24);
+  color: var(--md-sys-color-on-surface);
+}
+.scope-chip[data-state="stale"] {
+  background: var(--md-sys-color-tertiary-container, #ffdc9d);
+  color: var(--md-sys-color-on-tertiary-container, #261901);
+  border-color: var(--md-sys-color-tertiary, #7b5800);
+}
+.scope-chip[data-state="partial"] {
+  background: var(--md-sys-color-error-container, #ffdad6);
+  color: var(--md-sys-color-on-error-container, #410002);
+  border-color: var(--md-sys-color-error, #ba1a1a);
+}
+
+@media (max-width: 600px) {
+  .status-row__scopes {
+    margin-left: 0;
+    width: 100%;
+  }
+  .status-row {
+    font-size: 11px;
+  }
+}
+
 /* ---------- Totals strip ---------- */
 .totals {
   display: grid;

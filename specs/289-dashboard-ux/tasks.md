@@ -39,11 +39,11 @@ Eight bisect-safe slices.  Each commit body trailer: `Tasks: T289-S<n>`.  Persis
 
 ## Slice E — Dashboard status indicators
 
-- [ ] T289-S5 [US5] Above the existing per-scope cards on `/`, render a status row: `chain tip: <slot>` + `refreshed: <relative-time>` + per-scope chips with `fresh` / `stale` / `partial` state.
-- [ ] T289-S5 [US5] Source: the existing `chainTip` query (App.purs has this via the periodic refresh helper added pre-#283).  Per-scope state derived from the existing per-scope load result (success / error / in-flight).
-- [ ] T289-S5 [US5] Visual: each state has a distinct colour token from the theme palette (subtle; fresh = neutral, stale = warning, partial = caution).
-- [ ] T289-S5 Smoke proof in `WIP.md`: `/` renders the status row; stale state computed correctly when a refresh fails (force via DevTools network throttle or by waiting past the staleness threshold).
-- [ ] T289-S5 Commit: `feat(289): / dashboard status row — chain tip + refresh time + per-scope state` with `Tasks: T289-S5` trailer.
+- [X] T289-S5 [US5] Above the existing per-scope cards on `/`, render a status row: `chain tip: <slot>` + `refreshed: <relative-time>` + per-scope chips with `fresh` / `stale` / `partial` state.
+- [X] T289-S5 [US5] Source: the existing `chainTip` query (App.purs has this via the periodic refresh helper added pre-#283).  Per-scope state derived from the existing per-scope load result (success / error / in-flight).
+- [X] T289-S5 [US5] Visual: each state has a distinct colour token from the theme palette (subtle; fresh = neutral, stale = warning, partial = caution).
+- [X] T289-S5 Smoke proof in `WIP.md`: `/` renders the status row; stale state computed correctly when a refresh fails (force via DevTools network throttle or by waiting past the staleness threshold).
+- [X] T289-S5 Commit: `feat(289): / dashboard status row — chain tip + refresh time + per-scope state` with `Tasks: T289-S5` trailer.
 
 ## Slice F — Dashboard copy actions
 

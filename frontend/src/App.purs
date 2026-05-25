@@ -26,13 +26,16 @@ import Shell as Shell
 import Data.Argonaut.Core (Json, caseJsonObject)
 import Data.Argonaut.Core as Argonaut
 import Data.Array as Array
+import Data.DateTime.Instant (Instant, unInstant)
 import Data.Either (Either(..))
 import Data.Foldable (sum, traverse_)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String.CodePoints as CodePoints
+import Data.Time.Duration (Milliseconds(..))
 import Effect (Effect)
 import Effect.Aff.Class (class MonadAff)
+import Effect.Now (now)
 import Effect.Timer (setInterval)
 import Foreign.Object as FO
 import Halogen as H
@@ -61,7 +64,16 @@ type State =
       }
   , version :: Maybe Api.BuildIdentity
   , recent :: Maybe Api.RecentTxManifest
-  , lastRefresh :: Maybe String
+  -- #289 slice E — the dashboard status row uses an
+  -- `Instant` rather than an ISO string so the relative
+  -- time ("12 s ago" / "5 min ago") can be computed every
+  -- tick without re-parsing.  Updated on every successful
+  -- `RefreshAll`.
+  , lastRefreshAt :: Maybe Instant
+  -- Wall-clock tick for the relative-time renderer.  A
+  -- 1 s timer (`tickTimer`) writes here so the chip text
+  -- updates without re-running the chain query.
+  , clockNow :: Maybe Instant
   , theme :: Theme.Theme
   }
 
@@ -71,6 +83,11 @@ data Action
   | RefreshAll
   | LoadStatic
   | ToggleTheme
+  -- #289 slice E — 1 s clock tick driving the relative
+  -- time on the dashboard status row.  Independent of the
+  -- 30 s chain refresh so the "x s ago" label updates
+  -- every second.
+  | TickNow
 
 data ScopeName
   = CoreDevelopment
@@ -117,7 +134,8 @@ initialState =
       }
   , version: Nothing
   , recent: Nothing
-  , lastRefresh: Nothing
+  , lastRefreshAt: Nothing
+  , clockNow: Nothing
   , theme: Theme.Dark
   }
 
@@ -156,6 +174,7 @@ component =
       HH.div_
         [ topbar st
         , siteHeader st
+        , statusRow st
         , totalsStrip totals
         , scopeGrid st totals.ada
         , siteFooter st
@@ -190,7 +209,6 @@ component =
               "Live read-only view across the five registered \
               \scopes of the Amaru 2026 treasury."
           ]
-      , statusBanner st
       ]
 
   totalsStrip totals =
@@ -220,27 +238,70 @@ component =
           [ HH.text label_ ]
       ]
 
-  statusBanner st =
-    md "md-chip-set"
-      []
-      [ chip "chain tip"
-          ( case firstChainTipSlot st of
-              Just s -> "slot " <> formatThousands s
-              Nothing -> "—"
-          )
-      , chip "last refresh" (fromMaybe "—" st.lastRefresh)
-      , chip "scopes loaded"
-          ( show (countLoaded st) <> " / "
-              <> show (Array.length allScopeNames)
-          )
+  -- | #289 slice E — top-of-/ status row.  Chain tip slot
+  -- | (from the existing `chainTip` query), relative
+  -- | last-refresh time, and one chip per scope tracking
+  -- | fresh / stale / partial state.  Replaces the old
+  -- | `statusBanner` chip set which used Material assist
+  -- | chips inside `siteHeader`; the new row sits ABOVE
+  -- | the scope grid and uses a plain `.status-row` div so
+  -- | the per-scope `data-state` colour tokens can drive
+  -- | the visual differentiation.
+  statusRow st =
+    HH.div
+      [ HP.classes [ HH.ClassName "status-row" ]
+      , HP.attr (HH.AttrName "aria-label")
+          "Treasury status"
+      ]
+      [ HH.div
+          [ HP.classes [ HH.ClassName "status-row__meta" ] ]
+          [ statusPair "chain tip"
+              ( case firstChainTipSlot st of
+                  Just s -> formatThousands s
+                  Nothing -> "—"
+              )
+          , statusPair "refreshed"
+              (relativeTime st.clockNow st.lastRefreshAt)
+          ]
+      , HH.div
+          [ HP.classes [ HH.ClassName "status-row__scopes" ] ]
+          (map (scopeStatusChip st) allScopeNames)
       ]
 
-  chip label_ value_ =
-    md "md-assist-chip"
-      [ HP.prop (HH.PropName "label")
-          (label_ <> "  " <> value_)
+  statusPair label_ value_ =
+    HH.span
+      [ HP.classes [ HH.ClassName "status-row__pair" ] ]
+      [ HH.span
+          [ HP.classes [ HH.ClassName "status-row__label" ] ]
+          [ HH.text label_ ]
+      , HH.span
+          [ HP.classes [ HH.ClassName "status-row__value" ] ]
+          [ HH.text value_ ]
       ]
-      []
+
+  scopeStatusChip st name =
+    let
+      status = scopeLoadStatus
+        st.clockNow
+        st.lastRefreshAt
+        (scopeOf st name)
+      slug = scopeKey name
+      stateSlug = loadStatusSlug status
+    in
+      HH.span
+        [ HP.classes [ HH.ClassName "scope-chip" ]
+        , HP.attr (HH.AttrName "data-state") stateSlug
+        , HP.attr (HH.AttrName "data-scope") slug
+        , HP.attr (HH.AttrName "aria-label")
+            (slug <> " scope, " <> stateSlug)
+        ]
+        [ HH.span
+            [ HP.classes [ HH.ClassName "scope-chip__name" ] ]
+            [ HH.text slug ]
+        , HH.span
+            [ HP.classes [ HH.ClassName "scope-chip__state" ] ]
+            [ HH.text stateSlug ]
+        ]
 
   scopeGrid st totalAda =
     HH.div
@@ -393,11 +454,18 @@ component =
     Initialize -> do
       theme <- H.liftEffect Theme.initialTheme
       H.liftEffect (Theme.applyTheme theme)
-      H.modify_ \s -> s { theme = theme }
+      t0 <- H.liftEffect now
+      H.modify_ \s -> s { theme = theme, clockNow = Just t0 }
       handleAction LoadStatic
       handleAction RefreshAll
       emitter <- H.liftEffect refreshTimer
       void $ H.subscribe emitter
+      -- #289 slice E — independent 1 s tick so the status
+      -- row's relative-time chip updates between chain
+      -- refreshes (without re-running the 30 s chain query
+      -- every second).
+      tickEmitter <- H.liftEffect tickTimer
+      void $ H.subscribe tickEmitter
 
     ToggleTheme -> do
       st <- H.get
@@ -408,8 +476,13 @@ component =
 
     RefreshAll -> do
       traverse_ (handleAction <<< RefreshOne) allScopeNames
-      now <- H.liftEffect nowIso
-      H.modify_ \s -> s { lastRefresh = Just now }
+      t <- H.liftEffect now
+      H.modify_ \s ->
+        s { lastRefreshAt = Just t, clockNow = Just t }
+
+    TickNow -> do
+      t <- H.liftEffect now
+      H.modify_ \s -> s { clockNow = Just t }
 
     LoadStatic -> do
       v <- H.liftAff Api.fetchVersion
@@ -762,21 +835,89 @@ chainTipSlotOf st name = case scopeOf st name of
             tip
       )
 
-countLoaded :: State -> Int
-countLoaded st =
-  Array.length
-    ( Array.filter
-        ( \n -> case scopeOf st n of
-            Loaded _ -> true
-            _ -> false
-        )
-        allScopeNames
-    )
-
 refreshTimer :: Effect (HS.Emitter Action)
 refreshTimer = do
   { emitter, listener } <- HS.create
   _ <- setInterval 30000 (HS.notify listener RefreshAll)
   pure emitter
 
-foreign import nowIso :: Effect String
+-- | #289 slice E — 1 s wall-clock tick.  Independent of
+-- | the 30 s chain refresh; just pushes a fresh `Instant`
+-- | into `state.clockNow` so the relative-time chip
+-- | re-renders every second.
+tickTimer :: Effect (HS.Emitter Action)
+tickTimer = do
+  { emitter, listener } <- HS.create
+  _ <- setInterval 1000 (HS.notify listener TickNow)
+  pure emitter
+
+-- ---------------------------------------------------------------------------
+-- #289 slice E — dashboard status row helpers
+--
+-- Three indicators above the scope cards: the chain tip
+-- slot (from the existing chainTip query), the time since
+-- last successful refresh (relative; "12 s ago"), and a
+-- per-scope chip row showing fresh / stale / partial.
+--
+-- Staleness threshold = 60 s: anything older than a
+-- minute since the last successful chain query is
+-- considered stale (the 30 s `refreshTimer` should keep
+-- this rare, but a network blip leaves the operator
+-- looking at older data — that's worth surfacing).
+
+stalenessThresholdSeconds :: Int
+stalenessThresholdSeconds = 60
+
+data LoadStatus = StatusFresh | StatusStale | StatusPartial
+
+derive instance eqLoadStatus :: Eq LoadStatus
+
+loadStatusSlug :: LoadStatus -> String
+loadStatusSlug = case _ of
+  StatusFresh -> "fresh"
+  StatusStale -> "stale"
+  StatusPartial -> "partial"
+
+-- | Per-scope load status.  Loaded + recent → fresh;
+-- | Loaded + > 60 s old → stale; Failed / Loading →
+-- | partial.  When the wall clock or `lastRefreshAt`
+-- | aren't available yet (the initial render before
+-- | Initialize has fired), the scope falls back to
+-- | partial as the safest tri-state default.
+scopeLoadStatus
+  :: Maybe Instant
+  -> Maybe Instant
+  -> ScopeState
+  -> LoadStatus
+scopeLoadStatus mNow mLast s = case s of
+  Loaded _ -> case secondsSince mNow mLast of
+    Just secs | secs < stalenessThresholdSeconds -> StatusFresh
+    _ -> StatusStale
+  _ -> StatusPartial
+
+-- | Whole-second difference between `now` and a reference
+-- | instant, both wrapped in `Maybe` for the
+-- | not-yet-initialized case.  Returns `Nothing` when
+-- | either is missing.
+secondsSince :: Maybe Instant -> Maybe Instant -> Maybe Int
+secondsSince mNow mThen = do
+  tNow <- mNow
+  tThen <- mThen
+  let
+    Milliseconds a = unInstant tNow
+    Milliseconds b = unInstant tThen
+  pure (Int.round ((a - b) / 1000.0))
+
+-- | Relative-time text for the status row's `refreshed:`
+-- | chip.  Plain English at second / minute / hour / day
+-- | granularity.  Returns `—` when the last-refresh time
+-- | isn't yet known.
+relativeTime :: Maybe Instant -> Maybe Instant -> String
+relativeTime mNow mThen = case secondsSince mNow mThen of
+  Nothing -> "—"
+  Just s
+    | s < 0 -> "now"
+    | s < 60 -> show s <> " s ago"
+    | s < 3600 -> show (s / 60) <> " min ago"
+    | s < 86400 -> show (s / 3600) <> " hr ago"
+    | otherwise -> show (s / 86400) <> " day ago"

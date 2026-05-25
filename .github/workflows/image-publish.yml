@@ -43,17 +43,76 @@ jobs:
   deploy:
     needs: publish
     runs-on: ubuntu-latest
+    env:
+      EXPECTED_SHA: ${{ github.sha }}
+      PUBLIC_BASE_URL: https://amaru-treasury.plutimus.com
     steps:
       - name: SSH into production and update amaru-treasury
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          EXPECTED_SHA: ${{ env.EXPECTED_SHA }}
+          PUBLIC_BASE_URL: ${{ env.PUBLIC_BASE_URL }}
         with:
           host: ${{ secrets.PROD_SSH_HOST }}
           username: ${{ secrets.PROD_SSH_USER }}
           key: ${{ secrets.PROD_SSH_KEY }}
           port: 22
+          envs: EXPECTED_SHA,PUBLIC_BASE_URL
           script: |
             set -euo pipefail
             cd ~/services/amaru-treasury
             docker compose pull
             docker compose up -d
+
+            version_body="$(mktemp)"
+            cleanup() {
+              rm -f "$version_body"
+            }
+            trap cleanup EXIT
+
+            for attempt in $(seq 1 60); do
+              if curl -fsS --max-time 5 \
+                "$PUBLIC_BASE_URL/v1/version" \
+                >"$version_body"; then
+                version_json="$(tr -d '\n' < "$version_body")"
+                git_commit="$(
+                  printf '%s\n' "$version_json" \
+                    | sed -n 's/.*"biGitCommit"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
+                )"
+
+                if [ -z "$git_commit" ]; then
+                  echo "deploy smoke: /v1/version missing biGitCommit" >&2
+                  cat "$version_body" >&2
+                  exit 1
+                fi
+
+                case "$EXPECTED_SHA" in
+                  "$git_commit"*)
+                    ;;
+                  *)
+                    echo "deploy smoke: expected deployed commit prefix $EXPECTED_SHA, got $git_commit" >&2
+                    cat "$version_body" >&2
+                    exit 1
+                    ;;
+                esac
+
+                grep -q '"biMetadataSha256"' "$version_body" \
+                  || { echo "deploy smoke: /v1/version missing biMetadataSha256" >&2; cat "$version_body" >&2; exit 1; }
+                grep -q '"biRecentTxsCount"' "$version_body" \
+                  || { echo "deploy smoke: /v1/version missing biRecentTxsCount" >&2; cat "$version_body" >&2; exit 1; }
+
+                echo "deploy smoke: /v1/version OK for $git_commit"
+                break
+              fi
+
+              if [ "$attempt" -eq 60 ]; then
+                echo "deploy smoke: /v1/version did not become ready" >&2
+                docker compose ps >&2
+                docker compose logs --tail=200 amaru-treasury >&2
+                exit 1
+              fi
+
+              sleep 2
+            done
+
             docker image prune -f

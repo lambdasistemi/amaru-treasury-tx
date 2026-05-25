@@ -257,52 +257,94 @@ unchanged.
 
 ## §6. Live-boundary smoke shape
 
-**Decision**: A new hspec spec under
-`test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs`. The
-spec:
+**Decision (revised in slice-4)**: ship a **mid-fidelity
+opt-in smoke** in `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs`
+that proves the binary's **lifecycle** end-to-end against a
+live devnet, and **defer** the byte-level N2C trace recorder
+to follow-up issue [#293](https://github.com/lambdasistemi/amaru-treasury-tx/issues/293).
 
-1. Boots a devnet cardano-node fixture (reusing the project's
-   existing devnet harness from `app/devnet-cli-smoke-host/`).
-2. Wraps the node socket with a transparent N2C trace
-   recorder (`socat -t0 UNIX-LISTEN:<recorded>,fork,reuseaddr
-   UNIX-CONNECT:<real>` writing to a per-request log file).
-3. Boots `amaru-treasury-tx-api` against the recorded socket
-   + a fresh tmpfs RocksDB volume + a devnet metadata fixture.
-4. Waits for readiness (TCP connect to `:8080` succeeds).
-5. Issues `curl :8080/v1/treasury-inspect?scope=middleware`.
-6. **Assertion 1**: response status 200, body well-formed
-   `InspectReport`.
-7. **Assertion 2**: the recorded N2C trace for the request
-   window contains exactly one `GetChainPoint` and ZERO
-   `GetUTxOByAddress` / `GetUTxOByTxIn` queries.
-8. Pauses the indexer (kill -STOP on the follower) and waits
-   `lagThreshold` slots.
-9. Issues another `curl`; **Assertion 3**: response status
-   503, body matches the lagging-body schema from
-   [contracts/api-extension.md](./contracts/api-extension.md).
-10. Resumes the indexer; **Assertion 4**: response status
-    200 returns within ~1 lag-threshold's worth of slots.
+The original plan called for a full byte-level recorder + CBOR-
+frame analyzer asserting zero `GetUTxOByAddress` on the wire.
+The slice-4 driver's Q-001 surfaced that ~2 days of new
+infrastructure (socat bridge + LSQ frame scanner) would be
+needed for that, and that the FR-004 invariant is already
+proved at the **Provider boundary** by slice-2's
+`trappedProvider` (every Provider field except `nowTip` traps
+with `error "BUG: …"` if called). The orchestrator picked
+**Option B** (mid-fidelity lifecycle + 503 body + recovery)
+and filed #293 to track the deferred byte-level layer.
 
-The N2C trace parsing reuses whatever the existing devnet
-suite already has (`test/devnet/` has helpers for the
-treasury smoke chain). If no trace parser exists yet, a new
-helper module ships with this PR — but living under
-`test/devnet/` so it's not a runtime dependency.
+### What ships in slice-4
 
-**Rationale**:
+The spec, gated behind the `DEVNET_API_SMOKE_OPT_IN` env var
+so default `cabal test devnet-tests` skips it (gate stays
+cheap), and operator-invokable via `just devnet-api-smoke`:
 
-- The "zero `GetUTxOByAddress`" claim is the load-bearing
-  invariant of this slice; it MUST be proven by a real
-  N2C trace, not by mocking the Provider.
-- Pause/resume of the follower exercises the lag-503 gate
-  end-to-end including the 200-on-recovery acceptance from
-  FR-010.
+1. Boots a devnet via the existing
+   `Cardano.Node.Client.E2E.Devnet.withCardanoNode` harness.
+2. Boots `amaru-treasury-tx-api` against the **real** node
+   socket + tmpfs RocksDB at `$tmpdir/rocksdb` + a devnet
+   metadata fixture.
+3. Waits for readiness via TCP-connect on the bound port.
+4. Issues `curl :<port>/v1/treasury-inspect?scope=<some-scope>`.
+   **Assertion 1**: HTTP 200, body parses as a JSON object.
+5. Forces `Lagging` via `setReadinessForTest`.
+   **Assertion 2**: HTTP 503, body matches the 6-key schema
+   from [contracts/api-extension.md](./contracts/api-extension.md)
+   exactly.
+6. Restores `Ready`. **Assertion 3**: subsequent request
+   returns 200.
 
-**Alternatives considered**:
+### What's explicitly NOT in slice-4 (deferred to #293)
 
-- *Trace assertion via fake Provider*: misses the whole point
-  — proves only that the handler calls the new function,
-  doesn't prove the wired-up binary doesn't issue
-  `GetUTxOByAddress` somewhere we forgot to update.
-- *Property test*: a fixed scenario is sufficient and easier
-  to debug.
+- The transparent N2C socket trace recorder (socat bridge or
+  Haskell pass-through).
+- The LSQ frame analyzer that walks the recorded byte
+  stream and identifies `GetUTxOByAddress` /
+  `GetUTxOByTxIn` constructors.
+- A wire-level "exactly one `GetChainPoint` and zero scans"
+  assertion.
+
+These all live in [#293](https://github.com/lambdasistemi/amaru-treasury-tx/issues/293).
+
+### Why the layered proof is acceptable
+
+FR-004 is proved at two layers:
+
+| Layer | What it covers | Cost |
+|---|---|---|
+| Unit: `trappedProvider` (slice 2) | The handler closure cannot call `queryUTxOs` / `queryUTxOByTxIn` / any field except `nowTip` without crashing the unit test | Cheap (in-process, deterministic) |
+| Live-boundary smoke (slice 4) | The wired-up binary boots, serves a real request, returns 200 (and 503 on drift, and 200 on recovery) end-to-end | Medium (live devnet, opt-in) |
+| Byte-level recorder (deferred to #293) | The actual N2C wire bytes show no `GetUTxOByAddress` from ANY code path — middleware, background threads, future additions | High (~2 days infra) |
+
+The deferred layer adds **independence** from the unit
+suite's assumptions about where queries are issued. The
+current two layers cover the handler explicitly + the
+binary's lifecycle implicitly. #293 closes the gap when
+prioritized.
+
+**Rationale for the deferral**:
+
+- The slice loop must stay livable; absorbing ~2 days into
+  any single slice violates the bisect-safe-per-commit
+  cadence we've held throughout #242.
+- The unit's `trappedProvider` catches the most likely
+  regression (a handler edit smuggles a Provider scan call
+  back in) at lower cost than the byte recorder would.
+- The byte recorder is genuinely useful for FUTURE slices
+  too (the tx-history indexer in epic slice B+ will want the
+  same machinery), so building it as its own first-class
+  ticket is better leverage than rushing it into #242.
+
+**Alternatives considered (and rejected)**:
+
+- *Full byte recorder in slice 4*: too expensive for the
+  proof-delta over slice-2's unit trap. Option A in slice-4
+  Q-001.
+- *Lifecycle-only smoke (skip 503 / recovery)*: too thin;
+  the 503 body shape is operator-visible and worth a live
+  proof. Option C in slice-4 Q-001.
+- *Trace assertion via fake Provider*: misses the whole
+  point — proves only that the handler calls the new
+  function, doesn't prove the wired-up binary works
+  end-to-end.

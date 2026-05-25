@@ -118,7 +118,7 @@ data Format = Human | Json
     deriving (Eq, Show)
 
 data InspectOpts = InspectOpts
-    { ioMetadata :: !FilePath
+    { ioMetadata :: !(Maybe FilePath)
     , ioScope :: !(Maybe ScopeId)
     , ioFormat :: !(Maybe Format)
     -- ^ 'Nothing' = auto-detect (Human on TTY, Json otherwise).
@@ -131,10 +131,12 @@ data InspectOpts = InspectOpts
 inspectOptsP :: Parser InspectOpts
 inspectOptsP =
     InspectOpts
-        <$> strOption
-            ( long "metadata"
-                <> metavar "PATH"
-                <> help "Path to the deployment metadata.json"
+        <$> optional
+            ( strOption
+                ( long "metadata"
+                    <> metavar "PATH"
+                    <> help "Path to the deployment metadata.json"
+                )
             )
         <*> optional
             ( option
@@ -208,7 +210,8 @@ follow @specs/109-treasury-inspect/contracts/cli-surface.md@
 -}
 runTreasuryInspect :: GlobalOpts -> InspectOpts -> IO ()
 runTreasuryInspect g InspectOpts{..} = do
-    metadata <- readMetadataOrAbort ioMetadata
+    metadataPath <- metadataPathOrAbort ioMetadata
+    metadata <- readMetadataOrAbort metadataPath
     validateScope metadata ioScope
     socket <- resolveSocketOrAbort g
     anchor <- parseAnchorOrAbort (tmScopeOwners metadata)
@@ -280,6 +283,11 @@ runInspectFromBackend metadata anchor swapAddr scope backend = do
 -- ----------------------------------------------------
 -- Validation steps 2–4
 -- ----------------------------------------------------
+
+metadataPathOrAbort :: Maybe FilePath -> IO FilePath
+metadataPathOrAbort (Just path) = pure path
+metadataPathOrAbort Nothing =
+    abort 2 "metadata: pass --metadata or select a profile metadataPath"
 
 readMetadataOrAbort :: FilePath -> IO TreasuryMetadata
 readMetadataOrAbort path = do

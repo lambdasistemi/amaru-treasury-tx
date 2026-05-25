@@ -34,24 +34,24 @@ trailers should use the task IDs below, for example `Tasks: T286001`.
 
 ## Slice 2 - CLI entry point and `treasury-inspect`
 
-- [ ] T286009 RED: extend CLI parser/config tests for
+- [X] T286009 RED: extend CLI parser/config tests for
   `amaru-treasury-tx --config treasury.yaml --profile acme treasury-inspect`
   resolving profile metadata, default scope, network, socket, and
   swap-order address.
-- [ ] T286010 RED: add compatibility tests proving existing flag-only
+- [X] T286010 RED: add compatibility tests proving existing flag-only
   invocations still accept `--network`, `--network-magic`, `--node-socket`,
   command-specific `--metadata`, `--scope`, and `--swap-order-address`.
-- [ ] T286011 GREEN: implement `Amaru.Treasury.Cli.Config` as the only CLI
+- [X] T286011 GREEN: implement `Amaru.Treasury.Cli.Config` as the only CLI
   adapter from the shared config modules into existing `GlobalOpts` and
   command runtime shapes.
-- [ ] T286012 GREEN: migrate the shipped CLI runtime config surface in
+- [X] T286012 GREEN: migrate the shipped CLI runtime config surface in
   `lib/Amaru/Treasury/Cli.hs` / `Cli/Common.hs` onto `Cli.Config` while
   preserving the existing `Cmd` and `GlobalOpts` runtime shapes where
   practical.
-- [ ] T286013 GREEN: update `lib/Amaru/Treasury/Cli/TreasuryInspect.hs` so
+- [X] T286013 GREEN: update `lib/Amaru/Treasury/Cli/TreasuryInspect.hs` so
   omitted `--metadata`, `--scope`, and `--swap-order-address` are filled
   from the selected profile before command IO starts.
-- [ ] T286014 Run focused CLI tests, run `./gate.sh` if dependency fetch
+- [X] T286014 Run focused CLI tests, run `./gate.sh` if dependency fetch
   permits, record evidence in `WIP.md`, and commit Slice 2.
 
 ## Slice 3 - API entry point

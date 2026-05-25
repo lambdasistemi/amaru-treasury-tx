@@ -11,6 +11,7 @@ Haskell port of the bash recipes in
 ## Quick links
 
 - [**Quickstart**](quickstart.md) — wizard-to-`tx-build` pipes, pre-signing report review, and vault-backed witness creation.
+- [Inspect and config profiles](inspect.md) — read-only treasury snapshots, profile-based startup, and compatibility flags.
 - [Architecture overview](architecture.md) — modules and data flow.
 - [Trust model](trust-model.md) — what the wizard verifies, what the operator must assert.
 - [Swap recipe](swap.md) — building an existing swap intent with `tx-build`.

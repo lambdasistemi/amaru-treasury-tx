@@ -39,6 +39,41 @@ amaru-treasury-tx \
 By default this prints a human-readable report on the terminal, one
 section per scope.
 
+## Profile-based command
+
+If your operator settings live in `treasury.yaml`, the selected profile
+can provide the node socket, network, metadata path, default scope, and
+swap-order address:
+
+```sh
+amaru-treasury-tx \
+  --config treasury.yaml \
+  --profile acme \
+  treasury-inspect
+```
+
+In that form `treasury-inspect` can omit `--metadata` and `--scope`
+because it reads `metadataPath` and `defaultScope` from the profile.
+The command still verifies the metadata against the on-chain registry
+before reporting balances.
+
+Explicit command-line flags remain the highest-precedence source. Use
+them to override one profile value for a single run:
+
+```sh
+amaru-treasury-tx \
+  --config treasury.yaml \
+  --profile acme \
+  treasury-inspect \
+  --metadata emergency-metadata.json \
+  --scope middleware \
+  --swap-order-address addr1...
+```
+
+The old flag-only form still works, and so does the
+`CARDANO_NODE_SOCKET_PATH` compatibility environment variable when
+`--node-socket` / `AMARU_TREASURY_NODE_SOCKET` is not set.
+
 ## Filter to one scope
 
 After firing a `network_compliance` swap you usually only care about

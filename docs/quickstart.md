@@ -68,7 +68,102 @@ The wizard treats this file as an untrusted hint and verifies
 every consumed field against the on-chain registry NFT and
 build-time pinned Plutus blobs before producing an intent.
 
-## 4. The famous swap, end to end, no intermediate files
+## 4. Put operator settings in a profile
+
+You can keep the node socket, metadata path, default scope, wallet
+address, swap-order address, and API asset paths in a local YAML file
+and select the profile with `--config` / `--profile`. This changes only
+operator startup configuration. The same on-chain treasury contracts,
+registry NFT, metadata verification, and transaction builders remain the
+authority.
+
+Minimal `treasury.yaml`:
+
+```yaml
+profiles:
+  acme:
+    profileName: acme
+    tenantId: acme-mainnet
+    network: mainnet
+    # Or use networkMagic instead of network:
+    # networkMagic: 764824073
+    nodeSocket: /run/cardano/node.socket
+    metadataPath: /srv/amaru/metadata-mainnet.json
+    defaultScope: network_compliance
+    walletAddress: addr1...
+    swapOrderAddress: addr1...
+
+api:
+  manifest: /srv/amaru/recent-txs.json
+  buildIdentity: /srv/amaru/build-identity.json
+  static: /srv/amaru/dashboard
+```
+
+Run `treasury-inspect` from the selected profile:
+
+```bash
+amaru-treasury-tx --config treasury.yaml --profile acme treasury-inspect
+```
+
+Start the dashboard API from the same file:
+
+```bash
+amaru-treasury-tx-api --config treasury.yaml --profile acme
+```
+
+For environment-only startup, export the config source once and omit the
+flags:
+
+```bash
+export AMARU_TREASURY_CONFIG="$PWD/treasury.yaml"
+export AMARU_TREASURY_PROFILE=acme
+
+amaru-treasury-tx treasury-inspect
+amaru-treasury-tx-api
+```
+
+Precedence is:
+
+1. explicit CLI flags;
+2. `AMARU_TREASURY_*` environment variables and the
+   `CARDANO_NODE_SOCKET_PATH` compatibility alias;
+3. the selected YAML profile and top-level `api` section;
+4. built-in defaults where a command has one.
+
+There is no built-in default for required operator paths such as the node
+socket, metadata file, API manifest, API build identity, or API static
+directory. The CLI defaults the network to mainnet when no source
+selects a network. The API keeps its existing `--host` default
+`0.0.0.0` and `--port` / `-p` default `8080`.
+
+The environment variables accepted today are:
+
+| Variable | Purpose |
+|---|---|
+| `AMARU_TREASURY_CONFIG` | YAML config file path. |
+| `AMARU_TREASURY_PROFILE` | Profile name inside `profiles`. |
+| `AMARU_TREASURY_NETWORK` | Network name: `mainnet`, `preprod`, `preview`, or `devnet`. |
+| `AMARU_TREASURY_NETWORK_MAGIC` | Network magic when selecting by number. |
+| `AMARU_TREASURY_NODE_SOCKET` | Cardano node socket path. |
+| `CARDANO_NODE_SOCKET_PATH` | Compatibility alias for the node socket path. |
+| `AMARU_TREASURY_METADATA` | Treasury metadata JSON path. |
+| `AMARU_TREASURY_DEFAULT_SCOPE` | Default scope for profile-aware commands. |
+| `AMARU_TREASURY_TENANT_ID` | Tenant identifier reserved for future indexer partitioning. |
+| `AMARU_TREASURY_WALLET_ADDRESS` | Operator wallet address for profile-aware flows. |
+| `AMARU_TREASURY_SWAP_ORDER_ADDRESS` | SundaeSwap order script address. |
+| `AMARU_TREASURY_API_MANIFEST` | API recent transaction manifest path. |
+| `AMARU_TREASURY_API_BUILD_IDENTITY` | API build identity JSON path. |
+| `AMARU_TREASURY_API_STATIC` | API static asset directory. |
+
+`tenantId` is accepted and carried by the shared config model now, but
+it is reserved for future indexer and multi-tenant data partitioning. It
+is not an on-chain contract selector in this release.
+
+`amaru-treasury-tx-api` still starts mainnet-only. If a config file,
+environment variable, or selected profile supplies a non-mainnet
+network, the API rejects startup before opening the backend.
+
+## 5. The famous swap, end to end, no intermediate files
 
 ```bash
 amaru-treasury-tx \
@@ -112,7 +207,7 @@ What the flags mean:
 | `tx-build --report -` | Emits `{ intent, result }` on stdout. Successful `result` contains both `tx-cbor` and the mechanical report; expected build failures contain `result.failure.code` and `result.failure.message`. Final unsigned transactions are phase-1 preflighted against the sampled chain context before CBOR is written. |
 | `report-render` | Reads the build-output envelope from stdin and renders Markdown. |
 
-## 5. What flows where
+## 6. What flows where
 
 | Stream | Contents |
 |---|---|
@@ -129,7 +224,7 @@ Sundae overhead plus the minimum treasury leftover, and logs the
 computed ADA amount plus implied USDM target before emitting the
 intent.
 
-## 6. Read the audit files before signing
+## 7. Read the audit files before signing
 
 The command never asks for confirmation. Read the rendered Markdown
 report before handing `result.tx-cbor` to any signer. The report is
@@ -178,7 +273,7 @@ The `VERIFIED scope=…` line and the `NetworkConstants` row are
 the chain- and build-time roots binding the produced
 transaction to the upstream pin. Read them before signing.
 
-## 7. Sign + submit
+## 8. Sign + submit
 
 After the report and traces pass review, extract `result.tx-cbor`
 from the JSON envelope and create the required detached witnesses.
@@ -282,7 +377,7 @@ If the transaction does not declare required signer hashes, add
 acknowledgement. Submit within minutes — the wizard's
 `validityUpperBoundSlot` ticks down with the tip.
 
-## 8. Deterministic quote override
+## 9. Deterministic quote override
 
 ```bash
 amaru-treasury-tx \
@@ -305,7 +400,7 @@ amaru-treasury-tx \
 For a live ADA/USDM quote, use the `swap-quote` command (it owns the
 outbound HTTP). The wizard itself does no outbound HTTP after #110.
 
-## 9. Disburse USDM or ADA
+## 10. Disburse USDM or ADA
 
 Most operator disbursements pay USDM, so `disburse-wizard` defaults to
 `--unit usdm`. `--amount` is always in the smallest unit: 1e-6 USDM
@@ -340,7 +435,7 @@ emits a unified `action = "disburse"` intent for `tx-build`.
 See [Disburse](disburse.md) for the existing-intent form, payload
 shape, USDM selection rules, and test evidence.
 
-## 10. Withdraw rewards
+## 11. Withdraw rewards
 
 The withdraw flow has the same wizard-to-builder shape:
 
@@ -365,7 +460,7 @@ If the selected treasury reward account has zero rewards,
 [Withdraw](withdraw.md) for the existing-intent form, schema shape, and
 synthetic golden evidence.
 
-## 11. When something goes wrong
+## 12. When something goes wrong
 
 | Exit | Action |
 |------|--------|
@@ -383,7 +478,7 @@ override for precomputed rates. That path does not create
 `params.json`, so the operator must keep the external quote,
 slippage, arithmetic, and affordability audit record separately.
 
-## 12. Reproduce the known oracles (developer)
+## 13. Reproduce the known oracles (developer)
 
 The golden suite rebuilds frozen transaction fixtures:
 
@@ -399,7 +494,7 @@ UTxOs, and evaluator ExUnits, so the tests do not depend on today's
 chain state. See [Parity report](parity.md), [Withdraw](withdraw.md),
 and [Freeze workflow](freeze-workflow.md).
 
-## 13. Smoke the signer UX and pipe contracts (developer)
+## 14. Smoke the signer UX and pipe contracts (developer)
 
 Before cutting a release or handing a branch to operators, run:
 
@@ -413,7 +508,7 @@ including hidden paste and no-echo passphrase prompts, and exercises
 the withdraw fixture path through schema validation plus the synthetic
 CBOR golden.
 
-## 14. Trust model
+## 15. Trust model
 
 The full account of what the wizard verifies vs. what it asks
 the operator to assert lives in

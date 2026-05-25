@@ -21,16 +21,27 @@ module BooksPage (component) where
 
 import Prelude
 
+import Data.Argonaut.Core (stringify)
+import Data.Argonaut.Parser (jsonParser)
 import Data.Array as Array
+import Data.DateTime (date, time, day, hour, minute, month, second, year)
+import Data.DateTime.Instant (toDateTime)
+import Data.Either (Either(..))
+import Data.Enum (fromEnum)
 import Data.Maybe (Maybe(..))
 import Data.String as String
 import Effect (Effect)
+import Effect.Aff (Aff, makeAff, nonCanceler)
 import Effect.Aff.Class (class MonadAff)
+import Effect.Exception (Error)
+import Effect.Now (now)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 
+import BooksPage.Import (DiffRow)
+import BooksPage.Import as Import
 import Routing (Route(..))
 import Shell as Shell
 import Shell
@@ -52,6 +63,8 @@ import Shell.Book
   , removeFreeText
   , removeNamed
   , renameNamed
+  , replaceFreeText
+  , replaceNamed
   )
 import Theme as Theme
 import Web.UIEvent.KeyboardEvent (KeyboardEvent)
@@ -156,6 +169,29 @@ data EditingId = EditingId NamedBookKey String
 
 derive instance eqEditingId :: Eq EditingId
 
+type ImportPreview =
+  { afterBooks :: Books
+  , diffRows :: Array DiffRow
+  , warnings :: Array String
+  }
+
+type ImportDialogState =
+  { open :: Boolean
+  , text :: String
+  , destination :: Maybe FreeTextBookKey
+  , error :: Maybe String
+  , preview :: Maybe ImportPreview
+  }
+
+emptyImportDialog :: ImportDialogState
+emptyImportDialog =
+  { open: false
+  , text: ""
+  , destination: Nothing
+  , error: Nothing
+  , preview: Nothing
+  }
+
 type State =
   { books :: Books
   , editing :: Maybe EditingId
@@ -164,6 +200,7 @@ type State =
   , draftValue :: String
   , clearConfirm :: Maybe FreeTextBookKey
   , theme :: Theme.Theme
+  , importDialog :: ImportDialogState
   }
 
 initialState :: State
@@ -175,6 +212,7 @@ initialState =
   , draftValue: ""
   , clearConfirm: Nothing
   , theme: Theme.Dark
+  , importDialog: emptyImportDialog
   }
 
 data Action
@@ -195,6 +233,17 @@ data Action
   | CommitAdd
   | CancelAdd
   | AddKeyDown KeyboardEvent
+  | ExportAll
+  | CopyAll
+  | ExportBookByKey BookKey
+  | CopyBookByKey BookKey
+  | OpenImport
+  | CloseImport
+  | UpdateImportText String
+  | ImportFilePicked
+  | UpdateImportDestination String
+  | PreviewImport
+  | ConfirmImport
 
 -- ---------------------------------------------------------------------------
 -- Component
@@ -220,20 +269,50 @@ component =
 render :: forall m. State -> H.ComponentHTML Action () m
 render st =
   HH.div_
-    [ topbar RouteBooks
-        { themeLabel: themeLabel st.theme
-        , onToggleTheme: ToggleTheme
-        }
-    , siteHeader
-    , HH.div
-        [ HP.classes [ cn "build-layout" ]
-        , HP.style "flex-direction:column;gap:1rem"
+    ( [ topbar RouteBooks
+          { themeLabel: themeLabel st.theme
+          , onToggleTheme: ToggleTheme
+          }
+      , siteHeader
+      , HH.div
+          [ HP.classes [ cn "build-layout" ]
+          , HP.style "flex-direction:column;gap:1rem"
+          ]
+          ( [ topOfPageActions ]
+              <> emptyStateNotice st
+              <> namedCardSection st
+              <> freeTextCardSection st
+          )
+      , Shell.siteFooter { buildIdentityLine: "" }
+      ]
+        <> importDialogView st
+    )
+
+topOfPageActions :: forall m. H.ComponentHTML Action () m
+topOfPageActions =
+  HH.div
+    [ HP.style
+        "display:flex;gap:.5rem;flex-wrap:wrap;\
+        \align-items:center"
+    ]
+    [ HH.button
+        [ HP.classes [ cn "btn", cn "btn--primary" ]
+        , HP.type_ HP.ButtonButton
+        , HE.onClick (\_ -> ExportAll)
         ]
-        ( emptyStateNotice st
-            <> namedCardSection st
-            <> freeTextCardSection st
-        )
-    , Shell.siteFooter { buildIdentityLine: "" }
+        [ HH.text "Export all" ]
+    , HH.button
+        [ HP.classes [ cn "btn", cn "btn--ghost" ]
+        , HP.type_ HP.ButtonButton
+        , HE.onClick (\_ -> CopyAll)
+        ]
+        [ HH.text "Copy all" ]
+    , HH.button
+        [ HP.classes [ cn "btn", cn "btn--ghost" ]
+        , HP.type_ HP.ButtonButton
+        , HE.onClick (\_ -> OpenImport)
+        ]
+        [ HH.text "Import…" ]
     ]
 
 siteHeader :: forall m. H.ComponentHTML Action () m
@@ -310,7 +389,7 @@ namedCard st key =
         else
           map (namedEntryRow st key) entries
       )
-      [ namedFooter st key ]
+      [ namedFooter st key, perCardExport (N key) ]
 
 namedEntryRow
   :: forall m
@@ -474,7 +553,9 @@ freeTextCard st key =
         else
           map (freeTextRow key) entries
       )
-      [ freeTextFooter st key (Array.length entries) ]
+      [ freeTextFooter st key (Array.length entries)
+      , perCardExport (F key)
+      ]
 
 freeTextRow
   :: forall m
@@ -644,6 +725,287 @@ truncate s
         <> String.drop (String.length s - 6) s
   | otherwise = s
 
+-- ---------------------------------------------------------------------------
+-- Export/import action rows (slice D)
+
+-- | Per-card `Export` + `Copy` row.  Sits below the card's
+-- | shape-specific footer (Add new / Clear all).  Wire-shape
+-- | is the same bare per-book JSON the bundle import
+-- | dispatches to a single book, so a single-card export
+-- | drops directly into Lace / a Pinning Service / a script.
+perCardExport
+  :: forall m
+   . BookKey
+  -> H.ComponentHTML Action () m
+perCardExport key =
+  HH.div
+    [ HP.style
+        "display:flex;gap:.5rem;flex-wrap:wrap;\
+        \align-items:center;\
+        \border-top:1px solid var(--md-sys-color-outline-variant,#44474e);\
+        \margin-top:.25rem;padding-top:.5rem;opacity:.85"
+    ]
+    [ HH.button
+        [ HP.classes [ cn "btn", cn "btn--ghost" ]
+        , HP.type_ HP.ButtonButton
+        , HE.onClick (\_ -> ExportBookByKey key)
+        ]
+        [ HH.text "Export" ]
+    , HH.button
+        [ HP.classes [ cn "btn", cn "btn--ghost" ]
+        , HP.type_ HP.ButtonButton
+        , HE.onClick (\_ -> CopyBookByKey key)
+        ]
+        [ HH.text "Copy" ]
+    ]
+
+-- | Modal import dialog.  Rendered as a sibling of the
+-- | page chrome so the backdrop covers the topbar too.
+-- | Closed-state returns @[]@ so the parent's `<>` no-ops
+-- | cleanly.
+importDialogView
+  :: forall m
+   . State -> Array (H.ComponentHTML Action () m)
+importDialogView st
+  | not st.importDialog.open = []
+  | otherwise =
+      [ HH.div
+          [ HP.style
+              "position:fixed;inset:0;z-index:30;\
+              \background:rgba(0,0,0,.45);\
+              \display:flex;align-items:flex-start;\
+              \justify-content:center;padding:3rem 1rem;\
+              \overflow-y:auto"
+          ]
+          [ HH.div
+              [ HP.classes [ cn "form-section" ]
+              , HP.style
+                  "background:var(--md-sys-color-surface-container,#22252b);\
+                  \border:1px solid var(--md-sys-color-outline-variant,#44474e);\
+                  \border-radius:8px;padding:1.25rem;\
+                  \width:min(640px,100%);display:flex;\
+                  \flex-direction:column;gap:.75rem;\
+                  \box-shadow:0 12px 32px rgba(0,0,0,.35)"
+              ]
+              ( [ HH.h2
+                    [ HP.classes
+                        [ cn "form-section__title"
+                        , cn "md-typescale-title-medium"
+                        ]
+                    ]
+                    [ HH.text "Import books" ]
+                , HH.p
+                    [ HP.classes
+                        [ cn "md-typescale-body-small" ]
+                    , HP.style "opacity:.75"
+                    ]
+                    [ HH.text
+                        "Accepts an `amaru.book.bundle.v1` \
+                        \JSON document OR a bare array \
+                        \(wallets / reference URIs / \
+                        \strings — pick a destination for \
+                        \the last)."
+                    ]
+                , HH.label
+                    [ HP.classes [ cn "field" ] ]
+                    [ HH.span
+                        [ HP.classes [ cn "field__label" ] ]
+                        [ HH.text "File" ]
+                    , HH.input
+                        [ HP.type_ HP.InputFile
+                        , HP.id "books-import-file"
+                        , HP.attr
+                            (HH.AttrName "accept")
+                            "application/json,.json"
+                        , HE.onChange
+                            (\_ -> ImportFilePicked)
+                        , HP.classes [ cn "field__input" ]
+                        ]
+                    ]
+                , HH.label
+                    [ HP.classes [ cn "field" ] ]
+                    [ HH.span
+                        [ HP.classes [ cn "field__label" ] ]
+                        [ HH.text "Or paste JSON" ]
+                    , HH.textarea
+                        [ HP.value st.importDialog.text
+                        , HE.onValueInput UpdateImportText
+                        , HP.classes
+                            [ cn "field__input"
+                            , cn "field__input--mono"
+                            ]
+                        , HP.attr
+                            (HH.AttrName "rows")
+                            "8"
+                        , HP.style
+                            "min-height:8rem;resize:vertical;\
+                            \font-family:ui-monospace,\
+                            \SFMono-Regular,monospace"
+                        ]
+                    ]
+                , HH.label
+                    [ HP.classes [ cn "field" ] ]
+                    [ HH.span
+                        [ HP.classes [ cn "field__label" ] ]
+                        [ HH.text
+                            "Destination (for bare \
+                            \string arrays)"
+                        ]
+                    , HH.select
+                        [ HE.onValueChange
+                            UpdateImportDestination
+                        , HP.classes [ cn "field__input" ]
+                        ]
+                        ( [ HH.option
+                              [ HP.value "" ]
+                              [ HH.text "— auto / N/A —" ]
+                          ]
+                            <>
+                              map
+                                ( \k ->
+                                    HH.option
+                                      [ HP.value
+                                          (Import.freeTextSuffix k)
+                                      , HP.selected
+                                          ( st.importDialog.destination
+                                              == Just k
+                                          )
+                                      ]
+                                      [ HH.text
+                                          (freeTextHeader k)
+                                      ]
+                                )
+                                Import.allFreeTextKeys
+                        )
+                    ]
+                ]
+                  <> errorRow st.importDialog.error
+                  <> previewRows st.importDialog.preview
+                  <> dialogFooter st
+              )
+          ]
+      ]
+
+errorRow
+  :: forall m
+   . Maybe String -> Array (H.ComponentHTML Action () m)
+errorRow = case _ of
+  Nothing -> []
+  Just msg ->
+    [ HH.div
+        [ HP.classes [ cn "field__error" ]
+        , HP.style "padding:.5rem 0"
+        ]
+        [ HH.text msg ]
+    ]
+
+previewRows
+  :: forall m
+   . Maybe ImportPreview
+  -> Array (H.ComponentHTML Action () m)
+previewRows = case _ of
+  Nothing -> []
+  Just p ->
+    [ HH.div
+        [ HP.style "display:flex;flex-direction:column;gap:.4rem" ]
+        ( [ HH.p
+              [ HP.classes
+                  [ cn "md-typescale-body-medium" ]
+              ]
+              [ HH.text "Diff — entries per book:" ]
+          ]
+            <> map diffRowView p.diffRows
+            <> warningsView p.warnings
+        )
+    ]
+
+diffRowView
+  :: forall m. DiffRow -> H.ComponentHTML Action () m
+diffRowView row =
+  HH.div
+    [ HP.style
+        "display:flex;gap:1rem;\
+        \font-family:ui-monospace,SFMono-Regular,monospace;\
+        \font-size:.85rem"
+    ]
+    [ HH.span
+        [ HP.style "flex:1" ]
+        [ HH.text (bookKeyLabel row.book) ]
+    , HH.span
+        [ HP.style "opacity:.7" ]
+        [ HH.text
+            ( show row.beforeCount <> " → "
+                <> show row.afterCount
+            )
+        ]
+    ]
+
+warningsView
+  :: forall m
+   . Array String -> Array (H.ComponentHTML Action () m)
+warningsView ws
+  | Array.null ws = []
+  | otherwise =
+      [ HH.div
+          [ HP.style "margin-top:.5rem;opacity:.7" ]
+          ( map
+              ( \w ->
+                  HH.p
+                    [ HP.classes
+                        [ cn "md-typescale-body-small" ]
+                    ]
+                    [ HH.text ("⚠ " <> w) ]
+              )
+              ws
+          )
+      ]
+
+bookKeyLabel :: BookKey -> String
+bookKeyLabel = case _ of
+  N k -> namedHeader k
+  F k -> freeTextHeader k
+
+dialogFooter
+  :: forall m
+   . State -> Array (H.ComponentHTML Action () m)
+dialogFooter st =
+  [ HH.div
+      [ HP.style
+          "display:flex;gap:.5rem;justify-content:flex-end;\
+          \margin-top:.5rem"
+      ]
+      ( case st.importDialog.preview of
+          Nothing ->
+            [ HH.button
+                [ HP.classes [ cn "btn", cn "btn--ghost" ]
+                , HP.type_ HP.ButtonButton
+                , HE.onClick (\_ -> CloseImport)
+                ]
+                [ HH.text "Cancel" ]
+            , HH.button
+                [ HP.classes [ cn "btn", cn "btn--primary" ]
+                , HP.type_ HP.ButtonButton
+                , HE.onClick (\_ -> PreviewImport)
+                ]
+                [ HH.text "Preview" ]
+            ]
+          Just _ ->
+            [ HH.button
+                [ HP.classes [ cn "btn", cn "btn--ghost" ]
+                , HP.type_ HP.ButtonButton
+                , HE.onClick (\_ -> CloseImport)
+                ]
+                [ HH.text "Cancel" ]
+            , HH.button
+                [ HP.classes [ cn "btn", cn "btn--primary" ]
+                , HP.type_ HP.ButtonButton
+                , HE.onClick (\_ -> ConfirmImport)
+                ]
+                [ HH.text "Confirm" ]
+            ]
+      )
+  ]
+
 cn :: String -> HH.ClassName
 cn = HH.ClassName
 
@@ -764,6 +1126,252 @@ handleAction = case _ of
     "Enter" -> handleAction CommitAdd
     "Escape" -> handleAction CancelAdd
     _ -> pure unit
+
+  ExportAll -> do
+    st <- H.get
+    H.liftEffect do
+      ts <- utcTimestamp
+      _downloadText
+        ("amaru-treasury-books-" <> ts <> ".json")
+        (stringify (Import.encodeBundleJson st.books))
+
+  CopyAll -> do
+    st <- H.get
+    H.liftEffect
+      ( _writeClipboard
+          (stringify (Import.encodeBundleJson st.books))
+      )
+
+  ExportBookByKey key -> do
+    st <- H.get
+    H.liftEffect do
+      ts <- utcTimestamp
+      case key of
+        N nk ->
+          _downloadText
+            (Import.namedSuffix nk <> "-" <> ts <> ".json")
+            ( stringify
+                ( Import.encodeNamedBookJson
+                    (namedEntries nk st.books)
+                )
+            )
+        F fk ->
+          _downloadText
+            ( Import.freeTextSuffix fk <> "-" <> ts
+                <> ".json"
+            )
+            ( stringify
+                ( Import.encodeFreeTextBookJson
+                    (freeTextEntries fk st.books)
+                )
+            )
+
+  CopyBookByKey key -> do
+    st <- H.get
+    H.liftEffect case key of
+      N nk ->
+        _writeClipboard
+          ( stringify
+              ( Import.encodeNamedBookJson
+                  (namedEntries nk st.books)
+              )
+          )
+      F fk ->
+        _writeClipboard
+          ( stringify
+              ( Import.encodeFreeTextBookJson
+                  (freeTextEntries fk st.books)
+              )
+          )
+
+  OpenImport ->
+    H.modify_ \s -> s
+      { importDialog = emptyImportDialog { open = true } }
+
+  CloseImport ->
+    H.modify_ \s -> s { importDialog = emptyImportDialog }
+
+  UpdateImportText txt ->
+    H.modify_ \s -> s
+      { importDialog = s.importDialog
+          { text = txt
+          , error = Nothing
+          , preview = Nothing
+          }
+      }
+
+  ImportFilePicked -> do
+    txt <-
+      H.liftAff (readFileAff "#books-import-file")
+    H.modify_ \s -> s
+      { importDialog = s.importDialog
+          { text = txt
+          , error = Nothing
+          , preview = Nothing
+          }
+      }
+
+  UpdateImportDestination suffix ->
+    H.modify_ \s -> s
+      { importDialog = s.importDialog
+          { destination = Import.freeTextSuffixToKey suffix
+          , error = Nothing
+          , preview = Nothing
+          }
+      }
+
+  PreviewImport -> do
+    st <- H.get
+    let
+      raw = String.trim st.importDialog.text
+    if raw == "" then
+      H.modify_ \s -> s
+        { importDialog = s.importDialog
+            { error =
+                Just "paste JSON or pick a file first"
+            , preview = Nothing
+            }
+        }
+    else case jsonParser raw of
+      Left err ->
+        H.modify_ \s -> s
+          { importDialog = s.importDialog
+              { error =
+                  Just ("invalid JSON: " <> err)
+              , preview = Nothing
+              }
+          }
+      Right j -> case Import.parseImport j of
+        Left ierr ->
+          H.modify_ \s -> s
+            { importDialog = s.importDialog
+                { error =
+                    Just (Import.describeError ierr)
+                , preview = Nothing
+                }
+            }
+        Right payload ->
+          case
+            Import.merge
+              payload
+              st.importDialog.destination
+              st.books
+            of
+            Left ierr ->
+              H.modify_ \s -> s
+                { importDialog = s.importDialog
+                    { error =
+                        Just (Import.describeError ierr)
+                    , preview = Nothing
+                    }
+                }
+            Right after -> do
+              let
+                warnings = case payload of
+                  Import.BundlePayload bd -> bd.warnings
+                  _ -> []
+              H.modify_ \s -> s
+                { importDialog = s.importDialog
+                    { error = Nothing
+                    , preview = Just
+                        { afterBooks: after
+                        , diffRows: Import.diff st.books after
+                        , warnings
+                        }
+                    }
+                }
+
+  ConfirmImport -> do
+    st <- H.get
+    case st.importDialog.preview of
+      Just preview -> do
+        let after = preview.afterBooks
+        H.liftEffect do
+          replaceNamed WalletsBook after.wallets
+          replaceNamed ReferenceUrisBook after.referenceUris
+          replaceFreeText
+            DescriptionsBook
+            after.descriptions
+          replaceFreeText
+            JustificationsBook
+            after.justifications
+          replaceFreeText
+            DestinationLabelsBook
+            after.destinationLabels
+          replaceFreeText
+            ValidityHoursBook
+            after.validityHours
+          replaceFreeText
+            SlippageBpsBook
+            after.slippageBps
+          replaceFreeText
+            SplitCountsBook
+            after.splitCounts
+          replaceFreeText
+            ReferenceTypesBook
+            after.referenceTypes
+          replaceFreeText
+            ReferenceLabelsBook
+            after.referenceLabels
+        books' <- H.liftEffect loadAllBooks
+        H.modify_ \s -> s
+          { books = books'
+          , importDialog = emptyImportDialog
+          }
+      Nothing -> pure unit
+
+-- ---------------------------------------------------------------------------
+-- File-picker FFI bridged into Aff via `makeAff`
+
+readFileAff :: String -> Aff String
+readFileAff selector = makeAff \cb -> do
+  _readFileFromInput
+    selector
+    (cb <<< Right)
+    (cb <<< Left)
+  pure nonCanceler
+
+foreign import _downloadText
+  :: String -> String -> Effect Unit
+
+foreign import _writeClipboard :: String -> Effect Unit
+
+foreign import _readFileFromInput
+  :: String
+  -> (String -> Effect Unit)
+  -> (Error -> Effect Unit)
+  -> Effect Unit
+
+-- | UTC timestamp formatted @YYYY-MM-DDTHH-MM-SSZ@ — colons
+-- | replaced with dashes so the filename works on Windows
+-- | too (contract per FR-018).
+utcTimestamp :: Effect String
+utcTimestamp = do
+  inst <- now
+  let
+    dt = toDateTime inst
+    d = date dt
+    t = time dt
+    yy = show (fromEnum (year d))
+    mm = pad2 (fromEnum (month d))
+    dd = pad2 (fromEnum (day d))
+    hh = pad2 (fromEnum (hour t))
+    mi = pad2 (fromEnum (minute t))
+    ss = pad2 (fromEnum (second t))
+  pure
+    ( yy <> "-" <> mm <> "-" <> dd <> "T"
+        <> hh
+        <> "-"
+        <> mi
+        <> "-"
+        <> ss
+        <> "Z"
+    )
+
+pad2 :: Int -> String
+pad2 n
+  | n < 10 = "0" <> show n
+  | otherwise = show n
 
 -- | Build a 'NamedEntry' for 'addNamed' given the key.  If
 -- | the operator left the name blank we fall back to the

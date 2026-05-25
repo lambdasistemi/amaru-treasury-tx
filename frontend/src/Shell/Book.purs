@@ -39,6 +39,8 @@ module Shell.Book
   , addNamed
   , removeNamed
   , removeFreeText
+  , replaceNamed
+  , replaceFreeText
   , clear
   ) where
 
@@ -338,6 +340,24 @@ removeFreeText key value = do
 -- | next `load*` for the same key returns `[]`.
 clear :: BookKey -> Effect Unit
 clear = _remove <<< storageKey
+
+-- | Overwrite a named book's contents wholesale.  Used by
+-- | the `/books` import path (slice D) — the import's
+-- | merge logic produces the final array; this writes it
+-- | directly without per-entry `addNamed` round-trips.
+-- | Cap defensively at `maxEntries` in case the caller's
+-- | merge mis-counted.
+replaceNamed
+  :: NamedBookKey -> Array NamedEntry -> Effect Unit
+replaceNamed key xs =
+  writeNamed key (Array.take maxEntries xs)
+
+-- | Overwrite a free-text book wholesale.  Same use-case
+-- | + defensive cap as 'replaceNamed'.
+replaceFreeText
+  :: FreeTextBookKey -> Array String -> Effect Unit
+replaceFreeText key xs =
+  writeFreeText key (Array.take maxEntries xs)
 
 -- ---------------------------------------------------------------------------
 -- Write helpers (per-shape encoders)

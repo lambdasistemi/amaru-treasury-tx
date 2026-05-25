@@ -312,6 +312,52 @@ input[type="number"].field__input { -moz-appearance: textfield; }
   box-sizing: border-box;
 }
 
+/* #289 slice G — /books empty-state disclosure.
+   When every card in a group is empty, the whole group
+   collapses behind a single-line button rather than
+   stacking N identical "(no entries yet)" cards.
+   `.books-group--empty` reuses the same headline scale +
+   margins as the normal `.books-group` heading so the
+   visual rhythm of the page stays steady when groups
+   flip between empty and non-empty. */
+.group-disclosure {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  border: 0;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant, #44474e);
+  padding-bottom: .4rem;
+  margin: 2rem 0 .75rem 0;
+  font: inherit;
+  letter-spacing: .01em;
+  cursor: pointer;
+  opacity: .85;
+  transition: opacity 0.12s ease;
+}
+.group-disclosure:hover,
+.group-disclosure:focus-visible {
+  opacity: 1;
+}
+.books-group--empty {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* #289 slice G — fade the per-card Copy / Export buttons
+   when the card has no entries.  Operators see the
+   affordance is wired but visually de-emphasised; the
+   `pointer-events: none` rule blocks accidental clicks
+   that would produce an empty `[]` bundle / clipboard
+   blob.  Add new / Clear all stay active where applicable
+   (different selectors). */
+.btn[aria-disabled="true"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 /* #289 slice D — sectioned progress indicator.  A
    horizontal row of state chips above the form, plus a
    right-edge "Jump to Build" shortcut.  The row wraps on

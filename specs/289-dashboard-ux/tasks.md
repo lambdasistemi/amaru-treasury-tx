@@ -54,10 +54,10 @@ Eight bisect-safe slices.  Each commit body trailer: `Tasks: T289-S<n>`.  Persis
 
 ## Slice G — `/books` empty-state cleanup
 
-- [ ] T289-S7 [US7] When all cards in a group are empty, collapse the group under a single disclosure `N <group> books empty · expand`.  Clicking expands the group.  When ≥1 card in the group has entries, the group renders normally (no disclosure).
-- [ ] T289-S7 [US7] On empty cards (regardless of group collapse), the `Copy` and `Export` icon-buttons are `aria-disabled="true"` and visually de-emphasized (opacity 0.4, no hover).  Add new + Clear all stay active where applicable.
-- [ ] T289-S7 Smoke proof in `WIP.md`: from a freshly-cleared browser, `/books` no longer renders 10 identical full empty-card rows — the four groups all collapse under disclosures (since every card is empty).
-- [ ] T289-S7 Commit: `feat(289): /books empty-state — group collapse + disabled empty actions` with `Tasks: T289-S7` trailer.
+- [X] T289-S7 [US7] When all cards in a group are empty, collapse the group under a single disclosure `N <group> books empty · expand`.  Clicking expands the group.  When ≥1 card in the group has entries, the group renders normally (no disclosure).
+- [X] T289-S7 [US7] On empty cards (regardless of group collapse), the `Copy` and `Export` icon-buttons are `aria-disabled="true"` and visually de-emphasized (opacity 0.4, no hover).  Add new + Clear all stay active where applicable.
+- [X] T289-S7 Smoke proof in `WIP.md`: from a freshly-cleared browser, `/books` no longer renders 10 identical full empty-card rows — the four groups all collapse under disclosures (since every card is empty).
+- [X] T289-S7 Commit: `feat(289): /books empty-state — group collapse + disabled empty actions` with `Tasks: T289-S7` trailer.
 
 ## Slice H — Theme palette + hero scale
 

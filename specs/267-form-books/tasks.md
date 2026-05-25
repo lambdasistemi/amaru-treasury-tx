@@ -29,16 +29,16 @@ Four bisect-safe slices.  Each lands as ONE commit with body trailer `Tasks: T26
 
 ## Slice C — `/books` route
 
-- [ ] T267-S3 [US3] Add `books` SPA route to `Main.purs` (hash router) and a `Books` topbar link with `aria-current="page"` matching the existing View / Operate pattern.
+- [X] T267-S3 [US3] Add `books` SPA route to `Main.purs` (hash router) and a `Books` topbar link with `aria-current="page"` matching the existing View / Operate pattern.
 
-- [ ] T267-S3 [US3] Implement `frontend/src/BooksPage.purs`: one card per book defined in the Field → book mapping table.
+- [X] T267-S3 [US3] Implement `frontend/src/BooksPage.purs`: one card per book defined in the Field → book mapping table.
   - Named cards: `name | typed-value` row per entry; name editable (commit on blur / Enter); typed value read-only with `title=full-value` hover; `×` per row (no confirm); `Add new` opens inline editor with two fields.
   - Free-text cards: plain text row per entry; `×` per row; `Clear all` button at bottom with confirm prompt.
   - Empty-state card placeholder for books with zero entries.
 
-- [ ] T267-S3 Smoke proof in `WIP.md`: deploy, populate via `/operate`, navigate `/books`, rename an auto-named wallet, refresh `/operate` — dropdown shows the new name; click `×` on a free-text entry — datalist no longer contains it.
+- [X] T267-S3 Smoke proof in `WIP.md`: deploy, populate via `/operate`, navigate `/books`, rename an auto-named wallet, refresh `/operate` — dropdown shows the new name; click `×` on a free-text entry — datalist no longer contains it.
 
-- [ ] T267-S3 Commit: `feat(267): /books route + named & free-text card UIs (rename, add, remove, clear)` with `Tasks: T267-S3` trailer.
+- [X] T267-S3 Commit: `feat(267): /books route + named & free-text card UIs (rename, add, remove, clear)` with `Tasks: T267-S3` trailer.
 
 ## Slice D — Import / Export
 

@@ -21,6 +21,7 @@ import Web.HTML.HTMLElement as HTMLElement
 import Web.HTML.Window (document)
 
 import App as App
+import BooksPage as BooksPage
 import JsonTree.Behaviour as JsonTreeBehaviour
 import OperatePage as OperatePage
 import Routing (Route(..), currentRoute)
@@ -36,6 +37,9 @@ main = runHalogenAff do
       pure unit
     RouteOperate -> do
       _ <- runUI OperatePage.component unit host
+      pure unit
+    RouteBooks -> do
+      _ <- runUI BooksPage.component unit host
       pure unit
 
 mountHost :: Effect HTMLElement

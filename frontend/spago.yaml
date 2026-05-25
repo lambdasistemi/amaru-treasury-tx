@@ -21,6 +21,7 @@ package:
     - web-html
     - web-dom
     - web-events
+    - web-uievents
     - foreign-object
     - integers
     - numbers

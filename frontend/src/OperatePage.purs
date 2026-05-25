@@ -23,12 +23,14 @@ import Data.Argonaut.Decode (decodeJson, printJsonDecodeError)
 import Data.Argonaut.Parser (jsonParser)
 import Data.Array as Array
 import Data.Either (Either(..))
+import Data.Foldable (for_)
 import Data.Int as Int
 import Data.Maybe (Maybe(..))
 import Data.Number as Number
 import Data.String as String
 import Data.String.Common (joinWith) as T
 import Data.Tuple (Tuple(..))
+import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Aff.Class (class MonadAff)
 import Foreign.Object as FO
@@ -40,6 +42,18 @@ import Halogen.HTML.Properties as HP
 import JsonTree as JsonView
 import Routing (Route(..))
 import Shell as Shell
+import Shell.Book
+  ( FreeTextBookKey(..)
+  , NamedBookKey(..)
+  , NamedEntry(..)
+  , loadFreeText
+  , loadNamed
+  , namedTypedValue
+  , recordFreeText
+  , recordNamed
+  )
+import Web.UIEvent.KeyboardEvent (KeyboardEvent)
+import Web.UIEvent.KeyboardEvent as KE
 import Shell
   ( Scope(..)
   , allScopes
@@ -125,6 +139,103 @@ emptyReferenceRow =
   , label: ""
   }
 
+-- | #267 — operator history "books" cached in component
+-- | state.  Two shapes: 'wallets' and 'referenceUris' are
+-- | named books ('Shell.Book.NamedEntry' with `name + typed
+-- | value`); the rest are free-text 'Array String' lists.
+-- | Loaded at 'Initialize' and refreshed after every
+-- | 'ClickBuild' so dropdowns reflect freshly-recorded
+-- | entries without a page refresh.
+type Books =
+  { wallets :: Array NamedEntry
+  , referenceUris :: Array NamedEntry
+  , descriptions :: Array String
+  , justifications :: Array String
+  , destinationLabels :: Array String
+  , validityHours :: Array String
+  , slippageBps :: Array String
+  , splitCounts :: Array String
+  , referenceTypes :: Array String
+  , referenceLabels :: Array String
+  }
+
+emptyBooks :: Books
+emptyBooks =
+  { wallets: []
+  , referenceUris: []
+  , descriptions: []
+  , justifications: []
+  , destinationLabels: []
+  , validityHours: []
+  , slippageBps: []
+  , splitCounts: []
+  , referenceTypes: []
+  , referenceLabels: []
+  }
+
+-- | Load every per-field book in one pass.  Called by
+-- | 'Initialize' and re-called after each 'ClickBuild'.
+loadAllBooks :: Effect Books
+loadAllBooks = do
+  ws <- loadNamed WalletsBook
+  rs <- loadNamed ReferenceUrisBook
+  ds <- loadFreeText DescriptionsBook
+  js <- loadFreeText JustificationsBook
+  dl <- loadFreeText DestinationLabelsBook
+  vh <- loadFreeText ValidityHoursBook
+  sb <- loadFreeText SlippageBpsBook
+  sc <- loadFreeText SplitCountsBook
+  rt <- loadFreeText ReferenceTypesBook
+  rl <- loadFreeText ReferenceLabelsBook
+  pure
+    { wallets: ws
+    , referenceUris: rs
+    , descriptions: ds
+    , justifications: js
+    , destinationLabels: dl
+    , validityHours: vh
+    , slippageBps: sb
+    , splitCounts: sc
+    , referenceTypes: rt
+    , referenceLabels: rl
+    }
+
+-- | Record every operator-supplied field that has a book.
+-- | Called from 'ClickBuild' after the backend round-trip
+-- | (success OR failure — the operator's intent is the
+-- | same either way).  'Shell.Book' drops empty /
+-- | whitespace values on its own, so per-mode branches
+-- | don't need to filter.
+recordSubmittedBooks :: State -> Effect Unit
+recordSubmittedBooks st = do
+  recordNamed WalletsBook st.walletAddr
+  recordFreeText DescriptionsBook st.description
+  recordFreeText JustificationsBook st.justification
+  recordFreeText DestinationLabelsBook st.destinationLabel
+  recordFreeText ValidityHoursBook st.validityHours
+  case st.mode of
+    ModeSwap -> do
+      recordFreeText SplitCountsBook st.split
+      recordFreeText SlippageBpsBook st.slippageBps
+    ModeDisburse -> do
+      recordNamed WalletsBook st.beneficiaryAddr
+      for_ st.references \r -> do
+        recordNamed ReferenceUrisBook r.uri
+        recordFreeText ReferenceTypesBook r.refType
+        recordFreeText ReferenceLabelsBook r.label
+    ModeReorganize -> pure unit
+
+-- | Identity for one of the three named-input slots on the
+-- | form.  'ReferenceUriSlot' carries the row index so the
+-- | dynamically-added reference rows each get their own
+-- | independent dropdown.
+data NamedDropdownId
+  = WalletSlot
+  | BeneficiarySlot
+  | ReferenceUriSlot Int
+
+derive instance eqNamedDropdownId :: Eq NamedDropdownId
+
 type State =
   { scope :: Scope
   , mode :: TxMode
@@ -149,6 +260,8 @@ type State =
   , activeTab :: Tab
   , result :: BuildResult
   , theme :: Theme.Theme
+  , books :: Books
+  , openNamedDropdown :: Maybe NamedDropdownId
   }
 
 data BuildResult
@@ -181,6 +294,8 @@ initialState =
   , activeTab: TabIntent
   , result: NotStarted
   , theme: Theme.Dark
+  , books: emptyBooks
+  , openNamedDropdown: Nothing
   }
 
 data Action
@@ -213,6 +328,10 @@ data Action
   | SetTab Tab
   | ClickReset
   | ClickBuild
+  | BooksLoaded Books
+  | ToggleNamedDropdown NamedDropdownId
+  | PickNamed NamedDropdownId String
+  | NamedInputKeyDown KeyboardEvent
 
 -- ---------------------------------------------------------------------------
 -- Component
@@ -235,15 +354,20 @@ component =
 render :: forall m. State -> H.ComponentHTML Action () m
 render st =
   HH.div_
-    [ topbar RouteOperate
-        { themeLabel: themeLabel st.theme, onToggleTheme: ToggleTheme }
-    , siteHeader st.mode
-    , HH.div [ HP.classes [ cn "build-layout" ] ]
-        [ formColumn st
-        , previewColumn st
-        ]
-    , Shell.siteFooter { buildIdentityLine: "" }
-    ]
+    ( namedBackdrop st.openNamedDropdown
+        <>
+          [ topbar RouteOperate
+              { themeLabel: themeLabel st.theme
+              , onToggleTheme: ToggleTheme
+              }
+          , siteHeader st.mode
+          , HH.div [ HP.classes [ cn "build-layout" ] ]
+              [ formColumn st
+              , previewColumn st
+              ]
+          , Shell.siteFooter { buildIdentityLine: "" }
+          ]
+    )
 
 siteHeader :: forall m. TxMode -> H.ComponentHTML Action () m
 siteHeader mode =
@@ -287,7 +411,15 @@ formColumn st =
           [ scopePicker st.scope ]
       , formSection "02" "Wallet"
           "Operator bech32 address — fuel + collateral + change."
-          [ fieldV "wallet" st.walletAddr SetWalletAddr "addr1q…" true
+          [ namedFieldV
+              WalletSlot
+              st.openNamedDropdown
+              st.books.wallets
+              "wallet"
+              st.walletAddr
+              SetWalletAddr
+              "addr1q…"
+              true
               ( validateWalletAddr st.walletAddr
                   <|> serverFieldError st "wallet_addr"
               )
@@ -297,18 +429,42 @@ formColumn st =
         <>
           [ formSection "05" "Validity"
               "Validity-hours window. Leave blank for the chain horizon."
-              [ field "validity-hours" st.validityHours SetValidityHours
-                  "<chain horizon>" false
+              [ freeTextField
+                  "validity_hours"
+                  st.books.validityHours
+                  "validity-hours"
+                  st.validityHours
+                  SetValidityHours
+                  "<chain horizon>"
+                  false
               ]
           , formSection "06" "Rationale"
               "Description, justification, and destination label baked \
               \into the on-chain CIP-1694 rationale tree."
-              [ field "description" st.description SetDescription
-                  "weekly USDM build" false
-              , field "justification" st.justification SetJustification
-                  "operator decision" false
-              , field "destination-label" st.destinationLabel
-                  SetDestinationLabel "core_development" true
+              [ freeTextField
+                  "descriptions"
+                  st.books.descriptions
+                  "description"
+                  st.description
+                  SetDescription
+                  "weekly USDM build"
+                  false
+              , freeTextField
+                  "justifications"
+                  st.books.justifications
+                  "justification"
+                  st.justification
+                  SetJustification
+                  "operator decision"
+                  false
+              , freeTextField
+                  "destination_labels"
+                  st.books.destinationLabels
+                  "destination-label"
+                  st.destinationLabel
+                  SetDestinationLabel
+                  "core_development"
+                  true
               ]
           , formSection "07" "Extra signers"
               ( case st.mode of
@@ -347,10 +503,23 @@ modeSpecificSections st = case st.mode of
             <> ( case st.amountMode of
                   ModeUsdm ->
                     [ fieldNum "USDM target" st.usdm SetUsdm "USDM"
-                    , fieldNum "Chunks" st.split SetSplit "split"
+                    , freeTextFieldNum
+                        "split_counts"
+                        st.books.splitCounts
+                        "Chunks"
+                        st.split
+                        SetSplit
+                        "split"
                     ]
                   ModeAllAda ->
-                    [ fieldNum "Chunks" st.split SetSplit "split" ]
+                    [ freeTextFieldNum
+                        "split_counts"
+                        st.books.splitCounts
+                        "Chunks"
+                        st.split
+                        SetSplit
+                        "split"
+                    ]
               )
         )
     , formSection "04" "Rate"
@@ -362,7 +531,13 @@ modeSpecificSections st = case st.mode of
                     [ fieldNum "Min rate (USDM/ADA)" st.minRate SetMinRate "USDM/ADA" ]
                   RateOverride ->
                     [ fieldNum "ADA/USDM quote" st.adaUsdm SetAdaUsdm "USDM/ADA"
-                    , fieldNum "Slippage" st.slippageBps SetSlippageBps "bps"
+                    , freeTextFieldNum
+                        "slippage_bps"
+                        st.books.slippageBps
+                        "Slippage"
+                        st.slippageBps
+                        SetSlippageBps
+                        "bps"
                     ]
               )
         )
@@ -370,7 +545,11 @@ modeSpecificSections st = case st.mode of
   ModeDisburse ->
     [ formSection "03" "Beneficiary"
         "Bech32 mainnet address that receives the disbursement."
-        [ fieldV "beneficiary"
+        [ namedFieldV
+            BeneficiarySlot
+            st.openNamedDropdown
+            st.books.wallets
+            "beneficiary"
             st.beneficiaryAddr
             SetBeneficiaryAddr
             "addr1q…"
@@ -395,7 +574,7 @@ modeSpecificSections st = case st.mode of
         \invoices, contracts, proofs).  Mirrors the \
         \rationale.references array in historical \
         \disburse intents under transactions/2026/."
-        ( referencesPicker st.references
+        ( referencesPicker st
             <> [ HH.button
                   [ HP.classes [ cn "btn", cn "btn--ghost" ]
                   , HE.onClick (\_ -> AddReference)
@@ -416,34 +595,44 @@ modeSpecificSections st = case st.mode of
     []
 
 -- | Render every reference row with three inline inputs
--- | (URI, @type, label) and a delete button.
+-- | (URI, @type, label) and a delete button.  Takes the
+-- | full state so each row can pull its named-book panel
+-- | state and its free-text books in one shot.
 referencesPicker
   :: forall m
-   . Array ReferenceRow
+   . State
   -> Array (H.ComponentHTML Action () m)
-referencesPicker rows =
-  Array.mapWithIndex referenceRow rows
+referencesPicker st =
+  Array.mapWithIndex (referenceRow st) st.references
 
 referenceRow
   :: forall m
-   . Int
+   . State
+  -> Int
   -> ReferenceRow
   -> H.ComponentHTML Action () m
-referenceRow i row =
+referenceRow st i row =
   HH.div [ HP.classes [ cn "reference-row" ] ]
-    [ field
+    [ namedField
+        (ReferenceUriSlot i)
+        st.openNamedDropdown
+        st.books.referenceUris
         ("ref-uri-" <> show i)
         row.uri
         (SetReferenceUri i)
         "ipfs://bafy…"
         true
-    , field
+    , freeTextField
+        "reference_types"
+        st.books.referenceTypes
         ("ref-type-" <> show i)
         row.refType
         (SetReferenceType i)
         "Other"
         false
-    , field
+    , freeTextField
+        "reference_labels"
+        st.books.referenceLabels
         ("ref-label-" <> show i)
         row.label
         (SetReferenceLabel i)
@@ -720,6 +909,328 @@ fieldNumV label_ value_ action suffix err =
           Just msg -> [ fieldError msg ]
           Nothing -> []
     )
+
+-- ---------------------------------------------------------------------------
+-- Booked-variant render helpers (#267)
+--
+-- Two flavours:
+--   * Free-text — input + sibling <datalist>.  Browsers
+--     show the dropdown on focus, type-ahead and arrow
+--     keys just work, picking substitutes the option's
+--     value directly.  Cheap because label IS the value.
+--   * Named widget — input + ▾ toggle + Halogen-managed
+--     panel.  Required for `wallets` / `reference_uris`
+--     because the operator needs to SEE a human name but
+--     SUBSTITUTE the typed value (address / cid), and
+--     <datalist>'s label/value distinction is unreliable
+--     across browsers.
+
+-- | Free-text booked variant of 'fieldV' — same widget
+-- | shape with `list="book-<suffix>"` on the input and a
+-- | sibling `<datalist>` carrying one `<option>` per book
+-- | entry.
+freeTextFieldV
+  :: forall m
+   . String
+  -> Array String
+  -> String
+  -> String
+  -> (String -> Action)
+  -> String
+  -> Boolean
+  -> Maybe String
+  -> H.ComponentHTML Action () m
+freeTextFieldV suffix entries label_ value_ action placeholder mono err =
+  HH.label [ HP.classes [ cn "field" ] ]
+    ( [ HH.span [ HP.classes [ cn "field__label" ] ]
+          [ HH.text label_ ]
+      , HH.input
+          ( [ HP.value value_
+            , HP.type_ HP.InputText
+            , HP.placeholder placeholder
+            , HP.classes
+                ( [ cn "field__input" ]
+                    <>
+                      if mono then
+                        [ cn "field__input--mono" ]
+                      else []
+                )
+            , HE.onValueInput action
+            , HP.attr (HH.AttrName "list") ("book-" <> suffix)
+            ]
+              <> case err of
+                Just _ ->
+                  [ HP.attr (HH.AttrName "data-error") "true" ]
+                Nothing -> []
+          )
+      , bookDatalist suffix entries
+      ]
+        <> case err of
+          Just msg -> [ fieldError msg ]
+          Nothing -> []
+    )
+
+freeTextField
+  :: forall m
+   . String
+  -> Array String
+  -> String
+  -> String
+  -> (String -> Action)
+  -> String
+  -> Boolean
+  -> H.ComponentHTML Action () m
+freeTextField suffix entries label_ value_ action placeholder mono =
+  freeTextFieldV
+    suffix
+    entries
+    label_
+    value_
+    action
+    placeholder
+    mono
+    Nothing
+
+-- | Free-text booked variant of 'fieldNum'.  Same numeric
+-- | shape; adds `list=` + sibling `<datalist>`.
+freeTextFieldNum
+  :: forall m
+   . String
+  -> Array String
+  -> String
+  -> String
+  -> (String -> Action)
+  -> String
+  -> H.ComponentHTML Action () m
+freeTextFieldNum suffix entries label_ value_ action suffixUnit =
+  HH.label [ HP.classes [ cn "field" ] ]
+    [ HH.span [ HP.classes [ cn "field__label" ] ]
+        [ HH.text label_ ]
+    , HH.div [ HP.classes [ cn "field__num" ] ]
+        [ HH.input
+            [ HP.value value_
+            , HP.type_ HP.InputText
+            , HP.classes
+                [ cn "field__input", cn "field__input--mono" ]
+            , HE.onValueInput action
+            , HP.attr (HH.AttrName "list") ("book-" <> suffix)
+            ]
+        , HH.span [ HP.classes [ cn "field__suffix" ] ]
+            [ HH.text suffixUnit ]
+        ]
+    , bookDatalist suffix entries
+    ]
+
+-- | Render the `<datalist>` companion for a free-text
+-- | input.  Empty books emit an empty text node to avoid
+-- | polluting the DOM with vacuous dropdowns.
+bookDatalist
+  :: forall m
+   . String
+  -> Array String
+  -> H.ComponentHTML Action () m
+bookDatalist suffix entries
+  | Array.null entries = HH.text ""
+  | otherwise =
+      HH.element (HH.ElemName "datalist")
+        [ HP.id ("book-" <> suffix) ]
+        ( map
+            ( \v ->
+                HH.element (HH.ElemName "option")
+                  [ HP.value v ]
+                  []
+            )
+            entries
+        )
+
+-- | Named-book input slot — text input + ▾ toggle button.
+-- | When the slot's dropdown is open, a panel of named
+-- | rows is rendered absolutely below; picking a row
+-- | substitutes the entry's typed value (address / cid)
+-- | into the input and closes the panel.  Esc closes; an
+-- | application-level transparent backdrop closes on any
+-- | outside click.
+namedFieldV
+  :: forall m
+   . NamedDropdownId
+  -> Maybe NamedDropdownId
+  -> Array NamedEntry
+  -> String
+  -> String
+  -> (String -> Action)
+  -> String
+  -> Boolean
+  -> Maybe String
+  -> H.ComponentHTML Action () m
+namedFieldV slot openSlot entries label_ value_ action placeholder mono err =
+  let
+    isOpen = openSlot == Just slot
+    containerStyle =
+      if isOpen then
+        "position:relative;z-index:20"
+      else "position:relative"
+  in
+    HH.label
+      [ HP.classes [ cn "field" ]
+      , HP.style containerStyle
+      ]
+      ( [ HH.span [ HP.classes [ cn "field__label" ] ]
+            [ HH.text label_ ]
+        , HH.div
+            [ HP.style
+                "display:flex;gap:.25rem;\
+                \align-items:stretch;position:relative"
+            ]
+            ( [ HH.input
+                  ( [ HP.value value_
+                    , HP.type_ HP.InputText
+                    , HP.placeholder placeholder
+                    , HP.classes
+                        ( [ cn "field__input" ]
+                            <>
+                              if mono then
+                                [ cn "field__input--mono" ]
+                              else []
+                        )
+                    , HE.onValueInput action
+                    , HE.onKeyDown NamedInputKeyDown
+                    , HP.style "flex:1"
+                    ]
+                      <> case err of
+                        Just _ ->
+                          [ HP.attr
+                              (HH.AttrName "data-error")
+                              "true"
+                          ]
+                        Nothing -> []
+                  )
+              , HH.button
+                  [ HP.classes [ cn "btn", cn "btn--ghost" ]
+                  , HP.type_ HP.ButtonButton
+                  , HP.title "Show history"
+                  , HE.onClick
+                      (\_ -> ToggleNamedDropdown slot)
+                  ]
+                  [ HH.text "▾" ]
+              ]
+                <>
+                  if isOpen then [ namedDropdown slot entries ]
+                  else []
+            )
+        ]
+          <> case err of
+            Just msg -> [ fieldError msg ]
+            Nothing -> []
+      )
+
+namedField
+  :: forall m
+   . NamedDropdownId
+  -> Maybe NamedDropdownId
+  -> Array NamedEntry
+  -> String
+  -> String
+  -> (String -> Action)
+  -> String
+  -> Boolean
+  -> H.ComponentHTML Action () m
+namedField slot openSlot entries label_ value_ action placeholder mono =
+  namedFieldV
+    slot
+    openSlot
+    entries
+    label_
+    value_
+    action
+    placeholder
+    mono
+    Nothing
+
+-- | Absolutely-positioned dropdown panel.  One button per
+-- | entry showing the entry's friendly name; empty book
+-- | renders a placeholder row so the operator sees the
+-- | affordance is wired but the book hasn't been
+-- | populated yet (manually populating via the `/books`
+-- | page lands in slice C).
+namedDropdown
+  :: forall m
+   . NamedDropdownId
+  -> Array NamedEntry
+  -> H.ComponentHTML Action () m
+namedDropdown slot entries =
+  HH.div
+    [ HP.classes [ cn "named-dropdown" ]
+    , HP.style
+        "position:absolute;top:100%;left:0;right:0;\
+        \z-index:20;\
+        \background:var(--md-sys-color-surface-container,\
+        \#22252b);\
+        \border:1px solid var(--md-sys-color-outline-variant,\
+        \#44474e);\
+        \border-radius:4px;padding:.25rem;\
+        \display:flex;flex-direction:column;\
+        \max-height:14rem;overflow:auto;\
+        \box-shadow:0 6px 16px rgba(0,0,0,.25);\
+        \margin-top:.25rem"
+    ]
+    if Array.null entries then
+      [ HH.div
+          [ HP.style "padding:.5rem;opacity:.6" ]
+          [ HH.text
+              "(no entries yet — submit a build or use \
+              \/books to add one manually)"
+          ]
+      ]
+    else
+      map (namedDropdownRow slot) entries
+
+namedDropdownRow
+  :: forall m
+   . NamedDropdownId
+  -> NamedEntry
+  -> H.ComponentHTML Action () m
+namedDropdownRow slot entry =
+  HH.button
+    [ HP.classes [ cn "btn", cn "btn--ghost" ]
+    , HP.type_ HP.ButtonButton
+    , HP.style
+        "justify-content:flex-start;text-align:left;\
+        \padding:.4rem .6rem;border:0;background:transparent"
+    , HE.onClick
+        (\_ -> PickNamed slot (namedTypedValue entry))
+    ]
+    [ HH.text (namedEntryName entry) ]
+
+-- | Friendly-name projector for the named-book widget.
+-- | Lives here rather than in 'Shell.Book' because slice
+-- | B owns the widget; the 'NamedEntry' constructors are
+-- | the only thing crossing the module boundary.
+namedEntryName :: NamedEntry -> String
+namedEntryName = case _ of
+  WalletE w -> w.name
+  ReferenceUriE r -> r.name
+
+-- | Transparent full-viewport backdrop rendered while any
+-- | named dropdown is open.  Clicking it dispatches a
+-- | toggle on the currently-open slot, which closes it.
+-- | Sits at `z-index:18`, below the panel (`z-index:20`)
+-- | and the field container, so the panel rows and the ▾
+-- | toggle remain clickable.
+namedBackdrop
+  :: forall m
+   . Maybe NamedDropdownId
+  -> Array (H.ComponentHTML Action () m)
+namedBackdrop = case _ of
+  Nothing -> []
+  Just slot ->
+    [ HH.div
+        [ HP.style
+            "position:fixed;inset:0;z-index:18;\
+            \background:transparent;cursor:default"
+        , HE.onClick (\_ -> ToggleNamedDropdown slot)
+        ]
+        []
+    ]
 
 segmentedAmount :: forall m. AmountMode -> H.ComponentHTML Action () m
 segmentedAmount active =
@@ -1436,7 +1947,8 @@ handleAction
 handleAction = case _ of
   Initialize -> do
     t <- H.liftEffect initialTheme
-    H.modify_ \s -> s { theme = t }
+    books <- H.liftEffect loadAllBooks
+    H.modify_ \s -> s { theme = t, books = books }
   ToggleTheme -> do
     st <- H.get
     t' <- H.liftEffect (toggleThemeEff st.theme)
@@ -1499,7 +2011,40 @@ handleAction = case _ of
       ModeSwap -> postBuild "/v1/build/swap" st
       ModeDisburse -> postBuild "/v1/build/disburse" st
       ModeReorganize -> postBuild "/v1/build/reorganize" st
-    H.modify_ \s -> s { result = Result r }
+    -- Record supplied values into their books regardless of
+    -- outcome — the operator's intent is the same either
+    -- way; a backend failure shouldn't lose a freshly
+    -- typed wallet address.  Reloading after-the-fact means
+    -- the next render's dropdowns include the just-added
+    -- entry without a page refresh.
+    H.liftEffect (recordSubmittedBooks st)
+    books' <- H.liftEffect loadAllBooks
+    H.modify_ \s -> s { result = Result r, books = books' }
+  BooksLoaded books -> H.modify_ \s -> s { books = books }
+  ToggleNamedDropdown slot -> H.modify_ \s ->
+    s
+      { openNamedDropdown =
+          if s.openNamedDropdown == Just slot then Nothing
+          else Just slot
+      }
+  PickNamed slot value -> H.modify_ \s -> case slot of
+    WalletSlot ->
+      s { walletAddr = value, openNamedDropdown = Nothing }
+    BeneficiarySlot ->
+      s
+        { beneficiaryAddr = value
+        , openNamedDropdown = Nothing
+        }
+    ReferenceUriSlot i ->
+      s
+        { references =
+            updateAt i (\r -> r { uri = value }) s.references
+        , openNamedDropdown = Nothing
+        }
+  NamedInputKeyDown ev -> case KE.key ev of
+    "Escape" ->
+      H.modify_ \s -> s { openNamedDropdown = Nothing }
+    _ -> pure unit
 
 -- | POST the active request body to the given endpoint and
 -- | decode the response as opaque JSON.  Same boilerplate

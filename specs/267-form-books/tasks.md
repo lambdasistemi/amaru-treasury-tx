@@ -17,15 +17,15 @@ Four bisect-safe slices.  Each lands as ONE commit with body trailer `Tasks: T26
 
 ## Slice B — `/operate` integration
 
-- [ ] T267-S2 [US1, US2] Extend `OperatePage.purs` State with `books :: Books`; Action with `BooksLoaded Books`; Initialize handler loads all books at mount; `ClickBuild` handler records non-empty supplied values to their books.
+- [X] T267-S2 [US1, US2] Extend `OperatePage.purs` State with `books :: Books`; Action with `BooksLoaded Books`; Initialize handler loads all books at mount; `ClickBuild` handler records non-empty supplied values to their books.
 
-- [ ] T267-S2 [US1] Named-book widget for `wallets` (Wallet + Beneficiary inputs) and `reference_uris`: custom dropdown rendering each entry's `name` label, picking substitutes the typed value (`address` / `cid`) into the input.  HTML5 `<datalist>` cannot map name→value; this is a small Halogen component that renders an `<input>` paired with a click-to-open list of `<button name>` rows.
+- [X] T267-S2 [US1] Named-book widget for `wallets` (Wallet + Beneficiary inputs) and `reference_uris`: custom dropdown rendering each entry's `name` label, picking substitutes the typed value (`address` / `cid`) into the input.  HTML5 `<datalist>` cannot map name→value; this is a small Halogen component that renders an `<input>` paired with a click-to-open list of `<button name>` rows.
 
-- [ ] T267-S2 [US2] Free-text fields (`descriptions`, `justifications`, `destination_labels`, `validity_hours`, `slippage_bps`, `split_counts`, `reference_types`, `reference_labels`) get an HTML5 `<datalist>` of the history strings.
+- [X] T267-S2 [US2] Free-text fields (`descriptions`, `justifications`, `destination_labels`, `validity_hours`, `slippage_bps`, `split_counts`, `reference_types`, `reference_labels`) get an HTML5 `<datalist>` of the history strings.
 
-- [ ] T267-S2 Smoke proof in `WIP.md`: deploy to dev host, submit a build with a wallet bech32 + a description + a reference URI; refresh; named-dropdown shows the bech32's auto-name; datalist shows the description; localStorage values match the bare-array wire shape per FR-015.
+- [X] T267-S2 Smoke proof in `WIP.md`: deploy to dev host, submit a build with a wallet bech32 + a description + a reference URI; refresh; named-dropdown shows the bech32's auto-name; datalist shows the description; localStorage values match the bare-array wire shape per FR-015.
 
-- [ ] T267-S2 Commit: `feat(267): /operate wires Shell.Book — named-book widget + free-text datalist + record on ClickBuild` with `Tasks: T267-S2` trailer.
+- [X] T267-S2 Commit: `feat(267): /operate wires Shell.Book — named-book widget + free-text datalist + record on ClickBuild` with `Tasks: T267-S2` trailer.
 
 ## Slice C — `/books` route
 

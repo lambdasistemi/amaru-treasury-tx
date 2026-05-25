@@ -41,23 +41,23 @@ Three bisect-safe slices on PR [#290](https://github.com/lambdasistemi/amaru-tre
 
 ## Slice C — /books integration + bundle import/export
 
-- [ ] T288-S3 [US3] Add a `Drafts` group at the TOP of `/books`, above `Identities`.  The group contains TWO cards:
+- [X] T288-S3 [US3] Add a `Drafts` group at the TOP of `/books`, above `Identities`.  The group contains TWO cards:
   - `Drafts` card — lists every entry from `loadNamedVisible OperateDraftsBook`.
   - `History` card — lists every entry from `loadNamedVisible OperateHistoryBook`.
 
-- [ ] T288-S3 [US3] Drafts card row: `[ name input (editable, commit on blur/Enter) | snapshot summary span | copy icon | guarded trash icon ]`.  Snapshot summary one-liner: `<mode> · <scope> · <beneficiary-truncated> · <amount> USDM` (handle missing fields with `—`).  Copy copies the snapshot Json string.
+- [X] T288-S3 [US3] Drafts card row: `[ name input (editable, commit on blur/Enter) | snapshot summary span | copy icon | guarded trash icon ]`.  Snapshot summary one-liner: `<mode> · <scope> · <beneficiary-truncated> · <amount> USDM` (handle missing fields with `—`).  Copy copies the snapshot Json string.
 
-- [ ] T288-S3 [US3, US5] History card row: `[ timestamp (readonly span — NOT editable) | snapshot summary span | copy icon | guarded trash icon ]`.  Same snapshot summary formatter as Drafts.  No name editing (timestamps are content-addressable).  No `Add new` button (history is auto-captured only).
+- [X] T288-S3 [US3, US5] History card row: `[ timestamp (readonly span — NOT editable) | snapshot summary span | copy icon | guarded trash icon ]`.  Same snapshot summary formatter as Drafts.  No name editing (timestamps are content-addressable).  No `Add new` button (history is auto-captured only).
 
-- [ ] T288-S3 [US3] Empty-state captions:
+- [X] T288-S3 [US3] Empty-state captions:
   - Drafts card: "No drafts yet.  Use 'Save as draft…' on `/operate` to capture the current form."
   - History card: "No history yet.  Every successful Build on `/operate` will appear here, indexed by date."
 
-- [ ] T288-S3 [US3] Extend `BooksPage/Import.purs`: bundle parse / merge / diff handles BOTH `operate_drafts` AND `operate_history`.  Dedup-on-name (not dedup-on-typed-value — neither book has a typed primitive).  Auto-save slot is filtered out of exports.  Imports of `__autosave__` entries are silently dropped (defensive — a bundle from another browser shouldn't overwrite the local auto-save).
+- [X] T288-S3 [US3] Extend `BooksPage/Import.purs`: bundle parse / merge / diff handles BOTH `operate_drafts` AND `operate_history`.  Dedup-on-name (not dedup-on-typed-value — neither book has a typed primitive).  Auto-save slot is filtered out of exports.  Imports of `__autosave__` entries are silently dropped (defensive — a bundle from another browser shouldn't overwrite the local auto-save).
 
-- [ ] T288-S3 Smoke proof in `WIP.md`: from /operate, save 3 drafts AND build twice.  Navigate /books → top of page shows `Drafts` group with TWO cards: Drafts (3 rows) and History (2 rows).  Rename one draft in place → next /operate visit shows the renamed entry in the `Drafts ▾` picker.  Click guarded trash on a History row → row turns red → confirm → entry gone.  Export all → JSON contains `books.operate_drafts: [3 entries]` AND `books.operate_history: [1 entry remaining]` (NOT including __autosave__).  Clear all books, import the JSON → both books restored.
+- [X] T288-S3 Smoke proof in `WIP.md`: from /operate, save 3 drafts AND build twice.  Navigate /books → top of page shows `Drafts` group with TWO cards: Drafts (3 rows) and History (2 rows).  Rename one draft in place → next /operate visit shows the renamed entry in the `Drafts ▾` picker.  Click guarded trash on a History row → row turns red → confirm → entry gone.  Export all → JSON contains `books.operate_drafts: [3 entries]` AND `books.operate_history: [1 entry remaining]` (NOT including __autosave__).  Clear all books, import the JSON → both books restored.
 
-- [ ] T288-S3 Commit: `feat(288): /books Drafts group + History card + bundle import/export for operate_drafts and operate_history` with `Tasks: T288-S3` trailer.
+- [X] T288-S3 Commit: `feat(288): /books Drafts group + History card + bundle import/export for operate_drafts and operate_history` with `Tasks: T288-S3` trailer.
 
 ## Dependencies
 

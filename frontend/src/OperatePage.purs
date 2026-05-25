@@ -719,6 +719,8 @@ referenceRow st i row =
         [ HP.classes [ cn "btn", cn "btn--ghost" ]
         , HE.onClick (\_ -> RemoveReference i)
         , HP.title "Remove this reference"
+        , HP.attr (HH.AttrName "aria-label")
+            ("Remove reference " <> show (i + 1))
         , HP.type_ HP.ButtonButton
         ]
         [ HH.text "×" ]
@@ -738,22 +740,30 @@ plainField
   -> Boolean
   -> H.ComponentHTML Action () m
 plainField _label value_ action placeholder mono =
-  HH.label [ HP.classes [ cn "field" ] ]
-    [ HH.span [ HP.classes [ cn "field__label" ] ]
-        [ HH.text _label ]
-    , HH.input
-        [ HP.value value_
-        , HP.type_ HP.InputText
-        , HP.placeholder placeholder
-        , HP.classes
-            ( [ cn "field__input" ]
-                <>
-                  if mono then [ cn "field__input--mono" ]
-                  else []
-            )
-        , HE.onValueInput action
-        ]
-    ]
+  let
+    fid = "operate-" <> _label
+  in
+    HH.label
+      [ HP.classes [ cn "field" ]
+      , HP.for fid
+      ]
+      [ HH.span [ HP.classes [ cn "field__label" ] ]
+          [ HH.text _label ]
+      , HH.input
+          [ HP.id fid
+          , HP.value value_
+          , HP.type_ HP.InputText
+          , HP.placeholder placeholder
+          , HP.attr (HH.AttrName "aria-label") _label
+          , HP.classes
+              ( [ cn "field__input" ]
+                  <>
+                    if mono then [ cn "field__input--mono" ]
+                    else []
+              )
+          , HE.onValueInput action
+          ]
+      ]
 
 -- | Top-of-form Swap | Disburse | Reorganize selector.
 -- | Same '.segmented' class the amount/rate sub-selectors
@@ -938,8 +948,10 @@ field label_ value_ action placeholder mono =
 
 -- | 'field' + an optional validation error.  When the
 -- | error is 'Just', the input gets a @data-error="true"@
--- | attribute (styled red by style-build.css) and the
--- | error text is shown beneath the input.
+-- | attribute (styled red by style-build.css), an
+-- | @aria-invalid="true"@ attribute (FR-004 / FR-005), an
+-- | @aria-describedby@ pointing at the error span's id, and
+-- | the error text is shown beneath the input with that id.
 fieldV
   :: forall m
    . String
@@ -950,43 +962,100 @@ fieldV
   -> Maybe String
   -> H.ComponentHTML Action () m
 fieldV label_ value_ action placeholder mono err =
-  HH.label [ HP.classes [ cn "field" ] ]
-    ( [ HH.span [ HP.classes [ cn "field__label" ] ]
-          [ HH.text label_ ]
-      , HH.input
-          ( [ HP.value value_
-            , HP.type_ HP.InputText
-            , HP.placeholder placeholder
-            , HP.classes
-                ( [ cn "field__input" ]
-                    <>
-                      if mono then
-                        [ cn "field__input--mono" ]
-                      else []
-                )
-            , HE.onValueInput action
-            ]
-              <> case err of
-                Just _ ->
-                  [ HP.attr
-                      (HH.AttrName "data-error")
-                      "true"
-                  ]
-                Nothing -> []
-          )
+  let
+    fid = mkInputId label_
+    errId = fid <> "-error"
+  in
+    HH.label
+      [ HP.classes [ cn "field" ]
+      , HP.for fid
       ]
-        <> case err of
-          Just msg -> [ fieldError msg ]
-          Nothing -> []
-    )
+      ( [ HH.span [ HP.classes [ cn "field__label" ] ]
+            [ HH.text label_ ]
+        , HH.input
+            ( [ HP.id fid
+              , HP.value value_
+              , HP.type_ HP.InputText
+              , HP.placeholder placeholder
+              , HP.attr (HH.AttrName "aria-label") label_
+              , HP.classes
+                  ( [ cn "field__input" ]
+                      <>
+                        if mono then
+                          [ cn "field__input--mono" ]
+                        else []
+                  )
+              , HE.onValueInput action
+              ]
+                <> case err of
+                  Just _ ->
+                    [ HP.attr
+                        (HH.AttrName "data-error")
+                        "true"
+                    , HP.attr
+                        (HH.AttrName "aria-invalid")
+                        "true"
+                    , HP.attr
+                        (HH.AttrName "aria-describedby")
+                        errId
+                    ]
+                  Nothing -> []
+            )
+        ]
+          <> case err of
+            Just msg -> [ errorSpan errId msg ]
+            Nothing -> []
+      )
 
 -- | Inline error / warning hint shown beneath a form
--- | input. Styled by style-build.css via the
--- | .field__error class.
+-- | input.  Styled by style-build.css via the
+-- | `.field__error` class.  Used by the non-input contexts
+-- | (signers picker) where there's no specific input to tie
+-- | the error to — 'errorSpan' is the in-field variant that
+-- | carries an `id` for `aria-describedby`.
 fieldError :: forall m. String -> H.ComponentHTML Action () m
 fieldError msg =
   HH.div [ HP.classes [ cn "field__error" ] ]
     [ HH.text msg ]
+
+-- | Error span tied to a specific input id via the FR-005
+-- | `aria-describedby` link.
+errorSpan
+  :: forall m
+   . String -> String -> H.ComponentHTML Action () m
+errorSpan errId msg =
+  HH.div
+    [ HP.classes [ cn "field__error" ]
+    , HP.id errId
+    ]
+    [ HH.text msg ]
+
+-- | Stable form-input id derived from a visible label.
+-- | Prefixed with `operate-` so /operate's ids don't
+-- | collide with /books or /view in a shared SPA shell.
+-- | The slugifier lower-cases, replaces spaces / slashes
+-- | with hyphens, and drops parentheses + commas — enough
+-- | for every visible label currently used on the page.
+mkInputId :: String -> String
+mkInputId raw =
+  "operate-" <> slugify raw
+
+slugify :: String -> String
+slugify raw =
+  let
+    s0 = String.toLower raw
+    s1 = String.replaceAll
+      (String.Pattern " ") (String.Replacement "-") s0
+    s2 = String.replaceAll
+      (String.Pattern "/") (String.Replacement "-") s1
+    s3 = String.replaceAll
+      (String.Pattern "(") (String.Replacement "") s2
+    s4 = String.replaceAll
+      (String.Pattern ")") (String.Replacement "") s3
+    s5 = String.replaceAll
+      (String.Pattern ",") (String.Replacement "") s4
+  in
+    s5
 
 fieldNum
   :: forall m
@@ -1010,35 +1079,50 @@ fieldNumV
   -> Maybe String
   -> H.ComponentHTML Action () m
 fieldNumV label_ value_ action suffix err =
-  HH.label [ HP.classes [ cn "field" ] ]
-    ( [ HH.span [ HP.classes [ cn "field__label" ] ]
-          [ HH.text label_ ]
-      , HH.div [ HP.classes [ cn "field__num" ] ]
-          [ HH.input
-              ( [ HP.value value_
-                , HP.type_ HP.InputText
-                , HP.classes
-                    [ cn "field__input"
-                    , cn "field__input--mono"
-                    ]
-                , HE.onValueInput action
-                ]
-                  <> case err of
-                    Just _ ->
-                      [ HP.attr
-                          (HH.AttrName "data-error")
-                          "true"
-                      ]
-                    Nothing -> []
-              )
-          , HH.span [ HP.classes [ cn "field__suffix" ] ]
-              [ HH.text suffix ]
-          ]
+  let
+    fid = mkInputId label_
+    errId = fid <> "-error"
+  in
+    HH.label
+      [ HP.classes [ cn "field" ]
+      , HP.for fid
       ]
-        <> case err of
-          Just msg -> [ fieldError msg ]
-          Nothing -> []
-    )
+      ( [ HH.span [ HP.classes [ cn "field__label" ] ]
+            [ HH.text label_ ]
+        , HH.div [ HP.classes [ cn "field__num" ] ]
+            [ HH.input
+                ( [ HP.id fid
+                  , HP.value value_
+                  , HP.type_ HP.InputText
+                  , HP.attr (HH.AttrName "aria-label") label_
+                  , HP.classes
+                      [ cn "field__input"
+                      , cn "field__input--mono"
+                      ]
+                  , HE.onValueInput action
+                  ]
+                    <> case err of
+                      Just _ ->
+                        [ HP.attr
+                            (HH.AttrName "data-error")
+                            "true"
+                        , HP.attr
+                            (HH.AttrName "aria-invalid")
+                            "true"
+                        , HP.attr
+                            (HH.AttrName "aria-describedby")
+                            errId
+                        ]
+                      Nothing -> []
+                )
+            , HH.span [ HP.classes [ cn "field__suffix" ] ]
+                [ HH.text suffix ]
+            ]
+        ]
+          <> case err of
+            Just msg -> [ errorSpan errId msg ]
+            Nothing -> []
+      )
 
 -- ---------------------------------------------------------------------------
 -- Booked-variant render helpers (#267)
@@ -1071,34 +1155,46 @@ freeTextFieldV
   -> Maybe String
   -> H.ComponentHTML Action () m
 freeTextFieldV suffix entries label_ value_ action placeholder mono err =
-  HH.label [ HP.classes [ cn "field" ] ]
-    ( [ HH.span [ HP.classes [ cn "field__label" ] ]
-          [ HH.text label_ ]
-      , HH.input
-          ( [ HP.value value_
-            , HP.type_ HP.InputText
-            , HP.placeholder placeholder
-            , HP.classes
-                ( [ cn "field__input" ]
-                    <>
-                      if mono then
-                        [ cn "field__input--mono" ]
-                      else []
-                )
-            , HE.onValueInput action
-            , HP.attr (HH.AttrName "list") ("book-" <> suffix)
-            ]
-              <> case err of
-                Just _ ->
-                  [ HP.attr (HH.AttrName "data-error") "true" ]
-                Nothing -> []
-          )
-      , bookDatalist suffix entries
+  let
+    fid = "operate-" <> suffix
+    errId = fid <> "-error"
+  in
+    HH.label
+      [ HP.classes [ cn "field" ]
+      , HP.for fid
       ]
-        <> case err of
-          Just msg -> [ fieldError msg ]
-          Nothing -> []
-    )
+      ( [ HH.span [ HP.classes [ cn "field__label" ] ]
+            [ HH.text label_ ]
+        , HH.input
+            ( [ HP.id fid
+              , HP.value value_
+              , HP.type_ HP.InputText
+              , HP.placeholder placeholder
+              , HP.attr (HH.AttrName "aria-label") label_
+              , HP.classes
+                  ( [ cn "field__input" ]
+                      <>
+                        if mono then
+                          [ cn "field__input--mono" ]
+                        else []
+                  )
+              , HE.onValueInput action
+              , HP.attr (HH.AttrName "list") ("book-" <> suffix)
+              ]
+                <> case err of
+                  Just _ ->
+                    [ HP.attr (HH.AttrName "data-error") "true"
+                    , HP.attr (HH.AttrName "aria-invalid") "true"
+                    , HP.attr (HH.AttrName "aria-describedby") errId
+                    ]
+                  Nothing -> []
+            )
+        , bookDatalist suffix entries
+        ]
+          <> case err of
+            Just msg -> [ errorSpan errId msg ]
+            Nothing -> []
+      )
 
 freeTextField
   :: forall m
@@ -1133,23 +1229,31 @@ freeTextFieldNum
   -> String
   -> H.ComponentHTML Action () m
 freeTextFieldNum suffix entries label_ value_ action suffixUnit =
-  HH.label [ HP.classes [ cn "field" ] ]
-    [ HH.span [ HP.classes [ cn "field__label" ] ]
-        [ HH.text label_ ]
-    , HH.div [ HP.classes [ cn "field__num" ] ]
-        [ HH.input
-            [ HP.value value_
-            , HP.type_ HP.InputText
-            , HP.classes
-                [ cn "field__input", cn "field__input--mono" ]
-            , HE.onValueInput action
-            , HP.attr (HH.AttrName "list") ("book-" <> suffix)
-            ]
-        , HH.span [ HP.classes [ cn "field__suffix" ] ]
-            [ HH.text suffixUnit ]
-        ]
-    , bookDatalist suffix entries
-    ]
+  let
+    fid = "operate-" <> suffix
+  in
+    HH.label
+      [ HP.classes [ cn "field" ]
+      , HP.for fid
+      ]
+      [ HH.span [ HP.classes [ cn "field__label" ] ]
+          [ HH.text label_ ]
+      , HH.div [ HP.classes [ cn "field__num" ] ]
+          [ HH.input
+              [ HP.id fid
+              , HP.value value_
+              , HP.type_ HP.InputText
+              , HP.attr (HH.AttrName "aria-label") label_
+              , HP.classes
+                  [ cn "field__input", cn "field__input--mono" ]
+              , HE.onValueInput action
+              , HP.attr (HH.AttrName "list") ("book-" <> suffix)
+              ]
+          , HH.span [ HP.classes [ cn "field__suffix" ] ]
+              [ HH.text suffixUnit ]
+          ]
+      , bookDatalist suffix entries
+      ]
 
 -- | Render the `<datalist>` companion for a free-text
 -- | input.  Empty books emit an empty text node to avoid
@@ -1199,10 +1303,13 @@ namedFieldV slot openSlot entries label_ value_ action placeholder mono err =
       if isOpen then
         "position:relative;z-index:20"
       else "position:relative"
+    fid = "operate-" <> label_
+    errId = fid <> "-error"
   in
     HH.label
       [ HP.classes [ cn "field" ]
       , HP.style containerStyle
+      , HP.for fid
       ]
       ( [ HH.span [ HP.classes [ cn "field__label" ] ]
             [ HH.text label_ ]
@@ -1212,9 +1319,11 @@ namedFieldV slot openSlot entries label_ value_ action placeholder mono err =
                 \align-items:stretch;position:relative"
             ]
             ( [ HH.input
-                  ( [ HP.value value_
+                  ( [ HP.id fid
+                    , HP.value value_
                     , HP.type_ HP.InputText
                     , HP.placeholder placeholder
+                    , HP.attr (HH.AttrName "aria-label") label_
                     , HP.classes
                         ( [ cn "field__input" ]
                             <>
@@ -1231,13 +1340,21 @@ namedFieldV slot openSlot entries label_ value_ action placeholder mono err =
                           [ HP.attr
                               (HH.AttrName "data-error")
                               "true"
+                          , HP.attr
+                              (HH.AttrName "aria-invalid")
+                              "true"
+                          , HP.attr
+                              (HH.AttrName "aria-describedby")
+                              errId
                           ]
                         Nothing -> []
                   )
               , HH.button
                   [ HP.classes [ cn "btn", cn "btn--ghost" ]
                   , HP.type_ HP.ButtonButton
-                  , HP.title "Show history"
+                  , HP.title ("Show " <> label_ <> " history")
+                  , HP.attr (HH.AttrName "aria-label")
+                      ("Toggle " <> label_ <> " history dropdown")
                   , HE.onClick
                       (\_ -> ToggleNamedDropdown slot)
                   ]
@@ -1249,7 +1366,7 @@ namedFieldV slot openSlot entries label_ value_ action placeholder mono err =
             )
         ]
           <> case err of
-            Just msg -> [ fieldError msg ]
+            Just msg -> [ errorSpan errId msg ]
             Nothing -> []
       )
 
@@ -2216,9 +2333,12 @@ saveAsDraftBlock st = case st.saveDialog of
               "display:flex;gap:.25rem;align-items:center"
           ]
           [ HH.input
-              [ HP.value dlg.nameDraft
+              [ HP.id "operate-save-draft-name"
+              , HP.value dlg.nameDraft
               , HP.type_ HP.InputText
               , HP.placeholder "draft name"
+              , HP.attr (HH.AttrName "aria-label")
+                  "New draft name"
               , HP.classes [ cn "field__input" ]
               , HE.onValueInput SetSaveDraftName
               , HP.style "min-width:12rem"

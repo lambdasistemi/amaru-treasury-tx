@@ -23,11 +23,11 @@ Eight bisect-safe slices.  Each commit body trailer: `Tasks: T289-S<n>`.  Persis
 
 ## Slice C — `/operate` a11y
 
-- [ ] T289-S3 [US3] Every input/select/textarea on `/operate` gets `<label for="<id>">` OR `aria-label` (every input has a stable `id`).
-- [ ] T289-S3 [US3] Validation errors render `aria-invalid="true"` on the input + `aria-describedby="<error-id>"` linking to the error span (`id` on the span).
-- [ ] T289-S3 [US3] Touch-target sizes: every clickable / focusable element measures ≥ 44×44 px in the rendered DOM (or has equivalent padding/overlay covering ≥ 44×44 px hit-area).
-- [ ] T289-S3 Smoke proof in `WIP.md`: DOM checks pass.  Lighthouse accessibility on `/operate` reports ≥ 95 (run via Playwright's lighthouse plugin or a curl-based axe-core run; pick what's available in the existing harness).
-- [ ] T289-S3 Commit: `feat(289): /operate a11y — labels, aria-invalid, aria-describedby, touch targets` with `Tasks: T289-S3` trailer.
+- [X] T289-S3 [US3] Every input/select/textarea on `/operate` gets `<label for="<id>">` OR `aria-label` (every input has a stable `id`).
+- [X] T289-S3 [US3] Validation errors render `aria-invalid="true"` on the input + `aria-describedby="<error-id>"` linking to the error span (`id` on the span).
+- [X] T289-S3 [US3] Touch-target sizes: every clickable / focusable element measures ≥ 44×44 px in the rendered DOM (or has equivalent padding/overlay covering ≥ 44×44 px hit-area).
+- [X] T289-S3 Smoke proof in `WIP.md`: DOM checks pass.  Lighthouse accessibility on `/operate` reports ≥ 95 (run via Playwright's lighthouse plugin or a curl-based axe-core run; pick what's available in the existing harness).
+- [X] T289-S3 Commit: `feat(289): /operate a11y — labels, aria-invalid, aria-describedby, touch targets` with `Tasks: T289-S3` trailer.
 
 ## Slice D — `/operate` progress + first-blocker navigation
 

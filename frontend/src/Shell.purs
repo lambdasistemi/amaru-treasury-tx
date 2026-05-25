@@ -99,22 +99,38 @@ topbar active opts =
         ]
         [ HH.text "Amaru Treasury" ]
     , HH.nav [ HP.classes [ cn "topbar__nav" ] ]
-        [ navLink RouteView active "/" "View"
-        , navLink RouteOperate active "/operate" "Operate"
-        , navLink RouteBooks active "/books" "Books"
+        [ navLink RouteView active "/"
+            "View" "View transactions"
+        , navLink RouteOperate active "/operate"
+            "Operate" "Operate — prepare a transaction"
+        , navLink RouteBooks active "/books"
+            "Books" "Manage saved values (Books)"
         ]
     , HH.button
         [ HP.classes [ cn "topbar__theme-btn" ]
+        , HP.attr (HH.AttrName "aria-label") "Toggle theme"
         , HE.onClick (\_ -> opts.onToggleTheme)
         ]
         [ HH.text opts.themeLabel ]
     ]
 
-navLink :: forall w i. Route -> Route -> String -> String -> HH.HTML w i
-navLink target active href label =
+-- | One top-bar nav link.  Carries an explicit `aria-label`
+-- | (so screen readers announce the full route purpose, not
+-- | just the short visible text) plus `aria-current="page"`
+-- | on the active route.
+navLink
+  :: forall w i
+   . Route
+  -> Route
+  -> String
+  -> String
+  -> String
+  -> HH.HTML w i
+navLink target active href label ariaLabel =
   HH.a
     ( [ HP.href href
       , HP.classes [ cn "topbar__nav-link" ]
+      , HP.attr (HH.AttrName "aria-label") ariaLabel
       ]
         <> if target == active then
           [ HP.attr (HH.AttrName "aria-current") "page" ]

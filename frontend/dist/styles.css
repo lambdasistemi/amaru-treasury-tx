@@ -167,12 +167,26 @@ noscript {
 }
 
 /* ---------- Top bar ---------- */
+/* #289 slice A — the topbar must fit at every viewport from
+   320 px up.  Flex-wrap is the picked pattern (rather than a
+   hamburger drawer): the link set is short (View / Operate /
+   Books) and the theme-toggle stays reachable when the nav
+   wraps to its own row on narrow viewports.  `min-width:0`
+   on the children lets the brand truncate cleanly when the
+   row is still single-line on borderline widths. */
 .topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 8px 16px;
   min-height: 44px;
+}
+.topbar__brand {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .topbar__title {
   display: flex;
@@ -413,6 +427,32 @@ md-list-item {
 
 /* JSON tree styling lives in `json-tree.css`, shipped by
    the browser-json-tree flake input. */
+
+/* #289 slice A — tighten topbar chrome on phones so the
+   three nav links + brand + theme button can share a single
+   wrapped row (or two narrow rows) without horizontal
+   overflow at 320 px. */
+@media (max-width: 600px) {
+  .topbar {
+    gap: 6px 10px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+  .topbar__brand {
+    font-size: 16px;
+    line-height: 1.1;
+  }
+  .topbar__nav {
+    gap: 2px;
+    flex-wrap: wrap;
+  }
+  .topbar__nav-link {
+    padding: 4px 8px;
+  }
+  .topbar__theme-btn {
+    padding: 4px 8px;
+  }
+}
 
 @media (max-width: 700px) {
   .topbar {

@@ -239,7 +239,7 @@
           checks = import ./nix/checks.nix {
             inherit pkgs components lintPkgs
               treasuryMetadata recentTxs buildIdentity
-              frontend;
+              frontend image;
             src = ./.;
           };
           checkApps = import ./nix/apps.nix { inherit pkgs checks; };

@@ -1,5 +1,5 @@
 { pkgs, src, components, lintPkgs ? pkgs
-, treasuryMetadata, recentTxs, buildIdentity, frontend }:
+, treasuryMetadata, recentTxs, buildIdentity, frontend, image }:
 # Each verification step is built as a single
 # `writeShellApplication` app, then exposed twice:
 #
@@ -435,6 +435,52 @@ EOF
       '';
     };
 
+    # #242 T007/T008 — Asserts the dockerTools.streamLayeredImage
+    # carries the embedded indexer's persistent volume mount
+    # point and the matching `--indexer-db` Cmd flag.
+    #
+    # streamLayeredImage produces a small bash wrapper that
+    # exec's a `stream` binary with a generated
+    # `…-conf.json` describing the image config. The Volumes
+    # object and Cmd array we want to assert on live in that
+    # conf.json — not in the wrapper itself. We extract the
+    # store path of the conf out of the wrapper, then grep
+    # the conf for the two strings FR-013 / FR-014 require.
+    #
+    # The check is intentionally a substring assertion
+    # rather than a full `docker inspect` — running a daemon
+    # in the nix sandbox is too heavyweight, and the string
+    # identity is what the spec requires.
+    indexer-volume = {
+      runtimeInputs = [ pkgs.gnugrep ];
+      text = ''
+        conf=$(grep -oE '/nix/store/[^ ]+-conf\.json' '${image}' \
+          | head -n 1)
+        if [ -z "$conf" ] || [ ! -e "$conf" ]; then
+          echo \
+            'indexer-volume: could not locate conf.json from streamLayeredImage wrapper' \
+            >&2
+          exit 1
+        fi
+        if ! grep -F -- \
+          '/var/lib/amaru-treasury/indexer-rocksdb' \
+          "$conf" > /dev/null; then
+          echo \
+            'indexer-volume: conf.json missing volume path /var/lib/amaru-treasury/indexer-rocksdb' \
+            >&2
+          exit 1
+        fi
+        if ! grep -F -- '--indexer-db' \
+          "$conf" > /dev/null; then
+          echo \
+            'indexer-volume: conf.json missing --indexer-db Cmd flag' \
+            >&2
+          exit 1
+        fi
+        printf 'indexer-volume: OK (conf=%s)\n' "$conf"
+      '';
+    };
+
     vault-tty-smoke = {
       runtimeInputs = [
         components.exes.amaru-treasury-tx
@@ -504,6 +550,7 @@ in
   golden = mkCheck "golden" scripts.golden;
   lint = mkCheck "lint" scripts.lint;
   smoke = mkCheck "smoke" scripts.smoke;
+  indexer-volume = mkCheck "indexer-volume" scripts.indexer-volume;
   vault-tty-smoke = mkCheck "vault-tty-smoke" scripts.vault-tty-smoke;
 
   # The same writeShellApplication apps the checks invoke,

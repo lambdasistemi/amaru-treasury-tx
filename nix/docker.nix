@@ -77,7 +77,19 @@ pkgs.dockerTools.streamLayeredImage {
       "/etc/amaru-treasury/build-identity.json"
       "--static"
       "/var/lib/amaru-treasury/static"
+      "--indexer-db"
+      "/var/lib/amaru-treasury/indexer-rocksdb"
     ];
+    # #242 — Persistent RocksDB volume for the embedded
+    # chain-sync follower. Declaring the path here makes
+    # `docker inspect` advertise it as a Volumes entry; the
+    # compose files at deploy/compose/amaru-treasury{,-dev}/
+    # bind a named volume into it so the indexer survives
+    # container restarts without re-syncing from
+    # mainnetIndexerStartSlot.
+    Volumes = {
+      "/var/lib/amaru-treasury/indexer-rocksdb" = { };
+    };
     ExposedPorts = { "8080/tcp" = { }; };
     Env = [
       "LANG=C.UTF-8"

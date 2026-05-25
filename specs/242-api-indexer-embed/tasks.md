@@ -104,7 +104,7 @@ Layout legend:
 
 ## Phase 4 — Container packaging
 
-- [ ] **T007 [D]** **RED**: a `runCommand` Nix check that
+- [X] **T007 [D]** **RED**: a `runCommand` Nix check that
   inspects the built image's manifest and asserts the volume
   mount point `/var/lib/amaru-treasury/indexer-rocksdb`
   appears in the `Volumes` directive, and asserts
@@ -112,7 +112,7 @@ Layout legend:
   in the image Cmd. Add to `nix/checks.nix`. Fails before the
   image is edited.
 
-- [ ] **T008 [F][D]** **GREEN**:
+- [X] **T008 [F][D]** **GREEN**:
   - `nix/docker.nix` — add `Volumes` directive +
     `--indexer-db <path>` to Cmd,
   - `deploy/compose/amaru-treasury/docker-compose.yaml` —

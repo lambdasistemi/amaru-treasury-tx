@@ -275,7 +275,7 @@ mkIndexerConfig socket globalOpts cli interestSet =
                 SlotNo
                 (aircStartSlot cli)
         , icLagThresholdSlots = aircLagThresholdSlots cli
-        , icByronEpochSlots = 86_400
+        , icByronEpochSlots = 21_600
         , icSecurityParamK = 2160
         , icReconnectPolicy = defaultReconnectPolicy
         , icProbeConfig = defaultProbeConfig

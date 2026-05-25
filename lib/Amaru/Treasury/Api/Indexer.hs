@@ -147,9 +147,13 @@ data IndexerConfig = IndexerConfig
     -- 'checkReady' returns 'Lagging' and the handler
     -- layer answers HTTP 503.
     , icByronEpochSlots :: !Word64
-    -- ^ Byron @EpochSlots@. Default 86_400 matches the
-    -- mainnet Shelley-genesis @epochLength@; never
-    -- needs operator tuning on mainnet.
+    -- ^ Byron @EpochSlots@. Default 21_600 matches mainnet
+    -- (@10·k@ where @k = 2160@; mainnet @k@ comes from
+    -- @byron-genesis.json@ @protocolConsts.k@). The Byron
+    -- CBOR decoder threads this as a structural parameter;
+    -- mismatch yields a divergent block hash on every roll
+    -- and the chain-sync server disconnects with
+    -- @ApplyConflict@.
     , icSecurityParamK :: !Int
     -- ^ Cardano security parameter @k@. Default 2160
     -- matches mainnet; caps the rollback-log length and

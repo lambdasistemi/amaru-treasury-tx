@@ -311,6 +311,62 @@ input[type="number"].field__input { -moz-appearance: textfield; }
   min-width: 44px;
   box-sizing: border-box;
 }
+
+/* #289 slice D — sectioned progress indicator.  A
+   horizontal row of state chips above the form, plus a
+   right-edge "Jump to Build" shortcut.  The row wraps on
+   narrow viewports (mirrors slice A's topbar flex-wrap
+   pattern) and scrolls horizontally as a last resort. */
+.operate-progress {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant, #44474e);
+}
+.operate-progress__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font: 500 12px/1 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.04em;
+  background: var(--md-sys-color-surface-container, #22252b);
+  color: var(--md-sys-color-on-surface-variant, #c4c7cb);
+  border: 1px solid var(--md-sys-color-outline-variant, #44474e);
+  border-radius: var(--app-radius);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.operate-progress__chip:hover {
+  color: var(--md-sys-color-on-surface);
+  border-color: var(--md-sys-color-outline);
+}
+.operate-progress__chip[data-state="complete"] {
+  background: var(--md-sys-color-primary-container, #b8d4d6);
+  color: var(--md-sys-color-on-primary-container, #002022);
+  border-color: var(--md-sys-color-primary, #006a70);
+}
+.operate-progress__chip[data-state="invalid"] {
+  background: var(--md-sys-color-error-container, #ffdad6);
+  color: var(--md-sys-color-on-error-container, #410002);
+  border-color: var(--md-sys-color-error, #ba1a1a);
+}
+.operate-progress__chip[data-state="pending"] {
+  /* Default surface — the operator can see where they
+     haven't been yet without it visually shouting. */
+}
+.operate-progress__chip--build {
+  margin-left: auto;
+  font-weight: 700;
+}
+.operate-progress__glyph {
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 1;
+}
 .btn {
   border: 1px solid transparent;
   border-radius: var(--app-radius);

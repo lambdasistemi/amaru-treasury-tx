@@ -33,11 +33,6 @@
             "web-events",
             "web-html"
           ]
-        },
-        "test": {
-          "dependencies": [
-            "spec"
-          ]
         }
       }
     },

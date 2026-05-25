@@ -417,6 +417,12 @@ namedTypedValue :: NamedEntry -> String
 namedTypedValue = case _ of
   WalletE w -> w.address
   ReferenceE r -> r.uri
+  -- #288 slice A: snapshot books dedup on entry `name`.
+  -- The Import.purs merge paths for operate_drafts /
+  -- operate_history are wired in slice C; this branch
+  -- keeps the local helper total against the widened
+  -- 'NamedEntry' variant so the build stays green.
+  OperateSnapshotE s -> s.name
 
 dedupBy
   :: forall a
@@ -548,6 +554,15 @@ encodeNamedBookJson =
         , Tuple "uri" (Argonaut.fromString r.uri)
         , Tuple "type" (Argonaut.fromString r.refType)
         ]
+    -- #288 slice A: bundle export for the new books is
+    -- wired in slice C; keep this local encoder total so
+    -- the build stays green.  The shape matches
+    -- Shell.Book.encodeSnapshotEntry exactly.
+    OperateSnapshotE s ->
+      Argonaut.fromObject $ FO.fromFoldable
+        [ Tuple "name" (Argonaut.fromString s.name)
+        , Tuple "snapshot" s.snapshot
+        ]
 
 -- | Per-card free-text export: a bare 'Array String'.
 encodeFreeTextBookJson :: Array String -> Json
@@ -574,6 +589,12 @@ namedSuffix :: NamedBookKey -> String
 namedSuffix = case _ of
   WalletsBook -> "wallets"
   ReferencesBook -> "references"
+  -- #288 slice A: bundle handling for the new books is wired
+  -- in slice C; keep the local helper total so the build
+  -- stays green and `allNamedKeys` continues to enumerate
+  -- only the in-flight bundle keys for this slice.
+  OperateDraftsBook -> "operate_drafts"
+  OperateHistoryBook -> "operate_history"
 
 freeTextSuffix :: FreeTextBookKey -> String
 freeTextSuffix = case _ of

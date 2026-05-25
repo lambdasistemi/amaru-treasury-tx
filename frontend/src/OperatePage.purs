@@ -1260,6 +1260,11 @@ namedEntryName :: NamedEntry -> String
 namedEntryName = case _ of
   WalletE w -> w.name
   ReferenceE r -> r.name
+  -- #288 slice A: snapshot books project their own `name`.
+  -- The Drafts ▾ / History ▾ pickers are wired in slice B;
+  -- this branch keeps the local helper total against the
+  -- widened 'NamedEntry' variant so the build stays green.
+  OperateSnapshotE s -> s.name
 
 -- | Transparent full-viewport backdrop rendered while any
 -- | named dropdown is open.  Clicking it dispatches a

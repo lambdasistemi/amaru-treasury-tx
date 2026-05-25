@@ -31,6 +31,8 @@ import Data.DateTime.Instant (toDateTime)
 import Data.Either (Either(..))
 import Data.Enum (fromEnum)
 import Data.Maybe (Maybe(..))
+import Data.Set (Set)
+import Data.Set as Set
 import Data.String as String
 import Data.Time.Duration (Milliseconds(..))
 import Effect (Effect)
@@ -228,6 +230,13 @@ type State =
   , importDialog :: ImportDialogState
   , confirmingRemove :: Maybe RemoveTarget
   , recentlyCopied :: Maybe String
+  -- #289 slice G — groups whose disclosure is currently
+  -- collapsed.  Populated at 'Initialize' (and after every
+  -- book mutation) with every group where ALL cards are
+  -- empty, then toggled by the operator clicking the
+  -- one-line disclosure.  Non-empty groups never appear in
+  -- this set — they always render normally.
+  , collapsedGroups :: Set BooksGroup
   }
 
 initialState :: State
@@ -244,6 +253,7 @@ initialState =
   , importDialog: emptyImportDialog
   , confirmingRemove: Nothing
   , recentlyCopied: Nothing
+  , collapsedGroups: Set.empty
   }
 
 data Action
@@ -280,6 +290,8 @@ data Action
   | UpdateImportDestination String
   | PreviewImport
   | ConfirmImport
+  -- #289 slice G — toggle a group's empty-state disclosure.
+  | ToggleGroup BooksGroup
 
 -- ---------------------------------------------------------------------------
 -- Component
@@ -418,6 +430,9 @@ data BooksGroup
   | RationaleText
   | BuildParameters
 
+derive instance eqBooksGroup :: Eq BooksGroup
+derive instance ordBooksGroup :: Ord BooksGroup
+
 -- #288 — 'Drafts' goes at the TOP: it carries the
 -- highest-value operator state (recurring transaction
 -- templates + the full Build history).  Identities /
@@ -439,6 +454,40 @@ groupTitle = case _ of
   References -> "References"
   RationaleText -> "Rationale text"
   BuildParameters -> "Build parameters"
+
+-- | Whether the per-book entry list for the given key is
+-- | empty.  Used by 'groupIsEmpty' and by 'perCardExport'
+-- | to gate the Copy / Export `aria-disabled` state.
+bookKeyIsEmpty :: BookKey -> Books -> Boolean
+bookKeyIsEmpty key b = case key of
+  N nk -> Array.null (namedEntries nk b)
+  F fk -> Array.null (freeTextEntries fk b)
+
+-- | A group is empty when every book under it is empty.
+-- | Drives the slice-G one-line disclosure: instead of
+-- | rendering N stacked "(no entries yet)" cards, the
+-- | whole group collapses behind a single `<group> · N
+-- | books empty · expand` button.
+groupIsEmpty :: BooksGroup -> Books -> Boolean
+groupIsEmpty g b =
+  Array.all (\k -> bookKeyIsEmpty k b) (groupContents g)
+
+-- | Recompute the collapsed-groups set after a book
+-- | mutation: any group that is NOW empty is added to the
+-- | set so its disclosure starts in the collapsed state.
+-- | Groups already in the set stay (preserves the
+-- | operator's prior toggle).  Non-empty groups are not
+-- | removed — they simply don't render the disclosure,
+-- | so set membership is moot.
+collapseAllEmpty :: Books -> Set BooksGroup -> Set BooksGroup
+collapseAllEmpty b s =
+  Array.foldl
+    ( \acc g ->
+        if groupIsEmpty g b then Set.insert g acc
+        else acc
+    )
+    s
+    allGroups
 
 groupContents :: BooksGroup -> Array BookKey
 groupContents = case _ of
@@ -473,21 +522,74 @@ renderGroup
   -> BooksGroup
   -> Array (H.ComponentHTML Action () m)
 renderGroup st g =
-  [ HH.h2
-      [ HP.classes
-          [ cn "md-typescale-headline-small"
-          , cn "books-group"
+  let
+    cards = groupContents g
+    allEmpty = groupIsEmpty g st.books
+    collapsed = Set.member g st.collapsedGroups
+    -- The slice-G disclosure only renders when EVERY card
+    -- in the group is empty.  Non-empty groups keep the
+    -- pre-slice-G normal heading + cards layout.
+  in
+    if allEmpty then
+      [ groupDisclosure g (Array.length cards) collapsed ]
+        <>
+          ( if collapsed then []
+            else map (renderCard st) cards
+          )
+    else
+      [ HH.h2
+          [ HP.classes
+              [ cn "md-typescale-headline-small"
+              , cn "books-group"
+              ]
+          , HP.style
+              "margin:2rem 0 .75rem 0;\
+              \padding-bottom:.4rem;\
+              \border-bottom:1px solid \
+              \var(--md-sys-color-outline-variant,#44474e);\
+              \letter-spacing:.01em"
           ]
-      , HP.style
-          "margin:2rem 0 .75rem 0;\
-          \padding-bottom:.4rem;\
-          \border-bottom:1px solid \
-          \var(--md-sys-color-outline-variant,#44474e);\
-          \letter-spacing:.01em"
+          [ HH.text (groupTitle g) ]
       ]
-      [ HH.text (groupTitle g) ]
-  ]
-    <> map (renderCard st) (groupContents g)
+        <> map (renderCard st) cards
+
+-- | #289 slice G — one-line disclosure replacing the
+-- | normal group heading when every card in the group is
+-- | empty.  Clicking the button toggles its membership in
+-- | 'state.collapsedGroups'.
+groupDisclosure
+  :: forall m
+   . BooksGroup
+  -> Int
+  -> Boolean
+  -> H.ComponentHTML Action () m
+groupDisclosure g cardCount collapsed =
+  let
+    arrow = if collapsed then "▸ " else "▾ "
+    plural = if cardCount == 1 then "" else "s"
+    suffix = if collapsed then "expand" else "collapse"
+    text =
+      arrow
+        <> groupTitle g
+        <> " · "
+        <> show cardCount
+        <> " book"
+        <> plural
+        <> " empty · "
+        <> suffix
+  in
+    HH.button
+      [ HP.classes
+          [ cn "books-group"
+          , cn "books-group--empty"
+          , cn "group-disclosure"
+          ]
+      , HP.type_ HP.ButtonButton
+      , HP.attr (HH.AttrName "aria-expanded")
+          (if collapsed then "false" else "true")
+      , HE.onClick (\_ -> ToggleGroup g)
+      ]
+      [ HH.text text ]
 
 renderCard
   :: forall m
@@ -518,7 +620,9 @@ namedCard st key =
         else
           map (namedEntryRow st key) entries
       )
-      [ namedFooter st key, perCardExport (N key) ]
+      [ namedFooter st key
+      , perCardExport (N key) (Array.null entries)
+      ]
 
 -- ---------------------------------------------------------------------------
 -- Snapshot cards (#288 — Drafts + History)
@@ -550,7 +654,7 @@ snapshotCard st key =
         else
           map (snapshotEntryRow st key) entries
       )
-      [ perCardExport (N key) ]
+      [ perCardExport (N key) (Array.null entries) ]
 
 snapshotEntryRow
   :: forall m
@@ -971,7 +1075,7 @@ freeTextCard st key =
           map (freeTextRow st key) entries
       )
       [ freeTextFooter st key (Array.length entries)
-      , perCardExport (F key)
+      , perCardExport (F key) (Array.null entries)
       ]
 
 freeTextRow
@@ -1127,31 +1231,53 @@ emptyCardCaption msg =
 -- | is the same bare per-book JSON the bundle import
 -- | dispatches to a single book, so a single-card export
 -- | drops directly into Lace / a Pinning Service / a script.
+-- |
+-- | #289 slice G — when the card is empty (zero entries),
+-- | the Copy + Export buttons render with `aria-disabled="true"`
+-- | and the matching CSS skin (faded + `cursor: not-allowed`
+-- | + `pointer-events: none`).  An empty export would
+-- | produce a bare `[]` bundle; an empty copy would put `[]`
+-- | on the clipboard.  Neither is useful, so the affordance
+-- | is visually de-emphasised but the buttons stay in DOM
+-- | (preserves a11y tree continuity).
 perCardExport
   :: forall m
    . BookKey
+  -> Boolean
   -> H.ComponentHTML Action () m
-perCardExport key =
-  HH.div
-    [ HP.style
-        "display:flex;gap:.5rem;flex-wrap:wrap;\
-        \align-items:center;\
-        \border-top:1px solid var(--md-sys-color-outline-variant,#44474e);\
-        \margin-top:.25rem;padding-top:.5rem;opacity:.85"
-    ]
-    [ HH.button
-        [ HP.classes [ cn "btn", cn "btn--ghost" ]
-        , HP.type_ HP.ButtonButton
-        , HE.onClick (\_ -> ExportBookByKey key)
+perCardExport key isEmpty =
+  let
+    disabledAttrs =
+      if isEmpty then
+        [ HP.attr (HH.AttrName "aria-disabled") "true"
+        , HP.attr (HH.AttrName "tabindex") "-1"
         ]
-        [ HH.text "Export" ]
-    , HH.button
-        [ HP.classes [ cn "btn", cn "btn--ghost" ]
-        , HP.type_ HP.ButtonButton
-        , HE.onClick (\_ -> CopyBookByKey key)
-        ]
-        [ HH.text "Copy" ]
-    ]
+      else []
+  in
+    HH.div
+      [ HP.style
+          "display:flex;gap:.5rem;flex-wrap:wrap;\
+          \align-items:center;\
+          \border-top:1px solid var(--md-sys-color-outline-variant,#44474e);\
+          \margin-top:.25rem;padding-top:.5rem;opacity:.85"
+      ]
+      [ HH.button
+          ( [ HP.classes [ cn "btn", cn "btn--ghost" ]
+            , HP.type_ HP.ButtonButton
+            , HE.onClick (\_ -> ExportBookByKey key)
+            ]
+              <> disabledAttrs
+          )
+          [ HH.text "Export" ]
+      , HH.button
+          ( [ HP.classes [ cn "btn", cn "btn--ghost" ]
+            , HP.type_ HP.ButtonButton
+            , HE.onClick (\_ -> CopyBookByKey key)
+            ]
+              <> disabledAttrs
+          )
+          [ HH.text "Copy" ]
+      ]
 
 -- | Modal import dialog.  Rendered as a sibling of the
 -- | page chrome so the backdrop covers the topbar too.
@@ -1545,7 +1671,20 @@ handleAction = case _ of
   Initialize -> do
     t <- H.liftEffect initialTheme
     books <- H.liftEffect loadAllBooks
-    H.modify_ \s -> s { theme = t, books = books }
+    H.modify_ \s -> s
+      { theme = t
+      , books = books
+      , collapsedGroups = collapseAllEmpty books Set.empty
+      }
+
+  ToggleGroup g ->
+    H.modify_ \s -> s
+      { collapsedGroups =
+          if Set.member g s.collapsedGroups then
+            Set.delete g s.collapsedGroups
+          else
+            Set.insert g s.collapsedGroups
+      }
 
   ToggleTheme -> do
     st <- H.get
@@ -1598,6 +1737,8 @@ handleAction = case _ of
               Just (EditingId k v)
                 | k == key && v == value -> Nothing
               other -> other
+          , collapsedGroups =
+              collapseAllEmpty books' s.collapsedGroups
           }
       Just (RemoveFreeTextT key value) -> do
         H.liftEffect (removeFreeText key value)
@@ -1605,6 +1746,8 @@ handleAction = case _ of
         H.modify_ \s -> s
           { books = books'
           , confirmingRemove = Nothing
+          , collapsedGroups =
+              collapseAllEmpty books' s.collapsedGroups
           }
       Nothing -> pure unit
 
@@ -1634,6 +1777,8 @@ handleAction = case _ of
         H.modify_ \s -> s
           { books = books'
           , clearConfirm = Nothing
+          , collapsedGroups =
+              collapseAllEmpty books' s.collapsedGroups
           }
       Nothing -> pure unit
 
@@ -1680,6 +1825,8 @@ handleAction = case _ of
               , draftValue = ""
               , draftLabel = ""
               , draftType = ""
+              , collapsedGroups =
+                  collapseAllEmpty books' s.collapsedGroups
               }
       _ -> pure unit
 
@@ -1898,6 +2045,8 @@ handleAction = case _ of
         H.modify_ \s -> s
           { books = books'
           , importDialog = emptyImportDialog
+          , collapsedGroups =
+              collapseAllEmpty books' s.collapsedGroups
           }
       Nothing -> pure unit
 

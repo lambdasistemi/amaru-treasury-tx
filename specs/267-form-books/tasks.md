@@ -76,6 +76,22 @@ Operator-side feedback after the four shipping slices merged: the per-row `×` i
 
 - [X] T267-S5 Commit: `feat(267): /books row polish — icon trash (guarded), copy, clickable typed values` with `Tasks: T267-S5` trailer.
 
+## Slice F — `/books` semantic grouping
+
+Operator-side feedback after slice E: the flat list of ten cards reads as a "mess".  Group cards by how operators actually cluster the fields when authoring a build.
+
+- [X] T267-S6 [US3] Introduce a `BooksGroup` enum (`Identities` / `References` / `RationaleText` / `BuildParameters`) plus a `groupContents :: BooksGroup -> Array BookKey` taxonomy in `frontend/src/BooksPage.purs`.  Iterate `allGroups` in render order, emit one `<h2 class="md-typescale-title-large books-group">` per group, then dispatch each card via the existing per-card render path (`namedCard` / `freeTextCard`).
+
+- [X] T267-S6 [US3] Card order under each group: **Identities** → `wallets`; **References** → `reference_uris`, `reference_types`, `reference_labels`; **Rationale text** → `descriptions`, `justifications`, `destination_labels`; **Build parameters** → `validity_hours`, `slippage_bps`, `split_counts`.  Per-card render path (rows, copy / guarded trash, link wraps, Add new, Clear all, per-card export/copy) stays byte-identical to slice E.
+
+- [X] T267-S6 [US3] Empty-state top-of-page notice (FR-013) stays at the TOP, above the first group header.
+
+- [X] T267-S6 Amend `spec.md` FR-007 in the SAME commit to mention the grouping and the fixed order.
+
+- [X] T267-S6 Smoke proof in `WIP.md`: deploy, navigate `/books`; verify four `h2.books-group` headers in DOM order (`Identities`, `References`, `Rationale text`, `Build parameters`); verify each group's cards are in the spec order; verify the empty-state caption precedes the first group header; verify one row's slice-E affordances (copy, link href, guarded trash) still work in the grouped layout.
+
+- [X] T267-S6 Commit: `feat(267): /books — group cards by semantics (Identities, References, Rationale, Build parameters)` with `Tasks: T267-S6` trailer.
+
 ## Dependencies
 
 - Slice A blocks B, C, D.

@@ -9,8 +9,14 @@ network/socket options, log-handle management, and the
 small provider adapters used by wizard resolvers.
 -}
 module Amaru.Treasury.Cli.Common
-    ( GlobalOpts (..)
+    ( GlobalConfigOpts (..)
+    , GlobalNetworkArg (..)
+    , GlobalOpts (..)
+    , globalConfigOptsP
+    , globalConfigToGlobalOpts
     , globalOptsP
+    , networkMagicNameMaybe
+    , networkNameToPair
     , resolveNetworkName
     , resolveSocket
     , withSocket
@@ -28,7 +34,7 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Time.Clock.POSIX (getPOSIXTime)
-import Data.Word (Word64)
+import Data.Word (Word32, Word64)
 import Lens.Micro ((^.))
 import Options.Applicative
     ( Parser
@@ -74,10 +80,40 @@ data GlobalOpts = GlobalOpts
     }
     deriving stock (Eq, Show)
 
-globalOptsP :: Parser GlobalOpts
-globalOptsP =
-    mkOpts
+-- | Network source supplied by the global CLI surface.
+data GlobalNetworkArg
+    = GlobalNetworkByName !Text !NetworkMagic
+    | GlobalNetworkByMagic !Word32
+    deriving stock (Eq, Show)
+
+-- | Global CLI settings before config/env/profile resolution.
+data GlobalConfigOpts = GlobalConfigOpts
+    { gcoConfigPath :: !(Maybe FilePath)
+    , gcoProfile :: !(Maybe Text)
+    , gcoSocketPath :: !(Maybe FilePath)
+    , gcoNetwork :: !(Maybe GlobalNetworkArg)
+    }
+    deriving stock (Eq, Show)
+
+-- | Parser for global CLI config sources.
+globalConfigOptsP :: Parser GlobalConfigOpts
+globalConfigOptsP =
+    GlobalConfigOpts
         <$> optional
+            ( strOption
+                ( long "config"
+                    <> metavar "PATH"
+                    <> help "Path to treasury YAML config"
+                )
+            )
+        <*> optional
+            ( strOption
+                ( long "profile"
+                    <> metavar "NAME"
+                    <> help "Treasury profile name"
+                )
+            )
+        <*> optional
             ( strOption
                 ( long "node-socket"
                     <> metavar "PATH"
@@ -85,19 +121,19 @@ globalOptsP =
                         "cardano-node N2C socket (defaults to CARDANO_NODE_SOCKET_PATH)"
                 )
             )
-        <*> ( byName <|> byMagic <|> pure defaultMainnet
-            )
+        <*> optional (byName <|> byMagic)
   where
     byName =
-        option
-            (eitherReader networkNameToPair)
-            ( long "network"
-                <> metavar "NAME"
-                <> help
-                    "mainnet | preprod | preview | devnet (alternative to --network-magic)"
-            )
+        uncurry GlobalNetworkByName
+            <$> option
+                (eitherReader networkNameToPair)
+                ( long "network"
+                    <> metavar "NAME"
+                    <> help
+                        "mainnet | preprod | preview | devnet (alternative to --network-magic)"
+                )
     byMagic =
-        (\m -> (NetworkMagic m, networkMagicNameMaybe (NetworkMagic m)))
+        GlobalNetworkByMagic
             <$> option
                 auto
                 ( long "network-magic"
@@ -105,25 +141,42 @@ globalOptsP =
                     <> help
                         "Custom network magic (mainnet=764824073, preprod=1, preview=2, devnet=42)"
                 )
-    defaultMainnet =
-        ( NetworkMagic 764_824_073
-        , Just "mainnet"
-        )
-    mkOpts socket (magic, name) =
-        GlobalOpts
-            { goSocketPath = socket
+
+-- | Convert parsed global settings to the legacy runtime shape.
+globalConfigToGlobalOpts :: GlobalConfigOpts -> GlobalOpts
+globalConfigToGlobalOpts config =
+    let (magic, name) = networkArgToPair (gcoNetwork config)
+    in  GlobalOpts
+            { goSocketPath = gcoSocketPath config
             , goNetworkMagic = magic
             , goNetworkName = name
             }
 
-networkNameToPair
-    :: String -> Either String (NetworkMagic, Maybe Text)
+globalOptsP :: Parser GlobalOpts
+globalOptsP =
+    globalConfigToGlobalOpts <$> globalConfigOptsP
+
+networkArgToPair
+    :: Maybe GlobalNetworkArg
+    -> (NetworkMagic, Maybe Text)
+networkArgToPair = \case
+    Nothing -> defaultMainnet
+    Just (GlobalNetworkByName name magic) -> (magic, Just name)
+    Just (GlobalNetworkByMagic magic) ->
+        let networkMagic = NetworkMagic magic
+        in  (networkMagic, networkMagicNameMaybe networkMagic)
+  where
+    defaultMainnet =
+        ( NetworkMagic 764_824_073
+        , Just "mainnet"
+        )
+
+networkNameToPair :: String -> Either String (Text, NetworkMagic)
 networkNameToPair s = case s of
-    "mainnet" ->
-        Right (NetworkMagic 764_824_073, Just "mainnet")
-    "preprod" -> Right (NetworkMagic 1, Just "preprod")
-    "preview" -> Right (NetworkMagic 2, Just "preview")
-    "devnet" -> Right (NetworkMagic 42, Just "devnet")
+    "mainnet" -> Right ("mainnet", NetworkMagic 764_824_073)
+    "preprod" -> Right ("preprod", NetworkMagic 1)
+    "preview" -> Right ("preview", NetworkMagic 2)
+    "devnet" -> Right ("devnet", NetworkMagic 42)
     _ ->
         Left
             ( "unknown network name: "

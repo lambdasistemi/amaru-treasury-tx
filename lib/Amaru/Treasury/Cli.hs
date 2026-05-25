@@ -13,8 +13,10 @@ module Amaru.Treasury.Cli
     , execCliParser
     , opts
     , parseCliArgs
+    , parseCliArgsWithEnv
     ) where
 
+import Data.Bifunctor (first)
 import Data.List (isInfixOf)
 import Data.Version (showVersion)
 import Options.Applicative
@@ -39,8 +41,12 @@ import Options.Applicative
     , (<**>)
     )
 import Options.Applicative.Help.Types (ParserHelp)
-import System.Environment (getArgs)
+import System.Environment
+    ( getArgs
+    , getEnvironment
+    )
 import System.Exit (ExitCode (..))
+import System.Exit qualified as Exit
 
 import Paths_amaru_treasury_tx (version)
 
@@ -49,8 +55,16 @@ import Amaru.Treasury.Cli.AttachWitness
     , attachWitnessOptsP
     )
 import Amaru.Treasury.Cli.Common
-    ( GlobalOpts
-    , globalOptsP
+    ( GlobalConfigOpts
+    , GlobalOpts
+    , globalConfigOptsP
+    , globalConfigToGlobalOpts
+    )
+import Amaru.Treasury.Cli.Config
+    ( CliConfigError
+    , renderCliConfigError
+    , resolveGlobalConfig
+    , resolveTreasuryInspectConfig
     )
 import Amaru.Treasury.Cli.DisburseWizard
     ( ContingencyDisburseOpts
@@ -338,7 +352,22 @@ versionOption =
 opts :: ParserInfo (GlobalOpts, Cmd)
 opts =
     info
-        ( ((,) <$> globalOptsP <*> cmdP)
+        ( ( (,) . globalConfigToGlobalOpts
+                <$> globalConfigOptsP
+                <*> cmdP
+          )
+            <**> helper
+            <**> versionOption
+        )
+        ( fullDesc
+            <> progDesc
+                "Build unsigned Amaru treasury transactions"
+        )
+
+optsWithConfig :: ParserInfo (GlobalConfigOpts, Cmd)
+optsWithConfig =
+    info
+        ( ((,) <$> globalConfigOptsP <*> cmdP)
             <**> helper
             <**> versionOption
         )
@@ -348,13 +377,54 @@ opts =
         )
 
 execCliParser :: IO (GlobalOpts, Cmd)
-execCliParser =
-    getArgs >>= handleParseResult . parseCliArgs
+execCliParser = do
+    args <- getArgs
+    raw <- handleParseResult (parseCliConfigArgs args)
+    envs <- getEnvironment
+    resolved <- resolveCliCommand envs raw
+    case resolved of
+        Right parsed -> pure parsed
+        Left err ->
+            Exit.die ("amaru-treasury-tx: " <> renderCliConfigError err)
 
 parseCliArgs :: [String] -> ParserResult (GlobalOpts, Cmd)
 parseCliArgs args =
     adjustDisburseReferenceFailure args $
         execParserPure defaultPrefs opts args
+
+parseCliConfigArgs :: [String] -> ParserResult (GlobalConfigOpts, Cmd)
+parseCliConfigArgs args =
+    adjustDisburseReferenceFailure args $
+        execParserPure defaultPrefs optsWithConfig args
+
+parseCliArgsWithEnv
+    :: [(String, String)]
+    -> [String]
+    -> IO (Either String (GlobalOpts, Cmd))
+parseCliArgsWithEnv envs args =
+    case parseCliConfigArgs args of
+        Success raw ->
+            first renderCliConfigError <$> resolveCliCommand envs raw
+        Failure failure ->
+            let (body, _) = renderFailure failure "amaru-treasury-tx"
+            in  pure (Left body)
+        CompletionInvoked{} -> pure (Left "completion invoked")
+
+resolveCliCommand
+    :: [(String, String)]
+    -> (GlobalConfigOpts, Cmd)
+    -> IO (Either CliConfigError (GlobalOpts, Cmd))
+resolveCliCommand envs (globals, cmd) =
+    case cmd of
+        CmdTreasuryInspect inspect -> do
+            resolved <- resolveTreasuryInspectConfig envs globals inspect
+            pure $ fmap (fmap CmdTreasuryInspect) resolved
+        _ -> do
+            resolved <- resolveGlobalConfig envs globals
+            pure $ fmap (pairWithCmd cmd) resolved
+
+pairWithCmd :: Cmd -> GlobalOpts -> (GlobalOpts, Cmd)
+pairWithCmd cmd globalOpts = (globalOpts, cmd)
 
 adjustDisburseReferenceFailure
     :: [String]

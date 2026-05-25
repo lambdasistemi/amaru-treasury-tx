@@ -31,11 +31,11 @@ Eight bisect-safe slices.  Each commit body trailer: `Tasks: T289-S<n>`.  Persis
 
 ## Slice D — `/operate` progress + first-blocker navigation
 
-- [ ] T289-S4 [US4] Add a sectioned progress indicator at the top of `/operate`.  Sections: Identity (wallet + beneficiary), Amount, Rationale (description + justification + destination label), References, Signers.  Each section reports `complete` / `invalid` / `pending`.
-- [ ] T289-S4 [US4] Click a section → page scrolls to the section + focuses the first invalid input in it (or the first input if none invalid).
-- [ ] T289-S4 [US4] If slice B chose the "inline action bar" pattern: the progress indicator includes a "Jump to Build" affordance pinned to the right.
-- [ ] T289-S4 Smoke proof in `WIP.md`: with a wallet bech32 missing, the Identity section reports `invalid`; clicking it focuses the wallet input; the wallet input is in the viewport.
-- [ ] T289-S4 Commit: `feat(289): /operate sectioned progress + first-blocker navigation` with `Tasks: T289-S4` trailer.
+- [X] T289-S4 [US4] Add a sectioned progress indicator at the top of `/operate`.  Sections: Identity (wallet + beneficiary), Amount, Rationale (description + justification + destination label), References, Signers.  Each section reports `complete` / `invalid` / `pending`.
+- [X] T289-S4 [US4] Click a section → page scrolls to the section + focuses the first invalid input in it (or the first input if none invalid).
+- [X] T289-S4 [US4] If slice B chose the "inline action bar" pattern: the progress indicator includes a "Jump to Build" affordance pinned to the right.
+- [X] T289-S4 Smoke proof in `WIP.md`: with a wallet bech32 missing, the Identity section reports `invalid`; clicking it focuses the wallet input; the wallet input is in the viewport.
+- [X] T289-S4 Commit: `feat(289): /operate sectioned progress + first-blocker navigation` with `Tasks: T289-S4` trailer.
 
 ## Slice E — Dashboard status indicators
 

@@ -28,7 +28,7 @@ import Data.Either (Either(..))
 import Data.Enum (fromEnum)
 import Data.Foldable (for_)
 import Data.Int as Int
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust)
 import Data.Number as Number
 import Data.String as String
 import Data.String.Common (joinWith) as T
@@ -409,6 +409,13 @@ data Action
   | SetSaveDraftName String
   | ConfirmSaveDraft
   | CancelSaveDraft
+  -- #289 slice D — progress-chip jump.  Carries an
+  -- already-resolved input id so the handler is a thin
+  -- `_focusById` wrapper (no State lookup at action-fire
+  -- time, which keeps the chip render-and-click pure
+  -- with respect to the snapshot it was rendered from).
+  | JumpToSection String
+  | FocusBuildButton
 
 -- ---------------------------------------------------------------------------
 -- Component
@@ -482,7 +489,8 @@ siteHeader mode =
 formColumn :: forall m. State -> H.ComponentHTML Action () m
 formColumn st =
   HH.div [ HP.classes [ cn "form-column" ] ]
-    ( [ draftsBar st
+    ( [ progressIndicator st
+      , draftsBar st
       , modeSelector st.mode
       , formSection "01" "Scope"
           "Choose the registered scope you are spending from."
@@ -892,6 +900,181 @@ disburseAmountSuffix :: DisburseUnit -> String
 disburseAmountSuffix = case _ of
   UnitAda -> "ADA"
   UnitUsdm -> "USDM"
+
+-- ---------------------------------------------------------------------------
+-- #289 slice D — sectioned progress indicator
+--
+-- Five logical groups of form fields drive the chip row at
+-- the top of /operate.  Each chip reports one of three
+-- states (Complete | Invalid | Pending) and, when clicked,
+-- focuses the first invalid input in its section (or the
+-- first input when nothing is invalid).
+--
+-- "Invalid" means a field has a non-empty value that fails
+-- its validator (e.g. a partial bech32 or a non-positive
+-- amount).  "Pending" means a required field is still
+-- empty.  "Complete" means every required field in the
+-- section is filled and valid.
+
+data SectionState = SectionComplete | SectionInvalid | SectionPending
+
+derive instance eqSectionState :: Eq SectionState
+
+data Section
+  = SecIdentity
+  | SecAmount
+  | SecRationale
+  | SecReferences
+  | SecSigners
+
+derive instance eqSection :: Eq Section
+
+allSections :: Array Section
+allSections =
+  [ SecIdentity
+  , SecAmount
+  , SecRationale
+  , SecReferences
+  , SecSigners
+  ]
+
+sectionLabel :: Section -> String
+sectionLabel = case _ of
+  SecIdentity -> "Identity"
+  SecAmount -> "Amount"
+  SecRationale -> "Rationale"
+  SecReferences -> "References"
+  SecSigners -> "Signers"
+
+-- | A field's tri-state: 'Pending' when the input is empty
+-- | (still needs operator attention), 'Invalid' when the
+-- | value is non-empty but the validator rejects it,
+-- | 'Complete' when filled + valid.  Section state is a
+-- | priority fold over the field states.
+data FieldState = FComplete | FInvalid | FPending
+
+derive instance eqFieldState :: Eq FieldState
+
+fieldState :: String -> Maybe String -> FieldState
+fieldState value err
+  | String.trim value == "" = FPending
+  | otherwise = case err of
+      Just _ -> FInvalid
+      Nothing -> FComplete
+
+-- | Reduce a list of field states into a section state.
+-- | 'Invalid' wins over 'Pending' wins over 'Complete' —
+-- | an operator should see the most-actionable issue
+-- | first.  Empty list is 'Complete' (no fields to fill).
+combineFields :: Array FieldState -> SectionState
+combineFields xs
+  | Array.any (_ == FInvalid) xs = SectionInvalid
+  | Array.any (_ == FPending) xs = SectionPending
+  | otherwise = SectionComplete
+
+sectionState :: Section -> State -> SectionState
+sectionState sec st = case sec of
+  SecIdentity ->
+    -- Wallet is always required.  Beneficiary is required
+    -- only on disburse.  Scope is a picker with a default;
+    -- always complete.
+    combineFields
+      ( [ fieldState st.walletAddr
+            (validateWalletAddr st.walletAddr)
+        ]
+          <> case st.mode of
+            ModeDisburse ->
+              [ fieldState st.beneficiaryAddr
+                  (validateBeneficiaryAddr st.beneficiaryAddr)
+              ]
+            _ -> []
+      )
+
+  SecAmount -> case st.mode of
+    ModeSwap ->
+      combineFields
+        ( ( case st.amountMode of
+              ModeUsdm -> [ fieldState st.usdm Nothing ]
+              ModeAllAda -> []
+          )
+            <> [ fieldState st.split Nothing ]
+            <>
+              ( case st.rateMode of
+                  RateOperator ->
+                    [ fieldState st.minRate Nothing ]
+                  RateOverride ->
+                    [ fieldState st.adaUsdm Nothing
+                    , fieldState st.slippageBps Nothing
+                    ]
+              )
+        )
+    ModeDisburse ->
+      combineFields
+        [ fieldState st.disburseAmount
+            (validateDisburseAmount st.disburseAmount)
+        ]
+    ModeReorganize -> SectionComplete
+
+  SecRationale ->
+    -- Description / justification / destination-label
+    -- aren't strictly required by the wire shape (the
+    -- reorganize wizard treats them as Maybe Text), but
+    -- the spec calls them out as part of the rationale
+    -- tree.  Treat empty as Pending on swap/disburse;
+    -- skip the check on reorganize where they're optional.
+    case st.mode of
+      ModeReorganize -> SectionComplete
+      _ ->
+        combineFields
+          [ fieldState st.description Nothing
+          , fieldState st.justification Nothing
+          , fieldState st.destinationLabel Nothing
+          ]
+
+  SecReferences -> case st.mode of
+    ModeDisburse ->
+      -- Reference rows are optional, but a row that's been
+      -- started and left half-filled is invalid (the
+      -- operator clearly intended to add an entry).
+      combineFields
+        ( map (\r -> fieldState r.uri Nothing) st.references
+        )
+    _ -> SectionComplete
+
+  SecSigners -> case st.mode of
+    ModeReorganize -> SectionComplete
+    _ -> case st.extraSigners of
+      [] -> SectionPending
+      _ -> SectionComplete
+
+-- | Resolve the input id the section's chip should
+-- | scroll-and-focus on click.  Picks the first invalid
+-- | field if any, otherwise the first input in the
+-- | section (so the operator lands at a sensible place
+-- | even when the section is already complete).
+sectionFocusId :: Section -> State -> String
+sectionFocusId sec st = case sec of
+  SecIdentity ->
+    if isJust (validateWalletAddr st.walletAddr)
+      then "operate-wallet"
+    else case st.mode of
+      ModeDisburse
+        | isJust (validateBeneficiaryAddr st.beneficiaryAddr) ->
+            "operate-beneficiary"
+      _ -> "operate-wallet"
+  SecAmount -> case st.mode of
+    ModeSwap -> case st.amountMode of
+      ModeUsdm -> "operate-usdm-target"
+      ModeAllAda -> "operate-split_counts"
+    ModeDisburse -> "operate-amount"
+    ModeReorganize -> "operate-validity_hours"
+  SecRationale -> "operate-descriptions"
+  SecReferences -> case st.mode of
+    ModeDisburse -> case Array.head st.references of
+      Just _ -> "operate-ref-uri-0"
+      Nothing -> "operate-wallet"
+    _ -> "operate-wallet"
+  SecSigners -> "operate-signers-picker"
 
 formSection
   :: forall m
@@ -1554,7 +1737,15 @@ signersPicker
   -> Array Scope
   -> H.ComponentHTML Action () m
 signersPicker current selected =
-  HH.div [ HP.classes [ cn "signers-picker" ] ]
+  HH.div
+    [ HP.classes [ cn "signers-picker" ]
+    , HP.id "operate-signers-picker"
+    -- #289 slice D — the section progress chip jumps here.
+    -- The picker is a flex row of `<button>` chips (not an
+    -- `<input>`), so we make the container itself
+    -- programmatically focusable via `tabindex="-1"`.
+    , HP.attr (HH.AttrName "tabindex") "-1"
+    ]
     ( map signerChip others
         <> [ HH.span [ HP.classes [ cn "signers-picker__hint" ] ]
               [ HH.text "Pick at least one other scope to co-sign \
@@ -1597,11 +1788,13 @@ buildActions errs =
     HH.div [ HP.classes [ cn "build-actions" ] ]
       [ HH.button
           [ HP.classes [ cn "btn", cn "btn--ghost" ]
+          , HP.id "operate-reset-btn"
           , HE.onClick (\_ -> ClickReset)
           ]
           [ HH.text "Reset" ]
       , HH.button
           ( [ HP.classes [ cn "btn", cn "btn--filled" ]
+            , HP.id "operate-build-btn"
             , HP.title title
             , HE.onClick (\_ -> ClickBuild)
             ]
@@ -2196,6 +2389,93 @@ copyBlockButton payload label =
 
 -- ---------------------------------------------------------------------------
 -- #288 — drafts / history bar + snapshot serialization
+
+-- | #289 slice D — sectioned progress indicator.  Five
+-- | section chips (Identity / Amount / Rationale /
+-- | References / Signers) plus a "Jump to Build" chip at
+-- | the right edge (slice B picked Pattern A, so the
+-- | action bar is inline at the form-flow end on mobile
+-- | and the jump shortcut is the only ergonomic way to
+-- | reach Build without scrolling on a 390 px viewport).
+-- | Sits ABOVE the drafts bar so it's the first thing the
+-- | operator sees on the page.
+progressIndicator
+  :: forall m. State -> H.ComponentHTML Action () m
+progressIndicator st =
+  HH.nav
+    [ HP.classes [ cn "operate-progress" ]
+    , HP.attr (HH.AttrName "aria-label")
+        "Form completion progress"
+    ]
+    ( map (progressChip st) allSections
+        <> [ jumpToBuildChip st ]
+    )
+
+progressChip
+  :: forall m
+   . State -> Section -> H.ComponentHTML Action () m
+progressChip st sec =
+  let
+    state = sectionState sec st
+    focusId = sectionFocusId sec st
+    glyph = case state of
+      SectionComplete -> "✓"
+      SectionInvalid -> "⚠"
+      SectionPending -> "○"
+    descr = case state of
+      SectionComplete -> "complete"
+      SectionInvalid -> "has errors"
+      SectionPending -> "incomplete"
+    stateAttr = case state of
+      SectionComplete -> "complete"
+      SectionInvalid -> "invalid"
+      SectionPending -> "pending"
+  in
+    HH.button
+      [ HP.classes
+          [ cn "btn"
+          , cn "operate-progress__chip"
+          ]
+      , HP.attr (HH.AttrName "data-state") stateAttr
+      , HP.attr (HH.AttrName "aria-label")
+          ( sectionLabel sec
+              <> " section, "
+              <> descr
+          )
+      , HP.type_ HP.ButtonButton
+      , HE.onClick (\_ -> JumpToSection focusId)
+      ]
+      [ HH.span [ HP.classes [ cn "operate-progress__glyph" ] ]
+          [ HH.text glyph ]
+      , HH.text (sectionLabel sec)
+      ]
+
+-- | Right-edge "Jump to Build" affordance.  Slice B chose
+-- | Pattern A (drop sticky on mobile, inline action bar at
+-- | the form-flow end), so this chip is the operator's
+-- | shortcut to reach the Build button without a 1700-px
+-- | scroll on a phone.  The chip's enabled / disabled
+-- | visual mirrors the Build button's `formErrors` gate.
+jumpToBuildChip
+  :: forall m. State -> H.ComponentHTML Action () m
+jumpToBuildChip st =
+  let
+    blocked = not (Array.null (formErrors st))
+    stateAttr = if blocked then "pending" else "complete"
+  in
+    HH.button
+      [ HP.classes
+          [ cn "btn"
+          , cn "operate-progress__chip"
+          , cn "operate-progress__chip--build"
+          ]
+      , HP.attr (HH.AttrName "data-state") stateAttr
+      , HP.attr (HH.AttrName "aria-label")
+          "Jump to Build button"
+      , HP.type_ HP.ButtonButton
+      , HE.onClick (\_ -> FocusBuildButton)
+      ]
+      [ HH.text "Build ▼" ]
 
 -- | Top-of-/operate bar carrying the `Drafts ▾` picker, the
 -- | `Save as draft…` button (and its inline editor), and the
@@ -2892,6 +3172,9 @@ handleAction = case _ of
               }
       _ -> pure unit
   CancelSaveDraft -> H.modify_ \s -> s { saveDialog = Nothing }
+  JumpToSection inputId -> H.liftEffect (_focusById inputId)
+  FocusBuildButton ->
+    H.liftEffect (_focusById "operate-build-btn")
 
 -- | POST the active request body to the given endpoint and
 -- | decode the response as opaque JSON.  Same boilerplate
@@ -2942,3 +3225,13 @@ intOr :: Int -> String -> Int
 intOr d s = case Int.fromString s of
   Just n -> n
   Nothing -> d
+
+-- ---------------------------------------------------------------------------
+-- #289 slice D — FFI
+
+-- | Scroll the element with the given id into view and
+-- | move keyboard focus to it.  No-op when the id isn't
+-- | on the page (the implementation guards on
+-- | `document.getElementById(id) != null`).  See
+-- | `OperatePage.js`.
+foreign import _focusById :: String -> Effect Unit

@@ -42,19 +42,19 @@ Four bisect-safe slices.  Each lands as ONE commit with body trailer `Tasks: T26
 
 ## Slice D — Import / Export
 
-- [ ] T267-S4 [US4] Implement `frontend/src/BooksPage/Import.purs`:
+- [X] T267-S4 [US4] Implement `frontend/src/BooksPage/Import.purs`:
   - `parseBundle :: Json -> Either ImportError BundlePayload` (accepts `{kind:"amaru.book.bundle.v1", books:…}`).
   - `parseBareBook :: BookKey -> Json -> Either ImportError BookPayload` (per-book wire shape).
   - `merge :: BookKey -> Books -> BookPayload -> Books` enforcing dedup + 25-cap per FR-016.
   - `diff :: Books -> Books -> Array BookDiff` for the before/after summary.
 
-- [ ] T267-S4 [US4] Extend `BooksPage.purs` with top-of-page `Export all` + `Copy all` + `Import…`.  `Import…` opens a Halogen dialog with file picker + paste textarea + a destination-book dropdown (active only when a bare-array is detected).  Confirm step shows the per-book before/after summary; Cancel leaves state untouched.
+- [X] T267-S4 [US4] Extend `BooksPage.purs` with top-of-page `Export all` + `Copy all` + `Import…`.  `Import…` opens a Halogen dialog with file picker + paste textarea + a destination-book dropdown (active only when a bare-array is detected).  Confirm step shows the per-book before/after summary; Cancel leaves state untouched.
 
-- [ ] T267-S4 [US4] Add per-card `Export` (download `<book-key>-<UTC>.json`) + `Copy` (clipboard) buttons.  UTC-timestamped filenames per FR-018.
+- [X] T267-S4 [US4] Add per-card `Export` (download `<book-key>-<UTC>.json`) + `Copy` (clipboard) buttons.  UTC-timestamped filenames per FR-018.
 
-- [ ] T267-S4 Smoke proof in `WIP.md`: round-trip — export all, clear all books, import the file, verify content matches; export `wallets` per-card, rename the file `lace-contacts.json`, verify shape is bare `[{name, address}]` (drop-in for a Lace import attempt — actual Lace import out-of-scope to verify here, but the shape is documented).  Clipboard transport: copy all, paste into Import dialog textarea, confirm — verify merge.
+- [X] T267-S4 Smoke proof in `WIP.md`: round-trip — export all, clear all books, import the file, verify content matches; export `wallets` per-card, rename the file `lace-contacts.json`, verify shape is bare `[{name, address}]` (drop-in for a Lace import attempt — actual Lace import out-of-scope to verify here, but the shape is documented).  Clipboard transport: copy all, paste into Import dialog textarea, confirm — verify merge.
 
-- [ ] T267-S4 Commit: `feat(267): /books import/export — bundle + per-book, file + clipboard transports` with `Tasks: T267-S4` trailer.
+- [X] T267-S4 Commit: `feat(267): /books import/export — bundle + per-book, file + clipboard transports` with `Tasks: T267-S4` trailer.
 
 ## Dependencies
 

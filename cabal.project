@@ -27,15 +27,14 @@ source-repository-package
   --sha256: 1sr2r7xnl0q0a6jf4mfvvf37wn4cxf5s15bjra9am8z9a1rh6c80
 
 -- Provider, Submitter, N2C, and devnet helpers remain in cardano-node-clients.
--- Pinned to cardano-node-clients#159 branch tip; bundles
--- both #157 (Cardano.Node.Client.UTxOIndexer.Follower.withChainSyncFollower)
--- and #158 (interest-set address filter on the same follower).
--- Will re-pin to the merged commit before this PR is marked ready.
+-- Pinned to the merged main commit that bundles both upstream PRs
+-- needed by #242: #157 (Cardano.Node.Client.UTxOIndexer.Follower.withChainSyncFollower)
+-- and #159 (interest-set address filter on the same follower).
 source-repository-package
   type: git
   location: https://github.com/lambdasistemi/cardano-node-clients
-  tag: 2884f0f8020a7daa7bbe619c21e2c501e9439a5e
-  --sha256: 0nwyz7a2r5ab50lp79c0qif3vl4vdgj0cd5ijs269bviprgf8l8i
+  tag: daaad8853c22230e795995b1a4fceba58c392798
+  --sha256: 19zdjd2v4j8hdf8v0dwrl4lmsxnz2sliydjv21b7v4z7010xqzwn
 
 -- Mirrored from cardano-node-clients/cabal.project (SRPs are not transitive
 -- in cabal; see https://cabal.readthedocs.io/en/3.10/cabal-project.html).

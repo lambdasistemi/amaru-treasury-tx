@@ -149,7 +149,7 @@ Layout legend:
 
 ## Phase 6 — Documentation + asciinema cast
 
-- [ ] **T011 [O]** Prose doc page at
+- [X] **T011 [O]** Prose doc page at
   `docs/api-container-indexer.md` covering the embed model,
   CLI flags, RocksDB volume sizing, readiness probe
   semantics, operator procedure for "wipe RocksDB and
@@ -157,7 +157,7 @@ Layout legend:
   mechanical, no behaviour change):
   `docs(242): operator doc for the in-process indexer embed`.
 
-- [ ] **T012 [O]** Asciinema cast at
+- [X] **T012 [O]** Asciinema cast at
   `docs/assets/asciinema/amaru-treasury-tx-api.cast` showing
   container boot (readiness gate) + steady-state `curl
   /v1/treasury-inspect` + forced lag-503 with the JSON body.

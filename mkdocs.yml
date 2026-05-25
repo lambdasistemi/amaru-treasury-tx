@@ -69,6 +69,7 @@ nav:
   - Withdraw: withdraw.md
   - Reorganize: reorganize.md
   - Inspect: inspect.md
+  - API container indexer: api-container-indexer.md
   - Local devnet smoke: local-devnet-smoke.md
   - ChainContext: chain-context.md
   - Freeze workflow: freeze-workflow.md

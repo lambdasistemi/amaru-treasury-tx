@@ -16,10 +16,10 @@ Eight bisect-safe slices.  Each commit body trailer: `Tasks: T289-S<n>`.  Persis
 
 ## Slice B — `/operate` sticky action bar
 
-- [ ] T289-S2 [US2] Pick the FR-003 pattern: either drop sticky and place inline at flow end + add a "jump to Build" affordance from the progress indicator (slice D); OR keep sticky + add `padding-bottom` to the form area equal to the bar's height + a hide-on-scroll-up affordance.
-- [ ] T289-S2 [US2] Implement in `OperatePage.purs`.  Test at 390 px: after a synthesised validation error renders below the wallet field, both the field and the error are visible (not covered by the action bar).
-- [ ] T289-S2 Smoke proof in `WIP.md`: action bar non-occluding at 390 px; Build button reachable after validation error.
-- [ ] T289-S2 Commit: `feat(289): /operate action bar — non-occluding on mobile` with `Tasks: T289-S2` trailer.
+- [X] T289-S2 [US2] Pick the FR-003 pattern: either drop sticky and place inline at flow end + add a "jump to Build" affordance from the progress indicator (slice D); OR keep sticky + add `padding-bottom` to the form area equal to the bar's height + a hide-on-scroll-up affordance.
+- [X] T289-S2 [US2] Implement in `OperatePage.purs`.  Test at 390 px: after a synthesised validation error renders below the wallet field, both the field and the error are visible (not covered by the action bar).
+- [X] T289-S2 Smoke proof in `WIP.md`: action bar non-occluding at 390 px; Build button reachable after validation error.
+- [X] T289-S2 Commit: `feat(289): /operate action bar — non-occluding on mobile` with `Tasks: T289-S2` trailer.
 
 ## Slice C — `/operate` a11y
 

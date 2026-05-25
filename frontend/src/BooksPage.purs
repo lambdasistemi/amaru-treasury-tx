@@ -21,7 +21,9 @@ module BooksPage (component) where
 
 import Prelude
 
-import Data.Argonaut.Core (jsonEmptyObject, stringify)
+import Data.Argonaut.Core (Json, jsonEmptyObject, stringify)
+import Data.Argonaut.Core as Argonaut
+import Foreign.Object as FO
 import Data.Argonaut.Parser (jsonParser)
 import Data.Array as Array
 import Data.DateTime (date, time, day, hour, minute, month, second, year)
@@ -41,7 +43,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 
-import BooksPage.Import (DiffRow)
+import BooksPage.Import (DiffRow, ImportDestination(..))
 import BooksPage.Import as Import
 import Routing (Route(..))
 import Shell as Shell
@@ -58,9 +60,12 @@ import Shell.Book
   , NamedBookKey(..)
   , NamedEntry(..)
   , addNamed
+  , autoSaveName
   , clear
+  , loadAutoSave
   , loadFreeText
   , loadNamed
+  , loadNamedVisible
   , namedTypedValue
   , removeFreeText
   , removeNamed
@@ -88,6 +93,14 @@ type Books =
   , validityHours :: Array String
   , slippageBps :: Array String
   , splitCounts :: Array String
+  -- #288 — operator-curated drafts + auto-captured history
+  -- of /operate form snapshots.  Loaded via
+  -- 'loadNamedVisible' so the reserved '__autosave__' slot
+  -- never reaches /books — only entries the operator
+  -- explicitly named (drafts) OR the on-build-success
+  -- write produced (history) are rendered.
+  , operateDrafts :: Array NamedEntry
+  , operateHistory :: Array NamedEntry
   }
 
 emptyBooks :: Books
@@ -100,6 +113,8 @@ emptyBooks =
   , validityHours: []
   , slippageBps: []
   , splitCounts: []
+  , operateDrafts: []
+  , operateHistory: []
   }
 
 loadAllBooks :: Effect Books
@@ -112,6 +127,8 @@ loadAllBooks = do
   vh <- loadFreeText ValidityHoursBook
   sb <- loadFreeText SlippageBpsBook
   sc <- loadFreeText SplitCountsBook
+  od <- loadNamedVisible OperateDraftsBook
+  oh <- loadNamedVisible OperateHistoryBook
   pure
     { wallets: ws
     , references: rs
@@ -121,6 +138,8 @@ loadAllBooks = do
     , validityHours: vh
     , slippageBps: sb
     , splitCounts: sc
+    , operateDrafts: od
+    , operateHistory: oh
     }
 
 allBooksEmpty :: Books -> Boolean
@@ -133,6 +152,8 @@ allBooksEmpty b =
     && Array.null b.validityHours
     && Array.null b.slippageBps
     && Array.null b.splitCounts
+    && Array.null b.operateDrafts
+    && Array.null b.operateHistory
 
 freeTextEntries :: FreeTextBookKey -> Books -> Array String
 freeTextEntries k b = case k of
@@ -147,12 +168,8 @@ namedEntries :: NamedBookKey -> Books -> Array NamedEntry
 namedEntries k b = case k of
   WalletsBook -> b.wallets
   ReferencesBook -> b.references
-  -- #288 slice A: the new books aren't wired into the
-  -- 'Books' record yet (slice C extends the type + reader).
-  -- Iterating BooksPage with these keys returns the empty
-  -- array until slice C lands.
-  OperateDraftsBook -> []
-  OperateHistoryBook -> []
+  OperateDraftsBook -> b.operateDrafts
+  OperateHistoryBook -> b.operateHistory
 
 -- ---------------------------------------------------------------------------
 -- Component state
@@ -184,7 +201,7 @@ type ImportPreview =
 type ImportDialogState =
   { open :: Boolean
   , text :: String
-  , destination :: Maybe FreeTextBookKey
+  , destination :: Maybe ImportDestination
   , error :: Maybe String
   , preview :: Maybe ImportPreview
   }
@@ -395,14 +412,21 @@ emptyStateNotice st
 -- WRAPPING changes from "flat list" to "group-then-cards".
 
 data BooksGroup
-  = Identities
+  = Drafts
+  | Identities
   | References
   | RationaleText
   | BuildParameters
 
+-- #288 — 'Drafts' goes at the TOP: it carries the
+-- highest-value operator state (recurring transaction
+-- templates + the full Build history).  Identities /
+-- references / rationale / build-parameter books stay in
+-- their previous slice-F order below.
 allGroups :: Array BooksGroup
 allGroups =
-  [ Identities
+  [ Drafts
+  , Identities
   , References
   , RationaleText
   , BuildParameters
@@ -410,6 +434,7 @@ allGroups =
 
 groupTitle :: BooksGroup -> String
 groupTitle = case _ of
+  Drafts -> "Drafts"
   Identities -> "Identities"
   References -> "References"
   RationaleText -> "Rationale text"
@@ -417,6 +442,10 @@ groupTitle = case _ of
 
 groupContents :: BooksGroup -> Array BookKey
 groupContents = case _ of
+  Drafts ->
+    [ N OperateDraftsBook
+    , N OperateHistoryBook
+    ]
   Identities ->
     [ N WalletsBook ]
   References ->
@@ -466,6 +495,8 @@ renderCard
   -> BookKey
   -> H.ComponentHTML Action () m
 renderCard st = case _ of
+  N OperateDraftsBook -> snapshotCard st OperateDraftsBook
+  N OperateHistoryBook -> snapshotCard st OperateHistoryBook
   N nk -> namedCard st nk
   F fk -> freeTextCard st fk
 
@@ -488,6 +519,189 @@ namedCard st key =
           map (namedEntryRow st key) entries
       )
       [ namedFooter st key, perCardExport (N key) ]
+
+-- ---------------------------------------------------------------------------
+-- Snapshot cards (#288 — Drafts + History)
+--
+-- Snapshot books share an entry shape but render slightly
+-- differently from each other:
+--
+--   * Drafts: operator-named, inline-rename-on-blur input.
+--   * History: timestamp-named, read-only span (timestamps
+--     are content-addressable; renaming would be confusing).
+--
+-- Both share the snapshot-summary middle cell and the
+-- copy + guarded-trash right-side cluster.  Neither carries
+-- an `Add new` button — drafts come from /operate's
+-- `Save as draft…` editor, history from on-build append.
+
+snapshotCard
+  :: forall m
+   . State
+  -> NamedBookKey
+  -> H.ComponentHTML Action () m
+snapshotCard st key =
+  let
+    entries = namedEntries key st.books
+  in
+    bookCard (namedHeader key)
+      ( if Array.null entries then
+          [ emptyCardCaption (namedEmpty key) ]
+        else
+          map (snapshotEntryRow st key) entries
+      )
+      [ perCardExport (N key) ]
+
+snapshotEntryRow
+  :: forall m
+   . State
+  -> NamedBookKey
+  -> NamedEntry
+  -> H.ComponentHTML Action () m
+snapshotEntryRow st key entry =
+  let
+    tv = namedTypedValue entry
+    eid = EditingId key tv
+    target = RemoveNamedT key tv
+    snap = entrySnapshot entry
+    snapJson = stringify snap
+    nameCell = case key of
+      OperateDraftsBook -> draftNameCell st eid entry
+      _ -> readonlyNameCell entry
+  in
+    HH.div
+      [ HP.style (rowStyle (st.confirmingRemove == Just target))
+      ]
+      [ nameCell
+      , HH.span
+          [ HP.title snapJson
+          , HP.style
+              "flex:1 1 auto;min-width:0;\
+              \overflow:hidden;text-overflow:ellipsis;\
+              \white-space:nowrap;\
+              \padding:.4rem .25rem;\
+              \font-size:13px;opacity:.85;\
+              \font-family:'Roboto Mono',ui-monospace,monospace"
+          ]
+          [ HH.text (snapshotSummary snap) ]
+      , copyButton
+          (st.recentlyCopied == Just snapJson)
+          snapJson
+          (copyLabel key)
+      , deleteCluster st target (removeLabel key)
+      ]
+
+-- | Drafts cell: editable name input wired into the shared
+-- | rename flow (`StartRename` / `UpdateDraftName` /
+-- | `CommitRename`).  Reuses the same blur-commits and
+-- | Enter-commits behaviour as the wallet / reference
+-- | name inputs.
+draftNameCell
+  :: forall m
+   . State
+  -> EditingId
+  -> NamedEntry
+  -> H.ComponentHTML Action () m
+draftNameCell st eid entry =
+  let
+    nameForDisplay = case st.editing of
+      Just other | other == eid -> st.draftName
+      _ -> entryName entry
+  in
+    HH.input
+      [ HP.value nameForDisplay
+      , HP.type_ HP.InputText
+      , HP.placeholder "name"
+      , HE.onFocus (\_ -> StartRename eid (entryName entry))
+      , HE.onValueInput UpdateDraftName
+      , HE.onBlur (\_ -> CommitRename)
+      , HE.onKeyDown RenameKeyDown
+      , HP.style
+          "flex:0 1 14rem;min-width:8rem;\
+          \background:transparent;\
+          \border:1px solid transparent;\
+          \border-radius:4px;\
+          \padding:.4rem .55rem;\
+          \color:inherit;font:inherit;outline:none"
+      ]
+
+-- | History cell: read-only timestamp span.  No <input>
+-- | (DOM-visible attribute the smoke checks for).
+readonlyNameCell
+  :: forall m. NamedEntry -> H.ComponentHTML Action () m
+readonlyNameCell entry =
+  HH.span
+    [ HP.style
+        "flex:0 1 14rem;min-width:8rem;\
+        \padding:.4rem .55rem;\
+        \font-family:'Roboto Mono',ui-monospace,monospace;\
+        \font-size:13px;opacity:.9"
+    ]
+    [ HH.text (entryName entry) ]
+
+-- | Project the snapshot blob out of a 'NamedEntry'.  Only
+-- | snapshot entries carry one; the legacy variants return
+-- | an empty object so the summary cell stays defensive.
+entrySnapshot :: NamedEntry -> Json
+entrySnapshot = case _ of
+  OperateSnapshotE s -> s.snapshot
+  _ -> jsonEmptyObject
+
+-- | One-line preview of an /operate snapshot.  Format:
+-- |
+-- |   `<mode> · <scope> · <beneficiary trunc> · <amount> USDM`
+-- |
+-- | Missing fields render as `—` (em dash) so each segment
+-- | stays visually present.  Reads keys from slice-B's
+-- | actual on-disk schema (`beneficiaryAddr`, plus
+-- | `disburseAmount` for disburse mode and `usdm` for swap
+-- | mode).
+snapshotSummary :: Json -> String
+snapshotSummary j = case Argonaut.toObject j of
+  Nothing -> "—"
+  Just o ->
+    let
+      getStr k = FO.lookup k o >>= Argonaut.toString
+      mode = orDash (getStr "mode")
+      scope = orDash (getStr "scope")
+      bnf = case getStr "beneficiaryAddr" of
+        Just b | b /= "" -> truncateMid 12 6 b
+        _ -> "—"
+      amt = case mode of
+        "disburse" -> orDash (nonEmpty (getStr "disburseAmount"))
+        "swap" -> orDash (nonEmpty (getStr "usdm"))
+        _ -> "—"
+    in
+      mode
+        <> " · "
+        <> scope
+        <> " · "
+        <> bnf
+        <> " · "
+        <> amt
+        <> " USDM"
+
+orDash :: Maybe String -> String
+orDash = case _ of
+  Just s -> s
+  Nothing -> "—"
+
+nonEmpty :: Maybe String -> Maybe String
+nonEmpty = case _ of
+  Just "" -> Nothing
+  other -> other
+
+-- | Bech32-style middle truncation: keep the first `pre`
+-- | characters and the last `post` characters, joining
+-- | them with an ellipsis when the string is longer than
+-- | the sum.  Shorter strings pass through.
+truncateMid :: Int -> Int -> String -> String
+truncateMid pre post s
+  | String.length s <= pre + post = s
+  | otherwise =
+      String.take pre s
+        <> "…"
+        <> String.drop (String.length s - post) s
 
 namedEntryRow
   :: forall m
@@ -716,12 +930,12 @@ namedEmpty = case _ of
   ReferencesBook ->
     "No references yet.  Click + Add new or submit a \
     \build on /operate."
-  -- #288 slice A: empty-state captions for the new cards
-  -- are slice C's responsibility (FR-004 / FR-011).  These
-  -- placeholders are never reached in slice A because the
-  -- new books aren't iterated by /books yet.
-  OperateDraftsBook -> ""
-  OperateHistoryBook -> ""
+  OperateDraftsBook ->
+    "No drafts yet.  Use 'Save as draft…' on /operate to \
+    \capture the current form."
+  OperateHistoryBook ->
+    "No history yet.  Every successful Build on /operate \
+    \will appear here, indexed by date."
 
 namedValuePlaceholder :: NamedBookKey -> String
 namedValuePlaceholder = case _ of
@@ -1028,8 +1242,9 @@ importDialogView st
                     [ HH.span
                         [ HP.classes [ cn "field__label" ] ]
                         [ HH.text
-                            "Destination (for bare \
-                            \string arrays)"
+                            "Destination (for bare arrays — \
+                            \free-text strings OR \
+                            \{name, snapshot} entries)"
                         ]
                     , HH.select
                         [ HE.onValueChange
@@ -1048,7 +1263,7 @@ importDialogView st
                                           (Import.freeTextSuffix k)
                                       , HP.selected
                                           ( st.importDialog.destination
-                                              == Just k
+                                              == Just (DestFreeText k)
                                           )
                                       ]
                                       [ HH.text
@@ -1056,6 +1271,22 @@ importDialogView st
                                       ]
                                 )
                                 Import.allFreeTextKeys
+                            <>
+                              map
+                                ( \k ->
+                                    HH.option
+                                      [ HP.value
+                                          (Import.namedSuffix k)
+                                      , HP.selected
+                                          ( st.importDialog.destination
+                                              == Just (DestSnapshot k)
+                                          )
+                                      ]
+                                      [ HH.text
+                                          (namedHeader k)
+                                      ]
+                                )
+                                Import.allSnapshotKeys
                         )
                     ]
                 ]
@@ -1553,7 +1784,7 @@ handleAction = case _ of
   UpdateImportDestination suffix ->
     H.modify_ \s -> s
       { importDialog = s.importDialog
-          { destination = Import.freeTextSuffixToKey suffix
+          { destination = Import.destinationFromSuffix suffix
           , error = Nothing
           , preview = Nothing
           }
@@ -1646,6 +1877,23 @@ handleAction = case _ of
           replaceFreeText
             SplitCountsBook
             after.splitCounts
+        -- #288 — snapshot books.  The merge dropped any
+        -- '__autosave__' from the imported payload (FR-002:
+        -- a bundle from another browser must not overwrite
+        -- the local in-progress draft).  But `replaceNamed`
+        -- wipes the on-disk array wholesale, so we read the
+        -- local autosave slot first and re-add it after the
+        -- replace.
+        localAutoSave <- H.liftEffect
+          (loadAutoSave OperateDraftsBook)
+        H.liftEffect do
+          replaceNamed OperateDraftsBook
+            after.operateDrafts
+          case localAutoSave of
+            Just e -> addNamed OperateDraftsBook e
+            Nothing -> pure unit
+          replaceNamed OperateHistoryBook
+            after.operateHistory
         books' <- H.liftEffect loadAllBooks
         H.modify_ \s -> s
           { books = books'

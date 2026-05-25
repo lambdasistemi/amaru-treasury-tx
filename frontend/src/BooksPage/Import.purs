@@ -19,6 +19,7 @@
 module BooksPage.Import
   ( Books
   , BundleData
+  , ImportDestination(..)
   , ImportError(..)
   , ImportPayload(..)
   , DiffRow
@@ -31,13 +32,18 @@ module BooksPage.Import
   , encodeFreeTextBookJson
   , allFreeTextKeys
   , allNamedKeys
+  , allSnapshotKeys
   , freeTextSuffix
   , namedSuffix
   , freeTextSuffixToKey
+  , snapshotSuffixToKey
+  , destinationSuffix
+  , destinationFromSuffix
   ) where
 
 import Prelude
 
+import Control.Alt ((<|>))
 import Data.Argonaut.Core (Json)
 import Data.Argonaut.Core as Argonaut
 import Data.Argonaut.Decode (decodeJson)
@@ -56,8 +62,11 @@ import Shell.Book
   , FreeTextBookKey(..)
   , NamedBookKey(..)
   , NamedEntry(..)
+  , OperateSnapshotEntry
   , ReferenceEntry
   , WalletEntry
+  , autoSaveName
+  , bookCap
   )
 
 -- ---------------------------------------------------------------------------
@@ -74,6 +83,13 @@ type Books =
   , validityHours :: Array String
   , slippageBps :: Array String
   , splitCounts :: Array String
+  -- #288 — operator-curated drafts + auto-captured history
+  -- of /operate form snapshots.  Both stored as
+  -- 'NamedEntry' so the per-card render path reuses the
+  -- existing taxonomy; the actual entries are always
+  -- 'OperateSnapshotE' constructors.
+  , operateDrafts :: Array NamedEntry
+  , operateHistory :: Array NamedEntry
   }
 
 -- ---------------------------------------------------------------------------
@@ -83,6 +99,7 @@ data ImportPayload
   = BundlePayload BundleData
   | BareNamedWallets (Array WalletEntry)
   | BareNamedReferences (Array ReferenceEntry)
+  | BareNamedSnapshots (Array OperateSnapshotEntry)
   | BareFreeText (Array String)
 
 type BundleData =
@@ -94,14 +111,31 @@ type BundleData =
   , validityHours :: Array String
   , slippageBps :: Array String
   , splitCounts :: Array String
+  -- #288 — snapshot books carried in the same bundle.
+  -- '__autosave__' entries are silently dropped at parse
+  -- time so a cross-browser bundle can't overwrite the
+  -- local auto-save slot (FR-002).
+  , operateDrafts :: Array OperateSnapshotEntry
+  , operateHistory :: Array OperateSnapshotEntry
   , warnings :: Array String
   }
+
+-- | Destination picked by the operator for a bare-array
+-- | import.  Free-text books cover the original six string
+-- | books; snapshot books cover the two #288 books
+-- | (`operate_drafts` / `operate_history`).
+data ImportDestination
+  = DestFreeText FreeTextBookKey
+  | DestSnapshot NamedBookKey
+
+derive instance eqImportDestination :: Eq ImportDestination
 
 data ImportError
   = ParseError String
   | WrongKind String
   | UnknownShape
   | DestinationRequired
+  | SnapshotDestinationRequired
   | EmptyImport
 
 describeError :: ImportError -> String
@@ -110,10 +144,14 @@ describeError = case _ of
   WrongKind msg -> "unrecognised bundle: " <> msg
   UnknownShape ->
     "unsupported shape: expected a bundle object or a bare \
-    \array of strings, wallets, or reference URIs"
+    \array of strings, wallets, reference URIs, or \
+    \snapshots"
   DestinationRequired ->
     "bare string array — pick a destination free-text book \
     \from the dropdown"
+  SnapshotDestinationRequired ->
+    "bare snapshot array — pick 'Drafts' or 'History' from \
+    \the destination dropdown"
   EmptyImport -> "import produced no entries"
 
 -- ---------------------------------------------------------------------------
@@ -135,27 +173,54 @@ parseBareArray
 parseBareArray arr
   | Array.null arr = Left EmptyImport
   | otherwise =
-      -- References go FIRST: a ReferenceEntry has all the
-      -- WalletEntry fields except 'address' is replaced by
-      -- 'uri', and references additionally has 'label' +
-      -- 'type'.  Checking references before wallets means
-      -- a `{name, address, uri, label, type}` blob would
-      -- route to references (correct).  Wallets vs free
-      -- text are mutually exclusive by shape so order
-      -- doesn't matter for them.
-      case asReferenceEntries arr of
-        Just xs -> Right (BareNamedReferences xs)
-        Nothing -> case asWalletEntries arr of
-          Just xs -> Right (BareNamedWallets xs)
-          Nothing -> case asStrings arr of
-            Just xs -> Right (BareFreeText xs)
-            Nothing -> Left UnknownShape
+      -- Snapshot entries go FIRST: '{name, snapshot}' has
+      -- the lowest field count (two), and the 'snapshot'
+      -- field decodes as a Json *object* rather than a
+      -- string — wallets / references / free-text all
+      -- require string fields, so a snapshot blob is
+      -- unambiguous against them.
+      --
+      -- References then go before wallets: a 'ReferenceEntry'
+      -- has all the 'WalletEntry' fields except 'address' is
+      -- replaced by 'uri', and references additionally has
+      -- 'label' + 'type'.  Checking references before
+      -- wallets means a `{name, address, uri, label, type}`
+      -- blob would route to references (correct).
+      case asSnapshotEntries arr of
+        Just xs -> Right (BareNamedSnapshots xs)
+        Nothing -> case asReferenceEntries arr of
+          Just xs -> Right (BareNamedReferences xs)
+          Nothing -> case asWalletEntries arr of
+            Just xs -> Right (BareNamedWallets xs)
+            Nothing -> case asStrings arr of
+              Just xs -> Right (BareFreeText xs)
+              Nothing -> Left UnknownShape
 
 asWalletEntries :: Array Json -> Maybe (Array WalletEntry)
 asWalletEntries arr = case decodeJson (Argonaut.fromArray arr) of
   Right (xs :: Array WalletEntry)
     | not (Array.null xs) -> Just xs
   _ -> Nothing
+
+-- | A bare array is a snapshot payload when EVERY entry has
+-- | a string 'name' AND a 'snapshot' field that decodes as
+-- | a JSON object — defensive against legacy entries whose
+-- | snapshot is a string blob.  All-or-nothing per the
+-- | FR-011 spirit (a single bad entry rejects the bare
+-- | dispatch and falls through to the next codec).
+asSnapshotEntries
+  :: Array Json -> Maybe (Array OperateSnapshotEntry)
+asSnapshotEntries arr = case traverse decodeSnapshotEntry arr of
+  Just xs | not (Array.null xs) -> Just xs
+  _ -> Nothing
+
+decodeSnapshotEntry :: Json -> Maybe OperateSnapshotEntry
+decodeSnapshotEntry j = do
+  obj <- Argonaut.toObject j
+  name <- FO.lookup "name" obj >>= Argonaut.toString
+  snapshot <- FO.lookup "snapshot" obj
+  _ <- Argonaut.toObject snapshot
+  pure { name, snapshot }
 
 -- | A bare array is a 'references' payload when EVERY entry
 -- | decodes via 'decodeReferenceEntry' (i.e. carries
@@ -230,6 +295,8 @@ decodeBundleBooks obj =
     , validityHours: stringsAt "validity_hours" obj
     , slippageBps: stringsAt "slippage_bps" obj
     , splitCounts: stringsAt "split_counts" obj
+    , operateDrafts: snapshotsAt "operate_drafts" obj
+    , operateHistory: snapshotsAt "operate_history" obj
     , warnings
     }
 
@@ -243,6 +310,8 @@ knownKeys =
   , "validity_hours"
   , "slippage_bps"
   , "split_counts"
+  , "operate_drafts"
+  , "operate_history"
   ]
 
 namedAt :: String -> FO.Object Json -> Array WalletEntry
@@ -268,6 +337,18 @@ stringsAt k obj = case FO.lookup k obj of
     Left _ -> []
   Nothing -> []
 
+-- | Per-bundle-key decoder for snapshot books.  Defensive
+-- | per-entry: a single malformed entry is skipped, the
+-- | rest accepted (FR-006 spirit — robust against partial
+-- | migrations between snapshot schemas).
+snapshotsAt
+  :: String -> FO.Object Json -> Array OperateSnapshotEntry
+snapshotsAt k obj = case FO.lookup k obj of
+  Just j -> case Argonaut.toArray j of
+    Just arr -> Array.mapMaybe decodeSnapshotEntry arr
+    Nothing -> []
+  Nothing -> []
+
 -- ---------------------------------------------------------------------------
 -- Merge
 
@@ -279,7 +360,7 @@ stringsAt k obj = case FO.lookup k obj of
 -- | imported `name` wins on conflict.
 merge
   :: ImportPayload
-  -> Maybe FreeTextBookKey
+  -> Maybe ImportDestination
   -> Books
   -> Either ImportError Books
 merge payload mDest books = case payload of
@@ -310,6 +391,16 @@ merge payload mDest books = case payload of
               mergeStrings bd.slippageBps books.slippageBps
           , splitCounts =
               mergeStrings bd.splitCounts books.splitCounts
+          , operateDrafts =
+              mergeSnapshots
+                OperateDraftsBook
+                bd.operateDrafts
+                books.operateDrafts
+          , operateHistory =
+              mergeSnapshots
+                OperateHistoryBook
+                bd.operateHistory
+                books.operateHistory
           }
       )
 
@@ -327,10 +418,33 @@ merge payload mDest books = case payload of
           }
       )
 
+  BareNamedSnapshots xs -> case mDest of
+    Just (DestSnapshot OperateDraftsBook) ->
+      Right
+        ( books
+            { operateDrafts =
+                mergeSnapshots
+                  OperateDraftsBook
+                  xs
+                  books.operateDrafts
+            }
+        )
+    Just (DestSnapshot OperateHistoryBook) ->
+      Right
+        ( books
+            { operateHistory =
+                mergeSnapshots
+                  OperateHistoryBook
+                  xs
+                  books.operateHistory
+            }
+        )
+    _ -> Left SnapshotDestinationRequired
+
   BareFreeText xs -> case mDest of
-    Nothing -> Left DestinationRequired
-    Just k ->
+    Just (DestFreeText k) ->
       Right (mergeFreeTextAt k xs books)
+    _ -> Left DestinationRequired
 
 mergeFreeTextAt
   :: FreeTextBookKey -> Array String -> Books -> Books
@@ -351,9 +465,10 @@ mergeFreeTextAt key xs b = case key of
   SplitCountsBook ->
     b { splitCounts = mergeStrings xs b.splitCounts }
 
-cap :: Int
-cap = 25
-
+-- | Default cap for every book that doesn't override
+-- | 'bookCap'.  Snapshot books (`operate_history`) carry
+-- | their own 100-entry window via 'bookCap'; everything
+-- | else stays at the historical 25.
 mergeStrings :: Array String -> Array String -> Array String
 mergeStrings imported local =
   let
@@ -366,7 +481,9 @@ mergeStrings imported local =
         (\s -> not (Array.elem s importedSet))
         local
   in
-    Array.take cap (deduped <> kept)
+    -- Free-text books all return 25 from `bookCap` (any
+    -- 'F' key currently); pick one to read it from.
+    Array.take (bookCap (F DescriptionsBook)) (deduped <> kept)
 
 mergeNamedWallets
   :: Array WalletEntry
@@ -389,7 +506,7 @@ mergeNamedWallets imported local =
         local
     asNamed = map WalletE deduped
   in
-    Array.take cap (asNamed <> keptLocal)
+    Array.take (bookCap (N WalletsBook)) (asNamed <> keptLocal)
 
 mergeNamedReferences
   :: Array ReferenceEntry
@@ -411,7 +528,41 @@ mergeNamedReferences imported local =
         local
     asNamed = map ReferenceE deduped
   in
-    Array.take cap (asNamed <> keptLocal)
+    Array.take (bookCap (N ReferencesBook))
+      (asNamed <> keptLocal)
+
+-- | #288 — merge imported snapshot entries into a snapshot
+-- | book.  Dedup-on-name (snapshot books have no typed
+-- | primitive); imported entry wins on collision; the
+-- | reserved `__autosave__` slot is silently dropped from
+-- | imports so a bundle from another browser can't
+-- | overwrite the local in-progress draft (FR-002).
+-- | Capped via 'bookCap' (drafts=25, history=100).
+mergeSnapshots
+  :: NamedBookKey
+  -> Array OperateSnapshotEntry
+  -> Array NamedEntry
+  -> Array NamedEntry
+mergeSnapshots key imported local =
+  let
+    cleaned =
+      Array.filter
+        ( \e ->
+            String.trim e.name /= ""
+              && e.name /= autoSaveName
+        )
+        imported
+    deduped = dedupBy (\a b -> a.name == b.name) cleaned
+    names = map _.name deduped
+    keptLocal =
+      Array.filter
+        ( \e ->
+            not (Array.elem (namedTypedValue e) names)
+        )
+        local
+    asNamed = map OperateSnapshotE deduped
+  in
+    Array.take (bookCap (N key)) (asNamed <> keptLocal)
 
 namedTypedValue :: NamedEntry -> String
 namedTypedValue = case _ of
@@ -453,7 +604,15 @@ type DiffRow =
 -- | operator can confirm nothing was overlooked.
 diff :: Books -> Books -> Array DiffRow
 diff before after =
-  [ { book: N WalletsBook
+  [ { book: N OperateDraftsBook
+    , beforeCount: visibleSnapshotCount before.operateDrafts
+    , afterCount: visibleSnapshotCount after.operateDrafts
+    }
+  , { book: N OperateHistoryBook
+    , beforeCount: visibleSnapshotCount before.operateHistory
+    , afterCount: visibleSnapshotCount after.operateHistory
+    }
+  , { book: N WalletsBook
     , beforeCount: Array.length before.wallets
     , afterCount: Array.length after.wallets
     }
@@ -486,6 +645,16 @@ diff before after =
     , afterCount: Array.length after.splitCounts
     }
   ]
+
+-- | Snapshot count excluding the reserved auto-save slot.
+-- | The diff row reports user-visible entries so a one-only
+-- | `__autosave__` book reads as `0`, matching the
+-- | `Drafts ▾` / `History ▾` picker visibility.
+visibleSnapshotCount :: Array NamedEntry -> Int
+visibleSnapshotCount =
+  Array.length
+    <<< Array.filter
+      (\e -> namedTypedValue e /= autoSaveName)
 
 -- ---------------------------------------------------------------------------
 -- Encode (export wire shapes)
@@ -530,11 +699,33 @@ encodeBundleJson b =
                         ( encodeFreeTextBookJson
                             b.splitCounts
                         )
+                    -- #288 — snapshot books are emitted
+                    -- with the auto-save slot filtered out
+                    -- (FR-002): the bundle exists to share
+                    -- curated state across browsers, and
+                    -- the local in-progress draft is
+                    -- per-browser working state, not
+                    -- shareable.
+                    , Tuple "operate_drafts"
+                        ( encodeNamedBookJson
+                            (dropAutoSave b.operateDrafts)
+                        )
+                    , Tuple "operate_history"
+                        ( encodeNamedBookJson
+                            (dropAutoSave b.operateHistory)
+                        )
                     ]
                 )
             )
         ]
     )
+
+-- | Strip the reserved auto-save slot from a snapshot
+-- | book.  Used at export time so bundles never carry the
+-- | per-browser in-progress draft.
+dropAutoSave :: Array NamedEntry -> Array NamedEntry
+dropAutoSave =
+  Array.filter (\e -> namedTypedValue e /= autoSaveName)
 
 -- | Per-card export: a bare array of named-book entries.
 -- | Wallets encode via the auto-derived `encodeJson` (field
@@ -583,7 +774,19 @@ allFreeTextKeys =
   ]
 
 allNamedKeys :: Array NamedBookKey
-allNamedKeys = [ WalletsBook, ReferencesBook ]
+allNamedKeys =
+  [ WalletsBook
+  , ReferencesBook
+  , OperateDraftsBook
+  , OperateHistoryBook
+  ]
+
+-- | Subset of 'allNamedKeys' covering the snapshot books
+-- | only.  Used by the import dialog to populate the
+-- | snapshot-destination dropdown for `BareNamedSnapshots`
+-- | payloads.
+allSnapshotKeys :: Array NamedBookKey
+allSnapshotKeys = [ OperateDraftsBook, OperateHistoryBook ]
 
 namedSuffix :: NamedBookKey -> String
 namedSuffix = case _ of
@@ -614,3 +817,30 @@ freeTextSuffixToKey = case _ of
   "slippage_bps" -> Just SlippageBpsBook
   "split_counts" -> Just SplitCountsBook
   _ -> Nothing
+
+-- | Resolve the snapshot-book wire suffix
+-- | (`operate_drafts` / `operate_history`) into the typed
+-- | 'NamedBookKey'.  Returns 'Nothing' for any non-snapshot
+-- | suffix.
+snapshotSuffixToKey :: String -> Maybe NamedBookKey
+snapshotSuffixToKey = case _ of
+  "operate_drafts" -> Just OperateDraftsBook
+  "operate_history" -> Just OperateHistoryBook
+  _ -> Nothing
+
+-- | Wire suffix for an 'ImportDestination'.  Mirrors the
+-- | snake-case keys used by the bundle on disk so the
+-- | dialog's destination dropdown serialises uniformly
+-- | across both kinds of destination.
+destinationSuffix :: ImportDestination -> String
+destinationSuffix = case _ of
+  DestFreeText k -> freeTextSuffix k
+  DestSnapshot k -> namedSuffix k
+
+-- | Inverse of 'destinationSuffix': resolve a wire suffix
+-- | back to its typed destination.  Returns 'Nothing' for
+-- | unknown / unsupported (identity-book) suffixes.
+destinationFromSuffix :: String -> Maybe ImportDestination
+destinationFromSuffix s =
+  (DestFreeText <$> freeTextSuffixToKey s)
+    <|> (DestSnapshot <$> snapshotSuffixToKey s)

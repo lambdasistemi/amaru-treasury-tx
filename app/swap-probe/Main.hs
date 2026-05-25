@@ -30,6 +30,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
+import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
 import Data.Set qualified as Set
 import Data.Word (Word8)
@@ -59,6 +60,7 @@ import Cardano.Ledger.Hashes
     , unsafeMakeSafeHash
     )
 import Cardano.Ledger.Keys (KeyRole (..))
+import Cardano.Ledger.Mary.Value (MultiAsset (..))
 import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Slotting.Slot (SlotNo (..))
 import Ouroboros.Network.Magic (NetworkMagic (..))
@@ -296,7 +298,7 @@ intent =
         , siTreasuryUtxos = [treasuryInput]
         , siTreasuryAddress = treasuryAddr
         , siTreasuryLeftoverLovelace = Coin 1_041_836_734_694
-        , siTreasuryLeftoverAsset = Nothing
+        , siTreasuryLeftoverAssets = MultiAsset Map.empty
         , siRedeemerAmountLovelace = Coin amountLovelace
         , siPermissionsRewardAccount = permissionsAcct
         , siScopesDeployedAt = scopesRefIn

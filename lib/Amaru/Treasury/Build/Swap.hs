@@ -24,11 +24,13 @@ import Cardano.Ledger.Api.Tx.Body
     , feeTxBodyL
     , totalCollateralTxBodyL
     )
+import Cardano.Ledger.Api.Tx.Out (TxOut, valueTxOutL)
 import Cardano.Ledger.BaseTypes (StrictMaybe (..))
 import Cardano.Ledger.Binary (serialize)
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (bodyTxL)
+import Cardano.Ledger.Mary.Value (MaryValue (..), MultiAsset)
 import Cardano.Ledger.Metadata (Metadatum)
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Tx.Build
@@ -148,8 +150,13 @@ runSwapAction ctx intent rationale walletInput walletAddr = do
     let evaluator tx = do
             m <- ccEvaluateTx ctx tx
             pure (fmap (either (Left . show) Right) m)
+        intentWithTreasuryAssets =
+            intent
+                { siTreasuryLeftoverAssets =
+                    treasuryNativeAssets treasuryInputUtxos
+                }
         program = do
-            swapProgram intent
+            swapProgram intentWithTreasuryAssets
             setMetadata label1694 rationale
         noCtxIO :: InterpretIO q
         noCtxIO =
@@ -241,7 +248,7 @@ runSwapAction ctx intent rationale walletInput walletAddr = do
                             (length (siSwapOrders intent))
                             body
                     , brPerChunkOverheadLovelace =
-                        siSwapOrderExtraLovelace intent
+                        siSwapOrderExtraLovelace intentWithTreasuryAssets
                     , brWalletChangeOutput =
                         indexedOutputAt
                             (length (siSwapOrders intent) + 1)
@@ -253,3 +260,12 @@ runSwapAction ctx intent rationale walletInput walletAddr = do
                             (body ^. collateralReturnTxBodyL)
                     , brResidualTreasuryInputs = []
                     }
+
+treasuryNativeAssets
+    :: [(TxIn, TxOut ConwayEra)] -> MultiAsset
+treasuryNativeAssets =
+    foldMap (nativeAssetsOf . snd)
+  where
+    nativeAssetsOf txout =
+        case txout ^. valueTxOutL of
+            MaryValue _ assets -> assets

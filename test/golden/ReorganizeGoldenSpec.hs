@@ -233,6 +233,7 @@ reorganizeIntentFromInputs ReorganizeInputs{..} =
         , rgiScopesDeployedAt = riScopesDeployedAt
         , rgiScopeOwnerSigner = riScopeOwnerSigner
         , rgiUpperBound = riUpperBound
+        , rgiSplitNativeAssets = riSplitNativeAssets
         }
 
 rationaleFor

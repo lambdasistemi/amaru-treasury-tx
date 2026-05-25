@@ -79,6 +79,7 @@ import Amaru.Treasury.ChainContext (ChainContext (..))
 import Amaru.Treasury.Tx.Reorganize
     ( ReorganizeIntent (..)
     , reorganizeProgram
+    , reorganizeTreasuryOutputValues
     )
 import Cardano.Ledger.Api.PParams
     ( ppMaxTxExUnitsL
@@ -225,7 +226,12 @@ runReorganizeAction ctx intent rationale walletAddr = do
                 (tx :: ConwayTx)
         residue =
             drop (length selectedSubset) sortedTreasuryTxIns
-        changeOutputIndex = 1
+        treasuryOutputCount =
+            length $
+                reorganizeTreasuryOutputValues
+                    intent
+                    (preservedTreasuryValue selectedSubset)
+        changeOutputIndex = treasuryOutputCount
     pure
         BuildResult
             { brCborBytes = cbor
@@ -399,7 +405,12 @@ buildOnce ctx intent rationale walletAddr walletInputUtxos refUtxos subset = do
             InterpretIO $
                 const
                     (error "treasury build: unexpected context request")
-        changeOutputIndex = 1
+        treasuryOutputCount =
+            length $
+                reorganizeTreasuryOutputValues
+                    intent
+                    preservedValue
+        changeOutputIndex = treasuryOutputCount
     result <-
         liftIO $
             build

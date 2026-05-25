@@ -296,6 +296,7 @@ type State =
   , disburseUnit :: DisburseUnit
   , disburseAmount :: String
   , references :: Array ReferenceRow
+  , splitNativeAssets :: Boolean
   , validityHours :: String
   , description :: String
   , justification :: String
@@ -343,6 +344,7 @@ initialState =
   , disburseUnit: UnitUsdm
   , disburseAmount: "1500"
   , references: []
+  , splitNativeAssets: false
   , validityHours: ""
   , description: ""
   , justification: ""
@@ -384,6 +386,7 @@ data Action
   | SetReferenceUri Int String
   | SetReferenceType Int String
   | SetReferenceLabel Int String
+  | SetSplitNativeAssets Boolean
   | SetValidityHours String
   | SetDescription String
   | SetJustification String
@@ -660,14 +663,16 @@ modeSpecificSections st = case st.mode of
         )
     ]
   ModeReorganize ->
-    -- Reorganize has no mode-specific sections: every
-    -- chain-derived input (treasury address, scope-owner
-    -- key, deployed-at references, permissions reward
-    -- account, treasury UTxO set) is resolved by the
-    -- wizard from --metadata and the live N2C backend.
-    -- The shared rationale + validity + signers blocks
-    -- carry the only operator-supplied inputs.
-    []
+    [ formSection "03" "Output shape"
+        "Keep a single merged treasury output, or split \
+        \native assets into their own continuing treasury \
+        \output."
+        [ checkboxField
+            "Split native assets"
+            st.splitNativeAssets
+            SetSplitNativeAssets
+        ]
+    ]
 
 -- | Render every reference row with the slice-G compound
 -- | named widget for the URI (picking fills label + type
@@ -896,6 +901,28 @@ formSection num title hint body =
     , HH.p [ HP.classes [ cn "form-section__hint" ] ]
         [ HH.text hint ]
     , HH.div [ HP.classes [ cn "form-section__body" ] ] body
+    ]
+
+checkboxField
+  :: forall m
+   . String
+  -> Boolean
+  -> (Boolean -> Action)
+  -> H.ComponentHTML Action () m
+checkboxField label_ checked_ action =
+  HH.label
+    [ HP.classes [ cn "field" ]
+    , HP.style
+        "display:flex;flex-direction:row;gap:.625rem;\
+        \align-items:center"
+    ]
+    [ HH.input
+        [ HP.type_ HP.InputCheckbox
+        , HP.checked checked_
+        , HE.onChecked action
+        ]
+    , HH.span [ HP.classes [ cn "field__label" ] ]
+        [ HH.text label_ ]
     ]
 
 field
@@ -1765,6 +1792,8 @@ reorganizeRequestJson st =
     [ Tuple "rbrScope" (Argonaut.fromString (scopeSlug st.scope))
     , Tuple "rbrWalletAddr" (Argonaut.fromString st.walletAddr)
     , Tuple "rbrMetadataPath" (Argonaut.fromString st.metadataPath)
+    , Tuple "rbrSplitNativeAssets"
+        (Argonaut.fromBoolean st.splitNativeAssets)
     , Tuple "rbrValidityHours" (validityJson st.validityHours)
     , Tuple "rbrDescription" (maybeStringJson st.description)
     , Tuple "rbrJustification" (maybeStringJson st.justification)
@@ -1944,6 +1973,10 @@ reorganizeCliCommand st =
         , optionalTextFlag
             "--destination-label"
             st.destinationLabel
+        , if st.splitNativeAssets then
+            "  --split-native-assets"
+          else
+            ""
         ]
     )
 
@@ -2309,6 +2342,8 @@ snapshotState s =
         ( Argonaut.fromArray
             (map snapshotReference s.references)
         )
+    , Tuple "splitNativeAssets"
+        (Argonaut.fromBoolean s.splitNativeAssets)
     , Tuple "validityHours"
         (Argonaut.fromString s.validityHours)
     , Tuple "description" (Argonaut.fromString s.description)
@@ -2353,6 +2388,8 @@ restoreSnapshot j st = case Argonaut.toObject j of
       refsP = do
         arr <- FO.lookup "references" o >>= Argonaut.toArray
         pure (Array.mapMaybe restoreReference arr)
+      splitNativeAssetsP =
+        FO.lookup "splitNativeAssets" o >>= Argonaut.toBoolean
       signersP = do
         arr <- FO.lookup "extraSigners" o >>= Argonaut.toArray
         pure
@@ -2377,6 +2414,8 @@ restoreSnapshot j st = case Argonaut.toObject j of
         , disburseUnit = fromMaybe st.disburseUnit unitP
         , disburseAmount = ovr "disburseAmount" st.disburseAmount
         , references = fromMaybe st.references refsP
+        , splitNativeAssets =
+            fromMaybe st.splitNativeAssets splitNativeAssetsP
         , validityHours = ovr "validityHours" st.validityHours
         , description = ovr "description" st.description
         , justification = ovr "justification" st.justification
@@ -2550,6 +2589,9 @@ handleAction = case _ of
     H.modify_ \st -> st
       { references = updateAt i (\r -> r { label = s }) st.references
       }
+    scheduleAutoSave
+  SetSplitNativeAssets enabled -> do
+    H.modify_ \st -> st { splitNativeAssets = enabled }
     scheduleAutoSave
   SetValidityHours s -> do
     H.modify_ \st -> st { validityHours = s }

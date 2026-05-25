@@ -385,6 +385,10 @@ reorganizeSchema =
         , ("scopesDeployedAt", ref "txIn")
         , ("scopeOwnerSigner", ref "hex28")
         , ("upperBound", nonNegativeIntegerSchema)
+        ,
+            ( "splitNativeAssets"
+            , object ["type" .= ("boolean" :: Text)]
+            )
         ]
 
 emptyPayloadSchema :: Value

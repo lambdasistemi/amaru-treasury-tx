@@ -11,6 +11,7 @@ only defines the typed intent shape and transaction-builder sequence.
 module Amaru.Treasury.Tx.Reorganize
     ( -- * Intent
       ReorganizeIntent (..)
+    , reorganizeTreasuryOutputValues
 
       -- * Program
     , reorganizeProgram
@@ -20,11 +21,12 @@ import Cardano.Ledger.Address (AccountAddress, Addr)
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Hashes (KeyHash)
 import Cardano.Ledger.Keys (KeyRole (Guard))
-import Cardano.Ledger.Mary.Value (MaryValue)
+import Cardano.Ledger.Mary.Value (MaryValue (..), MultiAsset (..))
 import Cardano.Ledger.TxIn (TxIn)
 import Control.Monad (forM_, void)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
+import Data.Map.Strict qualified as Map
 
 import Cardano.Tx.Build
     ( TxBuild
@@ -39,6 +41,10 @@ import Cardano.Tx.Build
     )
 
 import Amaru.Treasury.Backend (SlotNo)
+import Amaru.Treasury.Constants
+    ( minUtxoDepositLovelace
+    , nativeAssetMinUtxoDepositLovelace
+    )
 import Amaru.Treasury.Redeemer
     ( RawPlutusData (..)
     , emptyListRedeemer
@@ -69,6 +75,10 @@ data ReorganizeIntent = ReorganizeIntent
     -- ^ scope-owner key hash required as signer
     , rgiUpperBound :: !SlotNo
     -- ^ @invalid_hereafter@ slot
+    , rgiSplitNativeAssets :: !Bool
+    -- ^ when true, split mixed treasury value into one
+    --     pure-ADA treasury output plus one native-asset
+    --     treasury output with a minimum ADA floor
     }
     deriving stock (Eq, Show)
 
@@ -103,6 +113,26 @@ reorganizeProgram intent preservedValue = do
         (rgiPermissionsRewardAccount intent)
         (Coin 0)
         (RawPlutusData emptyListRedeemer)
-    _ <- payTo (rgiTreasuryAddress intent) preservedValue
+    forM_ (reorganizeTreasuryOutputValues intent preservedValue) $
+        \value ->
+            void (payTo (rgiTreasuryAddress intent) value)
     requireSignature (rgiScopeOwnerSigner intent)
     validTo (rgiUpperBound intent)
+
+reorganizeTreasuryOutputValues
+    :: ReorganizeIntent
+    -> MaryValue
+    -> [MaryValue]
+reorganizeTreasuryOutputValues intent preservedValue =
+    case preservedValue of
+        MaryValue (Coin lovelace) assets@(MultiAsset assetMap)
+            | rgiSplitNativeAssets intent
+            , not (Map.null assetMap)
+            , lovelace
+                >= nativeAssetMinUtxoDepositLovelace + minUtxoDepositLovelace ->
+                [ MaryValue
+                    (Coin (lovelace - nativeAssetMinUtxoDepositLovelace))
+                    (MultiAsset Map.empty)
+                , MaryValue (Coin nativeAssetMinUtxoDepositLovelace) assets
+                ]
+        _ -> [preservedValue]

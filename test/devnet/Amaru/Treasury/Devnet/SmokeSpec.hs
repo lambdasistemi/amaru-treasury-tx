@@ -218,6 +218,7 @@ import Amaru.Treasury.Cli.Common
     )
 import Amaru.Treasury.Devnet.DisburseSubmit qualified as DisburseSubmit
 import Amaru.Treasury.Devnet.GovernanceWithdrawalInit qualified as GovernanceWithdrawalInit
+import Amaru.Treasury.Devnet.MixedUtxoSmoke (mixedUtxoSmoke)
 import Amaru.Treasury.Devnet.RegistryInit
     ( DevnetRegistryAnchors (..)
     , DevnetRegistryPublication (..)
@@ -1203,6 +1204,9 @@ spec =
         it
             "swap-ready: publishes SundaeSwap V3 order validator readiness"
             (runForPhases ["swap-ready"] swapReadySmoke)
+        it
+            "mixed-utxo: validates mixed treasury swap and reorganize through phase-2"
+            (runForPhases ["mixed-utxo"] mixedUtxoSmoke)
         it
             "registry-init: publishes registry artifacts"
             (runForPhases ["registry-init"] registryInitSmoke)

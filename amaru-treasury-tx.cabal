@@ -707,7 +707,10 @@ test-suite devnet-tests
   hs-source-dirs:     test/devnet
   main-is:            Spec.hs
   default-language:   GHC2021
-  other-modules:      Amaru.Treasury.Devnet.SmokeSpec
+  other-modules:
+    Amaru.Treasury.Devnet.MixedUtxoSmoke
+    Amaru.Treasury.Devnet.SmokeSpec
+
   build-depends:
     , aeson
     , amaru-treasury-tx
@@ -736,6 +739,7 @@ test-suite devnet-tests
     , plutus-core
     , text
     , time
+    , transformers
     , unix
 
   build-tool-depends: hspec-discover:hspec-discover

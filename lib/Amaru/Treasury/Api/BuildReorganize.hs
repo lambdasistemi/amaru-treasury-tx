@@ -121,6 +121,7 @@ data ReorganizeBuildRequest = ReorganizeBuildRequest
     , rbrDestinationLabel :: Maybe Text
     , rbrEvent :: Maybe Text
     , rbrLabel :: Maybe Text
+    , rbrSplitNativeAssets :: Maybe Bool
     }
     deriving (Eq, Show, Generic)
     deriving anyclass (FromJSON, ToJSON)
@@ -210,6 +211,7 @@ mapToReorganizeWizardOpts ReorganizeBuildRequest{..} =
                     , cfForcedSet = ForcedInclusionSet []
                     }
             , rwoFundingSeedTxIn = Nothing
+            , rwoSplitNativeAssets = rbrSplitNativeAssets == Just True
             }
 
 -- ---------------------------------------------------------------------------
@@ -458,6 +460,9 @@ renderCli ReorganizeBuildRequest{..} =
                     rbrDestinationLabel
                 <> maybeArg "--event " rbrEvent
                 <> maybeArg "--label " rbrLabel
+                <> boolArg
+                    "--split-native-assets"
+                    rbrSplitNativeAssets
         )
   where
     validityArgs Nothing = []
@@ -470,3 +475,6 @@ renderCli ReorganizeBuildRequest{..} =
     maybeQuotedArg flagP (Just v) = [flagP <> quote v]
 
     quote t = "\"" <> t <> "\""
+
+    boolArg flagP (Just True) = [flagP]
+    boolArg _ _ = []

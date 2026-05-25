@@ -332,6 +332,102 @@ md-assist-chip {
   }
 }
 
+/* ---------- #289 slice F — dashboard copy rows ---------- */
+/* Per-scope rows that show a long string (treasury bech32,
+   script hash, future txids).  Truncated display sits next
+   to a sibling copy icon-button so the operator can grab
+   the full value with one click — no jumping to a separate
+   panel.  The button flips to a check glyph for ~1 s on
+   success, and an inline "Copy failed" caption appears
+   below the row for ~3 s if the browser denies the write
+   (private browsing / non-HTTPS / focus policy). */
+.copy-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant, #44474e);
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 13px;
+}
+.copy-row:last-child {
+  border-bottom: 0;
+}
+.copy-row__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--md-sys-color-on-surface-variant);
+  flex: 0 0 auto;
+  min-width: 8rem;
+}
+.copy-row__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--md-sys-color-on-surface);
+  text-decoration: none;
+}
+a.copy-row__value {
+  color: var(--md-sys-color-primary);
+  text-decoration: underline;
+}
+a.copy-row__value:hover {
+  filter: brightness(1.1);
+}
+.copy-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--md-sys-color-outline-variant, #44474e);
+  border-radius: var(--app-radius);
+  background: var(--md-sys-color-surface-container, #22252b);
+  color: var(--md-sys-color-on-surface);
+  font: 600 16px/1 "Roboto Mono", ui-monospace, monospace;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.copy-icon-btn:hover {
+  border-color: var(--md-sys-color-outline);
+}
+.copy-icon-btn[data-state="copied"] {
+  background: var(--md-sys-color-primary-container, #b8d4d6);
+  color: var(--md-sys-color-on-primary-container, #002022);
+  border-color: var(--md-sys-color-primary, #006a70);
+}
+.copy-icon-btn[data-state="failed"] {
+  background: var(--md-sys-color-error-container, #ffdad6);
+  color: var(--md-sys-color-on-error-container, #410002);
+  border-color: var(--md-sys-color-error, #ba1a1a);
+}
+.copy-row__failed {
+  flex: 0 0 100%;
+  font-size: 11px;
+  font-family: "Roboto Flex", system-ui, sans-serif;
+  letter-spacing: 0.02em;
+  color: var(--md-sys-color-error, #ba1a1a);
+}
+
+@media (max-width: 600px) {
+  .copy-row__label {
+    min-width: 0;
+    flex-basis: 100%;
+  }
+  .copy-row__value {
+    flex-basis: 100%;
+  }
+  .copy-icon-btn {
+    margin-left: auto;
+  }
+}
+
 /* ---------- Totals strip ---------- */
 .totals {
   display: grid;

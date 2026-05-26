@@ -19,13 +19,13 @@ Each slice = one bisect-safe commit. Driver appends each milestone to
 
 ## Slice B — Mobile topbar nav reorder + `.copy-row` grid + after-review record
 
-- [ ] T299-S2 — `frontend/dist/styles.css` — `.copy-row` switches from `display: flex; flex-wrap: wrap` to `display: grid; grid-template-columns: minmax(8rem, auto) minmax(0, 1fr) auto`.
-- [ ] T299-S2 — `frontend/dist/style-build.css` — add `@media (max-width: 600px)` block reordering `.topbar__nav` to `order: 3; flex: 1 1 100%; margin-left: 0` and `.topbar__theme-btn { margin-left: auto; }`.
-- [ ] T299-S2 — `nix build --quiet .#frontend` green at HEAD.
-- [ ] T299-S2 — Playwright after-capture (orchestrator-run): re-take `/`, `/operate`, `/books` × {1280, 390, 320} and overwrite the slice-A subset with the final state.
-- [ ] T299-S2 — `frontend/test/ui-review/299/findings/after.md` summarising before/after deltas + any new follow-up issues filed.
-- [ ] T299-S2 — Playwright responsive smoke from #289 (`frontend/test/playwright/responsive.spec.ts`) still passes against a local serve (orchestrator-run).
-- [ ] T299-S2 — Commit `feat(299): mobile topbar reorder + copy-row grid + ui-review record` with `Tasks: T299-S2` trailer.
+- [X] T299-S2 — `frontend/dist/styles.css` — `.copy-row` switches from `display: flex; flex-wrap: wrap` to `display: grid; grid-template-columns: minmax(8rem, auto) minmax(0, 1fr) auto`.
+- [X] T299-S2 — `frontend/dist/style-build.css` — add `@media (max-width: 600px)` block reordering `.topbar__nav` to `order: 3; flex: 1 1 100%; margin-left: 0` and `.topbar__theme-btn { margin-left: auto; }`.
+- [X] T299-S2 — `nix build --quiet .#frontend` green at HEAD.
+- [X] T299-S2 — Playwright after-capture (orchestrator-run): re-take `/`, `/operate`, `/books` × {1280, 390, 320} and overwrite the slice-A subset with the final state.
+- [X] T299-S2 — `frontend/test/ui-review/299/findings/after.md` summarising before/after deltas + any new follow-up issues filed.
+- [X] T299-S2 — Playwright responsive smoke from #289 (`frontend/test/playwright/responsive.spec.ts`) still passes against a local serve (orchestrator-run).
+- [X] T299-S2 — Commit `feat(299): mobile topbar reorder + copy-row grid + ui-review record` with `Tasks: T299-S2` trailer.
 
 ## Finalize (orchestrator)
 

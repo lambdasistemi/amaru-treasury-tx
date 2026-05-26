@@ -6,18 +6,18 @@
 ## Tech stack
 
 - Markdown (constitution).
-- PureScript + Halogen (frontend `App.purs`) — `Data.String` for the format helper.
-- JavaScript FFI (`App.js`) — strictly reduced.
+- PureScript + Halogen (frontend `App.purs`) — current `main` already uses `Effect.Now` / `Instant` for the refresh status row.
+- JavaScript FFI — remove the stale, now-unpaired `App.js` shim.
 
 ## Affected files
 
 - `.specify/memory/constitution.md` — add Principle IX between VIII and Technology Constraints; bump version footer to `0.6.0`.
-- `frontend/src/App.js` — replace the `.replace`-chain `nowIso` body with `new Date().toISOString()`.
-- `frontend/src/App.purs` — add a small `formatNowIso :: String -> String` helper (or inline at the call site if cleaner) that drops the millisecond suffix and replaces `T` with a space.  The render at line 411 produces the same display string as before.
+- `frontend/src/App.js` — delete the stale `nowIso` shim because `App.purs` no longer imports it on current `main`.
+- `frontend/src/App.purs` — no code change after the rebase; preserve the current PureScript `Effect.Now` / `Instant` refresh status row.
 
 ## Slicing
 
-**One slice.** The constitution amendment and the App.js / App.purs shuffle are mutually dependent (Principle IX requires App.js to comply at the same SHA), and the surface is ~15 lines total.
+**One slice.** The constitution amendment and the stale `App.js` deletion are mutually dependent (Principle IX requires the frontend JS surface to comply at the same SHA), and the surface is small.
 
 ## Out-of-scope (mirrors spec)
 

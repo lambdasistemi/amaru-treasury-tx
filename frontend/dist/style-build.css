@@ -599,6 +599,23 @@ input[type="number"].field__input { -moz-appearance: textfield; }
   --jt-radius: var(--app-radius);
 }
 
+/* Issue #260 — surface a clear row boundary between each
+   key/value pair inside the inspect JSON viewer.  The
+   browser-json-tree library ships zero vertical separator
+   on `.v-pair-leaf` and on the `<summary>` of compound
+   pairs, which packs adjacent primitives ("slot: …",
+   "lovelace: …") into a wall of text on dense inspect
+   payloads.  Render a hairline `outline-variant` divider
+   plus a tiny breathing room so each pair reads as a
+   distinct row. */
+.json-tree-wrapper .v-pair-leaf,
+.json-tree-wrapper .v-pair-compound > summary {
+  border-bottom: 1px solid var(--jt-line);
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+
+
 /* Structure-level "Copy ..." chip — used above the
    intent.json tree on /operate and per-scope on /view.
    Subdued look in both themes; sys-color tokens flip

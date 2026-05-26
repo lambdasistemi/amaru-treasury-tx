@@ -235,6 +235,65 @@ destination address not matching the registered payee, or with
 non-canonical vendor labels, is a constitution violation and MUST
 NOT be submitted.
 
+### IX. PureScript frontend, JavaScript only as a thin FFI shim (NON-NEGOTIABLE)
+
+The SPA under `frontend/` is written in PureScript. Every piece of UI
+logic — state, actions, render, parsing, encoding, validation,
+business rules, formatting, routing — lives in `.purs` files. Type
+safety, exhaustiveness checking, and the PureScript review surface are
+load-bearing here: bugs land in code we can read with the same
+discipline as the Haskell backend.
+
+`.js` files in `frontend/src/` are **FFI shims and only FFI shims**. A
+shim's job is to wrap a browser API (`window.localStorage`,
+`navigator.clipboard`, `document.createElement('a')` download
+triggers, `URL.createObjectURL`, `KeyboardEvent.key`, the page
+`History` interface, etc.) so PureScript can call it. Each `.js` file
+is paired one-to-one with a `.purs` module's `foreign import` block,
+and is structurally the minimum needed for that bridge — a few `export
+const`s, a `try { … } catch { … }` where the browser API can throw,
+nothing else.
+
+What `.js` files MUST NOT contain:
+
+- Business logic, validation, parsing, encoding, formatting, or any
+  branching beyond a `try`/`catch` around the host API call.
+- Rendering, templating, DOM manipulation that isn't strictly the FFI
+  primitive (`a.download = …; a.click()` for a download trigger is
+  fine; building HTML is not).
+- Type-defining shapes that PureScript then "trusts". Shapes are
+  declared in `.purs`; the shim returns the closest browser primitive
+  (`String`, `Unit`, `Boolean`, `Number`) and PureScript decodes /
+  validates from there.
+- Side-effects beyond what the wrapped browser idiom requires.
+- Imports of other JS files or NPM packages. Pure browser-host APIs
+  only.
+
+**Atomic browser idioms.** Some host operations have no single-call
+primitive — triggering a file download requires `Blob` +
+`URL.createObjectURL` + `<a>` + `click()` + `revokeObjectURL`; reading
+a file from an `<input type="file">` requires `FileReader` +
+`onload`/`onerror`. These multi-step sequences ARE the irreducible
+browser idiom and are explicitly allowed inside a single shim function.
+The test: if the same sequence appears every time the host operation is
+needed and cannot be reduced further, it's atomic.
+
+The PureScript review heuristic: a `.js` shim should fit on one screen,
+and its diff in a slice should be no more than one wrapped host idiom
+per added function. A growing `.js` file is a signal the work belongs
+in PureScript.
+
+**Why**: type safety across the whole frontend; uniform review surface;
+no "JavaScript escape hatch" where untyped logic accumulates. The
+thin-shim discipline is exactly what makes the PureScript guarantees
+stick at runtime — every byte of JS is auditable in seconds and stays
+that way.
+
+`frontend/spago.yaml` is the dependency manifest for PureScript; the
+same "minimal browser-API FFI only" rule applies to any new dep added
+there — first preference is the `web-*` packages already pinned (no NPM
+bridge needed).
+
 ## Technology Constraints
 
 - GHC 9.6+ (matches `cardano-node-clients`).
@@ -278,4 +337,4 @@ The `/speckit.plan` step gates all implementation work against these
 principles; any deviation is recorded in the plan's
 "Constitution Compliance" section.
 
-**Version**: 0.5.1 | **Ratified**: 2026-05-04 | **Last Amended**: 2026-05-22
+**Version**: 0.6.0 | **Ratified**: 2026-05-04 | **Last Amended**: 2026-05-25

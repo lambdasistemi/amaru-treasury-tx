@@ -422,10 +422,6 @@ resolveWalletAndOn renv excl forced input meta scope = do
                         excl
                         forced
                         walletUtxos
-                outcome =
-                    buildReorganizeOutcome
-                        exclRefs
-                        walletRefSet
                 forcedTexts = map outRefText forcedRefs
             in  case selectWallet 1 filteredWallet of
                     Left _ ->
@@ -451,7 +447,20 @@ resolveWalletAndOn renv excl forced input meta scope = do
                             sreQueryTreasuryUtxos
                                 renv
                                 (smAddress scope)
-                        case sortTreasuryUtxos treasuryRows of
+                        let treasuryRefSet =
+                                map walletCandidateRef treasuryRows
+                            (filteredTreasury, _, _, _) =
+                                filterPool
+                                    walletCandidateRef
+                                    excl
+                                    (ForcedInclusionSet [])
+                                    treasuryRows
+                            outcome =
+                                buildReorganizeOutcome
+                                    exclRefs
+                                    walletRefSet
+                                    treasuryRefSet
+                        case sortTreasuryUtxos filteredTreasury of
                             Left countE ->
                                 pure (Left countE)
                             Right sortedNE -> do
@@ -505,11 +514,14 @@ walletCandidateRef (ref, _, _) =
                 )
 
 buildReorganizeOutcome
-    :: [OutRef] -> [OutRef] -> InputControlOutcome
-buildReorganizeOutcome excluded walletRefs =
-    let classify ref
-            | ref `elem` walletRefs = Right (ref, WalletOnly)
-            | otherwise = Left ref
+    :: [OutRef] -> [OutRef] -> [OutRef] -> InputControlOutcome
+buildReorganizeOutcome excluded walletRefs treasuryRefs =
+    let classify ref =
+            case (ref `elem` walletRefs, ref `elem` treasuryRefs) of
+                (True, True) -> Right (ref, Both)
+                (True, False) -> Right (ref, WalletOnly)
+                (False, True) -> Right (ref, TreasuryOnly)
+                (False, False) -> Left ref
         classified = map classify excluded
     in  InputControlOutcome
             { icoHits = rights classified
@@ -518,11 +530,17 @@ buildReorganizeOutcome excluded walletRefs =
 
 renderReorganizeExclusionLogLine
     :: Text -> OutRef -> PoolHit -> Text
-renderReorganizeExclusionLogLine prefix ref _pool =
+renderReorganizeExclusionLogLine prefix ref pool =
     prefix
         <> ": excluded utxo "
         <> outRefText ref
-        <> " (operator-supplied) [wallet]"
+        <> " (operator-supplied) ["
+        <> poolTag pool
+        <> "]"
+  where
+    poolTag WalletOnly = "wallet"
+    poolTag TreasuryOnly = "treasury"
+    poolTag Both = "wallet+treasury"
 
 renderReorganizeWalletShortfallWithExcludes
     :: Text -> [OutRef] -> Text

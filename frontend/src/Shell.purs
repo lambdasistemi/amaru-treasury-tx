@@ -109,9 +109,20 @@ topbar active opts =
     , HH.button
         [ HP.classes [ cn "topbar__theme-btn" ]
         , HP.attr (HH.AttrName "aria-label") "Toggle theme"
+        , HP.title ("Switch to " <> opts.themeLabel <> " theme")
         , HE.onClick (\_ -> opts.onToggleTheme)
         ]
-        [ HH.text opts.themeLabel ]
+        [ HH.element (HH.ElemName "md-icon") []
+            [ HH.text
+                ( if opts.themeLabel == "Dark" then
+                    "dark_mode"
+                  else
+                    "light_mode"
+                )
+            ]
+        , HH.span [ HP.classes [ cn "visually-hidden" ] ]
+            [ HH.text opts.themeLabel ]
+        ]
     ]
 
 -- | One top-bar nav link.  Carries an explicit `aria-label`

@@ -386,7 +386,9 @@ component =
                     , HP.title "Copy inspect JSON"
                     , HP.type_ HP.ButtonButton
                     ]
-                    [ HH.text "⎘ Copy inspect JSON" ]
+                    [ md "md-icon" [] [ HH.text "content_copy" ]
+                    , HH.span_ [ HH.text "Copy inspect JSON" ]
+                    ]
                 , JsonView.render
                     ( Argonaut.fromObject
                         (FO.singleton "details" j)
@@ -709,7 +711,7 @@ copyRow cfg =
               ]
           ]
           [ HH.text cfg.truncated ]
-    icon = if cfg.copied then "✓" else "⎘"
+    icon = if cfg.copied then "check" else "content_copy"
     btnLabel = "Copy " <> cfg.label
   in
     HH.div
@@ -730,7 +732,7 @@ copyRow cfg =
           , HP.type_ HP.ButtonButton
           , HE.onClick (\_ -> CopyValue cfg.full)
           ]
-          [ HH.text icon ]
+          [ md "md-icon" [] [ HH.text icon ] ]
       , if cfg.failed then
           HH.div
             [ HP.classes

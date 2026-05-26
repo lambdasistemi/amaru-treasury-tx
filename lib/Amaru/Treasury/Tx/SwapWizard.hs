@@ -492,6 +492,15 @@ data WizardError
     | -- | wizard accepts only Core/Ops/NetworkCompliance/
       --   Middleware; @Contingency@ is rejected
       WizardScopeUnsupported !ScopeId
+    | -- | Swaps are encoded as @Disburse@ on chain, and the
+      --   permissions validator's @approved_by_owner_and_someone_else@
+      --   rule (@validators/permissions.ak:59-64@) rejects any
+      --   resolved signer roster of length @<2@.  The wizard
+      --   refuses to emit such an intent so the operator does
+      --   not burn a witness-collection round on a tx the
+      --   chain cannot accept.  Payload is the selected scope
+      --   owner whose roster came up short.
+      WizardSingleSignerForbidden !ScopeId
     deriving (Eq, Show)
 
 -- | Domain-level validation per FR-012 + data-model §3.
@@ -523,6 +532,15 @@ owner. User-supplied signer tokens add witnesses; each
 extra token may be a known scope name/alias or a raw
 28-byte key hash. Duplicate tokens are removed after
 resolution while preserving the first occurrence.
+
+A swap intent is encoded on chain as a @Disburse@ op, and
+the permissions validator's @approved_by_owner_and_someone_else@
+rule requires the resolved roster to contain at least two
+distinct key hashes.  A single-signer roster cannot satisfy
+phase-2 validation, so the wizard refuses to emit one —
+@WizardSingleSignerForbidden@ is returned instead, naming the
+selected scope so the operator knows which @--extra-signer@
+they were missing.
 -}
 resolveSigners
     :: WizardEnv -> SwapWizardQ -> Either WizardError [Text]
@@ -535,7 +553,11 @@ resolveSigners we q = do
         traverse
             (resolveExtraSigner (rvOwners (weRegistry we)))
             (wqExtraSigners q)
-    pure (L.nub (selectedOwner : extraOwners))
+    let final = L.nub (selectedOwner : extraOwners)
+    when
+        (length final < 2)
+        (Left (WizardSingleSignerForbidden (wqScope q)))
+    pure final
 
 resolveExtraSigner
     :: ScopeOwners -> Text -> Either WizardError Text

@@ -201,14 +201,33 @@ spec = describe "SwapWizard" $ do
                            , "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
                            ]
 
-        it "defaults signers to the selected scope owner" $ do
-            let Right intent =
-                    wizardToTreasuryIntent
-                        env
-                        answers{wqExtraSigners = []}
-            tiSigners intent
-                `shouldBe` [ "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
-                           ]
+        it "rejects a single-signer roster (no --extra-signer)" $ do
+            -- The on-chain permissions validator's
+            -- 'approved_by_owner_and_someone_else' rule refuses any
+            -- resolved roster of length <2 for Disburse-class ops
+            -- (swaps are encoded as Disburse).  The wizard refuses
+            -- to emit such an intent so the operator does not burn
+            -- a witness-collection round on a tx the chain cannot
+            -- accept.  See #179.
+            wizardToTreasuryIntent
+                env
+                answers{wqExtraSigners = []}
+                `shouldBe` Left
+                    (WizardSingleSignerForbidden CoreDevelopment)
+
+        it "rejects an extra-signer that dedupes to the selected scope" $ do
+            -- @--extra-signer core_development@ resolves to the
+            -- same key hash as the selected scope owner; after
+            -- 'nub' the roster is length 1 and the guard fires.
+            wizardToTreasuryIntent
+                env
+                answers
+                    { wqExtraSigners =
+                        [ "core_development"
+                        ]
+                    }
+                `shouldBe` Left
+                    (WizardSingleSignerForbidden CoreDevelopment)
 
         it "accepts raw key hashes for extra signers" $ do
             let Right intent =

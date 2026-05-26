@@ -118,6 +118,7 @@ import Amaru.Treasury.Report
     , buildTransactionReport
     , txCborHexFromBytes
     )
+import Amaru.Treasury.Scope (scopeText)
 import Amaru.Treasury.Tx.SwapQuote qualified as SQ
 import Amaru.Treasury.Tx.SwapWizard
     ( AllAdaPlan (..)
@@ -126,7 +127,7 @@ import Amaru.Treasury.Tx.SwapWizard
     , ResolverError (..)
     , ResolverInput (..)
     , SwapWizardQ (..)
-    , WizardError
+    , WizardError (..)
     , registryViewFromVerified
     , renderWalletShortfall
     , renderWalletShortfallWithExcludes
@@ -471,6 +472,17 @@ buildSwapIntent g opts@WizardOpts{..} backend tr = runExceptT $ do
                 }
     intent <-
         case wizardToTreasuryIntent env answers of
+            Left (WizardSingleSignerForbidden scope) ->
+                throwE
+                    ( InputControl
+                        FieldExtraSigner
+                        ( "swap of scope "
+                            <> scopeText scope
+                            <> " needs at least one --extra-signer:"
+                            <> " the permissions validator rejects"
+                            <> " single-signer Disburse rosters"
+                        )
+                    )
             Left we ->
                 throwE
                     ( InternalTranslate

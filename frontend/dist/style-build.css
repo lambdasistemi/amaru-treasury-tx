@@ -43,6 +43,17 @@
   background: var(--md-sys-color-primary);
 }
 
+@media (max-width: 600px) {
+  .topbar__nav {
+    margin-left: 0;
+    order: 3;
+    flex: 1 1 100%;
+  }
+  .topbar__theme-btn {
+    margin-left: auto;
+  }
+}
+
 /* ---------- two-column layout ---------- */
 .build-layout {
   display: grid;

@@ -35,7 +35,8 @@ import Options.Applicative
     , switch
     )
 import System.Directory
-    ( doesFileExist
+    ( doesDirectoryExist
+    , doesFileExist
     , removeFile
     , renameFile
     )
@@ -158,6 +159,7 @@ runWitness g opts@WitnessOpts{..} = do
     networkName <-
         either (die . T.pack) pure (resolveNetworkName g)
     txBytes <- maybe BS.getContents BS.readFile woTxPath
+    preflightOutDir woOutPath
     passphrase <-
         either die pure
             =<< readVaultPassphrase
@@ -227,6 +229,27 @@ writeFileAtomic path bytes = do
     hClose handle
     (BS.writeFile tmp bytes >> renameFile tmp path)
         `onException` ignoreRemove tmp
+
+{- | Issue #182 — pre-flight check that @--out@'s parent dir
+exists BEFORE the operator types the vault passphrase.  A
+missing directory used to surface as an uncaught
+@IOException@ raised by 'openTempFile' inside
+'writeFileAtomic', costing the operator a fresh passphrase
+entry on retry.  Stdout-mode (@Nothing@) and the project's
+existing @takeDirectory@-of-bare-filename "." both pass
+without filesystem touch.
+-}
+preflightOutDir :: Maybe FilePath -> IO ()
+preflightOutDir Nothing = pure ()
+preflightOutDir (Just path) = do
+    let dir = takeDirectory path
+    exists <- doesDirectoryExist dir
+    unless exists $
+        die $
+            "output directory does not exist: `"
+                <> T.pack dir
+                <> "` (create it before retrying so you do "
+                <> "not have to re-enter the vault passphrase)"
 
 ignoreRemove :: FilePath -> IO ()
 ignoreRemove path =

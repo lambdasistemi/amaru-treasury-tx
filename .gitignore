@@ -16,6 +16,10 @@ llm/
 # Subagent run log (ephemeral, see resolve-ticket skill)
 WIP.md
 
+# Per-slice driver briefs (ephemeral, see resolve-ticket skill)
+.worker-brief-slice-*.md
+STATUS.md
+
 # MkDocs build output
 site/
 .orch/

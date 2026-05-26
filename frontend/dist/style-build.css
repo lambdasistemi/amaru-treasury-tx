@@ -612,6 +612,9 @@ input[type="number"].field__input { -moz-appearance: textfield; }
     border-color 0.12s ease,
     background 0.12s ease;
 }
+.v-copy--block md-icon {
+  font-size: 18px;
+}
 .v-copy--block:hover {
   color: var(--md-sys-color-on-surface);
   border-color: var(--md-sys-color-outline);

@@ -358,6 +358,7 @@ executable swap-probe
     , bytestring
     , cardano-crypto-class
     , cardano-ledger-core
+    , cardano-ledger-mary
     , cardano-slotting
     , containers
     , ouroboros-network:api

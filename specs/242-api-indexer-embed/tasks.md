@@ -237,6 +237,35 @@ Layout legend:
   `test(api-smoke): add hBuildDisburse + hBuildReorganize stubs`.
   Tasks trailer: `Tasks: T017`. Worker pair.
 
+## Phase 8.6 — Upstream block-indexer adoption
+
+- [X] **T018 [F]** Adopt the upstream `cardano-node-clients`
+  block-indexer extraction from `a8f830a99685a075fb01c9044023cf163e6a651c`.
+  Bump the `cardano-node-clients` SRP sha to
+  `19bswg4jy1agccrx1w1iikms0fp84jq0fp8k140z6cbd7sca70mp`; verify
+  `chain-follower` already matches upstream and stays unchanged; add
+  `cardano-node-clients:block-indexer` beside the existing
+  `utxo-indexer-lib` dependency where needed. Commit:
+  `chore(api): bump cnc pin to a8f830a + add block-indexer dep`.
+  Tasks trailer: `Tasks: T018`. Worker pair.
+
+- [ ] **T019 [H]** Migrate `withApiIndexer` internals to the
+  upstream `IndexerHandler` path by registering
+  `liveUtxoHandler interestSet :| []` through the new indexer
+  handler configuration. Preserve the public `withApiIndexer`
+  surface and remove downstream dispatch code made redundant by
+  upstream `BlockIndexer.Engine`. Commit:
+  `refactor(api): migrate withApiIndexer to IndexerHandler`.
+  Tasks trailer: `Tasks: T019`. Worker pair.
+
+- [ ] **T020 [H]** Keep the downstream readiness bridge and WAI
+  lag guard, but replace local pure readiness lag math with
+  `Cardano.Node.Client.BlockIndexer.Readiness` helpers. Use either
+  a type alias over the upstream readiness snapshot or a thin adapter
+  if the downstream API shape requires it. Commit:
+  `refactor(api): use upstream BlockIndexer.Readiness pure helpers`.
+  Tasks trailer: `Tasks: T020`. Worker pair.
+
 ## Phase 7 — PR finalization (re-do after T014 lands)
 
 - [ ] **T013 [O]** Edit GitHub issue #242 body via
@@ -265,9 +294,12 @@ Layout legend:
 | 6 — docs page | T011 | `docs(242): operator doc for the in-process indexer embed` |
 | 6 — asciinema cast | T012 | `docs(242): asciinema cast + plugin wiring for api container` |
 | 7 — PR ready | T013 | `chore: drop gate.sh (ready for review)` |
-| 8.5a — post-#165 pin + ChainSyncConfig | T015 | `chore(api): bump cnc pin to post-#165 tip + populate ChainSyncConfig` — `3e147bd0` |
-| 8.5b — IndexAll interest set | T016 | `feat(api): switch indexer interest set to IndexAll` — `06556b86` |
-| 8.5c — devnet smoke handler stubs | T017 | `test(api-smoke): add hBuildDisburse + hBuildReorganize stubs` — `24efbfd8` |
+| 8.5a — post-#165 pin + ChainSyncConfig | T015 | `chore(api): bump cnc pin to post-#165 tip + populate ChainSyncConfig` — `1144cef8` |
+| 8.5b — IndexAll interest set | T016 | `feat(api): switch indexer interest set to IndexAll` — `a50259bf` |
+| 8.5c — devnet smoke handler stubs | T017 | `test(api-smoke): add hBuildDisburse + hBuildReorganize stubs` — `362f3eac` |
+| 8.6a — a8f830a pin + block-indexer dep | T018 | `chore(api): bump cnc pin to a8f830a + add block-indexer dep` — `6baaae0b` |
+| 8.6b — IndexerHandler migration | T019 | `refactor(api): migrate withApiIndexer to IndexerHandler` |
+| 8.6c — upstream Readiness helpers | T020 | `refactor(api): use upstream BlockIndexer.Readiness pure helpers` |
 | 4 — container packaging | T006 + T007 | `feat(242): persistent RocksDB volume for the embedded indexer` |
 | 5 — devnet smoke | T008 + T009 | `feat(242): devnet smoke proves zero-GetUTxOByAddress on the request path` |
 | 6 — docs page | T010 | `docs(242): operator doc for the in-process indexer embed` |
@@ -291,6 +323,19 @@ N/A — no commit produced. See Phase 0 note.
 
 ### Slice 8.5c (T017)
 - `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs`
+
+### Slice 8.6a (T018)
+- `cabal.project`
+- `amaru-treasury-tx.cabal`
+
+### Slice 8.6b (T019)
+- `lib/Amaru/Treasury/Api/Indexer.hs`
+
+### Slice 8.6c (T020)
+- `lib/Amaru/Treasury/Api/Readiness.hs`
+- `lib/Amaru/Treasury/Api/Readiness/Internal.hs`
+- readiness and lag-guard tests that directly depend on the readiness
+  snapshot shape
 
 ### Slice 1 (T001) — upstream
 - `cardano-node-clients/lib-utxo-indexer/lib/Cardano/Node/Client/UTxOIndexer/Daemon.hs`

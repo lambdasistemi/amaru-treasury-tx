@@ -36,9 +36,6 @@ module Main (main) where
 
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as LBS
-import Data.Map.Strict qualified as Map
-import Data.Maybe (catMaybes)
-import Data.Set qualified as Set
 import Data.Streaming.Network (HostPreference)
 import Data.String (IsString (..))
 import Data.Text (Text)
@@ -65,7 +62,7 @@ import System.IO
     , stdout
     )
 
-import Cardano.Ledger.Address (Addr, serialiseAddr)
+import Cardano.Ledger.Address (Addr)
 import Cardano.Node.Client.N2C.Probe (defaultProbeConfig)
 import Cardano.Node.Client.N2C.Reconnect
     ( defaultReconnectPolicy
@@ -76,7 +73,6 @@ import Cardano.Node.Client.UTxOIndexer.Follower
     ( InterestSet (..)
     )
 import Cardano.Node.Client.UTxOIndexer.Types (SlotNo (..))
-import Cardano.Node.Client.UTxOIndexer.Types qualified as Indexer
 
 import Amaru.Treasury.Api.BuildDisburse (runBuildDisburse)
 import Amaru.Treasury.Api.BuildReorganize (runBuildReorganize)
@@ -120,8 +116,7 @@ import Amaru.Treasury.Inspect.Types
     )
 import Amaru.Treasury.IntentJSON.Common (parseAddr)
 import Amaru.Treasury.Metadata
-    ( ScopeMetadata (..)
-    , TreasuryMetadata (..)
+    ( TreasuryMetadata (..)
     , readMetadataFile
     )
 import Amaru.Treasury.Scope (ScopeId)
@@ -292,70 +287,23 @@ mkIndexerConfig socket globalOpts cli interestSet =
         , icInterestSet = interestSet
         }
 
-{- | Build the apply-time address filter the embedded
-indexer applies when @amaru-treasury-tx-api@ starts.
+{- | Build the apply-time interest set the embedded
+indexer uses when @amaru-treasury-tx-api@ starts.
 
-The interest set is the 4–5 scope treasury addresses
-from the loaded @metadata.json@ plus the SundaeSwap
-order address — every address the inspect handler ever
-queries. Outside this set the indexer drops
-'Cardano.Node.Client.UTxOIndexer.IndexerOp.UtxoCreate'
-ops at apply time; the dashboard responses stay
-byte-identical because queries are restricted to the
-set by construction, and the on-disk RocksDB volume
-stays bounded to @O(|interestSet|)@ instead of
-@O(entire chain UTxO set)@.
-
-'Addr' → upstream 'Indexer.Address' goes through
-'serialiseAddr', the same boundary
-'Amaru.Treasury.Api.Indexer.snapshotUtxosAt' uses; the
-encoder also pairs with @BlockExtract@'s
-'serialiseAddr' on the apply path, so the set's bytes
-match the bytes the indexer compares against on each
-'UtxoCreate'.
-
-Treasury addresses that fail to parse are skipped with
-a 'stderr' warning; the surviving set still covers the
-working scopes. The swap address is the
-'sundaeOrderAddressMainnet' constant already validated
-at boot, so we take a parsed value directly.
+Wizard-backed API flows can ask for arbitrary wallet
+UTxOs, not only treasury and swap-order addresses, so
+the embedded follower must retain the full UTxO set.
 -}
 computeInterestSet
     :: TreasuryMetadata
     -> Addr
     -- ^ The pre-parsed SundaeSwap order address.
     -> IO InterestSet
-computeInterestSet metadata sundaeAddr = do
-    treasuryAddrs <-
-        fmap catMaybes
-            . traverse parseScope
-            . Map.toList
-            $ tmTreasuries metadata
-    let everyAddr = sundaeAddr : treasuryAddrs
-        rawSet =
-            Set.fromList
-                (fmap (Indexer.Address . serialiseAddr) everyAddr)
-    putStrLn $
-        "amaru-treasury-tx-api: indexer interest set has "
-            <> show (Set.size rawSet)
-            <> " address(es) ("
-            <> show (length treasuryAddrs)
-            <> " treasury + 1 swap)"
-    pure (IndexAddressSet rawSet)
-  where
-    parseScope (scope, sm) =
-        case parseAddr (smAddress sm) of
-            Right a -> pure (Just a)
-            Left e -> do
-                putStrLn $
-                    "amaru-treasury-tx-api: skipping \
-                    \scope "
-                        <> show scope
-                        <> " from interest set; \
-                           \metadata address failed to \
-                           \parse: "
-                        <> e
-                pure Nothing
+computeInterestSet _metadata _sundaeAddr = do
+    putStrLn
+        "amaru-treasury-tx-api: indexer interest set = IndexAll \
+        \(wizard takes arbitrary wallet; needs every UTxO)"
+    pure IndexAll
 
 -- ---------------------------------------------------------------------------
 -- SPA fallback middleware

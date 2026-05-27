@@ -222,7 +222,7 @@ Layout legend:
   Tasks trailer: `Tasks: T015`. Worker pair:
   `bootstrap-pin-indexer-driver` / `bootstrap-pin-indexer-navigator`.
 
-- [ ] **T016 [H]** Switch the embedded indexer's interest set to
+- [X] **T016 [H]** Switch the embedded indexer's interest set to
   `IndexAll` in `app/amaru-treasury-tx-api/Main.hs`, with the
   operator log explaining that wizard flows need arbitrary wallet
   UTxOs. Commit:
@@ -266,7 +266,7 @@ Layout legend:
 | 6 — asciinema cast | T012 | `docs(242): asciinema cast + plugin wiring for api container` |
 | 7 — PR ready | T013 | `chore: drop gate.sh (ready for review)` |
 | 8.5a — post-#165 pin + ChainSyncConfig | T015 | `chore(api): bump cnc pin to post-#165 tip + populate ChainSyncConfig` — `3e147bd0` |
-| 8.5b — IndexAll interest set | T016 | `feat(api): switch indexer interest set to IndexAll` |
+| 8.5b — IndexAll interest set | T016 | `feat(api): switch indexer interest set to IndexAll` — `06556b86` |
 | 8.5c — devnet smoke handler stubs | T017 | `test(api-smoke): add hBuildDisburse + hBuildReorganize stubs` |
 | 4 — container packaging | T006 + T007 | `feat(242): persistent RocksDB volume for the embedded indexer` |
 | 5 — devnet smoke | T008 + T009 | `feat(242): devnet smoke proves zero-GetUTxOByAddress on the request path` |

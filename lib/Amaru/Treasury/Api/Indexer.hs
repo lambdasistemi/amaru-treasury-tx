@@ -1,6 +1,6 @@
 {- |
 Module      : Amaru.Treasury.Api.Indexer
-Description : Runner + readiness gate for the API indexer
+Description : Runner + query API for the embedded API indexer
 Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
@@ -12,42 +12,26 @@ process as the warp HTTP server, so the
 a local RocksDB store rather than from
 @GetUTxOByAddress@ on the production node. This module is
 the bring-up shim that wraps the upstream
-'Indexer.IndexerHandle' with an in-process 'Readiness'
-'TVar' the handler layer consults to decide between 200
-and HTTP 503.
-
-= Slice 2 wiring (this commit)
+'Indexer.IndexerHandle' with the chain-sync follower
+that writes into it.
 
 The chain-sync follower from
 'Cardano.Node.Client.UTxOIndexer.Follower' is now wired
 in-process: 'withApiIndexer' opens RocksDB, brings the
 follower up via 'Follower.withChainSyncFollower' against
-the caller-owned handle, and runs a small bridge thread
-that projects the upstream
-'Follower.Readiness' into the local 'Readiness' record
-the handlers consume. Both the upstream follower
-'Async' and the bridge are 'link'ed inside the bracket so
-exceptions propagate to the API container's main thread
-and trigger a clean container restart.
-
-The 'aiReadiness' 'TVar' shape, 'setReadinessForTest'
-helper, and 'checkReady' / 'waitReady' / 'snapshotAt'
-public API are unchanged from Slice 1, so the test suite
-that drove them stays green.
+the caller-owned handle, and exposes the follower's
+readiness STM for the API readiness bridge to consume.
+The upstream follower 'Async' is 'link'ed inside the
+bracket so exceptions propagate to the API container's
+main thread and trigger a clean container restart.
 -}
 module Amaru.Treasury.Api.Indexer
     ( -- * Configuration and state
       IndexerConfig (..)
-    , Readiness (..)
-    , ReadyState (..)
     , ApiIndexer (..)
 
       -- * Bring-up
     , withApiIndexer
-
-      -- * Readiness
-    , waitReady
-    , checkReady
 
       -- * Read operations
     , snapshotAt
@@ -75,12 +59,10 @@ import Cardano.Ledger.TxIn qualified as Ledger
 import Cardano.Node.Client.N2C.Probe (ProbeConfig)
 import Cardano.Node.Client.N2C.Reconnect
     ( ReconnectPolicy
-    , UpstreamStatus (..)
     )
 import Cardano.Node.Client.N2C.Trace (N2CEvent)
 import Cardano.Node.Client.UTxOIndexer.Follower
     ( ChainSyncConfig (..)
-    , FollowerHandle (..)
     )
 import Cardano.Node.Client.UTxOIndexer.Follower qualified as Follower
 import Cardano.Node.Client.UTxOIndexer.Indexer
@@ -94,25 +76,13 @@ import Cardano.Node.Client.UTxOIndexer.Types
     , TxOut (..)
     )
 import Cardano.Node.Client.UTxOIndexer.Types qualified as IxTypes
-import Control.Concurrent.Async (Async, link, withAsync)
+import Control.Concurrent.Async (Async, link)
 import Control.Concurrent.STM
     ( STM
-    , TVar
-    , atomically
-    , check
-    , newTVarIO
-    , readTVar
-    , readTVarIO
-    , retry
-    , writeTVar
     )
-import Control.Monad (void)
 import Control.Tracer (Tracer)
 import Data.ByteString qualified as BS
-import Data.Maybe (fromMaybe)
-import Data.Time.Clock (UTCTime, getCurrentTime)
-import Data.Void (Void)
-import Data.Word (Word16, Word64)
+import Data.Word (Word64)
 import Ouroboros.Network.Magic (NetworkMagic)
 
 -- ---------------------------------------------------------------------------
@@ -178,55 +148,6 @@ data IndexerConfig = IndexerConfig
     -- the fixture surface minimal.
     }
 
-{- | Live readiness snapshot. The follower's bridge
-thread writes this 'TVar' after every roll-forward and
-on every supervisor status transition.
-
-@rUpstreamUp = False@ is the sentinel "no rollForward
-yet" state. Until the bridge has seen the upstream
-follower advance, 'checkReady' returns 'Pending' and
-the readiness gate keeps warp from binding.
--}
-data Readiness = Readiness
-    { rProcessedSlot :: !SlotNo
-    -- ^ Highest slot the follower has applied.
-    , rTipSlot :: !SlotNo
-    -- ^ Latest tip slot observed from the upstream node.
-    , rLagSlots :: !Word64
-    -- ^ @rTipSlot - rProcessedSlot@, kept alongside the
-    -- raw slots so the handler layer can echo it in the
-    -- HTTP 503 body without re-deriving.
-    , rUpstreamUp :: !Bool
-    -- ^ True only when the bridge has observed an
-    -- upstream @UpstreamConnected@ AND a non-'Nothing'
-    -- processed slot. False covers both "follower hasn't
-    -- rolled yet" and "upstream is currently
-    -- disconnected".
-    , rUpdatedAt :: !UTCTime
-    -- ^ Wall-clock time of the last 'TVar' write.
-    }
-    deriving stock (Eq, Show)
-
-{- | Three-state verdict the handler layer consumes per
-request. Derived from 'Readiness' by 'checkReady'
-against 'icLagThresholdSlots'.
--}
-data ReadyState
-    = -- | Cold boot — the follower has not yet observed
-      -- the upstream tip. Handlers should treat this as
-      -- "not yet listening"; warp does not bind until
-      -- 'waitReady' returns.
-      Pending
-    | -- | Within the lag threshold of tip. Handlers
-      -- serve normally.
-      Ready
-    | -- | Beyond the lag threshold. The first 'Word64'
-      -- is the observed @lag_slots@; the second is the
-      -- configured threshold. Handlers should answer
-      -- HTTP 503 with both numbers in the body.
-      Lagging !Word64 !Word64
-    deriving stock (Eq, Show)
-
 {- | Opaque handle the API container threads through its
 'Handlers' record. The fields are exposed so the handler
 layer can pass through to the underlying indexer and so
@@ -239,24 +160,15 @@ data ApiIndexer = ApiIndexer
     -- between the follower writer and the handler
     -- readers; the upstream library guarantees
     -- thread-safety on reads.
-    , aiReadiness :: !(TVar Readiness)
-    -- ^ Updated by the bridge thread after each upstream
-    -- 'Follower.Readiness' transition; read by
-    -- 'checkReady' and 'waitReady'.
+    , aiFollowerReadiness :: !(STM Follower.Readiness)
+    -- ^ STM snapshot published by the upstream follower.
+    -- The API readiness module consumes this to maintain
+    -- the HTTP-server readiness state; this indexer layer
+    -- deliberately does not classify readiness itself.
     , aiFollower :: !(Async ())
     -- ^ The upstream follower's supervised chain-sync
     -- thread. 'link'ed inside 'withApiIndexer'; callers
     -- typically don't need to link it again.
-    , aiBridge :: !(Async ())
-    -- ^ The 'bridgeReadiness' thread that mirrors the
-    -- upstream 'Follower.Readiness' into 'aiReadiness'.
-    -- Exposed so the test helper
-    -- 'Amaru.Treasury.Api.Indexer.Internal.setReadinessForTest'
-    -- can 'cancel' it before injecting a deterministic
-    -- readiness value — otherwise the bridge can
-    -- overwrite the test's write between the helper
-    -- returning and the handler reading.
-    -- Production handlers MUST NOT cancel this.
     , aiConfig :: !IndexerConfig
     -- ^ The configuration this indexer was opened with.
     }
@@ -265,16 +177,13 @@ data ApiIndexer = ApiIndexer
 -- Bring-up
 
 {- | Bring up the indexer: open the RocksDB store, spawn
-the upstream chain-sync follower against it, run a
-bridge thread that mirrors the upstream
-'Follower.Readiness' into the local 'TVar', and hand a
+the upstream chain-sync follower against it, and hand a
 fully wired 'ApiIndexer' to the action.
 
-Resource-bracketed: on exit the bridge is cancelled, the
-follower is cancelled, and the RocksDB handle is closed.
-Follower and bridge are 'link'ed inside the bracket so
-their exceptions propagate to the action's thread and
-trigger a container restart.
+Resource-bracketed: on exit the follower is cancelled and
+the RocksDB handle is closed. The follower is 'link'ed
+inside the bracket so its exceptions propagate to the
+action's thread and trigger a container restart.
 -}
 withApiIndexer
     :: Tracer IO N2CEvent
@@ -282,40 +191,22 @@ withApiIndexer
     -> IndexerConfig
     -> (ApiIndexer -> IO a)
     -> IO a
-withApiIndexer tracer cfg action = do
-    now <- getCurrentTime
-    readinessVar <-
-        newTVarIO
-            Readiness
-                { rProcessedSlot = SlotNo 0
-                , rTipSlot = SlotNo 0
-                , rLagSlots = 0
-                , rUpstreamUp = False
-                , rUpdatedAt = now
-                }
+withApiIndexer tracer cfg action =
     Indexer.withRocksDBIndexer (icDbPath cfg) $ \handle ->
         Follower.withChainSyncFollower
             tracer
             (toChainSyncCfg cfg)
             handle
-            $ \fh ->
-                withAsync
-                    ( void $
-                        bridgeReadiness
-                            (fhReadiness fh)
-                            readinessVar
-                    )
-                    $ \bridge -> do
-                        link bridge
-                        link (fhAsync fh)
-                        action
-                            ApiIndexer
-                                { aiHandle = handle
-                                , aiReadiness = readinessVar
-                                , aiFollower = fhAsync fh
-                                , aiBridge = bridge
-                                , aiConfig = cfg
-                                }
+            $ \fh -> do
+                link (Follower.fhAsync fh)
+                action
+                    ApiIndexer
+                        { aiHandle = handle
+                        , aiFollowerReadiness =
+                            Follower.fhReadiness fh
+                        , aiFollower = Follower.fhAsync fh
+                        , aiConfig = cfg
+                        }
 
 {- | Project the runner's 'IndexerConfig' into the
 upstream follower's 'ChainSyncConfig'. The transformation
@@ -334,119 +225,6 @@ toChainSyncCfg cfg =
         , csProbeConfig = icProbeConfig cfg
         , csInterestSet = icInterestSet cfg
         }
-
-{- | Long-running bridge: block on changes to the
-upstream follower's readiness STM and project each new
-snapshot into the local 'TVar'.
-
-The upstream 'Follower.Readiness' record has a
-'Follower.rUpdatedAt' timestamp that is written every
-time the follower mutates its 'TVar', so equality on
-that field is sufficient to detect "no change yet" —
-we don't need an 'Eq' instance on the upstream record.
-
-Returns 'absurd' on its 'Void' loop to silence the
-unused-result warning at the call site; in practice the
-loop only exits when 'withAsync' cancels it on
-'withApiIndexer' exit.
--}
-bridgeReadiness
-    :: STM Follower.Readiness
-    -> TVar Readiness
-    -> IO Void
-bridgeReadiness fhRead local = do
-    initial <- atomically fhRead
-    nowFirst <- getCurrentTime
-    atomically $
-        writeTVar local (projectReadiness initial nowFirst)
-    go (Follower.rUpdatedAt initial)
-  where
-    go prevTime = do
-        next <- atomically $ do
-            current <- fhRead
-            if Follower.rUpdatedAt current == prevTime
-                then retry
-                else pure current
-        now <- getCurrentTime
-        atomically $
-            writeTVar local (projectReadiness next now)
-        go (Follower.rUpdatedAt next)
-
-{- | Map an upstream 'Follower.Readiness' snapshot into the
-local 'Readiness' shape. Conservative on the upstream
-state: 'rUpstreamUp' is 'True' only when the supervisor
-is 'UpstreamConnected' AND the follower has reported at
-least one processed slot. The lag is computed as
-@max 0 (tip - processed)@.
--}
-projectReadiness :: Follower.Readiness -> UTCTime -> Readiness
-projectReadiness fr now =
-    Readiness
-        { rProcessedSlot = fromMaybeSlot processed
-        , rTipSlot = fromMaybeSlot tip
-        , rLagSlots = computeLag processed tip
-        , rUpstreamUp = case (Follower.rUpstream fr, processed) of
-            (UpstreamConnected, Just _) -> True
-            _ -> False
-        , rUpdatedAt = now
-        }
-  where
-    processed = Follower.rProcessedSlot fr
-    tip = Follower.rTipSlot fr
-
-fromMaybeSlot :: Maybe SlotNo -> SlotNo
-fromMaybeSlot = fromMaybe (SlotNo 0)
-
-computeLag :: Maybe SlotNo -> Maybe SlotNo -> Word64
-computeLag (Just (SlotNo p)) (Just (SlotNo t))
-    | t > p = t - p
-    | otherwise = 0
-computeLag _ _ = 0
-
--- ---------------------------------------------------------------------------
--- Readiness
-
-{- | Block until 'checkReady' would return 'Ready'. Called
-once at boot before warp binds; MUST NOT be called from
-per-request handler code — use 'checkReady' there.
--}
-waitReady :: ApiIndexer -> IO ()
-waitReady apiIdx =
-    atomically $ do
-        r <- readTVar (aiReadiness apiIdx)
-        let threshold =
-                icLagThresholdSlots (aiConfig apiIdx)
-        check (classifyReadiness threshold r == Ready)
-
-{- | Per-request readiness verdict. Non-blocking snapshot
-of the current 'Readiness' classified against
-'icLagThresholdSlots'.
--}
-checkReady :: ApiIndexer -> IO ReadyState
-checkReady apiIdx = do
-    r <- readTVarIO (aiReadiness apiIdx)
-    pure $
-        classifyReadiness
-            (icLagThresholdSlots (aiConfig apiIdx))
-            r
-
-{- | Translate a raw 'Readiness' snapshot into the
-'ReadyState' verdict the handler layer consumes. Pure;
-the inputs are the threshold and the snapshot, the
-output is one of the three states.
-
-The order matters: when the follower has never reported,
-@rUpstreamUp = False@ wins over the lag arithmetic
-(which would otherwise read as @0 - 0 = 0 ≤ threshold@
-and falsely classify the pre-readiness state as
-'Ready').
--}
-classifyReadiness :: Word64 -> Readiness -> ReadyState
-classifyReadiness threshold r
-    | not (rUpstreamUp r) = Pending
-    | rLagSlots r > threshold =
-        Lagging (rLagSlots r) threshold
-    | otherwise = Ready
 
 -- ---------------------------------------------------------------------------
 -- Read operations

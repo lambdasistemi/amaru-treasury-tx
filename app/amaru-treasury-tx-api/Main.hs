@@ -87,16 +87,21 @@ import Amaru.Treasury.Api.Config
     , execApiConfig
     )
 import Amaru.Treasury.Api.Indexer
-    ( ApiIndexer
+    ( ApiIndexer (..)
     , IndexerConfig (..)
-    , waitReady
     , withApiIndexer
+    )
+import Amaru.Treasury.Api.LagGuard
+    ( withLagGuard
+    )
+import Amaru.Treasury.Api.Readiness
+    ( waitReady
+    , withReadinessBridge
     )
 import Amaru.Treasury.Api.Server
     ( Handlers (..)
     , mkApplication
     , mkInspectHandler
-    , withLagGuard
     )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity
@@ -169,47 +174,52 @@ main = do
                 \embedded indexer at "
                     <> icDbPath indexerCfg
             withApiIndexer defaultStderrTracer indexerCfg $
-                \apiIdx -> do
-                    putStrLn
-                        "amaru-treasury-tx-api: waiting for \
-                        \indexer readiness before binding \
-                        \warp"
-                    waitReady apiIdx
-                    putStrLn
-                        "amaru-treasury-tx-api: indexer \
-                        \ready; binding warp"
-                    let handlers =
-                            Handlers
-                                { hInspectReport =
-                                    runInspectScope
-                                        apiIdx
-                                        backend
-                                        metadata
-                                        anchor
-                                        swapAddr
-                                , hRecentTxs = manifest
-                                , hBuildIdentity = buildId
-                                , hBuildSwap = runBuildSwap g backend
-                                , hBuildDisburse =
-                                    runBuildDisburse g backend
-                                , hBuildReorganize =
-                                    runBuildReorganize g backend
-                                , hRawHandler =
-                                    serveDirectoryFileServer
-                                        (arcStatic opts)
-                                }
-                    putStrLn $
-                        "amaru-treasury-tx-api: listening on "
-                            <> arcHost opts
-                            <> ":"
-                            <> show (arcPort opts)
-                    runSettings
-                        warpSettings
-                        ( withLagGuard apiIdx $
-                            spaFallback $
-                                addFrameAncestors $
-                                    mkApplication handlers
-                        )
+                \apiIdx ->
+                    withReadinessBridge
+                        (icLagThresholdSlots indexerCfg)
+                        (aiFollowerReadiness apiIdx)
+                        $ \readiness -> do
+                            putStrLn
+                                "amaru-treasury-tx-api: waiting for \
+                                \indexer readiness before binding \
+                                \warp"
+                            waitReady readiness
+                            putStrLn
+                                "amaru-treasury-tx-api: indexer \
+                                \ready; binding warp"
+                            let handlers =
+                                    Handlers
+                                        { hInspectReport =
+                                            runInspectScope
+                                                apiIdx
+                                                backend
+                                                metadata
+                                                anchor
+                                                swapAddr
+                                        , hRecentTxs = manifest
+                                        , hBuildIdentity = buildId
+                                        , hBuildSwap =
+                                            runBuildSwap g backend
+                                        , hBuildDisburse =
+                                            runBuildDisburse g backend
+                                        , hBuildReorganize =
+                                            runBuildReorganize g backend
+                                        , hRawHandler =
+                                            serveDirectoryFileServer
+                                                (arcStatic opts)
+                                        }
+                            putStrLn $
+                                "amaru-treasury-tx-api: listening on "
+                                    <> arcHost opts
+                                    <> ":"
+                                    <> show (arcPort opts)
+                            runSettings
+                                warpSettings
+                                ( withLagGuard readiness $
+                                    spaFallback $
+                                        addFrameAncestors $
+                                            mkApplication handlers
+                                )
 
 {- | Run 'mkInspectHandler' against the embedded indexer
 and the live provider, then unwrap the resulting

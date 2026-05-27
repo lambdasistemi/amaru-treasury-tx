@@ -109,6 +109,9 @@ library
     Amaru.Treasury.Api.Config
     Amaru.Treasury.Api.Indexer
     Amaru.Treasury.Api.Indexer.Internal
+    Amaru.Treasury.Api.LagGuard
+    Amaru.Treasury.Api.Readiness
+    Amaru.Treasury.Api.Readiness.Internal
     Amaru.Treasury.Api.Server
     Amaru.Treasury.Api.Types
     Amaru.Treasury.AuxData
@@ -481,6 +484,8 @@ test-suite unit-tests
     Amaru.Treasury.Api.ConfigSpec
     Amaru.Treasury.Api.HandlersIndexerSpec
     Amaru.Treasury.Api.IndexerSpec
+    Amaru.Treasury.Api.LagGuardSpec
+    Amaru.Treasury.Api.ReadinessSpec
     Amaru.Treasury.Api.ServerSpec
     Amaru.Treasury.Api.TypesSpec
     Amaru.Treasury.AuxDataSpec
@@ -618,6 +623,7 @@ test-suite unit-tests
     , serialise
     , servant
     , servant-server
+    , stm
     , tagged
     , temporary
     , text

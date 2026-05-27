@@ -23,10 +23,8 @@ Three scenarios per the slice brief:
    response's @chain_tip@ field (the only remaining N2C
    call on the request hot path per FR-005).
 
-3. The lag-503 'Middleware' wrapping the WAI application
-   short-circuits every endpoint with HTTP 503 +
-   structured body when 'checkReady' reports 'Lagging'.
-   The body shape matches @contracts/api-extension.md@.
+The lag-503 middleware has its own unit coverage in
+"Amaru.Treasury.Api.LagGuardSpec".
 -}
 module Amaru.Treasury.Api.HandlersIndexerSpec (spec) where
 
@@ -38,16 +36,8 @@ import Cardano.Node.Client.Provider (Provider (..))
 import Cardano.Node.Client.UTxOIndexer.Follower (InterestSet (..))
 import Cardano.Node.Client.UTxOIndexer.Types qualified as Indexer
 import Cardano.Slotting.Slot (SlotNo (..))
-import Data.Aeson qualified as Aeson
-import Data.Aeson.KeyMap qualified as KM
-import Data.ByteString.Lazy qualified as LBS
 import Data.Map.Strict qualified as Map
-import Data.Time.Clock (getCurrentTime)
 import Data.Word (Word64)
-import Network.HTTP.Types (status404, status503)
-import Network.Wai (Application, responseLBS)
-import Network.Wai.Test (runSession)
-import Network.Wai.Test qualified as WaiTest
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import Servant qualified
 import Servant.Server (runHandler)
@@ -55,7 +45,6 @@ import System.IO.Temp (withSystemTempDirectory)
 import Test.Hspec
     ( Spec
     , describe
-    , expectationFailure
     , it
     , shouldBe
     )
@@ -63,15 +52,10 @@ import Test.Hspec
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer
     , IndexerConfig (..)
-    , Readiness (..)
     , withApiIndexer
-    )
-import Amaru.Treasury.Api.Indexer.Internal
-    ( setReadinessForTest
     )
 import Amaru.Treasury.Api.Server
     ( mkInspectHandler
-    , withLagGuard
     )
 import Amaru.Treasury.Constants
     ( sundaeOrderAddressMainnet
@@ -125,62 +109,6 @@ spec = describe "Amaru.Treasury.Api handlers + indexer" $ do
                             Middleware
                 ctSlot (irChainTip report)
                     `shouldBe` testNowTipWord
-
-    describe "withLagGuard"
-        $ it
-            "short-circuits every request with HTTP 503 +\
-            \ structured JSON body when checkReady is\
-            \ Lagging"
-        $ withTestIndexer
-        $ \apiIdx -> do
-            now <- getCurrentTime
-            setReadinessForTest apiIdx $
-                Readiness
-                    { rProcessedSlot = Indexer.SlotNo 100
-                    , rTipSlot = Indexer.SlotNo 300
-                    , rLagSlots = 200
-                    , rUpstreamUp = True
-                    , rUpdatedAt = now
-                    }
-            let app :: Application
-                app =
-                    withLagGuard apiIdx underlyingNotCalled
-            resp <-
-                runSession
-                    (WaiTest.srequest (waiGet "/v1/version"))
-                    app
-            WaiTest.simpleStatus resp
-                `shouldBe` status503
-            lookup
-                "Content-Type"
-                (WaiTest.simpleHeaders resp)
-                `shouldBe` Just
-                    "application/json; charset=utf-8"
-            case Aeson.decode (WaiTest.simpleBody resp) of
-                Just (Aeson.Object o) -> do
-                    KM.lookup "error" o
-                        `shouldBe` Just
-                            ( Aeson.String
-                                "indexer_lagging"
-                            )
-                    KM.lookup "processed_slot" o
-                        `shouldBe` Just
-                            (Aeson.Number 100)
-                    KM.lookup "tip_slot" o
-                        `shouldBe` Just
-                            (Aeson.Number 300)
-                    KM.lookup "lag_slots" o
-                        `shouldBe` Just
-                            (Aeson.Number 200)
-                    KM.lookup "threshold_slots" o
-                        `shouldBe` Just
-                            (Aeson.Number 60)
-                    KM.member "updated_at" o
-                        `shouldBe` True
-                other ->
-                    expectationFailure $
-                        "expected JSON object, got: "
-                            <> show other
 
 -- ---------------------------------------------------------------------------
 -- Fixtures
@@ -285,19 +213,6 @@ trap name =
                 <> " called unexpectedly (handler hot \
                    \path is indexer-served per #242)"
 
-{- | Underlying WAI application the lag-guard middleware
-wraps. Always returns 404 with a tag in the body so we
-can verify the lag-guard short-circuits BEFORE reaching
-this layer (the 503 path never sees this body).
--}
-underlyingNotCalled :: Application
-underlyingNotCalled _req respond =
-    respond $
-        responseLBS
-            status404
-            [("Content-Type", "text/plain")]
-            "underlying-not-called"
-
 -- ---------------------------------------------------------------------------
 -- Helpers
 
@@ -330,12 +245,3 @@ runHandlerOrFail h = do
                 "runHandlerOrFail: Servant.Handler returned \
                 \ServerError: "
                     <> show e
-
-waiGet :: LBS.ByteString -> WaiTest.SRequest
-waiGet path =
-    WaiTest.SRequest
-        ( WaiTest.setPath
-            WaiTest.defaultRequest
-            (LBS.toStrict path)
-        )
-        ""

@@ -120,20 +120,26 @@ import Amaru.Treasury.Api.BuildSwap
     ( SwapBuildResponse (..)
     )
 import Amaru.Treasury.Api.Indexer
-    ( ApiIndexer
+    ( ApiIndexer (..)
     , IndexerConfig (..)
-    , Readiness (..)
-    , waitReady
     , withApiIndexer
     )
-import Amaru.Treasury.Api.Indexer.Internal
+import Amaru.Treasury.Api.LagGuard
+    ( withLagGuard
+    )
+import Amaru.Treasury.Api.Readiness
+    ( Readiness (..)
+    , ReadinessHandle
+    , waitReady
+    , withReadinessBridge
+    )
+import Amaru.Treasury.Api.Readiness.Internal
     ( setReadinessForTest
     )
 import Amaru.Treasury.Api.Server
     ( Handlers (..)
     , mkApplication
     , mkInspectHandler
-    , withLagGuard
     )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity (..)
@@ -193,44 +199,50 @@ runSmoke = do
                 withApiIndexer
                     nullN2CTracer
                     indexerCfg
-                    $ \apiIdx -> do
-                        waitReady apiIdx
-                        bracket
-                            openFreePort
-                            (close . snd)
-                            $ \(port, sock) -> do
-                                let handlers =
-                                        smokeHandlers
-                                            apiIdx
-                                            backend
-                                            metadata
-                                            anchor
-                                            swapAddr
-                                    app =
-                                        withLagGuard
-                                            apiIdx
-                                            (mkApplication handlers)
-                                    settings =
-                                        setHost
-                                            "127.0.0.1"
-                                            defaultSettings
-                                manager <-
-                                    newManager
-                                        defaultManagerSettings
-                                withAsync
-                                    ( runSettingsSocket
-                                        settings
-                                        sock
-                                        app
-                                    )
-                                    $ \_ ->
-                                        runScenarios
-                                            manager
-                                            port
-                                            apiIdx
+                    $ \apiIdx ->
+                        withReadinessBridge
+                            (icLagThresholdSlots indexerCfg)
+                            (aiFollowerReadiness apiIdx)
+                            $ \readiness -> do
+                                waitReady readiness
+                                bracket
+                                    openFreePort
+                                    (close . snd)
+                                    $ \(port, sock) -> do
+                                        let handlers =
+                                                smokeHandlers
+                                                    apiIdx
+                                                    backend
+                                                    metadata
+                                                    anchor
+                                                    swapAddr
+                                            app =
+                                                withLagGuard
+                                                    readiness
+                                                    ( mkApplication
+                                                        handlers
+                                                    )
+                                            settings =
+                                                setHost
+                                                    "127.0.0.1"
+                                                    defaultSettings
+                                        manager <-
+                                            newManager
+                                                defaultManagerSettings
+                                        withAsync
+                                            ( runSettingsSocket
+                                                settings
+                                                sock
+                                                app
+                                            )
+                                            $ \_ ->
+                                                runScenarios
+                                                    manager
+                                                    port
+                                                    readiness
 
-runScenarios :: Manager -> Int -> ApiIndexer -> IO ()
-runScenarios manager port apiIdx = do
+runScenarios :: Manager -> Int -> ReadinessHandle -> IO ()
+runScenarios manager port readiness = do
     -- Scenario 1: live readiness → 200.
     res1 <- getInspect manager port
     statusCode (responseStatus res1) `shouldBe` 200
@@ -244,7 +256,7 @@ runScenarios manager port apiIdx = do
 
     -- Scenario 2: force Lagging → 503 + 6-key body.
     now <- getCurrentTime
-    setReadinessForTest apiIdx $
+    setReadinessForTest readiness $
         Readiness
             { rProcessedSlot = Indexer.SlotNo 100
             , rTipSlot = Indexer.SlotNo 300
@@ -276,7 +288,7 @@ runScenarios manager port apiIdx = do
 
     -- Scenario 3: restore Ready → 200.
     now' <- getCurrentTime
-    setReadinessForTest apiIdx $
+    setReadinessForTest readiness $
         Readiness
             { rProcessedSlot = Indexer.SlotNo 1000
             , rTipSlot = Indexer.SlotNo 1000

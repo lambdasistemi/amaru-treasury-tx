@@ -38,25 +38,15 @@ module Amaru.Treasury.Api.Server
 
       -- * Indexer-served handler (#242)
     , mkInspectHandler
-
-      -- * Readiness gate (#242)
-    , withLagGuard
     ) where
 
 import Cardano.Ledger.Address (Addr)
 import Cardano.Node.Client.Provider (Provider (..))
-import Control.Concurrent.STM (readTVarIO)
 import Control.Monad.IO.Class (liftIO)
-import Data.Aeson ((.=))
-import Data.Aeson qualified as Aeson
-import Data.ByteString.Lazy qualified as LBS
 import Data.Proxy (Proxy (..))
 import Data.Tagged (Tagged)
-import Data.Text (Text)
-import Data.Word (Word64)
 import Network.HTTP.Media ((//))
-import Network.HTTP.Types (status503)
-import Network.Wai (Application, Middleware, responseLBS)
+import Network.Wai (Application)
 import Servant
     ( Handler
     , Server
@@ -74,11 +64,8 @@ import Servant.API
     , ReqBody
     , Required
     , Strict
-    , type (:<|>)
     , type (:>)
     )
-
-import Cardano.Node.Client.UTxOIndexer.Types (SlotNo (..))
 
 import Amaru.Treasury.Api.BuildDisburse
     ( DisburseBuildRequest
@@ -94,9 +81,6 @@ import Amaru.Treasury.Api.BuildSwap
     )
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
-    , Readiness (..)
-    , ReadyState (..)
-    , checkReady
     , snapshotUtxosAt
     )
 import Amaru.Treasury.Api.Types
@@ -307,63 +291,3 @@ indexerProvider apiIdx realProvider =
                 \path should be indexer-served per #242 \
                 \(FR-004 invariant)."
         }
-
--- ---------------------------------------------------------------------------
--- Readiness gate (#242)
-
-{- | WAI middleware that short-circuits every request with
-HTTP 503 + structured JSON body when the embedded
-indexer's readiness verdict is 'Lagging'.
-
-The 503 body shape matches @contracts/api-extension.md@:
-@{error,processed_slot,tip_slot,lag_slots,threshold_slots,
-updated_at}@ with @additionalProperties: false@. The
-response is set @Content-Type: application/json;
-charset=utf-8@; @Accept@-negotiation is intentionally
-skipped — the 503 body is JSON regardless of what the
-client asked for, mirroring the spec's intake decision
-("dashboard frontend detects the 503 status and surfaces
-an error state").
-
-When the verdict is 'Pending' or 'Ready', the request is
-passed through unchanged. 'Pending' is supposed to be
-prevented from being observed by external clients because
-warp doesn't bind until 'waitReady' returns; the
-middleware nonetheless treats 'Pending' as "let through"
-(a defence-in-depth choice — the contract is silent on
-what to do during pre-bind probes).
--}
-withLagGuard :: ApiIndexer -> Middleware
-withLagGuard apiIdx app req respond = do
-    state <- checkReady apiIdx
-    case state of
-        Lagging lag threshold -> do
-            r <- readTVarIO (aiReadiness apiIdx)
-            let body = encodeLaggingBody r lag threshold
-                hdrs =
-                    [
-                        ( "Content-Type"
-                        , "application/json; charset=utf-8"
-                        )
-                    ]
-            respond (responseLBS status503 hdrs body)
-        _ -> app req respond
-
-{- | Encode the HTTP 503 body the lag-guard returns. The
-schema is fixed by @contracts/api-extension.md@; consumers
-can rely on the field set being exactly the six listed
-keys and on @additionalProperties: false@. Tests pin this
-shape directly via @aeson-keymap@ lookups.
--}
-encodeLaggingBody
-    :: Readiness -> Word64 -> Word64 -> LBS.ByteString
-encodeLaggingBody r lag threshold =
-    Aeson.encode $
-        Aeson.object
-            [ "error" .= ("indexer_lagging" :: Text)
-            , "processed_slot" .= unSlotNo (rProcessedSlot r)
-            , "tip_slot" .= unSlotNo (rTipSlot r)
-            , "lag_slots" .= lag
-            , "threshold_slots" .= threshold
-            , "updated_at" .= rUpdatedAt r
-            ]

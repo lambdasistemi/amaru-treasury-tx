@@ -116,6 +116,12 @@ import Test.Hspec
     , shouldBe
     )
 
+import Amaru.Treasury.Api.BuildDisburse
+    ( DisburseBuildResponse (..)
+    )
+import Amaru.Treasury.Api.BuildReorganize
+    ( ReorganizeBuildResponse (..)
+    )
 import Amaru.Treasury.Api.BuildSwap
     ( SwapBuildResponse (..)
     )
@@ -372,6 +378,34 @@ smokeHandlers apiIdx backend metadata anchor swapAddr =
                     , sbrFailureReason =
                         Just "smoke handler"
                     , sbrBuildFailureTag = Nothing
+                    }
+        , hBuildDisburse = \_ ->
+            pure
+                DisburseBuildResponse
+                    { dbrIntentJson = Nothing
+                    , dbrCli = Nothing
+                    , dbrCborHex = Nothing
+                    , dbrCborEnvelope = Nothing
+                    , dbrReport = Nothing
+                    , dbrFailureTag = Just "Smoke"
+                    , dbrFailureField = Nothing
+                    , dbrFailureReason =
+                        Just "smoke handler"
+                    , dbrBuildFailureTag = Nothing
+                    }
+        , hBuildReorganize = \_ ->
+            pure
+                ReorganizeBuildResponse
+                    { rbrIntentJson = Nothing
+                    , rbrCli = Nothing
+                    , rbrCborHex = Nothing
+                    , rbrCborEnvelope = Nothing
+                    , rbrReport = Nothing
+                    , rbrFailureTag = Just "Smoke"
+                    , rbrFailureField = Nothing
+                    , rbrFailureReason =
+                        Just "smoke handler"
+                    , rbrBuildFailureTag = Nothing
                     }
         , hRawHandler =
             Tagged $ \_req respond ->

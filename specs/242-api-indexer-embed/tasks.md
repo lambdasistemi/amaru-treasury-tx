@@ -229,7 +229,7 @@ Layout legend:
   `feat(api): switch indexer interest set to IndexAll`.
   Tasks trailer: `Tasks: T016`. Worker pair.
 
-- [ ] **T017 [H]** Add `hBuildDisburse` and `hBuildReorganize`
+- [X] **T017 [H]** Add `hBuildDisburse` and `hBuildReorganize`
   stubs to
   `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs` so the
   smoke handlers compile after the `Handlers` record grew.
@@ -267,7 +267,7 @@ Layout legend:
 | 7 — PR ready | T013 | `chore: drop gate.sh (ready for review)` |
 | 8.5a — post-#165 pin + ChainSyncConfig | T015 | `chore(api): bump cnc pin to post-#165 tip + populate ChainSyncConfig` — `3e147bd0` |
 | 8.5b — IndexAll interest set | T016 | `feat(api): switch indexer interest set to IndexAll` — `06556b86` |
-| 8.5c — devnet smoke handler stubs | T017 | `test(api-smoke): add hBuildDisburse + hBuildReorganize stubs` |
+| 8.5c — devnet smoke handler stubs | T017 | `test(api-smoke): add hBuildDisburse + hBuildReorganize stubs` — `24efbfd8` |
 | 4 — container packaging | T006 + T007 | `feat(242): persistent RocksDB volume for the embedded indexer` |
 | 5 — devnet smoke | T008 + T009 | `feat(242): devnet smoke proves zero-GetUTxOByAddress on the request path` |
 | 6 — docs page | T010 | `docs(242): operator doc for the in-process indexer embed` |

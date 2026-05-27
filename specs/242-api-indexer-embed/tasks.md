@@ -208,6 +208,35 @@ Layout legend:
   - `lib/Amaru/Treasury/Api/Indexer.hs`
   - `test/unit/Amaru/Treasury/Api/IndexerSpec.hs`
 
+## Phase 8.5 — Bootstrap post-#165 downstream corrections
+
+- [X] **T015 [F][H]** Adopt the post-#165
+  `cardano-node-clients` tip and populate the newly-required
+  `ChainSyncConfig` fields in one bisect-safe commit. Parent
+  answer
+  `/tmp/atx-254-blkidx/answers/A-001-bootstrap-slice-split.md`
+  approved combining `cabal.project` with
+  `lib/Amaru/Treasury/Api/Indexer.hs`, because the pin alone
+  fails the gate and the reverse order also fails. Commit:
+  `chore(api): bump cnc pin to post-#165 tip + populate ChainSyncConfig`.
+  Tasks trailer: `Tasks: T015`. Worker pair:
+  `bootstrap-pin-indexer-driver` / `bootstrap-pin-indexer-navigator`.
+
+- [ ] **T016 [H]** Switch the embedded indexer's interest set to
+  `IndexAll` in `app/amaru-treasury-tx-api/Main.hs`, with the
+  operator log explaining that wizard flows need arbitrary wallet
+  UTxOs. Commit:
+  `feat(api): switch indexer interest set to IndexAll`.
+  Tasks trailer: `Tasks: T016`. Worker pair.
+
+- [ ] **T017 [H]** Add `hBuildDisburse` and `hBuildReorganize`
+  stubs to
+  `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs` so the
+  smoke handlers compile after the `Handlers` record grew.
+  Commit:
+  `test(api-smoke): add hBuildDisburse + hBuildReorganize stubs`.
+  Tasks trailer: `Tasks: T017`. Worker pair.
+
 ## Phase 7 — PR finalization (re-do after T014 lands)
 
 - [ ] **T013 [O]** Edit GitHub issue #242 body via
@@ -236,6 +265,9 @@ Layout legend:
 | 6 — docs page | T011 | `docs(242): operator doc for the in-process indexer embed` |
 | 6 — asciinema cast | T012 | `docs(242): asciinema cast + plugin wiring for api container` |
 | 7 — PR ready | T013 | `chore: drop gate.sh (ready for review)` |
+| 8.5a — post-#165 pin + ChainSyncConfig | T015 | `chore(api): bump cnc pin to post-#165 tip + populate ChainSyncConfig` — `3e147bd0` |
+| 8.5b — IndexAll interest set | T016 | `feat(api): switch indexer interest set to IndexAll` |
+| 8.5c — devnet smoke handler stubs | T017 | `test(api-smoke): add hBuildDisburse + hBuildReorganize stubs` |
 | 4 — container packaging | T006 + T007 | `feat(242): persistent RocksDB volume for the embedded indexer` |
 | 5 — devnet smoke | T008 + T009 | `feat(242): devnet smoke proves zero-GetUTxOByAddress on the request path` |
 | 6 — docs page | T010 | `docs(242): operator doc for the in-process indexer embed` |
@@ -249,6 +281,16 @@ pair. Anything not listed is forbidden scope for that slice.
 
 ### ~~Slice 0a (T000a)~~ — cancelled
 N/A — no commit produced. See Phase 0 note.
+
+### Slice 8.5a (T015)
+- `cabal.project`
+- `lib/Amaru/Treasury/Api/Indexer.hs`
+
+### Slice 8.5b (T016)
+- `app/amaru-treasury-tx-api/Main.hs`
+
+### Slice 8.5c (T017)
+- `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs`
 
 ### Slice 1 (T001) — upstream
 - `cardano-node-clients/lib-utxo-indexer/lib/Cardano/Node/Client/UTxOIndexer/Daemon.hs`

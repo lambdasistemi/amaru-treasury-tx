@@ -80,10 +80,11 @@ import Control.Concurrent.Async (Async, link)
 import Control.Concurrent.STM
     ( STM
     )
-import Control.Tracer (Tracer)
+import Control.Tracer (Tracer (Tracer), nullTracer)
 import Data.ByteString qualified as BS
 import Data.Word (Word64)
 import Ouroboros.Network.Magic (NetworkMagic)
+import System.IO (hPutStrLn, stderr)
 
 -- ---------------------------------------------------------------------------
 -- Types
@@ -224,6 +225,46 @@ toChainSyncCfg cfg =
         , csReconnectPolicy = icReconnectPolicy cfg
         , csProbeConfig = icProbeConfig cfg
         , csInterestSet = icInterestSet cfg
+        , -- Cold-boot intersection seed (upstream
+          -- cardano-node-clients#162). 'Nothing' means
+          -- intersect at Origin and walk forward (the EBB
+          -- skip from #163 prevents the Byron-era
+          -- ApplyConflict that otherwise blocks cold sync
+          -- from mainnet). A future enhancement can query
+          -- the local node for current tip and pass that
+          -- as 'Just (slot, hash)' to skip Byron + early
+          -- Shelley entirely.
+          csStartPoint = Nothing
+        , -- Per-block tracer (upstream
+          -- cardano-node-clients#165 round-2). Silenced for
+          -- now: a roll-forward stream during cold-sync
+          -- emits thousands of events/sec which would
+          -- overflow docker's rotating log. Future
+          -- enhancement: throttle by slot-modulus to log
+          -- one milestone per ~10k slots.
+          csBlockTracer = nullTracer
+        , -- Upstream tip tracer. Fires on every chain-tip
+          -- update from the cardano-node (~once per 20s on
+          -- mainnet). Surfaces 'lag visible to upstream'
+          -- in container logs so operators can see whether
+          -- the indexer is keeping up.
+          -- Per-MsgRollForward tracer. Fires once per
+          -- block received by the chain-sync follower (NOT
+          -- only on tip change). During cold-sync this is
+          -- the only proxy for indexer throughput, so we
+          -- enable it for dev validation despite the
+          -- per-block stderr syscall + docker json-log
+          -- write overhead. A future enhancement should
+          -- replace this with a throttled bridge-thread
+          -- heartbeat that reads the readiness STM at a
+          -- fixed cadence instead of firing per block.
+          csTipTracer = Tracer $ \slot ->
+            hPutStrLn
+                stderr
+                ( "amaru-treasury-tx-api: \
+                  \upstream tip slot="
+                    <> show slot
+                )
         }
 
 -- ---------------------------------------------------------------------------

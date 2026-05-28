@@ -321,7 +321,7 @@ Layout legend:
 
 ## Phase 8.7 — Devnet-first proof before E2E
 
-- [ ] **T023 [H]** Repair the opt-in API devnet smoke after T022's
+- [X] **T023 [H]** Repair the opt-in API devnet smoke after T022's
   start-point contract change, then run it before any further
   mainnet/dev endpoint E2E validation. `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs`
   still constructs `IndexerConfig` with the retired `icStartSlot`
@@ -336,6 +336,8 @@ Layout legend:
   Tasks trailer: `Tasks: T023`. Worker pair.
 
   **Owned files**:
+  - `amaru-treasury-tx.cabal` (scope-widened 2026-05-28:
+    `devnet-tests` threaded runtime flags only)
   - `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs`
 
 ## Phase 7 — PR finalization (re-do after T014 lands)

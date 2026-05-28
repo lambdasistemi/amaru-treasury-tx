@@ -190,10 +190,12 @@ Layout legend:
   **Live-validation gate (mandatory before navigator NAVIGATOR-VERIFIED)**:
   Operator sequencing update (2026-05-28): run the devnet API smoke
   repair/proof in T023 first, then the transaction-inserting QA proof
-  in T024, then the tx-build indexer-provider wiring proof in T025.
-  Only return to this mainnet/dev endpoint E2E gate after the devnet
-  proof is healthy, the build endpoints are using the embedded indexer
-  for address UTxO reads, the operator is happy with that evidence, and
+  in T024, then the tx-build indexer-provider wiring proof in T025,
+  then the HTTP POST build proof in T026. Only return to this
+  mainnet/dev endpoint E2E gate after the devnet proof is healthy, the
+  build endpoints are using the embedded indexer for address UTxO
+  reads, the actual POST build endpoints have built the phase
+  transactions on devnet, the operator is happy with that evidence, and
   Slice B
   [#243](https://github.com/lambdasistemi/amaru-treasury-tx/issues/243)
   has proved `amaru-treasury-tx history --scope X` on devnet with
@@ -457,6 +459,58 @@ Layout legend:
     provider; do not weaken T024's transaction-insertion checks)
   - `amaru-treasury-tx.cabal` (only if a new test module or helper
     module is required)
+
+- [ ] **T026 [H]** Strengthen the devnet API smoke so the phase
+  transactions are built through the actual HTTP POST layer before they
+  are submitted. T024 proved indexed UTxO/phase effects, and T025 proved
+  build-handler provider wiring, but the current devnet smoke still
+  constructs and submits disburse/reorganize transactions through direct
+  Haskell helper calls. That is not enough QA for the operator's
+  "with the POST" requirement.
+
+  The smoke must run the real WAI application on a TCP port, send HTTP
+  `POST /v1/build/disburse` and `POST /v1/build/reorganize` requests
+  against that port, decode the successful response CBOR/envelope,
+  sign/submit the returned unsigned transaction, compute the expected
+  output `TxIn`s, wait for the embedded indexer to observe those outputs,
+  and assert the same inspect transitions as T024. Direct
+  `runDisburseAction` / `runReorganizeAction` phase insertion is no
+  longer acceptable for the API smoke once this task lands.
+
+  Use the embedded-indexer build provider from T025 in the smoke
+  handlers. Do not leave the `hBuildDisburse` / `hBuildReorganize`
+  "Smoke" stubs in the path exercised by this smoke. The test must fail
+  loudly if either POST returns a failure response or if the transaction
+  bytes returned by HTTP cannot be signed, submitted, and observed by
+  the indexer. Keep the pre-indexer stability-window ordering from
+  T024: the smoke still waits for more than the derived security
+  parameter/stability-window forged blocks before starting
+  `withApiIndexer`.
+
+  Scope note: the phase QA requirement is disburse + reorganize. T025's
+  unit wiring test continues to cover `POST /v1/build/swap` provider
+  wiring. Add a cheap swap POST smoke only if a reliable devnet request
+  fixture is already available; do not weaken or delay the phase POST
+  proof waiting on swap-market setup.
+
+  RED: `nix develop --quiet -c just devnet-api-smoke` on current HEAD
+  passes while using direct build helpers and/or stubbed POST build
+  handlers. Update the smoke so this old behavior fails because no
+  successful HTTP POST build response was used for the submitted phase
+  transactions. GREEN: the same command passes after both phase
+  transactions are built via HTTP POST, submitted, indexed, and reflected
+  in `/v1/treasury-inspect`. Commit:
+  `test(api-smoke): build phase transactions through HTTP POST`. Tasks
+  trailer: `Tasks: T026`. Worker pair.
+
+  **Owned files**:
+  - `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs`
+  - `amaru-treasury-tx.cabal` (only if a new devnet-test dependency or
+    helper module is required)
+  - `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` (only for shared
+    helper extraction/reuse; do not alter unrelated devnet phases)
+  - `test/devnet/Amaru/Treasury/Devnet/MixedUtxoSmoke.hs` (only for
+    helper extraction/reuse; do not weaken its assertions)
 
 ## Phase 7 — PR finalization (re-do after T014 lands)
 

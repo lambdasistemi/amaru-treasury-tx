@@ -34,7 +34,6 @@ import Cardano.Node.Client.N2C.Reconnect (defaultReconnectPolicy)
 import Cardano.Node.Client.N2C.Trace (nullN2CTracer)
 import Cardano.Node.Client.Provider (Provider (..))
 import Cardano.Node.Client.UTxOIndexer.Follower (InterestSet (..))
-import Cardano.Node.Client.UTxOIndexer.Types qualified as Indexer
 import Cardano.Slotting.Slot (SlotNo (..))
 import Data.Map.Strict qualified as Map
 import Data.Word (Word64)
@@ -225,7 +224,7 @@ withTestIndexer action =
                 { icDbPath = dir
                 , icSocketPath = dir <> "/missing.sock"
                 , icNetworkMagic = NetworkMagic 42
-                , icStartSlot = Indexer.SlotNo 0
+                , icStartPoint = Nothing
                 , icLagThresholdSlots = 60
                 , icByronEpochSlots = 86_400
                 , icSecurityParamK = 2160

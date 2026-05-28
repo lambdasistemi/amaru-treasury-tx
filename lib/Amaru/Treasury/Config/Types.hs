@@ -37,6 +37,7 @@ data ApiConfig = ApiConfig
     , acIndexerDb :: !(Maybe FilePath)
     , acIndexerLagThresholdSlots :: !(Maybe Word64)
     , acIndexerStartSlot :: !(Maybe Word64)
+    , acIndexerStartBlockHash :: !(Maybe Text)
     }
     deriving stock (Eq, Show)
 
@@ -50,6 +51,7 @@ emptyApiConfig =
         , acIndexerDb = Nothing
         , acIndexerLagThresholdSlots = Nothing
         , acIndexerStartSlot = Nothing
+        , acIndexerStartBlockHash = Nothing
         }
 
 instance FromJSON ApiConfig where
@@ -62,6 +64,7 @@ instance FromJSON ApiConfig where
                 <*> o .:? "indexerDb"
                 <*> o .:? "indexerLagThresholdSlots"
                 <*> o .:? "indexerStartSlot"
+                <*> o .:? "indexerStartBlockHash"
 
 -- | One named treasury profile in @treasury.yaml@.
 data TreasuryProfileConfig = TreasuryProfileConfig
@@ -123,6 +126,7 @@ data TreasuryConfigOverrides = TreasuryConfigOverrides
     , tcoApiIndexerDb :: !(Maybe FilePath)
     , tcoApiIndexerLagThresholdSlots :: !(Maybe Word64)
     , tcoApiIndexerStartSlot :: !(Maybe Word64)
+    , tcoApiIndexerStartBlockHash :: !(Maybe Text)
     }
     deriving stock (Eq, Show)
 
@@ -146,6 +150,7 @@ emptyTreasuryConfigOverrides =
         , tcoApiIndexerDb = Nothing
         , tcoApiIndexerLagThresholdSlots = Nothing
         , tcoApiIndexerStartSlot = Nothing
+        , tcoApiIndexerStartBlockHash = Nothing
         }
 
 -- | Network name and magic after source resolution.

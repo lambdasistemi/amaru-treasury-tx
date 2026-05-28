@@ -15,7 +15,8 @@ Thin binary that:
     @--static@) plus the embedded-indexer flags introduced
     by #242 (@--indexer-db@,
     @--indexer-lag-threshold-slots@,
-    @--indexer-start-slot@);
+    @--indexer-start-slot@,
+    @--indexer-start-block-hash@);
   * loads the three read-only JSON artefacts the image
     bakes in;
   * opens a single N2C session against the cardano mainnet
@@ -35,6 +36,7 @@ Refuses to start against any non-mainnet network magic
 module Main (main) where
 
 import Data.Aeson qualified as Aeson
+import Data.Bifunctor (first)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Streaming.Network (HostPreference)
 import Data.String (IsString (..))
@@ -106,8 +108,7 @@ import Amaru.Treasury.Api.Types
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.Cli.Common (GlobalOpts (..))
 import Amaru.Treasury.Constants
-    ( mainnetIndexerStartSlot
-    , sundaeOrderAddressMainnet
+    ( sundaeOrderAddressMainnet
     )
 import Amaru.Treasury.Inspect.Types
     ( DeploymentAnchor (..)
@@ -274,11 +275,8 @@ mkIndexerConfig socket globalOpts cli interestSet =
         { icDbPath = aircDbPath cli
         , icSocketPath = socket
         , icNetworkMagic = goNetworkMagic globalOpts
-        , icStartSlot =
-            maybe
-                mainnetIndexerStartSlot
-                SlotNo
-                (aircStartSlot cli)
+        , icStartPoint =
+            first SlotNo <$> aircStartPoint cli
         , icLagThresholdSlots = aircLagThresholdSlots cli
         , icByronEpochSlots = 21_600
         , icSecurityParamK = 2160

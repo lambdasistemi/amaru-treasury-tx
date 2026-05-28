@@ -71,6 +71,7 @@ import Cardano.Node.Client.UTxOIndexer.Indexer
 import Cardano.Node.Client.UTxOIndexer.Indexer qualified as Indexer
 import Cardano.Node.Client.UTxOIndexer.Types
     ( Address (..)
+    , BlockHash
     , SlotNo (..)
     , TxIn
     , TxOut (..)
@@ -109,10 +110,10 @@ data IndexerConfig = IndexerConfig
     -- follower connects to.
     , icNetworkMagic :: !NetworkMagic
     -- ^ Network magic for the chain-sync handshake.
-    , icStartSlot :: !SlotNo
-    -- ^ Cold-boot starting slot. Ignored once the
+    , icStartPoint :: !(Maybe (SlotNo, BlockHash))
+    -- ^ Cold-boot intersection point. Ignored once the
     -- on-disk store has a prior cursor (the follower's
-    -- @getResumePoints@ wins).
+    -- @getResumePoints@ wins). 'Nothing' starts at Origin.
     , icLagThresholdSlots :: !Word64
     -- ^ Drift threshold. When
     -- @tip_slot - processed_slot > this value@,
@@ -241,11 +242,8 @@ toChainSyncCfg cfg =
           -- intersect at Origin and walk forward (the EBB
           -- skip from #163 prevents the Byron-era
           -- ApplyConflict that otherwise blocks cold sync
-          -- from mainnet). A future enhancement can query
-          -- the local node for current tip and pass that
-          -- as 'Just (slot, hash)' to skip Byron + early
-          -- Shelley entirely.
-          csStartPoint = Nothing
+          -- from mainnet).
+          csStartPoint = icStartPoint cfg
         , -- Per-block tracer (upstream
           -- cardano-node-clients#165 round-2). Silenced for
           -- now: a roll-forward stream during cold-sync

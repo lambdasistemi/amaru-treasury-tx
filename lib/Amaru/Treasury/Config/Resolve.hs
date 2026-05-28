@@ -93,6 +93,8 @@ envTreasuryConfigOverrides envs =
         , tcoApiIndexerStartSlot =
             lookupString "AMARU_TREASURY_API_INDEXER_START_SLOT"
                 >>= readMaybe
+        , tcoApiIndexerStartBlockHash =
+            lookupText "AMARU_TREASURY_API_INDEXER_START_BLOCK_HASH"
         }
   where
     lookupString key = lookup key envs

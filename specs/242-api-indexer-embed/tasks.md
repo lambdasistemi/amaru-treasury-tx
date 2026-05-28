@@ -281,7 +281,7 @@ Layout legend:
   `chore(api): repin cnc to merged handler seam`.
   Tasks trailer: `Tasks: T021`. Worker pair.
 
-- [ ] **T022 [H]** Project the API cold-boot override into the
+- [X] **T022 [H]** Project the API cold-boot override into the
   upstream-shaped `ChainSyncConfig.csStartPoint`.
   `cardano-node-clients` now correctly requires a concrete
   `(SlotNo, BlockHash)` start point; a slot alone is not a valid
@@ -306,6 +306,7 @@ Layout legend:
   - `lib/Amaru/Treasury/Config/Resolve.hs`
   - `lib/Amaru/Treasury/Config/Types.hs`
   - `test/unit/Amaru/Treasury/Api/ConfigSpec.hs`
+  - `test/unit/Amaru/Treasury/Api/HandlersIndexerSpec.hs`
   - `test/unit/Amaru/Treasury/Api/IndexerSpec.hs`
   - `test/unit/Amaru/Treasury/Config/FileSpec.hs`
 

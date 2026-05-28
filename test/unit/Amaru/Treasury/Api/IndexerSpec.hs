@@ -103,7 +103,7 @@ spec = describe "Amaru.Treasury.Api.Indexer" $ do
                         { icDbPath = "/tmp/unused"
                         , icSocketPath = "/tmp/unused.sock"
                         , icNetworkMagic = NetworkMagic 42
-                        , icStartSlot = SlotNo 0
+                        , icStartPoint = Nothing
                         , icLagThresholdSlots = 60
                         , icByronEpochSlots = 86_400
                         , icSecurityParamK = 2160
@@ -129,7 +129,7 @@ spec = describe "Amaru.Treasury.Api.Indexer" $ do
                             { icDbPath = "/tmp/unused"
                             , icSocketPath = "/tmp/unused.sock"
                             , icNetworkMagic = NetworkMagic 42
-                            , icStartSlot = SlotNo 0
+                            , icStartPoint = Nothing
                             , icLagThresholdSlots = 60
                             , icByronEpochSlots = 86_400
                             , icSecurityParamK = 2160
@@ -140,6 +140,31 @@ spec = describe "Amaru.Treasury.Api.Indexer" $ do
                             }
             case csHandlers chainSyncCfg of
                 _ :| extraHandlers -> length extraHandlers `shouldBe` 0
+
+    describe "toChainSyncCfg"
+        $ it
+            "projects a configured start point into\
+            \ ChainSyncConfig.csStartPoint"
+        $ do
+            let startHash = BlockHash (B.replicate 32 0xAB)
+                chainSyncCfg =
+                    toChainSyncCfg
+                        IndexerConfig
+                            { icDbPath = "/tmp/unused"
+                            , icSocketPath = "/tmp/unused.sock"
+                            , icNetworkMagic = NetworkMagic 42
+                            , icStartPoint =
+                                Just (SlotNo 123, startHash)
+                            , icLagThresholdSlots = 60
+                            , icByronEpochSlots = 86_400
+                            , icSecurityParamK = 2160
+                            , icReconnectPolicy =
+                                defaultReconnectPolicy
+                            , icProbeConfig = defaultProbeConfig
+                            , icInterestSet = IndexAll
+                            }
+            csStartPoint chainSyncCfg
+                `shouldBe` Just (SlotNo 123, startHash)
 
 -- ---------------------------------------------------------------------------
 -- Helpers
@@ -158,7 +183,7 @@ withTmpIndexer action =
                 { icDbPath = dir
                 , icSocketPath = dir <> "/missing.sock"
                 , icNetworkMagic = NetworkMagic 42
-                , icStartSlot = SlotNo 0
+                , icStartPoint = Nothing
                 , icLagThresholdSlots = 60
                 , icByronEpochSlots = 86_400
                 , icSecurityParamK = 2160

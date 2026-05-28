@@ -8,6 +8,8 @@ License     : Apache-2.0
 -}
 module Amaru.Treasury.Api.ConfigSpec (spec) where
 
+import Cardano.Node.Client.UTxOIndexer.Types (BlockHash (..))
+import Data.ByteString qualified as B
 import Data.List (isInfixOf)
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.FilePath ((</>))
@@ -60,7 +62,7 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                         ApiIndexerRuntimeConfig
                             { aircDbPath = "indexer-profile"
                             , aircLagThresholdSlots = 60
-                            , aircStartSlot = Nothing
+                            , aircStartPoint = Nothing
                             }
                     , arcGlobalOpts =
                         GlobalOpts
@@ -105,7 +107,7 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                     ApiIndexerRuntimeConfig
                         { aircDbPath = "indexer-env"
                         , aircLagThresholdSlots = 60
-                        , aircStartSlot = Nothing
+                        , aircStartPoint = Nothing
                         }
                 , arcGlobalOpts =
                     GlobalOpts
@@ -147,6 +149,8 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                     , "42"
                     , "--indexer-start-slot"
                     , "123"
+                    , "--indexer-start-block-hash"
+                    , sampleBlockHashHex
                     ]
 
             resolved
@@ -162,7 +166,8 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                         ApiIndexerRuntimeConfig
                             { aircDbPath = "indexer-cli"
                             , aircLagThresholdSlots = 42
-                            , aircStartSlot = Just 123
+                            , aircStartPoint =
+                                Just (123, sampleBlockHash)
                             }
                     , arcGlobalOpts =
                         GlobalOpts
@@ -221,7 +226,7 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                     ApiIndexerRuntimeConfig
                         { aircDbPath = "indexer-flag"
                         , aircLagThresholdSlots = 60
-                        , aircStartSlot = Nothing
+                        , aircStartPoint = Nothing
                         }
                 , arcGlobalOpts =
                     GlobalOpts
@@ -253,6 +258,101 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                 []
 
         arcSocket <$> resolved `shouldBe` Right "/legacy/node.socket"
+
+    it "rejects an indexer start slot without a block hash" $ do
+        resolved <-
+            parseApiArgsWithEnv
+                []
+                [ "--socket"
+                , "/flag/node.socket"
+                , "--metadata"
+                , "metadata-flag.json"
+                , "--manifest"
+                , "manifest-flag.json"
+                , "--build-identity"
+                , "build-flag.json"
+                , "--static"
+                , "static-flag"
+                , "--indexer-db"
+                , "indexer-flag"
+                , "--indexer-start-slot"
+                , "123"
+                ]
+
+        resolved
+            `shouldFailWith` "api.indexerStartPoint requires both indexerStartSlot and indexerStartBlockHash"
+
+    it "resolves an indexer start point from slot and block hash" $ do
+        resolved <-
+            parseApiArgsWithEnv
+                []
+                [ "--socket"
+                , "/flag/node.socket"
+                , "--metadata"
+                , "metadata-flag.json"
+                , "--manifest"
+                , "manifest-flag.json"
+                , "--build-identity"
+                , "build-flag.json"
+                , "--static"
+                , "static-flag"
+                , "--indexer-db"
+                , "indexer-flag"
+                , "--indexer-start-slot"
+                , "123"
+                , "--indexer-start-block-hash"
+                , sampleBlockHashHex
+                ]
+
+        aircStartPoint . arcIndexer <$> resolved
+            `shouldBe` Right (Just (123, sampleBlockHash))
+
+    it "rejects an indexer start block hash without a slot" $ do
+        resolved <-
+            parseApiArgsWithEnv
+                []
+                [ "--socket"
+                , "/flag/node.socket"
+                , "--metadata"
+                , "metadata-flag.json"
+                , "--manifest"
+                , "manifest-flag.json"
+                , "--build-identity"
+                , "build-flag.json"
+                , "--static"
+                , "static-flag"
+                , "--indexer-db"
+                , "indexer-flag"
+                , "--indexer-start-block-hash"
+                , sampleBlockHashHex
+                ]
+
+        resolved
+            `shouldFailWith` "api.indexerStartPoint requires both indexerStartSlot and indexerStartBlockHash"
+
+    it "rejects a malformed indexer start block hash" $ do
+        resolved <-
+            parseApiArgsWithEnv
+                []
+                [ "--socket"
+                , "/flag/node.socket"
+                , "--metadata"
+                , "metadata-flag.json"
+                , "--manifest"
+                , "manifest-flag.json"
+                , "--build-identity"
+                , "build-flag.json"
+                , "--static"
+                , "static-flag"
+                , "--indexer-db"
+                , "indexer-flag"
+                , "--indexer-start-slot"
+                , "123"
+                , "--indexer-start-block-hash"
+                , "not-hex"
+                ]
+
+        resolved `shouldFailWith` "api.indexerStartBlockHash"
 
     it "rejects non-mainnet profile configuration for the API" $
         withSystemTempDirectory "treasury-api-config" $ \tmp -> do
@@ -326,3 +426,10 @@ nonMainnetYaml =
     \  buildIdentity: build-profile.json\n\
     \  static: static-profile\n\
     \  indexerDb: indexer-profile\n"
+
+sampleBlockHashHex :: String
+sampleBlockHashHex =
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+sampleBlockHash :: BlockHash
+sampleBlockHash = BlockHash (B.replicate 32 0xAA)

@@ -58,6 +58,7 @@ treasuryConfigOverridesParser =
         <*> optional (subConfig "api" apiIndexerDbSetting)
         <*> optional (subConfig "api" apiIndexerLagThresholdSlotsSetting)
         <*> optional (subConfig "api" apiIndexerStartSlotSetting)
+        <*> optional (subConfig "api" apiIndexerStartBlockHashSetting)
 
 -- | Settings parser wrapped in YAML config loading.
 treasuryConfigWithYamlParser :: Parser TreasuryConfigOverrides
@@ -241,4 +242,14 @@ apiIndexerStartSlotSetting =
         , conf "indexerStartSlot"
         , metavar "SLOT"
         , help "API embedded indexer cold-boot start slot"
+        ]
+
+apiIndexerStartBlockHashSetting :: Parser Text
+apiIndexerStartBlockHashSetting =
+    strOption
+        [ long "api-indexer-start-block-hash"
+        , env "AMARU_TREASURY_API_INDEXER_START_BLOCK_HASH"
+        , conf "indexerStartBlockHash"
+        , metavar "HASH"
+        , help "API embedded indexer cold-boot start block hash"
         ]

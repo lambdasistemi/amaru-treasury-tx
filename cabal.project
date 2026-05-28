@@ -33,9 +33,9 @@ source-repository-package
 source-repository-package
   type: git
   location: https://github.com/lambdasistemi/cardano-node-clients
-  -- Pinned to cardano-node-clients PR #169 final head:
+  -- Pinned to cardano-node-clients merged main commit for PR #169:
   -- exposes ChainSyncConfig.csHandlers for downstream handler wiring.
-  tag: 57dc17b9ba2a383211762bd473946c303ed00cf9
+  tag: 9353c889c9a531e535ed7e9d8b6b0ad4fa621ec7
   --sha256: 1qcdy0wnx58v7agpzk5rjwchifld2sacxv6q8fsmgb8kwgd2q8gv
 
 -- Mirrored from cardano-node-clients/cabal.project (SRPs are not transitive

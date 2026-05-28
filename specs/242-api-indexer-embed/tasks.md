@@ -266,7 +266,7 @@ Layout legend:
   `refactor(api): use upstream BlockIndexer.Readiness pure helpers`.
   Tasks trailer: `Tasks: T020`. Worker pair.
 
-- [ ] **T021 [F]** Re-pin `cardano-node-clients` from the final
+- [X] **T021 [F]** Re-pin `cardano-node-clients` from the final
   PR #169 head `57dc17b9ba2a383211762bd473946c303ed00cf9` to the
   merged `main` commit
   `9353c889c9a531e535ed7e9d8b6b0ad4fa621ec7`. The fixed-output

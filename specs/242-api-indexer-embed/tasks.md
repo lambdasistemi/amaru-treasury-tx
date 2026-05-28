@@ -189,9 +189,10 @@ Layout legend:
 
   **Live-validation gate (mandatory before navigator NAVIGATOR-VERIFIED)**:
   Operator sequencing update (2026-05-28): run the devnet API smoke
-  repair/proof in T023 first. Only return to this mainnet/dev endpoint
-  E2E gate after the devnet proof is healthy, the operator is happy
-  with that evidence, and Slice B
+  repair/proof in T023 first, then the transaction-inserting QA proof
+  in T024. Only return to this mainnet/dev endpoint E2E gate after the
+  devnet proof is healthy, the operator is happy with that evidence,
+  and Slice B
   [#243](https://github.com/lambdasistemi/amaru-treasury-tx/issues/243)
   has proved `amaru-treasury-tx history --scope X` on devnet with
   submitted disburse + reorganize entries. `#242` does not implement
@@ -339,6 +340,74 @@ Layout legend:
   - `amaru-treasury-tx.cabal` (scope-widened 2026-05-28:
     `devnet-tests` threaded runtime flags only)
   - `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs`
+
+- [ ] **T024 [H]** Strengthen the opt-in API devnet smoke from
+  lifecycle/readiness proof to transaction-inserting QA. The smoke must
+  follow the upstream `cardano-tx-generator` proof shape from
+  `cardano-tx-tools:tx-generator-lib`: submit the transaction, compute
+  the exact expected output `TxIn`, wait for the embedded indexer to
+  observe that `TxIn` (via `awaitTxIn` or an equivalent
+  `snapshotUtxosAt` poll), and only then assert the phase as detected.
+  A bare HTTP 200 JSON object is not sufficient.
+
+  **Required devnet sequence**:
+  1. Boot the local `cardano-node-clients:devnet` node and the API
+     harness.
+  2. Before starting the API embedded indexer, wait until the devnet has
+     forged more than its stability-window/security-parameter blocks
+     (derive the window from the devnet genesis/harness or the indexer
+     config; do not guess). Record the observed tip/stability values in
+     the smoke failure/success output. This ordering is mandatory:
+     `withApiIndexer` starts only after the pre-indexer stability wait.
+  3. Start the API embedded indexer with `IndexAll` so arbitrary wallet
+     and treasury UTxOs can be indexed.
+  4. Create or reuse devnet metadata for `core_development` from the
+     devnet registry artifacts, not mainnet fixture addresses.
+  5. Insert a submitted disburse-phase transaction and wait for enough
+     chain progress that the indexer observes the expected treasury
+     continuation output and beneficiary output.
+  6. Insert a submitted reorganize-phase transaction (not just an
+     unsigned build/asset-preservation check) and wait for enough chain
+     progress that the indexer observes the expected merged treasury
+     continuation output.
+  7. Assert `/v1/treasury-inspect?scope=core_development` is served from
+     indexed state after each phase and carries the expected treasury
+     UTxO count/value transition. Preserve the existing readiness
+     `200 -> forced 503 -> restored 200` scenarios after the indexed
+     state assertions.
+
+  **Upstream reference**: mirror the generator's QA invariant from
+  `/code/cardano-tx-tools/lib-tx-generator/Cardano/Tx/Generator/Daemon.hs`
+  around `Submitted -> awaitTxIn expected-output`, plus the TxBuild
+  composition style in
+  `/code/cardano-tx-tools/lib-tx-generator/Cardano/Tx/Generator/Build.hs`.
+  If importing `cardano-tx-tools:tx-generator-lib` directly is not the
+  smallest reliable path, copy the invariant, not the daemon.
+
+  **History gate remains cross-ticket**: #242 may prove indexed UTxOs
+  and phase ledger effects. It must not claim tx-history readiness.
+  Before T014 enters the real dev/mainnet endpoint, #243 must still
+  prove `amaru-treasury-tx history --scope core_development` on devnet
+  returns both submitted entries with correct `disburse` and
+  `reorganize` roles.
+
+  RED: `nix develop --quiet -c just devnet-api-smoke` on the current
+  branch passes while proving only lifecycle/readiness; update the smoke
+  so this old behavior fails the new assertions (missing indexed phase
+  observations). GREEN: the same command submits both phase
+  transactions, waits for indexer observations, asserts inspect content,
+  and passes. Commit:
+  `test(api-smoke): prove devnet indexed phase transactions`.
+  Tasks trailer: `Tasks: T024`. Worker pair.
+
+  **Owned files**:
+  - `amaru-treasury-tx.cabal` (only if a devnet-test module or
+    `cardano-tx-tools:tx-generator-lib` dependency is required)
+  - `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs`
+  - `test/devnet/Amaru/Treasury/Devnet/SmokeSpec.hs` (only for shared
+    helper extraction/reuse; do not alter unrelated devnet phases)
+  - `test/devnet/Amaru/Treasury/Devnet/MixedUtxoSmoke.hs` (only for
+    helper extraction/reuse; do not weaken its assertions)
 
 ## Phase 7 — PR finalization (re-do after T014 lands)
 

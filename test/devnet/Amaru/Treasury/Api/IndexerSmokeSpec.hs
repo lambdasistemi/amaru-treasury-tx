@@ -1,3 +1,7 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -58,35 +62,124 @@ Run via:
 -}
 module Amaru.Treasury.Api.IndexerSmokeSpec (spec) where
 
-import Cardano.Ledger.Address (Addr, serialiseAddr)
+import Cardano.Crypto.DSIGN
+    ( Ed25519DSIGN
+    , SignKeyDSIGN
+    , deriveVerKeyDSIGN
+    , rawSerialiseSignKeyDSIGN
+    )
+import Cardano.Ledger.Address
+    ( AccountAddress (..)
+    , AccountId (..)
+    , Addr
+    , getNetwork
+    , serialiseAddr
+    )
+import Cardano.Ledger.Alonzo.Scripts (AsIx)
+import Cardano.Ledger.Api.Tx (txIdTx)
+import Cardano.Ledger.Api.Tx.Out
+    ( TxOut
+    , addrTxOutL
+    , valueTxOutL
+    )
+import Cardano.Ledger.BaseTypes
+    ( Network (..)
+    , mkTxIxPartial
+    )
+import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Conway (ConwayEra)
+import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
+import Cardano.Ledger.Core (PParams)
+import Cardano.Ledger.Credential (Credential (..))
+import Cardano.Ledger.Hashes (KeyHash)
+import Cardano.Ledger.Keys
+    ( KeyRole (Payment)
+    , VKey (..)
+    , hashKey
+    )
+import Cardano.Ledger.Mary.Value
+    ( MaryValue (..)
+    , MultiAsset (..)
+    )
+import Cardano.Ledger.Metadata (Metadatum)
+import Cardano.Ledger.Plutus.ExUnits (ExUnits)
+import Cardano.Ledger.TxIn (TxId, TxIn (..))
 import Cardano.Node.Client.E2E.Devnet (withCardanoNode)
-import Cardano.Node.Client.E2E.Setup (devnetMagic, genesisDir)
+import Cardano.Node.Client.E2E.Setup
+    ( addKeyWitness
+    , devnetMagic
+    , genesisAddr
+    , genesisDir
+    , genesisSignKey
+    )
 import Cardano.Node.Client.N2C.Probe (defaultProbeConfig)
 import Cardano.Node.Client.N2C.Reconnect
     ( defaultReconnectPolicy
     )
 import Cardano.Node.Client.N2C.Trace (nullN2CTracer)
-import Cardano.Node.Client.Provider (Provider)
+import Cardano.Node.Client.Provider
+    ( LedgerSnapshot (..)
+    , Provider (..)
+    )
+import Cardano.Node.Client.Submitter
+    ( SubmitResult (..)
+    , Submitter (..)
+    )
 import Cardano.Node.Client.UTxOIndexer.Follower
     ( InterestSet (..)
     )
 import Cardano.Node.Client.UTxOIndexer.Types qualified as Indexer
+import Cardano.Slotting.Slot (SlotNo (..))
+import Cardano.Tx.Build
+    ( InterpretIO (..)
+    , TxBuild
+    , build
+    , collateral
+    , mkPParamsBound
+    , payTo
+    , spend
+    , validTo
+    )
+import Cardano.Tx.Ledger (ConwayTx)
+import Codec.Binary.Bech32 qualified as Bech32
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (withAsync)
 import Control.Exception (bracket)
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad (unless, when)
+import Control.Monad.Trans.Except (runExceptT)
+import Data.Aeson
+    ( FromJSON (..)
+    , eitherDecodeFileStrict
+    , encode
+    , object
+    , withObject
+    , (.:)
+    , (.=)
+    )
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KM
+import Data.ByteString qualified as BS
+import Data.ByteString.Base16 qualified as B16
+import Data.ByteString.Lazy qualified as BSL
 import Data.ByteString.Lazy qualified as LBS
+import Data.Foldable (toList, traverse_)
+import Data.List qualified as List
+import Data.List.NonEmpty (NonEmpty ((:|)))
+import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Tagged (Tagged (..))
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.Time
     ( UTCTime (..)
     , fromGregorian
     , getCurrentTime
     , secondsToDiffTime
     )
+import Data.Void (Void)
+import Data.Word (Word64)
+import Lens.Micro ((^.))
 import Network.HTTP.Client
     ( Manager
     , Response (..)
@@ -106,7 +199,12 @@ import Network.Wai.Handler.Warp
     )
 import Servant.Server qualified as Servant
 import System.Environment (lookupEnv)
+import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
+import System.Posix.Files
+    ( ownerReadMode
+    , setFileMode
+    )
 import Test.Hspec
     ( Spec
     , describe
@@ -128,6 +226,7 @@ import Amaru.Treasury.Api.BuildSwap
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
     , IndexerConfig (..)
+    , snapshotUtxosAt
     , withApiIndexer
     )
 import Amaru.Treasury.Api.LagGuard
@@ -151,17 +250,100 @@ import Amaru.Treasury.Api.Types
     ( BuildIdentity (..)
     , RecentTxManifest (..)
     )
-import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
-import Amaru.Treasury.Constants (sundaeOrderAddressMainnet)
+import Amaru.Treasury.AuxData
+    ( RationaleBody (..)
+    , rationaleMetadatum
+    )
+import Amaru.Treasury.Backend.N2C (withLocalNodeClient)
+import Amaru.Treasury.Build.Disburse (runDisburseAction)
+import Amaru.Treasury.Build.Reorganize (runReorganizeAction)
+import Amaru.Treasury.Build.Result
+    ( BuildResult (..)
+    , ScriptResult (..)
+    )
+import Amaru.Treasury.ChainContext (withLiveContext)
+import Amaru.Treasury.Cli.Common (GlobalOpts (..))
+import Amaru.Treasury.Devnet.RegistryInit
+    ( DevnetRegistryAnchors (..)
+    , DevnetRegistryPublication (..)
+    , TreasuryTarget (..)
+    )
+import Amaru.Treasury.Devnet.RegistryInit qualified as RegistryInit
+import Amaru.Treasury.Devnet.Runner
+    ( DevnetStakeRewardInitOpts (..)
+    , runDevnetStakeRewardInit
+    )
 import Amaru.Treasury.Inspect.Types
     ( DeploymentAnchor (..)
     , Outref (..)
     )
-import Amaru.Treasury.IntentJSON.Common (parseAddr)
-import Amaru.Treasury.Metadata
-    ( TreasuryMetadata (..)
-    , readMetadataFile
+import Amaru.Treasury.IntentJSON.Common
+    ( parseGuardKeyHash
     )
+import Amaru.Treasury.Metadata
+    ( ScopeMetadata (..)
+    , ScriptRef (..)
+    , TreasuryMetadata (..)
+    )
+import Amaru.Treasury.Registry.Derive
+    ( scriptHashToHex
+    )
+import Amaru.Treasury.Report.Accounting
+    ( ValueSummary (..)
+    , valueSummary
+    )
+import Amaru.Treasury.Scope
+    ( ScopeId (CoreDevelopment)
+    )
+import Amaru.Treasury.Tx.AttachWitness
+    ( decodeUnsignedTxHex
+    )
+import Amaru.Treasury.Tx.Disburse
+    ( DisburseAdaPayload (..)
+    , DisburseIntent (..)
+    , DisburseIntentFields (..)
+    )
+import Amaru.Treasury.Tx.Reorganize
+    ( ReorganizeIntent (..)
+    )
+import Amaru.Treasury.Tx.Submit
+    ( renderTxId
+    )
+import Amaru.Treasury.Tx.SwapWizard
+    ( txInToText
+    )
+import Amaru.Treasury.Tx.Witness
+    ( addCardanoCliPaymentKeyWitness
+    )
+
+data PreIndexerStabilityProof = PreIndexerStabilityProof
+    { pispDerivedThresholdSlots :: !Word
+    , pispObservedForgedBlocks :: !Word
+    , pispObservedTipSlot :: !Word
+    , pispWaitCompletedBeforeIndexerStart :: !Bool
+    }
+    deriving stock (Eq, Show)
+
+data SmokeProofs = SmokeProofs
+    { spPreIndexerStability :: !(Maybe PreIndexerStabilityProof)
+    , spIndexedPhaseProofs :: ![Text]
+    }
+    deriving stock (Eq, Show)
+
+data ShelleyGenesisConfig = ShelleyGenesisConfig
+    { sgcNetworkMagic :: !Int
+    , sgcSecurityParam :: !Word
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON ShelleyGenesisConfig where
+    parseJSON =
+        withObject "ShelleyGenesisConfig" $ \o ->
+            ShelleyGenesisConfig
+                <$> o .: "networkMagic"
+                <*> o .: "securityParam"
+
+data NoCtx a
 
 spec :: Spec
 spec = describe "api indexer smoke (opt-in)" $ do
@@ -170,8 +352,7 @@ spec = describe "api indexer smoke (opt-in)" $ do
         Nothing ->
             it
                 "skipped — set DEVNET_API_SMOKE_OPT_IN=1\
-                \ + E2E_GENESIS_DIR + DEVNET_SMOKE_METADATA\
-                \ to run"
+                \ + E2E_GENESIS_DIR to run"
                 (pure () :: IO ())
         Just _ ->
             it
@@ -187,21 +368,63 @@ spec = describe "api indexer smoke (opt-in)" $ do
 runSmoke :: IO ()
 runSmoke = do
     gDir <- genesisDir
-    metadataPath <- requireEnv "DEVNET_SMOKE_METADATA"
-    metadata <- readMetadataFile metadataPath
-    anchor <- parseAnchorOrFail (tmScopeOwners metadata)
-    swapAddr <- parseSwapAddrOrFail
+    genesis <- readShelleyGenesisConfig gDir
+    sgcNetworkMagic genesis `shouldBe` 42
     withCardanoNode gDir $ \nodeSock _startMs ->
-        withLocalNodeBackend devnetMagic nodeSock $ \backend ->
+        withLocalNodeClient devnetMagic nodeSock $ \backend submitter ->
             withSystemTempDirectory "atx-api-smoke" $ \dir -> do
-                let interestSet =
-                        IndexAddressSet
-                            (Set.singleton (toIxAddr swapAddr))
+                pp <- queryProtocolParams backend
+                seedUtxos <- queryUTxOs backend genesisAddr
+                publication <-
+                    RegistryInit.publishDevnetRegistryInit
+                        (apiRegistryConfig genesisAddr)
+                        backend
+                        submitter
+                        pp
+                        seedUtxos
+                RegistryInit.writeRegistryInitArtifacts
+                    42
+                    dir
+                    publication
+                signingKeyFile <- writeGenesisPaymentSigningKey dir
+                runDevnetStakeRewardInit
+                    GlobalOpts
+                        { goSocketPath = Just nodeSock
+                        , goNetworkMagic = devnetMagic
+                        , goNetworkName = Just "devnet"
+                        }
+                    DevnetStakeRewardInitOpts
+                        { dsrioRegistryFile =
+                            RegistryInit.registryInitRegistryPath dir
+                        , dsrioFundingAddress =
+                            T.unpack (renderAddr genesisAddr)
+                        , dsrioSigningKeyFile = signingKeyFile
+                        , dsrioRunDir = dir
+                        }
+                fundingUtxos <- queryUTxOs backend genesisAddr
+                treasuryInputs <-
+                    fundApiTreasuryUtxos
+                        backend
+                        submitter
+                        pp
+                        (draTreasuryTarget (drpAnchors publication))
+                        fundingUtxos
+                let metadata =
+                        devnetMetadataFromRegistry publication
+                    anchor =
+                        devnetDeploymentAnchor publication
+                    swapAddr =
+                        genesisAddr
                     indexerCfg =
                         smokeIndexerConfig
                             dir
                             nodeSock
-                            interestSet
+                            IndexAll
+                            (fromIntegral (sgcSecurityParam genesis))
+                stabilityProof <-
+                    waitForPreIndexerStability
+                        backend
+                        (sgcSecurityParam genesis)
                 withApiIndexer
                     nullN2CTracer
                     indexerCfg
@@ -241,14 +464,33 @@ runSmoke = do
                                                 sock
                                                 app
                                             )
-                                            $ \_ ->
+                                            $ \_ -> do
+                                                phaseProofs <-
+                                                    runIndexedPhaseScenarios
+                                                        manager
+                                                        port
+                                                        apiIdx
+                                                        backend
+                                                        submitter
+                                                        (drpAnchors publication)
+                                                        treasuryInputs
                                                 runScenarios
                                                     manager
                                                     port
                                                     readiness
+                                                    SmokeProofs
+                                                        { spPreIndexerStability =
+                                                            Just stabilityProof
+                                                        , spIndexedPhaseProofs =
+                                                            phaseProofs
+                                                        }
 
-runScenarios :: Manager -> Int -> ReadinessHandle -> IO ()
-runScenarios manager port readiness = do
+runScenarios
+    :: Manager -> Int -> ReadinessHandle -> SmokeProofs -> IO ()
+runScenarios manager port readiness proofs = do
+    assertPreIndexerStabilityProof (spPreIndexerStability proofs)
+    assertIndexedPhaseProofs (spIndexedPhaseProofs proofs)
+
     -- Scenario 1: live readiness → 200.
     res1 <- getInspect manager port
     statusCode (responseStatus res1) `shouldBe` 200
@@ -305,8 +547,832 @@ runScenarios manager port readiness = do
     res3 <- getInspect manager port
     statusCode (responseStatus res3) `shouldBe` 200
 
+runIndexedPhaseScenarios
+    :: Manager
+    -> Int
+    -> ApiIndexer
+    -> Provider IO
+    -> Submitter IO
+    -> DevnetRegistryAnchors
+    -> ((TxIn, TxOut ConwayEra), (TxIn, TxOut ConwayEra))
+    -> IO [Text]
+runIndexedPhaseScenarios
+    manager
+    port
+    apiIdx
+    provider
+    submitter
+    anchors
+    (firstTreasury, secondTreasury) = do
+        assertInspectTreasuryState
+            manager
+            port
+            "initial treasury funding"
+            2
+            60_000_000
+        walletUtxos <- queryUTxOs provider genesisAddr
+        disburseWallet <-
+            selectLargestAdaUtxo "api disburse wallet fuel" walletUtxos
+        disburseTxId <-
+            submitApiDisburse
+                provider
+                submitter
+                anchors
+                disburseWallet
+                firstTreasury
+                5_000_000
+        let disburseTreasuryRef = txOutRef disburseTxId 0
+            disburseBeneficiaryRef = txOutRef disburseTxId 1
+        _ <-
+            awaitIndexedTxOut
+                apiIdx
+                "disburse treasury continuation"
+                (ttAddress (draTreasuryTarget anchors))
+                disburseTreasuryRef
+                (assertPureAdaTxOut 35_000_000)
+        _ <-
+            awaitIndexedTxOut
+                apiIdx
+                "disburse beneficiary output"
+                genesisAddr
+                disburseBeneficiaryRef
+                (assertPureAdaTxOut 5_000_000)
+        assertInspectTreasuryState
+            manager
+            port
+            "after disburse"
+            2
+            55_000_000
+
+        indexedTreasury <-
+            queryUTxOByTxIn provider (Set.singleton disburseTreasuryRef)
+        disburseTreasury <-
+            case Map.lookup disburseTreasuryRef indexedTreasury of
+                Just txOut -> pure (disburseTreasuryRef, txOut)
+                Nothing ->
+                    failWith
+                        "disburse treasury continuation was indexed but is \
+                        \not live through the provider"
+        walletUtxos' <- queryUTxOs provider genesisAddr
+        reorganizeWallet <-
+            selectLargestAdaUtxo "api reorganize wallet fuel" walletUtxos'
+        reorganizeTxId <-
+            submitApiReorganize
+                provider
+                submitter
+                anchors
+                reorganizeWallet
+                disburseTreasury
+                secondTreasury
+        let reorganizeTreasuryRef = txOutRef reorganizeTxId 0
+        _ <-
+            awaitIndexedTxOut
+                apiIdx
+                "reorganize merged treasury continuation"
+                (ttAddress (draTreasuryTarget anchors))
+                reorganizeTreasuryRef
+                (assertPureAdaTxOut 55_000_000)
+        assertInspectTreasuryState
+            manager
+            port
+            "after reorganize"
+            1
+            55_000_000
+        pure
+            [ "disburse treasury continuation"
+            , "disburse beneficiary output"
+            , "reorganize merged treasury continuation"
+            ]
+
 -- ---------------------------------------------------------------------------
 -- Helpers
+
+assertPreIndexerStabilityProof
+    :: Maybe PreIndexerStabilityProof -> IO ()
+assertPreIndexerStabilityProof proof =
+    case proof of
+        Nothing ->
+            failWith
+                "missing pre-indexer stability observation/order proof: \
+                \expected derived security-param threshold, distinct \
+                \post-wait-start forged block observations greater than \
+                \threshold, observed tip, and confirmation that \
+                \withApiIndexer started only after the stability wait"
+        Just observed -> do
+            let threshold = pispDerivedThresholdSlots observed
+                observedBlocks = pispObservedForgedBlocks observed
+            unless (observedBlocks > threshold) $
+                failWith $
+                    "pre-indexer stability wait observed "
+                        <> show observedBlocks
+                        <> " distinct post-wait-start forged blocks \
+                           \but derived threshold is "
+                        <> show threshold
+                        <> " (tip slot "
+                        <> show (pispObservedTipSlot observed)
+                        <> ")"
+            unless (pispWaitCompletedBeforeIndexerStart observed) $
+                failWith
+                    "withApiIndexer started before the pre-indexer \
+                    \stability wait completed"
+
+assertIndexedPhaseProofs :: [Text] -> IO ()
+assertIndexedPhaseProofs observed =
+    case missing of
+        [] -> pure ()
+        _ ->
+            failWith $
+                "missing indexed devnet phase observations: "
+                    <> T.unpack (T.intercalate ", " missing)
+                    <> "; observed: "
+                    <> T.unpack (T.intercalate ", " observed)
+  where
+    required =
+        [ "disburse treasury continuation"
+        , "disburse beneficiary output"
+        , "reorganize merged treasury continuation"
+        ]
+    missing =
+        List.filter (`notElem` observed) required
+
+apiRegistryConfig :: Addr -> RegistryInit.DevnetRegistryInitConfig
+apiRegistryConfig fundingAddress =
+    RegistryInit.DevnetRegistryInitConfig
+        { RegistryInit.dricNetwork = Testnet
+        , RegistryInit.dricFundingAddress = fundingAddress
+        , RegistryInit.dricOwnerKeyHash =
+            paymentKeyHashFromSignKey genesisSignKey
+        , RegistryInit.dricSignTx = addKeyWitness genesisSignKey
+        }
+
+readShelleyGenesisConfig :: FilePath -> IO ShelleyGenesisConfig
+readShelleyGenesisConfig gDir = do
+    decoded <-
+        eitherDecodeFileStrict
+            (gDir </> "shelley-genesis.json")
+    case decoded of
+        Left err ->
+            failWith $
+                "decode shelley-genesis.json for API smoke stability \
+                \threshold: "
+                    <> err
+        Right cfg -> pure cfg
+
+waitForPreIndexerStability
+    :: Provider IO -> Word -> IO PreIndexerStabilityProof
+waitForPreIndexerStability provider threshold =
+    go (480 :: Int) Set.empty
+  where
+    go attempts observedPoints = do
+        snapshot <- queryLedgerSnapshot provider
+        let SlotNo tipWord64 = ledgerTipSlot snapshot
+            tip = fromIntegral tipWord64
+            pointKey = show (ledgerChainPoint snapshot)
+            observedPoints'
+                | tipWord64 == 0 = observedPoints
+                | otherwise = Set.insert pointKey observedPoints
+            observedBlocks = fromIntegral (Set.size observedPoints')
+        if observedBlocks > threshold
+            then do
+                putStrLn $
+                    "pre-indexer stability wait: \
+                    \derivedThresholdSlots="
+                        <> show threshold
+                        <> " observedDistinctForgedBlocks="
+                        <> show observedBlocks
+                        <> " observedTipSlot="
+                        <> show tip
+                        <> " withApiIndexerStartsAfterWait=true"
+                pure
+                    PreIndexerStabilityProof
+                        { pispDerivedThresholdSlots = threshold
+                        , pispObservedForgedBlocks = observedBlocks
+                        , pispObservedTipSlot = tip
+                        , pispWaitCompletedBeforeIndexerStart = True
+                        }
+            else
+                if attempts <= 0
+                    then
+                        failWith $
+                            "timed out before starting withApiIndexer: \
+                            \observed "
+                                <> show observedBlocks
+                                <> " distinct post-wait-start forged \
+                                   \blocks at tip slot "
+                                <> show tip
+                                <> ", not more than derived security \
+                                   \parameter block threshold "
+                                <> show threshold
+                    else do
+                        threadDelay 500_000
+                        go (attempts - 1) observedPoints'
+
+devnetMetadataFromRegistry
+    :: DevnetRegistryPublication -> TreasuryMetadata
+devnetMetadataFromRegistry publication =
+    TreasuryMetadata
+        { tmScopeOwners = txInToText (draScopesRef registry)
+        , tmTreasuries =
+            Map.singleton
+                CoreDevelopment
+                ScopeMetadata
+                    { smOwner = Just (draOwnerKeyHash registry)
+                    , smBudget = Nothing
+                    , smAddress = renderAddr (ttAddress target)
+                    , smTreasury =
+                        ScriptRef
+                            { srHash = ttScriptHashText target
+                            , srDeployedAt =
+                                txInToText (draTreasuryRef registry)
+                            }
+                    , smPermissions =
+                        ScriptRef
+                            { srHash =
+                                scriptHashToHex
+                                    (draPermissionsHash registry)
+                            , srDeployedAt =
+                                txInToText (draPermissionsRef registry)
+                            }
+                    , smRegistry =
+                        ScriptRef
+                            { srHash = draRegistryPolicyId registry
+                            , srDeployedAt =
+                                txInToText (draRegistryRef registry)
+                            }
+                    }
+        }
+  where
+    registry =
+        drpAnchors publication
+    target =
+        draTreasuryTarget registry
+
+devnetDeploymentAnchor
+    :: DevnetRegistryPublication -> DeploymentAnchor
+devnetDeploymentAnchor publication =
+    DeploymentAnchor $
+        txInToOutref (draScopesRef (drpAnchors publication))
+
+fundApiTreasuryUtxos
+    :: Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> TreasuryTarget
+    -> [(TxIn, TxOut ConwayEra)]
+    -> IO ((TxIn, TxOut ConwayEra), (TxIn, TxOut ConwayEra))
+fundApiTreasuryUtxos provider submitter pp target utxos = do
+    seed@(seedIn, _) <-
+        selectLargestAdaUtxo "api treasury funding" utxos
+    snapshot <- queryLedgerSnapshot provider
+    let upperSlot =
+            addSlots 20 (ledgerTipSlot snapshot)
+        interpret :: InterpretIO NoCtx
+        interpret =
+            InterpretIO $ \case {}
+        eval tx =
+            fmap
+                (Map.map (either (Left . show) Right))
+                (evaluateTx provider tx)
+        prog :: TxBuild NoCtx Void ()
+        prog = do
+            _ <- spend seedIn
+            collateral seedIn
+            _ <- payTo (ttAddress target) (lovelaceValue 40_000_000)
+            _ <- payTo (ttAddress target) (lovelaceValue 20_000_000)
+            validTo upperSlot
+    txId <-
+        buildSubmitAndWait
+            "fund API treasury UTxOs"
+            provider
+            submitter
+            pp
+            interpret
+            eval
+            [seed]
+            []
+            genesisAddr
+            prog
+    found <- waitForTxIns provider [txOutRef txId 0, txOutRef txId 1] 60
+    case found of
+        [first, second] -> do
+            assertTreasuryTxOut
+                "api treasury funding #0"
+                (ttAddress target)
+                40_000_000
+                first
+            assertTreasuryTxOut
+                "api treasury funding #1"
+                (ttAddress target)
+                20_000_000
+                second
+            pure (first, second)
+        _ ->
+            failWith "api treasury funding outputs were not found"
+
+submitApiDisburse
+    :: Provider IO
+    -> Submitter IO
+    -> DevnetRegistryAnchors
+    -> (TxIn, TxOut ConwayEra)
+    -> (TxIn, TxOut ConwayEra)
+    -> Integer
+    -> IO TxId
+submitApiDisburse
+    provider
+    submitter
+    anchors
+    walletInput
+    treasuryInput
+    amountLovelace = do
+        snapshot <- queryLedgerSnapshot provider
+        signer <-
+            expectEither
+                "api disburse owner signer"
+                (parseGuardKeyHash (draOwnerKeyHash anchors))
+        let target = draTreasuryTarget anchors
+            treasuryBefore = txOutLovelace (snd treasuryInput)
+            leftover = treasuryBefore - amountLovelace
+            needed =
+                Set.fromList
+                    [ fst walletInput
+                    , fst treasuryInput
+                    , draScopesRef anchors
+                    , draPermissionsRef anchors
+                    , draTreasuryRef anchors
+                    , draRegistryRef anchors
+                    ]
+            fields =
+                DisburseIntentFields
+                    { difWalletUtxo = fst walletInput
+                    , difBeneficiaryAddress = genesisAddr
+                    , difTreasuryUtxos = [fst treasuryInput]
+                    , difTreasuryAddress = ttAddress target
+                    , difPermissionsRewardAccount =
+                        permissionsRewardAccount anchors
+                    , difScopesDeployedAt = draScopesRef anchors
+                    , difPermissionsDeployedAt =
+                        draPermissionsRef anchors
+                    , difTreasuryDeployedAt = draTreasuryRef anchors
+                    , difRegistryDeployedAt = draRegistryRef anchors
+                    , difSigners = [signer]
+                    , difUpperBound = addSlots 20 (ledgerTipSlot snapshot)
+                    }
+            payload =
+                DisburseAdaPayload
+                    { dapAmountLovelace = Coin amountLovelace
+                    , dapLeftoverLovelace = Coin leftover
+                    }
+            intent =
+                DisburseAdaIntent fields payload
+        withLiveContext Testnet provider needed $ \ctx -> do
+            result <-
+                runExceptT $
+                    runDisburseAction
+                        ctx
+                        intent
+                        (apiRationale "disburse")
+                        genesisAddr
+            buildResult <- expectBuildResult "api disburse" result
+            assertScriptResultsOk "api disburse" buildResult
+            submitBuildResult "api disburse" submitter buildResult
+
+submitApiReorganize
+    :: Provider IO
+    -> Submitter IO
+    -> DevnetRegistryAnchors
+    -> (TxIn, TxOut ConwayEra)
+    -> (TxIn, TxOut ConwayEra)
+    -> (TxIn, TxOut ConwayEra)
+    -> IO TxId
+submitApiReorganize
+    provider
+    submitter
+    anchors
+    walletInput
+    firstTreasury
+    secondTreasury = do
+        snapshot <- queryLedgerSnapshot provider
+        signer <-
+            expectEither
+                "api reorganize owner signer"
+                (parseGuardKeyHash (draOwnerKeyHash anchors))
+        let target = draTreasuryTarget anchors
+            needed =
+                Set.fromList
+                    [ fst walletInput
+                    , fst firstTreasury
+                    , fst secondTreasury
+                    , draScopesRef anchors
+                    , draPermissionsRef anchors
+                    , draTreasuryRef anchors
+                    , draRegistryRef anchors
+                    ]
+            intent =
+                ReorganizeIntent
+                    { rgiWalletUtxo = fst walletInput
+                    , rgiTreasuryUtxos =
+                        fst firstTreasury :| [fst secondTreasury]
+                    , rgiTreasuryAddress = ttAddress target
+                    , rgiTreasuryDeployedAt = draTreasuryRef anchors
+                    , rgiRegistryDeployedAt = draRegistryRef anchors
+                    , rgiPermissionsRewardAccount =
+                        permissionsRewardAccount anchors
+                    , rgiPermissionsDeployedAt =
+                        draPermissionsRef anchors
+                    , rgiScopesDeployedAt = draScopesRef anchors
+                    , rgiScopeOwnerSigner = signer
+                    , rgiUpperBound = addSlots 20 (ledgerTipSlot snapshot)
+                    , rgiSplitNativeAssets = False
+                    }
+        withLiveContext Testnet provider needed $ \ctx -> do
+            result <-
+                runExceptT $
+                    runReorganizeAction
+                        ctx
+                        intent
+                        (apiRationale "reorganize")
+                        genesisAddr
+            buildResult <- expectBuildResult "api reorganize" result
+            assertScriptResultsOk "api reorganize" buildResult
+            submitBuildResult "api reorganize" submitter buildResult
+
+submitBuildResult
+    :: String -> Submitter IO -> BuildResult -> IO TxId
+submitBuildResult label submitter buildResult =
+    case decodeUnsignedTxHex
+        (B16.encode (BSL.toStrict (brCborBytes buildResult))) of
+        Left err ->
+            failWith $
+                label <> " decode unsigned tx failed: " <> show err
+        Right tx -> do
+            let signed =
+                    addCardanoCliPaymentKeyWitness genesisSignKey tx
+                signedTxId =
+                    txIdTx signed
+                signedTxIdText =
+                    renderTxId signedTxId
+            signedTxIdText `shouldBe` brTxId buildResult
+            submitTx submitter signed >>= \case
+                Submitted _ -> pure signedTxId
+                Rejected reason ->
+                    failWith $
+                        label <> " rejected: " <> show reason
+
+awaitIndexedTxOut
+    :: ApiIndexer
+    -> String
+    -> Addr
+    -> TxIn
+    -> (TxOut ConwayEra -> Either String ())
+    -> IO (TxOut ConwayEra)
+awaitIndexedTxOut apiIdx label addr ref check =
+    go (120 :: Int)
+  where
+    go attempts = do
+        utxos <- snapshotUtxosAt apiIdx addr
+        case Map.lookup ref (Map.fromList utxos) of
+            Just txOut ->
+                case check txOut of
+                    Right () -> pure txOut
+                    Left err ->
+                        failWith $
+                            label
+                                <> " indexed unexpected TxOut at "
+                                <> T.unpack (txInToText ref)
+                                <> ": "
+                                <> err
+            Nothing ->
+                if attempts <= 0
+                    then
+                        failWith $
+                            label
+                                <> " not observed by embedded indexer at "
+                                <> T.unpack (txInToText ref)
+                    else do
+                        threadDelay 500_000
+                        go (attempts - 1)
+
+assertInspectTreasuryState
+    :: Manager -> Int -> String -> Int -> Integer -> IO ()
+assertInspectTreasuryState manager port label expectedCount expectedLovelace = do
+    res <- getInspect manager port
+    statusCode (responseStatus res) `shouldBe` 200
+    case Aeson.decode (responseBody res) of
+        Just (Aeson.Object root) -> do
+            scopes <- case KM.lookup "scopes" root of
+                Just (Aeson.Array xs) -> pure xs
+                other ->
+                    failWith $
+                        label
+                            <> ": inspect response lacks scopes array: "
+                            <> show other
+            case toList scopes of
+                [Aeson.Object scope] -> do
+                    treasuryUtxos <- case KM.lookup "treasuryUtxos" scope of
+                        Just (Aeson.Array xs) -> pure xs
+                        other ->
+                            failWith $
+                                label
+                                    <> ": inspect scope lacks treasuryUtxos: "
+                                    <> show other
+                    length treasuryUtxos `shouldBe` expectedCount
+                    case KM.lookup "totals" scope of
+                        Just (Aeson.Object totals) ->
+                            KM.lookup "lovelace" totals
+                                `shouldBe` Just
+                                    ( Aeson.Number
+                                        (fromInteger expectedLovelace)
+                                    )
+                        other ->
+                            failWith $
+                                label
+                                    <> ": inspect scope lacks totals: "
+                                    <> show other
+                other ->
+                    failWith $
+                        label
+                            <> ": expected one core_development scope, got "
+                            <> show other
+        other ->
+            failWith $
+                label
+                    <> ": inspect response is not a JSON object: "
+                    <> show other
+
+assertPureAdaTxOut :: Integer -> TxOut ConwayEra -> Either String ()
+assertPureAdaTxOut expectedLovelace txOut
+    | txOutLovelace txOut /= expectedLovelace =
+        Left $
+            "lovelace="
+                <> show (txOutLovelace txOut)
+                <> " expected="
+                <> show expectedLovelace
+    | txOutHasAssets txOut =
+        Left "expected pure ADA output, found native assets"
+    | otherwise =
+        Right ()
+
+assertTreasuryTxOut
+    :: String -> Addr -> Integer -> (TxIn, TxOut ConwayEra) -> IO ()
+assertTreasuryTxOut label expectedAddr expectedLovelace (_, txOut) = do
+    txOut ^. addrTxOutL `shouldBe` expectedAddr
+    case assertPureAdaTxOut expectedLovelace txOut of
+        Right () -> pure ()
+        Left err -> failWith (label <> ": " <> err)
+
+assertScriptResultsOk :: String -> BuildResult -> IO ()
+assertScriptResultsOk label buildResult = do
+    let results = brScriptResults buildResult
+    when (null results) $
+        failWith (label <> " did not evaluate any scripts")
+    traverse_
+        ( \scriptResult ->
+            case srOutcome scriptResult of
+                Right{} -> pure ()
+                Left err ->
+                    failWith $
+                        label
+                            <> " phase-2 failed for "
+                            <> show (srPurpose scriptResult)
+                            <> ": "
+                            <> err
+        )
+        results
+
+expectEither :: String -> Either String a -> IO a
+expectEither label =
+    either
+        ( \err ->
+            failWith (label <> ": " <> err)
+        )
+        pure
+
+expectBuildResult
+    :: (Show e) => String -> Either e BuildResult -> IO BuildResult
+expectBuildResult label =
+    either
+        ( \err ->
+            failWith (label <> " build failed: " <> show err)
+        )
+        pure
+
+apiRationale :: T.Text -> Metadatum
+apiRationale action =
+    rationaleMetadatum
+        RationaleBody
+            { rbEvent = "api-indexer-devnet"
+            , rbLabel = "api indexed phase " <> action
+            , rbReferences = []
+            , rbDescription =
+                [ "Devnet API smoke submitted "
+                    <> action
+                    <> " tx."
+                ]
+            , rbDestinationLabel = "devnet treasury"
+            , rbJustification =
+                [ "Issue #242 indexed phase-output proof."
+                ]
+            }
+        (BS.replicate 28 0)
+
+buildSubmitAndWait
+    :: String
+    -> Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> InterpretIO NoCtx
+    -> ( ConwayTx
+         -> IO
+                ( Map.Map
+                    (ConwayPlutusPurpose AsIx ConwayEra)
+                    (Either String ExUnits)
+                )
+       )
+    -> [(TxIn, TxOut ConwayEra)]
+    -> [(TxIn, TxOut ConwayEra)]
+    -> Addr
+    -> TxBuild NoCtx Void ()
+    -> IO TxId
+buildSubmitAndWait
+    label
+    provider
+    submitter
+    pp
+    interpret
+    eval
+    inputs
+    refs
+    changeAddr
+    prog =
+        build
+            (mkPParamsBound pp)
+            interpret
+            eval
+            inputs
+            refs
+            changeAddr
+            prog
+            >>= \case
+                Left err ->
+                    failWith (label <> ": " <> show err)
+                Right tx -> do
+                    let signed = addKeyWitness genesisSignKey tx
+                        txId = txIdTx signed
+                    submitTx submitter signed >>= \case
+                        Submitted _ -> pure ()
+                        Rejected reason ->
+                            failWith $
+                                label <> " rejected: " <> show reason
+                    waitForTxChange provider txId genesisAddr 60
+                    pure txId
+
+waitForTxChange :: Provider IO -> TxId -> Addr -> Int -> IO ()
+waitForTxChange _ txId _ attempts
+    | attempts <= 0 =
+        failWith $
+            "timed out waiting for tx change output: "
+                <> show txId
+waitForTxChange provider txId addr attempts = do
+    utxos <- queryUTxOs provider addr
+    if any (hasTxId txId . fst) utxos
+        then pure ()
+        else do
+            threadDelay 500_000
+            waitForTxChange provider txId addr (attempts - 1)
+
+waitForTxIns
+    :: Provider IO
+    -> [TxIn]
+    -> Int
+    -> IO [(TxIn, TxOut ConwayEra)]
+waitForTxIns _ refs attempts
+    | attempts <= 0 =
+        failWith $
+            "timed out waiting for UTxOs: "
+                <> show (txInToText <$> refs)
+waitForTxIns provider refs attempts = do
+    found <- queryUTxOByTxIn provider (Set.fromList refs)
+    if all (`Map.member` found) refs
+        then
+            pure
+                [ (ref, found Map.! ref)
+                | ref <- refs
+                ]
+        else do
+            threadDelay 500_000
+            waitForTxIns provider refs (attempts - 1)
+
+selectLargestAdaUtxo
+    :: String
+    -> [(TxIn, TxOut ConwayEra)]
+    -> IO (TxIn, TxOut ConwayEra)
+selectLargestAdaUtxo label utxos =
+    case foldr choose Nothing utxos of
+        Just (_, selected) -> pure selected
+        Nothing -> failWith ("no pure-ADA UTxO for " <> label)
+  where
+    choose utxo@(_, txOut) best =
+        let MaryValue (Coin lovelace) (MultiAsset assets) =
+                txOut ^. valueTxOutL
+        in  if Map.null assets
+                then case best of
+                    Nothing -> Just (lovelace, utxo)
+                    Just (bestLovelace, _)
+                        | lovelace > bestLovelace ->
+                            Just (lovelace, utxo)
+                    _ -> best
+                else best
+
+permissionsRewardAccount :: DevnetRegistryAnchors -> AccountAddress
+permissionsRewardAccount anchors =
+    AccountAddress
+        Testnet
+        (AccountId (ScriptHashObj (draPermissionsHash anchors)))
+
+txOutRef :: TxId -> Integer -> TxIn
+txOutRef txId ix =
+    TxIn txId (mkTxIxPartial ix)
+
+txInToOutref :: TxIn -> Outref
+txInToOutref txIn =
+    case parseOutrefText (txInToText txIn) of
+        Just outref -> outref
+        Nothing ->
+            error
+                "IndexerSmokeSpec.txInToOutref: txInToText did not \
+                \render txid#ix"
+
+hasTxId :: TxId -> TxIn -> Bool
+hasTxId txId (TxIn utxoTxId _) =
+    txId == utxoTxId
+
+addSlots :: Word64 -> SlotNo -> SlotNo
+addSlots delta (SlotNo slot) =
+    SlotNo (slot + delta)
+
+lovelaceValue :: Integer -> MaryValue
+lovelaceValue lovelace =
+    MaryValue (Coin lovelace) (MultiAsset Map.empty)
+
+txOutLovelace :: TxOut ConwayEra -> Integer
+txOutLovelace txOut =
+    vsLovelace (valueSummary (txOut ^. valueTxOutL))
+
+txOutHasAssets :: TxOut ConwayEra -> Bool
+txOutHasAssets txOut =
+    let ValueSummary{vsAssets} =
+            valueSummary (txOut ^. valueTxOutL)
+    in  not (Map.null vsAssets)
+
+paymentKeyHashFromSignKey
+    :: SignKeyDSIGN Ed25519DSIGN
+    -> KeyHash Payment
+paymentKeyHashFromSignKey =
+    hashKey
+        . VKey
+        . deriveVerKeyDSIGN
+
+renderAddr :: Addr -> T.Text
+renderAddr addr =
+    Bech32.encodeLenient
+        hrp
+        (Bech32.dataPartFromBytes (serialiseAddr addr))
+  where
+    hrp =
+        either
+            (error . ("renderAddr: " <>) . show)
+            id
+            (Bech32.humanReadablePartFromText (addressHrp addr))
+    addressHrp target =
+        case getNetwork target of
+            Mainnet -> "addr"
+            Testnet -> "addr_test"
+
+writeGenesisPaymentSigningKey :: FilePath -> IO FilePath
+writeGenesisPaymentSigningKey runDir = do
+    let path = runDir </> "registry-init-funding.skey"
+    BSL.writeFile
+        path
+        ( encode
+            ( object
+                [ "type"
+                    .= ( "PaymentSigningKeyShelley_ed25519"
+                            :: T.Text
+                       )
+                , "description" .= ("Payment Signing Key" :: T.Text)
+                , "cborHex"
+                    .= TE.decodeUtf8
+                        ( "5820"
+                            <> B16.encode
+                                ( rawSerialiseSignKeyDSIGN
+                                    genesisSignKey
+                                )
+                        )
+                ]
+            )
+        )
+    setFileMode path ownerReadMode
+    pure path
 
 getInspect
     :: Manager -> Int -> IO (Response LBS.ByteString)
@@ -315,15 +1381,16 @@ getInspect manager port = do
         parseRequest $
             "http://127.0.0.1:"
                 <> show port
-                <> "/v1/treasury-inspect?scope=middleware"
+                <> "/v1/treasury-inspect?scope=core_development"
     httpLbs req manager
 
 smokeIndexerConfig
     :: FilePath
     -> FilePath
     -> InterestSet
+    -> Int
     -> IndexerConfig
-smokeIndexerConfig dir nodeSock interestSet =
+smokeIndexerConfig dir nodeSock interestSet securityParamK =
     IndexerConfig
         { icDbPath = dir <> "/rocksdb"
         , icSocketPath = nodeSock
@@ -331,7 +1398,7 @@ smokeIndexerConfig dir nodeSock interestSet =
         , icStartPoint = Nothing
         , icLagThresholdSlots = 60
         , icByronEpochSlots = 86_400
-        , icSecurityParamK = 432
+        , icSecurityParamK = securityParamK
         , icReconnectPolicy = defaultReconnectPolicy
         , icProbeConfig = defaultProbeConfig
         , icInterestSet = interestSet
@@ -428,39 +1495,6 @@ stubBuildIdentity =
         , biMetadataSource = "smoke"
         , biRecentTxsCount = 0
         }
-
-toIxAddr :: Addr -> Indexer.Address
-toIxAddr = Indexer.Address . serialiseAddr
-
-requireEnv :: String -> IO String
-requireEnv name = do
-    v <- lookupEnv name
-    case v of
-        Just x -> pure x
-        Nothing ->
-            failWith $
-                "missing env var "
-                    <> name
-                    <> " (smoke needs it; see module Haddock)"
-
-parseSwapAddrOrFail :: IO Addr
-parseSwapAddrOrFail =
-    case parseAddr sundaeOrderAddressMainnet of
-        Right a -> pure a
-        Left e ->
-            failWith $
-                "sundaeOrderAddressMainnet failed to\
-                \ parse: "
-                    <> e
-
-parseAnchorOrFail :: Text -> IO DeploymentAnchor
-parseAnchorOrFail raw =
-    case parseOutrefText raw of
-        Just o -> pure (DeploymentAnchor o)
-        Nothing ->
-            failWith $
-                "tmScopeOwners is not txid#ix: "
-                    <> T.unpack raw
 
 parseOutrefText :: Text -> Maybe Outref
 parseOutrefText t =

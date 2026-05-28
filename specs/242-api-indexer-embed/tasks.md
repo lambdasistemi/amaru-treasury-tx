@@ -341,7 +341,7 @@ Layout legend:
     `devnet-tests` threaded runtime flags only)
   - `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs`
 
-- [ ] **T024 [H]** Strengthen the opt-in API devnet smoke from
+- [X] **T024 [H]** Strengthen the opt-in API devnet smoke from
   lifecycle/readiness proof to transaction-inserting QA. The smoke must
   follow the upstream `cardano-tx-generator` proof shape from
   `cardano-tx-tools:tx-generator-lib`: submit the transaction, compute

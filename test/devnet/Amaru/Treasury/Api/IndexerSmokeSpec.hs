@@ -69,9 +69,7 @@ import Cardano.Crypto.DSIGN
     , rawSerialiseSignKeyDSIGN
     )
 import Cardano.Ledger.Address
-    ( AccountAddress (..)
-    , AccountId (..)
-    , Addr
+    ( Addr
     , getNetwork
     , serialiseAddr
     )
@@ -90,7 +88,6 @@ import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
 import Cardano.Ledger.Core (PParams)
-import Cardano.Ledger.Credential (Credential (..))
 import Cardano.Ledger.Hashes (KeyHash)
 import Cardano.Ledger.Keys
     ( KeyRole (Payment)
@@ -101,7 +98,6 @@ import Cardano.Ledger.Mary.Value
     ( MaryValue (..)
     , MultiAsset (..)
     )
-import Cardano.Ledger.Metadata (Metadatum)
 import Cardano.Ledger.Plutus.ExUnits (ExUnits)
 import Cardano.Ledger.TxIn (TxId, TxIn (..))
 import Cardano.Node.Client.E2E.Devnet (withCardanoNode)
@@ -145,8 +141,7 @@ import Codec.Binary.Bech32 qualified as Bech32
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (withAsync)
 import Control.Exception (bracket)
-import Control.Monad (unless, when)
-import Control.Monad.Trans.Except (runExceptT)
+import Control.Monad (unless)
 import Data.Aeson
     ( FromJSON (..)
     , eitherDecodeFileStrict
@@ -158,13 +153,11 @@ import Data.Aeson
     )
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KM
-import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
 import Data.ByteString.Lazy qualified as LBS
-import Data.Foldable (toList, traverse_)
+import Data.Foldable (toList)
 import Data.List qualified as List
-import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Tagged (Tagged (..))
@@ -182,6 +175,8 @@ import Data.Word (Word64)
 import Lens.Micro ((^.))
 import Network.HTTP.Client
     ( Manager
+    , Request (..)
+    , RequestBody (..)
     , Response (..)
     , defaultManagerSettings
     , httpLbs
@@ -215,13 +210,17 @@ import Test.Hspec
     )
 
 import Amaru.Treasury.Api.BuildDisburse
-    ( DisburseBuildResponse (..)
+    ( DisburseBuildRequest (..)
+    , DisburseBuildResponse (..)
+    , runBuildDisburse
     )
 import Amaru.Treasury.Api.BuildReorganize
-    ( ReorganizeBuildResponse (..)
+    ( ReorganizeBuildRequest (..)
+    , ReorganizeBuildResponse (..)
+    , runBuildReorganize
     )
 import Amaru.Treasury.Api.BuildSwap
-    ( SwapBuildResponse (..)
+    ( runBuildSwap
     )
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
@@ -242,26 +241,17 @@ import Amaru.Treasury.Api.Readiness.Internal
     ( setReadinessForTest
     )
 import Amaru.Treasury.Api.Server
-    ( Handlers (..)
+    ( BuildHandlers (..)
+    , Handlers (..)
     , mkApplication
+    , mkBuildHandlers
     , mkInspectHandler
     )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity (..)
     , RecentTxManifest (..)
     )
-import Amaru.Treasury.AuxData
-    ( RationaleBody (..)
-    , rationaleMetadatum
-    )
 import Amaru.Treasury.Backend.N2C (withLocalNodeClient)
-import Amaru.Treasury.Build.Disburse (runDisburseAction)
-import Amaru.Treasury.Build.Reorganize (runReorganizeAction)
-import Amaru.Treasury.Build.Result
-    ( BuildResult (..)
-    , ScriptResult (..)
-    )
-import Amaru.Treasury.ChainContext (withLiveContext)
 import Amaru.Treasury.Cli.Common (GlobalOpts (..))
 import Amaru.Treasury.Devnet.RegistryInit
     ( DevnetRegistryAnchors (..)
@@ -276,9 +266,6 @@ import Amaru.Treasury.Devnet.Runner
 import Amaru.Treasury.Inspect.Types
     ( DeploymentAnchor (..)
     , Outref (..)
-    )
-import Amaru.Treasury.IntentJSON.Common
-    ( parseGuardKeyHash
     )
 import Amaru.Treasury.Metadata
     ( ScopeMetadata (..)
@@ -297,17 +284,6 @@ import Amaru.Treasury.Scope
     )
 import Amaru.Treasury.Tx.AttachWitness
     ( decodeUnsignedTxHex
-    )
-import Amaru.Treasury.Tx.Disburse
-    ( DisburseAdaPayload (..)
-    , DisburseIntent (..)
-    , DisburseIntentFields (..)
-    )
-import Amaru.Treasury.Tx.Reorganize
-    ( ReorganizeIntent (..)
-    )
-import Amaru.Treasury.Tx.Submit
-    ( renderTxId
     )
 import Amaru.Treasury.Tx.SwapWizard
     ( txInToText
@@ -373,6 +349,12 @@ runSmoke = do
     withCardanoNode gDir $ \nodeSock _startMs ->
         withLocalNodeClient devnetMagic nodeSock $ \backend submitter ->
             withSystemTempDirectory "atx-api-smoke" $ \dir -> do
+                let globalOpts =
+                        GlobalOpts
+                            { goSocketPath = Just nodeSock
+                            , goNetworkMagic = devnetMagic
+                            , goNetworkName = Just "devnet"
+                            }
                 pp <- queryProtocolParams backend
                 seedUtxos <- queryUTxOs backend genesisAddr
                 publication <-
@@ -388,11 +370,7 @@ runSmoke = do
                     publication
                 signingKeyFile <- writeGenesisPaymentSigningKey dir
                 runDevnetStakeRewardInit
-                    GlobalOpts
-                        { goSocketPath = Just nodeSock
-                        , goNetworkMagic = devnetMagic
-                        , goNetworkName = Just "devnet"
-                        }
+                    globalOpts
                     DevnetStakeRewardInitOpts
                         { dsrioRegistryFile =
                             RegistryInit.registryInitRegistryPath dir
@@ -415,12 +393,15 @@ runSmoke = do
                         devnetDeploymentAnchor publication
                     swapAddr =
                         genesisAddr
+                    metadataPath =
+                        dir </> "api-devnet-metadata.json"
                     indexerCfg =
                         smokeIndexerConfig
                             dir
                             nodeSock
                             IndexAll
                             (fromIntegral (sgcSecurityParam genesis))
+                writeSmokeMetadata metadataPath metadata
                 stabilityProof <-
                     waitForPreIndexerStability
                         backend
@@ -442,6 +423,7 @@ runSmoke = do
                                                 smokeHandlers
                                                     apiIdx
                                                     backend
+                                                    globalOpts
                                                     metadata
                                                     anchor
                                                     swapAddr
@@ -472,6 +454,7 @@ runSmoke = do
                                                         apiIdx
                                                         backend
                                                         submitter
+                                                        metadataPath
                                                         (drpAnchors publication)
                                                         treasuryInputs
                                                 runScenarios
@@ -553,6 +536,7 @@ runIndexedPhaseScenarios
     -> ApiIndexer
     -> Provider IO
     -> Submitter IO
+    -> FilePath
     -> DevnetRegistryAnchors
     -> ((TxIn, TxOut ConwayEra), (TxIn, TxOut ConwayEra))
     -> IO [Text]
@@ -560,27 +544,24 @@ runIndexedPhaseScenarios
     manager
     port
     apiIdx
-    provider
+    _provider
     submitter
+    metadataPath
     anchors
-    (firstTreasury, secondTreasury) = do
+    _treasuryInputs = do
         assertInspectTreasuryState
             manager
             port
             "initial treasury funding"
             2
             60_000_000
-        walletUtxos <- queryUTxOs provider genesisAddr
-        disburseWallet <-
-            selectLargestAdaUtxo "api disburse wallet fuel" walletUtxos
         disburseTxId <-
-            submitApiDisburse
-                provider
+            postBuildDisburseAndSubmit
+                manager
+                port
                 submitter
+                metadataPath
                 anchors
-                disburseWallet
-                firstTreasury
-                5_000_000
         let disburseTreasuryRef = txOutRef disburseTxId 0
             disburseBeneficiaryRef = txOutRef disburseTxId 1
         _ <-
@@ -604,26 +585,12 @@ runIndexedPhaseScenarios
             2
             55_000_000
 
-        indexedTreasury <-
-            queryUTxOByTxIn provider (Set.singleton disburseTreasuryRef)
-        disburseTreasury <-
-            case Map.lookup disburseTreasuryRef indexedTreasury of
-                Just txOut -> pure (disburseTreasuryRef, txOut)
-                Nothing ->
-                    failWith
-                        "disburse treasury continuation was indexed but is \
-                        \not live through the provider"
-        walletUtxos' <- queryUTxOs provider genesisAddr
-        reorganizeWallet <-
-            selectLargestAdaUtxo "api reorganize wallet fuel" walletUtxos'
         reorganizeTxId <-
-            submitApiReorganize
-                provider
+            postBuildReorganizeAndSubmit
+                manager
+                port
                 submitter
-                anchors
-                reorganizeWallet
-                disburseTreasury
-                secondTreasury
+                metadataPath
         let reorganizeTreasuryRef = txOutRef reorganizeTxId 0
         _ <-
             awaitIndexedTxOut
@@ -639,8 +606,10 @@ runIndexedPhaseScenarios
             1
             55_000_000
         pure
-            [ "disburse treasury continuation"
+            [ "POST /v1/build/disburse success"
+            , "disburse treasury continuation"
             , "disburse beneficiary output"
+            , "POST /v1/build/reorganize success"
             , "reorganize merged treasury continuation"
             ]
 
@@ -688,8 +657,10 @@ assertIndexedPhaseProofs observed =
                     <> T.unpack (T.intercalate ", " observed)
   where
     required =
-        [ "disburse treasury continuation"
+        [ "POST /v1/build/disburse success"
+        , "disburse treasury continuation"
         , "disburse beneficiary output"
+        , "POST /v1/build/reorganize success"
         , "reorganize merged treasury continuation"
         ]
     missing =
@@ -807,6 +778,45 @@ devnetMetadataFromRegistry publication =
     target =
         draTreasuryTarget registry
 
+writeSmokeMetadata :: FilePath -> TreasuryMetadata -> IO ()
+writeSmokeMetadata path metadata =
+    case Map.lookup CoreDevelopment (tmTreasuries metadata) of
+        Nothing ->
+            failWith "devnet smoke metadata missing core_development"
+        Just scope ->
+            LBS.writeFile
+                path
+                ( encode
+                    ( object
+                        [ "scope_owners" .= tmScopeOwners metadata
+                        , "treasuries"
+                            .= object
+                                [ "core_development"
+                                    .= object
+                                        [ "owner" .= smOwner scope
+                                        , "budget" .= smBudget scope
+                                        , "address" .= smAddress scope
+                                        , "treasury_script"
+                                            .= scriptRefJson
+                                                (smTreasury scope)
+                                        , "permissions_script"
+                                            .= scriptRefJson
+                                                (smPermissions scope)
+                                        , "registry_script"
+                                            .= scriptRefJson
+                                                (smRegistry scope)
+                                        ]
+                                ]
+                        ]
+                    )
+                )
+  where
+    scriptRefJson ref =
+        object
+            [ "hash" .= srHash ref
+            , "deployed_at" .= srDeployedAt ref
+            ]
+
 devnetDeploymentAnchor
     :: DevnetRegistryPublication -> DeploymentAnchor
 devnetDeploymentAnchor publication =
@@ -869,151 +879,138 @@ fundApiTreasuryUtxos provider submitter pp target utxos = do
         _ ->
             failWith "api treasury funding outputs were not found"
 
-submitApiDisburse
-    :: Provider IO
+postBuildDisburseAndSubmit
+    :: Manager
+    -> Int
     -> Submitter IO
+    -> FilePath
     -> DevnetRegistryAnchors
-    -> (TxIn, TxOut ConwayEra)
-    -> (TxIn, TxOut ConwayEra)
-    -> Integer
     -> IO TxId
-submitApiDisburse
-    provider
-    submitter
-    anchors
-    walletInput
-    treasuryInput
-    amountLovelace = do
-        snapshot <- queryLedgerSnapshot provider
-        signer <-
-            expectEither
-                "api disburse owner signer"
-                (parseGuardKeyHash (draOwnerKeyHash anchors))
-        let target = draTreasuryTarget anchors
-            treasuryBefore = txOutLovelace (snd treasuryInput)
-            leftover = treasuryBefore - amountLovelace
-            needed =
-                Set.fromList
-                    [ fst walletInput
-                    , fst treasuryInput
-                    , draScopesRef anchors
-                    , draPermissionsRef anchors
-                    , draTreasuryRef anchors
-                    , draRegistryRef anchors
-                    ]
-            fields =
-                DisburseIntentFields
-                    { difWalletUtxo = fst walletInput
-                    , difBeneficiaryAddress = genesisAddr
-                    , difTreasuryUtxos = [fst treasuryInput]
-                    , difTreasuryAddress = ttAddress target
-                    , difPermissionsRewardAccount =
-                        permissionsRewardAccount anchors
-                    , difScopesDeployedAt = draScopesRef anchors
-                    , difPermissionsDeployedAt =
-                        draPermissionsRef anchors
-                    , difTreasuryDeployedAt = draTreasuryRef anchors
-                    , difRegistryDeployedAt = draRegistryRef anchors
-                    , difSigners = [signer]
-                    , difUpperBound = addSlots 20 (ledgerTipSlot snapshot)
-                    }
-            payload =
-                DisburseAdaPayload
-                    { dapAmountLovelace = Coin amountLovelace
-                    , dapLeftoverLovelace = Coin leftover
-                    }
-            intent =
-                DisburseAdaIntent fields payload
-        withLiveContext Testnet provider needed $ \ctx -> do
-            result <-
-                runExceptT $
-                    runDisburseAction
-                        ctx
-                        intent
-                        (apiRationale "disburse")
-                        genesisAddr
-            buildResult <- expectBuildResult "api disburse" result
-            assertScriptResultsOk "api disburse" buildResult
-            submitBuildResult "api disburse" submitter buildResult
+postBuildDisburseAndSubmit manager port submitter metadataPath _anchors = do
+    res <-
+        postJson
+            manager
+            port
+            "/v1/build/disburse"
+            DisburseBuildRequest
+                { dbrScope = CoreDevelopment
+                , dbrWalletAddr = renderAddr genesisAddr
+                , dbrBeneficiaryAddr = renderAddr genesisAddr
+                , dbrMetadataPath = metadataPath
+                , dbrUnit = "ada"
+                , dbrAmount = 5
+                , dbrValidityHours = Nothing
+                , dbrDescription = "Devnet API smoke disburse"
+                , dbrJustification = "HTTP POST build smoke"
+                , dbrDestinationLabel = "devnet-beneficiary"
+                , dbrEvent = Nothing
+                , dbrLabel = Just "api-smoke-disburse"
+                , dbrSigners = []
+                , dbrReferences = []
+                }
+    statusCode (responseStatus res) `shouldBe` 200
+    response <-
+        decodePostResponse
+            "POST /v1/build/disburse"
+            (responseBody res)
+    cborHex <-
+        case ( dbrFailureTag response
+             , dbrBuildFailureTag response
+             , dbrCborHex response
+             ) of
+            (Nothing, Nothing, Just cborHex) -> pure cborHex
+            _ ->
+                failWith $
+                    "POST /v1/build/disburse did not return a successful \
+                    \unsigned tx: "
+                        <> show response
+    submitUnsignedTxHex "POST /v1/build/disburse" submitter cborHex
 
-submitApiReorganize
-    :: Provider IO
+postBuildReorganizeAndSubmit
+    :: Manager
+    -> Int
     -> Submitter IO
-    -> DevnetRegistryAnchors
-    -> (TxIn, TxOut ConwayEra)
-    -> (TxIn, TxOut ConwayEra)
-    -> (TxIn, TxOut ConwayEra)
+    -> FilePath
     -> IO TxId
-submitApiReorganize
-    provider
-    submitter
-    anchors
-    walletInput
-    firstTreasury
-    secondTreasury = do
-        snapshot <- queryLedgerSnapshot provider
-        signer <-
-            expectEither
-                "api reorganize owner signer"
-                (parseGuardKeyHash (draOwnerKeyHash anchors))
-        let target = draTreasuryTarget anchors
-            needed =
-                Set.fromList
-                    [ fst walletInput
-                    , fst firstTreasury
-                    , fst secondTreasury
-                    , draScopesRef anchors
-                    , draPermissionsRef anchors
-                    , draTreasuryRef anchors
-                    , draRegistryRef anchors
-                    ]
-            intent =
-                ReorganizeIntent
-                    { rgiWalletUtxo = fst walletInput
-                    , rgiTreasuryUtxos =
-                        fst firstTreasury :| [fst secondTreasury]
-                    , rgiTreasuryAddress = ttAddress target
-                    , rgiTreasuryDeployedAt = draTreasuryRef anchors
-                    , rgiRegistryDeployedAt = draRegistryRef anchors
-                    , rgiPermissionsRewardAccount =
-                        permissionsRewardAccount anchors
-                    , rgiPermissionsDeployedAt =
-                        draPermissionsRef anchors
-                    , rgiScopesDeployedAt = draScopesRef anchors
-                    , rgiScopeOwnerSigner = signer
-                    , rgiUpperBound = addSlots 20 (ledgerTipSlot snapshot)
-                    , rgiSplitNativeAssets = False
-                    }
-        withLiveContext Testnet provider needed $ \ctx -> do
-            result <-
-                runExceptT $
-                    runReorganizeAction
-                        ctx
-                        intent
-                        (apiRationale "reorganize")
-                        genesisAddr
-            buildResult <- expectBuildResult "api reorganize" result
-            assertScriptResultsOk "api reorganize" buildResult
-            submitBuildResult "api reorganize" submitter buildResult
+postBuildReorganizeAndSubmit manager port submitter metadataPath = do
+    res <-
+        postJson
+            manager
+            port
+            "/v1/build/reorganize"
+            ReorganizeBuildRequest
+                { rbrScope = CoreDevelopment
+                , rbrWalletAddr = renderAddr genesisAddr
+                , rbrMetadataPath = metadataPath
+                , rbrValidityHours = Nothing
+                , rbrDescription = Just "Devnet API smoke reorganize"
+                , rbrJustification = Just "HTTP POST build smoke"
+                , rbrDestinationLabel = Just "devnet-treasury"
+                , rbrEvent = Nothing
+                , rbrLabel = Just "api-smoke-reorganize"
+                , rbrSplitNativeAssets = Just False
+                }
+    statusCode (responseStatus res) `shouldBe` 200
+    response <-
+        decodePostResponse
+            "POST /v1/build/reorganize"
+            (responseBody res)
+    cborHex <-
+        case ( rbrFailureTag response
+             , rbrBuildFailureTag response
+             , rbrCborHex response
+             ) of
+            (Nothing, Nothing, Just cborHex) -> pure cborHex
+            _ ->
+                failWith $
+                    "POST /v1/build/reorganize did not return a \
+                    \successful unsigned tx: "
+                        <> show response
+    submitUnsignedTxHex "POST /v1/build/reorganize" submitter cborHex
 
-submitBuildResult
-    :: String -> Submitter IO -> BuildResult -> IO TxId
-submitBuildResult label submitter buildResult =
-    case decodeUnsignedTxHex
-        (B16.encode (BSL.toStrict (brCborBytes buildResult))) of
+postJson
+    :: (Aeson.ToJSON a)
+    => Manager
+    -> Int
+    -> String
+    -> a
+    -> IO (Response LBS.ByteString)
+postJson manager port path body = do
+    req0 <-
+        parseRequest $
+            "http://127.0.0.1:" <> show port <> path
+    let req =
+            req0
+                { method = "POST"
+                , requestBody = RequestBodyLBS (encode body)
+                , requestHeaders =
+                    [("Content-Type", "application/json")]
+                }
+    httpLbs req manager
+
+decodePostResponse
+    :: (Aeson.FromJSON a)
+    => String
+    -> LBS.ByteString
+    -> IO a
+decodePostResponse label body =
+    case Aeson.eitherDecode body of
+        Right value -> pure value
+        Left err ->
+            failWith $
+                label <> " response JSON decode failed: " <> err
+
+submitUnsignedTxHex :: String -> Submitter IO -> Text -> IO TxId
+submitUnsignedTxHex label submitter cborHex =
+    case decodeUnsignedTxHex (TE.encodeUtf8 cborHex) of
         Left err ->
             failWith $
                 label <> " decode unsigned tx failed: " <> show err
         Right tx -> do
             let signed =
                     addCardanoCliPaymentKeyWitness genesisSignKey tx
-                signedTxId =
-                    txIdTx signed
-                signedTxIdText =
-                    renderTxId signedTxId
-            signedTxIdText `shouldBe` brTxId buildResult
             submitTx submitter signed >>= \case
-                Submitted _ -> pure signedTxId
+                Submitted _ -> pure (txIdTx signed)
                 Rejected reason ->
                     failWith $
                         label <> " rejected: " <> show reason
@@ -1119,61 +1116,6 @@ assertTreasuryTxOut label expectedAddr expectedLovelace (_, txOut) = do
     case assertPureAdaTxOut expectedLovelace txOut of
         Right () -> pure ()
         Left err -> failWith (label <> ": " <> err)
-
-assertScriptResultsOk :: String -> BuildResult -> IO ()
-assertScriptResultsOk label buildResult = do
-    let results = brScriptResults buildResult
-    when (null results) $
-        failWith (label <> " did not evaluate any scripts")
-    traverse_
-        ( \scriptResult ->
-            case srOutcome scriptResult of
-                Right{} -> pure ()
-                Left err ->
-                    failWith $
-                        label
-                            <> " phase-2 failed for "
-                            <> show (srPurpose scriptResult)
-                            <> ": "
-                            <> err
-        )
-        results
-
-expectEither :: String -> Either String a -> IO a
-expectEither label =
-    either
-        ( \err ->
-            failWith (label <> ": " <> err)
-        )
-        pure
-
-expectBuildResult
-    :: (Show e) => String -> Either e BuildResult -> IO BuildResult
-expectBuildResult label =
-    either
-        ( \err ->
-            failWith (label <> " build failed: " <> show err)
-        )
-        pure
-
-apiRationale :: T.Text -> Metadatum
-apiRationale action =
-    rationaleMetadatum
-        RationaleBody
-            { rbEvent = "api-indexer-devnet"
-            , rbLabel = "api indexed phase " <> action
-            , rbReferences = []
-            , rbDescription =
-                [ "Devnet API smoke submitted "
-                    <> action
-                    <> " tx."
-                ]
-            , rbDestinationLabel = "devnet treasury"
-            , rbJustification =
-                [ "Issue #242 indexed phase-output proof."
-                ]
-            }
-        (BS.replicate 28 0)
 
 buildSubmitAndWait
     :: String
@@ -1282,12 +1224,6 @@ selectLargestAdaUtxo label utxos =
                             Just (lovelace, utxo)
                     _ -> best
                 else best
-
-permissionsRewardAccount :: DevnetRegistryAnchors -> AccountAddress
-permissionsRewardAccount anchors =
-    AccountAddress
-        Testnet
-        (AccountId (ScriptHashObj (draPermissionsHash anchors)))
 
 txOutRef :: TxId -> Integer -> TxIn
 txOutRef txId ix =
@@ -1407,11 +1343,12 @@ smokeIndexerConfig dir nodeSock interestSet securityParamK =
 smokeHandlers
     :: ApiIndexer
     -> Provider IO
+    -> GlobalOpts
     -> TreasuryMetadata
     -> DeploymentAnchor
     -> Addr
     -> Handlers
-smokeHandlers apiIdx backend metadata anchor swapAddr =
+smokeHandlers apiIdx backend globalOpts metadata anchor swapAddr =
     Handlers
         { hInspectReport = \scope -> do
             r <-
@@ -1432,48 +1369,9 @@ smokeHandlers apiIdx backend metadata anchor swapAddr =
                             <> show e
         , hRecentTxs = RecentTxManifest []
         , hBuildIdentity = stubBuildIdentity
-        , hBuildSwap = \_ ->
-            pure
-                SwapBuildResponse
-                    { sbrIntentJson = Nothing
-                    , sbrCli = Nothing
-                    , sbrCborHex = Nothing
-                    , sbrCborEnvelope = Nothing
-                    , sbrReport = Nothing
-                    , sbrFailureTag = Just "Smoke"
-                    , sbrFailureField = Nothing
-                    , sbrFailureReason =
-                        Just "smoke handler"
-                    , sbrBuildFailureTag = Nothing
-                    }
-        , hBuildDisburse = \_ ->
-            pure
-                DisburseBuildResponse
-                    { dbrIntentJson = Nothing
-                    , dbrCli = Nothing
-                    , dbrCborHex = Nothing
-                    , dbrCborEnvelope = Nothing
-                    , dbrReport = Nothing
-                    , dbrFailureTag = Just "Smoke"
-                    , dbrFailureField = Nothing
-                    , dbrFailureReason =
-                        Just "smoke handler"
-                    , dbrBuildFailureTag = Nothing
-                    }
-        , hBuildReorganize = \_ ->
-            pure
-                ReorganizeBuildResponse
-                    { rbrIntentJson = Nothing
-                    , rbrCli = Nothing
-                    , rbrCborHex = Nothing
-                    , rbrCborEnvelope = Nothing
-                    , rbrReport = Nothing
-                    , rbrFailureTag = Just "Smoke"
-                    , rbrFailureField = Nothing
-                    , rbrFailureReason =
-                        Just "smoke handler"
-                    , rbrBuildFailureTag = Nothing
-                    }
+        , hBuildSwap = bhBuildSwap buildHandlers
+        , hBuildDisburse = bhBuildDisburse buildHandlers
+        , hBuildReorganize = bhBuildReorganize buildHandlers
         , hRawHandler =
             Tagged $ \_req respond ->
                 respond $
@@ -1482,6 +1380,14 @@ smokeHandlers apiIdx backend metadata anchor swapAddr =
                         [("Content-Type", "text/plain")]
                         "smoke: raw not served"
         }
+  where
+    buildHandlers =
+        mkBuildHandlers
+            apiIdx
+            backend
+            (runBuildSwap globalOpts)
+            (runBuildDisburse globalOpts)
+            (runBuildReorganize globalOpts)
 
 stubBuildIdentity :: BuildIdentity
 stubBuildIdentity =

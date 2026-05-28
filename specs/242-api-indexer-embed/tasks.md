@@ -460,7 +460,7 @@ Layout legend:
   - `amaru-treasury-tx.cabal` (only if a new test module or helper
     module is required)
 
-- [ ] **T026 [H]** Strengthen the devnet API smoke so the phase
+- [X] **T026 [H]** Strengthen the devnet API smoke so the phase
   transactions are built through the actual HTTP POST layer before they
   are submitted. T024 proved indexed UTxO/phase effects, and T025 proved
   build-handler provider wiring, but the current devnet smoke still
@@ -493,6 +493,13 @@ Layout legend:
   fixture is already available; do not weaken or delay the phase POST
   proof waiting on swap-market setup.
 
+  Scope widened during RED/GREEN: the real POST disburse path exposed
+  a production selector bug where `queryValues` could return
+  reference-script deployment UTxOs as treasury spend candidates,
+  leading to `BabbageNonDisjointRefInputs`. The fix is to make
+  `queryValues` apply the same `filterFundUtxos` boundary as
+  `queryFlatFunds`, with a focused unit RED in `CommonSpec`.
+
   RED: `nix develop --quiet -c just devnet-api-smoke` on current HEAD
   passes while using direct build helpers and/or stubbed POST build
   handlers. Update the smoke so this old behavior fails because no
@@ -500,10 +507,12 @@ Layout legend:
   transactions. GREEN: the same command passes after both phase
   transactions are built via HTTP POST, submitted, indexed, and reflected
   in `/v1/treasury-inspect`. Commit:
-  `test(api-smoke): build phase transactions through HTTP POST`. Tasks
+  `fix(api): keep POST builds off reference UTxOs`. Tasks
   trailer: `Tasks: T026`. Worker pair.
 
   **Owned files**:
+  - `lib/Amaru/Treasury/Cli/Common.hs`
+  - `test/unit/Amaru/Treasury/Cli/CommonSpec.hs`
   - `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs`
   - `amaru-treasury-tx.cabal` (only if a new devnet-test dependency or
     helper module is required)

@@ -188,6 +188,15 @@ Layout legend:
   `lib/Amaru/Treasury/Api/Indexer.hs:149-152`.
 
   **Live-validation gate (mandatory before navigator NAVIGATOR-VERIFIED)**:
+  Operator sequencing update (2026-05-28): run the devnet API smoke
+  repair/proof in T023 first. Only return to this mainnet/dev endpoint
+  E2E gate after the devnet proof is healthy, the operator is happy
+  with that evidence, and Slice B
+  [#243](https://github.com/lambdasistemi/amaru-treasury-tx/issues/243)
+  has proved `amaru-treasury-tx history --scope X` on devnet with
+  submitted disburse + reorganize entries. `#242` does not implement
+  tx history; it remains a pre-reality cross-ticket gate.
+
   rebuild + redeploy to `/home/paolino/services/amaru-treasury-dev`
   using the dev iteration loop (per
   `deploy/compose/amaru-treasury-dev/docker-compose.yaml` header
@@ -309,6 +318,25 @@ Layout legend:
   - `test/unit/Amaru/Treasury/Api/HandlersIndexerSpec.hs`
   - `test/unit/Amaru/Treasury/Api/IndexerSpec.hs`
   - `test/unit/Amaru/Treasury/Config/FileSpec.hs`
+
+## Phase 8.7 — Devnet-first proof before E2E
+
+- [ ] **T023 [H]** Repair the opt-in API devnet smoke after T022's
+  start-point contract change, then run it before any further
+  mainnet/dev endpoint E2E validation. `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs`
+  still constructs `IndexerConfig` with the retired `icStartSlot`
+  field; update the smoke to the new `icStartPoint` shape. Prefer
+  `Nothing` if the devnet follower should start from origin, or a real
+  `(SlotNo, BlockHash)` only if the devnet harness exposes a stable
+  block hash cheaply. RED: `nix develop --quiet -c cabal build
+  test:devnet-tests -O0` fails on `icStartSlot`. GREEN: the same
+  build succeeds, then `nix develop --quiet -c just devnet-api-smoke`
+  passes. Commit:
+  `test(api-smoke): update devnet smoke for start-point config`.
+  Tasks trailer: `Tasks: T023`. Worker pair.
+
+  **Owned files**:
+  - `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs`
 
 ## Phase 7 — PR finalization (re-do after T014 lands)
 

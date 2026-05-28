@@ -29,6 +29,7 @@ The lag-503 middleware has its own unit coverage in
 module Amaru.Treasury.Api.HandlersIndexerSpec (spec) where
 
 import Cardano.Ledger.Address (Addr)
+import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Node.Client.N2C.Probe (defaultProbeConfig)
 import Cardano.Node.Client.N2C.Reconnect (defaultReconnectPolicy)
 import Cardano.Node.Client.N2C.Trace (nullN2CTracer)
@@ -36,6 +37,9 @@ import Cardano.Node.Client.Provider (Provider (..))
 import Cardano.Node.Client.UTxOIndexer.Follower (InterestSet (..))
 import Cardano.Slotting.Slot (SlotNo (..))
 import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
+import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
 import Data.Word (Word64)
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import Servant qualified
@@ -46,6 +50,7 @@ import Test.Hspec
     , describe
     , it
     , shouldBe
+    , shouldSatisfy
     )
 
 import Amaru.Treasury.Api.Indexer
@@ -54,7 +59,10 @@ import Amaru.Treasury.Api.Indexer
     , withApiIndexer
     )
 import Amaru.Treasury.Api.Server
-    ( mkInspectHandler
+    ( BuildHandlers (..)
+    , mkBuildHandlers
+    , mkBuildProvider
+    , mkInspectHandler
     )
 import Amaru.Treasury.Constants
     ( sundaeOrderAddressMainnet
@@ -65,7 +73,7 @@ import Amaru.Treasury.Inspect.Types
     , InspectReport (..)
     , Outref (..)
     )
-import Amaru.Treasury.IntentJSON.Common (parseAddr)
+import Amaru.Treasury.IntentJSON.Common (parseAddr, parseTxIn)
 import Amaru.Treasury.Metadata
     ( ScopeMetadata (..)
     , ScriptRef (..)
@@ -109,6 +117,61 @@ spec = describe "Amaru.Treasury.Api handlers + indexer" $ do
                 ctSlot (irChainTip report)
                     `shouldBe` testNowTipWord
 
+    describe "mkBuildProvider" $ do
+        it
+            "serves exact TxIn reads from the indexer, not the raw provider"
+            $ withTestIndexer
+            $ \apiIdx -> do
+                found <-
+                    queryUTxOByTxIn
+                        (mkBuildProvider apiIdx trappedProvider)
+                        (Set.singleton sampleTxIn)
+                found `shouldBe` Map.empty
+
+    describe "mkBuildHandlers" $ do
+        it
+            "wires the swap build handler to the indexer-backed provider"
+            $ withTestIndexer
+            $ \apiIdx -> do
+                addr <- mainnetSwapAddr
+                let buildHandlers = trappedBuildHandlers apiIdx addr
+                _ <- bhBuildSwap buildHandlers (error "unused swap request")
+                pure ()
+
+        it
+            "wires the disburse build handler to the indexer-backed provider"
+            $ withTestIndexer
+            $ \apiIdx -> do
+                addr <- mainnetSwapAddr
+                let buildHandlers = trappedBuildHandlers apiIdx addr
+                _ <-
+                    bhBuildDisburse
+                        buildHandlers
+                        (error "unused disburse request")
+                pure ()
+
+        it
+            "wires the reorganize build handler to the indexer-backed provider"
+            $ withTestIndexer
+            $ \apiIdx -> do
+                addr <- mainnetSwapAddr
+                let buildHandlers = trappedBuildHandlers apiIdx addr
+                _ <-
+                    bhBuildReorganize
+                        buildHandlers
+                        (error "unused reorganize request")
+                pure ()
+
+    describe "amaru-treasury-tx-api Main build wiring" $ do
+        it
+            "uses the shared build-provider wiring instead of raw backend calls"
+            $ do
+                src <- TIO.readFile apiMainSource
+                src `shouldNotContainText` "runBuildSwap g backend"
+                src `shouldNotContainText` "runBuildDisburse g backend"
+                src `shouldNotContainText` "runBuildReorganize g backend"
+                src `shouldContainText` "mkBuildHandlers"
+
 -- ---------------------------------------------------------------------------
 -- Fixtures
 
@@ -117,6 +180,13 @@ testNowTipSlot = SlotNo 12_345
 
 testNowTipWord :: Word64
 testNowTipWord = unSlotNo testNowTipSlot
+
+sampleTxIn :: TxIn
+sampleTxIn =
+    case parseTxIn
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0" of
+        Right txIn -> txIn
+        Left e -> error ("sampleTxIn: parseTxIn failed: " <> e)
 
 testMetadata :: TreasuryMetadata
 testMetadata =
@@ -244,3 +314,28 @@ runHandlerOrFail h = do
                 "runHandlerOrFail: Servant.Handler returned \
                 \ServerError: "
                     <> show e
+
+trappedBuildHandlers :: ApiIndexer -> Addr -> BuildHandlers
+trappedBuildHandlers apiIdx addr =
+    mkBuildHandlers
+        apiIdx
+        trappedProvider
+        (\provider _req -> buildQuery provider)
+        (\provider _req -> buildQuery provider)
+        (\provider _req -> buildQuery provider)
+  where
+    buildQuery :: Provider IO -> IO a
+    buildQuery provider = do
+        _ <- queryUTxOs provider addr
+        pure (error "unused build response")
+
+apiMainSource :: FilePath
+apiMainSource = "app/amaru-treasury-tx-api/Main.hs"
+
+shouldContainText :: T.Text -> T.Text -> IO ()
+shouldContainText haystack needle =
+    haystack `shouldSatisfy` T.isInfixOf needle
+
+shouldNotContainText :: T.Text -> T.Text -> IO ()
+shouldNotContainText haystack needle =
+    haystack `shouldSatisfy` (not . T.isInfixOf needle)

@@ -33,11 +33,14 @@ module Amaru.Treasury.Api.Server
 
       -- * Server
     , Handlers (..)
+    , BuildHandlers (..)
     , mkServer
     , mkApplication
 
       -- * Indexer-served handler (#242)
     , mkInspectHandler
+    , mkBuildProvider
+    , mkBuildHandlers
     ) where
 
 import Cardano.Ledger.Address (Addr)
@@ -82,6 +85,7 @@ import Amaru.Treasury.Api.BuildSwap
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
     , snapshotUtxosAt
+    , snapshotUtxosByTxIn
     )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity
@@ -198,6 +202,36 @@ data Handlers = Handlers
     --   directory-server; in tests it is a tiny 404 stub.
     }
 
+-- | The three API build endpoints after provider wiring.
+data BuildHandlers = BuildHandlers
+    { bhBuildSwap :: SwapBuildRequest -> IO SwapBuildResponse
+    , bhBuildDisburse
+        :: DisburseBuildRequest
+        -> IO DisburseBuildResponse
+    , bhBuildReorganize
+        :: ReorganizeBuildRequest
+        -> IO ReorganizeBuildResponse
+    }
+
+{- | Construct the three build handlers from one shared
+provider.
+-}
+mkBuildHandlers
+    :: ApiIndexer
+    -> Provider IO
+    -> (Provider IO -> SwapBuildRequest -> IO SwapBuildResponse)
+    -> (Provider IO -> DisburseBuildRequest -> IO DisburseBuildResponse)
+    -> (Provider IO -> ReorganizeBuildRequest -> IO ReorganizeBuildResponse)
+    -> BuildHandlers
+mkBuildHandlers apiIdx realProvider buildSwap buildDisburse buildReorganize =
+    BuildHandlers
+        { bhBuildSwap = buildSwap buildProvider
+        , bhBuildDisburse = buildDisburse buildProvider
+        , bhBuildReorganize = buildReorganize buildProvider
+        }
+  where
+    buildProvider = mkBuildProvider apiIdx realProvider
+
 -- | Build the servant 'Server' from the 'Handlers' record.
 mkServer :: Handlers -> Server DashboardAPI
 mkServer Handlers{..} =
@@ -247,11 +281,13 @@ Implementation strategy: rather than touch the existing
 construct a thin **synthetic** 'Provider' that:
 
 * delegates 'nowTip' to the caller's real provider,
-* routes 'queryUTxOs' through the in-process indexer,
-* /traps/ 'queryUTxOByTxIn' with a defensive 'error' call so
-  any future code path that smuggles a UTxO query back to the
-  node socket on the request hot path fails LOUDLY at first
-  invocation (FR-002 / FR-004 invariant).
+* routes address UTxO scans through the in-process indexer
+  via 'queryUTxOs' / 'snapshotUtxosAt',
+* routes exact input lookup through the same indexer via
+  'queryUTxOByTxIn' / 'snapshotUtxosByTxIn',
+* keeps the live provider for non-UTxO ledger data such as
+  tip, protocol parameters, evaluation, rewards, votes, and
+  governance queries.
 
 The rest of the 'Provider' fields are inherited from the
 real provider; they aren't touched by
@@ -275,19 +311,20 @@ mkInspectHandler apiIdx realProvider metadata anchor swapAddr scope =
             (Just scope)
             (indexerProvider apiIdx realProvider)
 
+{- | Build the provider used by @POST /v1/build/*@
+handlers.
+-}
+mkBuildProvider :: ApiIndexer -> Provider IO -> Provider IO
+mkBuildProvider = indexerProvider
+
 {- | Build the synthetic 'Provider' described in
 'mkInspectHandler''s Haddock: real provider for 'nowTip',
-indexer-backed 'queryUTxOs', and a loud trap on
-'queryUTxOByTxIn'.
+indexer-backed 'queryUTxOs' / 'queryUTxOByTxIn', and live
+provider delegation for non-address ledger data.
 -}
 indexerProvider :: ApiIndexer -> Provider IO -> Provider IO
 indexerProvider apiIdx realProvider =
     realProvider
         { queryUTxOs = snapshotUtxosAt apiIdx
-        , queryUTxOByTxIn = \_ ->
-            error
-                "BUG: amaru-treasury-tx-api request hot \
-                \path issued queryUTxOByTxIn; this code \
-                \path should be indexer-served per #242 \
-                \(FR-004 invariant)."
+        , queryUTxOByTxIn = snapshotUtxosByTxIn apiIdx
         }

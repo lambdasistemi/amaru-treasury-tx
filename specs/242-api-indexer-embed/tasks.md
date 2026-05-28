@@ -411,7 +411,7 @@ Layout legend:
   - `test/devnet/Amaru/Treasury/Devnet/MixedUtxoSmoke.hs` (only for
     helper extraction/reuse; do not weaken its assertions)
 
-- [ ] **T025 [H]** Wire the API tx-build endpoints to the embedded
+- [X] **T025 [H]** Wire the API tx-build endpoints to the embedded
   indexer-backed provider before any mainnet/reality endpoint test.
   `POST /v1/build/swap`, `/v1/build/disburse`, and
   `/v1/build/reorganize` must not receive the raw live node provider

@@ -36,12 +36,13 @@ module Amaru.Treasury.Api.Indexer
       -- * Read operations
     , snapshotAt
     , snapshotUtxosAt
+    , snapshotUtxosByTxIn
 
       -- * Internal helpers (exposed for tests)
     , toChainSyncCfg
     ) where
 
-import Cardano.Crypto.Hash.Class (hashFromBytes)
+import Cardano.Crypto.Hash.Class (hashFromBytes, hashToBytes)
 import Cardano.Ledger.Address (Addr, serialiseAddr)
 import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.BaseTypes (TxIx (..))
@@ -53,6 +54,7 @@ import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core qualified as Ledger
 import Cardano.Ledger.Hashes
     ( SafeHash
+    , extractHash
     , unsafeMakeSafeHash
     )
 import Cardano.Ledger.TxIn qualified as Ledger
@@ -84,6 +86,8 @@ import Control.Concurrent.STM
 import Control.Tracer (Tracer (Tracer), nullTracer)
 import Data.ByteString qualified as BS
 import Data.List.NonEmpty (NonEmpty (..))
+import Data.Map.Strict qualified as Map
+import Data.Set qualified as Set
 import Data.Word (Word64)
 import Ouroboros.Network.Magic (NetworkMagic)
 import System.IO (hPutStrLn, stderr)
@@ -331,11 +335,58 @@ snapshotUtxosAt apiIdx addr = do
             (Address (serialiseAddr addr))
     traverse convertEntry raw
 
+{- | Point lookup for ledger-typed UTxOs by exact input,
+served from the embedded indexer.
+
+This wraps upstream 'Indexer.awaitTxIn' with a zero-second
+timeout: already indexed, still-unspent inputs return
+immediately; missing or spent inputs return 'Nothing'
+without waiting for future chain events. That gives build
+finalization the same current-snapshot semantics as a live
+@queryUTxOByTxIn@ call while keeping the API request path
+off address and exact-input queries against the production
+node.
+-}
+snapshotUtxosByTxIn
+    :: ApiIndexer
+    -> Set.Set Ledger.TxIn
+    -> IO (Map.Map Ledger.TxIn (Ledger.TxOut ConwayEra))
+snapshotUtxosByTxIn apiIdx txIns =
+    Map.fromList
+        <$> traverseMaybe lookupOne (Set.toList txIns)
+  where
+    lookupOne ledgerTxIn = do
+        mObs <-
+            Indexer.awaitTxIn
+                (aiHandle apiIdx)
+                (toIndexerTxIn ledgerTxIn)
+                (Just 0)
+        case mObs of
+            Nothing -> pure Nothing
+            Just obs -> do
+                txOut <- decodeIndexerTxOut (Indexer.aoTxOut obs)
+                pure (Just (ledgerTxIn, txOut))
+
+traverseMaybe :: (a -> IO (Maybe b)) -> [a] -> IO [b]
+traverseMaybe f =
+    fmap foldMaybes . traverse f
+  where
+    foldMaybes [] = []
+    foldMaybes (Nothing : xs) = foldMaybes xs
+    foldMaybes (Just x : xs) = x : foldMaybes xs
+
 convertEntry
     :: (TxIn, TxOut)
     -> IO (Ledger.TxIn, Ledger.TxOut ConwayEra)
 convertEntry (ixTxIn, IxTypes.TxOut bytes) = do
-    txOut <- case decodeConwayTxOut bytes of
+    txOut <- decodeIndexerTxOut (IxTypes.TxOut bytes)
+    pure (convertTxIn ixTxIn, txOut)
+
+decodeIndexerTxOut
+    :: TxOut
+    -> IO (Ledger.TxOut ConwayEra)
+decodeIndexerTxOut (IxTypes.TxOut bytes) =
+    case decodeConwayTxOut bytes of
         Right o -> pure o
         Left err ->
             ioError $
@@ -343,7 +394,6 @@ convertEntry (ixTxIn, IxTypes.TxOut bytes) = do
                     "snapshotUtxosAt: failed to decode \
                     \indexer TxOut bytes as ConwayEra TxOut: "
                         <> show err
-    pure (convertTxIn ixTxIn, txOut)
 
 decodeConwayTxOut
     :: BS.ByteString
@@ -355,6 +405,12 @@ convertTxIn (IxTypes.TxIn idBytes ix) =
     Ledger.TxIn
         (Ledger.TxId (mkSafeHash idBytes))
         (TxIx ix)
+
+toIndexerTxIn :: Ledger.TxIn -> TxIn
+toIndexerTxIn (Ledger.TxIn (Ledger.TxId txIdHash) txIx) =
+    IxTypes.TxIn
+        (hashToBytes (extractHash txIdHash))
+        (unTxIx txIx)
 
 {- | Re-wrap the indexer's 32-byte raw tx-id bytes as a
 ledger 'SafeHash'. 'unsafeMakeSafeHash' is the right

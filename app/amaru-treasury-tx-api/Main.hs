@@ -97,8 +97,10 @@ import Amaru.Treasury.Api.Readiness
     , withReadinessBridge
     )
 import Amaru.Treasury.Api.Server
-    ( Handlers (..)
+    ( BuildHandlers (..)
+    , Handlers (..)
     , mkApplication
+    , mkBuildHandlers
     , mkInspectHandler
     )
 import Amaru.Treasury.Api.Types
@@ -183,7 +185,14 @@ main = do
                             putStrLn
                                 "amaru-treasury-tx-api: indexer \
                                 \ready; binding warp"
-                            let handlers =
+                            let buildHandlers =
+                                    mkBuildHandlers
+                                        apiIdx
+                                        backend
+                                        (runBuildSwap g)
+                                        (runBuildDisburse g)
+                                        (runBuildReorganize g)
+                                handlers =
                                     Handlers
                                         { hInspectReport =
                                             runInspectScope
@@ -195,11 +204,12 @@ main = do
                                         , hRecentTxs = manifest
                                         , hBuildIdentity = buildId
                                         , hBuildSwap =
-                                            runBuildSwap g backend
+                                            bhBuildSwap buildHandlers
                                         , hBuildDisburse =
-                                            runBuildDisburse g backend
+                                            bhBuildDisburse buildHandlers
                                         , hBuildReorganize =
-                                            runBuildReorganize g backend
+                                            bhBuildReorganize
+                                                buildHandlers
                                         , hRawHandler =
                                             serveDirectoryFileServer
                                                 (arcStatic opts)

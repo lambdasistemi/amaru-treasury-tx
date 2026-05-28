@@ -191,8 +191,14 @@ Layout legend:
   rebuild + redeploy to `/home/paolino/services/amaru-treasury-dev`
   using the dev iteration loop (per
   `deploy/compose/amaru-treasury-dev/docker-compose.yaml` header
-  comment), with `--indexer-start-slot 175000000` injected into the
-  command list to bound cold-sync window. URL
+  comment), with an upstream-shaped start point injected into the
+  command list to bound the cold-sync window:
+  `--indexer-start-slot 174999998` plus
+  `--indexer-start-block-hash
+  777668efebcac3d2d32c19a821878cc27f373ebd24dcc5bd971ea33cfd6734b3`.
+  This is the nearest block at or before absolute slot `175000000`
+  per Koios `blocks?abs_slot=lte.175000000&order=abs_slot.desc&limit=1`.
+  URL
   `https://amaru-treasury.dev.plutimus.com/api/inspect` must
   transition `502 → 503 → 200` within 10 min, and container logs must
   show `event=connected` + `applied slot N` lines (no more
@@ -274,6 +280,34 @@ Layout legend:
   because the merge commit has the same source tree. Commit:
   `chore(api): repin cnc to merged handler seam`.
   Tasks trailer: `Tasks: T021`. Worker pair.
+
+- [ ] **T022 [H]** Project the API cold-boot override into the
+  upstream-shaped `ChainSyncConfig.csStartPoint`.
+  `cardano-node-clients` now correctly requires a concrete
+  `(SlotNo, BlockHash)` start point; a slot alone is not a valid
+  chain-sync intersection point. Extend the API operator/config
+  surface with `--indexer-start-block-hash HASH` (and matching YAML/env
+  keys where the existing start-slot setting is mirrored), fail config
+  resolution when one half of the pair is supplied without the other,
+  and make `toChainSyncCfg` set
+  `csStartPoint = Just (icStartSlot, icStartBlockHash)` when both are
+  present. RED: focused config/indexer tests prove the current code
+  accepts a lone slot and projects `Nothing`. GREEN: tests prove the
+  pair resolves, the lone-slot/lone-hash cases fail with a diagnostic,
+  and `toChainSyncCfg` passes the pair through. Commit:
+  `fix(api): project configured chain-sync start point`. Tasks trailer:
+  `Tasks: T022`. Worker pair.
+
+  **Owned files**:
+  - `app/amaru-treasury-tx-api/Main.hs`
+  - `lib/Amaru/Treasury/Api/Config.hs`
+  - `lib/Amaru/Treasury/Api/Indexer.hs`
+  - `lib/Amaru/Treasury/Config/OptEnv.hs`
+  - `lib/Amaru/Treasury/Config/Resolve.hs`
+  - `lib/Amaru/Treasury/Config/Types.hs`
+  - `test/unit/Amaru/Treasury/Api/ConfigSpec.hs`
+  - `test/unit/Amaru/Treasury/Api/IndexerSpec.hs`
+  - `test/unit/Amaru/Treasury/Config/FileSpec.hs`
 
 ## Phase 7 — PR finalization (re-do after T014 lands)
 

@@ -190,9 +190,11 @@ Layout legend:
   **Live-validation gate (mandatory before navigator NAVIGATOR-VERIFIED)**:
   Operator sequencing update (2026-05-28): run the devnet API smoke
   repair/proof in T023 first, then the transaction-inserting QA proof
-  in T024. Only return to this mainnet/dev endpoint E2E gate after the
-  devnet proof is healthy, the operator is happy with that evidence,
-  and Slice B
+  in T024, then the tx-build indexer-provider wiring proof in T025.
+  Only return to this mainnet/dev endpoint E2E gate after the devnet
+  proof is healthy, the build endpoints are using the embedded indexer
+  for address UTxO reads, the operator is happy with that evidence, and
+  Slice B
   [#243](https://github.com/lambdasistemi/amaru-treasury-tx/issues/243)
   has proved `amaru-treasury-tx history --scope X` on devnet with
   submitted disburse + reorganize entries. `#242` does not implement
@@ -408,6 +410,53 @@ Layout legend:
     helper extraction/reuse; do not alter unrelated devnet phases)
   - `test/devnet/Amaru/Treasury/Devnet/MixedUtxoSmoke.hs` (only for
     helper extraction/reuse; do not weaken its assertions)
+
+- [ ] **T025 [H]** Wire the API tx-build endpoints to the embedded
+  indexer-backed provider before any mainnet/reality endpoint test.
+  `POST /v1/build/swap`, `/v1/build/disburse`, and
+  `/v1/build/reorganize` must not receive the raw live node provider
+  for address UTxO selection. Their provider must serve address UTxO
+  reads from `ApiIndexer`/`snapshotUtxosAt`; the live provider may
+  remain only for non-address UTxO ledger data that the indexer does
+  not own, such as protocol parameters, ledger snapshots/tips,
+  evaluation, rewards, votes, and governance queries.
+
+  Preserve the existing `treasury-inspect` indexer behavior. If final
+  transaction assembly still requires exact-`TxIn` lookup through
+  `queryUTxOByTxIn`, handle it deliberately. Prefer serving it from
+  upstream `UTxOIndexer.Indexer.awaitTxIn`/observation data (zero
+  timeout for point lookup) so exact-input reads are indexer-backed too;
+  otherwise document and test the narrow exact-input exception. Do not
+  silently fall back to live node address queries.
+
+  RED: add a focused unit/wiring test that proves current API build
+  handler wiring passes the raw backend into `runBuildSwap`,
+  `runBuildDisburse`, and `runBuildReorganize` (or otherwise would call
+  live `queryUTxOs` during address selection) instead of an
+  indexer-backed provider. GREEN: construct one shared
+  indexer-backed build provider after `withApiIndexer` starts, pass it
+  to all three build handlers, and prove with a trapped real provider
+  that live `queryUTxOs` is not used by the build wiring. Keep
+  `nix develop --quiet -c cabal build test:devnet-tests -O0` and
+  `nix develop --quiet -c just devnet-api-smoke` green; the existing
+  T024 smoke remains the devnet transaction-insertion proof for the
+  indexed state after both phases. Commit:
+  `fix(api): use indexer-backed provider for build UTxOs`. Tasks
+  trailer: `Tasks: T025`. Worker pair.
+
+  **Owned files**:
+  - `app/amaru-treasury-tx-api/Main.hs`
+  - `lib/Amaru/Treasury/Api/Indexer.hs`
+  - `lib/Amaru/Treasury/Api/Server.hs`
+  - `test/unit/Amaru/Treasury/Api/HandlersIndexerSpec.hs`
+  - `test/unit/Amaru/Treasury/Api/ServerSpec.hs` (only if adding a
+    dedicated server wiring spec is cleaner than extending
+    `HandlersIndexerSpec`)
+  - `test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs` (only if the
+    smoke needs a small assertion that build handlers use the shared
+    provider; do not weaken T024's transaction-insertion checks)
+  - `amaru-treasury-tx.cabal` (only if a new test module or helper
+    module is required)
 
 ## Phase 7 — PR finalization (re-do after T014 lands)
 

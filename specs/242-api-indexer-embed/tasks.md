@@ -258,7 +258,7 @@ Layout legend:
   `refactor(api): migrate withApiIndexer to IndexerHandler`.
   Tasks trailer: `Tasks: T019`. Worker pair.
 
-- [ ] **T020 [H]** Keep the downstream readiness bridge and WAI
+- [X] **T020 [H]** Keep the downstream readiness bridge and WAI
   lag guard, but replace local pure readiness lag math with
   `Cardano.Node.Client.BlockIndexer.Readiness` helpers. Use either
   a type alias over the upstream readiness snapshot or a thin adapter

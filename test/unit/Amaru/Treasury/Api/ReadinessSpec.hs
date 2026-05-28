@@ -20,6 +20,7 @@ import Control.Concurrent.STM
     , atomically
     , newTVarIO
     , readTVar
+    , readTVarIO
     , writeTVar
     )
 import Data.Time.Clock
@@ -38,7 +39,7 @@ import Test.Hspec
 
 import Amaru.Treasury.Api.Readiness
     ( Readiness (..)
-    , ReadinessHandle
+    , ReadinessHandle (..)
     , ReadyState (..)
     , checkReady
     , waitReady
@@ -78,6 +79,20 @@ spec = describe "Amaru.Treasury.Api.Readiness" $ do
                     (Just (SlotNo 300))
                     UpstreamConnected
                 eventuallyReadyState readiness (Lagging 200 60)
+
+        it
+            "clamps processed-ahead lag to zero and remains Ready"
+            $ withFakeFollower
+            $ \source now readiness -> do
+                writeFollower
+                    source
+                    (addUTCTime 1 now)
+                    (Just (SlotNo 300))
+                    (Just (SlotNo 100))
+                    UpstreamConnected
+                eventuallyReadyState readiness Ready
+                r <- readTVarIO (rhReadiness readiness)
+                rLagSlots r `shouldBe` 0
 
     describe "waitReady"
         $ it

@@ -25,6 +25,7 @@ module Amaru.Treasury.Api.Readiness
     , checkReady
     ) where
 
+import Cardano.Node.Client.BlockIndexer.Readiness qualified as BlockReadiness
 import Cardano.Node.Client.N2C.Reconnect
     ( UpstreamStatus (..)
     )
@@ -214,7 +215,9 @@ projectReadiness fr now =
     Readiness
         { rProcessedSlot = fromMaybeSlot processed
         , rTipSlot = fromMaybeSlot tip
-        , rLagSlots = computeLag processed tip
+        , rLagSlots =
+            fromMaybe 0 $
+                BlockReadiness.slotLag slotNoToWord64 processed tip
         , rUpstreamUp = case (Follower.rUpstream fr, processed) of
             (UpstreamConnected, Just _) -> True
             _ -> False
@@ -227,11 +230,8 @@ projectReadiness fr now =
 fromMaybeSlot :: Maybe SlotNo -> SlotNo
 fromMaybeSlot = fromMaybe (SlotNo 0)
 
-computeLag :: Maybe SlotNo -> Maybe SlotNo -> Word64
-computeLag (Just (SlotNo p)) (Just (SlotNo t))
-    | t > p = t - p
-    | otherwise = 0
-computeLag _ _ = 0
+slotNoToWord64 :: SlotNo -> Word64
+slotNoToWord64 (SlotNo slot) = slot
 
 {- | Translate a raw 'Readiness' snapshot into the
 'ReadyState' verdict the handler layer consumes. Pure;
@@ -246,6 +246,11 @@ falsely classify the pre-readiness state as 'Ready').
 classifyReadiness :: Word64 -> Readiness -> ReadyState
 classifyReadiness threshold r
     | not (rUpstreamUp r) = Pending
-    | rLagSlots r > threshold =
+    | BlockReadiness.readyFromLag
+        id
+        threshold
+        (rUpstreamUp r)
+        (Just (rLagSlots r)) =
+        Ready
+    | otherwise =
         Lagging (rLagSlots r) threshold
-    | otherwise = Ready

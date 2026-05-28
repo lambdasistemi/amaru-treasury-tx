@@ -34,6 +34,7 @@ import Cardano.Node.Client.UTxOIndexer.Types
     , TxOut (..)
     )
 import Data.ByteString qualified as B
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Set qualified as Set
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.IO.Temp (withSystemTempDirectory)
@@ -116,6 +117,29 @@ spec = describe "Amaru.Treasury.Api.Indexer" $ do
             csInterestSet (toChainSyncCfg cfg)
                 `shouldBe` IndexAddressSet
                     (Set.singleton addr)
+
+    describe "toChainSyncCfg"
+        $ it
+            "registers the live UTxO handler through\
+            \ ChainSyncConfig.csHandlers (#168 seam)"
+        $ do
+            let chainSyncCfg =
+                    toChainSyncCfg
+                        IndexerConfig
+                            { icDbPath = "/tmp/unused"
+                            , icSocketPath = "/tmp/unused.sock"
+                            , icNetworkMagic = NetworkMagic 42
+                            , icStartSlot = SlotNo 0
+                            , icLagThresholdSlots = 60
+                            , icByronEpochSlots = 86_400
+                            , icSecurityParamK = 2160
+                            , icReconnectPolicy =
+                                defaultReconnectPolicy
+                            , icProbeConfig = defaultProbeConfig
+                            , icInterestSet = IndexAll
+                            }
+            case csHandlers chainSyncCfg of
+                _ :| extraHandlers -> length extraHandlers `shouldBe` 0
 
 -- ---------------------------------------------------------------------------
 -- Helpers

@@ -82,6 +82,7 @@ import Control.Concurrent.STM
     )
 import Control.Tracer (Tracer (Tracer), nullTracer)
 import Data.ByteString qualified as BS
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Word (Word64)
 import Ouroboros.Network.Magic (NetworkMagic)
 import System.IO (hPutStrLn, stderr)
@@ -225,6 +226,16 @@ toChainSyncCfg cfg =
         , csReconnectPolicy = icReconnectPolicy cfg
         , csProbeConfig = icProbeConfig cfg
         , csInterestSet = icInterestSet cfg
+        , -- Upstream handler-list seam
+          -- (cardano-node-clients#168/#169). The API
+          -- container still wants the standard UTxO
+          -- columns, so it registers the live UTxO
+          -- handler explicitly. Future tx-history slices
+          -- can append their own handler here without
+          -- opening a second chain-sync follower.
+          csHandlers =
+            Indexer.liveUtxoHandler (icInterestSet cfg)
+                :| []
         , -- Cold-boot intersection seed (upstream
           -- cardano-node-clients#162). 'Nothing' means
           -- intersect at Origin and walk forward (the EBB

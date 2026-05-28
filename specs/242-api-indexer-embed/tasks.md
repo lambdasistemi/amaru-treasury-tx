@@ -249,7 +249,7 @@ Layout legend:
   `chore(api): bump cnc pin to a8f830a + add block-indexer dep`.
   Tasks trailer: `Tasks: T018`. Worker pair.
 
-- [ ] **T019 [H]** Migrate `withApiIndexer` internals to the
+- [X] **T019 [H]** Migrate `withApiIndexer` internals to the
   upstream `IndexerHandler` path by registering
   `liveUtxoHandler interestSet :| []` through the new indexer
   handler configuration. Preserve the public `withApiIndexer`

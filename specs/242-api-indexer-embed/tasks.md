@@ -266,6 +266,15 @@ Layout legend:
   `refactor(api): use upstream BlockIndexer.Readiness pure helpers`.
   Tasks trailer: `Tasks: T020`. Worker pair.
 
+- [ ] **T021 [F]** Re-pin `cardano-node-clients` from the final
+  PR #169 head `57dc17b9ba2a383211762bd473946c303ed00cf9` to the
+  merged `main` commit
+  `9353c889c9a531e535ed7e9d8b6b0ad4fa621ec7`. The fixed-output
+  sha stays `1qcdy0wnx58v7agpzk5rjwchifld2sacxv6q8fsmgb8kwgd2q8gv`
+  because the merge commit has the same source tree. Commit:
+  `chore(api): repin cnc to merged handler seam`.
+  Tasks trailer: `Tasks: T021`. Worker pair.
+
 ## Phase 7 — PR finalization (re-do after T014 lands)
 
 - [ ] **T013 [O]** Edit GitHub issue #242 body via

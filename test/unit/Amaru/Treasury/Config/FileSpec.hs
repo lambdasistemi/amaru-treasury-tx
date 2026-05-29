@@ -11,6 +11,7 @@ module Amaru.Treasury.Config.FileSpec (spec) where
 import Data.ByteString (ByteString)
 import Data.Either (isLeft)
 import Data.Map.Strict qualified as Map
+import Data.Text (Text)
 import Test.Hspec
     ( Spec
     , describe
@@ -59,6 +60,11 @@ spec = describe "Amaru.Treasury.Config.File" $ do
                             , acBuildIdentity =
                                 Just "build-identity.json"
                             , acStatic = Just "frontend/dist"
+                            , acIndexerDb = Just "indexer-db"
+                            , acIndexerLagThresholdSlots = Just 42
+                            , acIndexerStartSlot = Just 123
+                            , acIndexerStartBlockHash =
+                                Just sampleBlockHashHex
                             }
                     }
 
@@ -89,7 +95,11 @@ fullConfigYaml =
     \api:\n\
     \  manifest: recent-txs.json\n\
     \  buildIdentity: build-identity.json\n\
-    \  static: frontend/dist\n"
+    \  static: frontend/dist\n\
+    \  indexerDb: indexer-db\n\
+    \  indexerLagThresholdSlots: 42\n\
+    \  indexerStartSlot: 123\n\
+    \  indexerStartBlockHash: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n"
 
 profileOnlyYaml :: ByteString
 profileOnlyYaml =
@@ -98,3 +108,7 @@ profileOnlyYaml =
     \    network: mainnet\n\
     \    nodeSocket: /run/cardano/node.socket\n\
     \    metadataPath: metadata-mainnet.json\n"
+
+sampleBlockHashHex :: Text
+sampleBlockHashHex =
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

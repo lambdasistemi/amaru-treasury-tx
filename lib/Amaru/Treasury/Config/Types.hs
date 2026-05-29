@@ -27,13 +27,17 @@ import Data.Aeson
 import Data.Aeson.Types ((.!=))
 import Data.Map.Strict (Map)
 import Data.Text (Text)
-import Data.Word (Word32)
+import Data.Word (Word32, Word64)
 
 -- | API-specific runtime paths from the shared YAML file.
 data ApiConfig = ApiConfig
     { acManifest :: !(Maybe FilePath)
     , acBuildIdentity :: !(Maybe FilePath)
     , acStatic :: !(Maybe FilePath)
+    , acIndexerDb :: !(Maybe FilePath)
+    , acIndexerLagThresholdSlots :: !(Maybe Word64)
+    , acIndexerStartSlot :: !(Maybe Word64)
+    , acIndexerStartBlockHash :: !(Maybe Text)
     }
     deriving stock (Eq, Show)
 
@@ -44,6 +48,10 @@ emptyApiConfig =
         { acManifest = Nothing
         , acBuildIdentity = Nothing
         , acStatic = Nothing
+        , acIndexerDb = Nothing
+        , acIndexerLagThresholdSlots = Nothing
+        , acIndexerStartSlot = Nothing
+        , acIndexerStartBlockHash = Nothing
         }
 
 instance FromJSON ApiConfig where
@@ -53,6 +61,10 @@ instance FromJSON ApiConfig where
                 <$> o .:? "manifest"
                 <*> o .:? "buildIdentity"
                 <*> o .:? "static"
+                <*> o .:? "indexerDb"
+                <*> o .:? "indexerLagThresholdSlots"
+                <*> o .:? "indexerStartSlot"
+                <*> o .:? "indexerStartBlockHash"
 
 -- | One named treasury profile in @treasury.yaml@.
 data TreasuryProfileConfig = TreasuryProfileConfig
@@ -111,6 +123,10 @@ data TreasuryConfigOverrides = TreasuryConfigOverrides
     , tcoApiManifest :: !(Maybe FilePath)
     , tcoApiBuildIdentity :: !(Maybe FilePath)
     , tcoApiStatic :: !(Maybe FilePath)
+    , tcoApiIndexerDb :: !(Maybe FilePath)
+    , tcoApiIndexerLagThresholdSlots :: !(Maybe Word64)
+    , tcoApiIndexerStartSlot :: !(Maybe Word64)
+    , tcoApiIndexerStartBlockHash :: !(Maybe Text)
     }
     deriving stock (Eq, Show)
 
@@ -131,6 +147,10 @@ emptyTreasuryConfigOverrides =
         , tcoApiManifest = Nothing
         , tcoApiBuildIdentity = Nothing
         , tcoApiStatic = Nothing
+        , tcoApiIndexerDb = Nothing
+        , tcoApiIndexerLagThresholdSlots = Nothing
+        , tcoApiIndexerStartSlot = Nothing
+        , tcoApiIndexerStartBlockHash = Nothing
         }
 
 -- | Network name and magic after source resolution.

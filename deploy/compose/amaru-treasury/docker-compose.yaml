@@ -13,6 +13,11 @@ services:
       # /node/mainnet/ipc/node.socket. Mounting the parent
       # so cardano-node propagation works.
       - /node/mainnet:/n2c:ro
+      # #242 — Persistent RocksDB volume for the embedded
+      # chain-sync follower. Survives container restarts so
+      # the indexer resumes from getResumePoints instead of
+      # cold-syncing from mainnetIndexerStartSlot every roll.
+      - amaru-treasury-indexer:/var/lib/amaru-treasury/indexer-rocksdb
     labels:
       - traefik.docker.network=web
       - traefik.http.routers.amaru-treasury.rule=Host(`amaru-treasury.plutimus.com`)
@@ -28,3 +33,10 @@ services:
 networks:
   web:
     external: true
+
+volumes:
+  # #242 — Production indexer state. Isolated from the dev
+  # variant (which uses `amaru-treasury-indexer-dev`) so a
+  # `docker compose down -v` in either environment can't
+  # nuke the other's chain-sync progress.
+  amaru-treasury-indexer:

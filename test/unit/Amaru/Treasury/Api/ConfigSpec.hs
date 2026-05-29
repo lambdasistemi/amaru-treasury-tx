@@ -8,6 +8,8 @@ License     : Apache-2.0
 -}
 module Amaru.Treasury.Api.ConfigSpec (spec) where
 
+import Cardano.Node.Client.UTxOIndexer.Types (BlockHash (..))
+import Data.ByteString qualified as B
 import Data.List (isInfixOf)
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.FilePath ((</>))
@@ -23,7 +25,8 @@ import Test.Hspec
     )
 
 import Amaru.Treasury.Api.Config
-    ( ApiRuntimeConfig (..)
+    ( ApiIndexerRuntimeConfig (..)
+    , ApiRuntimeConfig (..)
     , parseApiArgsWithEnv
     )
 import Amaru.Treasury.Cli.Common
@@ -55,6 +58,12 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                     , arcManifest = "manifest-profile.json"
                     , arcBuildIdentity = "build-profile.json"
                     , arcStatic = "static-profile"
+                    , arcIndexer =
+                        ApiIndexerRuntimeConfig
+                            { aircDbPath = "indexer-profile"
+                            , aircLagThresholdSlots = 60
+                            , aircStartPoint = Nothing
+                            }
                     , arcGlobalOpts =
                         GlobalOpts
                             { goSocketPath = Just "/profile/node.socket"
@@ -78,6 +87,10 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                     , "build-env.json"
                     )
                 , ("AMARU_TREASURY_API_STATIC", "static-env")
+                ,
+                    ( "AMARU_TREASURY_API_INDEXER_DB"
+                    , "indexer-env"
+                    )
                 ]
                 []
 
@@ -90,6 +103,12 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                 , arcManifest = "manifest-env.json"
                 , arcBuildIdentity = "build-env.json"
                 , arcStatic = "static-env"
+                , arcIndexer =
+                    ApiIndexerRuntimeConfig
+                        { aircDbPath = "indexer-env"
+                        , aircLagThresholdSlots = 60
+                        , aircStartPoint = Nothing
+                        }
                 , arcGlobalOpts =
                     GlobalOpts
                         { goSocketPath = Just "/env/node.socket"
@@ -124,6 +143,14 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                     , "build-cli.json"
                     , "--static"
                     , "static-cli"
+                    , "--indexer-db"
+                    , "indexer-cli"
+                    , "--indexer-lag-threshold-slots"
+                    , "42"
+                    , "--indexer-start-slot"
+                    , "123"
+                    , "--indexer-start-block-hash"
+                    , sampleBlockHashHex
                     ]
 
             resolved
@@ -135,6 +162,13 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                     , arcManifest = "manifest-cli.json"
                     , arcBuildIdentity = "build-cli.json"
                     , arcStatic = "static-cli"
+                    , arcIndexer =
+                        ApiIndexerRuntimeConfig
+                            { aircDbPath = "indexer-cli"
+                            , aircLagThresholdSlots = 42
+                            , aircStartPoint =
+                                Just (123, sampleBlockHash)
+                            }
                     , arcGlobalOpts =
                         GlobalOpts
                             { goSocketPath = Just "/cli/node.socket"
@@ -175,6 +209,8 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                 , "build-flag.json"
                 , "--static"
                 , "static-flag"
+                , "--indexer-db"
+                , "indexer-flag"
                 ]
 
         resolved
@@ -186,6 +222,12 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                 , arcManifest = "manifest-flag.json"
                 , arcBuildIdentity = "build-flag.json"
                 , arcStatic = "static-flag"
+                , arcIndexer =
+                    ApiIndexerRuntimeConfig
+                        { aircDbPath = "indexer-flag"
+                        , aircLagThresholdSlots = 60
+                        , aircStartPoint = Nothing
+                        }
                 , arcGlobalOpts =
                     GlobalOpts
                         { goSocketPath = Just "/flag/node.socket"
@@ -208,10 +250,109 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                     , "build-env.json"
                     )
                 , ("AMARU_TREASURY_API_STATIC", "static-env")
+                ,
+                    ( "AMARU_TREASURY_API_INDEXER_DB"
+                    , "indexer-env"
+                    )
                 ]
                 []
 
         arcSocket <$> resolved `shouldBe` Right "/legacy/node.socket"
+
+    it "rejects an indexer start slot without a block hash" $ do
+        resolved <-
+            parseApiArgsWithEnv
+                []
+                [ "--socket"
+                , "/flag/node.socket"
+                , "--metadata"
+                , "metadata-flag.json"
+                , "--manifest"
+                , "manifest-flag.json"
+                , "--build-identity"
+                , "build-flag.json"
+                , "--static"
+                , "static-flag"
+                , "--indexer-db"
+                , "indexer-flag"
+                , "--indexer-start-slot"
+                , "123"
+                ]
+
+        resolved
+            `shouldFailWith` "api.indexerStartPoint requires both indexerStartSlot and indexerStartBlockHash"
+
+    it "resolves an indexer start point from slot and block hash" $ do
+        resolved <-
+            parseApiArgsWithEnv
+                []
+                [ "--socket"
+                , "/flag/node.socket"
+                , "--metadata"
+                , "metadata-flag.json"
+                , "--manifest"
+                , "manifest-flag.json"
+                , "--build-identity"
+                , "build-flag.json"
+                , "--static"
+                , "static-flag"
+                , "--indexer-db"
+                , "indexer-flag"
+                , "--indexer-start-slot"
+                , "123"
+                , "--indexer-start-block-hash"
+                , sampleBlockHashHex
+                ]
+
+        aircStartPoint . arcIndexer <$> resolved
+            `shouldBe` Right (Just (123, sampleBlockHash))
+
+    it "rejects an indexer start block hash without a slot" $ do
+        resolved <-
+            parseApiArgsWithEnv
+                []
+                [ "--socket"
+                , "/flag/node.socket"
+                , "--metadata"
+                , "metadata-flag.json"
+                , "--manifest"
+                , "manifest-flag.json"
+                , "--build-identity"
+                , "build-flag.json"
+                , "--static"
+                , "static-flag"
+                , "--indexer-db"
+                , "indexer-flag"
+                , "--indexer-start-block-hash"
+                , sampleBlockHashHex
+                ]
+
+        resolved
+            `shouldFailWith` "api.indexerStartPoint requires both indexerStartSlot and indexerStartBlockHash"
+
+    it "rejects a malformed indexer start block hash" $ do
+        resolved <-
+            parseApiArgsWithEnv
+                []
+                [ "--socket"
+                , "/flag/node.socket"
+                , "--metadata"
+                , "metadata-flag.json"
+                , "--manifest"
+                , "manifest-flag.json"
+                , "--build-identity"
+                , "build-flag.json"
+                , "--static"
+                , "static-flag"
+                , "--indexer-db"
+                , "indexer-flag"
+                , "--indexer-start-slot"
+                , "123"
+                , "--indexer-start-block-hash"
+                , "not-hex"
+                ]
+
+        resolved `shouldFailWith` "api.indexerStartBlockHash"
 
     it "rejects non-mainnet profile configuration for the API" $
         withSystemTempDirectory "treasury-api-config" $ \tmp -> do
@@ -260,7 +401,8 @@ treasuryYaml =
     \api:\n\
     \  manifest: manifest-profile.json\n\
     \  buildIdentity: build-profile.json\n\
-    \  static: static-profile\n"
+    \  static: static-profile\n\
+    \  indexerDb: indexer-profile\n"
 
 missingApiYaml :: String
 missingApiYaml =
@@ -282,4 +424,12 @@ nonMainnetYaml =
     \api:\n\
     \  manifest: manifest-profile.json\n\
     \  buildIdentity: build-profile.json\n\
-    \  static: static-profile\n"
+    \  static: static-profile\n\
+    \  indexerDb: indexer-profile\n"
+
+sampleBlockHashHex :: String
+sampleBlockHashHex =
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+sampleBlockHash :: BlockHash
+sampleBlockHash = BlockHash (B.replicate 32 0xAA)

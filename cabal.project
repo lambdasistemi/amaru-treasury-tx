@@ -27,19 +27,25 @@ source-repository-package
   --sha256: 1sr2r7xnl0q0a6jf4mfvvf37wn4cxf5s15bjra9am8z9a1rh6c80
 
 -- Provider, Submitter, N2C, and devnet helpers remain in cardano-node-clients.
+-- Pinned to the merged main commit that bundles both upstream PRs
+-- needed by #242: #157 (Cardano.Node.Client.UTxOIndexer.Follower.withChainSyncFollower)
+-- and #159 (interest-set address filter on the same follower).
 source-repository-package
   type: git
   location: https://github.com/lambdasistemi/cardano-node-clients
-  tag: 38fc1917ba475b90edd974576e1c71790d165532
-  --sha256: 09i3ysv7650imhd4b26cwybjckfs8qfv75kh1r6511zyjvmxykrh
+  -- Pinned to cardano-node-clients merged PR #171:
+  -- exposes the indexer transaction runner so ATX can use the
+  -- LedgerAndIndexer provider shape.
+  tag: 58744a88d38ab997588cecf752a259503c073728
+  --sha256: 0x0lfdkjgksxw4qn5dpfvg3ls8l1gmkl8jfpskyn7b3sg1wr4mlp
 
 -- Mirrored from cardano-node-clients/cabal.project (SRPs are not transitive
 -- in cabal; see https://cabal.readthedocs.io/en/3.10/cabal-project.html).
 source-repository-package
   type: git
   location: https://github.com/lambdasistemi/chain-follower
-  tag: 371b5930976ac3bb4e8a4ef576d5098d706984ee
-  --sha256: 1rks78zmgmxz5cg4v82vnc6hwib8vrylwk2m7y82iqaymmnskdvf
+  tag: d592a5015f8d7edb2d6022936a67a054dfe5329f
+  --sha256: 1pm2yhsm2zg5nv01aixv6ss21f2ka8ysq6dv2q4mpf9smz0m8g78
 
 source-repository-package
   type: git

@@ -33,13 +33,29 @@ module Amaru.Treasury.Api.Server
 
       -- * Server
     , Handlers (..)
+    , BuildHandlers (..)
     , mkServer
     , mkApplication
+
+      -- * Indexer-served handler (#242)
+    , mkInspectHandler
+    , withIndexerProvider
+    , mkBuildProvider
+    , mkBuildHandlers
     ) where
 
+import Cardano.Ledger.Address (Addr)
+import Cardano.Node.Client.Provider
+    ( Provider (..)
+    , QueryHandleBackend (..)
+    , mkQueryHandle
+    )
+import Cardano.Node.Client.Provider qualified as Provider
+import Cardano.Node.Client.UTxOIndexer.Provider qualified as IndexedProvider
 import Control.Monad.IO.Class (liftIO)
 import Data.Proxy (Proxy (..))
 import Data.Tagged (Tagged)
+import Database.KV.Transaction (RunTransaction (..))
 import Network.HTTP.Media ((//))
 import Network.Wai (Application)
 import Servant
@@ -59,7 +75,6 @@ import Servant.API
     , ReqBody
     , Required
     , Strict
-    , type (:<|>)
     , type (:>)
     )
 
@@ -75,12 +90,20 @@ import Amaru.Treasury.Api.BuildSwap
     ( SwapBuildRequest
     , SwapBuildResponse
     )
+import Amaru.Treasury.Api.Indexer
+    ( ApiIndexer (..)
+    )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity
     , RecentTxManifest
     )
+import Amaru.Treasury.Cli.TreasuryInspect (runInspectFromBackend)
 import Amaru.Treasury.Inspect.Render (encodeReport)
-import Amaru.Treasury.Inspect.Types (InspectReport)
+import Amaru.Treasury.Inspect.Types
+    ( DeploymentAnchor
+    , InspectReport
+    )
+import Amaru.Treasury.Metadata (TreasuryMetadata)
 import Amaru.Treasury.Scope (ScopeId)
 
 {- | A servant content type that emits an 'InspectReport' via
@@ -185,6 +208,36 @@ data Handlers = Handlers
     --   directory-server; in tests it is a tiny 404 stub.
     }
 
+-- | The three API build endpoints after provider wiring.
+data BuildHandlers = BuildHandlers
+    { bhBuildSwap :: SwapBuildRequest -> IO SwapBuildResponse
+    , bhBuildDisburse
+        :: DisburseBuildRequest
+        -> IO DisburseBuildResponse
+    , bhBuildReorganize
+        :: ReorganizeBuildRequest
+        -> IO ReorganizeBuildResponse
+    }
+
+{- | Construct the three build handlers from one shared
+provider.
+-}
+mkBuildHandlers
+    :: ApiIndexer cf op
+    -> Provider IO
+    -> (Provider IO -> SwapBuildRequest -> IO SwapBuildResponse)
+    -> (Provider IO -> DisburseBuildRequest -> IO DisburseBuildResponse)
+    -> (Provider IO -> ReorganizeBuildRequest -> IO ReorganizeBuildResponse)
+    -> BuildHandlers
+mkBuildHandlers apiIdx realProvider buildSwap buildDisburse buildReorganize =
+    BuildHandlers
+        { bhBuildSwap = buildSwap buildProvider
+        , bhBuildDisburse = buildDisburse buildProvider
+        , bhBuildReorganize = buildReorganize buildProvider
+        }
+  where
+    buildProvider = mkBuildProvider apiIdx realProvider
+
 -- | Build the servant 'Server' from the 'Handlers' record.
 mkServer :: Handlers -> Server DashboardAPI
 mkServer Handlers{..} =
@@ -217,3 +270,128 @@ run by warp.
 -}
 mkApplication :: Handlers -> Application
 mkApplication = serve dashboardAPI . mkServer
+
+-- ---------------------------------------------------------------------------
+-- Indexer-served inspect handler (#242)
+
+{- | Build the @\/v1\/treasury-inspect@ handler closure that
+the API container uses post-#242. The handler reads
+treasury / swap-order UTxOs from the embedded indexer (via
+the typed indexer provider) instead of from the production node, and
+sources only the @chain_tip@ field from the existing
+'Provider IO' session (via the unchanged 'nowTip' field —
+FR-005).
+
+Implementation strategy: rather than touch the existing
+'runInspectFromBackend' (out of #242 Slice 2's owned set), we
+construct a thin **synthetic** 'Provider' that:
+
+* delegates 'nowTip' to the caller's real provider,
+* routes address UTxO scans through the in-process indexer
+  via 'queryUTxOs',
+* routes exact input lookup through the same indexer via
+  'queryUTxOByTxIn',
+* keeps the live provider for non-UTxO ledger data such as
+  tip, protocol parameters, evaluation, rewards, votes, and
+  governance queries.
+
+The rest of the 'Provider' fields are inherited from the
+real provider; they aren't touched by
+'runInspectFromBackend''s read path, so this is harmless.
+-}
+mkInspectHandler
+    :: ApiIndexer cf op
+    -> Provider IO
+    -> TreasuryMetadata
+    -> DeploymentAnchor
+    -> Addr
+    -- ^ swap-order address
+    -> ScopeId
+    -> Handler InspectReport
+mkInspectHandler apiIdx realProvider metadata anchor swapAddr scope =
+    liftIO $
+        runInspectFromBackend
+            metadata
+            anchor
+            swapAddr
+            (Just scope)
+            (indexerProvider apiIdx realProvider)
+
+{- | Build the provider used by @POST /v1/build/*@
+handlers.
+-}
+mkBuildProvider :: ApiIndexer cf op -> Provider IO -> Provider IO
+mkBuildProvider = indexerProvider
+
+{- | Run an action with a legacy 'Provider IO' whose UTxO
+queries are backed by the embedded indexer.
+
+This is the transitional adapter for the existing ATX
+wizard/build code. It keeps the live provider for non-UTxO ledger
+queries, but both direct UTxO reads and acquired-handle UTxO reads
+go through the indexer transaction runner.
+-}
+withIndexerProvider
+    :: ApiIndexer cf op
+    -> Provider IO
+    -> (Provider IO -> IO a)
+    -> IO a
+withIndexerProvider apiIdx realProvider action =
+    action (indexerProvider apiIdx realProvider)
+
+{- | Build the synthetic 'Provider' described in
+'mkInspectHandler''s Haddock: real provider for 'nowTip',
+indexer-backed 'queryUTxOs' / 'queryUTxOByTxIn', and live
+provider delegation for non-address ledger data.
+-}
+indexerProvider :: ApiIndexer cf op -> Provider IO -> Provider IO
+indexerProvider apiIdx realProvider =
+    realProvider
+        { withAcquired = \callback ->
+            Provider.withAcquired realProvider $ \handle ->
+                callback $
+                    mkQueryHandle
+                        QueryHandleBackend
+                            { backendQueryUTxOs = queryIndexedUTxOs
+                            , backendQueryUTxOsAt = queryIndexedUTxOsAt
+                            , backendQueryUTxOByTxIn =
+                                queryIndexedUTxOByTxIn
+                            , backendQueryProtocolParams =
+                                Provider.queryProtocolParamsH handle
+                            , backendQueryLedgerSnapshot =
+                                Provider.queryLedgerSnapshotH handle
+                            , backendQueryStakeRewards =
+                                Provider.queryStakeRewardsH handle
+                            , backendQueryRewardAccounts =
+                                Provider.queryRewardAccountsH handle
+                            , backendQueryVoteDelegatees =
+                                Provider.queryVoteDelegateesH handle
+                            , backendQueryTreasury =
+                                Provider.queryTreasuryH handle
+                            , backendQueryGovernanceState =
+                                Provider.queryGovernanceStateH handle
+                            , backendEvaluateTx =
+                                Provider.evaluateTxH handle
+                            , backendPosixMsToSlot =
+                                Provider.posixMsToSlotH handle
+                            , backendPosixMsCeilSlot =
+                                Provider.posixMsCeilSlotH handle
+                            }
+        , queryUTxOs = queryIndexedUTxOs
+        , queryUTxOByTxIn = queryIndexedUTxOByTxIn
+        }
+  where
+    RunTransaction{runTransaction} = aiRunner apiIdx
+    indexer = IndexedProvider.indexerProvider
+
+    queryIndexedUTxOs =
+        runTransaction
+            . IndexedProvider.queryIndexedUTxOs indexer
+
+    queryIndexedUTxOsAt =
+        runTransaction
+            . IndexedProvider.queryIndexedUTxOsAt indexer
+
+    queryIndexedUTxOByTxIn =
+        runTransaction
+            . IndexedProvider.queryIndexedUTxOByTxIn indexer

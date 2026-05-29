@@ -76,6 +76,7 @@ import Amaru.Treasury.Backend
 import Amaru.Treasury.Cli.Common
     ( filterFundUtxos
     , queryFlatFunds
+    , queryValues
     )
 import Amaru.Treasury.IntentJSON.Common (mkHash28)
 import Amaru.Treasury.LedgerParse (txInFromText)
@@ -119,6 +120,18 @@ spec = describe "Amaru.Treasury.Cli.Common" $ do
                             ]
                 rows <- queryFlatFunds provider sampleAddrText
                 map fstOfTriple rows `shouldBe` [fundTxRef]
+
+    describe "queryValues" $ do
+        it "excludes TxOuts carrying reference scripts" $ do
+            fundIn <- parseTxIn fundTxRef
+            deployIn <- parseTxIn deployedAtTxRef
+            let provider =
+                    mockProvider
+                        [ (fundIn, fundTxOut)
+                        , (deployIn, deployTxOut)
+                        ]
+            rows <- queryValues provider sampleAddrText
+            map fst rows `shouldBe` [fundIn]
 
 -- ----------------------------------------------------
 -- Provider mock

@@ -33,6 +33,11 @@ services:
       - /home/paolino/services/amaru-treasury-dev/static:/srv/static:ro
       - /nix/store:/nix/store:ro
       - /home/paolino/services/amaru-treasury-dev/api-bin:/srv/api-bin:ro
+      # #242 — Persistent RocksDB volume for the embedded
+      # chain-sync follower. Named separately from the
+      # production volume so a `docker compose down -v` in
+      # one environment can't nuke the other's state.
+      - amaru-treasury-indexer-dev:/var/lib/amaru-treasury/indexer-rocksdb
     command:
       - /srv/api-bin/amaru-treasury-tx-api
       - --host
@@ -49,6 +54,8 @@ services:
       - /etc/amaru-treasury/build-identity.json
       - --static
       - /srv/static
+      - --indexer-db
+      - /var/lib/amaru-treasury/indexer-rocksdb
     labels:
       - traefik.docker.network=web
       - traefik.http.routers.amaru-treasury-dev.rule=Host(`amaru-treasury.dev.plutimus.com`)
@@ -64,3 +71,9 @@ services:
 networks:
   web:
     external: true
+
+volumes:
+  # #242 — Dev variant of the embedded indexer's RocksDB
+  # state. Named separately from production so the two
+  # environments can be started + torn down independently.
+  amaru-treasury-indexer-dev:

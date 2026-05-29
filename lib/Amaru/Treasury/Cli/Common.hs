@@ -329,7 +329,7 @@ queryValues p addrText = case parseAddr addrText of
         utxos <- queryUTxOs p a
         pure
             [ (txin, txout ^. valueTxOutL)
-            | (txin, txout) <- utxos
+            | (txin, txout) <- filterFundUtxos utxos
             ]
 
 nowTip :: Provider IO -> IO Word64

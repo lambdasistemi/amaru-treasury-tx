@@ -128,6 +128,23 @@ devnet-smoke phase="node":
 devnet-cli-smoke *args:
     scripts/smoke/smoke.sh {{ args }}
 
+# Opt-in live-boundary smoke for the #242 API container.
+# Boots `amaru-treasury-tx-api` against a real devnet node +
+# a tmpfs RocksDB, hits /v1/treasury-inspect over HTTP and
+# asserts 200, 503 (forced lag), 200 (recovery). Requires:
+#   E2E_GENESIS_DIR   = path to cardano-node-clients devnet genesis
+#   DEVNET_SMOKE_METADATA = path to a metadata.json the binary parses
+# The DEVNET_API_SMOKE_OPT_IN=1 env var is set automatically.
+# NOT invoked by ./gate.sh — too expensive for per-commit gating.
+devnet-api-smoke:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export DEVNET_API_SMOKE_OPT_IN=1
+    cabal test devnet-tests -O0 \
+        --test-show-details=direct \
+        --test-option=--match \
+        --test-option='api indexer smoke'
+
 # Full CI pipeline (build, tests, lint, format-check)
 ci:
     just build

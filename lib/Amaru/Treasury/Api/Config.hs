@@ -9,16 +9,22 @@ server's runtime startup record.
 -}
 module Amaru.Treasury.Api.Config
     ( ApiRuntimeConfig (..)
+    , ApiIndexerRuntimeConfig (..)
     , execApiConfig
     , parseApiArgsWithEnv
     , module Amaru.Treasury.Config
     ) where
 
+import Cardano.Node.Client.UTxOIndexer.Types (BlockHash (..))
 import Control.Applicative ((<|>))
 import Data.Bifunctor (first)
+import Data.ByteString qualified as BS
+import Data.ByteString.Base16 qualified as B16
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Word (Word32)
+import Data.Text.Encoding qualified as TE
+import Data.Word (Word32, Word64)
 import Options.Applicative
     ( Parser
     , ParserInfo
@@ -61,7 +67,16 @@ data ApiRuntimeConfig = ApiRuntimeConfig
     , arcManifest :: !FilePath
     , arcBuildIdentity :: !FilePath
     , arcStatic :: !FilePath
+    , arcIndexer :: !ApiIndexerRuntimeConfig
     , arcGlobalOpts :: !GlobalOpts
+    }
+    deriving stock (Eq, Show)
+
+-- | Fully resolved embedded-indexer startup configuration.
+data ApiIndexerRuntimeConfig = ApiIndexerRuntimeConfig
+    { aircDbPath :: !FilePath
+    , aircLagThresholdSlots :: !Word64
+    , aircStartPoint :: !(Maybe (Word64, BlockHash))
     }
     deriving stock (Eq, Show)
 
@@ -75,6 +90,10 @@ data ApiCliOpts = ApiCliOpts
     , acoManifest :: !(Maybe FilePath)
     , acoBuildIdentity :: !(Maybe FilePath)
     , acoStatic :: !(Maybe FilePath)
+    , acoIndexerDb :: !(Maybe FilePath)
+    , acoIndexerLagThresholdSlots :: !(Maybe Word64)
+    , acoIndexerStartSlot :: !(Maybe Word64)
+    , acoIndexerStartBlockHash :: !(Maybe Text)
     }
     deriving stock (Eq, Show)
 
@@ -82,6 +101,7 @@ data ApiConfigError
     = ApiConfigFileError !ConfigFileError
     | ApiConfigResolveError !ResolveError
     | ApiConfigMissingRequired !Text
+    | ApiConfigInvalidStartPoint !Text
     | ApiConfigNonMainnet !ResolvedNetwork
     deriving stock (Eq, Show)
 
@@ -192,6 +212,40 @@ apiConfigOptsP =
                     <> help "Halogen bundle directory (baked in)"
                 )
             )
+        <*> optional
+            ( strOption
+                ( long "indexer-db"
+                    <> metavar "PATH"
+                    <> help
+                        "RocksDB directory for the embedded indexer"
+                )
+            )
+        <*> optional
+            ( option
+                auto
+                ( long "indexer-lag-threshold-slots"
+                    <> metavar "SLOTS"
+                    <> help
+                        "Lag-slots above which the service returns HTTP 503"
+                )
+            )
+        <*> optional
+            ( option
+                auto
+                ( long "indexer-start-slot"
+                    <> metavar "SLOT"
+                    <> help "Override the mainnet cold-boot starting slot"
+                )
+            )
+        <*> optional
+            ( T.pack
+                <$> strOption
+                    ( long "indexer-start-block-hash"
+                        <> metavar "HASH"
+                        <> help
+                            "Block hash for --indexer-start-slot"
+                    )
+            )
 
 resolveApiRuntimeConfig
     :: [(String, String)]
@@ -245,6 +299,45 @@ resolveApiRuntimeConfig envs opts = do
                     acStatic
                     treasuryConfig
                 )
+        indexerDb <-
+            requireResolved
+                "api.indexerDb"
+                ( apiValue
+                    cliOverrides
+                    envOverrides
+                    tcoApiIndexerDb
+                    acIndexerDb
+                    treasuryConfig
+                )
+        startPoint <-
+            resolveIndexerStartPoint
+                ( apiValue
+                    cliOverrides
+                    envOverrides
+                    tcoApiIndexerStartSlot
+                    acIndexerStartSlot
+                    treasuryConfig
+                )
+                ( apiValue
+                    cliOverrides
+                    envOverrides
+                    tcoApiIndexerStartBlockHash
+                    acIndexerStartBlockHash
+                    treasuryConfig
+                )
+        let indexer =
+                ApiIndexerRuntimeConfig
+                    { aircDbPath = indexerDb
+                    , aircLagThresholdSlots =
+                        fromMaybe 60 $
+                            apiValue
+                                cliOverrides
+                                envOverrides
+                                tcoApiIndexerLagThresholdSlots
+                                acIndexerLagThresholdSlots
+                                treasuryConfig
+                    , aircStartPoint = startPoint
+                    }
         pure
             ApiRuntimeConfig
                 { arcHost = acoHost opts
@@ -254,6 +347,7 @@ resolveApiRuntimeConfig envs opts = do
                 , arcManifest = manifest
                 , arcBuildIdentity = buildIdentity
                 , arcStatic = static
+                , arcIndexer = indexer
                 , arcGlobalOpts =
                     globalOptsFromResolved socket resolved
                 }
@@ -281,6 +375,11 @@ apiCliOverrides opts =
         , tcoApiManifest = acoManifest opts
         , tcoApiBuildIdentity = acoBuildIdentity opts
         , tcoApiStatic = acoStatic opts
+        , tcoApiIndexerDb = acoIndexerDb opts
+        , tcoApiIndexerLagThresholdSlots =
+            acoIndexerLagThresholdSlots opts
+        , tcoApiIndexerStartSlot = acoIndexerStartSlot opts
+        , tcoApiIndexerStartBlockHash = acoIndexerStartBlockHash opts
         }
 
 apiPath
@@ -290,7 +389,16 @@ apiPath
     -> (ApiConfig -> Maybe FilePath)
     -> Maybe TreasuryConfig
     -> Maybe FilePath
-apiPath cliOverrides envOverrides overrideField apiField config =
+apiPath = apiValue
+
+apiValue
+    :: TreasuryConfigOverrides
+    -> TreasuryConfigOverrides
+    -> (TreasuryConfigOverrides -> Maybe a)
+    -> (ApiConfig -> Maybe a)
+    -> Maybe TreasuryConfig
+    -> Maybe a
+apiValue cliOverrides envOverrides overrideField apiField config =
     overrideField cliOverrides
         <|> overrideField envOverrides
         <|> (config >>= apiField . tcApi)
@@ -301,6 +409,39 @@ requireResolved
     -> Either ApiConfigError FilePath
 requireResolved name =
     maybe (Left (ApiConfigMissingRequired name)) Right
+
+resolveIndexerStartPoint
+    :: Maybe Word64
+    -> Maybe Text
+    -> Either ApiConfigError (Maybe (Word64, BlockHash))
+resolveIndexerStartPoint Nothing Nothing = Right Nothing
+resolveIndexerStartPoint (Just _) Nothing =
+    Left $
+        ApiConfigInvalidStartPoint
+            "api.indexerStartPoint requires both indexerStartSlot and indexerStartBlockHash"
+resolveIndexerStartPoint Nothing (Just _) =
+    Left $
+        ApiConfigInvalidStartPoint
+            "api.indexerStartPoint requires both indexerStartSlot and indexerStartBlockHash"
+resolveIndexerStartPoint (Just slot) (Just rawHash) = do
+    blockHash <- parseIndexerStartBlockHash rawHash
+    Right (Just (slot, blockHash))
+
+parseIndexerStartBlockHash :: Text -> Either ApiConfigError BlockHash
+parseIndexerStartBlockHash rawHash = do
+    bytes <-
+        first
+            ( ApiConfigInvalidStartPoint
+                . T.pack
+                . ("api.indexerStartBlockHash: invalid hex: " <>)
+            )
+            (B16.decode (TE.encodeUtf8 rawHash))
+    if BS.length bytes == 32
+        then Right (BlockHash bytes)
+        else
+            Left $
+                ApiConfigInvalidStartPoint
+                    "api.indexerStartBlockHash must be 64 hex characters (32 bytes)"
 
 requireMainnet
     :: ResolvedTreasuryConfig
@@ -345,6 +486,8 @@ renderApiConfigError = \case
             <> " (expected mainnet|preprod|preview|devnet)"
     ApiConfigMissingRequired field ->
         "config: missing required field " <> T.unpack field
+    ApiConfigInvalidStartPoint err ->
+        T.unpack err
     ApiConfigNonMainnet network ->
         "api: expected mainnet network, got "
             <> networkDescription network

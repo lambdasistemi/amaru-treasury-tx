@@ -40,11 +40,11 @@
 
 ## Slice 4 — Downstream CLI
 
-- [ ] T243-S4 Add `history --scope X` parser and runner.
-- [ ] T243-S4 Read from the local history index through the Haskell
+- [X] T243-S4 Add `history --scope X` parser and runner.
+- [X] T243-S4 Read from the local history index through the Haskell
   indexer API.
-- [ ] T243-S4 Unit tests prove output rows are stable and scope-filtered.
-- [ ] T243-S4 Commit:
+- [X] T243-S4 Unit tests prove output rows are stable and scope-filtered.
+- [X] T243-S4 Commit:
   `feat(history): add scope history command`.
 
 ## Slice 5 — Downstream Devnet Proof

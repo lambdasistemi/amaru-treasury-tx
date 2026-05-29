@@ -35,6 +35,9 @@ import Amaru.Treasury.Cli.Envelope
 import Amaru.Treasury.Cli.GovernanceWithdrawalInitWizard
     ( runGovernanceWithdrawalInitWizard
     )
+import Amaru.Treasury.Cli.History
+    ( runHistory
+    )
 import Amaru.Treasury.Cli.RegistryInitWizard
     ( runRegistryInitWizard
     )
@@ -117,6 +120,8 @@ main = withUtf8 . withUpdateCheckMain $ do
         CmdTreasuryInspect io ->
             withSocket g $ \socket ->
                 runTreasuryInspect g{goSocketPath = Just socket} io
+        CmdHistory ho ->
+            runHistory ho
         CmdAttachWitness ao ->
             runAttachWitness ao
         CmdVaultCreate vo ->

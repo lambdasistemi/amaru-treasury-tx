@@ -50,10 +50,13 @@ import Test.Hspec
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
     , IndexerConfig (..)
+    , historyDbPath
     , toChainSyncCfg
     , withApiIndexer
     )
 import Amaru.Treasury.Api.Indexer qualified as ApiIdx
+import Amaru.Treasury.Cli.History (queryScopeHistory)
+import Amaru.Treasury.Scope (ScopeId (CoreDevelopment))
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Api.Indexer" $ do
@@ -114,6 +117,7 @@ spec = describe "Amaru.Treasury.Api.Indexer" $ do
                         , icInterestSet =
                             IndexAddressSet
                                 (Set.singleton addr)
+                        , icRegistryScopeMappings = []
                         }
             csInterestSet (toChainSyncCfg cfg)
                 `shouldBe` IndexAddressSet
@@ -138,9 +142,41 @@ spec = describe "Amaru.Treasury.Api.Indexer" $ do
                                 defaultReconnectPolicy
                             , icProbeConfig = defaultProbeConfig
                             , icInterestSet = IndexAll
+                            , icRegistryScopeMappings = []
                             }
             case csHandlers chainSyncCfg of
                 _ :| extraHandlers -> length extraHandlers `shouldBe` 0
+
+    describe "historyDbPath"
+        $ it
+            "is a deterministic sibling of icDbPath"
+        $ historyDbPath
+            IndexerConfig
+                { icDbPath = "/tmp/treasury-rocksdb"
+                , icSocketPath = "/tmp/unused.sock"
+                , icNetworkMagic = NetworkMagic 42
+                , icStartPoint = Nothing
+                , icLagThresholdSlots = 60
+                , icByronEpochSlots = 86_400
+                , icSecurityParamK = 2160
+                , icReconnectPolicy = defaultReconnectPolicy
+                , icProbeConfig = defaultProbeConfig
+                , icInterestSet = IndexAll
+                , icRegistryScopeMappings = []
+                }
+            `shouldBe` "/tmp/treasury-rocksdb-history"
+
+    describe "withApiIndexer"
+        $ it
+            "exposes a history handle whose fresh store\
+            \ has no rows for a scope"
+        $ withTmpIndexer
+        $ \apiIdx -> do
+            rows <-
+                queryScopeHistory
+                    (aiHistory apiIdx)
+                    CoreDevelopment
+            length rows `shouldBe` 0
 
     describe "toChainSyncCfg"
         $ it
@@ -163,6 +199,7 @@ spec = describe "Amaru.Treasury.Api.Indexer" $ do
                                 defaultReconnectPolicy
                             , icProbeConfig = defaultProbeConfig
                             , icInterestSet = IndexAll
+                            , icRegistryScopeMappings = []
                             }
             csStartPoint chainSyncCfg
                 `shouldBe` Just (SlotNo 123, startHash)
@@ -191,5 +228,6 @@ withTmpIndexer action =
                 , icReconnectPolicy = defaultReconnectPolicy
                 , icProbeConfig = defaultProbeConfig
                 , icInterestSet = IndexAll
+                , icRegistryScopeMappings = []
                 }
             action

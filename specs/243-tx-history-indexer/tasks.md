@@ -49,14 +49,14 @@
 
 ## Slice 5 — Downstream Devnet Proof
 
-- [ ] T243-S5 Extend the indexed devnet smoke to wait more than the
+- [X] T243-S5 Extend the indexed devnet smoke to wait more than the
   stability window before `withApiIndexer`.
-- [ ] T243-S5 Submit disburse and reorganize after indexer start.
-- [ ] T243-S5 Let the network advance enough for both phases to be
+- [X] T243-S5 Submit disburse and reorganize after indexer start.
+- [X] T243-S5 Let the network advance enough for both phases to be
   detected.
-- [ ] T243-S5 Assert `history --scope core_development` returns both
+- [X] T243-S5 Assert `history --scope core_development` returns both
   roles with txids and slots.
-- [ ] T243-S5 Commit:
+- [X] T243-S5 Commit:
   `test(history): prove indexed treasury history on devnet`.
 
 ## Slice 6 — Repin And Finalize

@@ -325,6 +325,7 @@ withTestIndexer action =
                 , icReconnectPolicy = defaultReconnectPolicy
                 , icProbeConfig = defaultProbeConfig
                 , icInterestSet = IndexAll
+                , icRegistryScopeMappings = []
                 }
             action
 

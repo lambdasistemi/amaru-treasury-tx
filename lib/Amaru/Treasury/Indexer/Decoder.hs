@@ -54,6 +54,10 @@ module Amaru.Treasury.Indexer.Decoder
 
       -- * Decoder
     , treasuryDecodeTx
+    , treasuryDecodeTxWith
+
+      -- * Dynamic registry-policy scope mappings
+    , registryScopeMappingsFromMetadata
 
       -- * Entry accessors
     , summaryTenant
@@ -104,6 +108,11 @@ import Cardano.Node.Client.TxHistoryIndexer.Types
     )
 
 import Amaru.Treasury.AuxData (label1694)
+import Amaru.Treasury.Metadata
+    ( ScopeMetadata (..)
+    , ScriptRef (..)
+    , TreasuryMetadata (..)
+    )
 import Amaru.Treasury.Registry.Derive (derivedRegistryNftPolicy)
 import Amaru.Treasury.Scope
     ( ScopeId (..)
@@ -119,11 +128,32 @@ treasuryTenantId = TenantId "amaru-treasury-tx"
 entries it warrants, echoing the supplied block 'SlotNo' into each
 key. 'Nothing' for any transaction that is not a recognised treasury
 transaction.
+
+Uses only the statically derived per-scope registry NFT policies
+(the pinned mainnet seed). Deployments whose registry policies are
+derived from a per-instance seed (e.g. the devnet bootstrap) must use
+'treasuryDecodeTxWith' with the extra mappings recovered from their
+deployment metadata.
 -}
 treasuryDecodeTx :: SlotNo -> BlockTx -> Maybe [TxSummaryEntry]
-treasuryDecodeTx slot (BlockTx raw) = do
+treasuryDecodeTx = treasuryDecodeTxWith []
+
+{- | Like 'treasuryDecodeTx', but consults @extra@ registry-policy →
+'ScopeId' mappings before the static pinned-seed table. The extra
+mappings win on conflict, so a deployment that derives its registry
+NFT policies from a per-instance seed (the devnet bootstrap, or any
+non-mainnet instance) can map its own rationale @instance@ /
+registry-mint policy ids to a scope. The static table remains the
+fallback so mainnet treasury txs keep decoding with no extra config.
+-}
+treasuryDecodeTxWith
+    :: [(ByteString, ScopeId)]
+    -> SlotNo
+    -> BlockTx
+    -> Maybe [TxSummaryEntry]
+treasuryDecodeTxWith extra slot (BlockTx raw) = do
     tx <- decodeConwayTx raw
-    (role, scope) <- classifyTx tx
+    (role, scope) <- classifyTx extra tx
     let key =
             TxSummaryKey
                 { tskTenant = treasuryTenantId
@@ -161,22 +191,25 @@ swapLabel = "Swap ADA<->USDM"
 contract's discrimination order. 'Nothing' for non-treasury
 transactions.
 -}
-classifyTx :: ConwayTx -> Maybe (ByteString, ScopeId)
-classifyTx tx = fromRegistryMint <|> fromRationale
+classifyTx
+    :: [(ByteString, ScopeId)] -> ConwayTx -> Maybe (ByteString, ScopeId)
+classifyTx extra tx = fromRegistryMint <|> fromRationale
   where
+    scopeOf = registryPolicyScope extra
+
     fromRegistryMint = do
         scope <-
             listToMaybe
                 [ s
                 | policy <- mintedPolicies tx
-                , Just s <- [registryPolicyScope policy]
+                , Just s <- [scopeOf policy]
                 ]
         Just (roleMintRegistry, scope)
 
     fromRationale = do
         metadatum <- label1694Metadatum tx
         event <- rationaleField "event" metadatum
-        scope <- rationaleInstance metadatum >>= registryPolicyScope
+        scope <- rationaleInstance metadatum >>= scopeOf
         classifyEvent event (rationaleField "label" metadatum) scope
 
     classifyEvent event mLabel scope = case event of
@@ -260,9 +293,14 @@ metadatumText = \case
 -- Scope derivation
 -- ------------------------------------------------------------
 
--- | Map a registry NFT policy id back to its 'ScopeId'.
-registryPolicyScope :: ByteString -> Maybe ScopeId
-registryPolicyScope policy = lookup policy registryPolicyScopes
+{- | Map a registry NFT policy id back to its 'ScopeId', consulting
+the caller-supplied @extra@ mappings first and falling back to the
+static pinned-seed table.
+-}
+registryPolicyScope
+    :: [(ByteString, ScopeId)] -> ByteString -> Maybe ScopeId
+registryPolicyScope extra policy =
+    lookup policy extra <|> lookup policy registryPolicyScopes
 
 {- | The registry NFT policy id of every scope, paired with the scope.
 Computed once from the pinned validator blobs.
@@ -272,6 +310,23 @@ registryPolicyScopes =
     [ (scriptHashBytes hash, scope)
     | scope <- allScopes
     , Right hash <- [derivedRegistryNftPolicy scope]
+    ]
+
+{- | Recover the @registry-policy-id → 'ScopeId'@ mappings carried by
+a deployment's 'TreasuryMetadata'. Each scope's @registry_script.hash@
+is the 28-byte registry NFT policy id (lower-hex); entries whose hash
+is not valid hex are dropped. Suitable as the @extra@ argument to
+'treasuryDecodeTxWith' for any deployment (devnet or other
+per-instance seed) whose registry policies are not the pinned-seed
+statics.
+-}
+registryScopeMappingsFromMetadata
+    :: TreasuryMetadata -> [(ByteString, ScopeId)]
+registryScopeMappingsFromMetadata metadata =
+    [ (bytes, scope)
+    | (scope, scopeMeta) <- Map.toList (tmTreasuries metadata)
+    , Right bytes <-
+        [B16.decode (TE.encodeUtf8 (srHash (smRegistry scopeMeta)))]
     ]
 
 -- | Render a scope as its 'HistoryScope' (UTF-8 'scopeText').

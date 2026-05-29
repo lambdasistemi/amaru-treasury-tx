@@ -237,7 +237,7 @@ the indexer (via 'snapshotUtxosAt') and 'nowTip' on the
 backend.
 -}
 runInspectScope
-    :: ApiIndexer
+    :: ApiIndexer cf op
     -> Provider IO
     -> TreasuryMetadata
     -> DeploymentAnchor

@@ -1,3 +1,5 @@
+{-# LANGUAGE RankNTypes #-}
+
 {- |
 Module      : Amaru.Treasury.Api.Indexer
 Description : Runner + query API for the embedded API indexer
@@ -63,6 +65,7 @@ import Cardano.Node.Client.N2C.Reconnect
     ( ReconnectPolicy
     )
 import Cardano.Node.Client.N2C.Trace (N2CEvent)
+import Cardano.Node.Client.UTxOIndexer.Columns (Cols)
 import Cardano.Node.Client.UTxOIndexer.Follower
     ( ChainSyncConfig (..)
     )
@@ -89,6 +92,7 @@ import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Word (Word64)
+import Database.KV.Transaction (RunTransaction)
 import Ouroboros.Network.Magic (NetworkMagic)
 import System.IO (hPutStrLn, stderr)
 
@@ -161,7 +165,7 @@ layer can pass through to the underlying indexer and so
 the API container can 'link' the follower thread if it
 wants exceptions to propagate.
 -}
-data ApiIndexer = ApiIndexer
+data ApiIndexer cf op = ApiIndexer
     { aiHandle :: !IndexerHandle
     -- ^ Underlying @utxo-indexer-lib@ handle. Shared
     -- between the follower writer and the handler
@@ -178,6 +182,11 @@ data ApiIndexer = ApiIndexer
     -- typically don't need to link it again.
     , aiConfig :: !IndexerConfig
     -- ^ The configuration this indexer was opened with.
+    , aiRunner :: !(RunTransaction IO cf Cols op)
+    -- ^ Transaction runner for the same indexer store as
+    -- 'aiHandle'. The API provider adapter uses this for
+    -- typed indexer reads while the follower mutates the
+    -- store through 'aiHandle'.
     }
 
 -- ---------------------------------------------------------------------------
@@ -196,10 +205,10 @@ withApiIndexer
     :: Tracer IO N2CEvent
     -- ^ Tracer for follower lifecycle events.
     -> IndexerConfig
-    -> (ApiIndexer -> IO a)
+    -> (forall cf op. ApiIndexer cf op -> IO a)
     -> IO a
 withApiIndexer tracer cfg action =
-    Indexer.withRocksDBIndexer (icDbPath cfg) $ \handle ->
+    Indexer.withRocksDBIndexerRunner (icDbPath cfg) $ \handle runner ->
         Follower.withChainSyncFollower
             tracer
             (toChainSyncCfg cfg)
@@ -213,6 +222,7 @@ withApiIndexer tracer cfg action =
                             Follower.fhReadiness fh
                         , aiFollower = Follower.fhAsync fh
                         , aiConfig = cfg
+                        , aiRunner = runner
                         }
 
 {- | Project the runner's 'IndexerConfig' into the
@@ -293,7 +303,7 @@ recorded on apply-block. Consumers that need
 instead.
 -}
 snapshotAt
-    :: ApiIndexer
+    :: ApiIndexer cf op
     -> Address
     -> IO [(TxIn, TxOut)]
 snapshotAt apiIdx = Indexer.snapshotAt (aiHandle apiIdx)
@@ -325,7 +335,7 @@ the operator must triage. A graceful "best-effort skip"
 is the wrong default — it would mask data loss.
 -}
 snapshotUtxosAt
-    :: ApiIndexer
+    :: ApiIndexer cf op
     -> Addr
     -> IO [(Ledger.TxIn, Ledger.TxOut ConwayEra)]
 snapshotUtxosAt apiIdx addr = do
@@ -348,7 +358,7 @@ off address and exact-input queries against the production
 node.
 -}
 snapshotUtxosByTxIn
-    :: ApiIndexer
+    :: ApiIndexer cf op
     -> Set.Set Ledger.TxIn
     -> IO (Map.Map Ledger.TxIn (Ledger.TxOut ConwayEra))
 snapshotUtxosByTxIn apiIdx txIns =

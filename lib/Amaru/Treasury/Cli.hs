@@ -76,6 +76,10 @@ import Amaru.Treasury.Cli.GovernanceWithdrawalInitWizard
     ( GovernanceWithdrawalInitWizardOpts
     , governanceWithdrawalInitWizardOptsP
     )
+import Amaru.Treasury.Cli.History
+    ( HistoryOpts
+    , historyOptsP
+    )
 import Amaru.Treasury.Cli.RegistryInitWizard
     ( RegistryInitWizardOpts
     , registryInitWizardOptsP
@@ -143,6 +147,7 @@ data Cmd
     | CmdTxBuild TxBuildOpts
     | CmdReportRender ReportRenderOpts
     | CmdTreasuryInspect InspectOpts
+    | CmdHistory HistoryOpts
     | CmdAttachWitness AttachWitnessOpts
     | CmdVaultCreate VaultCreateOpts
     | CmdWitness WitnessOpts
@@ -259,6 +264,14 @@ cmdP =
                     (CmdTreasuryInspect <$> inspectOptsP)
                     ( progDesc
                         "Read-only report: treasury balances + pending SundaeSwap orders per scope"
+                    )
+                )
+            <> command
+                "history"
+                ( info
+                    (CmdHistory <$> historyOptsP)
+                    ( progDesc
+                        "Read-only: print treasury tx history for a scope from the local indexer"
                     )
                 )
             <> command

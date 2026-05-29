@@ -68,6 +68,7 @@ import Cardano.Crypto.DSIGN
     , deriveVerKeyDSIGN
     , rawSerialiseSignKeyDSIGN
     )
+import Cardano.Crypto.Hash.Class (hashToBytes)
 import Cardano.Ledger.Address
     ( Addr
     , getNetwork
@@ -88,7 +89,7 @@ import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
 import Cardano.Ledger.Core (PParams)
-import Cardano.Ledger.Hashes (KeyHash)
+import Cardano.Ledger.Hashes (KeyHash, extractHash)
 import Cardano.Ledger.Keys
     ( KeyRole (Payment)
     , VKey (..)
@@ -99,7 +100,7 @@ import Cardano.Ledger.Mary.Value
     , MultiAsset (..)
     )
 import Cardano.Ledger.Plutus.ExUnits (ExUnits)
-import Cardano.Ledger.TxIn (TxId, TxIn (..))
+import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Cardano.Node.Client.E2E.Devnet (withCardanoNode)
 import Cardano.Node.Client.E2E.Setup
     ( addKeyWitness
@@ -153,9 +154,11 @@ import Data.Aeson
     )
 import Data.Aeson qualified as Aeson
 import Data.Aeson.KeyMap qualified as KM
+import Data.ByteString (ByteString)
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
 import Data.ByteString.Lazy qualified as LBS
+import Data.Char (isDigit)
 import Data.Foldable (toList)
 import Data.List qualified as List
 import Data.Map.Strict qualified as Map
@@ -253,6 +256,10 @@ import Amaru.Treasury.Api.Types
     )
 import Amaru.Treasury.Backend.N2C (withLocalNodeClient)
 import Amaru.Treasury.Cli.Common (GlobalOpts (..))
+import Amaru.Treasury.Cli.History
+    ( queryScopeHistory
+    , renderHistoryRows
+    )
 import Amaru.Treasury.Devnet.RegistryInit
     ( DevnetRegistryAnchors (..)
     , DevnetRegistryPublication (..)
@@ -262,6 +269,9 @@ import Amaru.Treasury.Devnet.RegistryInit qualified as RegistryInit
 import Amaru.Treasury.Devnet.Runner
     ( DevnetStakeRewardInitOpts (..)
     , runDevnetStakeRewardInit
+    )
+import Amaru.Treasury.Indexer.Decoder
+    ( registryScopeMappingsFromMetadata
     )
 import Amaru.Treasury.Inspect.Types
     ( DeploymentAnchor (..)
@@ -401,6 +411,9 @@ runSmoke = do
                             nodeSock
                             IndexAll
                             (fromIntegral (sgcSecurityParam genesis))
+                            ( registryScopeMappingsFromMetadata
+                                metadata
+                            )
                 writeSmokeMetadata metadataPath metadata
                 stabilityProof <-
                     waitForPreIndexerStability
@@ -605,12 +618,27 @@ runIndexedPhaseScenarios
             "after reorganize"
             1
             55_000_000
+
+        historyRows <-
+            awaitHistoryRows
+                apiIdx
+                [ (disburseTxId, "disburse")
+                , (reorganizeTxId, "reorganize")
+                ]
+        mapM_
+            ( \row ->
+                putStrLn
+                    ("treasury history row: " <> T.unpack row)
+            )
+            historyRows
         pure
             [ "POST /v1/build/disburse success"
             , "disburse treasury continuation"
             , "disburse beneficiary output"
             , "POST /v1/build/reorganize success"
             , "reorganize merged treasury continuation"
+            , "indexed history disburse row present"
+            , "indexed history reorganize row present"
             ]
 
 -- ---------------------------------------------------------------------------
@@ -662,6 +690,8 @@ assertIndexedPhaseProofs observed =
         , "disburse beneficiary output"
         , "POST /v1/build/reorganize success"
         , "reorganize merged treasury continuation"
+        , "indexed history disburse row present"
+        , "indexed history reorganize row present"
         ]
     missing =
         List.filter (`notElem` observed) required
@@ -1049,6 +1079,66 @@ awaitIndexedTxOut apiIdx label addr ref check =
                         threadDelay 500_000
                         go (attempts - 1)
 
+{- | Poll the embedded tx-history store (the same RocksDB the live
+follower writes through 'aiHistory') for @core_development@ until a
+rendered @slot txid role@ row is present for every required
+@(submitted txid, role)@ pair, then return all rendered rows.
+
+The match is on the S4 'renderHistoryRows' output: each required row
+must render as exactly three whitespace-separated fields — a decimal
+slot, the lower-hex submitted tx id, and the expected role. Older
+rows (e.g. @mint-registry@ from registry publication) are tolerated;
+only the submitted disburse/reorganize ids with their roles are
+required.
+-}
+awaitHistoryRows
+    :: ApiIndexer cf op
+    -> [(TxId, Text)]
+    -> IO [Text]
+awaitHistoryRows apiIdx required =
+    go (120 :: Int)
+  where
+    go attempts = do
+        entries <-
+            queryScopeHistory (aiHistory apiIdx) CoreDevelopment
+        let rows = renderHistoryRows entries
+        case missingRows rows of
+            [] -> pure rows
+            missing
+                | attempts <= 0 ->
+                    failWith $
+                        "embedded indexer did not observe treasury \
+                        \history rows for the submitted txs under \
+                        \core_development; missing (txid, role): "
+                            <> show missing
+                            <> "; observed rows: "
+                            <> show rows
+                | otherwise -> do
+                    threadDelay 500_000
+                    go (attempts - 1)
+    missingRows rows =
+        [ (expectedTxId, role)
+        | (txid, role) <- required
+        , let expectedTxId = txIdHex txid
+        , not (any (rowMatches expectedTxId role) rows)
+        ]
+    rowMatches expectedTxId expectedRole row =
+        case T.words row of
+            [slotW, txIdW, roleW] ->
+                not (T.null slotW)
+                    && T.all isDigit slotW
+                    && txIdW == expectedTxId
+                    && roleW == expectedRole
+            _ -> False
+
+{- | Lower-hex of a ledger 'TxId' — the raw 32 tx-id bytes the
+history decoder echoes into @tskTxId@ and 'renderHistoryRows'
+base16-encodes.
+-}
+txIdHex :: TxId -> Text
+txIdHex (TxId safeHash) =
+    TE.decodeUtf8 (B16.encode (hashToBytes (extractHash safeHash)))
+
 assertInspectTreasuryState
     :: Manager -> Int -> String -> Int -> Integer -> IO ()
 assertInspectTreasuryState manager port label expectedCount expectedLovelace = do
@@ -1325,20 +1415,27 @@ smokeIndexerConfig
     -> FilePath
     -> InterestSet
     -> Int
+    -> [(ByteString, ScopeId)]
     -> IndexerConfig
-smokeIndexerConfig dir nodeSock interestSet securityParamK =
-    IndexerConfig
-        { icDbPath = dir <> "/rocksdb"
-        , icSocketPath = nodeSock
-        , icNetworkMagic = devnetMagic
-        , icStartPoint = Nothing
-        , icLagThresholdSlots = 60
-        , icByronEpochSlots = 86_400
-        , icSecurityParamK = securityParamK
-        , icReconnectPolicy = defaultReconnectPolicy
-        , icProbeConfig = defaultProbeConfig
-        , icInterestSet = interestSet
-        }
+smokeIndexerConfig
+    dir
+    nodeSock
+    interestSet
+    securityParamK
+    registryScopeMappings =
+        IndexerConfig
+            { icDbPath = dir <> "/rocksdb"
+            , icSocketPath = nodeSock
+            , icNetworkMagic = devnetMagic
+            , icStartPoint = Nothing
+            , icLagThresholdSlots = 60
+            , icByronEpochSlots = 86_400
+            , icSecurityParamK = securityParamK
+            , icReconnectPolicy = defaultReconnectPolicy
+            , icProbeConfig = defaultProbeConfig
+            , icInterestSet = interestSet
+            , icRegistryScopeMappings = registryScopeMappings
+            }
 
 smokeHandlers
     :: ApiIndexer cf op

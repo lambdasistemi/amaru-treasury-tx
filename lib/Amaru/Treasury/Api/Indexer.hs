@@ -34,6 +34,7 @@ module Amaru.Treasury.Api.Indexer
 
       -- * Bring-up
     , withApiIndexer
+    , historyDbPath
 
       -- * Read operations
     , snapshotAt
@@ -42,6 +43,7 @@ module Amaru.Treasury.Api.Indexer
 
       -- * Internal helpers (exposed for tests)
     , toChainSyncCfg
+    , toChainSyncCfgWithHistory
     ) where
 
 import Cardano.Crypto.Hash.Class (hashFromBytes, hashToBytes)
@@ -65,6 +67,10 @@ import Cardano.Node.Client.N2C.Reconnect
     ( ReconnectPolicy
     )
 import Cardano.Node.Client.N2C.Trace (N2CEvent)
+import Cardano.Node.Client.TxHistoryIndexer.Indexer
+    ( HistoryIndexer
+    , withRocksDBHistoryIndexer
+    )
 import Cardano.Node.Client.UTxOIndexer.Columns (Cols)
 import Cardano.Node.Client.UTxOIndexer.Follower
     ( ChainSyncConfig (..)
@@ -95,6 +101,9 @@ import Data.Word (Word64)
 import Database.KV.Transaction (RunTransaction)
 import Ouroboros.Network.Magic (NetworkMagic)
 import System.IO (hPutStrLn, stderr)
+
+import Amaru.Treasury.Indexer.Decoder (treasuryDecodeTxWith)
+import Amaru.Treasury.Scope (ScopeId)
 
 -- ---------------------------------------------------------------------------
 -- Types
@@ -157,6 +166,18 @@ data IndexerConfig = IndexerConfig
     -- stays bounded to the addresses the dashboard ever
     -- queries. Tests typically pass 'IndexAll' to keep
     -- the fixture surface minimal.
+    , icRegistryScopeMappings :: ![(BS.ByteString, ScopeId)]
+    -- ^ Extra @registry-policy-id → 'ScopeId'@ mappings
+    -- handed to the tx-history decoder
+    -- ('treasuryDecodeTxWith') so deployments whose
+    -- registry NFT policies are derived from a per-instance
+    -- seed (the devnet bootstrap, or any non-mainnet
+    -- instance) can have their treasury txs classified.
+    -- The API container computes these from its
+    -- 'Amaru.Treasury.Metadata.TreasuryMetadata' via
+    -- 'Amaru.Treasury.Indexer.Decoder.registryScopeMappingsFromMetadata';
+    -- the decoder still falls back to the static pinned-seed
+    -- table, so mainnet needs no extra mappings ('[]').
     }
 
 {- | Opaque handle the API container threads through its
@@ -187,6 +208,15 @@ data ApiIndexer cf op = ApiIndexer
     -- 'aiHandle'. The API provider adapter uses this for
     -- typed indexer reads while the follower mutates the
     -- store through 'aiHandle'.
+    , aiHistory :: !HistoryIndexer
+    -- ^ Tx-history store opened beside the UTxO RocksDB
+    -- (at 'historyDbPath') and written through the /same/
+    -- chain-sync follower via the
+    -- 'Cardano.Node.Client.UTxOIndexer.Follower.historyAttachment'
+    -- seam. Exposed so local readers (the @history@ CLI
+    -- query path and the devnet smoke proof) can query the
+    -- exact store the live follower writes, with no second
+    -- chain-sync runner and no N2C UTxO lookup.
     }
 
 -- ---------------------------------------------------------------------------
@@ -209,21 +239,31 @@ withApiIndexer
     -> IO a
 withApiIndexer tracer cfg action =
     Indexer.withRocksDBIndexerRunner (icDbPath cfg) $ \handle runner ->
-        Follower.withChainSyncFollower
-            tracer
-            (toChainSyncCfg cfg)
-            handle
-            $ \fh -> do
-                link (Follower.fhAsync fh)
-                action
-                    ApiIndexer
-                        { aiHandle = handle
-                        , aiFollowerReadiness =
-                            Follower.fhReadiness fh
-                        , aiFollower = Follower.fhAsync fh
-                        , aiConfig = cfg
-                        , aiRunner = runner
-                        }
+        withRocksDBHistoryIndexer (historyDbPath cfg) $ \history ->
+            Follower.withChainSyncFollower
+                tracer
+                ( toChainSyncCfgWithHistory
+                    cfg
+                    ( Follower.historyAttachment
+                        ( treasuryDecodeTxWith
+                            (icRegistryScopeMappings cfg)
+                        )
+                        history
+                    )
+                )
+                handle
+                $ \fh -> do
+                    link (Follower.fhAsync fh)
+                    action
+                        ApiIndexer
+                            { aiHandle = handle
+                            , aiFollowerReadiness =
+                                Follower.fhReadiness fh
+                            , aiFollower = Follower.fhAsync fh
+                            , aiConfig = cfg
+                            , aiRunner = runner
+                            , aiHistory = history
+                            }
 
 {- | Project the runner's 'IndexerConfig' into the
 upstream follower's 'ChainSyncConfig'. The transformation
@@ -288,7 +328,40 @@ toChainSyncCfg cfg =
                   \upstream tip slot="
                     <> show slot
                 )
+        , -- History-less base projection (upstream
+          -- cardano-node-clients#172). 'toChainSyncCfg'
+          -- leaves 'csHistory' empty so the pure config
+          -- unit tests stay decoupled from a live history
+          -- store; 'withApiIndexer' uses
+          -- 'toChainSyncCfgWithHistory' to attach the
+          -- treasury decoder to the same follower.
+          csHistory = Nothing
         }
+
+{- | Project an 'IndexerConfig' into a follower
+'ChainSyncConfig' that additionally drives a tx-history
+store on the /same/ chain-sync session via the supplied
+'Follower.HistoryAttachment'. This is the projection
+'withApiIndexer' uses in production; it differs from
+'toChainSyncCfg' only in setting 'csHistory' to 'Just',
+so there is never a second chain-sync runner.
+-}
+toChainSyncCfgWithHistory
+    :: IndexerConfig
+    -> Follower.HistoryAttachment
+    -> ChainSyncConfig
+toChainSyncCfgWithHistory cfg attachment =
+    (toChainSyncCfg cfg){csHistory = Just attachment}
+
+{- | Deterministic on-disk location of the tx-history
+RocksDB store: a fixed sibling of the UTxO store's
+'icDbPath'. 'withApiIndexer' opens the history store here
+and the @history@ CLI ('Amaru.Treasury.Cli.History')
+reads the same directory, so the live follower's writes
+and the read path agree without extra configuration.
+-}
+historyDbPath :: IndexerConfig -> FilePath
+historyDbPath cfg = icDbPath cfg <> "-history"
 
 -- ---------------------------------------------------------------------------
 -- Read operations

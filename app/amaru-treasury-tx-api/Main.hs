@@ -37,6 +37,7 @@ module Main (main) where
 
 import Data.Aeson qualified as Aeson
 import Data.Bifunctor (first)
+import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Streaming.Network (HostPreference)
 import Data.String (IsString (..))
@@ -112,6 +113,9 @@ import Amaru.Treasury.Cli.Common (GlobalOpts (..))
 import Amaru.Treasury.Constants
     ( sundaeOrderAddressMainnet
     )
+import Amaru.Treasury.Indexer.Decoder
+    ( registryScopeMappingsFromMetadata
+    )
 import Amaru.Treasury.Inspect.Types
     ( DeploymentAnchor (..)
     , InspectReport
@@ -160,6 +164,7 @@ main = do
                 (arcGlobalOpts opts)
                 (arcIndexer opts)
                 interestSet
+                (registryScopeMappingsFromMetadata metadata)
 
     putStrLn $
         "amaru-treasury-tx-api: opening N2C session on "
@@ -272,15 +277,20 @@ flags. The four internally-defaulted fields
 ('icByronEpochSlots', 'icSecurityParamK',
 'icReconnectPolicy', 'icProbeConfig') match the upstream
 daemon's mainnet defaults; documented in
-'Amaru.Treasury.Api.Indexer.IndexerConfig'.
+'Amaru.Treasury.Api.Indexer.IndexerConfig'. The final
+argument carries the @registry-policy → scope@ mappings
+recovered from the deployment metadata, so the embedded
+tx-history decoder can classify treasury txs whose
+registry policies are not the pinned-seed statics.
 -}
 mkIndexerConfig
     :: FilePath
     -> GlobalOpts
     -> ApiIndexerRuntimeConfig
     -> InterestSet
+    -> [(ByteString, ScopeId)]
     -> IndexerConfig
-mkIndexerConfig socket globalOpts cli interestSet =
+mkIndexerConfig socket globalOpts cli interestSet registryScopeMappings =
     IndexerConfig
         { icDbPath = aircDbPath cli
         , icSocketPath = socket
@@ -293,6 +303,7 @@ mkIndexerConfig socket globalOpts cli interestSet =
         , icReconnectPolicy = defaultReconnectPolicy
         , icProbeConfig = defaultProbeConfig
         , icInterestSet = interestSet
+        , icRegistryScopeMappings = registryScopeMappings
         }
 
 {- | Build the apply-time interest set the embedded

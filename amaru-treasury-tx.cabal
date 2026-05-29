@@ -146,6 +146,7 @@ library
     Amaru.Treasury.Cli.DisburseWizard
     Amaru.Treasury.Cli.Envelope
     Amaru.Treasury.Cli.GovernanceWithdrawalInitWizard
+    Amaru.Treasury.Cli.History
     Amaru.Treasury.Cli.Passphrase
     Amaru.Treasury.Cli.RegistryInitWizard
     Amaru.Treasury.Cli.ReorganizeWizard
@@ -175,6 +176,7 @@ library
     Amaru.Treasury.Devnet.RegistryInit
     Amaru.Treasury.Devnet.Runner
     Amaru.Treasury.Devnet.StakeRewardInit
+    Amaru.Treasury.Indexer.Decoder
     Amaru.Treasury.Inspect
     Amaru.Treasury.Inspect.Render
     Amaru.Treasury.Inspect.Schema
@@ -249,7 +251,7 @@ library
     , aeson-pretty
     , age
     , async
-    , base                                     <5
+    , base                                         <5
     , base16-bytestring
     , bech32
     , bytestring
@@ -265,6 +267,7 @@ library
     , cardano-ledger-shelley
     , cardano-node-clients
     , cardano-node-clients:block-indexer
+    , cardano-node-clients:tx-history-indexer-lib
     , cardano-node-clients:utxo-indexer-lib
     , cardano-slotting
     , cardano-strict-containers
@@ -505,6 +508,7 @@ test-suite unit-tests
     Amaru.Treasury.Cli.EnvelopeSpec
     Amaru.Treasury.Cli.GovernanceWithdrawalInitWizardInputControlSpec
     Amaru.Treasury.Cli.GovernanceWithdrawalInitWizardParserSpec
+    Amaru.Treasury.Cli.HistorySpec
     Amaru.Treasury.Cli.ParserSpec
     Amaru.Treasury.Cli.RegistryInitWizardInputControlSpec
     Amaru.Treasury.Cli.RegistryInitWizardModeSplitSpec
@@ -527,6 +531,8 @@ test-suite unit-tests
     Amaru.Treasury.Devnet.GovernanceWithdrawalInitSpec
     Amaru.Treasury.Devnet.RegistryInitSpec
     Amaru.Treasury.Devnet.StakeRewardInitSpec
+    Amaru.Treasury.Indexer.DecoderFixtures
+    Amaru.Treasury.Indexer.DecoderSpec
     Amaru.Treasury.Inspect.SchemaSpec
     Amaru.Treasury.Inspect.SwapOrderDatumSpec
     Amaru.Treasury.IntentJSONSchemaSpec
@@ -592,7 +598,7 @@ test-suite unit-tests
     , age
     , amaru-treasury-tx
     , async
-    , base                                   <5
+    , base                                         <5
     , base16-bytestring
     , bech32
     , bytestring
@@ -606,12 +612,14 @@ test-suite unit-tests
     , cardano-ledger-mary
     , cardano-node-clients
     , cardano-node-clients:block-indexer
+    , cardano-node-clients:tx-history-indexer-lib
     , cardano-node-clients:utxo-indexer-lib
     , cardano-slotting
     , cardano-tx-tools
     , containers
     , contra-tracer
     , directory
+    , file-embed
     , filepath
     , hspec
     , hspec-discover

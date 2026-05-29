@@ -39,15 +39,23 @@ module Amaru.Treasury.Api.Server
 
       -- * Indexer-served handler (#242)
     , mkInspectHandler
+    , withIndexerProvider
     , mkBuildProvider
     , mkBuildHandlers
     ) where
 
 import Cardano.Ledger.Address (Addr)
-import Cardano.Node.Client.Provider (Provider (..))
+import Cardano.Node.Client.Provider
+    ( Provider (..)
+    , QueryHandleBackend (..)
+    , mkQueryHandle
+    )
+import Cardano.Node.Client.Provider qualified as Provider
+import Cardano.Node.Client.UTxOIndexer.Provider qualified as IndexedProvider
 import Control.Monad.IO.Class (liftIO)
 import Data.Proxy (Proxy (..))
 import Data.Tagged (Tagged)
+import Database.KV.Transaction (RunTransaction (..))
 import Network.HTTP.Media ((//))
 import Network.Wai (Application)
 import Servant
@@ -84,8 +92,6 @@ import Amaru.Treasury.Api.BuildSwap
     )
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
-    , snapshotUtxosAt
-    , snapshotUtxosByTxIn
     )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity
@@ -217,7 +223,7 @@ data BuildHandlers = BuildHandlers
 provider.
 -}
 mkBuildHandlers
-    :: ApiIndexer
+    :: ApiIndexer cf op
     -> Provider IO
     -> (Provider IO -> SwapBuildRequest -> IO SwapBuildResponse)
     -> (Provider IO -> DisburseBuildRequest -> IO DisburseBuildResponse)
@@ -271,7 +277,7 @@ mkApplication = serve dashboardAPI . mkServer
 {- | Build the @\/v1\/treasury-inspect@ handler closure that
 the API container uses post-#242. The handler reads
 treasury / swap-order UTxOs from the embedded indexer (via
-'snapshotUtxosAt') instead of from the production node, and
+the typed indexer provider) instead of from the production node, and
 sources only the @chain_tip@ field from the existing
 'Provider IO' session (via the unchanged 'nowTip' field —
 FR-005).
@@ -282,9 +288,9 @@ construct a thin **synthetic** 'Provider' that:
 
 * delegates 'nowTip' to the caller's real provider,
 * routes address UTxO scans through the in-process indexer
-  via 'queryUTxOs' / 'snapshotUtxosAt',
+  via 'queryUTxOs',
 * routes exact input lookup through the same indexer via
-  'queryUTxOByTxIn' / 'snapshotUtxosByTxIn',
+  'queryUTxOByTxIn',
 * keeps the live provider for non-UTxO ledger data such as
   tip, protocol parameters, evaluation, rewards, votes, and
   governance queries.
@@ -294,7 +300,7 @@ real provider; they aren't touched by
 'runInspectFromBackend''s read path, so this is harmless.
 -}
 mkInspectHandler
-    :: ApiIndexer
+    :: ApiIndexer cf op
     -> Provider IO
     -> TreasuryMetadata
     -> DeploymentAnchor
@@ -314,17 +320,78 @@ mkInspectHandler apiIdx realProvider metadata anchor swapAddr scope =
 {- | Build the provider used by @POST /v1/build/*@
 handlers.
 -}
-mkBuildProvider :: ApiIndexer -> Provider IO -> Provider IO
+mkBuildProvider :: ApiIndexer cf op -> Provider IO -> Provider IO
 mkBuildProvider = indexerProvider
+
+{- | Run an action with a legacy 'Provider IO' whose UTxO
+queries are backed by the embedded indexer.
+
+This is the transitional adapter for the existing ATX
+wizard/build code. It keeps the live provider for non-UTxO ledger
+queries, but both direct UTxO reads and acquired-handle UTxO reads
+go through the indexer transaction runner.
+-}
+withIndexerProvider
+    :: ApiIndexer cf op
+    -> Provider IO
+    -> (Provider IO -> IO a)
+    -> IO a
+withIndexerProvider apiIdx realProvider action =
+    action (indexerProvider apiIdx realProvider)
 
 {- | Build the synthetic 'Provider' described in
 'mkInspectHandler''s Haddock: real provider for 'nowTip',
 indexer-backed 'queryUTxOs' / 'queryUTxOByTxIn', and live
 provider delegation for non-address ledger data.
 -}
-indexerProvider :: ApiIndexer -> Provider IO -> Provider IO
+indexerProvider :: ApiIndexer cf op -> Provider IO -> Provider IO
 indexerProvider apiIdx realProvider =
     realProvider
-        { queryUTxOs = snapshotUtxosAt apiIdx
-        , queryUTxOByTxIn = snapshotUtxosByTxIn apiIdx
+        { withAcquired = \callback ->
+            Provider.withAcquired realProvider $ \handle ->
+                callback $
+                    mkQueryHandle
+                        QueryHandleBackend
+                            { backendQueryUTxOs = queryIndexedUTxOs
+                            , backendQueryUTxOsAt = queryIndexedUTxOsAt
+                            , backendQueryUTxOByTxIn =
+                                queryIndexedUTxOByTxIn
+                            , backendQueryProtocolParams =
+                                Provider.queryProtocolParamsH handle
+                            , backendQueryLedgerSnapshot =
+                                Provider.queryLedgerSnapshotH handle
+                            , backendQueryStakeRewards =
+                                Provider.queryStakeRewardsH handle
+                            , backendQueryRewardAccounts =
+                                Provider.queryRewardAccountsH handle
+                            , backendQueryVoteDelegatees =
+                                Provider.queryVoteDelegateesH handle
+                            , backendQueryTreasury =
+                                Provider.queryTreasuryH handle
+                            , backendQueryGovernanceState =
+                                Provider.queryGovernanceStateH handle
+                            , backendEvaluateTx =
+                                Provider.evaluateTxH handle
+                            , backendPosixMsToSlot =
+                                Provider.posixMsToSlotH handle
+                            , backendPosixMsCeilSlot =
+                                Provider.posixMsCeilSlotH handle
+                            }
+        , queryUTxOs = queryIndexedUTxOs
+        , queryUTxOByTxIn = queryIndexedUTxOByTxIn
         }
+  where
+    RunTransaction{runTransaction} = aiRunner apiIdx
+    indexer = IndexedProvider.indexerProvider
+
+    queryIndexedUTxOs =
+        runTransaction
+            . IndexedProvider.queryIndexedUTxOs indexer
+
+    queryIndexedUTxOsAt =
+        runTransaction
+            . IndexedProvider.queryIndexedUTxOsAt indexer
+
+    queryIndexedUTxOByTxIn =
+        runTransaction
+            . IndexedProvider.queryIndexedUTxOByTxIn indexer

@@ -1,5 +1,6 @@
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 
 {- |
 Module      : Amaru.Treasury.Api.HandlersIndexerSpec
@@ -33,7 +34,11 @@ import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Node.Client.N2C.Probe (defaultProbeConfig)
 import Cardano.Node.Client.N2C.Reconnect (defaultReconnectPolicy)
 import Cardano.Node.Client.N2C.Trace (nullN2CTracer)
-import Cardano.Node.Client.Provider (Provider (..))
+import Cardano.Node.Client.Provider
+    ( Provider (..)
+    , queryUTxOByTxInH
+    , singleShotWithAcquired
+    )
 import Cardano.Node.Client.UTxOIndexer.Follower (InterestSet (..))
 import Cardano.Slotting.Slot (SlotNo (..))
 import Data.Map.Strict qualified as Map
@@ -126,6 +131,19 @@ spec = describe "Amaru.Treasury.Api handlers + indexer" $ do
                     queryUTxOByTxIn
                         (mkBuildProvider apiIdx trappedProvider)
                         (Set.singleton sampleTxIn)
+                found `shouldBe` Map.empty
+
+        it
+            "serves acquired exact TxIn reads from the indexer, not the raw provider"
+            $ withTestIndexer
+            $ \apiIdx -> do
+                found <-
+                    withAcquired
+                        (mkBuildProvider apiIdx acquirableTrappedProvider)
+                        $ \handle ->
+                            queryUTxOByTxInH
+                                handle
+                                (Set.singleton sampleTxIn)
                 found `shouldBe` Map.empty
 
     describe "mkBuildHandlers" $ do
@@ -264,6 +282,12 @@ trappedProvider =
         , queryUpperBoundSlot = \_ -> trap "queryUpperBoundSlot"
         }
 
+acquirableTrappedProvider :: Provider IO
+acquirableTrappedProvider =
+    trappedProvider
+        { withAcquired = singleShotWithAcquired trappedProvider
+        }
+
 {- | Defer the trap into the IO action's run-time, not its
 WHNF: cardano-node-clients's @StrictData@ default-extension
 makes 'Provider' fields strict, so a bare @error "..."@ at a
@@ -285,7 +309,7 @@ trap name =
 -- ---------------------------------------------------------------------------
 -- Helpers
 
-withTestIndexer :: (ApiIndexer -> IO a) -> IO a
+withTestIndexer :: (forall cf op. ApiIndexer cf op -> IO a) -> IO a
 withTestIndexer action =
     withSystemTempDirectory "atx-handlers-test" $ \dir ->
         withApiIndexer
@@ -315,7 +339,7 @@ runHandlerOrFail h = do
                 \ServerError: "
                     <> show e
 
-trappedBuildHandlers :: ApiIndexer -> Addr -> BuildHandlers
+trappedBuildHandlers :: ApiIndexer cf op -> Addr -> BuildHandlers
 trappedBuildHandlers apiIdx addr =
     mkBuildHandlers
         apiIdx

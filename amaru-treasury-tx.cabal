@@ -249,7 +249,7 @@ library
     , aeson-pretty
     , age
     , async
-    , base                                   <5
+    , base                                     <5
     , base16-bytestring
     , bech32
     , bytestring
@@ -292,6 +292,7 @@ library
     , plutus-core
     , plutus-ledger-api
     , plutus-tx
+    , rocksdb-kv-transactions:kv-transactions
     , scientific
     , servant
     , servant-server

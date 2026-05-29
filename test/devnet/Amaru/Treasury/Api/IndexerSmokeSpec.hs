@@ -533,7 +533,7 @@ runScenarios manager port readiness proofs = do
 runIndexedPhaseScenarios
     :: Manager
     -> Int
-    -> ApiIndexer
+    -> ApiIndexer cf op
     -> Provider IO
     -> Submitter IO
     -> FilePath
@@ -1016,7 +1016,7 @@ submitUnsignedTxHex label submitter cborHex =
                         label <> " rejected: " <> show reason
 
 awaitIndexedTxOut
-    :: ApiIndexer
+    :: ApiIndexer cf op
     -> String
     -> Addr
     -> TxIn
@@ -1341,7 +1341,7 @@ smokeIndexerConfig dir nodeSock interestSet securityParamK =
         }
 
 smokeHandlers
-    :: ApiIndexer
+    :: ApiIndexer cf op
     -> Provider IO
     -> GlobalOpts
     -> TreasuryMetadata

@@ -1,5 +1,6 @@
 {-# LANGUAGE NumericUnderscores #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 
 {- |
 Module      : Amaru.Treasury.Api.IndexerSpec
@@ -174,7 +175,7 @@ backed by a per-test tmpfs RocksDB. The temporary
 directory is removed recursively when the action
 returns or throws.
 -}
-withTmpIndexer :: (ApiIndexer -> IO a) -> IO a
+withTmpIndexer :: (forall cf op. ApiIndexer cf op -> IO a) -> IO a
 withTmpIndexer action =
     withSystemTempDirectory "amaru-api-indexer-test" $ \dir ->
         withApiIndexer

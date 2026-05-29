@@ -33,12 +33,12 @@ source-repository-package
 source-repository-package
   type: git
   location: https://github.com/lambdasistemi/cardano-node-clients
-  -- Pinned to cardano-node-clients merged PR #172:
+  -- Pinned to cardano-node-clients main after merged PR #173:
   -- adds the tx-history-indexer-lib (BlockTx / DecodeTx seam and the
   -- ordered TxSummaryKey codec) consumed by the treasury history
   -- decoder, on top of #171's indexer transaction runner.
-  tag: cdcdab2ba3bc8b5addbcf8c75f121bc4b2c81d71
-  --sha256: 1akccx2dkp4z5y1mk4msp5w6anzbpqa6rgn6k3qcys3d1baai43y
+  tag: e4b01cb9efdf88e99934cf7a09fed0e25bad1019
+  --sha256: 1ll7lsyfk2a8flmrlrbbvd609mk8szkjpcpd6xxnj46p9vbm5r61
 
 -- Mirrored from cardano-node-clients/cabal.project (SRPs are not transitive
 -- in cabal; see https://cabal.readthedocs.io/en/3.10/cabal-project.html).

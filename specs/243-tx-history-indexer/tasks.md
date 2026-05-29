@@ -64,4 +64,4 @@
 - [X] T243-S6 Merge upstream PR after downstream proof.
 - [X] T243-S6 Repin ATX to upstream main.
 - [X] T243-S6 Run both `./gate.sh` commands at HEAD.
-- [ ] T243-S6 Drop `gate.sh` before marking PRs ready.
+- [X] T243-S6 Drop `gate.sh` before marking PRs ready.

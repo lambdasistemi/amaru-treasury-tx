@@ -288,6 +288,12 @@ toChainSyncCfg cfg =
                   \upstream tip slot="
                     <> show slot
                 )
+        , -- No history attachment in this slice (upstream
+          -- cardano-node-clients#172). 'Nothing' preserves
+          -- the current follower behaviour; wiring the
+          -- treasury history decoder into the live follower
+          -- is a later API/indexer slice.
+          csHistory = Nothing
         }
 
 -- ---------------------------------------------------------------------------

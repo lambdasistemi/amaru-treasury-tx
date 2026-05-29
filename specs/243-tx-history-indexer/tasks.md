@@ -30,12 +30,12 @@
 
 ## Slice 3 — Downstream Treasury Decoder
 
-- [ ] T243-S3 Pin ATX to the upstream history branch.
-- [ ] T243-S3 Add `Amaru.Treasury.Indexer.Decoder`.
-- [ ] T243-S3 RED/GREEN unit coverage for `disburse`, `reorganize`,
+- [X] T243-S3 Pin ATX to the upstream history branch.
+- [X] T243-S3 Add `Amaru.Treasury.Indexer.Decoder`.
+- [X] T243-S3 RED/GREEN unit coverage for `disburse`, `reorganize`,
   `withdraw`, `swap`, `contingency-disburse`, and mint-registry
   classification.
-- [ ] T243-S3 Commit:
+- [X] T243-S3 Commit:
   `feat(history): decode treasury transaction roles`.
 
 ## Slice 4 — Downstream CLI

@@ -227,7 +227,9 @@ import Amaru.Treasury.Api.BuildSwap
     ( runBuildSwap
     )
 import Amaru.Treasury.Api.History
-    ( queryScopeHistoryResponse
+    ( queryScopeHistoryFilteredResponse
+    , queryScopeHistoryQueryResponse
+    , queryScopeHistoryShaclResponse
     )
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
@@ -1632,7 +1634,11 @@ smokeHandlers apiIdx backend globalOpts metadata anchor swapAddr =
                             <> show e
         , hRecentTxs = RecentTxManifest []
         , hBuildIdentity = stubBuildIdentity
-        , hScopeHistory = queryScopeHistoryResponse (aiHistory apiIdx)
+        , hScopeHistory = queryScopeHistoryFilteredResponse (aiHistory apiIdx)
+        , hScopeHistoryQuery =
+            queryScopeHistoryQueryResponse (aiHistory apiIdx)
+        , hScopeHistoryShacl =
+            queryScopeHistoryShaclResponse (aiHistory apiIdx)
         , hBuildSwap = bhBuildSwap buildHandlers
         , hBuildDisburse = bhBuildDisburse buildHandlers
         , hBuildReorganize = bhBuildReorganize buildHandlers

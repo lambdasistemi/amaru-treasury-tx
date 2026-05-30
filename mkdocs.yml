@@ -69,6 +69,8 @@ nav:
   - Withdraw: withdraw.md
   - Reorganize: reorganize.md
   - Inspect: inspect.md
+  - Treasury history RDF demo: history-rdf-demo.md
+  - Treasury history RDF case study: history-rdf-case-study.md
   - API container indexer: api-container-indexer.md
   - Local devnet smoke: local-devnet-smoke.md
   - ChainContext: chain-context.md

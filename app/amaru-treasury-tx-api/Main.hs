@@ -86,7 +86,9 @@ import Amaru.Treasury.Api.Config
     , execApiConfig
     )
 import Amaru.Treasury.Api.History
-    ( queryScopeHistoryResponse
+    ( queryScopeHistoryFilteredResponse
+    , queryScopeHistoryQueryResponse
+    , queryScopeHistoryShaclResponse
     )
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
@@ -214,7 +216,13 @@ main = do
                                         , hRecentTxs = manifest
                                         , hBuildIdentity = buildId
                                         , hScopeHistory =
-                                            queryScopeHistoryResponse
+                                            queryScopeHistoryFilteredResponse
+                                                (aiHistory apiIdx)
+                                        , hScopeHistoryQuery =
+                                            queryScopeHistoryQueryResponse
+                                                (aiHistory apiIdx)
+                                        , hScopeHistoryShacl =
+                                            queryScopeHistoryShaclResponse
                                                 (aiHistory apiIdx)
                                         , hBuildSwap =
                                             bhBuildSwap buildHandlers

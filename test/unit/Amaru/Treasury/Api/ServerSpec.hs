@@ -49,7 +49,9 @@ import Amaru.Treasury.Api.Types
     ( BuildIdentity (..)
     , RecentTxManifest (..)
     , ScopeHistoryEntry (..)
+    , ScopeHistoryQueryResponse (..)
     , ScopeHistoryResponse (..)
+    , ScopeHistoryShaclResponse (..)
     )
 import Amaru.Treasury.Inspect.Render (encodeReport)
 import Amaru.Treasury.Inspect.Types
@@ -126,6 +128,63 @@ spec = do
                     (mkApplication stubHandlers)
             statusCodeOf res `shouldSatisfy` is4xx
 
+        it "accepts shared history filter query params" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        ( waiGet
+                            "/v1/scope/core_development/txs?role=disburse&asset=ada&direction=outbound&since=10&until=20&limit=1"
+                        )
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+
+    describe "GET /v1/scope/{scope}/txs/query" $ do
+        it "accepts a named RDF query" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        ( waiGet
+                            "/v1/scope/core_development/txs/query?name=history-entries"
+                        )
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+
+        it "rejects an unknown named RDF query" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        ( waiGet
+                            "/v1/scope/core_development/txs/query?name=bogus"
+                        )
+                    )
+                    (mkApplication stubHandlers)
+            statusCodeOf res `shouldSatisfy` is4xx
+
+    describe "GET /v1/scope/{scope}/txs/shacl" $ do
+        it "accepts a named SHACL shape" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        ( waiGet
+                            "/v1/scope/core_development/txs/shacl?name=history-entry"
+                        )
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+
+        it "rejects an unknown named SHACL shape" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        ( waiGet
+                            "/v1/scope/core_development/txs/shacl?name=bogus"
+                        )
+                    )
+                    (mkApplication stubHandlers)
+            statusCodeOf res `shouldSatisfy` is4xx
+
     describe "Raw fallback" $
         it "is invoked for unknown paths" $ do
             res <-
@@ -185,8 +244,24 @@ stubHandlers =
         { hInspectReport = \_scope -> pure stubReport
         , hRecentTxs = RecentTxManifest []
         , hBuildIdentity = stubBuildIdentity
-        , hScopeHistory = \scope ->
+        , hScopeHistory = \scope _filter ->
             pure stubHistory{shrScope = scope}
+        , hScopeHistoryQuery = \scope _queryName ->
+            pure
+                ScopeHistoryQueryResponse
+                    { shqrScope = scope
+                    , shqrQuery = "stub"
+                    , shqrColumns = ["query"]
+                    , shqrRows = [["stub"]]
+                    }
+        , hScopeHistoryShacl = \scope _shapeName ->
+            pure
+                ScopeHistoryShaclResponse
+                    { shsrScope = scope
+                    , shsrShape = "stub"
+                    , shsrConforms = True
+                    , shsrReport = ""
+                    }
         , hBuildSwap = \_ ->
             pure
                 SwapBuildResponse

@@ -1,0 +1,24 @@
+# Realized spend edges inside the indexed treasury history lattice.
+#
+# This is the downstream app's small version of the cardano-ledger-rdf
+# case-study cross-transaction join: when both producer and consumer are
+# indexed, the input TxOutRef joins back to the producer output.
+
+PREFIX cardano: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/cardano#>
+
+SELECT ?producer ?ix ?consumer ?lovelace
+WHERE {
+  ?ptx a cardano:Transaction ;
+       cardano:hasTxId/cardano:bytesHex ?producer ;
+       cardano:hasOutput ?out .
+  ?out cardano:hasIndex ?ix ;
+       cardano:lovelace ?lovelace .
+
+  ?ctx a cardano:Transaction ;
+       cardano:hasTxId/cardano:bytesHex ?consumer ;
+       cardano:hasInput/cardano:fromTxOutRef ?ref .
+  ?ref cardano:hasTxId/cardano:bytesHex ?producer ;
+       cardano:hasIndex ?ix .
+  FILTER (?producer != ?consumer)
+}
+ORDER BY DESC(?lovelace) ?producer ?consumer ?ix

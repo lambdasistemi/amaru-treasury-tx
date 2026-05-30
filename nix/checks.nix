@@ -1,5 +1,6 @@
 { pkgs, src, components, lintPkgs ? pkgs
-, treasuryMetadata, recentTxs, buildIdentity, frontend, image }:
+, treasuryMetadata, recentTxs, buildIdentity, frontend, image
+, rdfRuntimeInputs ? [ ] }:
 # Each verification step is built as a single
 # `writeShellApplication` app, then exposed twice:
 #
@@ -183,7 +184,11 @@ let
     };
 
     unit = {
-      runtimeInputs = [ components.tests.unit-tests ];
+      # The history RDF tests shell out to Apache Jena (`arq`,
+      # `shacl`) and the `cq-rdf` emitter, so the hermetic check
+      # needs them on PATH — the dev shell has them, but this
+      # sandbox does not inherit it.
+      runtimeInputs = [ components.tests.unit-tests ] ++ rdfRuntimeInputs;
       # No `exec` — the check derivation needs the script to
       # return so the wrapping `runCommand` can `touch $out`.
       text = ''

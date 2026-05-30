@@ -161,6 +161,7 @@
                 pkgs.just
                 pkgs.curl
                 pkgs.cacert
+                pkgs.apache-jena
                 pkgs.lmdb
                 cardano-node.packages.${system}.cardano-cli
                 cardano-node.packages.${system}.cardano-node
@@ -180,6 +181,13 @@
             };
           };
           components = project.hsPkgs.amaru-treasury-tx.components;
+          cqRdf =
+            pkgs.symlinkJoin {
+              name = "cq-rdf-cardano-ledger-rdf";
+              paths =
+                [ project.hsPkgs."cardano-ledger-rdf".components.exes."cq-rdf" ];
+              meta.mainProgram = "cq-rdf";
+            };
           # The upstream metadata journal as a content-addressed
           # Nix store path. `nix/metadata.nix` is the single
           # access point — every consumer (checks, image, the
@@ -239,19 +247,35 @@
           checks = import ./nix/checks.nix {
             inherit pkgs components lintPkgs
               treasuryMetadata recentTxs buildIdentity
-              frontend image;
+              frontend image rdfRuntimeInputs;
             src = ./.;
           };
           checkApps = import ./nix/apps.nix { inherit pkgs checks; };
-          mkExe = name:
+          mkExeWithRuntime = name: runtimeInputs:
+            let runtimePath = pkgs.lib.makeBinPath runtimeInputs;
+            in
             pkgs.symlinkJoin {
               name = "${name}-${packageVersion}";
               version = packageVersion;
-              paths = [ components.exes.${name} ];
+              paths = [ components.exes.${name} ] ++ runtimeInputs;
+              nativeBuildInputs = [ pkgs.makeWrapper ];
+              postBuild = pkgs.lib.optionalString (runtimePath != "") ''
+                wrapProgram "$out/bin/${name}" \
+                  --prefix PATH : "${runtimePath}"
+              '';
               meta.mainProgram = name;
             };
-          amaru-treasury-tx = mkExe "amaru-treasury-tx";
-          amaru-treasury-tx-api = mkExe "amaru-treasury-tx-api";
+          mkExe = name: mkExeWithRuntime name [ ];
+          # Apache Jena's `arq`/`shacl` wrappers locate the JVM
+          # via `which java`, so a JDK and `which` must ride along
+          # with jena and the cq-rdf emitter wherever the RDF
+          # layer shells out (wrapped exes and the unit check).
+          rdfRuntimeInputs =
+            [ pkgs.apache-jena cqRdf pkgs.jdk pkgs.which ];
+          amaru-treasury-tx =
+            mkExeWithRuntime "amaru-treasury-tx" rdfRuntimeInputs;
+          amaru-treasury-tx-api =
+            mkExeWithRuntime "amaru-treasury-tx-api" rdfRuntimeInputs;
           amaru-treasury-intent-schema =
             mkExe "amaru-treasury-intent-schema";
           swap-probe = mkExe "swap-probe";

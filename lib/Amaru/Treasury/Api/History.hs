@@ -12,6 +12,9 @@ scan.
 -}
 module Amaru.Treasury.Api.History
     ( queryScopeHistoryResponse
+    , queryScopeHistoryFilteredResponse
+    , queryScopeHistoryQueryResponse
+    , queryScopeHistoryShaclResponse
     , historyResponseFromEntries
     , historyEntryFromSummary
     ) where
@@ -19,6 +22,7 @@ module Amaru.Treasury.Api.History
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 
 import Cardano.Node.Client.TxHistoryIndexer.Indexer
@@ -37,7 +41,23 @@ import Cardano.Slotting.Slot (SlotNo (..))
 
 import Amaru.Treasury.Api.Types
     ( ScopeHistoryEntry (..)
+    , ScopeHistoryQueryResponse (..)
     , ScopeHistoryResponse (..)
+    , ScopeHistoryShaclResponse (..)
+    )
+import Amaru.Treasury.History.Sparql
+    ( HistoryFilter
+    , HistoryQueryName
+    , HistoryQueryResult (..)
+    , HistoryShaclResult (..)
+    , HistoryShapeName
+    , emptyHistoryFilter
+    , filterHistoryEntries
+    , renderHistoryQueryName
+    , renderHistoryShapeName
+    , renderHistorySparqlError
+    , runNamedHistoryQuery
+    , runNamedHistoryShacl
     )
 import Amaru.Treasury.Indexer.Decoder (treasuryTenantId)
 import Amaru.Treasury.Scope
@@ -49,8 +69,63 @@ import Amaru.Treasury.Scope
 queryScopeHistoryResponse
     :: HistoryIndexer -> ScopeId -> IO ScopeHistoryResponse
 queryScopeHistoryResponse idx scope =
-    historyResponseFromEntries scope
-        <$> queryHistory idx treasuryTenantId (scopeHistoryScope scope)
+    queryScopeHistoryFilteredResponse idx scope emptyHistoryFilter
+
+-- | Query and filter the local history store for one treasury scope.
+queryScopeHistoryFilteredResponse
+    :: HistoryIndexer -> ScopeId -> HistoryFilter -> IO ScopeHistoryResponse
+queryScopeHistoryFilteredResponse idx scope flt = do
+    entries <- queryScopeEntries idx scope
+    filtered <- filterHistoryEntries flt entries
+    case filtered of
+        Right rows -> pure (historyResponseFromEntries scope rows)
+        Left err -> fail (T.unpack (renderHistorySparqlError err))
+
+-- | Run one named RDF/SPARQL query over one indexed treasury scope.
+queryScopeHistoryQueryResponse
+    :: HistoryIndexer
+    -> ScopeId
+    -> HistoryQueryName
+    -> IO ScopeHistoryQueryResponse
+queryScopeHistoryQueryResponse idx scope queryName = do
+    entries <- queryScopeEntries idx scope
+    result <- runNamedHistoryQuery queryName entries
+    case result of
+        Right resultTable ->
+            pure
+                ScopeHistoryQueryResponse
+                    { shqrScope = scope
+                    , shqrQuery =
+                        renderHistoryQueryName (hqrQuery resultTable)
+                    , shqrColumns = hqrColumns resultTable
+                    , shqrRows = hqrRows resultTable
+                    }
+        Left err -> fail (T.unpack (renderHistorySparqlError err))
+
+-- | Run one named RDF/SHACL validation over one indexed treasury scope.
+queryScopeHistoryShaclResponse
+    :: HistoryIndexer
+    -> ScopeId
+    -> HistoryShapeName
+    -> IO ScopeHistoryShaclResponse
+queryScopeHistoryShaclResponse idx scope shapeName = do
+    entries <- queryScopeEntries idx scope
+    result <- runNamedHistoryShacl shapeName entries
+    case result of
+        Right resultReport ->
+            pure
+                ScopeHistoryShaclResponse
+                    { shsrScope = scope
+                    , shsrShape =
+                        renderHistoryShapeName (hsrShape resultReport)
+                    , shsrConforms = hsrConforms resultReport
+                    , shsrReport = hsrReport resultReport
+                    }
+        Left err -> fail (T.unpack (renderHistorySparqlError err))
+
+queryScopeEntries :: HistoryIndexer -> ScopeId -> IO [TxSummaryEntry]
+queryScopeEntries idx scope =
+    queryHistory idx treasuryTenantId (scopeHistoryScope scope)
 
 -- | Convert raw summary entries to the HTTP response shape.
 historyResponseFromEntries

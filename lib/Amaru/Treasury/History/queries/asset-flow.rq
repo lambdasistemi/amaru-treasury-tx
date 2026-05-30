@@ -1,0 +1,28 @@
+# Output-side asset flow for indexed treasury history.
+#
+# Modeled after cardano-ledger-rdf's packaged asset-flow view, but kept
+# as an actual SPARQL query for the ATX HTTP/CLI surfaces. One row is one
+# output asset carried by one indexed transaction.
+
+PREFIX cardano: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/cardano#>
+PREFIX rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+SELECT ?txid ?asset ?quantity ?destination
+WHERE {
+  ?tx a cardano:Transaction ;
+      cardano:hasTxId/cardano:bytesHex ?txid ;
+      cardano:hasOutput ?out .
+  ?out cardano:atAddress ?addr .
+  OPTIONAL { ?addr cardano:bech32 ?bech32 . }
+  BIND (COALESCE(?bech32, STR(?addr)) AS ?destination)
+  {
+    ?out cardano:lovelace ?quantity .
+    FILTER (?quantity != 0)
+    BIND ("ada" AS ?asset)
+  } UNION {
+    ?out cardano:hasAssetValue/rdf:rest*/rdf:first ?assetValue .
+    ?assetValue cardano:hasIdentifier/cardano:bytesHex ?asset ;
+                cardano:quantity ?quantity .
+  }
+}
+ORDER BY ?txid ?destination ?asset ?quantity

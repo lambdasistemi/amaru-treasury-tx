@@ -1,0 +1,18 @@
+# Treasury history row query.
+#
+# Reads the ATX metadata triples that the application generates beside the
+# Cardano ledger RDF graph. The query is intentionally fixed: CLI/HTTP
+# callers select this named query, not arbitrary SPARQL text.
+
+PREFIX atx: <https://lambdasistemi.github.io/amaru-treasury-tx/vocab/history#>
+
+SELECT ?slot ?txid ?scope ?role ?direction
+WHERE {
+  ?entry a atx:HistoryEntry ;
+         atx:slot ?slot ;
+         atx:txid ?txid ;
+         atx:scope ?scope ;
+         atx:role ?role ;
+         atx:direction ?direction .
+}
+ORDER BY ?slot ?txid ?role

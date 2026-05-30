@@ -34,6 +34,8 @@ import Amaru.Treasury.Api.Types
     , BuildIdentity (..)
     , RecentTxEntry (..)
     , RecentTxManifest (..)
+    , ScopeHistoryEntry (..)
+    , ScopeHistoryResponse (..)
     )
 import Amaru.Treasury.Scope (ScopeId, allScopes)
 
@@ -46,6 +48,10 @@ spec = do
     describe "RecentTxManifest JSON" $
         it "round-trips via aeson" $
             property roundTripRecentTxManifest
+
+    describe "ScopeHistoryResponse JSON" $
+        it "round-trips via aeson" $
+            property roundTripScopeHistoryResponse
 
     describe "ApiError JSON" $
         it "round-trips via aeson with and without aeField" $
@@ -63,6 +69,11 @@ roundTripRecentTxManifest :: Property
 roundTripRecentTxManifest =
     forAll genRecentTxManifest $ \m ->
         decode (encode m) == Just m
+
+roundTripScopeHistoryResponse :: Property
+roundTripScopeHistoryResponse =
+    forAll genScopeHistoryResponse $ \r ->
+        decode (encode r) == Just r
 
 roundTripApiError :: Property
 roundTripApiError =
@@ -90,6 +101,19 @@ genRecentTxEntry =
         <$> genScope
         <*> genHex64
         <*> genUTCTime
+        <*> genShortText
+
+genScopeHistoryResponse :: Gen ScopeHistoryResponse
+genScopeHistoryResponse =
+    ScopeHistoryResponse
+        <$> genScope
+        <*> listOf genScopeHistoryEntry
+
+genScopeHistoryEntry :: Gen ScopeHistoryEntry
+genScopeHistoryEntry =
+    ScopeHistoryEntry
+        <$> arbitrary
+        <*> genHex64
         <*> genShortText
 
 genApiError :: Gen ApiError

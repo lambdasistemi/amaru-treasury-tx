@@ -12,6 +12,8 @@ Haskell port of the bash recipes in
 
 - [**Quickstart**](quickstart.md) — wizard-to-`tx-build` pipes, pre-signing report review, and vault-backed witness creation.
 - [Inspect and config profiles](inspect.md) — read-only treasury snapshots, profile-based startup, and compatibility flags.
+- [Treasury history RDF demo](history-rdf-demo.md) — CLI and HTTP examples for named SPARQL queries, filters, and SHACL validation.
+- [Treasury history RDF case study](history-rdf-case-study.md) — how ATX metadata, Cardano Ledger RDF, SPARQL, and SHACL compose for transaction-history analysis.
 - [Architecture overview](architecture.md) — modules and data flow.
 - [Trust model](trust-model.md) — what the wizard verifies, what the operator must assert.
 - [Swap recipe](swap.md) — building an existing swap intent with `tx-build`.

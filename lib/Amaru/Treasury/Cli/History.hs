@@ -30,6 +30,7 @@ module Amaru.Treasury.Cli.History
 
       -- * Query and render (pure-ish seams for tests)
     , queryScopeHistory
+    , queryFilteredScopeHistory
     , queryTxDetail
     , scopeHistoryScope
     , renderHistoryRow
@@ -37,6 +38,7 @@ module Amaru.Treasury.Cli.History
     , renderTxDetail
     ) where
 
+import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
@@ -45,10 +47,12 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Text.IO qualified as TIO
+import Data.Word (Word64)
 import Options.Applicative
     ( Parser
     , ReadM
     , argument
+    , auto
     , eitherReader
     , help
     , long
@@ -80,6 +84,19 @@ import Cardano.Node.Client.TxHistoryIndexer.Types
     )
 import Cardano.Slotting.Slot (SlotNo (..))
 
+import Amaru.Treasury.History.Sparql
+    ( HistoryFilter (..)
+    , HistoryQueryName
+    , HistoryShapeName
+    , filterHistoryEntries
+    , historyQueryRowsTsv
+    , historyShaclResultLines
+    , parseHistoryQueryName
+    , parseHistoryShapeName
+    , renderHistorySparqlError
+    , runNamedHistoryQuery
+    , runNamedHistoryShacl
+    )
 import Amaru.Treasury.Indexer.Decoder (treasuryTenantId)
 import Amaru.Treasury.Scope
     ( ScopeId
@@ -94,6 +111,22 @@ data HistoryOpts = HistoryOpts
     , hoIndexerDb :: !(Maybe FilePath)
     -- ^ RocksDB indexer directory. Falls back to
     -- @AMARU_TREASURY_API_INDEXER_DB@ when absent.
+    , hoRole :: !(Maybe Text)
+    -- ^ Optional exact role filter.
+    , hoAsset :: !(Maybe Text)
+    -- ^ Optional asset filter over the RDF asset-flow query.
+    , hoDirection :: !(Maybe Text)
+    -- ^ Optional direction filter, e.g. @inbound@ or @outbound@.
+    , hoSince :: !(Maybe Word64)
+    -- ^ Optional lower slot bound, inclusive.
+    , hoUntil :: !(Maybe Word64)
+    -- ^ Optional upper slot bound, inclusive.
+    , hoLimit :: !(Maybe Int)
+    -- ^ Optional maximum rows after filtering.
+    , hoRdfQuery :: !(Maybe HistoryQueryName)
+    -- ^ Optional named SPARQL query to run instead of row rendering.
+    , hoShacl :: !(Maybe HistoryShapeName)
+    -- ^ Optional named SHACL shape to validate instead of row rendering.
     }
     deriving stock (Eq, Show)
 
@@ -124,6 +157,73 @@ historyOptsP =
                     <> metavar "PATH"
                     <> help
                         "RocksDB tx-history indexer directory; defaults to $AMARU_TREASURY_API_INDEXER_DB"
+                )
+            )
+        <*> optional
+            ( T.pack
+                <$> strOption
+                    ( long "role"
+                        <> metavar "ROLE"
+                        <> help "Only include rows whose indexed role matches ROLE"
+                    )
+            )
+        <*> optional
+            ( T.pack
+                <$> strOption
+                    ( long "asset"
+                        <> metavar "ASSET"
+                        <> help
+                            "Only include rows whose ledger RDF asset-flow contains ASSET (ada or asset bytesHex)"
+                    )
+            )
+        <*> optional
+            ( T.pack
+                <$> strOption
+                    ( long "direction"
+                        <> metavar "DIRECTION"
+                        <> help "Only include inbound or outbound rows"
+                    )
+            )
+        <*> optional
+            ( option
+                auto
+                ( long "since"
+                    <> metavar "SLOT"
+                    <> help "Only include rows at or after SLOT"
+                )
+            )
+        <*> optional
+            ( option
+                auto
+                ( long "until"
+                    <> metavar "SLOT"
+                    <> help "Only include rows at or before SLOT"
+                )
+            )
+        <*> optional
+            ( option
+                auto
+                ( long "limit"
+                    <> metavar "N"
+                    <> help "Limit the number of rendered rows"
+                )
+            )
+        <*> optional
+            ( option
+                historyQueryReader
+                ( long "rdf-query"
+                    <> metavar "NAME"
+                    <> help
+                        "Run a named SPARQL query: history-entries|tx-count|asset-flow|spend-edges|entity-occurrences"
+                )
+            )
+        <*> optional
+            ( option
+                historyShapeReader
+                ( long "shacl"
+                    <> metavar "NAME"
+                    <> help
+                        "Run a named SHACL validation: history-entry|indexed-tx-body"
                 )
             )
 
@@ -159,6 +259,22 @@ txIdReader =
                         "TXID must be a 32-byte transaction id encoded as hex"
             Left err -> Left ("TXID must be hex: " <> err)
 
+historyQueryReader :: ReadM HistoryQueryName
+historyQueryReader =
+    eitherReader $
+        firstText . parseHistoryQueryName . T.pack
+  where
+    firstText =
+        either (Left . T.unpack) Right
+
+historyShapeReader :: ReadM HistoryShapeName
+historyShapeReader =
+    eitherReader $
+        firstText . parseHistoryShapeName . T.pack
+  where
+    firstText =
+        either (Left . T.unpack) Right
+
 {- | Run @history@: resolve the indexer database path, open the
 RocksDB store, query the selected scope, and print the rendered
 rows. Exits with code 2 if no database path is available.
@@ -173,7 +289,40 @@ runHistory opts = do
         Right dbPath ->
             withRocksDBHistoryIndexer dbPath $ \idx -> do
                 entries <- queryScopeHistory idx (hoScope opts)
-                mapM_ TIO.putStrLn (renderHistoryRows entries)
+                case (hoRdfQuery opts, hoShacl opts) of
+                    (Just _, Just _) ->
+                        dieHistory
+                            "history: pass only one of --rdf-query or --shacl"
+                    (Just queryName, Nothing) -> do
+                        result <- runNamedHistoryQuery queryName entries
+                        case result of
+                            Right table ->
+                                mapM_
+                                    TIO.putStrLn
+                                    (historyQueryRowsTsv table)
+                            Left err ->
+                                dieHistory (renderHistorySparqlError err)
+                    (Nothing, Just shapeName) -> do
+                        result <- runNamedHistoryShacl shapeName entries
+                        case result of
+                            Right report ->
+                                mapM_
+                                    TIO.putStrLn
+                                    (historyShaclResultLines report)
+                            Left err ->
+                                dieHistory (renderHistorySparqlError err)
+                    (Nothing, Nothing) -> do
+                        filtered <-
+                            queryFilteredScopeHistory
+                                idx
+                                (hoScope opts)
+                                (historyFilter opts)
+                        case filtered of
+                            Right rows ->
+                                mapM_
+                                    TIO.putStrLn
+                                    (renderHistoryRows rows)
+                            Left err -> dieHistory err
 
 {- | Run @tx-detail@: resolve the indexer database path, look up the
 treasury summary by tx id using the direct indexer API, and print the
@@ -228,6 +377,16 @@ queryScopeHistory
     :: HistoryIndexer -> ScopeId -> IO [TxSummaryEntry]
 queryScopeHistory idx scope =
     queryHistory idx treasuryTenantId (scopeHistoryScope scope)
+
+-- | Query and filter one scope through the shared RDF/SPARQL layer.
+queryFilteredScopeHistory
+    :: HistoryIndexer
+    -> ScopeId
+    -> HistoryFilter
+    -> IO (Either Text [TxSummaryEntry])
+queryFilteredScopeHistory idx scope flt = do
+    entries <- queryScopeHistory idx scope
+    first renderHistorySparqlError <$> filterHistoryEntries flt entries
 
 -- | Directly look up one detailed treasury transaction by tx id.
 queryTxDetail :: HistoryIndexer -> TxId -> IO (Maybe TxSummary)
@@ -317,3 +476,19 @@ directionTextOf = bytesText . unTxDirection
 
 bytesText :: ByteString -> Text
 bytesText = TE.decodeUtf8Lenient
+
+historyFilter :: HistoryOpts -> HistoryFilter
+historyFilter opts =
+    HistoryFilter
+        { hfRole = hoRole opts
+        , hfAsset = hoAsset opts
+        , hfDirection = hoDirection opts
+        , hfSince = hoSince opts
+        , hfUntil = hoUntil opts
+        , hfLimit = hoLimit opts
+        }
+
+dieHistory :: Text -> IO a
+dieHistory err = do
+    hPutStrLn stderr ("amaru-treasury-tx: " <> T.unpack err)
+    exitWith (ExitFailure 1)

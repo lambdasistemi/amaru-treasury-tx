@@ -62,6 +62,10 @@ import Amaru.Treasury.Cli.History
     , renderTxDetail
     , scopeHistoryScope
     )
+import Amaru.Treasury.History.Sparql
+    ( HistoryQueryName (..)
+    , HistoryShapeName (..)
+    )
 import Amaru.Treasury.Indexer.Decoder (treasuryTenantId)
 import Amaru.Treasury.Scope (ScopeId (..))
 
@@ -79,7 +83,63 @@ spec = describe "Amaru.Treasury.Cli.History" $ do
                 Success (_, CmdHistory o) -> do
                     hoScope o `shouldBe` CoreDevelopment
                     hoIndexerDb o `shouldBe` Just "/tmp/history-db"
+                    hoRole o `shouldBe` Nothing
+                    hoAsset o `shouldBe` Nothing
+                    hoDirection o `shouldBe` Nothing
+                    hoSince o `shouldBe` Nothing
+                    hoUntil o `shouldBe` Nothing
+                    hoLimit o `shouldBe` Nothing
+                    hoRdfQuery o `shouldBe` Nothing
+                    hoShacl o `shouldBe` Nothing
                 _ -> expectationFailure "expected CmdHistory parse"
+
+        it "accepts history filters and a named RDF query" $
+            case parseCliArgs
+                [ "history"
+                , "--scope"
+                , "core_development"
+                , "--indexer-db"
+                , "/tmp/history-db"
+                , "--role"
+                , "disburse"
+                , "--asset"
+                , "ada"
+                , "--direction"
+                , "outbound"
+                , "--since"
+                , "10"
+                , "--until"
+                , "20"
+                , "--limit"
+                , "3"
+                , "--rdf-query"
+                , "asset-flow"
+                ] of
+                Success (_, CmdHistory o) -> do
+                    hoRole o `shouldBe` Just "disburse"
+                    hoAsset o `shouldBe` Just "ada"
+                    hoDirection o `shouldBe` Just "outbound"
+                    hoSince o `shouldBe` Just 10
+                    hoUntil o `shouldBe` Just 20
+                    hoLimit o `shouldBe` Just 3
+                    hoRdfQuery o `shouldBe` Just AssetFlowQuery
+                    hoShacl o `shouldBe` Nothing
+                _ -> expectationFailure "expected filtered CmdHistory parse"
+
+        it "accepts a named SHACL validation" $
+            case parseCliArgs
+                [ "history"
+                , "--scope"
+                , "core_development"
+                , "--indexer-db"
+                , "/tmp/history-db"
+                , "--shacl"
+                , "history-entry"
+                ] of
+                Success (_, CmdHistory o) -> do
+                    hoRdfQuery o `shouldBe` Nothing
+                    hoShacl o `shouldBe` Just HistoryEntryShape
+                _ -> expectationFailure "expected SHACL CmdHistory parse"
 
         it "rejects a missing --scope" $
             isFailure ["history"] `shouldBe` True

@@ -344,12 +344,15 @@ cmdTag = \case
     CmdDisburseWizard{} -> "disburse-wizard"
     CmdContingencyDisburse{} -> "contingency-disburse-wizard"
     CmdWithdrawWizard{} -> "withdraw-wizard"
+    CmdReorganizeWizard{} -> "reorganize-wizard"
     CmdRegistryInitWizard{} -> "registry-init-wizard"
     CmdStakeRewardInitWizard{} -> "stake-reward-init-wizard"
     CmdGovernanceWithdrawalInitWizard{} ->
         "governance-withdrawal-init-wizard"
     CmdReportRender{} -> "report-render"
     CmdTreasuryInspect{} -> "treasury-inspect"
+    CmdHistory{} -> "history"
+    CmdTxDetail{} -> "tx-detail"
     CmdVaultCreate{} -> "vault-create"
     CmdWitness{} -> "witness"
 

@@ -13,12 +13,14 @@ raw transaction bytes carried by 'BlockTx': no UTxO lookups, no
 network, no IO.
 
 Each recognised treasury transaction yields exactly one
-'TxSummaryEntry' filed under the fixed tenant
+'TxSummary' filed under the fixed tenant
 @TenantId "amaru-treasury-tx"@. The history scope is the UTF-8
 'Amaru.Treasury.Scope.scopeText' of the 'Amaru.Treasury.Scope.ScopeId'
 recovered from on-chain data (never the treasury script hash). The
 supplied 'SlotNo' is echoed verbatim into the key, the raw transaction
-id bytes are echoed as 'tskTxId', and the payload is empty.
+id bytes are echoed as 'tskTxId', and the compatibility list payload is
+empty. The detail fields are populated only from the transaction body
+and witnesses carried by 'BlockTx': no node lookup and no UTxO scan.
 
 = Role discrimination (per the slice-3 contract)
 
@@ -45,7 +47,10 @@ signal, or whose registry policy id maps to no known scope yields
 module Amaru.Treasury.Indexer.Decoder
     ( -- * Re-exported upstream types
       TenantId (..)
+    , TxSummary
     , TxSummaryEntry
+    , TxSummaryInput
+    , TxSummaryOutput
     , BlockTx
     , mkBlockTx
 
@@ -65,34 +70,79 @@ module Amaru.Treasury.Indexer.Decoder
     , summarySlot
     , summaryTxId
     , summaryPayload
+    , summaryInputs
+    , summaryOutputs
+    , summaryRedeemer
+    , summaryFee
+    , summaryRequiredSigners
+    , summaryBlockHash
     ) where
 
 import Control.Applicative ((<|>))
+import Data.Aeson (encode)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
+import Data.Either (fromRight)
+import Data.Foldable (toList)
 import Data.Map.Strict qualified as Map
-import Data.Maybe (listToMaybe)
+import Data.Maybe (fromMaybe, listToMaybe)
+import Data.Set qualified as Set
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
+import Data.Word (Word64)
 import Lens.Micro ((^.))
 
 import Cardano.Crypto.Hash.Class (hashToBytes)
+import Cardano.Ledger.Address
+    ( Addr
+    , getNetwork
+    , serialiseAddr
+    )
+import Cardano.Ledger.Alonzo.TxWits (Redeemers (..))
 import Cardano.Ledger.Api.Era (eraProtVerLow)
-import Cardano.Ledger.Api.Tx (auxDataTxL, txIdTx)
+import Cardano.Ledger.Api.Tx (auxDataTxL, txIdTx, witsTxL)
 import Cardano.Ledger.Api.Tx.AuxData (metadataTxAuxDataL)
-import Cardano.Ledger.Api.Tx.Body (mintTxBodyL)
-import Cardano.Ledger.BaseTypes (StrictMaybe (..))
+import Cardano.Ledger.Api.Tx.Body
+    ( feeTxBodyL
+    , inputsTxBodyL
+    , mintTxBodyL
+    , outputsTxBodyL
+    , reqSignerHashesTxBodyL
+    )
+import Cardano.Ledger.Api.Tx.Out
+    ( addrTxOutL
+    , datumTxOutL
+    , valueTxOutL
+    )
+import Cardano.Ledger.Api.Tx.Wits (rdmrsTxWitsL)
+import Cardano.Ledger.BaseTypes
+    ( Network (..)
+    , StrictMaybe (..)
+    , txIxToInt
+    )
 import Cardano.Ledger.Binary (DecCBOR (..), decodeFullAnnotator)
+import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (bodyTxL)
-import Cardano.Ledger.Hashes (ScriptHash (..), extractHash)
-import Cardano.Ledger.Mary.Value (MultiAsset (..), PolicyID (..))
+import Cardano.Ledger.Hashes
+    ( KeyHash (..)
+    , ScriptHash (..)
+    , extractHash
+    )
+import Cardano.Ledger.Mary.Value
+    ( MaryValue
+    , MultiAsset (..)
+    , PolicyID (..)
+    )
 import Cardano.Ledger.Metadata (Metadatum (..))
+import Cardano.Ledger.Plutus.Data qualified as PlutusData
 import Cardano.Ledger.TxIn qualified as Ledger
 import Cardano.Slotting.Slot (SlotNo)
 import Cardano.Tx.Ledger (ConwayTx)
+import Codec.Binary.Bech32 qualified as Bech32
 
 import Cardano.Node.Client.TxHistoryIndexer.BlockExtract
     ( BlockTx (..)
@@ -103,8 +153,11 @@ import Cardano.Node.Client.TxHistoryIndexer.Types
     , TenantId (..)
     , TxId (..)
     , TxRole (..)
+    , TxSummary (..)
     , TxSummaryEntry (..)
+    , TxSummaryInput (..)
     , TxSummaryKey (..)
+    , TxSummaryOutput (..)
     )
 
 import Amaru.Treasury.AuxData (label1694)
@@ -114,6 +167,7 @@ import Amaru.Treasury.Metadata
     , TreasuryMetadata (..)
     )
 import Amaru.Treasury.Registry.Derive (derivedRegistryNftPolicy)
+import Amaru.Treasury.Report.Accounting (valueSummary)
 import Amaru.Treasury.Scope
     ( ScopeId (..)
     , allScopes
@@ -135,7 +189,7 @@ derived from a per-instance seed (e.g. the devnet bootstrap) must use
 'treasuryDecodeTxWith' with the extra mappings recovered from their
 deployment metadata.
 -}
-treasuryDecodeTx :: SlotNo -> BlockTx -> Maybe [TxSummaryEntry]
+treasuryDecodeTx :: SlotNo -> BlockTx -> Maybe [TxSummary]
 treasuryDecodeTx = treasuryDecodeTxWith []
 
 {- | Like 'treasuryDecodeTx', but consults @extra@ registry-policy →
@@ -150,7 +204,7 @@ treasuryDecodeTxWith
     :: [(ByteString, ScopeId)]
     -> SlotNo
     -> BlockTx
-    -> Maybe [TxSummaryEntry]
+    -> Maybe [TxSummary]
 treasuryDecodeTxWith extra slot (BlockTx raw) = do
     tx <- decodeConwayTx raw
     (role, scope) <- classifyTx extra tx
@@ -162,7 +216,18 @@ treasuryDecodeTxWith extra slot (BlockTx raw) = do
                 , tskTxId = TxId (rawTxId tx)
                 , tskRole = TxRole role
                 }
-    Just [TxSummaryEntry{tseKey = key, tsePayload = BS.empty}]
+    Just
+        [ TxSummary
+            { txsKey = key
+            , txsPayload = BS.empty
+            , txsInputs = txInputs tx
+            , txsOutputs = txOutputs tx
+            , txsRedeemer = Just (txRedeemerSummary tx role scope)
+            , txsFee = txFee tx
+            , txsRequiredSigners = txRequiredSigners tx
+            , txsBlockHash = Nothing
+            }
+        ]
 
 -- ------------------------------------------------------------
 -- Classification
@@ -248,6 +313,119 @@ mintedPolicies tx =
     case tx ^. bodyTxL . mintTxBodyL of
         MultiAsset assets ->
             [scriptHashBytes sh | PolicyID sh <- Map.keys assets]
+
+{- | Transaction inputs in deterministic ledger order. Values and
+owning scopes require previous-output context, so the pure decoder
+records them as unknown rather than consulting the node.
+-}
+txInputs :: ConwayTx -> [TxSummaryInput]
+txInputs tx =
+    [ TxSummaryInput
+        { tsiTxIn = textBytes (renderTxIn txIn)
+        , tsiScope = Nothing
+        , tsiValue = "unknown"
+        }
+    | txIn <- Set.toAscList (tx ^. bodyTxL . inputsTxBodyL)
+    ]
+
+-- | Transaction outputs rendered in body order.
+txOutputs :: ConwayTx -> [TxSummaryOutput]
+txOutputs tx =
+    [ TxSummaryOutput
+        { tsoAddress = textBytes (renderAddress (txOut ^. addrTxOutL))
+        , tsoValue = valueBytes (txOut ^. valueTxOutL)
+        , tsoDatum = textBytes <$> datumSummary (txOut ^. datumTxOutL)
+        }
+    | txOut <- toList (tx ^. bodyTxL . outputsTxBodyL)
+    ]
+
+txFee :: ConwayTx -> Maybe Word64
+txFee tx =
+    let Coin fee = tx ^. bodyTxL . feeTxBodyL
+    in  Just (fromIntegral fee)
+
+txRequiredSigners :: ConwayTx -> [ByteString]
+txRequiredSigners tx =
+    textBytes . renderKeyHash
+        <$> Set.toAscList (tx ^. bodyTxL . reqSignerHashesTxBodyL)
+
+txRedeemerSummary :: ConwayTx -> ByteString -> ScopeId -> ByteString
+txRedeemerSummary tx role scope =
+    textBytes $
+        T.intercalate
+            " "
+            [ "scope=" <> scopeText scope
+            , "role=" <> TE.decodeUtf8 role
+            , "redeemers=" <> T.pack (show (redeemerCount tx))
+            , "payload=" <> rolePayloadSummary tx
+            ]
+
+redeemerCount :: ConwayTx -> Int
+redeemerCount tx =
+    let Redeemers redeemers = tx ^. witsTxL . rdmrsTxWitsL
+    in  Map.size redeemers
+
+rolePayloadSummary :: ConwayTx -> Text
+rolePayloadSummary tx =
+    case label1694Metadatum tx of
+        Just metadatum ->
+            T.intercalate
+                ","
+                [ "event=" <> field "event" metadatum
+                , "label=" <> field "label" metadatum
+                , "instance=" <> instanceField metadatum
+                ]
+        Nothing ->
+            "mintedPolicies="
+                <> T.intercalate "," (hexText <$> mintedPolicies tx)
+  where
+    field name metadatum = fromMaybe "-" (rationaleField name metadatum)
+    instanceField metadatum =
+        fromMaybe
+            "-"
+            (metadatumLookup "instance" metadatum >>= metadatumText)
+
+datumSummary :: PlutusData.Datum ConwayEra -> Maybe Text
+datumSummary = \case
+    PlutusData.NoDatum -> Nothing
+    PlutusData.DatumHash h ->
+        Just ("datumHash:" <> hexText (hashToBytes (extractHash h)))
+    PlutusData.Datum _ -> Just "inlineDatum"
+
+renderAddress :: Addr -> Text
+renderAddress addr =
+    Bech32.encodeLenient
+        hrp
+        (Bech32.dataPartFromBytes (serialiseAddr addr))
+  where
+    hrp =
+        fromRight
+            (error "renderAddress: invalid hrp")
+            (Bech32.humanReadablePartFromText (addressHrp addr))
+    addressHrp target =
+        case getNetwork target of
+            Mainnet -> "addr"
+            Testnet -> "addr_test"
+
+renderTxIn :: Ledger.TxIn -> Text
+renderTxIn (Ledger.TxIn (Ledger.TxId h) ix) =
+    hexText (hashToBytes (extractHash h))
+        <> "#"
+        <> T.pack (show (txIxToInt ix))
+
+renderKeyHash :: KeyHash discriminator -> Text
+renderKeyHash (KeyHash h) =
+    hexText (hashToBytes h)
+
+textBytes :: Text -> ByteString
+textBytes = TE.encodeUtf8
+
+hexText :: ByteString -> Text
+hexText = TE.decodeUtf8 . B16.encode
+
+valueBytes :: MaryValue -> ByteString
+valueBytes =
+    BSL.toStrict . encode . valueSummary
 
 -- | The label-1694 rationale metadatum, if present.
 label1694Metadatum :: ConwayTx -> Maybe Metadatum
@@ -341,22 +519,40 @@ scriptHashBytes (ScriptHash hash) = hashToBytes hash
 -- Entry accessors
 -- ------------------------------------------------------------
 
--- | Tenant of a decoded entry.
-summaryTenant :: TxSummaryEntry -> TenantId
-summaryTenant = tskTenant . tseKey
+-- | Tenant of a decoded summary.
+summaryTenant :: TxSummary -> TenantId
+summaryTenant = tskTenant . txsKey
 
--- | History scope of a decoded entry, as UTF-8 text.
-summaryScope :: TxSummaryEntry -> Text
-summaryScope = TE.decodeUtf8 . unHistoryScope . tskScope . tseKey
+-- | History scope of a decoded summary, as UTF-8 text.
+summaryScope :: TxSummary -> Text
+summaryScope = TE.decodeUtf8 . unHistoryScope . tskScope . txsKey
 
--- | Slot of a decoded entry.
-summarySlot :: TxSummaryEntry -> SlotNo
-summarySlot = tskSlot . tseKey
+-- | Slot of a decoded summary.
+summarySlot :: TxSummary -> SlotNo
+summarySlot = tskSlot . txsKey
 
--- | Raw transaction-id bytes of a decoded entry.
-summaryTxId :: TxSummaryEntry -> ByteString
-summaryTxId = unTxId . tskTxId . tseKey
+-- | Raw transaction-id bytes of a decoded summary.
+summaryTxId :: TxSummary -> ByteString
+summaryTxId = unTxId . tskTxId . txsKey
 
--- | Opaque payload of a decoded entry.
-summaryPayload :: TxSummaryEntry -> ByteString
-summaryPayload = tsePayload
+-- | Opaque compatibility payload of a decoded summary.
+summaryPayload :: TxSummary -> ByteString
+summaryPayload = txsPayload
+
+summaryInputs :: TxSummary -> [TxSummaryInput]
+summaryInputs = txsInputs
+
+summaryOutputs :: TxSummary -> [TxSummaryOutput]
+summaryOutputs = txsOutputs
+
+summaryRedeemer :: TxSummary -> Maybe ByteString
+summaryRedeemer = txsRedeemer
+
+summaryFee :: TxSummary -> Maybe Word64
+summaryFee = txsFee
+
+summaryRequiredSigners :: TxSummary -> [ByteString]
+summaryRequiredSigners = txsRequiredSigners
+
+summaryBlockHash :: TxSummary -> Maybe ByteString
+summaryBlockHash = txsBlockHash

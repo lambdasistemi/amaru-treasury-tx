@@ -20,18 +20,25 @@ store is whichever RocksDB directory @--indexer-db@ (or the
 module Amaru.Treasury.Cli.History
     ( -- * Options
       HistoryOpts (..)
+    , TxDetailOpts (..)
     , historyOptsP
+    , txDetailOptsP
 
       -- * Runner
     , runHistory
+    , runTxDetail
 
       -- * Query and render (pure-ish seams for tests)
     , queryScopeHistory
+    , queryTxDetail
     , scopeHistoryScope
     , renderHistoryRow
     , renderHistoryRows
+    , renderTxDetail
     ) where
 
+import Data.ByteString (ByteString)
+import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.Char (toLower)
 import Data.Text (Text)
@@ -41,6 +48,7 @@ import Data.Text.IO qualified as TIO
 import Options.Applicative
     ( Parser
     , ReadM
+    , argument
     , eitherReader
     , help
     , long
@@ -55,6 +63,7 @@ import System.IO (hPutStrLn, stderr)
 
 import Cardano.Node.Client.TxHistoryIndexer.Indexer
     ( HistoryIndexer
+    , getByTxId
     , queryHistory
     , withRocksDBHistoryIndexer
     )
@@ -62,8 +71,11 @@ import Cardano.Node.Client.TxHistoryIndexer.Types
     ( HistoryScope (..)
     , TxId (..)
     , TxRole (..)
+    , TxSummary (..)
     , TxSummaryEntry (..)
+    , TxSummaryInput (..)
     , TxSummaryKey (..)
+    , TxSummaryOutput (..)
     )
 import Cardano.Slotting.Slot (SlotNo (..))
 
@@ -79,6 +91,16 @@ data HistoryOpts = HistoryOpts
     { hoScope :: !ScopeId
     -- ^ Treasury scope whose history to read.
     , hoIndexerDb :: !(Maybe FilePath)
+    -- ^ RocksDB indexer directory. Falls back to
+    -- @AMARU_TREASURY_API_INDEXER_DB@ when absent.
+    }
+    deriving stock (Eq, Show)
+
+-- | Flags for the @tx-detail@ subcommand.
+data TxDetailOpts = TxDetailOpts
+    { tdoTxId :: !TxId
+    -- ^ Raw transaction id to read from the tx-history indexer.
+    , tdoIndexerDb :: !(Maybe FilePath)
     -- ^ RocksDB indexer directory. Falls back to
     -- @AMARU_TREASURY_API_INDEXER_DB@ when absent.
     }
@@ -104,10 +126,37 @@ historyOptsP =
                 )
             )
 
+-- | Parse @tx-detail TXID@.
+txDetailOptsP :: Parser TxDetailOpts
+txDetailOptsP =
+    TxDetailOpts
+        <$> argument
+            txIdReader
+            (metavar "TXID")
+        <*> optional
+            ( strOption
+                ( long "indexer-db"
+                    <> metavar "PATH"
+                    <> help
+                        "RocksDB tx-history indexer directory; defaults to $AMARU_TREASURY_API_INDEXER_DB"
+                )
+            )
+
 scopeReader :: ReadM ScopeId
 scopeReader =
     eitherReader $
         scopeFromText . T.pack . map toLower
+
+txIdReader :: ReadM TxId
+txIdReader =
+    eitherReader $ \raw ->
+        case B16.decode (TE.encodeUtf8 (T.pack raw)) of
+            Right bytes
+                | BS.length bytes == 32 -> Right (TxId bytes)
+                | otherwise ->
+                    Left
+                        "TXID must be a 32-byte transaction id encoded as hex"
+            Left err -> Left ("TXID must be hex: " <> err)
 
 {- | Run @history@: resolve the indexer database path, open the
 RocksDB store, query the selected scope, and print the rendered
@@ -124,6 +173,32 @@ runHistory opts = do
             withRocksDBHistoryIndexer dbPath $ \idx -> do
                 entries <- queryScopeHistory idx (hoScope opts)
                 mapM_ TIO.putStrLn (renderHistoryRows entries)
+
+{- | Run @tx-detail@: resolve the indexer database path, look up the
+treasury summary by tx id using the direct indexer API, and print the
+decoded view. Exits with code 1 when the tx id is not indexed for the
+treasury tenant.
+-}
+runTxDetail :: TxDetailOpts -> IO ()
+runTxDetail opts = do
+    envs <- getEnvironment
+    case resolveIndexerDb (tdoIndexerDb opts) envs of
+        Left err -> do
+            hPutStrLn stderr ("amaru-treasury-tx: " <> err)
+            exitWith (ExitFailure 2)
+        Right dbPath ->
+            withRocksDBHistoryIndexer dbPath $ \idx -> do
+                mSummary <- queryTxDetail idx (tdoTxId opts)
+                case mSummary of
+                    Nothing -> do
+                        hPutStrLn
+                            stderr
+                            ( "amaru-treasury-tx: tx-detail: not found "
+                                <> T.unpack (txIdHex (tdoTxId opts))
+                            )
+                        exitWith (ExitFailure 1)
+                    Just summary ->
+                        mapM_ TIO.putStrLn (renderTxDetail summary)
 
 {- | Resolve the indexer database path: the explicit @--indexer-db@
 flag wins, else the @AMARU_TREASURY_API_INDEXER_DB@ environment
@@ -153,6 +228,11 @@ queryScopeHistory
 queryScopeHistory idx scope =
     queryHistory idx treasuryTenantId (scopeHistoryScope scope)
 
+-- | Directly look up one detailed treasury transaction by tx id.
+queryTxDetail :: HistoryIndexer -> TxId -> IO (Maybe TxSummary)
+queryTxDetail idx =
+    getByTxId idx treasuryTenantId
+
 {- | Render a 'ScopeId' as the upstream 'HistoryScope' bytes: the
 UTF-8 'scopeText', matching the decoder's key derivation.
 -}
@@ -172,5 +252,59 @@ renderHistoryRow entry =
   where
     key = tseKey entry
     slotText = T.pack (show (unSlotNo (tskSlot key)))
-    txIdText = TE.decodeUtf8 (B16.encode (unTxId (tskTxId key)))
+    txIdText = txIdHex (tskTxId key)
     roleText = TE.decodeUtf8 (unTxRole (tskRole key))
+
+-- | Render a detailed transaction view with one stable field per line.
+renderTxDetail :: TxSummary -> [Text]
+renderTxDetail summary =
+    [ "slot " <> T.pack (show (unSlotNo (tskSlot key)))
+    , "txid " <> txIdHex (tskTxId key)
+    , "scope " <> scopeTextOf (tskScope key)
+    , "role " <> roleTextOf (tskRole key)
+    , "block-hash " <> maybe "-" hexText (txsBlockHash summary)
+    , "fee " <> maybe "-" (T.pack . show) (txsFee summary)
+    , "required-signers "
+        <> if null (txsRequiredSigners summary)
+            then "-"
+            else T.intercalate "," (bytesText <$> txsRequiredSigners summary)
+    , "redeemer " <> maybe "-" bytesText (txsRedeemer summary)
+    ]
+        <> (renderInput <$> txsInputs summary)
+        <> zipWith renderOutput [(0 :: Int) ..] (txsOutputs summary)
+  where
+    key = txsKey summary
+
+renderInput :: TxSummaryInput -> Text
+renderInput input =
+    T.unwords
+        [ "input"
+        , bytesText (tsiTxIn input)
+        , "scope=" <> maybe "-" scopeTextOf (tsiScope input)
+        , "value=" <> bytesText (tsiValue input)
+        ]
+
+renderOutput :: Int -> TxSummaryOutput -> Text
+renderOutput ix output =
+    T.unwords
+        [ "output"
+        , T.pack (show ix)
+        , "address=" <> bytesText (tsoAddress output)
+        , "value=" <> bytesText (tsoValue output)
+        , "datum=" <> maybe "-" bytesText (tsoDatum output)
+        ]
+
+txIdHex :: TxId -> Text
+txIdHex = hexText . unTxId
+
+hexText :: ByteString -> Text
+hexText = TE.decodeUtf8 . B16.encode
+
+scopeTextOf :: HistoryScope -> Text
+scopeTextOf = bytesText . unHistoryScope
+
+roleTextOf :: TxRole -> Text
+roleTextOf = bytesText . unTxRole
+
+bytesText :: ByteString -> Text
+bytesText = TE.decodeUtf8Lenient

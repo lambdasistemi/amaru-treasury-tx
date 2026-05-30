@@ -78,7 +78,9 @@ import Amaru.Treasury.Cli.GovernanceWithdrawalInitWizard
     )
 import Amaru.Treasury.Cli.History
     ( HistoryOpts
+    , TxDetailOpts
     , historyOptsP
+    , txDetailOptsP
     )
 import Amaru.Treasury.Cli.RegistryInitWizard
     ( RegistryInitWizardOpts
@@ -148,6 +150,7 @@ data Cmd
     | CmdReportRender ReportRenderOpts
     | CmdTreasuryInspect InspectOpts
     | CmdHistory HistoryOpts
+    | CmdTxDetail TxDetailOpts
     | CmdAttachWitness AttachWitnessOpts
     | CmdVaultCreate VaultCreateOpts
     | CmdWitness WitnessOpts
@@ -272,6 +275,14 @@ cmdP =
                     (CmdHistory <$> historyOptsP)
                     ( progDesc
                         "Read-only: print treasury tx history for a scope from the local indexer"
+                    )
+                )
+            <> command
+                "tx-detail"
+                ( info
+                    (CmdTxDetail <$> txDetailOptsP)
+                    ( progDesc
+                        "Read-only: print one decoded treasury transaction from the local indexer"
                     )
                 )
             <> command

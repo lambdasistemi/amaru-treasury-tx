@@ -118,6 +118,7 @@ spec = describe "Amaru.Treasury.Api.Indexer" $ do
                             IndexAddressSet
                                 (Set.singleton addr)
                         , icRegistryScopeMappings = []
+                        , icScopeAddressMappings = []
                         }
             csInterestSet (toChainSyncCfg cfg)
                 `shouldBe` IndexAddressSet
@@ -143,6 +144,7 @@ spec = describe "Amaru.Treasury.Api.Indexer" $ do
                             , icProbeConfig = defaultProbeConfig
                             , icInterestSet = IndexAll
                             , icRegistryScopeMappings = []
+                            , icScopeAddressMappings = []
                             }
             case csHandlers chainSyncCfg of
                 _ :| extraHandlers -> length extraHandlers `shouldBe` 0
@@ -163,6 +165,7 @@ spec = describe "Amaru.Treasury.Api.Indexer" $ do
                 , icProbeConfig = defaultProbeConfig
                 , icInterestSet = IndexAll
                 , icRegistryScopeMappings = []
+                , icScopeAddressMappings = []
                 }
             `shouldBe` "/tmp/treasury-rocksdb-history"
 
@@ -200,6 +203,7 @@ spec = describe "Amaru.Treasury.Api.Indexer" $ do
                             , icProbeConfig = defaultProbeConfig
                             , icInterestSet = IndexAll
                             , icRegistryScopeMappings = []
+                            , icScopeAddressMappings = []
                             }
             csStartPoint chainSyncCfg
                 `shouldBe` Just (SlotNo 123, startHash)
@@ -229,5 +233,6 @@ withTmpIndexer action =
                 , icProbeConfig = defaultProbeConfig
                 , icInterestSet = IndexAll
                 , icRegistryScopeMappings = []
+                , icScopeAddressMappings = []
                 }
             action

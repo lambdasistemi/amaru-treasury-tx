@@ -278,6 +278,7 @@ import Amaru.Treasury.Devnet.Runner
     )
 import Amaru.Treasury.Indexer.Decoder
     ( registryScopeMappingsFromMetadata
+    , scopeAddressMappingsFromMetadata
     )
 import Amaru.Treasury.Inspect.Types
     ( DeploymentAnchor (..)
@@ -396,7 +397,7 @@ runSmoke = do
                         , dsrioRunDir = dir
                         }
                 fundingUtxos <- queryUTxOs backend genesisAddr
-                treasuryInputs <-
+                (_preIndexerFundingTxId, treasuryInputs) <-
                     fundApiTreasuryUtxos
                         backend
                         submitter
@@ -418,6 +419,9 @@ runSmoke = do
                             IndexAll
                             (fromIntegral (sgcSecurityParam genesis))
                             ( registryScopeMappingsFromMetadata
+                                metadata
+                            )
+                            ( scopeAddressMappingsFromMetadata
                                 metadata
                             )
                 writeSmokeMetadata metadataPath metadata
@@ -473,6 +477,7 @@ runSmoke = do
                                                         apiIdx
                                                         backend
                                                         submitter
+                                                        pp
                                                         metadataPath
                                                         (drpAnchors publication)
                                                         treasuryInputs
@@ -555,6 +560,7 @@ runIndexedPhaseScenarios
     -> ApiIndexer cf op
     -> Provider IO
     -> Submitter IO
+    -> PParams ConwayEra
     -> FilePath
     -> DevnetRegistryAnchors
     -> ((TxIn, TxOut ConwayEra), (TxIn, TxOut ConwayEra))
@@ -563,8 +569,9 @@ runIndexedPhaseScenarios
     manager
     port
     apiIdx
-    _provider
+    provider
     submitter
+    pp
     metadataPath
     anchors
     _treasuryInputs = do
@@ -625,11 +632,21 @@ runIndexedPhaseScenarios
             1
             55_000_000
 
+        fundingUtxos <- queryUTxOs provider genesisAddr
+        (inboundTxId, _) <-
+            fundApiTreasuryUtxos
+                provider
+                submitter
+                pp
+                (draTreasuryTarget anchors)
+                fundingUtxos
+
         historyRows <-
             awaitHistoryRows
                 apiIdx
-                [ (disburseTxId, "disburse")
-                , (reorganizeTxId, "reorganize")
+                [ (disburseTxId, "disburse", "outbound")
+                , (reorganizeTxId, "reorganize", "outbound")
+                , (inboundTxId, "-", "inbound")
                 ]
         disburseDetailRows <-
             awaitDisburseTxDetail
@@ -655,8 +672,10 @@ runIndexedPhaseScenarios
             , "disburse beneficiary output"
             , "POST /v1/build/reorganize success"
             , "reorganize merged treasury continuation"
+            , "indexed inbound funding submitted"
             , "indexed history disburse row present"
             , "indexed history reorganize row present"
+            , "indexed history inbound row present"
             , "tx-detail disburse decoded view present"
             ]
 
@@ -709,8 +728,10 @@ assertIndexedPhaseProofs observed =
         , "disburse beneficiary output"
         , "POST /v1/build/reorganize success"
         , "reorganize merged treasury continuation"
+        , "indexed inbound funding submitted"
         , "indexed history disburse row present"
         , "indexed history reorganize row present"
+        , "indexed history inbound row present"
         , "tx-detail disburse decoded view present"
         ]
     missing =
@@ -879,7 +900,7 @@ fundApiTreasuryUtxos
     -> PParams ConwayEra
     -> TreasuryTarget
     -> [(TxIn, TxOut ConwayEra)]
-    -> IO ((TxIn, TxOut ConwayEra), (TxIn, TxOut ConwayEra))
+    -> IO (TxId, ((TxIn, TxOut ConwayEra), (TxIn, TxOut ConwayEra)))
 fundApiTreasuryUtxos provider submitter pp target utxos = do
     seed@(seedIn, _) <-
         selectLargestAdaUtxo "api treasury funding" utxos
@@ -925,7 +946,7 @@ fundApiTreasuryUtxos provider submitter pp target utxos = do
                 (ttAddress target)
                 20_000_000
                 second
-            pure (first, second)
+            pure (txId, (first, second))
         _ ->
             failWith "api treasury funding outputs were not found"
 
@@ -1101,19 +1122,19 @@ awaitIndexedTxOut apiIdx label addr ref check =
 
 {- | Poll the embedded tx-history store (the same RocksDB the live
 follower writes through 'aiHistory') for @core_development@ until a
-rendered @slot txid role@ row is present for every required
-@(submitted txid, role)@ pair, then return all rendered rows.
+rendered @slot txid role direction=...@ row is present for every
+required @(submitted txid, role, direction)@ tuple, then return all
+rendered rows.
 
 The match is on the S4 'renderHistoryRows' output: each required row
-must render as exactly three whitespace-separated fields — a decimal
-slot, the lower-hex submitted tx id, and the expected role. Older
-rows (e.g. @mint-registry@ from registry publication) are tolerated;
-only the submitted disburse/reorganize ids with their roles are
-required.
+must render as exactly four whitespace-separated fields — a decimal
+slot, the lower-hex submitted tx id, the expected role, and the expected
+direction. Older rows (e.g. @mint-registry@ from registry publication)
+are tolerated.
 -}
 awaitHistoryRows
     :: ApiIndexer cf op
-    -> [(TxId, Text)]
+    -> [(TxId, Text, Text)]
     -> IO [Text]
 awaitHistoryRows apiIdx required =
     go (120 :: Int)
@@ -1129,7 +1150,7 @@ awaitHistoryRows apiIdx required =
                     failWith $
                         "embedded indexer did not observe treasury \
                         \history rows for the submitted txs under \
-                        \core_development; missing (txid, role): "
+                        \core_development; missing (txid, role, direction): "
                             <> show missing
                             <> "; observed rows: "
                             <> show rows
@@ -1137,18 +1158,19 @@ awaitHistoryRows apiIdx required =
                     threadDelay 500_000
                     go (attempts - 1)
     missingRows rows =
-        [ (expectedTxId, role)
-        | (txid, role) <- required
+        [ (expectedTxId, role, direction)
+        | (txid, role, direction) <- required
         , let expectedTxId = txIdHex txid
-        , not (any (rowMatches expectedTxId role) rows)
+        , not (any (rowMatches expectedTxId role direction) rows)
         ]
-    rowMatches expectedTxId expectedRole row =
+    rowMatches expectedTxId expectedRole expectedDirection row =
         case T.words row of
-            [slotW, txIdW, roleW] ->
+            [slotW, txIdW, roleW, directionW] ->
                 not (T.null slotW)
                     && T.all isDigit slotW
                     && txIdW == expectedTxId
                     && roleW == expectedRole
+                    && directionW == "direction=" <> expectedDirection
             _ -> False
 
 {- | Poll direct tx-id detail lookup for the submitted devnet disburse
@@ -1176,6 +1198,7 @@ awaitDisburseTxDetail apiIdx txid treasuryAddr beneficiaryAddr =
             )
         , ("scope", (== "scope core_development"))
         , ("role", (== "role disburse"))
+        , ("direction", (== "direction outbound"))
         ,
             ( "slot"
             , \row ->
@@ -1556,13 +1579,15 @@ smokeIndexerConfig
     -> InterestSet
     -> Int
     -> [(ByteString, ScopeId)]
+    -> [(ByteString, ScopeId)]
     -> IndexerConfig
 smokeIndexerConfig
     dir
     nodeSock
     interestSet
     securityParamK
-    registryScopeMappings =
+    registryScopeMappings
+    scopeAddressMappings =
         IndexerConfig
             { icDbPath = dir <> "/rocksdb"
             , icSocketPath = nodeSock
@@ -1575,6 +1600,7 @@ smokeIndexerConfig
             , icProbeConfig = defaultProbeConfig
             , icInterestSet = interestSet
             , icRegistryScopeMappings = registryScopeMappings
+            , icScopeAddressMappings = scopeAddressMappings
             }
 
 smokeHandlers

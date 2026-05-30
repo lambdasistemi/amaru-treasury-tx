@@ -378,6 +378,7 @@ stubHistory =
                 , sheTxId =
                     "a54df28670cd4409bcf7b59f033c6b1fec428662ce13c8e4d0c383a6571816f4"
                 , sheRole = "disburse"
+                , sheDirection = "outbound"
                 }
             ]
         }

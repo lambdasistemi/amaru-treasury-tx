@@ -115,6 +115,7 @@ genScopeHistoryEntry =
         <$> arbitrary
         <*> genHex64
         <*> genShortText
+        <*> elements ["outbound", "inbound"]
 
 genApiError :: Gen ApiError
 genApiError =

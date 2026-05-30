@@ -102,7 +102,7 @@ import Database.KV.Transaction (RunTransaction)
 import Ouroboros.Network.Magic (NetworkMagic)
 import System.IO (hPutStrLn, stderr)
 
-import Amaru.Treasury.Indexer.Decoder (treasuryDecodeTxWith)
+import Amaru.Treasury.Indexer.Decoder (treasuryDecodeTxWithInterest)
 import Amaru.Treasury.Scope (ScopeId)
 
 -- ---------------------------------------------------------------------------
@@ -169,7 +169,7 @@ data IndexerConfig = IndexerConfig
     , icRegistryScopeMappings :: ![(BS.ByteString, ScopeId)]
     -- ^ Extra @registry-policy-id → 'ScopeId'@ mappings
     -- handed to the tx-history decoder
-    -- ('treasuryDecodeTxWith') so deployments whose
+    -- ('treasuryDecodeTxWithInterest') so deployments whose
     -- registry NFT policies are derived from a per-instance
     -- seed (the devnet bootstrap, or any non-mainnet
     -- instance) can have their treasury txs classified.
@@ -178,6 +178,11 @@ data IndexerConfig = IndexerConfig
     -- 'Amaru.Treasury.Indexer.Decoder.registryScopeMappingsFromMetadata';
     -- the decoder still falls back to the static pinned-seed
     -- table, so mainnet needs no extra mappings ('[]').
+    , icScopeAddressMappings :: ![(BS.ByteString, ScopeId)]
+    -- ^ Extra @bech32 treasury-address → 'ScopeId'@ mappings handed
+    -- to the tx-history decoder so transactions that pay into a
+    -- treasury address without running a treasury validator are
+    -- classified as inbound funding.
     }
 
 {- | Opaque handle the API container threads through its
@@ -245,8 +250,9 @@ withApiIndexer tracer cfg action =
                 ( toChainSyncCfgWithHistory
                     cfg
                     ( Follower.historyAttachment
-                        ( treasuryDecodeTxWith
+                        ( treasuryDecodeTxWithInterest
                             (icRegistryScopeMappings cfg)
+                            (icScopeAddressMappings cfg)
                         )
                         history
                     )

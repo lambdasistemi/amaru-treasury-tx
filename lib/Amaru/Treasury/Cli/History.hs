@@ -69,6 +69,7 @@ import Cardano.Node.Client.TxHistoryIndexer.Indexer
     )
 import Cardano.Node.Client.TxHistoryIndexer.Types
     ( HistoryScope (..)
+    , TxDirection (..)
     , TxId (..)
     , TxRole (..)
     , TxSummary (..)
@@ -239,21 +240,23 @@ UTF-8 'scopeText', matching the decoder's key derivation.
 scopeHistoryScope :: ScopeId -> HistoryScope
 scopeHistoryScope = HistoryScope . TE.encodeUtf8 . scopeText
 
--- | Render the stable @slot txid role@ rows for a query result.
+-- | Render the stable @slot txid role direction=...@ rows for a query result.
 renderHistoryRows :: [TxSummaryEntry] -> [Text]
 renderHistoryRows = map renderHistoryRow
 
-{- | Render one entry as @slot txid role@: decimal slot, lower-hex
-raw tx-id bytes, and the UTF-8 role bytes.
+{- | Render one entry as @slot txid role direction=...@: decimal slot,
+lower-hex raw tx-id bytes, UTF-8 role bytes (or @-@), and the
+direction label.
 -}
 renderHistoryRow :: TxSummaryEntry -> Text
 renderHistoryRow entry =
-    T.unwords [slotText, txIdText, roleText]
+    T.unwords [slotText, txIdText, roleText, directionText]
   where
     key = tseKey entry
     slotText = T.pack (show (unSlotNo (tskSlot key)))
     txIdText = txIdHex (tskTxId key)
-    roleText = TE.decodeUtf8 (unTxRole (tskRole key))
+    roleText = roleTextOf (tskRole key)
+    directionText = "direction=" <> directionTextOf (tseDirection entry)
 
 -- | Render a detailed transaction view with one stable field per line.
 renderTxDetail :: TxSummary -> [Text]
@@ -262,6 +265,7 @@ renderTxDetail summary =
     , "txid " <> txIdHex (tskTxId key)
     , "scope " <> scopeTextOf (tskScope key)
     , "role " <> roleTextOf (tskRole key)
+    , "direction " <> directionTextOf (txsDirection summary)
     , "block-hash " <> maybe "-" hexText (txsBlockHash summary)
     , "fee " <> maybe "-" (T.pack . show) (txsFee summary)
     , "required-signers "
@@ -304,7 +308,12 @@ scopeTextOf :: HistoryScope -> Text
 scopeTextOf = bytesText . unHistoryScope
 
 roleTextOf :: TxRole -> Text
-roleTextOf = bytesText . unTxRole
+roleTextOf role
+    | BS.null (unTxRole role) = "-"
+    | otherwise = bytesText (unTxRole role)
+
+directionTextOf :: TxDirection -> Text
+directionTextOf = bytesText . unTxDirection
 
 bytesText :: ByteString -> Text
 bytesText = TE.decodeUtf8Lenient

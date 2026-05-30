@@ -326,6 +326,7 @@ withTestIndexer action =
                 , icProbeConfig = defaultProbeConfig
                 , icInterestSet = IndexAll
                 , icRegistryScopeMappings = []
+                , icScopeAddressMappings = []
                 }
             action
 

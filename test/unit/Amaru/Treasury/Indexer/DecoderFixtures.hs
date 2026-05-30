@@ -24,6 +24,8 @@ module Amaru.Treasury.Indexer.DecoderFixtures
     , swapFixture
     , contingencyDisburseFixture
     , mintRegistryFixture
+    , inboundFundingFixture
+    , inboundFundingAddress
     , invalidBlockTx
     ) where
 
@@ -32,6 +34,7 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
 import Data.FileEmbed (embedFile)
+import Data.Foldable (toList)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text.Encoding qualified as TE
@@ -39,10 +42,19 @@ import Data.Word (Word8)
 import Lens.Micro ((%~), (&), (.~), (^.))
 
 import Cardano.Crypto.Hash.Class (hashToBytes)
+import Cardano.Ledger.Address
+    ( Addr
+    , getNetwork
+    , serialiseAddr
+    )
+import Cardano.Ledger.Alonzo.TxWits (Redeemers (..))
 import Cardano.Ledger.Api.Era (eraProtVerLow)
-import Cardano.Ledger.Api.Tx (auxDataTxL, txIdTx)
+import Cardano.Ledger.Api.Tx (auxDataTxL, txIdTx, witsTxL)
 import Cardano.Ledger.Api.Tx.AuxData (metadataTxAuxDataL)
-import Cardano.Ledger.Api.Tx.Body (mintTxBodyL)
+import Cardano.Ledger.Api.Tx.Body (mintTxBodyL, outputsTxBodyL)
+import Cardano.Ledger.Api.Tx.Out (addrTxOutL)
+import Cardano.Ledger.Api.Tx.Wits (rdmrsTxWitsL)
+import Cardano.Ledger.BaseTypes (Network (..), StrictMaybe (..))
 import Cardano.Ledger.Binary
     ( DecCBOR (..)
     , decodeFullAnnotator
@@ -59,6 +71,7 @@ import Cardano.Ledger.Mary.Value
 import Cardano.Ledger.Metadata (Metadatum (..))
 import Cardano.Ledger.TxIn qualified as Ledger
 import Cardano.Tx.Ledger (ConwayTx)
+import Codec.Binary.Bech32 qualified as Bech32
 
 import Amaru.Treasury.Indexer.Decoder (BlockTx, mkBlockTx)
 
@@ -141,6 +154,23 @@ mintRegistryFixture =
     syntheticFixture (scopeText CoreDevelopment) $
         disburseBaseTx
             & bodyTxL . mintTxBodyL .~ registryMint CoreDevelopment
+
+{- | Plain inbound funding: reuse the disburse body (so it pays to the
+core treasury address), but remove rationale metadata and redeemers so
+the decoder classifies it only through the output address mapping.
+-}
+inboundFundingFixture :: RoleFixture
+inboundFundingFixture =
+    syntheticFixture (scopeText CoreDevelopment) inboundFundingTx
+
+inboundFundingAddress :: ByteString
+inboundFundingAddress = TE.encodeUtf8 (firstOutputAddress inboundFundingTx)
+
+inboundFundingTx :: ConwayTx
+inboundFundingTx =
+    disburseBaseTx
+        & auxDataTxL .~ SNothing
+        & witsTxL . rdmrsTxWitsL .~ Redeemers Map.empty
 
 -- | A 'BlockTx' whose bytes are not a Conway transaction.
 invalidBlockTx :: BlockTx
@@ -227,6 +257,27 @@ decodeTxOrError label raw =
 rawTxId :: ConwayTx -> ByteString
 rawTxId tx = case txIdTx tx of
     Ledger.TxId safeHash -> hashToBytes (extractHash safeHash)
+
+firstOutputAddress :: ConwayTx -> Text
+firstOutputAddress tx =
+    case toList (tx ^. bodyTxL . outputsTxBodyL) of
+        txOut : _ -> renderAddress (txOut ^. addrTxOutL)
+        [] -> error "firstOutputAddress: fixture has no outputs"
+
+renderAddress :: Addr -> Text
+renderAddress addr =
+    Bech32.encodeLenient
+        hrp
+        (Bech32.dataPartFromBytes (serialiseAddr addr))
+  where
+    hrp =
+        case Bech32.humanReadablePartFromText (addressHrp addr) of
+            Right value -> value
+            Left err -> error ("renderAddress: " <> show err)
+    addressHrp target =
+        case getNetwork target of
+            Mainnet -> "addr"
+            Testnet -> "addr_test"
 
 -- | Decode base16 fixture contents, ignoring surrounding whitespace.
 decodeHex :: ByteString -> ByteString

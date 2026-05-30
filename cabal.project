@@ -33,10 +33,10 @@ source-repository-package
 source-repository-package
   type: git
   location: https://github.com/lambdasistemi/cardano-node-clients
-  -- Pinned to cardano-node-clients main after PR #176:
-  -- adds detailed TxSummary storage plus getByTxId for tx-detail.
-  tag: 5ab268336ec010bf7a3e8840f66113872d06c601
-  --sha256: 1qq0kx5bf1ak05rl1cqzmdi1dp6r8md4knyka58vffpbsn85knw5
+  -- Pinned to cardano-node-clients PR #177 merge:
+  -- adds TxDirection storage for inbound-funding history rows.
+  tag: bebf9b22fd3a137e406020e09b98849ea69231f3
+  --sha256: 1d9y4sg0jsag5fij28phvvgjxbrdw8hi4fppc591rbjvcflwd966
 
 -- Mirrored from cardano-node-clients/cabal.project (SRPs are not transitive
 -- in cabal; see https://cabal.readthedocs.io/en/3.10/cabal-project.html).

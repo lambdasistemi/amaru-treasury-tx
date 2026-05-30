@@ -28,6 +28,7 @@ import Cardano.Slotting.Slot (SlotNo (..))
 import Amaru.Treasury.Indexer.Decoder
     ( TenantId (..)
     , TxSummary
+    , summaryDirection
     , summaryFee
     , summaryInputs
     , summaryOutputs
@@ -38,17 +39,21 @@ import Amaru.Treasury.Indexer.Decoder
     , summaryTenant
     , summaryTxId
     , treasuryDecodeTx
+    , treasuryDecodeTxWithInterest
     )
 import Amaru.Treasury.Indexer.DecoderFixtures
     ( RoleFixture (..)
     , contingencyDisburseFixture
     , disburseFixture
+    , inboundFundingAddress
+    , inboundFundingFixture
     , invalidBlockTx
     , mintRegistryFixture
     , reorganizeFixture
     , swapFixture
     , withdrawFixture
     )
+import Amaru.Treasury.Scope (ScopeId (CoreDevelopment))
 
 -- | The slot the decoder must echo verbatim into every entry.
 suppliedSlot :: SlotNo
@@ -86,6 +91,9 @@ itDecodesRole role fixture =
                 `shouldSatisfy` maybe False (maybe False (> 0))
             fmap summaryRedeemer (firstEntry entries)
                 `shouldSatisfy` maybe False (maybe False (not . BS.null))
+        it "marks treasury-role transactions outbound" $
+            fmap summaryDirection (firstEntry entries)
+                `shouldBe` Just "outbound"
 
 {- | The first decoded entry, if the transaction decoded to a
 non-empty list of treasury entries.
@@ -125,3 +133,20 @@ spec = describe "treasuryDecodeTx" $ do
         it "decodes to Nothing" $
             treasuryDecodeTx suppliedSlot invalidBlockTx
                 `shouldBe` (Nothing :: Maybe [TxSummary])
+
+    describe "inbound funding" $ do
+        let entries =
+                treasuryDecodeTxWithInterest
+                    []
+                    [(inboundFundingAddress, CoreDevelopment)]
+                    suppliedSlot
+                    (fixtureTx inboundFundingFixture)
+        it "decodes a plain payment to a treasury address" $
+            fmap length entries `shouldBe` Just 1
+        it "marks it inbound with no treasury role" $ do
+            fmap summaryScope (firstEntry entries)
+                `shouldBe` Just "core_development"
+            fmap summaryDirection (firstEntry entries)
+                `shouldBe` Just "inbound"
+            fmap summaryRedeemer (firstEntry entries)
+                `shouldBe` Just Nothing

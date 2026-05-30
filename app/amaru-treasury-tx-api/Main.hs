@@ -118,6 +118,7 @@ import Amaru.Treasury.Constants
     )
 import Amaru.Treasury.Indexer.Decoder
     ( registryScopeMappingsFromMetadata
+    , scopeAddressMappingsFromMetadata
     )
 import Amaru.Treasury.Inspect.Types
     ( DeploymentAnchor (..)
@@ -168,6 +169,7 @@ main = do
                 (arcIndexer opts)
                 interestSet
                 (registryScopeMappingsFromMetadata metadata)
+                (scopeAddressMappingsFromMetadata metadata)
 
     putStrLn $
         "amaru-treasury-tx-api: opening N2C session on "
@@ -295,22 +297,30 @@ mkIndexerConfig
     -> ApiIndexerRuntimeConfig
     -> InterestSet
     -> [(ByteString, ScopeId)]
+    -> [(ByteString, ScopeId)]
     -> IndexerConfig
-mkIndexerConfig socket globalOpts cli interestSet registryScopeMappings =
-    IndexerConfig
-        { icDbPath = aircDbPath cli
-        , icSocketPath = socket
-        , icNetworkMagic = goNetworkMagic globalOpts
-        , icStartPoint =
-            first SlotNo <$> aircStartPoint cli
-        , icLagThresholdSlots = aircLagThresholdSlots cli
-        , icByronEpochSlots = 21_600
-        , icSecurityParamK = 2160
-        , icReconnectPolicy = defaultReconnectPolicy
-        , icProbeConfig = defaultProbeConfig
-        , icInterestSet = interestSet
-        , icRegistryScopeMappings = registryScopeMappings
-        }
+mkIndexerConfig
+    socket
+    globalOpts
+    cli
+    interestSet
+    registryScopeMappings
+    scopeAddressMappings =
+        IndexerConfig
+            { icDbPath = aircDbPath cli
+            , icSocketPath = socket
+            , icNetworkMagic = goNetworkMagic globalOpts
+            , icStartPoint =
+                first SlotNo <$> aircStartPoint cli
+            , icLagThresholdSlots = aircLagThresholdSlots cli
+            , icByronEpochSlots = 21_600
+            , icSecurityParamK = 2160
+            , icReconnectPolicy = defaultReconnectPolicy
+            , icProbeConfig = defaultProbeConfig
+            , icInterestSet = interestSet
+            , icRegistryScopeMappings = registryScopeMappings
+            , icScopeAddressMappings = scopeAddressMappings
+            }
 
 {- | Build the apply-time interest set the embedded
 indexer uses when @amaru-treasury-tx-api@ starts.

@@ -248,7 +248,7 @@ treasuryDecodeTxWithInterest registryMappings addressMappings slot (BlockTx raw)
                     }
         in  TxSummary
                 { txsKey = key
-                , txsPayload = BS.empty
+                , txsPayload = raw
                 , txsInputs = txInputs tx
                 , txsOutputs = txOutputs tx
                 , txsRedeemer = txRedeemerSummary tx <$> mRole <*> pure scope

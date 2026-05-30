@@ -11,7 +11,7 @@ Per answer A-001 every recognised entry must:
   * carry the role's UTF-8 scope text verbatim;
   * echo the supplied 'SlotNo' verbatim;
   * echo the raw transaction-id bytes;
-  * carry an empty payload.
+  * carry the raw transaction CBOR payload.
   * populate transaction detail fields from the raw 'BlockTx'.
 
 and a non-treasury transaction must decode to 'Nothing'.
@@ -23,6 +23,9 @@ module Amaru.Treasury.Indexer.DecoderSpec
 import Data.ByteString qualified as BS
 import Test.Hspec
 
+import Cardano.Node.Client.TxHistoryIndexer.BlockExtract
+    ( BlockTx (..)
+    )
 import Cardano.Slotting.Slot (SlotNo (..))
 
 import Amaru.Treasury.Indexer.Decoder
@@ -79,9 +82,9 @@ itDecodesRole role fixture =
         it "echoes the raw transaction-id bytes" $
             fmap summaryTxId (firstEntry entries)
                 `shouldBe` Just (fixtureTxId fixture)
-        it "carries an empty payload" $
+        it "carries the raw transaction CBOR payload" $
             fmap summaryPayload (firstEntry entries)
-                `shouldBe` Just BS.empty
+                `shouldBe` Just (unBlockTx (fixtureTx fixture))
         it "populates decoded transaction details" $ do
             fmap (not . null . summaryInputs) (firstEntry entries)
                 `shouldBe` Just True

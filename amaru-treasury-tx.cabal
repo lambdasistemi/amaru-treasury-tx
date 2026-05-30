@@ -107,6 +107,7 @@ library
     Amaru.Treasury.Api.BuildReorganize
     Amaru.Treasury.Api.BuildSwap
     Amaru.Treasury.Api.Config
+    Amaru.Treasury.Api.History
     Amaru.Treasury.Api.Indexer
     Amaru.Treasury.Api.Indexer.Internal
     Amaru.Treasury.Api.LagGuard
@@ -489,6 +490,7 @@ test-suite unit-tests
   other-modules:
     Amaru.Treasury.Api.ConfigSpec
     Amaru.Treasury.Api.HandlersIndexerSpec
+    Amaru.Treasury.Api.HistorySpec
     Amaru.Treasury.Api.IndexerSpec
     Amaru.Treasury.Api.LagGuardSpec
     Amaru.Treasury.Api.ReadinessSpec

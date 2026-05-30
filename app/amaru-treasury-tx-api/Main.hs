@@ -85,6 +85,9 @@ import Amaru.Treasury.Api.Config
     , ApiRuntimeConfig (..)
     , execApiConfig
     )
+import Amaru.Treasury.Api.History
+    ( queryScopeHistoryResponse
+    )
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
     , IndexerConfig (..)
@@ -208,6 +211,9 @@ main = do
                                                 swapAddr
                                         , hRecentTxs = manifest
                                         , hBuildIdentity = buildId
+                                        , hScopeHistory =
+                                            queryScopeHistoryResponse
+                                                (aiHistory apiIdx)
                                         , hBuildSwap =
                                             bhBuildSwap buildHandlers
                                         , hBuildDisburse =

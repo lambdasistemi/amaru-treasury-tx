@@ -18,6 +18,8 @@ Single source of truth for the HTTP surface served by
     baked into the image at build time.
   * @GET \/v1\/version@ — read-only 'BuildIdentity' carrying
     the deployed image's pinned metadata sha + git sha.
+  * @GET \/v1\/scope\/\<scope\>\/txs@ — indexed treasury
+    history rows from the embedded tx-history store.
   * Anything else — static assets served by the 'rawHandler'
     supplied by the caller (typically the PureScript bundle).
 -}
@@ -66,6 +68,7 @@ import Servant
     )
 import Servant.API
     ( Accept (..)
+    , Capture
     , Get
     , JSON
     , MimeRender (..)
@@ -96,6 +99,7 @@ import Amaru.Treasury.Api.Indexer
 import Amaru.Treasury.Api.Types
     ( BuildIdentity
     , RecentTxManifest
+    , ScopeHistoryResponse
     )
 import Amaru.Treasury.Cli.TreasuryInspect (runInspectFromBackend)
 import Amaru.Treasury.Inspect.Render (encodeReport)
@@ -134,6 +138,10 @@ type JsonAPI =
                     :> Get '[JSON] RecentTxManifest
                 :<|> "version"
                     :> Get '[JSON] BuildIdentity
+                :<|> "scope"
+                    :> Capture "scope" ScopeId
+                    :> "txs"
+                    :> Get '[JSON] ScopeHistoryResponse
                 :<|> "build"
                     :> "swap"
                     :> ReqBody '[JSON] SwapBuildRequest
@@ -178,6 +186,7 @@ data Handlers = Handlers
     { hInspectReport :: ScopeId -> IO InspectReport
     , hRecentTxs :: RecentTxManifest
     , hBuildIdentity :: BuildIdentity
+    , hScopeHistory :: ScopeId -> IO ScopeHistoryResponse
     , hBuildSwap :: SwapBuildRequest -> IO SwapBuildResponse
     -- ^ Build a swap intent from a wire-shape request.  The
     --   binary's implementation calls
@@ -244,6 +253,7 @@ mkServer Handlers{..} =
     ( inspectH
         :<|> pure hRecentTxs
         :<|> pure hBuildIdentity
+        :<|> scopeHistoryH
         :<|> buildSwapH
         :<|> buildDisburseH
         :<|> buildReorganizeH
@@ -252,6 +262,9 @@ mkServer Handlers{..} =
   where
     inspectH :: ScopeId -> Handler InspectReport
     inspectH scope = liftIO (hInspectReport scope)
+
+    scopeHistoryH :: ScopeId -> Handler ScopeHistoryResponse
+    scopeHistoryH scope = liftIO (hScopeHistory scope)
 
     buildSwapH :: SwapBuildRequest -> Handler SwapBuildResponse
     buildSwapH req = liftIO (hBuildSwap req)

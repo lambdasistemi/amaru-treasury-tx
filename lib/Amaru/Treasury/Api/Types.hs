@@ -10,11 +10,12 @@ Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
 JSON-only carriers consumed by the @amaru-treasury-tx-api@
-servant surface declared in
-'Amaru.Treasury.Api.Server'. JSON shapes are derived from the
-record field names verbatim via @Generic@ — the same wire
-contract @nix/build-identity.nix@ and @nix/recent-txs.nix@
-emit at build time.
+servant surface declared in 'Amaru.Treasury.Api.Server'. The
+build identity and recent transaction manifest preserve the
+field-name shapes emitted by @nix/build-identity.nix@ and
+@nix/recent-txs.nix@ at build time. New HTTP-owned carriers
+define explicit JSON instances so their wire contract is not
+tied to Haskell record prefixes.
 -}
 module Amaru.Treasury.Api.Types
     ( -- * Build identity
@@ -24,13 +25,25 @@ module Amaru.Treasury.Api.Types
     , RecentTxManifest (..)
     , RecentTxEntry (..)
 
+      -- * Indexed tx history
+    , ScopeHistoryResponse (..)
+    , ScopeHistoryEntry (..)
+
       -- * Errors
     , ApiError (..)
     ) where
 
-import Data.Aeson (FromJSON, ToJSON)
+import Data.Aeson
+    ( FromJSON (..)
+    , ToJSON (..)
+    , object
+    , withObject
+    , (.:)
+    , (.=)
+    )
 import Data.Text (Text)
 import Data.Time (UTCTime)
+import Data.Word (Word64)
 import GHC.Generics (Generic)
 
 import Amaru.Treasury.Scope (ScopeId)
@@ -71,6 +84,54 @@ data RecentTxEntry = RecentTxEntry
     }
     deriving stock (Eq, Show, Generic)
     deriving anyclass (ToJSON, FromJSON)
+
+{- | Response returned by @GET /v1/scope/<scope>/txs@.
+It is backed by the local tx-history RocksDB store, not
+the baked recent transaction manifest.
+-}
+data ScopeHistoryResponse = ScopeHistoryResponse
+    { shrScope :: ScopeId
+    , shrEntries :: [ScopeHistoryEntry]
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON ScopeHistoryResponse where
+    toJSON r =
+        object
+            [ "scope" .= shrScope r
+            , "entries" .= shrEntries r
+            ]
+
+instance FromJSON ScopeHistoryResponse where
+    parseJSON =
+        withObject "ScopeHistoryResponse" $ \o ->
+            ScopeHistoryResponse
+                <$> o .: "scope"
+                <*> o .: "entries"
+
+-- | One indexed treasury history row.
+data ScopeHistoryEntry = ScopeHistoryEntry
+    { sheSlot :: Word64
+    , sheTxId :: Text
+    , sheRole :: Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON ScopeHistoryEntry where
+    toJSON e =
+        object
+            [ "slot" .= sheSlot e
+            , "txid" .= sheTxId e
+            , "role" .= sheRole e
+            ]
+
+instance FromJSON ScopeHistoryEntry where
+    parseJSON =
+        withObject "ScopeHistoryEntry" $ \o ->
+            ScopeHistoryEntry
+                <$> o .: "slot"
+                <*> o .: "txid"
+                <*> o .: "role"
 
 {- | Uniform 4xx body: human-readable message plus an optional
 field name that points the operator at the source of the

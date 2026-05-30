@@ -48,6 +48,8 @@ import Amaru.Treasury.Api.Server
 import Amaru.Treasury.Api.Types
     ( BuildIdentity (..)
     , RecentTxManifest (..)
+    , ScopeHistoryEntry (..)
+    , ScopeHistoryResponse (..)
     )
 import Amaru.Treasury.Inspect.Render (encodeReport)
 import Amaru.Treasury.Inspect.Types
@@ -104,6 +106,25 @@ spec = do
                     (WaiTest.srequest (waiGet "/v1/version"))
                     (mkApplication stubHandlers)
             WaiTest.simpleStatus res `shouldBe` status200
+
+    describe "GET /v1/scope/{scope}/txs" $ do
+        it "returns indexed tx-history rows for the captured scope" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        (waiGet "/v1/scope/core_development/txs")
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res)
+                `shouldBe` Just stubHistory
+
+        it "returns 400 when the captured scope is unknown" $ do
+            res <-
+                runSession
+                    (WaiTest.srequest (waiGet "/v1/scope/foo/txs"))
+                    (mkApplication stubHandlers)
+            statusCodeOf res `shouldSatisfy` is4xx
 
     describe "Raw fallback" $
         it "is invoked for unknown paths" $ do
@@ -164,6 +185,8 @@ stubHandlers =
         { hInspectReport = \_scope -> pure stubReport
         , hRecentTxs = RecentTxManifest []
         , hBuildIdentity = stubBuildIdentity
+        , hScopeHistory = \scope ->
+            pure stubHistory{shrScope = scope}
         , hBuildSwap = \_ ->
             pure
                 SwapBuildResponse
@@ -343,4 +366,18 @@ stubBuildIdentity =
         , biMetadataSource =
             "github:pragma-org/amaru-treasury/fb1937964196b061ddc4f247d2de11a13745d541"
         , biRecentTxsCount = 0
+        }
+
+stubHistory :: ScopeHistoryResponse
+stubHistory =
+    ScopeHistoryResponse
+        { shrScope = CoreDevelopment
+        , shrEntries =
+            [ ScopeHistoryEntry
+                { sheSlot = 187084729
+                , sheTxId =
+                    "a54df28670cd4409bcf7b59f033c6b1fec428662ce13c8e4d0c383a6571816f4"
+                , sheRole = "disburse"
+                }
+            ]
         }

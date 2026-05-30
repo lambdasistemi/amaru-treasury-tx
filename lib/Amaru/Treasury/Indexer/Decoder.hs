@@ -12,7 +12,7 @@ transaction in a block. It is pure over the block's 'SlotNo' and the
 raw transaction bytes carried by 'BlockTx': no UTxO lookups, no
 network, no IO.
 
-Each recognised treasury transaction yields exactly one
+Each recognised outbound treasury transaction yields exactly one
 'TxSummary' filed under the fixed tenant
 @TenantId "amaru-treasury-tx"@. The history scope is the UTF-8
 'Amaru.Treasury.Scope.scopeText' of the 'Amaru.Treasury.Scope.ScopeId'
@@ -60,9 +60,11 @@ module Amaru.Treasury.Indexer.Decoder
       -- * Decoder
     , treasuryDecodeTx
     , treasuryDecodeTxWith
+    , treasuryDecodeTxWithInterest
 
       -- * Dynamic registry-policy scope mappings
     , registryScopeMappingsFromMetadata
+    , scopeAddressMappingsFromMetadata
 
       -- * Entry accessors
     , summaryTenant
@@ -76,6 +78,7 @@ module Amaru.Treasury.Indexer.Decoder
     , summaryFee
     , summaryRequiredSigners
     , summaryBlockHash
+    , summaryDirection
     ) where
 
 import Control.Applicative ((<|>))
@@ -151,6 +154,7 @@ import Cardano.Node.Client.TxHistoryIndexer.BlockExtract
 import Cardano.Node.Client.TxHistoryIndexer.Types
     ( HistoryScope (..)
     , TenantId (..)
+    , TxDirection (..)
     , TxId (..)
     , TxRole (..)
     , TxSummary (..)
@@ -205,29 +209,58 @@ treasuryDecodeTxWith
     -> SlotNo
     -> BlockTx
     -> Maybe [TxSummary]
-treasuryDecodeTxWith extra slot (BlockTx raw) = do
+treasuryDecodeTxWith extra = treasuryDecodeTxWithInterest extra []
+
+{- | Decode treasury actions plus inbound funding. The first mapping is
+@registry-policy-id -> scope@ for outbound treasury roles; the second is
+@bech32 treasury-address -> scope@ for plain funding transactions whose
+outputs pay into a treasury scope without running a treasury validator.
+-}
+treasuryDecodeTxWithInterest
+    :: [(ByteString, ScopeId)]
+    -> [(ByteString, ScopeId)]
+    -> SlotNo
+    -> BlockTx
+    -> Maybe [TxSummary]
+treasuryDecodeTxWithInterest registryMappings addressMappings slot (BlockTx raw) = do
     tx <- decodeConwayTx raw
-    (role, scope) <- classifyTx extra tx
-    let key =
-            TxSummaryKey
-                { tskTenant = treasuryTenantId
-                , tskScope = scopeToHistoryScope scope
-                , tskSlot = slot
-                , tskTxId = TxId (rawTxId tx)
-                , tskRole = TxRole role
+    case classifyTx registryMappings tx of
+        Just (role, scope) ->
+            Just [summaryFor tx directionOutbound (Just role) scope]
+        Nothing ->
+            case inboundScopes addressMappings tx of
+                [] -> Nothing
+                scopes ->
+                    Just
+                        [ summaryFor tx directionInbound Nothing scope
+                        | scope <- scopes
+                        ]
+  where
+    summaryFor tx direction mRole scope =
+        let role = fromMaybe BS.empty mRole
+            key =
+                TxSummaryKey
+                    { tskTenant = treasuryTenantId
+                    , tskScope = scopeToHistoryScope scope
+                    , tskSlot = slot
+                    , tskTxId = TxId (rawTxId tx)
+                    , tskRole = TxRole role
+                    }
+        in  TxSummary
+                { txsKey = key
+                , txsPayload = BS.empty
+                , txsInputs = txInputs tx
+                , txsOutputs = txOutputs tx
+                , txsRedeemer = txRedeemerSummary tx <$> mRole <*> pure scope
+                , txsFee = txFee tx
+                , txsRequiredSigners = txRequiredSigners tx
+                , txsBlockHash = Nothing
+                , txsDirection = direction
                 }
-    Just
-        [ TxSummary
-            { txsKey = key
-            , txsPayload = BS.empty
-            , txsInputs = txInputs tx
-            , txsOutputs = txOutputs tx
-            , txsRedeemer = Just (txRedeemerSummary tx role scope)
-            , txsFee = txFee tx
-            , txsRequiredSigners = txRequiredSigners tx
-            , txsBlockHash = Nothing
-            }
-        ]
+
+directionOutbound, directionInbound :: TxDirection
+directionOutbound = TxDirection "outbound"
+directionInbound = TxDirection "inbound"
 
 -- ------------------------------------------------------------
 -- Classification
@@ -286,6 +319,28 @@ classifyTx extra tx = fromRegistryMint <|> fromRationale
                 Just (roleContingencyDisburse, scope)
             | otherwise -> Just (roleDisburse, scope)
         _ -> Nothing
+
+inboundScopes :: [(ByteString, ScopeId)] -> ConwayTx -> [ScopeId]
+inboundScopes addressMappings tx
+    | redeemerCount tx /= 0 = []
+    | otherwise =
+        unique
+            [ scope
+            | txOut <- toList (tx ^. bodyTxL . outputsTxBodyL)
+            , Just scope <-
+                [ lookup
+                    (textBytes (renderAddress (txOut ^. addrTxOutL)))
+                    addressMappings
+                ]
+            ]
+
+unique :: (Ord a) => [a] -> [a]
+unique = go Set.empty
+  where
+    go _ [] = []
+    go seen (x : xs)
+        | x `Set.member` seen = go seen xs
+        | otherwise = x : go (Set.insert x seen) xs
 
 -- ------------------------------------------------------------
 -- Transaction field extraction
@@ -507,6 +562,17 @@ registryScopeMappingsFromMetadata metadata =
         [B16.decode (TE.encodeUtf8 (srHash (smRegistry scopeMeta)))]
     ]
 
+{- | Recover the @bech32 treasury-address -> 'ScopeId'@ mappings carried
+by deployment metadata. The inbound-funding detector compares rendered
+transaction output addresses to these bytes.
+-}
+scopeAddressMappingsFromMetadata
+    :: TreasuryMetadata -> [(ByteString, ScopeId)]
+scopeAddressMappingsFromMetadata metadata =
+    [ (TE.encodeUtf8 (smAddress scopeMeta), scope)
+    | (scope, scopeMeta) <- Map.toList (tmTreasuries metadata)
+    ]
+
 -- | Render a scope as its 'HistoryScope' (UTF-8 'scopeText').
 scopeToHistoryScope :: ScopeId -> HistoryScope
 scopeToHistoryScope = HistoryScope . TE.encodeUtf8 . scopeText
@@ -556,3 +622,6 @@ summaryRequiredSigners = txsRequiredSigners
 
 summaryBlockHash :: TxSummary -> Maybe ByteString
 summaryBlockHash = txsBlockHash
+
+summaryDirection :: TxSummary -> ByteString
+summaryDirection = unTxDirection . txsDirection

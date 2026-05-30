@@ -16,7 +16,9 @@ module Amaru.Treasury.Api.History
     , historyEntryFromSummary
     ) where
 
+import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
+import Data.Text (Text)
 import Data.Text.Encoding qualified as TE
 
 import Cardano.Node.Client.TxHistoryIndexer.Indexer
@@ -25,6 +27,7 @@ import Cardano.Node.Client.TxHistoryIndexer.Indexer
     )
 import Cardano.Node.Client.TxHistoryIndexer.Types
     ( HistoryScope (..)
+    , TxDirection (..)
     , TxId (..)
     , TxRole (..)
     , TxSummaryEntry (..)
@@ -64,10 +67,19 @@ historyEntryFromSummary entry =
     ScopeHistoryEntry
         { sheSlot = unSlotNo (tskSlot key)
         , sheTxId = TE.decodeUtf8 (B16.encode (unTxId (tskTxId key)))
-        , sheRole = TE.decodeUtf8 (unTxRole (tskRole key))
+        , sheRole = roleText (tskRole key)
+        , sheDirection = directionText (tseDirection entry)
         }
   where
     key = tseKey entry
+
+roleText :: TxRole -> Text
+roleText role
+    | BS.null (unTxRole role) = "-"
+    | otherwise = TE.decodeUtf8 (unTxRole role)
+
+directionText :: TxDirection -> Text
+directionText = TE.decodeUtf8 . unTxDirection
 
 scopeHistoryScope :: ScopeId -> HistoryScope
 scopeHistoryScope =

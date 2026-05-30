@@ -32,6 +32,7 @@ import Cardano.Node.Client.TxHistoryIndexer.Indexer
 import Cardano.Node.Client.TxHistoryIndexer.Types
     ( HistoryScope
     , TenantId (..)
+    , TxDirection (..)
     , TxId (..)
     , TxRole (..)
     , TxSummary (..)
@@ -154,7 +155,7 @@ spec = describe "Amaru.Treasury.Cli.History" $ do
                     `shouldReturn` Just summary
 
     describe "rendered rows" $ do
-        it "are stable slot txid role ordered by the query" $
+        it "are stable slot txid role direction ordered by the query" $
             withInMemoryHistoryIndexer $ \idx -> do
                 let later =
                         mkEntry
@@ -175,12 +176,26 @@ spec = describe "Amaru.Treasury.Cli.History" $ do
                     renderHistoryRows
                         <$> queryScopeHistory idx CoreDevelopment
                 rows
-                    `shouldBe` [ "3 0102 swap"
-                               , "7 abcd disburse"
+                    `shouldBe` [ "3 0102 swap direction=outbound"
+                               , "7 abcd disburse direction=outbound"
                                ]
 
         it "renders no rows for an empty query" $
             renderHistoryRows [] `shouldBe` ([] :: [Text])
+
+        it "renders inbound rows with a visible empty-role marker" $ do
+            let entry =
+                    ( mkEntry
+                        treasuryTenantId
+                        (scopeHistoryScope CoreDevelopment)
+                        11
+                        (BS.pack [0xde, 0xad])
+                        BS.empty
+                    )
+                        { tseDirection = TxDirection "inbound"
+                        }
+            renderHistoryRows [entry]
+                `shouldBe` ["11 dead - direction=inbound"]
 
     describe "tx-detail render" $
         it "prints the decoded detail fields" $ do
@@ -199,6 +214,7 @@ spec = describe "Amaru.Treasury.Cli.History" $ do
                            , "txid 1234"
                            , "scope core_development"
                            , "role withdraw"
+                           , "direction outbound"
                            , "block-hash abcd"
                            , "fee 2"
                            , "required-signers signer-a,signer-b"
@@ -225,6 +241,7 @@ mkEntry tenant scope slot txid role =
                 , tskRole = TxRole role
                 }
         , tsePayload = BS.empty
+        , tseDirection = TxDirection "outbound"
         }
 
 mkSummary
@@ -263,6 +280,7 @@ mkSummary tenant scope slot txid role =
         , txsFee = Just 2
         , txsRequiredSigners = ["signer-a", "signer-b"]
         , txsBlockHash = Nothing
+        , txsDirection = TxDirection "outbound"
         }
 
 isFailure :: [String] -> Bool

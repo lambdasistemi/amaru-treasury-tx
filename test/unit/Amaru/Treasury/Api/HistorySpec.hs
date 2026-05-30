@@ -19,6 +19,7 @@ import Cardano.Node.Client.TxHistoryIndexer.Indexer
 import Cardano.Node.Client.TxHistoryIndexer.Types
     ( HistoryScope
     , TenantId (..)
+    , TxDirection (..)
     , TxId (..)
     , TxRole (..)
     , TxSummaryEntry (..)
@@ -73,6 +74,7 @@ spec =
                                 { sheSlot = 3
                                 , sheTxId = "0102"
                                 , sheRole = "disburse"
+                                , sheDirection = "outbound"
                                 }
                             ]
                         }
@@ -95,4 +97,5 @@ mkEntry tenant scope slot txid role =
                 , tskRole = TxRole role
                 }
         , tsePayload = BS.empty
+        , tseDirection = TxDirection "outbound"
         }

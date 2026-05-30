@@ -114,6 +114,7 @@ data ScopeHistoryEntry = ScopeHistoryEntry
     { sheSlot :: Word64
     , sheTxId :: Text
     , sheRole :: Text
+    , sheDirection :: Text
     }
     deriving stock (Eq, Show)
 
@@ -123,6 +124,7 @@ instance ToJSON ScopeHistoryEntry where
             [ "slot" .= sheSlot e
             , "txid" .= sheTxId e
             , "role" .= sheRole e
+            , "direction" .= sheDirection e
             ]
 
 instance FromJSON ScopeHistoryEntry where
@@ -132,6 +134,7 @@ instance FromJSON ScopeHistoryEntry where
                 <$> o .: "slot"
                 <*> o .: "txid"
                 <*> o .: "role"
+                <*> o .: "direction"
 
 {- | Uniform 4xx body: human-readable message plus an optional
 field name that points the operator at the source of the

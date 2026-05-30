@@ -1,0 +1,8 @@
+# Count the transactions in the indexed treasury history lattice.
+
+PREFIX cardano: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/cardano#>
+
+SELECT (COUNT(DISTINCT ?tx) AS ?transactions)
+WHERE {
+  ?tx a cardano:Transaction .
+}

@@ -27,6 +27,8 @@ extra-source-files:
   docs/assets/intent-schema.json
   docs/assets/treasury-inspect-schema.json
   docs/assets/tx-report-schema.json
+  lib/Amaru/Treasury/History/queries/*.rq
+  lib/Amaru/Treasury/History/shapes/*.shacl.ttl
   scripts/smoke/cardano-cli-envelope-oracle
   scripts/smoke/devnet-local
   scripts/smoke/smoke.sh
@@ -177,6 +179,7 @@ library
     Amaru.Treasury.Devnet.RegistryInit
     Amaru.Treasury.Devnet.Runner
     Amaru.Treasury.Devnet.StakeRewardInit
+    Amaru.Treasury.History.Sparql
     Amaru.Treasury.Indexer.Decoder
     Amaru.Treasury.Inspect
     Amaru.Treasury.Inspect.Render
@@ -296,12 +299,14 @@ library
     , plutus-core
     , plutus-ledger-api
     , plutus-tx
+    , process
     , rocksdb-kv-transactions:kv-transactions
     , scientific
     , servant
     , servant-server
     , stm
     , tagged
+    , temporary
     , text
     , time
     , transformers
@@ -533,6 +538,7 @@ test-suite unit-tests
     Amaru.Treasury.Devnet.GovernanceWithdrawalInitSpec
     Amaru.Treasury.Devnet.RegistryInitSpec
     Amaru.Treasury.Devnet.StakeRewardInitSpec
+    Amaru.Treasury.History.SparqlSpec
     Amaru.Treasury.Indexer.DecoderFixtures
     Amaru.Treasury.Indexer.DecoderSpec
     Amaru.Treasury.Inspect.SchemaSpec

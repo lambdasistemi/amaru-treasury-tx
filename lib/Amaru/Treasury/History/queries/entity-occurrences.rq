@@ -1,0 +1,16 @@
+# Operator entity occurrence summary.
+#
+# This mirrors the upstream cardano-ledger-rdf entity-occurrences
+# packaged-view contract. It returns rows when the graph contains an
+# operator overlay with cardano:Entity declarations.
+
+PREFIX cardano: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/cardano#>
+PREFIX rdfs:    <http://www.w3.org/2000/01/rdf-schema#>
+
+SELECT ?entityLabel (COUNT(?identifier) AS ?leafSiteCount)
+WHERE {
+  ?entity a cardano:Entity ;
+          rdfs:label ?entityLabel ;
+          cardano:hasIdentifier ?identifier .
+}
+GROUP BY ?entity ?entityLabel

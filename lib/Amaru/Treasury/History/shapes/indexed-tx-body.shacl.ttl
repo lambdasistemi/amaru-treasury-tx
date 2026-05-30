@@ -1,0 +1,12 @@
+@prefix atx: <https://lambdasistemi.github.io/amaru-treasury-tx/vocab/history#> .
+@prefix cardano: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/cardano#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+
+atx:IndexedTxBodyShape a sh:NodeShape ;
+  sh:targetClass atx:HistoryEntry ;
+  sh:property [
+    sh:path atx:tx ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:class cardano:Transaction
+  ] .

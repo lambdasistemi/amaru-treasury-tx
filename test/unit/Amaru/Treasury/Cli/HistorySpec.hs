@@ -26,6 +26,7 @@ import Data.Word (Word64)
 
 import Cardano.Node.Client.TxHistoryIndexer.Indexer
     ( appendHistory
+    , appendSummaries
     , withInMemoryHistoryIndexer
     )
 import Cardano.Node.Client.TxHistoryIndexer.Types
@@ -33,8 +34,11 @@ import Cardano.Node.Client.TxHistoryIndexer.Types
     , TenantId (..)
     , TxId (..)
     , TxRole (..)
+    , TxSummary (..)
     , TxSummaryEntry (..)
+    , TxSummaryInput (..)
     , TxSummaryKey (..)
+    , TxSummaryOutput (..)
     )
 import Cardano.Slotting.Slot (SlotNo (..))
 import Options.Applicative (ParserResult (..))
@@ -50,8 +54,11 @@ import Test.Hspec
 import Amaru.Treasury.Cli (Cmd (..), parseCliArgs)
 import Amaru.Treasury.Cli.History
     ( HistoryOpts (..)
+    , TxDetailOpts (..)
     , queryScopeHistory
+    , queryTxDetail
     , renderHistoryRows
+    , renderTxDetail
     , scopeHistoryScope
     )
 import Amaru.Treasury.Indexer.Decoder (treasuryTenantId)
@@ -79,6 +86,22 @@ spec = describe "Amaru.Treasury.Cli.History" $ do
         it "rejects an unknown --scope" $
             isFailure
                 ["history", "--scope", "bogus", "--indexer-db", "/x"]
+                `shouldBe` True
+
+        it "accepts tx-detail TXID --indexer-db" $
+            case parseCliArgs
+                [ "tx-detail"
+                , replicate 64 'a'
+                , "--indexer-db"
+                , "/tmp/history-db"
+                ] of
+                Success (_, CmdTxDetail o) -> do
+                    tdoTxId o `shouldBe` TxId (BS.replicate 32 0xaa)
+                    tdoIndexerDb o `shouldBe` Just "/tmp/history-db"
+                _ -> expectationFailure "expected CmdTxDetail parse"
+
+        it "rejects a malformed tx-detail TXID" $
+            isFailure ["tx-detail", "not-a-txid", "--indexer-db", "/x"]
                 `shouldBe` True
 
     describe "in-memory query" $
@@ -109,6 +132,27 @@ spec = describe "Amaru.Treasury.Cli.History" $ do
                 queryScopeHistory idx CoreDevelopment
                     `shouldReturn` [eCore]
 
+    describe "tx-detail query" $
+        it "uses the indexer tx-id lookup for the treasury tenant" $
+            withInMemoryHistoryIndexer $ \idx -> do
+                let summary =
+                        mkSummary
+                            treasuryTenantId
+                            (scopeHistoryScope CoreDevelopment)
+                            2
+                            (BS.pack [0xdd])
+                            "disburse"
+                    otherTenant =
+                        mkSummary
+                            (TenantId "other")
+                            (scopeHistoryScope CoreDevelopment)
+                            2
+                            (BS.pack [0xee])
+                            "disburse"
+                appendSummaries idx [otherTenant, summary]
+                queryTxDetail idx (TxId (BS.pack [0xdd]))
+                    `shouldReturn` Just summary
+
     describe "rendered rows" $ do
         it "are stable slot txid role ordered by the query" $
             withInMemoryHistoryIndexer $ \idx -> do
@@ -138,6 +182,31 @@ spec = describe "Amaru.Treasury.Cli.History" $ do
         it "renders no rows for an empty query" $
             renderHistoryRows [] `shouldBe` ([] :: [Text])
 
+    describe "tx-detail render" $
+        it "prints the decoded detail fields" $ do
+            let summary =
+                    ( mkSummary
+                        treasuryTenantId
+                        (scopeHistoryScope CoreDevelopment)
+                        9
+                        (BS.pack [0x12, 0x34])
+                        "withdraw"
+                    )
+                        { txsBlockHash = Just (BS.pack [0xab, 0xcd])
+                        }
+            renderTxDetail summary
+                `shouldBe` [ "slot 9"
+                           , "txid 1234"
+                           , "scope core_development"
+                           , "role withdraw"
+                           , "block-hash abcd"
+                           , "fee 2"
+                           , "required-signers signer-a,signer-b"
+                           , "redeemer redeemer-summary"
+                           , "input input#0 scope=core_development value=42 lovelace"
+                           , "output 0 address=addr1... value=40 lovelace datum=inlineDatum"
+                           ]
+
 mkEntry
     :: TenantId
     -> HistoryScope
@@ -156,6 +225,44 @@ mkEntry tenant scope slot txid role =
                 , tskRole = TxRole role
                 }
         , tsePayload = BS.empty
+        }
+
+mkSummary
+    :: TenantId
+    -> HistoryScope
+    -> Word64
+    -> ByteString
+    -> ByteString
+    -> TxSummary
+mkSummary tenant scope slot txid role =
+    TxSummary
+        { txsKey =
+            TxSummaryKey
+                { tskTenant = tenant
+                , tskScope = scope
+                , tskSlot = SlotNo slot
+                , tskTxId = TxId txid
+                , tskRole = TxRole role
+                }
+        , txsPayload = BS.empty
+        , txsInputs =
+            [ TxSummaryInput
+                { tsiTxIn = "input#0"
+                , tsiScope = Just scope
+                , tsiValue = "42 lovelace"
+                }
+            ]
+        , txsOutputs =
+            [ TxSummaryOutput
+                { tsoAddress = "addr1..."
+                , tsoValue = "40 lovelace"
+                , tsoDatum = Just "inlineDatum"
+                }
+            ]
+        , txsRedeemer = Just "redeemer-summary"
+        , txsFee = Just 2
+        , txsRequiredSigners = ["signer-a", "signer-b"]
+        , txsBlockHash = Nothing
         }
 
 isFailure :: [String] -> Bool

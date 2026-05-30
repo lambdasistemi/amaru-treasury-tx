@@ -2,8 +2,8 @@
 treasury history decoder (issue #243, slice 3).
 
 The decoder takes the block's 'SlotNo' and a 'BlockTx' and yields
-one 'TxSummaryEntry' per recognised treasury action, or 'Nothing'
-when the transaction is not a treasury transaction.
+one 'TxSummary' per recognised treasury action, or 'Nothing' when the
+transaction is not a treasury transaction.
 
 Per answer A-001 every recognised entry must:
 
@@ -12,6 +12,7 @@ Per answer A-001 every recognised entry must:
   * echo the supplied 'SlotNo' verbatim;
   * echo the raw transaction-id bytes;
   * carry an empty payload.
+  * populate transaction detail fields from the raw 'BlockTx'.
 
 and a non-treasury transaction must decode to 'Nothing'.
 -}
@@ -26,8 +27,12 @@ import Cardano.Slotting.Slot (SlotNo (..))
 
 import Amaru.Treasury.Indexer.Decoder
     ( TenantId (..)
-    , TxSummaryEntry
+    , TxSummary
+    , summaryFee
+    , summaryInputs
+    , summaryOutputs
     , summaryPayload
+    , summaryRedeemer
     , summaryScope
     , summarySlot
     , summaryTenant
@@ -72,11 +77,20 @@ itDecodesRole role fixture =
         it "carries an empty payload" $
             fmap summaryPayload (firstEntry entries)
                 `shouldBe` Just BS.empty
+        it "populates decoded transaction details" $ do
+            fmap (not . null . summaryInputs) (firstEntry entries)
+                `shouldBe` Just True
+            fmap (not . null . summaryOutputs) (firstEntry entries)
+                `shouldBe` Just True
+            fmap summaryFee (firstEntry entries)
+                `shouldSatisfy` maybe False (maybe False (> 0))
+            fmap summaryRedeemer (firstEntry entries)
+                `shouldSatisfy` maybe False (maybe False (not . BS.null))
 
 {- | The first decoded entry, if the transaction decoded to a
 non-empty list of treasury entries.
 -}
-firstEntry :: Maybe [TxSummaryEntry] -> Maybe TxSummaryEntry
+firstEntry :: Maybe [TxSummary] -> Maybe TxSummary
 firstEntry = \case
     Just (e : _) -> Just e
     _ -> Nothing
@@ -110,4 +124,4 @@ spec = describe "treasuryDecodeTx" $ do
     describe "non-treasury transaction" $
         it "decodes to Nothing" $
             treasuryDecodeTx suppliedSlot invalidBlockTx
-                `shouldBe` (Nothing :: Maybe [TxSummaryEntry])
+                `shouldBe` (Nothing :: Maybe [TxSummary])

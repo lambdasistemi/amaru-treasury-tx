@@ -122,6 +122,7 @@ import Cardano.Node.Client.Submitter
     ( SubmitResult (..)
     , Submitter (..)
     )
+import Cardano.Node.Client.TxHistoryIndexer.Types qualified as History
 import Cardano.Node.Client.UTxOIndexer.Follower
     ( InterestSet (..)
     )
@@ -225,6 +226,9 @@ import Amaru.Treasury.Api.BuildReorganize
 import Amaru.Treasury.Api.BuildSwap
     ( runBuildSwap
     )
+import Amaru.Treasury.Api.History
+    ( queryScopeHistoryResponse
+    )
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
     , IndexerConfig (..)
@@ -258,7 +262,9 @@ import Amaru.Treasury.Backend.N2C (withLocalNodeClient)
 import Amaru.Treasury.Cli.Common (GlobalOpts (..))
 import Amaru.Treasury.Cli.History
     ( queryScopeHistory
+    , queryTxDetail
     , renderHistoryRows
+    , renderTxDetail
     )
 import Amaru.Treasury.Devnet.RegistryInit
     ( DevnetRegistryAnchors (..)
@@ -625,12 +631,24 @@ runIndexedPhaseScenarios
                 [ (disburseTxId, "disburse")
                 , (reorganizeTxId, "reorganize")
                 ]
+        disburseDetailRows <-
+            awaitDisburseTxDetail
+                apiIdx
+                disburseTxId
+                (ttAddress (draTreasuryTarget anchors))
+                genesisAddr
         mapM_
             ( \row ->
                 putStrLn
                     ("treasury history row: " <> T.unpack row)
             )
             historyRows
+        mapM_
+            ( \row ->
+                putStrLn
+                    ("treasury tx-detail row: " <> T.unpack row)
+            )
+            disburseDetailRows
         pure
             [ "POST /v1/build/disburse success"
             , "disburse treasury continuation"
@@ -639,6 +657,7 @@ runIndexedPhaseScenarios
             , "reorganize merged treasury continuation"
             , "indexed history disburse row present"
             , "indexed history reorganize row present"
+            , "tx-detail disburse decoded view present"
             ]
 
 -- ---------------------------------------------------------------------------
@@ -692,6 +711,7 @@ assertIndexedPhaseProofs observed =
         , "reorganize merged treasury continuation"
         , "indexed history disburse row present"
         , "indexed history reorganize row present"
+        , "tx-detail disburse decoded view present"
         ]
     missing =
         List.filter (`notElem` observed) required
@@ -1131,13 +1151,133 @@ awaitHistoryRows apiIdx required =
                     && roleW == expectedRole
             _ -> False
 
+{- | Poll direct tx-id detail lookup for the submitted devnet disburse
+and assert the rendered view carries the transaction id, role, scope,
+fee/signers/redeemer, block hash, pure decoder input shape, and the two
+outputs built by the API request.
+-}
+awaitDisburseTxDetail
+    :: ApiIndexer cf op
+    -> TxId
+    -> Addr
+    -> Addr
+    -> IO [Text]
+awaitDisburseTxDetail apiIdx txid treasuryAddr beneficiaryAddr =
+    go (120 :: Int)
+  where
+    expectedTxId = txIdHex txid
+    treasuryAddress = renderAddr treasuryAddr
+    beneficiaryAddress = renderAddr beneficiaryAddr
+    checks :: [(String, Text -> Bool)]
+    checks =
+        [
+            ( "txid"
+            , (== "txid " <> expectedTxId)
+            )
+        , ("scope", (== "scope core_development"))
+        , ("role", (== "role disburse"))
+        ,
+            ( "slot"
+            , \row ->
+                case T.words row of
+                    ["slot", n] -> not (T.null n) && T.all isDigit n
+                    _ -> False
+            )
+        ,
+            ( "block hash"
+            , \row ->
+                T.isPrefixOf "block-hash " row
+                    && row /= "block-hash -"
+            )
+        ,
+            ( "fee"
+            , \row ->
+                T.isPrefixOf "fee " row
+                    && row /= "fee -"
+            )
+        ,
+            ( "required signers"
+            , \row ->
+                T.isPrefixOf "required-signers " row
+                    && row /= "required-signers -"
+            )
+        ,
+            ( "redeemer scope/role"
+            , \row ->
+                T.isPrefixOf "redeemer " row
+                    && "scope=core_development" `T.isInfixOf` row
+                    && "role=disburse" `T.isInfixOf` row
+            )
+        ,
+            ( "unknown input value"
+            , \row ->
+                T.isPrefixOf "input " row
+                    && "value=unknown" `T.isInfixOf` row
+            )
+        ,
+            ( "treasury continuation output"
+            , \row ->
+                T.isPrefixOf "output " row
+                    && ("address=" <> treasuryAddress) `T.isInfixOf` row
+                    && "35000000" `T.isInfixOf` row
+            )
+        ,
+            ( "beneficiary output"
+            , \row ->
+                T.isPrefixOf "output " row
+                    && ("address=" <> beneficiaryAddress) `T.isInfixOf` row
+                    && "5000000" `T.isInfixOf` row
+            )
+        ]
+
+    go attempts = do
+        mSummary <-
+            queryTxDetail
+                (aiHistory apiIdx)
+                (History.TxId (txIdBytes txid))
+        case mSummary of
+            Just summary -> do
+                let rows = renderTxDetail summary
+                    missing =
+                        [ label
+                        | (label, predicate) <- checks
+                        , not (any predicate rows)
+                        ]
+                case missing of
+                    [] -> pure rows
+                    _
+                        | attempts <= 0 ->
+                            failWith $
+                                "embedded indexer tx-detail for disburse "
+                                    <> T.unpack expectedTxId
+                                    <> " missed fields: "
+                                    <> show missing
+                                    <> "; rendered rows: "
+                                    <> show rows
+                        | otherwise -> retry (attempts - 1)
+            Nothing
+                | attempts <= 0 ->
+                    failWith $
+                        "embedded indexer did not expose tx-detail for \
+                        \disburse tx "
+                            <> T.unpack expectedTxId
+                | otherwise -> retry (attempts - 1)
+
+    retry attempts = do
+        threadDelay 500_000
+        go attempts
+
 {- | Lower-hex of a ledger 'TxId' — the raw 32 tx-id bytes the
 history decoder echoes into @tskTxId@ and 'renderHistoryRows'
 base16-encodes.
 -}
 txIdHex :: TxId -> Text
-txIdHex (TxId safeHash) =
-    TE.decodeUtf8 (B16.encode (hashToBytes (extractHash safeHash)))
+txIdHex =
+    TE.decodeUtf8 . B16.encode . txIdBytes
+
+txIdBytes :: TxId -> ByteString
+txIdBytes (TxId safeHash) =
+    hashToBytes (extractHash safeHash)
 
 assertInspectTreasuryState
     :: Manager -> Int -> String -> Int -> Integer -> IO ()
@@ -1466,6 +1606,7 @@ smokeHandlers apiIdx backend globalOpts metadata anchor swapAddr =
                             <> show e
         , hRecentTxs = RecentTxManifest []
         , hBuildIdentity = stubBuildIdentity
+        , hScopeHistory = queryScopeHistoryResponse (aiHistory apiIdx)
         , hBuildSwap = bhBuildSwap buildHandlers
         , hBuildDisburse = bhBuildDisburse buildHandlers
         , hBuildReorganize = bhBuildReorganize buildHandlers

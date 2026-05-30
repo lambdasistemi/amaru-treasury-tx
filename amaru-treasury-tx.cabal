@@ -749,7 +749,7 @@ test-suite devnet-tests
     , aeson
     , amaru-treasury-tx
     , async
-    , base                                   <5
+    , base                                         <5
     , base16-bytestring
     , bech32
     , bytestring
@@ -762,6 +762,7 @@ test-suite devnet-tests
     , cardano-node-clients
     , cardano-node-clients:block-indexer
     , cardano-node-clients:devnet
+    , cardano-node-clients:tx-history-indexer-lib
     , cardano-node-clients:utxo-indexer-lib
     , cardano-slotting
     , cardano-tx-tools

@@ -28,6 +28,8 @@ module Amaru.Treasury.Api.Types
       -- * Indexed tx history
     , ScopeHistoryResponse (..)
     , ScopeHistoryEntry (..)
+    , ScopeHistoryQueryResponse (..)
+    , ScopeHistoryShaclResponse (..)
 
       -- * Errors
     , ApiError (..)
@@ -112,9 +114,15 @@ instance FromJSON ScopeHistoryResponse where
 -- | One indexed treasury history row.
 data ScopeHistoryEntry = ScopeHistoryEntry
     { sheSlot :: Word64
+    -- ^ Absolute chain slot recorded by the tx-history indexer.
     , sheTxId :: Text
+    -- ^ Lowercase hex Cardano transaction id.
     , sheRole :: Text
+    -- ^ Treasury role label, e.g. @disburse@, @reorganize@, or
+    --   @-@ for inbound funding without a treasury redeemer role.
     , sheDirection :: Text
+    -- ^ Direction label from the history indexer, currently
+    --   @inbound@ or @outbound@.
     }
     deriving stock (Eq, Show)
 
@@ -135,6 +143,80 @@ instance FromJSON ScopeHistoryEntry where
                 <*> o .: "txid"
                 <*> o .: "role"
                 <*> o .: "direction"
+
+{- | Response returned by a named RDF/SPARQL history query.
+
+The query itself is selected from a fixed server-side catalog; this
+carrier only exposes the selected name and its result table.
+-}
+data ScopeHistoryQueryResponse = ScopeHistoryQueryResponse
+    { shqrScope :: ScopeId
+    -- ^ Treasury scope whose indexed rows formed the RDF lattice.
+    , shqrQuery :: Text
+    -- ^ Stable server-side query name, e.g. @asset-flow@ or
+    --   @spend-edges@. This is not caller-supplied SPARQL text.
+    , shqrColumns :: [Text]
+    -- ^ TSV/SPARQL result variable names without the leading @?@.
+    , shqrRows :: [[Text]]
+    -- ^ SPARQL result cells, one inner list per row, in
+    --   'shqrColumns' order.
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON ScopeHistoryQueryResponse where
+    toJSON r =
+        object
+            [ "scope" .= shqrScope r
+            , "query" .= shqrQuery r
+            , "columns" .= shqrColumns r
+            , "rows" .= shqrRows r
+            ]
+
+instance FromJSON ScopeHistoryQueryResponse where
+    parseJSON =
+        withObject "ScopeHistoryQueryResponse" $ \o ->
+            ScopeHistoryQueryResponse
+                <$> o .: "scope"
+                <*> o .: "query"
+                <*> o .: "columns"
+                <*> o .: "rows"
+
+{- | Response returned by a named RDF/SHACL history validation.
+
+The shape set is selected from a fixed server-side catalog; this carrier
+does not expose arbitrary SHACL supplied by the caller.
+-}
+data ScopeHistoryShaclResponse = ScopeHistoryShaclResponse
+    { shsrScope :: ScopeId
+    -- ^ Treasury scope whose indexed rows formed the RDF lattice.
+    , shsrShape :: Text
+    -- ^ Stable server-side SHACL shape name, e.g. @history-entry@
+    --   or @indexed-tx-body@.
+    , shsrConforms :: Bool
+    -- ^ True when the SHACL engine found no violation.
+    , shsrReport :: Text
+    -- ^ Raw SHACL report text. Empty when the selected shape conforms
+    --   cleanly.
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON ScopeHistoryShaclResponse where
+    toJSON r =
+        object
+            [ "scope" .= shsrScope r
+            , "shape" .= shsrShape r
+            , "conforms" .= shsrConforms r
+            , "report" .= shsrReport r
+            ]
+
+instance FromJSON ScopeHistoryShaclResponse where
+    parseJSON =
+        withObject "ScopeHistoryShaclResponse" $ \o ->
+            ScopeHistoryShaclResponse
+                <$> o .: "scope"
+                <*> o .: "shape"
+                <*> o .: "conforms"
+                <*> o .: "report"
 
 {- | Uniform 4xx body: human-readable message plus an optional
 field name that points the operator at the source of the

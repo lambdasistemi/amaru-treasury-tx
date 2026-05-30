@@ -20,6 +20,10 @@ Single source of truth for the HTTP surface served by
     the deployed image's pinned metadata sha + git sha.
   * @GET \/v1\/scope\/\<scope\>\/txs@ — indexed treasury
     history rows from the embedded tx-history store.
+  * @GET \/v1\/scope\/\<scope\>\/txs\/query?name=\<query\>@
+    — named RDF/SPARQL history analysis.
+  * @GET \/v1\/scope\/\<scope\>\/txs\/shacl?name=\<shape\>@
+    — named RDF/SHACL history validation.
   * Anything else — static assets served by the 'rawHandler'
     supplied by the caller (typically the PureScript bundle).
 -}
@@ -57,6 +61,8 @@ import Cardano.Node.Client.UTxOIndexer.Provider qualified as IndexedProvider
 import Control.Monad.IO.Class (liftIO)
 import Data.Proxy (Proxy (..))
 import Data.Tagged (Tagged)
+import Data.Text (Text)
+import Data.Word (Word64)
 import Database.KV.Transaction (RunTransaction (..))
 import Network.HTTP.Media ((//))
 import Network.Wai (Application)
@@ -73,6 +79,7 @@ import Servant.API
     , JSON
     , MimeRender (..)
     , Post
+    , QueryParam
     , QueryParam'
     , Raw
     , ReqBody
@@ -99,9 +106,16 @@ import Amaru.Treasury.Api.Indexer
 import Amaru.Treasury.Api.Types
     ( BuildIdentity
     , RecentTxManifest
+    , ScopeHistoryQueryResponse
     , ScopeHistoryResponse
+    , ScopeHistoryShaclResponse
     )
 import Amaru.Treasury.Cli.TreasuryInspect (runInspectFromBackend)
+import Amaru.Treasury.History.Sparql
+    ( HistoryFilter (..)
+    , HistoryQueryName
+    , HistoryShapeName
+    )
 import Amaru.Treasury.Inspect.Render (encodeReport)
 import Amaru.Treasury.Inspect.Types
     ( DeploymentAnchor
@@ -141,7 +155,25 @@ type JsonAPI =
                 :<|> "scope"
                     :> Capture "scope" ScopeId
                     :> "txs"
+                    :> QueryParam "role" Text
+                    :> QueryParam "asset" Text
+                    :> QueryParam "direction" Text
+                    :> QueryParam "since" Word64
+                    :> QueryParam "until" Word64
+                    :> QueryParam "limit" Int
                     :> Get '[JSON] ScopeHistoryResponse
+                :<|> "scope"
+                    :> Capture "scope" ScopeId
+                    :> "txs"
+                    :> "query"
+                    :> QueryParam' '[Required, Strict] "name" HistoryQueryName
+                    :> Get '[JSON] ScopeHistoryQueryResponse
+                :<|> "scope"
+                    :> Capture "scope" ScopeId
+                    :> "txs"
+                    :> "shacl"
+                    :> QueryParam' '[Required, Strict] "name" HistoryShapeName
+                    :> Get '[JSON] ScopeHistoryShaclResponse
                 :<|> "build"
                     :> "swap"
                     :> ReqBody '[JSON] SwapBuildRequest
@@ -186,7 +218,15 @@ data Handlers = Handlers
     { hInspectReport :: ScopeId -> IO InspectReport
     , hRecentTxs :: RecentTxManifest
     , hBuildIdentity :: BuildIdentity
-    , hScopeHistory :: ScopeId -> IO ScopeHistoryResponse
+    , hScopeHistory :: ScopeId -> HistoryFilter -> IO ScopeHistoryResponse
+    , hScopeHistoryQuery
+        :: ScopeId
+        -> HistoryQueryName
+        -> IO ScopeHistoryQueryResponse
+    , hScopeHistoryShacl
+        :: ScopeId
+        -> HistoryShapeName
+        -> IO ScopeHistoryShaclResponse
     , hBuildSwap :: SwapBuildRequest -> IO SwapBuildResponse
     -- ^ Build a swap intent from a wire-shape request.  The
     --   binary's implementation calls
@@ -254,6 +294,8 @@ mkServer Handlers{..} =
         :<|> pure hRecentTxs
         :<|> pure hBuildIdentity
         :<|> scopeHistoryH
+        :<|> scopeHistoryQueryH
+        :<|> scopeHistoryShaclH
         :<|> buildSwapH
         :<|> buildDisburseH
         :<|> buildReorganizeH
@@ -263,8 +305,37 @@ mkServer Handlers{..} =
     inspectH :: ScopeId -> Handler InspectReport
     inspectH scope = liftIO (hInspectReport scope)
 
-    scopeHistoryH :: ScopeId -> Handler ScopeHistoryResponse
-    scopeHistoryH scope = liftIO (hScopeHistory scope)
+    scopeHistoryH
+        :: ScopeId
+        -> Maybe Text
+        -> Maybe Text
+        -> Maybe Text
+        -> Maybe Word64
+        -> Maybe Word64
+        -> Maybe Int
+        -> Handler ScopeHistoryResponse
+    scopeHistoryH scope role asset direction since untilSlot limitRows =
+        liftIO $
+            hScopeHistory
+                scope
+                HistoryFilter
+                    { hfRole = role
+                    , hfAsset = asset
+                    , hfDirection = direction
+                    , hfSince = since
+                    , hfUntil = untilSlot
+                    , hfLimit = limitRows
+                    }
+
+    scopeHistoryQueryH
+        :: ScopeId -> HistoryQueryName -> Handler ScopeHistoryQueryResponse
+    scopeHistoryQueryH scope queryName =
+        liftIO (hScopeHistoryQuery scope queryName)
+
+    scopeHistoryShaclH
+        :: ScopeId -> HistoryShapeName -> Handler ScopeHistoryShaclResponse
+    scopeHistoryShaclH scope shapeName =
+        liftIO (hScopeHistoryShacl scope shapeName)
 
     buildSwapH :: SwapBuildRequest -> Handler SwapBuildResponse
     buildSwapH req = liftIO (hBuildSwap req)

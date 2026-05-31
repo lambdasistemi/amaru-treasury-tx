@@ -13,7 +13,13 @@ import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.Foldable (for_)
 import Data.Word (Word64)
+import System.Directory
+    ( Permissions (executable)
+    , getPermissions
+    , setPermissions
+    )
 import System.Environment (lookupEnv, setEnv, unsetEnv)
+import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
 
 import Cardano.Node.Client.TxHistoryIndexer.Types
@@ -154,6 +160,33 @@ spec =
                     expectationFailure
                         ("expected SHACL success, got " <> show err)
 
+        it "skips a transaction body when cq-rdf exits non-zero" $ do
+            withSystemTempDirectory "atx-failing-cq-rdf" $ \binDir -> do
+                let cqRdf = binDir </> "cq-rdf"
+                BS.writeFile
+                    cqRdf
+                    "#!/bin/sh\necho bad treasury tx >&2\nexit 23\n"
+                perms <- getPermissions cqRdf
+                setPermissions cqRdf perms{executable = True}
+                withPathPrefix binDir $ do
+                    result <-
+                        runNamedHistoryQuery
+                            TxCountQuery
+                            [ mkEntryWithPayload
+                                3
+                                "0102"
+                                "disburse"
+                                "outbound"
+                                "not-cbor"
+                            ]
+                    result
+                        `shouldBe` Right
+                            HistoryQueryResult
+                                { hqrQuery = TxCountQuery
+                                , hqrColumns = ["transactions"]
+                                , hqrRows = [["0"]]
+                                }
+
 mkEntry
     :: Word64
     -> ByteString
@@ -161,6 +194,16 @@ mkEntry
     -> ByteString
     -> TxSummaryEntry
 mkEntry slot txid role direction =
+    mkEntryWithPayload slot txid role direction BS.empty
+
+mkEntryWithPayload
+    :: Word64
+    -> ByteString
+    -> ByteString
+    -> ByteString
+    -> ByteString
+    -> TxSummaryEntry
+mkEntryWithPayload slot txid role direction payload =
     TxSummaryEntry
         { tseKey =
             TxSummaryKey
@@ -170,7 +213,7 @@ mkEntry slot txid role direction =
                 , tskTxId = TxId (hexBytes txid)
                 , tskRole = TxRole role
                 }
-        , tsePayload = BS.empty
+        , tsePayload = payload
         , tseDirection = TxDirection direction
         }
 
@@ -189,3 +232,11 @@ withPath path action = do
 restorePath :: Maybe String -> IO ()
 restorePath Nothing = unsetEnv "PATH"
 restorePath (Just path) = setEnv "PATH" path
+
+withPathPrefix :: FilePath -> IO a -> IO a
+withPathPrefix path action = do
+    original <- lookupEnv "PATH"
+    bracket_
+        (setEnv "PATH" (path <> maybe "" (":" <>) original))
+        (restorePath original)
+        action

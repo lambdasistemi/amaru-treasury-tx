@@ -58,6 +58,13 @@ pkgs.dockerTools.streamLayeredImage {
     # bind mount in docker-compose.yaml has a target even if
     # the path is missing on a fresh container.
     mkdir -p n2c
+    # Writable, sticky /tmp. The history RDF path uses
+    # `withSystemTempDirectory` (under $TMPDIR, default /tmp) to
+    # stage Turtle for cq-rdf/arq/shacl. streamLayeredImage ships
+    # no /tmp, so every RDF query/shacl/asset request otherwise
+    # 500s with `createDirectory: does not exist`.
+    mkdir -p tmp
+    chmod 1777 tmp
   '';
 
   config = {

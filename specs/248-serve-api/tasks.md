@@ -23,6 +23,6 @@
 
 ## Slice 4 — Serve Config Decision
 
-- [ ] T248-S4 Resolve whether this PR must add `amaru-treasury-tx serve --config`.
-- [ ] T248-S4 If required, add the delegating CLI surface and tests.
-- [ ] T248-S4 Run the final build/unit/Nix gate.
+- [X] T248-S4 Resolve whether this PR must add `amaru-treasury-tx serve --config`.
+- [X] T248-S4 If required, add the delegating CLI surface and tests.
+- [X] T248-S4 Run the final build/unit/Nix gate.

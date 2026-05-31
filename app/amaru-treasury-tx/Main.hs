@@ -48,6 +48,9 @@ import Amaru.Treasury.Cli.ReorganizeWizard
 import Amaru.Treasury.Cli.ReportRender
     ( runReportRender
     )
+import Amaru.Treasury.Cli.Serve
+    ( runServe
+    )
 import Amaru.Treasury.Cli.StakeRewardInitWizard
     ( runStakeRewardInitWizard
     )
@@ -134,6 +137,8 @@ main = withUtf8 . withUpdateCheckMain $ do
         CmdSubmit so ->
             withSocket g $ \socket ->
                 runSubmit (goNetworkMagic g) socket so
+        CmdServe so ->
+            runServe so
         CmdEnvelopeTx ->
             runEnvelope Tx
         CmdEnvelopeWitness ->

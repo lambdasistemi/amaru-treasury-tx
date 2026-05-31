@@ -369,7 +369,7 @@ waiGet path =
         ""
 
 waiPostJson :: ByteString -> ByteString -> WaiTest.SRequest
-waiPostJson path body =
+waiPostJson path =
     WaiTest.SRequest
         ( WaiTest.setPath
             WaiTest.defaultRequest
@@ -378,7 +378,6 @@ waiPostJson path body =
                 }
             (LBS.toStrict path)
         )
-        body
 
 statusCodeOf :: SResponse -> Int
 statusCodeOf r = statusCode (WaiTest.simpleStatus r)

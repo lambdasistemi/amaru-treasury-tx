@@ -155,6 +155,7 @@ library
     Amaru.Treasury.Cli.RegistryInitWizard
     Amaru.Treasury.Cli.ReorganizeWizard
     Amaru.Treasury.Cli.ReportRender
+    Amaru.Treasury.Cli.Serve
     Amaru.Treasury.Cli.StakeRewardInitWizard
     Amaru.Treasury.Cli.Submit
     Amaru.Treasury.Cli.SwapCancel
@@ -480,8 +481,8 @@ executable amaru-treasury-tx-api
     , optparse-applicative
     , ouroboros-network:api
     , servant-server
-    , streaming-commons
     , stm
+    , streaming-commons
     , text
     , time
     , wai

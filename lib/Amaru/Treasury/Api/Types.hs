@@ -469,7 +469,7 @@ instance FromJSON RegistryScope where
                 <*> o .: "address"
 
 -- | Deployment script metadata for web clients.
-data ScriptsResponse = ScriptsResponse
+newtype ScriptsResponse = ScriptsResponse
     { srScopes :: [ScopeScripts]
     }
     deriving stock (Eq, Show)

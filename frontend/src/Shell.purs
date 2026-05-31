@@ -101,6 +101,8 @@ topbar active opts =
     , HH.nav [ HP.classes [ cn "topbar__nav" ] ]
         [ navLink RouteView active "/"
             "View" "View transactions"
+        , navLink RouteAudit active "/audit"
+            "Audit" "Audit transaction history"
         , navLink RouteOperate active "/operate"
             "Operate" "Operate — prepare a transaction"
         , navLink RouteBooks active "/books"

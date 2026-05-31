@@ -21,6 +21,7 @@ import Web.HTML.HTMLElement as HTMLElement
 import Web.HTML.Window (document)
 
 import App as App
+import AuditPage as AuditPage
 import BooksPage as BooksPage
 import JsonTree.Behaviour as JsonTreeBehaviour
 import OperatePage as OperatePage
@@ -34,6 +35,9 @@ main = runHalogenAff do
   case route of
     RouteView -> do
       _ <- runUI App.component unit host
+      pure unit
+    RouteAudit -> do
+      _ <- runUI AuditPage.component unit host
       pure unit
     RouteOperate -> do
       _ <- runUI OperatePage.component unit host

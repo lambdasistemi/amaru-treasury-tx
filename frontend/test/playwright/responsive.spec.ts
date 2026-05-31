@@ -33,7 +33,7 @@ const VIEWPORTS = [
   { name: 'desktop-1280', width: 1280, height: 800 },
 ] as const;
 
-const PAGES = ['/', '/operate', '/books'] as const;
+const PAGES = ['/', '/audit', '/operate', '/books'] as const;
 
 async function measureHorizontalOverflow(pw: Page): Promise<number> {
   return await pw.evaluate(
@@ -66,6 +66,9 @@ for (const v of VIEWPORTS) {
       // carries an explicit aria-label.  FR-002.
       await expect(
         pw.locator('nav a[aria-label="View transactions"]'),
+      ).toBeVisible();
+      await expect(
+        pw.locator('nav a[aria-label="Audit transaction history"]'),
       ).toBeVisible();
       await expect(
         pw.locator('nav a[aria-label="Operate — prepare a transaction"]'),

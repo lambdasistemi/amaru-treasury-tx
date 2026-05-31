@@ -255,7 +255,15 @@ import Amaru.Treasury.Api.Server
     , Handlers (..)
     , mkApplication
     , mkBuildHandlers
+    , mkBuildProvider
     , mkInspectHandler
+    )
+import Amaru.Treasury.Api.State
+    ( queryPending
+    , queryScopeState
+    , queryScopeUtxos
+    , registryResponseFromMetadata
+    , scriptsResponseFromMetadata
     )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity (..)
@@ -1636,6 +1644,23 @@ smokeHandlers apiIdx backend globalOpts metadata anchor swapAddr =
         , hRecentTxs = RecentTxManifest []
         , hBuildIdentity = stubBuildIdentity
         , hTxDetail = queryTxDetailResponse (aiHistory apiIdx)
+        , hRegistry = pure (registryResponseFromMetadata metadata)
+        , hScripts = pure (scriptsResponseFromMetadata metadata)
+        , hPending =
+            queryPending
+                readProvider
+                metadata
+                swapAddr
+        , hScopeState =
+            queryScopeState
+                readProvider
+                metadata
+                swapAddr
+        , hScopeUtxos =
+            queryScopeUtxos
+                readProvider
+                metadata
+                swapAddr
         , hScopeHistory = queryScopeHistoryFilteredResponse (aiHistory apiIdx)
         , hScopeHistoryQuery =
             queryScopeHistoryQueryResponse (aiHistory apiIdx)
@@ -1660,6 +1685,7 @@ smokeHandlers apiIdx backend globalOpts metadata anchor swapAddr =
             (runBuildSwap globalOpts)
             (runBuildDisburse globalOpts)
             (runBuildReorganize globalOpts)
+    readProvider = mkBuildProvider apiIdx backend
 
 stubBuildIdentity :: BuildIdentity
 stubBuildIdentity =

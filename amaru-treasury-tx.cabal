@@ -116,6 +116,7 @@ library
     Amaru.Treasury.Api.Readiness
     Amaru.Treasury.Api.Readiness.Internal
     Amaru.Treasury.Api.Server
+    Amaru.Treasury.Api.State
     Amaru.Treasury.Api.Types
     Amaru.Treasury.AuxData
     Amaru.Treasury.Backend

@@ -38,6 +38,16 @@ module Amaru.Treasury.Api.Types
     , TxDetailInput (..)
     , TxDetailOutput (..)
 
+      -- * Indexed state reads
+    , ScopeUtxosResponse (..)
+    , PendingResponse (..)
+    , PendingScope (..)
+    , RegistryResponse (..)
+    , RegistryScope (..)
+    , ScriptsResponse (..)
+    , ScopeScripts (..)
+    , ScriptRefResponse (..)
+
       -- * Errors
     , ApiError (..)
     ) where
@@ -64,6 +74,10 @@ import Data.Word (Word64)
 import GHC.Generics (Generic)
 import Web.HttpApiData (FromHttpApiData (..))
 
+import Amaru.Treasury.Inspect.Types
+    ( PendingSwapOrder
+    , TreasuryUtxo
+    )
 import Amaru.Treasury.Scope (ScopeId)
 
 {- | Payload of @GET /v1/version@. Constructed entirely at
@@ -356,6 +370,159 @@ instance FromJSON TxDetailOutput where
                 <*> o .: "address"
                 <*> o .: "value"
                 <*> o .:? "datum"
+
+-- | Response returned by @GET /v1/scope/<scope>/utxos@.
+data ScopeUtxosResponse = ScopeUtxosResponse
+    { surScope :: ScopeId
+    , surEntries :: [TreasuryUtxo]
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON ScopeUtxosResponse where
+    toJSON r =
+        object
+            [ "scope" .= surScope r
+            , "entries" .= surEntries r
+            ]
+
+-- | Response returned by @GET /v1/pending@.
+data PendingResponse = PendingResponse
+    { prScope :: Maybe ScopeId
+    , prEntries :: [PendingScope]
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON PendingResponse where
+    toJSON r =
+        object
+            [ "scope" .= prScope r
+            , "entries" .= prEntries r
+            ]
+
+-- | Pending orders grouped by treasury scope.
+data PendingScope = PendingScope
+    { psScope :: ScopeId
+    , psOrders :: [PendingSwapOrder]
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON PendingScope where
+    toJSON s =
+        object
+            [ "scope" .= psScope s
+            , "orders" .= psOrders s
+            ]
+
+-- | Deployment registry metadata for web clients.
+data RegistryResponse = RegistryResponse
+    { rrScopeOwners :: Text
+    , rrScopes :: [RegistryScope]
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON RegistryResponse where
+    toJSON r =
+        object
+            [ "scopeOwners" .= rrScopeOwners r
+            , "scopes" .= rrScopes r
+            ]
+
+instance FromJSON RegistryResponse where
+    parseJSON =
+        withObject "RegistryResponse" $ \o ->
+            RegistryResponse
+                <$> o .: "scopeOwners"
+                <*> o .: "scopes"
+
+-- | One scope's registry metadata.
+data RegistryScope = RegistryScope
+    { rsScope :: ScopeId
+    , rsOwner :: Maybe Text
+    , rsBudget :: Maybe Integer
+    , rsAddress :: Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON RegistryScope where
+    toJSON s =
+        object
+            [ "scope" .= rsScope s
+            , "owner" .= rsOwner s
+            , "budget" .= rsBudget s
+            , "address" .= rsAddress s
+            ]
+
+instance FromJSON RegistryScope where
+    parseJSON =
+        withObject "RegistryScope" $ \o ->
+            RegistryScope
+                <$> o .: "scope"
+                <*> o .:? "owner"
+                <*> o .:? "budget"
+                <*> o .: "address"
+
+-- | Deployment script metadata for web clients.
+data ScriptsResponse = ScriptsResponse
+    { srScopes :: [ScopeScripts]
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON ScriptsResponse where
+    toJSON r =
+        object ["scopes" .= srScopes r]
+
+instance FromJSON ScriptsResponse where
+    parseJSON =
+        withObject "ScriptsResponse" $ \o ->
+            ScriptsResponse <$> o .: "scopes"
+
+-- | Reference scripts published for one scope.
+data ScopeScripts = ScopeScripts
+    { ssrScope :: ScopeId
+    , ssrTreasury :: ScriptRefResponse
+    , ssrPermissions :: ScriptRefResponse
+    , ssrRegistry :: ScriptRefResponse
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON ScopeScripts where
+    toJSON s =
+        object
+            [ "scope" .= ssrScope s
+            , "treasury" .= ssrTreasury s
+            , "permissions" .= ssrPermissions s
+            , "registry" .= ssrRegistry s
+            ]
+
+instance FromJSON ScopeScripts where
+    parseJSON =
+        withObject "ScopeScripts" $ \o ->
+            ScopeScripts
+                <$> o .: "scope"
+                <*> o .: "treasury"
+                <*> o .: "permissions"
+                <*> o .: "registry"
+
+-- | One script reference from deployment metadata.
+data ScriptRefResponse = ScriptRefResponse
+    { srrHash :: Text
+    , srrDeployedAt :: Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON ScriptRefResponse where
+    toJSON r =
+        object
+            [ "hash" .= srrHash r
+            , "deployedAt" .= srrDeployedAt r
+            ]
+
+instance FromJSON ScriptRefResponse where
+    parseJSON =
+        withObject "ScriptRefResponse" $ \o ->
+            ScriptRefResponse
+                <$> o .: "hash"
+                <*> o .: "deployedAt"
 
 {- | Uniform 4xx body: human-readable message plus an optional
 field name that points the operator at the source of the

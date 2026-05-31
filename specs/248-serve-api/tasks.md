@@ -9,10 +9,10 @@
 
 ## Slice 2 — State Reads
 
-- [ ] T248-S2 Add scope state, scope UTxO, pending, registry, and scripts carriers.
-- [ ] T248-S2 Wire handlers from metadata and the indexer-backed provider.
-- [ ] T248-S2 Cover route shapes and indexer-backed behavior in unit tests.
-- [ ] T248-S2 Run the relevant gate and commit the slice.
+- [X] T248-S2 Add scope state, scope UTxO, pending, registry, and scripts carriers.
+- [X] T248-S2 Wire handlers from metadata and the indexer-backed provider.
+- [X] T248-S2 Cover route shapes and indexer-backed behavior in unit tests.
+- [X] T248-S2 Run the relevant gate and commit the slice.
 
 ## Slice 3 — Tip, Params, Submit, Health
 

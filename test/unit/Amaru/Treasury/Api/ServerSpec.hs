@@ -47,11 +47,19 @@ import Amaru.Treasury.Api.Server
     )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity (..)
+    , PendingResponse (..)
+    , PendingScope (..)
     , RecentTxManifest (..)
+    , RegistryResponse (..)
+    , RegistryScope (..)
     , ScopeHistoryEntry (..)
     , ScopeHistoryQueryResponse (..)
     , ScopeHistoryResponse (..)
     , ScopeHistoryShaclResponse (..)
+    , ScopeScripts (..)
+    , ScopeUtxosResponse (..)
+    , ScriptRefResponse (..)
+    , ScriptsResponse (..)
     , TxDetailInput (..)
     , TxDetailOutput (..)
     , TxDetailResponse (..)
@@ -62,6 +70,9 @@ import Amaru.Treasury.Inspect.Types
     , DeploymentAnchor (..)
     , InspectReport (..)
     , Outref (..)
+    , ScopeSection (..)
+    , ScopeTotals (..)
+    , TreasuryUtxo (..)
     )
 import Amaru.Treasury.Scope (ScopeId (..))
 import Amaru.Treasury.Wizard.Failure (FieldId (..))
@@ -139,6 +150,54 @@ spec = do
                     )
                     (mkApplication stubHandlers{hTxDetail = \_ -> pure Nothing})
             statusCodeOf res `shouldBe` 404
+
+    describe "state read endpoints" $ do
+        it "returns registry metadata" $ do
+            res <-
+                runSession
+                    (WaiTest.srequest (waiGet "/v1/registry"))
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res)
+                `shouldBe` Just stubRegistry
+
+        it "returns script metadata" $ do
+            res <-
+                runSession
+                    (WaiTest.srequest (waiGet "/v1/scripts"))
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res)
+                `shouldBe` Just stubScripts
+
+        it "returns pending orders grouped by scope" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        (waiGet "/v1/pending?scope=core_development")
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+
+        it "returns one scope state section" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        (waiGet "/v1/scope/core_development/state")
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+
+        it "accepts UTxO filters for one scope" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        ( waiGet
+                            "/v1/scope/core_development/utxos?asset=ada&min_lovelace=1&limit=1"
+                        )
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
 
     describe "GET /v1/scope/{scope}/txs" $ do
         it "returns indexed tx-history rows for the captured scope" $ do
@@ -276,6 +335,14 @@ stubHandlers =
         , hRecentTxs = RecentTxManifest []
         , hBuildIdentity = stubBuildIdentity
         , hTxDetail = \_ -> pure (Just stubTxDetail)
+        , hRegistry = pure stubRegistry
+        , hScripts = pure stubScripts
+        , hPending = \scope ->
+            pure stubPending{prScope = scope}
+        , hScopeState = \scope ->
+            pure stubScopeState{ssScope = scope}
+        , hScopeUtxos = \scope _filter ->
+            pure stubScopeUtxos{surScope = scope}
         , hScopeHistory = \scope _filter ->
             pure stubHistory{shrScope = scope}
         , hScopeHistoryQuery = \scope _queryName ->
@@ -310,6 +377,92 @@ stubHandlers =
         , hBuildDisburse = \_ -> pure disburseIntentFailureResp
         , hBuildReorganize = \_ -> pure reorganizeIntentFailureResp
         , hRawHandler = stubRawHandler
+        }
+
+stubRegistry :: RegistryResponse
+stubRegistry =
+    RegistryResponse
+        { rrScopeOwners =
+            "11ace24a1111111111111111111111111111111111111111111111111111111111#0"
+        , rrScopes =
+            [ RegistryScope
+                { rsScope = CoreDevelopment
+                , rsOwner = Just "owner"
+                , rsBudget = Just 1
+                , rsAddress = "addr1..."
+                }
+            ]
+        }
+
+stubScripts :: ScriptsResponse
+stubScripts =
+    ScriptsResponse
+        { srScopes =
+            [ ScopeScripts
+                { ssrScope = CoreDevelopment
+                , ssrTreasury = stubScriptRef
+                , ssrPermissions = stubScriptRef
+                , ssrRegistry = stubScriptRef
+                }
+            ]
+        }
+
+stubScriptRef :: ScriptRefResponse
+stubScriptRef =
+    ScriptRefResponse
+        { srrHash = "00"
+        , srrDeployedAt =
+            "11ace24a1111111111111111111111111111111111111111111111111111111111#0"
+        }
+
+stubPending :: PendingResponse
+stubPending =
+    PendingResponse
+        { prScope = Nothing
+        , prEntries =
+            [ PendingScope
+                { psScope = CoreDevelopment
+                , psOrders = []
+                }
+            ]
+        }
+
+stubScopeUtxos :: ScopeUtxosResponse
+stubScopeUtxos =
+    ScopeUtxosResponse
+        { surScope = CoreDevelopment
+        , surEntries = [stubTreasuryUtxo]
+        }
+
+stubScopeState :: ScopeSection
+stubScopeState =
+    ScopeSection
+        { ssScope = CoreDevelopment
+        , ssTreasuryAddress = "addr1..."
+        , ssTreasuryScriptHash = "00"
+        , ssTreasuryUtxos = [stubTreasuryUtxo]
+        , ssTreasuryTotals =
+            ScopeTotals
+                { stLovelace = 1
+                , stUsdm = 0
+                , stOtherAssetsCount = 0
+                }
+        , ssPendingOrders = []
+        }
+
+stubTreasuryUtxo :: TreasuryUtxo
+stubTreasuryUtxo =
+    TreasuryUtxo
+        { tuOutref =
+            Outref
+                { orTxId =
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                , orIx = 0
+                }
+        , tuLovelace = 1
+        , tuUsdm = 0
+        , tuOtherAssets = []
+        , tuDatumHash = Nothing
         }
 
 validTxIdPath :: ByteString

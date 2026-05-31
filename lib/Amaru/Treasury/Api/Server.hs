@@ -105,12 +105,19 @@ import Amaru.Treasury.Api.BuildSwap
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
     )
+import Amaru.Treasury.Api.State
+    ( ScopeUtxoFilter (..)
+    )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity
+    , PendingResponse
     , RecentTxManifest
+    , RegistryResponse
     , ScopeHistoryQueryResponse
     , ScopeHistoryResponse
     , ScopeHistoryShaclResponse
+    , ScopeUtxosResponse
+    , ScriptsResponse
     , TxDetailResponse
     , TxIdParam
     )
@@ -124,6 +131,7 @@ import Amaru.Treasury.Inspect.Render (encodeReport)
 import Amaru.Treasury.Inspect.Types
     ( DeploymentAnchor
     , InspectReport
+    , ScopeSection
     )
 import Amaru.Treasury.Metadata (TreasuryMetadata)
 import Amaru.Treasury.Scope (ScopeId)
@@ -159,6 +167,24 @@ type JsonAPI =
                 :<|> "tx"
                     :> Capture "txid" TxIdParam
                     :> Get '[JSON] TxDetailResponse
+                :<|> "registry"
+                    :> Get '[JSON] RegistryResponse
+                :<|> "scripts"
+                    :> Get '[JSON] ScriptsResponse
+                :<|> "pending"
+                    :> QueryParam "scope" ScopeId
+                    :> Get '[JSON] PendingResponse
+                :<|> "scope"
+                    :> Capture "scope" ScopeId
+                    :> "state"
+                    :> Get '[JSON] ScopeSection
+                :<|> "scope"
+                    :> Capture "scope" ScopeId
+                    :> "utxos"
+                    :> QueryParam "asset" Text
+                    :> QueryParam "min_lovelace" Integer
+                    :> QueryParam "limit" Int
+                    :> Get '[JSON] ScopeUtxosResponse
                 :<|> "scope"
                     :> Capture "scope" ScopeId
                     :> "txs"
@@ -226,6 +252,11 @@ data Handlers = Handlers
     , hRecentTxs :: RecentTxManifest
     , hBuildIdentity :: BuildIdentity
     , hTxDetail :: TxIdParam -> IO (Maybe TxDetailResponse)
+    , hRegistry :: IO RegistryResponse
+    , hScripts :: IO ScriptsResponse
+    , hPending :: Maybe ScopeId -> IO PendingResponse
+    , hScopeState :: ScopeId -> IO ScopeSection
+    , hScopeUtxos :: ScopeId -> ScopeUtxoFilter -> IO ScopeUtxosResponse
     , hScopeHistory :: ScopeId -> HistoryFilter -> IO ScopeHistoryResponse
     , hScopeHistoryQuery
         :: ScopeId
@@ -302,6 +333,11 @@ mkServer Handlers{..} =
         :<|> pure hRecentTxs
         :<|> pure hBuildIdentity
         :<|> txDetailH
+        :<|> liftIO hRegistry
+        :<|> liftIO hScripts
+        :<|> pendingH
+        :<|> scopeStateH
+        :<|> scopeUtxosH
         :<|> scopeHistoryH
         :<|> scopeHistoryQueryH
         :<|> scopeHistoryShaclH
@@ -320,6 +356,28 @@ mkServer Handlers{..} =
         case mDetail of
             Just detail -> pure detail
             Nothing -> Handler (throwE err404)
+
+    pendingH :: Maybe ScopeId -> Handler PendingResponse
+    pendingH scope = liftIO (hPending scope)
+
+    scopeStateH :: ScopeId -> Handler ScopeSection
+    scopeStateH scope = liftIO (hScopeState scope)
+
+    scopeUtxosH
+        :: ScopeId
+        -> Maybe Text
+        -> Maybe Integer
+        -> Maybe Int
+        -> Handler ScopeUtxosResponse
+    scopeUtxosH scope asset minLovelace limitRows =
+        liftIO $
+            hScopeUtxos
+                scope
+                ScopeUtxoFilter
+                    { sufAsset = asset
+                    , sufMinLovelace = minLovelace
+                    , sufLimit = limitRows
+                    }
 
     scopeHistoryH
         :: ScopeId

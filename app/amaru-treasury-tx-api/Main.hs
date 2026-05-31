@@ -108,7 +108,15 @@ import Amaru.Treasury.Api.Server
     , Handlers (..)
     , mkApplication
     , mkBuildHandlers
+    , mkBuildProvider
     , mkInspectHandler
+    )
+import Amaru.Treasury.Api.State
+    ( queryPending
+    , queryScopeState
+    , queryScopeUtxos
+    , registryResponseFromMetadata
+    , scriptsResponseFromMetadata
     )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity
@@ -205,6 +213,8 @@ main = do
                                         (runBuildSwap g)
                                         (runBuildDisburse g)
                                         (runBuildReorganize g)
+                                readProvider =
+                                    mkBuildProvider apiIdx backend
                                 handlers =
                                     Handlers
                                         { hInspectReport =
@@ -219,6 +229,29 @@ main = do
                                         , hTxDetail =
                                             queryTxDetailResponse
                                                 (aiHistory apiIdx)
+                                        , hRegistry =
+                                            pure $
+                                                registryResponseFromMetadata
+                                                    metadata
+                                        , hScripts =
+                                            pure $
+                                                scriptsResponseFromMetadata
+                                                    metadata
+                                        , hPending =
+                                            queryPending
+                                                readProvider
+                                                metadata
+                                                swapAddr
+                                        , hScopeState =
+                                            queryScopeState
+                                                readProvider
+                                                metadata
+                                                swapAddr
+                                        , hScopeUtxos =
+                                            queryScopeUtxos
+                                                readProvider
+                                                metadata
+                                                swapAddr
                                         , hScopeHistory =
                                             queryScopeHistoryFilteredResponse
                                                 (aiHistory apiIdx)

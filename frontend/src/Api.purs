@@ -17,10 +17,12 @@ import Prelude
 import Affjax.ResponseFormat as RF
 import Affjax.Web as AX
 import Control.Parallel (parOneOf)
+import Data.Array as Array
 import Data.Argonaut.Core (Json)
 import Data.Argonaut.Decode (decodeJson, printJsonDecodeError)
 import Data.Argonaut.Decode.Class (class DecodeJson)
 import Data.Either (Either(..))
+import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..))
 import Effect.Aff (Aff, delay)
 
@@ -41,6 +43,27 @@ type RecentTxEntry =
 
 type RecentTxManifest =
   { rtmEntries :: Array RecentTxEntry
+  }
+
+type ScopeHistoryEntry =
+  { slot :: Int
+  , txid :: String
+  , role :: String
+  , direction :: String
+  }
+
+type ScopeHistoryResponse =
+  { scope :: String
+  , entries :: Array ScopeHistoryEntry
+  }
+
+type ScopeHistoryFilters =
+  { role :: Maybe String
+  , asset :: Maybe String
+  , direction :: Maybe String
+  , since :: Maybe String
+  , until :: Maybe String
+  , limit :: Maybe String
   }
 
 -- | Cap every HTTP call at 8 s so the UI never hangs forever
@@ -82,6 +105,27 @@ fetchRecentTxs = withTimeout (getJson "/v1/recent-txs")
 fetchVersion :: Aff (Either String BuildIdentity)
 fetchVersion = withTimeout (getJson "/v1/version")
 
+fetchScopeHistory
+  :: String
+  -> ScopeHistoryFilters
+  -> Aff (Either String ScopeHistoryResponse)
+fetchScopeHistory scope filters =
+  withTimeout
+    ( getJson
+        ( "/v1/scope/"
+            <> encodeURIComponent scope
+            <> "/txs"
+            <> queryString
+              [ { key: "role", value: filters.role }
+              , { key: "asset", value: filters.asset }
+              , { key: "direction", value: filters.direction }
+              , { key: "since", value: filters.since }
+              , { key: "until", value: filters.until }
+              , { key: "limit", value: filters.limit }
+              ]
+        )
+    )
+
 getJson
   :: forall a
    . DecodeJson a
@@ -95,3 +139,28 @@ getJson url = do
       case decodeJson resp.body of
         Left err -> Left (printJsonDecodeError err)
         Right v -> Right v
+
+queryString
+  :: Array { key :: String, value :: Maybe String }
+  -> String
+queryString params =
+  let
+    rendered = Array.mapMaybe renderParam params
+  in
+    if Array.null rendered then ""
+    else "?" <> Array.intercalate "&" rendered
+
+renderParam
+  :: { key :: String, value :: Maybe String }
+  -> Maybe String
+renderParam param = case param.value of
+  Nothing -> Nothing
+  Just "" -> Nothing
+  Just v ->
+    Just
+      ( encodeURIComponent param.key
+          <> "="
+          <> encodeURIComponent v
+      )
+
+foreign import encodeURIComponent :: String -> String

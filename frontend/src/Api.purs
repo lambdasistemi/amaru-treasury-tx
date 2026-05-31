@@ -57,6 +57,34 @@ type ScopeHistoryResponse =
   , entries :: Array ScopeHistoryEntry
   }
 
+type TxDetailInput =
+  { txIn :: String
+  , scope :: Maybe String
+  , value :: String
+  }
+
+type TxDetailOutput =
+  { index :: Int
+  , address :: String
+  , value :: String
+  , datum :: Maybe String
+  }
+
+type TxDetailResponse =
+  { slot :: Int
+  , txid :: String
+  , scope :: String
+  , role :: String
+  , direction :: String
+  , blockHash :: Maybe String
+  , fee :: Maybe Int
+  , requiredSigners :: Array String
+  , redeemer :: Maybe String
+  , inputs :: Array TxDetailInput
+  , outputs :: Array TxDetailOutput
+  , lines :: Array String
+  }
+
 type ScopeHistoryFilters =
   { role :: Maybe String
   , asset :: Maybe String
@@ -125,6 +153,11 @@ fetchScopeHistory scope filters =
               ]
         )
     )
+
+fetchTxDetail :: String -> Aff (Either String TxDetailResponse)
+fetchTxDetail txid =
+  withTimeout
+    (getJson ("/v1/tx/" <> encodeURIComponent txid))
 
 getJson
   :: forall a

@@ -885,21 +885,40 @@ md-list-item {
   overflow-wrap: anywhere;
   color: var(--md-sys-color-on-surface);
 }
-.audit-detail__stub {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
+.audit-detail__body {
+  margin-top: 14px;
+}
+.audit-detail__section {
   margin-top: 14px;
   padding: 12px;
   border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: var(--app-radius);
   background: var(--md-sys-color-surface-container);
 }
-.audit-detail__stub md-icon {
-  color: var(--md-sys-color-secondary);
+.audit-detail__section h3 {
+  margin: 0 0 8px 0;
+  color: var(--md-sys-color-on-surface);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
-.audit-detail__stub p {
-  margin: 3px 0 0 0;
+.audit-detail__section ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.audit-detail__section li {
+  overflow-wrap: anywhere;
+  color: var(--md-sys-color-on-surface);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.audit-detail__empty {
+  margin: 0;
   color: var(--md-sys-color-on-surface-variant);
 }
 

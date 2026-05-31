@@ -24,6 +24,13 @@ data LoadState
   | Loaded Api.ScopeHistoryResponse
   | Failed String
 
+data DetailState
+  = DetailIdle
+  | DetailLoading String
+  | DetailLoaded Api.TxDetailResponse
+  | DetailNotFound String
+  | DetailFailed String
+
 type Filters =
   { role :: String
   , asset :: String
@@ -38,6 +45,7 @@ type State =
   , filters :: Filters
   , history :: LoadState
   , selectedTx :: Maybe Api.ScopeHistoryEntry
+  , detail :: DetailState
   , theme :: Theme.Theme
   }
 
@@ -72,6 +80,7 @@ initialState =
   , filters: initialFilters
   , history: Loading
   , selectedTx: Nothing
+  , detail: DetailIdle
   , theme: Theme.Dark
   }
 
@@ -122,28 +131,38 @@ component =
 
     LoadHistory -> do
       st <- H.get
-      H.modify_ \s -> s { history = Loading, selectedTx = Nothing }
+      H.modify_ \s -> s
+        { history = Loading
+        , selectedTx = Nothing
+        , detail = DetailIdle
+        }
       res <- H.liftAff
         ( Api.fetchScopeHistory
             (Shell.scopeSlug st.selectedScope)
             (apiFilters st.filters)
         )
       case res of
-        Right ok ->
+        Right ok -> do
           H.modify_ \s -> s
             { history = Loaded ok
             , selectedTx = Array.head ok.entries
+            , detail = DetailIdle
             }
+          case Array.head ok.entries of
+            Nothing -> pure unit
+            Just tx -> loadTxDetail tx
         Left err ->
           H.modify_ \s -> s
             { history = Failed err
             , selectedTx = Nothing
+            , detail = DetailIdle
             }
 
     SetScope slug -> do
       H.modify_ \s -> s
         { selectedScope = scopeFromSlug slug
         , selectedTx = Nothing
+        , detail = DetailIdle
         }
       handleAction LoadHistory
 
@@ -173,11 +192,34 @@ component =
       H.modify_ \s -> s
         { filters = initialFilters
         , selectedTx = Nothing
+        , detail = DetailIdle
         }
       handleAction LoadHistory
 
-    SelectTx tx ->
+    SelectTx tx -> do
       H.modify_ \s -> s { selectedTx = Just tx }
+      loadTxDetail tx
+
+  loadTxDetail
+    :: Api.ScopeHistoryEntry
+    -> H.HalogenM State Action () output m Unit
+  loadTxDetail tx = do
+    H.modify_ \s -> s { detail = DetailLoading tx.txid }
+    res <- H.liftAff (Api.fetchTxDetail tx.txid)
+    current <- H.get
+    case current.selectedTx of
+      Just selected
+        | selected.txid == tx.txid ->
+            H.modify_ \s -> s
+              { detail = case res of
+                  Right detail -> DetailLoaded detail
+                  Left err ->
+                    if isNotFound404 err then
+                      DetailNotFound tx.txid
+                    else
+                      DetailFailed err
+              }
+      _ -> pure unit
 
 auditHeader :: forall w i. HH.HTML w i
 auditHeader =
@@ -288,7 +330,7 @@ auditBody st =
               else
                 historyTable response.entries st.selectedTx
         ]
-    , detailPanel st.selectedTx
+    , detailPanel st.selectedTx st.detail
     ]
 
 historyTable
@@ -349,8 +391,12 @@ historyRow selectedTx entry =
       , HH.td_ [ badge entry.direction ]
       ]
 
-detailPanel :: forall w. Maybe Api.ScopeHistoryEntry -> HH.HTML w Action
-detailPanel selectedTx =
+detailPanel
+  :: forall w
+   . Maybe Api.ScopeHistoryEntry
+  -> DetailState
+  -> HH.HTML w Action
+detailPanel selectedTx detail =
   HH.aside
     [ HP.classes [ cn "audit-detail" ] ]
     [ HH.h2
@@ -362,25 +408,105 @@ detailPanel selectedTx =
             "No row selected"
             "A transaction summary will appear here."
         Just tx ->
-          HH.div_
-            [ kv "slot" (show tx.slot)
-            , kv "txid" tx.txid
-            , kv "role" tx.role
-            , kv "direction" tx.direction
-            , HH.div
-                [ HP.classes [ cn "audit-detail__stub" ] ]
-                [ md "md-icon" [] [ HH.text "pending_actions" ]
-                , HH.div_
-                    [ HH.strong_ [ HH.text "Detail endpoint pending" ]
-                    , HH.p_
-                        [ HH.text
-                            "Drill-down is stubbed until #248 \
-                            \releases GET /tx/{txid}."
-                        ]
-                    ]
-                ]
-            ]
+          detailContent tx detail
     ]
+
+detailContent
+  :: forall w
+   . Api.ScopeHistoryEntry
+  -> DetailState
+  -> HH.HTML w Action
+detailContent tx (DetailLoaded response) =
+  txDetail response
+detailContent tx detail =
+  HH.div_
+    [ kv "slot" (show tx.slot)
+    , kv "txid" tx.txid
+    , kv "role" tx.role
+    , kv "direction" tx.direction
+    , case detail of
+        DetailIdle ->
+          stateMessage
+            "Detail not loaded"
+            "Select the transaction again to load its full record."
+        DetailLoading txid ->
+          stateMessage
+            "Loading transaction detail"
+            ("Fetching /v1/tx/" <> txid)
+        DetailNotFound _ ->
+          stateMessage
+            "Transaction not found"
+            "The detail API returned 404 for this txid."
+        DetailFailed err ->
+          stateMessage "Detail request failed" err
+        DetailLoaded _ ->
+          stateMessage
+            "Detail loaded"
+            "The selected transaction detail is ready."
+    ]
+
+txDetail :: forall w i. Api.TxDetailResponse -> HH.HTML w i
+txDetail detail =
+  HH.div
+    [ HP.classes [ cn "audit-detail__body" ] ]
+    [ kv "slot" (show detail.slot)
+    , kv "txid" detail.txid
+    , kv "scope" detail.scope
+    , kv "role" detail.role
+    , kv "direction" detail.direction
+    , kv "block hash" (fromMaybe "-" detail.blockHash)
+    , kv "fee" (maybeText show detail.fee)
+    , kv "redeemer" (fromMaybe "-" detail.redeemer)
+    , sectionList "Required signers" detail.requiredSigners identity
+    , sectionList "Inputs" detail.inputs inputRow
+    , sectionList "Outputs" detail.outputs outputRow
+    , sectionList "Lines" detail.lines identity
+    ]
+
+sectionList
+  :: forall a w i
+   . String
+  -> Array a
+  -> (a -> String)
+  -> HH.HTML w i
+sectionList title rows renderRow =
+  HH.section
+    [ HP.classes [ cn "audit-detail__section" ] ]
+    [ HH.h3_ [ HH.text title ]
+    , if Array.null rows then
+        HH.p
+          [ HP.classes [ cn "audit-detail__empty" ] ]
+          [ HH.text "None" ]
+      else
+        HH.ul_
+          ( map
+              ( \row ->
+                  HH.li
+                    [ HP.classes [ cn "mono" ] ]
+                    [ HH.text (renderRow row) ]
+              )
+              rows
+          )
+    ]
+
+inputRow :: Api.TxDetailInput -> String
+inputRow input =
+  input.txIn
+    <> " | "
+    <> fromMaybe "-" input.scope
+    <> " | "
+    <> input.value
+
+outputRow :: Api.TxDetailOutput -> String
+outputRow output =
+  "#"
+    <> show output.index
+    <> " | "
+    <> output.address
+    <> " | "
+    <> output.value
+    <> " | datum "
+    <> fromMaybe "-" output.datum
 
 stateMessage :: forall w i. String -> String -> HH.HTML w i
 stateMessage title body =
@@ -466,6 +592,10 @@ blankToMaybe :: String -> Maybe String
 blankToMaybe "" = Nothing
 blankToMaybe s = Just s
 
+maybeText :: forall a. (a -> String) -> Maybe a -> String
+maybeText _ Nothing = "-"
+maybeText f (Just a) = f a
+
 scopeFromSlug :: String -> Shell.Scope
 scopeFromSlug slug =
   fromMaybe Shell.CoreDevelopment
@@ -487,6 +617,12 @@ isLagging503 err =
   String.contains (String.Pattern "503") err
     || String.contains (String.Pattern "ServiceUnavailable") err
     || String.contains (String.Pattern "Service Unavailable") err
+
+isNotFound404 :: String -> Boolean
+isNotFound404 err =
+  String.contains (String.Pattern "404") err
+    || String.contains (String.Pattern "NotFound") err
+    || String.contains (String.Pattern "Not Found") err
 
 md
   :: forall r w i

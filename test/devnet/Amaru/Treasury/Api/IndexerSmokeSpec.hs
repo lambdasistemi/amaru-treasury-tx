@@ -267,7 +267,11 @@ import Amaru.Treasury.Api.State
     )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity (..)
+    , HealthResponse (..)
+    , ParamsResponse (..)
     , RecentTxManifest (..)
+    , SubmitResponse (..)
+    , TipResponse (..)
     )
 import Amaru.Treasury.Backend.N2C (withLocalNodeClient)
 import Amaru.Treasury.Cli.Common (GlobalOpts (..))
@@ -1651,6 +1655,30 @@ smokeHandlers apiIdx backend globalOpts metadata anchor swapAddr =
                 readProvider
                 metadata
                 swapAddr
+        , hTip = pure (TipResponse 0)
+        , hParams =
+            pure
+                ParamsResponse
+                    { parEra = "conway"
+                    , parSummary = "smoke handler"
+                    }
+        , hSubmit = \_ ->
+            pure
+                SubmitResponse
+                    { subStatus = "unavailable"
+                    , subTxId = Nothing
+                    , subReason = Just "smoke handler submit not wired"
+                    }
+        , hHealth =
+            pure
+                HealthResponse
+                    { hrStatus = "ready"
+                    , hrProcessedSlot = 0
+                    , hrTipSlot = 0
+                    , hrLagSlots = 0
+                    , hrThresholdSlots = 0
+                    , hrUpdatedAt = biBuildTime stubBuildIdentity
+                    }
         , hScopeState =
             queryScopeState
                 readProvider

@@ -25,8 +25,14 @@ import Data.ByteString.Lazy qualified as LBS
 import Data.Tagged (Tagged (..))
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
 import Network.HTTP.Types (status200, status404)
+import Network.HTTP.Types.Method (methodPost)
 import Network.HTTP.Types.Status (statusCode)
-import Network.Wai (Application, responseLBS)
+import Network.Wai
+    ( Application
+    , requestHeaders
+    , requestMethod
+    , responseLBS
+    )
 import Network.Wai.Test (SResponse, runSession)
 import Network.Wai.Test qualified as WaiTest
 import Servant qualified
@@ -47,6 +53,8 @@ import Amaru.Treasury.Api.Server
     )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity (..)
+    , HealthResponse (..)
+    , ParamsResponse (..)
     , PendingResponse (..)
     , PendingScope (..)
     , RecentTxManifest (..)
@@ -60,6 +68,9 @@ import Amaru.Treasury.Api.Types
     , ScopeUtxosResponse (..)
     , ScriptRefResponse (..)
     , ScriptsResponse (..)
+    , SubmitRequest (..)
+    , SubmitResponse (..)
+    , TipResponse (..)
     , TxDetailInput (..)
     , TxDetailOutput (..)
     , TxDetailResponse (..)
@@ -199,6 +210,44 @@ spec = do
                     (mkApplication stubHandlers)
             WaiTest.simpleStatus res `shouldBe` status200
 
+    describe "node utility and health endpoints" $ do
+        it "returns the current tip slot" $ do
+            res <-
+                runSession
+                    (WaiTest.srequest (waiGet "/v1/tip"))
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res) `shouldBe` Just stubTip
+
+        it "returns protocol parameter summary" $ do
+            res <-
+                runSession
+                    (WaiTest.srequest (waiGet "/v1/params"))
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res) `shouldBe` Just stubParams
+
+        it "submits a signed transaction request" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        ( waiPostJson
+                            "/v1/submit"
+                            (Aeson.encode (SubmitRequest "00"))
+                        )
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res) `shouldBe` Just stubSubmit
+
+        it "returns readiness health" $ do
+            res <-
+                runSession
+                    (WaiTest.srequest (waiGet "/v1/health"))
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res) `shouldBe` Just stubHealth
+
     describe "GET /v1/scope/{scope}/txs" $ do
         it "returns indexed tx-history rows for the captured scope" $ do
             res <-
@@ -319,6 +368,18 @@ waiGet path =
         )
         ""
 
+waiPostJson :: ByteString -> ByteString -> WaiTest.SRequest
+waiPostJson path body =
+    WaiTest.SRequest
+        ( WaiTest.setPath
+            WaiTest.defaultRequest
+                { requestMethod = methodPost
+                , requestHeaders = [("Content-Type", "application/json")]
+                }
+            (LBS.toStrict path)
+        )
+        body
+
 statusCodeOf :: SResponse -> Int
 statusCodeOf r = statusCode (WaiTest.simpleStatus r)
 
@@ -339,6 +400,10 @@ stubHandlers =
         , hScripts = pure stubScripts
         , hPending = \scope ->
             pure stubPending{prScope = scope}
+        , hTip = pure stubTip
+        , hParams = pure stubParams
+        , hSubmit = \_ -> pure stubSubmit
+        , hHealth = pure stubHealth
         , hScopeState = \scope ->
             pure stubScopeState{ssScope = scope}
         , hScopeUtxos = \scope _filter ->
@@ -425,6 +490,37 @@ stubPending =
                 , psOrders = []
                 }
             ]
+        }
+
+stubTip :: TipResponse
+stubTip = TipResponse 123
+
+stubParams :: ParamsResponse
+stubParams =
+    ParamsResponse
+        { parEra = "conway"
+        , parSummary = "params"
+        }
+
+stubSubmit :: SubmitResponse
+stubSubmit =
+    SubmitResponse
+        { subStatus = "accepted"
+        , subTxId =
+            Just
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        , subReason = Nothing
+        }
+
+stubHealth :: HealthResponse
+stubHealth =
+    HealthResponse
+        { hrStatus = "ready"
+        , hrProcessedSlot = 120
+        , hrTipSlot = 123
+        , hrLagSlots = 3
+        , hrThresholdSlots = 60
+        , hrUpdatedAt = biBuildTime stubBuildIdentity
         }
 
 stubScopeUtxos :: ScopeUtxosResponse

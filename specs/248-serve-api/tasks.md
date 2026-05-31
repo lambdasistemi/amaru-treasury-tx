@@ -16,10 +16,10 @@
 
 ## Slice 3 — Tip, Params, Submit, Health
 
-- [ ] T248-S3 Add tip, params, submit, and health carriers/routes.
-- [ ] T248-S3 Wire tip/params/submit to the node boundary and health to readiness.
-- [ ] T248-S3 Cover route shapes and submit outcome rendering in unit tests.
-- [ ] T248-S3 Run the relevant gate and commit the slice.
+- [X] T248-S3 Add tip, params, submit, and health carriers/routes.
+- [X] T248-S3 Wire tip/params/submit to the node boundary and health to readiness.
+- [X] T248-S3 Cover route shapes and submit outcome rendering in unit tests.
+- [X] T248-S3 Run the relevant gate and commit the slice.
 
 ## Slice 4 — Serve Config Decision
 

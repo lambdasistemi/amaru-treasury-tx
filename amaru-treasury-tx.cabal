@@ -481,6 +481,7 @@ executable amaru-treasury-tx-api
     , ouroboros-network:api
     , servant-server
     , streaming-commons
+    , stm
     , text
     , time
     , wai

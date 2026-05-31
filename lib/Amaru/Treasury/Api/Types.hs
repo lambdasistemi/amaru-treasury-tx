@@ -48,6 +48,13 @@ module Amaru.Treasury.Api.Types
     , ScopeScripts (..)
     , ScriptRefResponse (..)
 
+      -- * Node utility reads
+    , TipResponse (..)
+    , ParamsResponse (..)
+    , SubmitRequest (..)
+    , SubmitResponse (..)
+    , HealthResponse (..)
+
       -- * Errors
     , ApiError (..)
     ) where
@@ -523,6 +530,112 @@ instance FromJSON ScriptRefResponse where
             ScriptRefResponse
                 <$> o .: "hash"
                 <*> o .: "deployedAt"
+
+-- | Response returned by @GET /v1/tip@.
+newtype TipResponse = TipResponse
+    { trSlot :: Word64
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON TipResponse where
+    toJSON r = object ["slot" .= trSlot r]
+
+instance FromJSON TipResponse where
+    parseJSON =
+        withObject "TipResponse" $ \o ->
+            TipResponse <$> o .: "slot"
+
+-- | Response returned by @GET /v1/params@.
+data ParamsResponse = ParamsResponse
+    { parEra :: Text
+    , parSummary :: Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON ParamsResponse where
+    toJSON r =
+        object
+            [ "era" .= parEra r
+            , "summary" .= parSummary r
+            ]
+
+instance FromJSON ParamsResponse where
+    parseJSON =
+        withObject "ParamsResponse" $ \o ->
+            ParamsResponse
+                <$> o .: "era"
+                <*> o .: "summary"
+
+-- | Request body accepted by @POST /v1/submit@.
+newtype SubmitRequest = SubmitRequest
+    { srCborHex :: Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON SubmitRequest where
+    toJSON r = object ["cborHex" .= srCborHex r]
+
+instance FromJSON SubmitRequest where
+    parseJSON =
+        withObject "SubmitRequest" $ \o ->
+            SubmitRequest <$> o .: "cborHex"
+
+-- | Response returned by @POST /v1/submit@.
+data SubmitResponse = SubmitResponse
+    { subStatus :: Text
+    , subTxId :: Maybe Text
+    , subReason :: Maybe Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON SubmitResponse where
+    toJSON r =
+        object
+            [ "status" .= subStatus r
+            , "txid" .= subTxId r
+            , "reason" .= subReason r
+            ]
+
+instance FromJSON SubmitResponse where
+    parseJSON =
+        withObject "SubmitResponse" $ \o ->
+            SubmitResponse
+                <$> o .: "status"
+                <*> o .:? "txid"
+                <*> o .:? "reason"
+
+-- | Response returned by @GET /v1/health@.
+data HealthResponse = HealthResponse
+    { hrStatus :: Text
+    , hrProcessedSlot :: Word64
+    , hrTipSlot :: Word64
+    , hrLagSlots :: Word64
+    , hrThresholdSlots :: Word64
+    , hrUpdatedAt :: UTCTime
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON HealthResponse where
+    toJSON r =
+        object
+            [ "status" .= hrStatus r
+            , "processedSlot" .= hrProcessedSlot r
+            , "tipSlot" .= hrTipSlot r
+            , "lagSlots" .= hrLagSlots r
+            , "thresholdSlots" .= hrThresholdSlots r
+            , "updatedAt" .= hrUpdatedAt r
+            ]
+
+instance FromJSON HealthResponse where
+    parseJSON =
+        withObject "HealthResponse" $ \o ->
+            HealthResponse
+                <$> o .: "status"
+                <*> o .: "processedSlot"
+                <*> o .: "tipSlot"
+                <*> o .: "lagSlots"
+                <*> o .: "thresholdSlots"
+                <*> o .: "updatedAt"
 
 {- | Uniform 4xx body: human-readable message plus an optional
 field name that points the operator at the source of the

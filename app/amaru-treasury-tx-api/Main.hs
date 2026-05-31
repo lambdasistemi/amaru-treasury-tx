@@ -35,6 +35,7 @@ Refuses to start against any non-mainnet network magic
 -}
 module Main (main) where
 
+import Control.Concurrent.STM (readTVarIO)
 import Data.Aeson qualified as Aeson
 import Data.Bifunctor (first)
 import Data.ByteString (ByteString)
@@ -43,7 +44,8 @@ import Data.Streaming.Network (HostPreference)
 import Data.String (IsString (..))
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Word (Word16)
+import Data.Text.Encoding qualified as TE
+import Data.Word (Word16, Word64)
 import Network.Wai
     ( Middleware
     , mapResponseHeaders
@@ -55,6 +57,7 @@ import Network.Wai.Handler.Warp
     , setHost
     , setPort
     )
+import Ouroboros.Network.Magic (NetworkMagic)
 import Servant.Server (runHandler)
 import Servant.Server.StaticFiles (serveDirectoryFileServer)
 import System.Exit (die)
@@ -71,7 +74,7 @@ import Cardano.Node.Client.N2C.Reconnect
     ( defaultReconnectPolicy
     )
 import Cardano.Node.Client.N2C.Trace (defaultStderrTracer)
-import Cardano.Node.Client.Provider (Provider)
+import Cardano.Node.Client.Provider (Provider (..))
 import Cardano.Node.Client.UTxOIndexer.Follower
     ( InterestSet (..)
     )
@@ -100,7 +103,11 @@ import Amaru.Treasury.Api.LagGuard
     ( withLagGuard
     )
 import Amaru.Treasury.Api.Readiness
-    ( waitReady
+    ( Readiness (..)
+    , ReadinessHandle (..)
+    , ReadyState (..)
+    , checkReady
+    , waitReady
     , withReadinessBridge
     )
 import Amaru.Treasury.Api.Server
@@ -120,10 +127,18 @@ import Amaru.Treasury.Api.State
     )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity
+    , HealthResponse (..)
+    , ParamsResponse (..)
     , RecentTxManifest
+    , SubmitRequest (..)
+    , SubmitResponse (..)
+    , TipResponse (..)
     )
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
-import Amaru.Treasury.Cli.Common (GlobalOpts (..))
+import Amaru.Treasury.Cli.Common
+    ( GlobalOpts (..)
+    , nowTip
+    )
 import Amaru.Treasury.Constants
     ( sundaeOrderAddressMainnet
     )
@@ -142,6 +157,12 @@ import Amaru.Treasury.Metadata
     , readMetadataFile
     )
 import Amaru.Treasury.Scope (ScopeId)
+import Amaru.Treasury.Tx.Submit
+    ( SubmitOutcome (..)
+    , renderSubmitOutcome
+    , renderTxId
+    , submitSignedTx
+    )
 
 -- Main
 
@@ -242,6 +263,23 @@ main = do
                                                 readProvider
                                                 metadata
                                                 swapAddr
+                                        , hTip =
+                                            TipResponse <$> nowTip backend
+                                        , hParams = do
+                                            params <-
+                                                queryProtocolParams backend
+                                            pure
+                                                ParamsResponse
+                                                    { parEra = "conway"
+                                                    , parSummary =
+                                                        T.pack (show params)
+                                                    }
+                                        , hSubmit =
+                                            runSubmitRequest
+                                                (goNetworkMagic g)
+                                                (arcSocket opts)
+                                        , hHealth =
+                                            healthResponse readiness
                                         , hScopeState =
                                             queryScopeState
                                                 readProvider
@@ -324,6 +362,56 @@ runInspectScope apiIdx backend metadata anchor swapAddr scope = do
                     \threw a Servant.ServerError; this is \
                     \unexpected: "
                         <> show e
+
+runSubmitRequest
+    :: NetworkMagic
+    -> FilePath
+    -> SubmitRequest
+    -> IO SubmitResponse
+runSubmitRequest magic socketPath (SubmitRequest cborHex) = do
+    outcome <- submitSignedTx magic socketPath (TE.encodeUtf8 cborHex)
+    pure $ case outcome of
+        SubmitAccepted txId ->
+            SubmitResponse
+                { subStatus = "accepted"
+                , subTxId = Just (renderTxId txId)
+                , subReason = Nothing
+                }
+        SubmitRejected _ ->
+            SubmitResponse
+                { subStatus = "rejected"
+                , subTxId = Nothing
+                , subReason = Just (renderSubmitOutcome outcome)
+                }
+        SubmitDecodeFailed _ ->
+            SubmitResponse
+                { subStatus = "decode_failed"
+                , subTxId = Nothing
+                , subReason = Just (renderSubmitOutcome outcome)
+                }
+
+healthResponse :: ReadinessHandle -> IO HealthResponse
+healthResponse readiness = do
+    status <- checkReady readiness
+    snapshot <- readTVarIO (rhReadiness readiness)
+    pure
+        HealthResponse
+            { hrStatus = readyStateText status
+            , hrProcessedSlot = slotWord64 (rProcessedSlot snapshot)
+            , hrTipSlot = slotWord64 (rTipSlot snapshot)
+            , hrLagSlots = rLagSlots snapshot
+            , hrThresholdSlots = rhLagThresholdSlots readiness
+            , hrUpdatedAt = rUpdatedAt snapshot
+            }
+
+readyStateText :: ReadyState -> Text
+readyStateText = \case
+    Pending -> "pending"
+    Ready -> "ready"
+    Lagging{} -> "lagging"
+
+slotWord64 :: SlotNo -> Word64
+slotWord64 (SlotNo slot) = slot
 
 {- | Build the runner's 'IndexerConfig' from the operator
 flags. The four internally-defaulted fields

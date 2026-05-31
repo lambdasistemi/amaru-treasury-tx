@@ -110,6 +110,8 @@ import Amaru.Treasury.Api.State
     )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity
+    , HealthResponse
+    , ParamsResponse
     , PendingResponse
     , RecentTxManifest
     , RegistryResponse
@@ -118,6 +120,9 @@ import Amaru.Treasury.Api.Types
     , ScopeHistoryShaclResponse
     , ScopeUtxosResponse
     , ScriptsResponse
+    , SubmitRequest
+    , SubmitResponse
+    , TipResponse
     , TxDetailResponse
     , TxIdParam
     )
@@ -174,6 +179,15 @@ type JsonAPI =
                 :<|> "pending"
                     :> QueryParam "scope" ScopeId
                     :> Get '[JSON] PendingResponse
+                :<|> "tip"
+                    :> Get '[JSON] TipResponse
+                :<|> "params"
+                    :> Get '[JSON] ParamsResponse
+                :<|> "submit"
+                    :> ReqBody '[JSON] SubmitRequest
+                    :> Post '[JSON] SubmitResponse
+                :<|> "health"
+                    :> Get '[JSON] HealthResponse
                 :<|> "scope"
                     :> Capture "scope" ScopeId
                     :> "state"
@@ -255,6 +269,10 @@ data Handlers = Handlers
     , hRegistry :: IO RegistryResponse
     , hScripts :: IO ScriptsResponse
     , hPending :: Maybe ScopeId -> IO PendingResponse
+    , hTip :: IO TipResponse
+    , hParams :: IO ParamsResponse
+    , hSubmit :: SubmitRequest -> IO SubmitResponse
+    , hHealth :: IO HealthResponse
     , hScopeState :: ScopeId -> IO ScopeSection
     , hScopeUtxos :: ScopeId -> ScopeUtxoFilter -> IO ScopeUtxosResponse
     , hScopeHistory :: ScopeId -> HistoryFilter -> IO ScopeHistoryResponse
@@ -336,6 +354,10 @@ mkServer Handlers{..} =
         :<|> liftIO hRegistry
         :<|> liftIO hScripts
         :<|> pendingH
+        :<|> liftIO hTip
+        :<|> liftIO hParams
+        :<|> submitH
+        :<|> liftIO hHealth
         :<|> scopeStateH
         :<|> scopeUtxosH
         :<|> scopeHistoryH
@@ -359,6 +381,9 @@ mkServer Handlers{..} =
 
     pendingH :: Maybe ScopeId -> Handler PendingResponse
     pendingH scope = liftIO (hPending scope)
+
+    submitH :: SubmitRequest -> Handler SubmitResponse
+    submitH req = liftIO (hSubmit req)
 
     scopeStateH :: ScopeId -> Handler ScopeSection
     scopeStateH scope = liftIO (hScopeState scope)

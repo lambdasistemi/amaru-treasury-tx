@@ -26,6 +26,9 @@ services:
     container_name: amaru-treasury-dev
     restart: unless-stopped
     read_only: true
+    # Writable /tmp for the history RDF pipeline (see prod compose).
+    tmpfs:
+      - /tmp
     networks:
       - web
     volumes:

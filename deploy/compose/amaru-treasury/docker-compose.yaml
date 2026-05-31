@@ -4,6 +4,13 @@ services:
     container_name: amaru-treasury
     restart: unless-stopped
     read_only: true
+    # Writable /tmp for the history RDF pipeline. /txs/query,
+    # /txs/shacl and ?asset= stage Turtle for cq-rdf/arq/shacl
+    # via withSystemTempDirectory (under /tmp). With read_only
+    # root and no tmpfs, every such request 500s
+    # ("createDirectory: permission denied").
+    tmpfs:
+      - /tmp
     networks:
       - web
     volumes:

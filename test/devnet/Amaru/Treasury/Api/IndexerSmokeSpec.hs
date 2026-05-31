@@ -230,6 +230,7 @@ import Amaru.Treasury.Api.History
     ( queryScopeHistoryFilteredResponse
     , queryScopeHistoryQueryResponse
     , queryScopeHistoryShaclResponse
+    , queryTxDetailResponse
     )
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
@@ -254,11 +255,23 @@ import Amaru.Treasury.Api.Server
     , Handlers (..)
     , mkApplication
     , mkBuildHandlers
+    , mkBuildProvider
     , mkInspectHandler
+    )
+import Amaru.Treasury.Api.State
+    ( queryPending
+    , queryScopeState
+    , queryScopeUtxos
+    , registryResponseFromMetadata
+    , scriptsResponseFromMetadata
     )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity (..)
+    , HealthResponse (..)
+    , ParamsResponse (..)
     , RecentTxManifest (..)
+    , SubmitResponse (..)
+    , TipResponse (..)
     )
 import Amaru.Treasury.Backend.N2C (withLocalNodeClient)
 import Amaru.Treasury.Cli.Common (GlobalOpts (..))
@@ -1634,6 +1647,48 @@ smokeHandlers apiIdx backend globalOpts metadata anchor swapAddr =
                             <> show e
         , hRecentTxs = RecentTxManifest []
         , hBuildIdentity = stubBuildIdentity
+        , hTxDetail = queryTxDetailResponse (aiHistory apiIdx)
+        , hRegistry = pure (registryResponseFromMetadata metadata)
+        , hScripts = pure (scriptsResponseFromMetadata metadata)
+        , hPending =
+            queryPending
+                readProvider
+                metadata
+                swapAddr
+        , hTip = pure (TipResponse 0)
+        , hParams =
+            pure
+                ParamsResponse
+                    { parEra = "conway"
+                    , parSummary = "smoke handler"
+                    }
+        , hSubmit = \_ ->
+            pure
+                SubmitResponse
+                    { subStatus = "unavailable"
+                    , subTxId = Nothing
+                    , subReason = Just "smoke handler submit not wired"
+                    }
+        , hHealth =
+            pure
+                HealthResponse
+                    { hrStatus = "ready"
+                    , hrProcessedSlot = 0
+                    , hrTipSlot = 0
+                    , hrLagSlots = 0
+                    , hrThresholdSlots = 0
+                    , hrUpdatedAt = biBuildTime stubBuildIdentity
+                    }
+        , hScopeState =
+            queryScopeState
+                readProvider
+                metadata
+                swapAddr
+        , hScopeUtxos =
+            queryScopeUtxos
+                readProvider
+                metadata
+                swapAddr
         , hScopeHistory = queryScopeHistoryFilteredResponse (aiHistory apiIdx)
         , hScopeHistoryQuery =
             queryScopeHistoryQueryResponse (aiHistory apiIdx)
@@ -1658,6 +1713,7 @@ smokeHandlers apiIdx backend globalOpts metadata anchor swapAddr =
             (runBuildSwap globalOpts)
             (runBuildDisburse globalOpts)
             (runBuildReorganize globalOpts)
+    readProvider = mkBuildProvider apiIdx backend
 
 stubBuildIdentity :: BuildIdentity
 stubBuildIdentity =

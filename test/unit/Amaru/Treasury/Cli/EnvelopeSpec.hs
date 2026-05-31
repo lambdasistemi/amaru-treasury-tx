@@ -71,6 +71,10 @@ spec =
             parseCmd ["submit", "--tx", "signed.cbor"]
                 `shouldBe` Right "submit"
 
+        it "parses serve --config as the API service surface" $
+            parseCmd ["serve", "--config", "service.yaml"]
+                `shouldBe` Right "serve"
+
         it "leaves tx-build on its existing option shape" $
             parseCmd ["tx-build", "--out", "-"]
                 `shouldBe` Right "tx-build"
@@ -337,6 +341,7 @@ cmdTag = \case
     CmdDeEnvelope -> "de-envelope"
     CmdAttachWitness{} -> "attach-witness"
     CmdSubmit{} -> "submit"
+    CmdServe{} -> "serve"
     CmdTxBuild{} -> "tx-build"
     CmdSwapWizard{} -> "swap-wizard"
     CmdSwapQuote{} -> "swap-quote"

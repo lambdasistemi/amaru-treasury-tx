@@ -25,8 +25,14 @@ import Data.ByteString.Lazy qualified as LBS
 import Data.Tagged (Tagged (..))
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
 import Network.HTTP.Types (status200, status404)
+import Network.HTTP.Types.Method (methodPost)
 import Network.HTTP.Types.Status (statusCode)
-import Network.Wai (Application, responseLBS)
+import Network.Wai
+    ( Application
+    , requestHeaders
+    , requestMethod
+    , responseLBS
+    )
 import Network.Wai.Test (SResponse, runSession)
 import Network.Wai.Test qualified as WaiTest
 import Servant qualified
@@ -47,11 +53,27 @@ import Amaru.Treasury.Api.Server
     )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity (..)
+    , HealthResponse (..)
+    , ParamsResponse (..)
+    , PendingResponse (..)
+    , PendingScope (..)
     , RecentTxManifest (..)
+    , RegistryResponse (..)
+    , RegistryScope (..)
     , ScopeHistoryEntry (..)
     , ScopeHistoryQueryResponse (..)
     , ScopeHistoryResponse (..)
     , ScopeHistoryShaclResponse (..)
+    , ScopeScripts (..)
+    , ScopeUtxosResponse (..)
+    , ScriptRefResponse (..)
+    , ScriptsResponse (..)
+    , SubmitRequest (..)
+    , SubmitResponse (..)
+    , TipResponse (..)
+    , TxDetailInput (..)
+    , TxDetailOutput (..)
+    , TxDetailResponse (..)
     )
 import Amaru.Treasury.Inspect.Render (encodeReport)
 import Amaru.Treasury.Inspect.Types
@@ -59,6 +81,9 @@ import Amaru.Treasury.Inspect.Types
     , DeploymentAnchor (..)
     , InspectReport (..)
     , Outref (..)
+    , ScopeSection (..)
+    , ScopeTotals (..)
+    , TreasuryUtxo (..)
     )
 import Amaru.Treasury.Scope (ScopeId (..))
 import Amaru.Treasury.Wizard.Failure (FieldId (..))
@@ -108,6 +133,120 @@ spec = do
                     (WaiTest.srequest (waiGet "/v1/version"))
                     (mkApplication stubHandlers)
             WaiTest.simpleStatus res `shouldBe` status200
+
+    describe "GET /v1/tx/{txid}" $ do
+        it "returns indexed transaction detail rows" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        (waiGet ("/v1/tx/" <> validTxIdPath))
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res)
+                `shouldBe` Just stubTxDetail
+
+        it "returns 400 when the txid path segment is malformed" $ do
+            res <-
+                runSession
+                    (WaiTest.srequest (waiGet "/v1/tx/not-a-txid"))
+                    (mkApplication stubHandlers)
+            statusCodeOf res `shouldSatisfy` is4xx
+
+        it "returns 404 when the txid is not indexed" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        (waiGet ("/v1/tx/" <> validTxIdPath))
+                    )
+                    (mkApplication stubHandlers{hTxDetail = \_ -> pure Nothing})
+            statusCodeOf res `shouldBe` 404
+
+    describe "state read endpoints" $ do
+        it "returns registry metadata" $ do
+            res <-
+                runSession
+                    (WaiTest.srequest (waiGet "/v1/registry"))
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res)
+                `shouldBe` Just stubRegistry
+
+        it "returns script metadata" $ do
+            res <-
+                runSession
+                    (WaiTest.srequest (waiGet "/v1/scripts"))
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res)
+                `shouldBe` Just stubScripts
+
+        it "returns pending orders grouped by scope" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        (waiGet "/v1/pending?scope=core_development")
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+
+        it "returns one scope state section" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        (waiGet "/v1/scope/core_development/state")
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+
+        it "accepts UTxO filters for one scope" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        ( waiGet
+                            "/v1/scope/core_development/utxos?asset=ada&min_lovelace=1&limit=1"
+                        )
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+
+    describe "node utility and health endpoints" $ do
+        it "returns the current tip slot" $ do
+            res <-
+                runSession
+                    (WaiTest.srequest (waiGet "/v1/tip"))
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res) `shouldBe` Just stubTip
+
+        it "returns protocol parameter summary" $ do
+            res <-
+                runSession
+                    (WaiTest.srequest (waiGet "/v1/params"))
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res) `shouldBe` Just stubParams
+
+        it "submits a signed transaction request" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        ( waiPostJson
+                            "/v1/submit"
+                            (Aeson.encode (SubmitRequest "00"))
+                        )
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res) `shouldBe` Just stubSubmit
+
+        it "returns readiness health" $ do
+            res <-
+                runSession
+                    (WaiTest.srequest (waiGet "/v1/health"))
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res) `shouldBe` Just stubHealth
 
     describe "GET /v1/scope/{scope}/txs" $ do
         it "returns indexed tx-history rows for the captured scope" $ do
@@ -229,6 +368,17 @@ waiGet path =
         )
         ""
 
+waiPostJson :: ByteString -> ByteString -> WaiTest.SRequest
+waiPostJson path =
+    WaiTest.SRequest
+        ( WaiTest.setPath
+            WaiTest.defaultRequest
+                { requestMethod = methodPost
+                , requestHeaders = [("Content-Type", "application/json")]
+                }
+            (LBS.toStrict path)
+        )
+
 statusCodeOf :: SResponse -> Int
 statusCodeOf r = statusCode (WaiTest.simpleStatus r)
 
@@ -244,6 +394,19 @@ stubHandlers =
         { hInspectReport = \_scope -> pure stubReport
         , hRecentTxs = RecentTxManifest []
         , hBuildIdentity = stubBuildIdentity
+        , hTxDetail = \_ -> pure (Just stubTxDetail)
+        , hRegistry = pure stubRegistry
+        , hScripts = pure stubScripts
+        , hPending = \scope ->
+            pure stubPending{prScope = scope}
+        , hTip = pure stubTip
+        , hParams = pure stubParams
+        , hSubmit = \_ -> pure stubSubmit
+        , hHealth = pure stubHealth
+        , hScopeState = \scope ->
+            pure stubScopeState{ssScope = scope}
+        , hScopeUtxos = \scope _filter ->
+            pure stubScopeUtxos{surScope = scope}
         , hScopeHistory = \scope _filter ->
             pure stubHistory{shrScope = scope}
         , hScopeHistoryQuery = \scope _queryName ->
@@ -278,6 +441,161 @@ stubHandlers =
         , hBuildDisburse = \_ -> pure disburseIntentFailureResp
         , hBuildReorganize = \_ -> pure reorganizeIntentFailureResp
         , hRawHandler = stubRawHandler
+        }
+
+stubRegistry :: RegistryResponse
+stubRegistry =
+    RegistryResponse
+        { rrScopeOwners =
+            "11ace24a1111111111111111111111111111111111111111111111111111111111#0"
+        , rrScopes =
+            [ RegistryScope
+                { rsScope = CoreDevelopment
+                , rsOwner = Just "owner"
+                , rsBudget = Just 1
+                , rsAddress = "addr1..."
+                }
+            ]
+        }
+
+stubScripts :: ScriptsResponse
+stubScripts =
+    ScriptsResponse
+        { srScopes =
+            [ ScopeScripts
+                { ssrScope = CoreDevelopment
+                , ssrTreasury = stubScriptRef
+                , ssrPermissions = stubScriptRef
+                , ssrRegistry = stubScriptRef
+                }
+            ]
+        }
+
+stubScriptRef :: ScriptRefResponse
+stubScriptRef =
+    ScriptRefResponse
+        { srrHash = "00"
+        , srrDeployedAt =
+            "11ace24a1111111111111111111111111111111111111111111111111111111111#0"
+        }
+
+stubPending :: PendingResponse
+stubPending =
+    PendingResponse
+        { prScope = Nothing
+        , prEntries =
+            [ PendingScope
+                { psScope = CoreDevelopment
+                , psOrders = []
+                }
+            ]
+        }
+
+stubTip :: TipResponse
+stubTip = TipResponse 123
+
+stubParams :: ParamsResponse
+stubParams =
+    ParamsResponse
+        { parEra = "conway"
+        , parSummary = "params"
+        }
+
+stubSubmit :: SubmitResponse
+stubSubmit =
+    SubmitResponse
+        { subStatus = "accepted"
+        , subTxId =
+            Just
+                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        , subReason = Nothing
+        }
+
+stubHealth :: HealthResponse
+stubHealth =
+    HealthResponse
+        { hrStatus = "ready"
+        , hrProcessedSlot = 120
+        , hrTipSlot = 123
+        , hrLagSlots = 3
+        , hrThresholdSlots = 60
+        , hrUpdatedAt = biBuildTime stubBuildIdentity
+        }
+
+stubScopeUtxos :: ScopeUtxosResponse
+stubScopeUtxos =
+    ScopeUtxosResponse
+        { surScope = CoreDevelopment
+        , surEntries = [stubTreasuryUtxo]
+        }
+
+stubScopeState :: ScopeSection
+stubScopeState =
+    ScopeSection
+        { ssScope = CoreDevelopment
+        , ssTreasuryAddress = "addr1..."
+        , ssTreasuryScriptHash = "00"
+        , ssTreasuryUtxos = [stubTreasuryUtxo]
+        , ssTreasuryTotals =
+            ScopeTotals
+                { stLovelace = 1
+                , stUsdm = 0
+                , stOtherAssetsCount = 0
+                }
+        , ssPendingOrders = []
+        }
+
+stubTreasuryUtxo :: TreasuryUtxo
+stubTreasuryUtxo =
+    TreasuryUtxo
+        { tuOutref =
+            Outref
+                { orTxId =
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                , orIx = 0
+                }
+        , tuLovelace = 1
+        , tuUsdm = 0
+        , tuOtherAssets = []
+        , tuDatumHash = Nothing
+        }
+
+validTxIdPath :: ByteString
+validTxIdPath =
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+stubTxDetail :: TxDetailResponse
+stubTxDetail =
+    TxDetailResponse
+        { tdrSlot = 42
+        , tdrTxId =
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        , tdrScope = "core_development"
+        , tdrRole = "disburse"
+        , tdrDirection = "outbound"
+        , tdrBlockHash = Just "abcd"
+        , tdrFee = Just 2
+        , tdrRequiredSigners = ["signer-a"]
+        , tdrRedeemer = Just "redeemer-summary"
+        , tdrInputs =
+            [ TxDetailInput
+                { tdiTxIn = "input#0"
+                , tdiScope = Just "core_development"
+                , tdiValue = "42 lovelace"
+                }
+            ]
+        , tdrOutputs =
+            [ TxDetailOutput
+                { tdoIndex = 0
+                , tdoAddress = "addr1..."
+                , tdoValue = "40 lovelace"
+                , tdoDatum = Just "inlineDatum"
+                }
+            ]
+        , tdrLines =
+            [ "slot 42"
+            , "txid aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ]
         }
 
 -- ---------------------------------------------------------------------------

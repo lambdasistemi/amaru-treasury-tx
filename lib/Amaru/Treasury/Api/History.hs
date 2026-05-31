@@ -15,8 +15,10 @@ module Amaru.Treasury.Api.History
     , queryScopeHistoryFilteredResponse
     , queryScopeHistoryQueryResponse
     , queryScopeHistoryShaclResponse
+    , queryTxDetailResponse
     , historyResponseFromEntries
     , historyEntryFromSummary
+    , txDetailResponseFromSummary
     ) where
 
 import Data.ByteString qualified as BS
@@ -34,8 +36,11 @@ import Cardano.Node.Client.TxHistoryIndexer.Types
     , TxDirection (..)
     , TxId (..)
     , TxRole (..)
+    , TxSummary (..)
     , TxSummaryEntry (..)
+    , TxSummaryInput (..)
     , TxSummaryKey (..)
+    , TxSummaryOutput (..)
     )
 import Cardano.Slotting.Slot (SlotNo (..))
 
@@ -44,6 +49,14 @@ import Amaru.Treasury.Api.Types
     , ScopeHistoryQueryResponse (..)
     , ScopeHistoryResponse (..)
     , ScopeHistoryShaclResponse (..)
+    , TxDetailInput (..)
+    , TxDetailOutput (..)
+    , TxDetailResponse (..)
+    , TxIdParam (..)
+    )
+import Amaru.Treasury.Cli.History
+    ( queryTxDetail
+    , renderTxDetail
     )
 import Amaru.Treasury.History.Sparql
     ( HistoryFilter
@@ -123,6 +136,12 @@ queryScopeHistoryShaclResponse idx scope shapeName = do
                     }
         Left err -> fail (T.unpack (renderHistorySparqlError err))
 
+-- | Query the local history store for one transaction detail.
+queryTxDetailResponse
+    :: HistoryIndexer -> TxIdParam -> IO (Maybe TxDetailResponse)
+queryTxDetailResponse idx (TxIdParam txid) =
+    fmap txDetailResponseFromSummary <$> queryTxDetail idx txid
+
 queryScopeEntries :: HistoryIndexer -> ScopeId -> IO [TxSummaryEntry]
 queryScopeEntries idx scope =
     queryHistory idx treasuryTenantId (scopeHistoryScope scope)
@@ -159,3 +178,53 @@ directionText = TE.decodeUtf8 . unTxDirection
 scopeHistoryScope :: ScopeId -> HistoryScope
 scopeHistoryScope =
     HistoryScope . TE.encodeUtf8 . scopeText
+
+-- | Convert the CLI tx-detail summary into the HTTP response shape.
+txDetailResponseFromSummary :: TxSummary -> TxDetailResponse
+txDetailResponseFromSummary summary =
+    TxDetailResponse
+        { tdrSlot = unSlotNo (tskSlot key)
+        , tdrTxId = txIdText (tskTxId key)
+        , tdrScope = scopeTextOf (tskScope key)
+        , tdrRole = roleText (tskRole key)
+        , tdrDirection = directionText (txsDirection summary)
+        , tdrBlockHash = hexText <$> txsBlockHash summary
+        , tdrFee = txsFee summary
+        , tdrRequiredSigners = bytesText <$> txsRequiredSigners summary
+        , tdrRedeemer = bytesText <$> txsRedeemer summary
+        , tdrInputs = inputFromSummary <$> txsInputs summary
+        , tdrOutputs =
+            zipWith outputFromSummary [(0 :: Int) ..] (txsOutputs summary)
+        , tdrLines = renderTxDetail summary
+        }
+  where
+    key = txsKey summary
+
+inputFromSummary :: TxSummaryInput -> TxDetailInput
+inputFromSummary input =
+    TxDetailInput
+        { tdiTxIn = bytesText (tsiTxIn input)
+        , tdiScope = scopeTextOf <$> tsiScope input
+        , tdiValue = bytesText (tsiValue input)
+        }
+
+outputFromSummary :: Int -> TxSummaryOutput -> TxDetailOutput
+outputFromSummary ix output =
+    TxDetailOutput
+        { tdoIndex = ix
+        , tdoAddress = bytesText (tsoAddress output)
+        , tdoValue = bytesText (tsoValue output)
+        , tdoDatum = bytesText <$> tsoDatum output
+        }
+
+txIdText :: TxId -> Text
+txIdText = hexText . unTxId
+
+hexText :: BS.ByteString -> Text
+hexText = TE.decodeUtf8 . B16.encode
+
+scopeTextOf :: HistoryScope -> Text
+scopeTextOf = bytesText . unHistoryScope
+
+bytesText :: BS.ByteString -> Text
+bytesText = TE.decodeUtf8Lenient

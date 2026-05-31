@@ -116,6 +116,7 @@ library
     Amaru.Treasury.Api.Readiness
     Amaru.Treasury.Api.Readiness.Internal
     Amaru.Treasury.Api.Server
+    Amaru.Treasury.Api.State
     Amaru.Treasury.Api.Types
     Amaru.Treasury.AuxData
     Amaru.Treasury.Backend
@@ -154,6 +155,7 @@ library
     Amaru.Treasury.Cli.RegistryInitWizard
     Amaru.Treasury.Cli.ReorganizeWizard
     Amaru.Treasury.Cli.ReportRender
+    Amaru.Treasury.Cli.Serve
     Amaru.Treasury.Cli.StakeRewardInitWizard
     Amaru.Treasury.Cli.Submit
     Amaru.Treasury.Cli.SwapCancel
@@ -479,6 +481,7 @@ executable amaru-treasury-tx-api
     , optparse-applicative
     , ouroboros-network:api
     , servant-server
+    , stm
     , streaming-commons
     , text
     , time

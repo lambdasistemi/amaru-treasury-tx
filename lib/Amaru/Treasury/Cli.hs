@@ -90,6 +90,10 @@ import Amaru.Treasury.Cli.ReorganizeWizard
     ( ReorganizeWizardOpts
     , reorganizeWizardOptsP
     )
+import Amaru.Treasury.Cli.Serve
+    ( ServeOpts
+    , serveOptsP
+    )
 import Amaru.Treasury.Cli.StakeRewardInitWizard
     ( StakeRewardInitWizardOpts
     , stakeRewardInitWizardOptsP
@@ -155,6 +159,7 @@ data Cmd
     | CmdVaultCreate VaultCreateOpts
     | CmdWitness WitnessOpts
     | CmdSubmit SubmitOpts
+    | CmdServe ServeOpts
     | CmdEnvelopeTx
     | CmdEnvelopeWitness
     | CmdEnvelopeSignedTx
@@ -315,6 +320,14 @@ cmdP =
                     (CmdSubmit <$> submitOptsP)
                     ( progDesc
                         "Submit a signed Conway tx CBOR hex via the local node socket"
+                    )
+                )
+            <> command
+                "serve"
+                ( info
+                    (CmdServe <$> serveOptsP)
+                    ( progDesc
+                        "Run the HTTP API service (delegates to amaru-treasury-tx-api)"
                     )
                 )
             <> command

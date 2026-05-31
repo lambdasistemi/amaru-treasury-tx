@@ -31,23 +31,60 @@ module Amaru.Treasury.Api.Types
     , ScopeHistoryQueryResponse (..)
     , ScopeHistoryShaclResponse (..)
 
+      -- * Indexed transaction detail
+    , TxIdParam (..)
+    , txIdParamHex
+    , TxDetailResponse (..)
+    , TxDetailInput (..)
+    , TxDetailOutput (..)
+
+      -- * Indexed state reads
+    , ScopeUtxosResponse (..)
+    , PendingResponse (..)
+    , PendingScope (..)
+    , RegistryResponse (..)
+    , RegistryScope (..)
+    , ScriptsResponse (..)
+    , ScopeScripts (..)
+    , ScriptRefResponse (..)
+
+      -- * Node utility reads
+    , TipResponse (..)
+    , ParamsResponse (..)
+    , SubmitRequest (..)
+    , SubmitResponse (..)
+    , HealthResponse (..)
+
       -- * Errors
     , ApiError (..)
     ) where
 
+import Cardano.Node.Client.TxHistoryIndexer.Types
+    ( TxId (..)
+    )
 import Data.Aeson
     ( FromJSON (..)
     , ToJSON (..)
     , object
     , withObject
     , (.:)
+    , (.:?)
     , (.=)
     )
+import Data.ByteString qualified as BS
+import Data.ByteString.Base16 qualified as B16
 import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.Time (UTCTime)
 import Data.Word (Word64)
 import GHC.Generics (Generic)
+import Web.HttpApiData (FromHttpApiData (..))
 
+import Amaru.Treasury.Inspect.Types
+    ( PendingSwapOrder
+    , TreasuryUtxo
+    )
 import Amaru.Treasury.Scope (ScopeId)
 
 {- | Payload of @GET /v1/version@. Constructed entirely at
@@ -217,6 +254,388 @@ instance FromJSON ScopeHistoryShaclResponse where
                 <*> o .: "shape"
                 <*> o .: "conforms"
                 <*> o .: "report"
+
+-- | Parsed @/v1/tx/<txid>@ path segment.
+newtype TxIdParam = TxIdParam
+    { unTxIdParam :: TxId
+    }
+    deriving stock (Eq, Show)
+
+instance FromHttpApiData TxIdParam where
+    parseUrlPiece raw =
+        case B16.decode (TE.encodeUtf8 raw) of
+            Right bytes
+                | BS.length bytes == 32 -> Right (TxIdParam (TxId bytes))
+                | otherwise ->
+                    Left
+                        "txid must be a 32-byte transaction id encoded as hex"
+            Left err -> Left ("txid must be hex: " <> T.pack err)
+
+-- | Render a parsed path txid back to lowercase hex.
+txIdParamHex :: TxIdParam -> Text
+txIdParamHex (TxIdParam (TxId bytes)) =
+    TE.decodeUtf8 (B16.encode bytes)
+
+-- | Response returned by @GET /v1/tx/<txid>@.
+data TxDetailResponse = TxDetailResponse
+    { tdrSlot :: Word64
+    , tdrTxId :: Text
+    , tdrScope :: Text
+    , tdrRole :: Text
+    , tdrDirection :: Text
+    , tdrBlockHash :: Maybe Text
+    , tdrFee :: Maybe Word64
+    , tdrRequiredSigners :: [Text]
+    , tdrRedeemer :: Maybe Text
+    , tdrInputs :: [TxDetailInput]
+    , tdrOutputs :: [TxDetailOutput]
+    , tdrLines :: [Text]
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON TxDetailResponse where
+    toJSON r =
+        object
+            [ "slot" .= tdrSlot r
+            , "txid" .= tdrTxId r
+            , "scope" .= tdrScope r
+            , "role" .= tdrRole r
+            , "direction" .= tdrDirection r
+            , "blockHash" .= tdrBlockHash r
+            , "fee" .= tdrFee r
+            , "requiredSigners" .= tdrRequiredSigners r
+            , "redeemer" .= tdrRedeemer r
+            , "inputs" .= tdrInputs r
+            , "outputs" .= tdrOutputs r
+            , "lines" .= tdrLines r
+            ]
+
+instance FromJSON TxDetailResponse where
+    parseJSON =
+        withObject "TxDetailResponse" $ \o ->
+            TxDetailResponse
+                <$> o .: "slot"
+                <*> o .: "txid"
+                <*> o .: "scope"
+                <*> o .: "role"
+                <*> o .: "direction"
+                <*> o .:? "blockHash"
+                <*> o .:? "fee"
+                <*> o .: "requiredSigners"
+                <*> o .:? "redeemer"
+                <*> o .: "inputs"
+                <*> o .: "outputs"
+                <*> o .: "lines"
+
+-- | One indexed input in a transaction detail response.
+data TxDetailInput = TxDetailInput
+    { tdiTxIn :: Text
+    , tdiScope :: Maybe Text
+    , tdiValue :: Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON TxDetailInput where
+    toJSON i =
+        object
+            [ "txIn" .= tdiTxIn i
+            , "scope" .= tdiScope i
+            , "value" .= tdiValue i
+            ]
+
+instance FromJSON TxDetailInput where
+    parseJSON =
+        withObject "TxDetailInput" $ \o ->
+            TxDetailInput
+                <$> o .: "txIn"
+                <*> o .:? "scope"
+                <*> o .: "value"
+
+-- | One indexed output in a transaction detail response.
+data TxDetailOutput = TxDetailOutput
+    { tdoIndex :: Int
+    , tdoAddress :: Text
+    , tdoValue :: Text
+    , tdoDatum :: Maybe Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON TxDetailOutput where
+    toJSON o =
+        object
+            [ "index" .= tdoIndex o
+            , "address" .= tdoAddress o
+            , "value" .= tdoValue o
+            , "datum" .= tdoDatum o
+            ]
+
+instance FromJSON TxDetailOutput where
+    parseJSON =
+        withObject "TxDetailOutput" $ \o ->
+            TxDetailOutput
+                <$> o .: "index"
+                <*> o .: "address"
+                <*> o .: "value"
+                <*> o .:? "datum"
+
+-- | Response returned by @GET /v1/scope/<scope>/utxos@.
+data ScopeUtxosResponse = ScopeUtxosResponse
+    { surScope :: ScopeId
+    , surEntries :: [TreasuryUtxo]
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON ScopeUtxosResponse where
+    toJSON r =
+        object
+            [ "scope" .= surScope r
+            , "entries" .= surEntries r
+            ]
+
+-- | Response returned by @GET /v1/pending@.
+data PendingResponse = PendingResponse
+    { prScope :: Maybe ScopeId
+    , prEntries :: [PendingScope]
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON PendingResponse where
+    toJSON r =
+        object
+            [ "scope" .= prScope r
+            , "entries" .= prEntries r
+            ]
+
+-- | Pending orders grouped by treasury scope.
+data PendingScope = PendingScope
+    { psScope :: ScopeId
+    , psOrders :: [PendingSwapOrder]
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON PendingScope where
+    toJSON s =
+        object
+            [ "scope" .= psScope s
+            , "orders" .= psOrders s
+            ]
+
+-- | Deployment registry metadata for web clients.
+data RegistryResponse = RegistryResponse
+    { rrScopeOwners :: Text
+    , rrScopes :: [RegistryScope]
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON RegistryResponse where
+    toJSON r =
+        object
+            [ "scopeOwners" .= rrScopeOwners r
+            , "scopes" .= rrScopes r
+            ]
+
+instance FromJSON RegistryResponse where
+    parseJSON =
+        withObject "RegistryResponse" $ \o ->
+            RegistryResponse
+                <$> o .: "scopeOwners"
+                <*> o .: "scopes"
+
+-- | One scope's registry metadata.
+data RegistryScope = RegistryScope
+    { rsScope :: ScopeId
+    , rsOwner :: Maybe Text
+    , rsBudget :: Maybe Integer
+    , rsAddress :: Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON RegistryScope where
+    toJSON s =
+        object
+            [ "scope" .= rsScope s
+            , "owner" .= rsOwner s
+            , "budget" .= rsBudget s
+            , "address" .= rsAddress s
+            ]
+
+instance FromJSON RegistryScope where
+    parseJSON =
+        withObject "RegistryScope" $ \o ->
+            RegistryScope
+                <$> o .: "scope"
+                <*> o .:? "owner"
+                <*> o .:? "budget"
+                <*> o .: "address"
+
+-- | Deployment script metadata for web clients.
+newtype ScriptsResponse = ScriptsResponse
+    { srScopes :: [ScopeScripts]
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON ScriptsResponse where
+    toJSON r =
+        object ["scopes" .= srScopes r]
+
+instance FromJSON ScriptsResponse where
+    parseJSON =
+        withObject "ScriptsResponse" $ \o ->
+            ScriptsResponse <$> o .: "scopes"
+
+-- | Reference scripts published for one scope.
+data ScopeScripts = ScopeScripts
+    { ssrScope :: ScopeId
+    , ssrTreasury :: ScriptRefResponse
+    , ssrPermissions :: ScriptRefResponse
+    , ssrRegistry :: ScriptRefResponse
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON ScopeScripts where
+    toJSON s =
+        object
+            [ "scope" .= ssrScope s
+            , "treasury" .= ssrTreasury s
+            , "permissions" .= ssrPermissions s
+            , "registry" .= ssrRegistry s
+            ]
+
+instance FromJSON ScopeScripts where
+    parseJSON =
+        withObject "ScopeScripts" $ \o ->
+            ScopeScripts
+                <$> o .: "scope"
+                <*> o .: "treasury"
+                <*> o .: "permissions"
+                <*> o .: "registry"
+
+-- | One script reference from deployment metadata.
+data ScriptRefResponse = ScriptRefResponse
+    { srrHash :: Text
+    , srrDeployedAt :: Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON ScriptRefResponse where
+    toJSON r =
+        object
+            [ "hash" .= srrHash r
+            , "deployedAt" .= srrDeployedAt r
+            ]
+
+instance FromJSON ScriptRefResponse where
+    parseJSON =
+        withObject "ScriptRefResponse" $ \o ->
+            ScriptRefResponse
+                <$> o .: "hash"
+                <*> o .: "deployedAt"
+
+-- | Response returned by @GET /v1/tip@.
+newtype TipResponse = TipResponse
+    { trSlot :: Word64
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON TipResponse where
+    toJSON r = object ["slot" .= trSlot r]
+
+instance FromJSON TipResponse where
+    parseJSON =
+        withObject "TipResponse" $ \o ->
+            TipResponse <$> o .: "slot"
+
+-- | Response returned by @GET /v1/params@.
+data ParamsResponse = ParamsResponse
+    { parEra :: Text
+    , parSummary :: Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON ParamsResponse where
+    toJSON r =
+        object
+            [ "era" .= parEra r
+            , "summary" .= parSummary r
+            ]
+
+instance FromJSON ParamsResponse where
+    parseJSON =
+        withObject "ParamsResponse" $ \o ->
+            ParamsResponse
+                <$> o .: "era"
+                <*> o .: "summary"
+
+-- | Request body accepted by @POST /v1/submit@.
+newtype SubmitRequest = SubmitRequest
+    { srCborHex :: Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON SubmitRequest where
+    toJSON r = object ["cborHex" .= srCborHex r]
+
+instance FromJSON SubmitRequest where
+    parseJSON =
+        withObject "SubmitRequest" $ \o ->
+            SubmitRequest <$> o .: "cborHex"
+
+-- | Response returned by @POST /v1/submit@.
+data SubmitResponse = SubmitResponse
+    { subStatus :: Text
+    , subTxId :: Maybe Text
+    , subReason :: Maybe Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON SubmitResponse where
+    toJSON r =
+        object
+            [ "status" .= subStatus r
+            , "txid" .= subTxId r
+            , "reason" .= subReason r
+            ]
+
+instance FromJSON SubmitResponse where
+    parseJSON =
+        withObject "SubmitResponse" $ \o ->
+            SubmitResponse
+                <$> o .: "status"
+                <*> o .:? "txid"
+                <*> o .:? "reason"
+
+-- | Response returned by @GET /v1/health@.
+data HealthResponse = HealthResponse
+    { hrStatus :: Text
+    , hrProcessedSlot :: Word64
+    , hrTipSlot :: Word64
+    , hrLagSlots :: Word64
+    , hrThresholdSlots :: Word64
+    , hrUpdatedAt :: UTCTime
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON HealthResponse where
+    toJSON r =
+        object
+            [ "status" .= hrStatus r
+            , "processedSlot" .= hrProcessedSlot r
+            , "tipSlot" .= hrTipSlot r
+            , "lagSlots" .= hrLagSlots r
+            , "thresholdSlots" .= hrThresholdSlots r
+            , "updatedAt" .= hrUpdatedAt r
+            ]
+
+instance FromJSON HealthResponse where
+    parseJSON =
+        withObject "HealthResponse" $ \o ->
+            HealthResponse
+                <$> o .: "status"
+                <*> o .: "processedSlot"
+                <*> o .: "tipSlot"
+                <*> o .: "lagSlots"
+                <*> o .: "thresholdSlots"
+                <*> o .: "updatedAt"
 
 {- | Uniform 4xx body: human-readable message plus an optional
 field name that points the operator at the source of the

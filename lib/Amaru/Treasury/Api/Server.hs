@@ -59,6 +59,7 @@ import Cardano.Node.Client.Provider
 import Cardano.Node.Client.Provider qualified as Provider
 import Cardano.Node.Client.UTxOIndexer.Provider qualified as IndexedProvider
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans.Except (throwE)
 import Data.Proxy (Proxy (..))
 import Data.Tagged (Tagged)
 import Data.Text (Text)
@@ -67,8 +68,8 @@ import Database.KV.Transaction (RunTransaction (..))
 import Network.HTTP.Media ((//))
 import Network.Wai (Application)
 import Servant
-    ( Handler
-    , Server
+    ( Server
+    , err404
     , serve
     , (:<|>) (..)
     )
@@ -87,6 +88,7 @@ import Servant.API
     , Strict
     , type (:>)
     )
+import Servant.Server.Internal.Handler (Handler (..))
 
 import Amaru.Treasury.Api.BuildDisburse
     ( DisburseBuildRequest
@@ -103,12 +105,26 @@ import Amaru.Treasury.Api.BuildSwap
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
     )
+import Amaru.Treasury.Api.State
+    ( ScopeUtxoFilter (..)
+    )
 import Amaru.Treasury.Api.Types
     ( BuildIdentity
+    , HealthResponse
+    , ParamsResponse
+    , PendingResponse
     , RecentTxManifest
+    , RegistryResponse
     , ScopeHistoryQueryResponse
     , ScopeHistoryResponse
     , ScopeHistoryShaclResponse
+    , ScopeUtxosResponse
+    , ScriptsResponse
+    , SubmitRequest
+    , SubmitResponse
+    , TipResponse
+    , TxDetailResponse
+    , TxIdParam
     )
 import Amaru.Treasury.Cli.TreasuryInspect (runInspectFromBackend)
 import Amaru.Treasury.History.Sparql
@@ -120,6 +136,7 @@ import Amaru.Treasury.Inspect.Render (encodeReport)
 import Amaru.Treasury.Inspect.Types
     ( DeploymentAnchor
     , InspectReport
+    , ScopeSection
     )
 import Amaru.Treasury.Metadata (TreasuryMetadata)
 import Amaru.Treasury.Scope (ScopeId)
@@ -152,6 +169,36 @@ type JsonAPI =
                     :> Get '[JSON] RecentTxManifest
                 :<|> "version"
                     :> Get '[JSON] BuildIdentity
+                :<|> "tx"
+                    :> Capture "txid" TxIdParam
+                    :> Get '[JSON] TxDetailResponse
+                :<|> "registry"
+                    :> Get '[JSON] RegistryResponse
+                :<|> "scripts"
+                    :> Get '[JSON] ScriptsResponse
+                :<|> "pending"
+                    :> QueryParam "scope" ScopeId
+                    :> Get '[JSON] PendingResponse
+                :<|> "tip"
+                    :> Get '[JSON] TipResponse
+                :<|> "params"
+                    :> Get '[JSON] ParamsResponse
+                :<|> "submit"
+                    :> ReqBody '[JSON] SubmitRequest
+                    :> Post '[JSON] SubmitResponse
+                :<|> "health"
+                    :> Get '[JSON] HealthResponse
+                :<|> "scope"
+                    :> Capture "scope" ScopeId
+                    :> "state"
+                    :> Get '[JSON] ScopeSection
+                :<|> "scope"
+                    :> Capture "scope" ScopeId
+                    :> "utxos"
+                    :> QueryParam "asset" Text
+                    :> QueryParam "min_lovelace" Integer
+                    :> QueryParam "limit" Int
+                    :> Get '[JSON] ScopeUtxosResponse
                 :<|> "scope"
                     :> Capture "scope" ScopeId
                     :> "txs"
@@ -218,6 +265,16 @@ data Handlers = Handlers
     { hInspectReport :: ScopeId -> IO InspectReport
     , hRecentTxs :: RecentTxManifest
     , hBuildIdentity :: BuildIdentity
+    , hTxDetail :: TxIdParam -> IO (Maybe TxDetailResponse)
+    , hRegistry :: IO RegistryResponse
+    , hScripts :: IO ScriptsResponse
+    , hPending :: Maybe ScopeId -> IO PendingResponse
+    , hTip :: IO TipResponse
+    , hParams :: IO ParamsResponse
+    , hSubmit :: SubmitRequest -> IO SubmitResponse
+    , hHealth :: IO HealthResponse
+    , hScopeState :: ScopeId -> IO ScopeSection
+    , hScopeUtxos :: ScopeId -> ScopeUtxoFilter -> IO ScopeUtxosResponse
     , hScopeHistory :: ScopeId -> HistoryFilter -> IO ScopeHistoryResponse
     , hScopeHistoryQuery
         :: ScopeId
@@ -293,6 +350,16 @@ mkServer Handlers{..} =
     ( inspectH
         :<|> pure hRecentTxs
         :<|> pure hBuildIdentity
+        :<|> txDetailH
+        :<|> liftIO hRegistry
+        :<|> liftIO hScripts
+        :<|> pendingH
+        :<|> liftIO hTip
+        :<|> liftIO hParams
+        :<|> submitH
+        :<|> liftIO hHealth
+        :<|> scopeStateH
+        :<|> scopeUtxosH
         :<|> scopeHistoryH
         :<|> scopeHistoryQueryH
         :<|> scopeHistoryShaclH
@@ -304,6 +371,38 @@ mkServer Handlers{..} =
   where
     inspectH :: ScopeId -> Handler InspectReport
     inspectH scope = liftIO (hInspectReport scope)
+
+    txDetailH :: TxIdParam -> Handler TxDetailResponse
+    txDetailH txid = do
+        mDetail <- liftIO (hTxDetail txid)
+        case mDetail of
+            Just detail -> pure detail
+            Nothing -> Handler (throwE err404)
+
+    pendingH :: Maybe ScopeId -> Handler PendingResponse
+    pendingH scope = liftIO (hPending scope)
+
+    submitH :: SubmitRequest -> Handler SubmitResponse
+    submitH req = liftIO (hSubmit req)
+
+    scopeStateH :: ScopeId -> Handler ScopeSection
+    scopeStateH scope = liftIO (hScopeState scope)
+
+    scopeUtxosH
+        :: ScopeId
+        -> Maybe Text
+        -> Maybe Integer
+        -> Maybe Int
+        -> Handler ScopeUtxosResponse
+    scopeUtxosH scope asset minLovelace limitRows =
+        liftIO $
+            hScopeUtxos
+                scope
+                ScopeUtxoFilter
+                    { sufAsset = asset
+                    , sufMinLovelace = minLovelace
+                    , sufLimit = limitRows
+                    }
 
     scopeHistoryH
         :: ScopeId

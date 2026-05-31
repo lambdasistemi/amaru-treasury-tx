@@ -63,7 +63,6 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
-import Data.Text.Read qualified as TR
 import Data.Word (Word64)
 import System.Exit (ExitCode (..))
 import System.FilePath ((</>))
@@ -322,28 +321,39 @@ runNamedHistoryShacl name entries = do
         Left err -> pure (Left err)
         Right ttl -> runShacl name (shapeBytes name) ttl
 
-{- | Apply the shared history filters through the RDF query layer, then
-return the original indexer entries in index order.
+{- | Apply the shared history filters, returning the original indexer
+entries in index order.
+
+Role, direction, slot bounds, and limit are available directly on each
+indexed entry. Asset filtering still uses the RDF asset-flow query
+because asset movements are derived from the transaction body.
 -}
 filterHistoryEntries
     :: HistoryFilter
     -> [TxSummaryEntry]
     -> IO (Either HistorySparqlError [TxSummaryEntry])
 filterHistoryEntries flt@HistoryFilter{..} entries = do
-    mHistory <- runNamedHistoryQuery HistoryEntriesQuery entries
-    case mHistory of
-        Left err -> pure (Left err)
-        Right historyRows -> do
-            mAssetTxIds <- assetTxIds flt entries
-            pure $ do
-                assetIds <- mAssetTxIds
-                txIds <- matchingHistoryTxIds flt historyRows
-                let wanted = Set.intersection txIds assetIds
-                Right $
-                    applyLimit hfLimit $
-                        List.filter
-                            ((`Set.member` wanted) . entryTxIdText)
-                            entries
+    mAssetTxIds <- assetTxIds flt entries
+    pure $ do
+        assetIds <- mAssetTxIds
+        Right $
+            applyLimit hfLimit $
+                List.filter
+                    ( \entry ->
+                        historyEntryMatches flt entry
+                            && entryTxIdText entry `Set.member` assetIds
+                    )
+                    entries
+
+historyEntryMatches :: HistoryFilter -> TxSummaryEntry -> Bool
+historyEntryMatches HistoryFilter{..} entry =
+    matchesText hfRole (Just (roleText (tskRole key)))
+        && matchesText hfDirection (Just (directionText (tseDirection entry)))
+        && maybe True (slot >=) hfSince
+        && maybe True (slot <=) hfUntil
+  where
+    key = tseKey entry
+    slot = unSlotNo (tskSlot key)
 
 assetTxIds
     :: HistoryFilter
@@ -367,40 +377,11 @@ assetTxIds HistoryFilter{hfAsset = Just needle} entries = do
                 , Just txid <- [Map.lookup "txid" row]
                 ]
 
-matchingHistoryTxIds
-    :: HistoryFilter
-    -> HistoryQueryResult
-    -> Either HistorySparqlError (Set.Set Text)
-matchingHistoryTxIds HistoryFilter{..} result =
-    Set.fromList
-        <$> traverse rowTxId (filter rowMatches (resultRows result))
-  where
-    rowMatches row =
-        matchesText hfRole (Map.lookup "role" row)
-            && matchesText hfDirection (Map.lookup "direction" row)
-            && matchesLowerBound hfSince (Map.lookup "slot" row)
-            && matchesUpperBound hfUntil (Map.lookup "slot" row)
-
-    rowTxId row =
-        case Map.lookup "txid" row of
-            Just txid -> Right txid
-            Nothing -> Left (HistoryResultMalformed "missing txid column")
-
 matchesText :: Maybe Text -> Maybe Text -> Bool
 matchesText Nothing _ = True
 matchesText (Just expected) (Just actual) =
     T.toLower expected == T.toLower actual
 matchesText (Just _) Nothing = False
-
-matchesLowerBound :: Maybe Word64 -> Maybe Text -> Bool
-matchesLowerBound Nothing _ = True
-matchesLowerBound (Just lo) value =
-    maybe False (>= lo) (value >>= parseWord64)
-
-matchesUpperBound :: Maybe Word64 -> Maybe Text -> Bool
-matchesUpperBound Nothing _ = True
-matchesUpperBound (Just hi) value =
-    maybe False (<= hi) (value >>= parseWord64)
 
 applyLimit :: Maybe Int -> [a] -> [a]
 applyLimit Nothing = id
@@ -699,13 +680,6 @@ turtleString txt =
         '\r' -> "\\r"
         '\t' -> "\\t"
         c -> T.singleton c
-
-parseWord64 :: Text -> Maybe Word64
-parseWord64 txt =
-    case TR.decimal txt of
-        Right (n, rest)
-            | T.null rest -> Just n
-        _ -> Nothing
 
 processOutputText :: String -> String -> Text
 processOutputText out err =

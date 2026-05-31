@@ -36,6 +36,9 @@ import Amaru.Treasury.Api.Types
     , RecentTxManifest (..)
     , ScopeHistoryEntry (..)
     , ScopeHistoryResponse (..)
+    , TxDetailInput (..)
+    , TxDetailOutput (..)
+    , TxDetailResponse (..)
     )
 import Amaru.Treasury.Scope (ScopeId, allScopes)
 
@@ -52,6 +55,10 @@ spec = do
     describe "ScopeHistoryResponse JSON" $
         it "round-trips via aeson" $
             property roundTripScopeHistoryResponse
+
+    describe "TxDetailResponse JSON" $
+        it "round-trips via aeson" $
+            property roundTripTxDetailResponse
 
     describe "ApiError JSON" $
         it "round-trips via aeson with and without aeField" $
@@ -73,6 +80,11 @@ roundTripRecentTxManifest =
 roundTripScopeHistoryResponse :: Property
 roundTripScopeHistoryResponse =
     forAll genScopeHistoryResponse $ \r ->
+        decode (encode r) == Just r
+
+roundTripTxDetailResponse :: Property
+roundTripTxDetailResponse =
+    forAll genTxDetailResponse $ \r ->
         decode (encode r) == Just r
 
 roundTripApiError :: Property
@@ -116,6 +128,37 @@ genScopeHistoryEntry =
         <*> genHex64
         <*> genShortText
         <*> elements ["outbound", "inbound"]
+
+genTxDetailResponse :: Gen TxDetailResponse
+genTxDetailResponse =
+    TxDetailResponse
+        <$> arbitrary
+        <*> genHex64
+        <*> genShortText
+        <*> genShortText
+        <*> elements ["outbound", "inbound"]
+        <*> oneof [pure Nothing, Just <$> genHex64]
+        <*> oneof [pure Nothing, Just <$> arbitrary]
+        <*> listOf genShortText
+        <*> oneof [pure Nothing, Just <$> genShortText]
+        <*> listOf genTxDetailInput
+        <*> listOf genTxDetailOutput
+        <*> listOf genShortText
+
+genTxDetailInput :: Gen TxDetailInput
+genTxDetailInput =
+    TxDetailInput
+        <$> genShortText
+        <*> oneof [pure Nothing, Just <$> genShortText]
+        <*> genShortText
+
+genTxDetailOutput :: Gen TxDetailOutput
+genTxDetailOutput =
+    TxDetailOutput
+        <$> arbitrary
+        <*> genShortText
+        <*> genShortText
+        <*> oneof [pure Nothing, Just <$> genShortText]
 
 genApiError :: Gen ApiError
 genApiError =

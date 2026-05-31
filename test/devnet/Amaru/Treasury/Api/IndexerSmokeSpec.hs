@@ -230,6 +230,7 @@ import Amaru.Treasury.Api.History
     ( queryScopeHistoryFilteredResponse
     , queryScopeHistoryQueryResponse
     , queryScopeHistoryShaclResponse
+    , queryTxDetailResponse
     )
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
@@ -1634,6 +1635,7 @@ smokeHandlers apiIdx backend globalOpts metadata anchor swapAddr =
                             <> show e
         , hRecentTxs = RecentTxManifest []
         , hBuildIdentity = stubBuildIdentity
+        , hTxDetail = queryTxDetailResponse (aiHistory apiIdx)
         , hScopeHistory = queryScopeHistoryFilteredResponse (aiHistory apiIdx)
         , hScopeHistoryQuery =
             queryScopeHistoryQueryResponse (aiHistory apiIdx)

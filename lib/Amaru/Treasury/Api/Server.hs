@@ -59,6 +59,7 @@ import Cardano.Node.Client.Provider
 import Cardano.Node.Client.Provider qualified as Provider
 import Cardano.Node.Client.UTxOIndexer.Provider qualified as IndexedProvider
 import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Trans.Except (throwE)
 import Data.Proxy (Proxy (..))
 import Data.Tagged (Tagged)
 import Data.Text (Text)
@@ -67,8 +68,8 @@ import Database.KV.Transaction (RunTransaction (..))
 import Network.HTTP.Media ((//))
 import Network.Wai (Application)
 import Servant
-    ( Handler
-    , Server
+    ( Server
+    , err404
     , serve
     , (:<|>) (..)
     )
@@ -87,6 +88,7 @@ import Servant.API
     , Strict
     , type (:>)
     )
+import Servant.Server.Internal.Handler (Handler (..))
 
 import Amaru.Treasury.Api.BuildDisburse
     ( DisburseBuildRequest
@@ -109,6 +111,8 @@ import Amaru.Treasury.Api.Types
     , ScopeHistoryQueryResponse
     , ScopeHistoryResponse
     , ScopeHistoryShaclResponse
+    , TxDetailResponse
+    , TxIdParam
     )
 import Amaru.Treasury.Cli.TreasuryInspect (runInspectFromBackend)
 import Amaru.Treasury.History.Sparql
@@ -152,6 +156,9 @@ type JsonAPI =
                     :> Get '[JSON] RecentTxManifest
                 :<|> "version"
                     :> Get '[JSON] BuildIdentity
+                :<|> "tx"
+                    :> Capture "txid" TxIdParam
+                    :> Get '[JSON] TxDetailResponse
                 :<|> "scope"
                     :> Capture "scope" ScopeId
                     :> "txs"
@@ -218,6 +225,7 @@ data Handlers = Handlers
     { hInspectReport :: ScopeId -> IO InspectReport
     , hRecentTxs :: RecentTxManifest
     , hBuildIdentity :: BuildIdentity
+    , hTxDetail :: TxIdParam -> IO (Maybe TxDetailResponse)
     , hScopeHistory :: ScopeId -> HistoryFilter -> IO ScopeHistoryResponse
     , hScopeHistoryQuery
         :: ScopeId
@@ -293,6 +301,7 @@ mkServer Handlers{..} =
     ( inspectH
         :<|> pure hRecentTxs
         :<|> pure hBuildIdentity
+        :<|> txDetailH
         :<|> scopeHistoryH
         :<|> scopeHistoryQueryH
         :<|> scopeHistoryShaclH
@@ -304,6 +313,13 @@ mkServer Handlers{..} =
   where
     inspectH :: ScopeId -> Handler InspectReport
     inspectH scope = liftIO (hInspectReport scope)
+
+    txDetailH :: TxIdParam -> Handler TxDetailResponse
+    txDetailH txid = do
+        mDetail <- liftIO (hTxDetail txid)
+        case mDetail of
+            Just detail -> pure detail
+            Nothing -> Handler (throwE err404)
 
     scopeHistoryH
         :: ScopeId

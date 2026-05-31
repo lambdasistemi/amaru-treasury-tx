@@ -52,6 +52,9 @@ import Amaru.Treasury.Api.Types
     , ScopeHistoryQueryResponse (..)
     , ScopeHistoryResponse (..)
     , ScopeHistoryShaclResponse (..)
+    , TxDetailInput (..)
+    , TxDetailOutput (..)
+    , TxDetailResponse (..)
     )
 import Amaru.Treasury.Inspect.Render (encodeReport)
 import Amaru.Treasury.Inspect.Types
@@ -108,6 +111,34 @@ spec = do
                     (WaiTest.srequest (waiGet "/v1/version"))
                     (mkApplication stubHandlers)
             WaiTest.simpleStatus res `shouldBe` status200
+
+    describe "GET /v1/tx/{txid}" $ do
+        it "returns indexed transaction detail rows" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        (waiGet ("/v1/tx/" <> validTxIdPath))
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res)
+                `shouldBe` Just stubTxDetail
+
+        it "returns 400 when the txid path segment is malformed" $ do
+            res <-
+                runSession
+                    (WaiTest.srequest (waiGet "/v1/tx/not-a-txid"))
+                    (mkApplication stubHandlers)
+            statusCodeOf res `shouldSatisfy` is4xx
+
+        it "returns 404 when the txid is not indexed" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        (waiGet ("/v1/tx/" <> validTxIdPath))
+                    )
+                    (mkApplication stubHandlers{hTxDetail = \_ -> pure Nothing})
+            statusCodeOf res `shouldBe` 404
 
     describe "GET /v1/scope/{scope}/txs" $ do
         it "returns indexed tx-history rows for the captured scope" $ do
@@ -244,6 +275,7 @@ stubHandlers =
         { hInspectReport = \_scope -> pure stubReport
         , hRecentTxs = RecentTxManifest []
         , hBuildIdentity = stubBuildIdentity
+        , hTxDetail = \_ -> pure (Just stubTxDetail)
         , hScopeHistory = \scope _filter ->
             pure stubHistory{shrScope = scope}
         , hScopeHistoryQuery = \scope _queryName ->
@@ -278,6 +310,44 @@ stubHandlers =
         , hBuildDisburse = \_ -> pure disburseIntentFailureResp
         , hBuildReorganize = \_ -> pure reorganizeIntentFailureResp
         , hRawHandler = stubRawHandler
+        }
+
+validTxIdPath :: ByteString
+validTxIdPath =
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+stubTxDetail :: TxDetailResponse
+stubTxDetail =
+    TxDetailResponse
+        { tdrSlot = 42
+        , tdrTxId =
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        , tdrScope = "core_development"
+        , tdrRole = "disburse"
+        , tdrDirection = "outbound"
+        , tdrBlockHash = Just "abcd"
+        , tdrFee = Just 2
+        , tdrRequiredSigners = ["signer-a"]
+        , tdrRedeemer = Just "redeemer-summary"
+        , tdrInputs =
+            [ TxDetailInput
+                { tdiTxIn = "input#0"
+                , tdiScope = Just "core_development"
+                , tdiValue = "42 lovelace"
+                }
+            ]
+        , tdrOutputs =
+            [ TxDetailOutput
+                { tdoIndex = 0
+                , tdoAddress = "addr1..."
+                , tdoValue = "40 lovelace"
+                , tdoDatum = Just "inlineDatum"
+                }
+            ]
+        , tdrLines =
+            [ "slot 42"
+            , "txid aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            ]
         }
 
 -- ---------------------------------------------------------------------------

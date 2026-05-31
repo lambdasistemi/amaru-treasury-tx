@@ -31,22 +31,38 @@ module Amaru.Treasury.Api.Types
     , ScopeHistoryQueryResponse (..)
     , ScopeHistoryShaclResponse (..)
 
+      -- * Indexed transaction detail
+    , TxIdParam (..)
+    , txIdParamHex
+    , TxDetailResponse (..)
+    , TxDetailInput (..)
+    , TxDetailOutput (..)
+
       -- * Errors
     , ApiError (..)
     ) where
 
+import Cardano.Node.Client.TxHistoryIndexer.Types
+    ( TxId (..)
+    )
 import Data.Aeson
     ( FromJSON (..)
     , ToJSON (..)
     , object
     , withObject
     , (.:)
+    , (.:?)
     , (.=)
     )
+import Data.ByteString qualified as BS
+import Data.ByteString.Base16 qualified as B16
 import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.Time (UTCTime)
 import Data.Word (Word64)
 import GHC.Generics (Generic)
+import Web.HttpApiData (FromHttpApiData (..))
 
 import Amaru.Treasury.Scope (ScopeId)
 
@@ -217,6 +233,129 @@ instance FromJSON ScopeHistoryShaclResponse where
                 <*> o .: "shape"
                 <*> o .: "conforms"
                 <*> o .: "report"
+
+-- | Parsed @/v1/tx/<txid>@ path segment.
+newtype TxIdParam = TxIdParam
+    { unTxIdParam :: TxId
+    }
+    deriving stock (Eq, Show)
+
+instance FromHttpApiData TxIdParam where
+    parseUrlPiece raw =
+        case B16.decode (TE.encodeUtf8 raw) of
+            Right bytes
+                | BS.length bytes == 32 -> Right (TxIdParam (TxId bytes))
+                | otherwise ->
+                    Left
+                        "txid must be a 32-byte transaction id encoded as hex"
+            Left err -> Left ("txid must be hex: " <> T.pack err)
+
+-- | Render a parsed path txid back to lowercase hex.
+txIdParamHex :: TxIdParam -> Text
+txIdParamHex (TxIdParam (TxId bytes)) =
+    TE.decodeUtf8 (B16.encode bytes)
+
+-- | Response returned by @GET /v1/tx/<txid>@.
+data TxDetailResponse = TxDetailResponse
+    { tdrSlot :: Word64
+    , tdrTxId :: Text
+    , tdrScope :: Text
+    , tdrRole :: Text
+    , tdrDirection :: Text
+    , tdrBlockHash :: Maybe Text
+    , tdrFee :: Maybe Word64
+    , tdrRequiredSigners :: [Text]
+    , tdrRedeemer :: Maybe Text
+    , tdrInputs :: [TxDetailInput]
+    , tdrOutputs :: [TxDetailOutput]
+    , tdrLines :: [Text]
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON TxDetailResponse where
+    toJSON r =
+        object
+            [ "slot" .= tdrSlot r
+            , "txid" .= tdrTxId r
+            , "scope" .= tdrScope r
+            , "role" .= tdrRole r
+            , "direction" .= tdrDirection r
+            , "blockHash" .= tdrBlockHash r
+            , "fee" .= tdrFee r
+            , "requiredSigners" .= tdrRequiredSigners r
+            , "redeemer" .= tdrRedeemer r
+            , "inputs" .= tdrInputs r
+            , "outputs" .= tdrOutputs r
+            , "lines" .= tdrLines r
+            ]
+
+instance FromJSON TxDetailResponse where
+    parseJSON =
+        withObject "TxDetailResponse" $ \o ->
+            TxDetailResponse
+                <$> o .: "slot"
+                <*> o .: "txid"
+                <*> o .: "scope"
+                <*> o .: "role"
+                <*> o .: "direction"
+                <*> o .:? "blockHash"
+                <*> o .:? "fee"
+                <*> o .: "requiredSigners"
+                <*> o .:? "redeemer"
+                <*> o .: "inputs"
+                <*> o .: "outputs"
+                <*> o .: "lines"
+
+-- | One indexed input in a transaction detail response.
+data TxDetailInput = TxDetailInput
+    { tdiTxIn :: Text
+    , tdiScope :: Maybe Text
+    , tdiValue :: Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON TxDetailInput where
+    toJSON i =
+        object
+            [ "txIn" .= tdiTxIn i
+            , "scope" .= tdiScope i
+            , "value" .= tdiValue i
+            ]
+
+instance FromJSON TxDetailInput where
+    parseJSON =
+        withObject "TxDetailInput" $ \o ->
+            TxDetailInput
+                <$> o .: "txIn"
+                <*> o .:? "scope"
+                <*> o .: "value"
+
+-- | One indexed output in a transaction detail response.
+data TxDetailOutput = TxDetailOutput
+    { tdoIndex :: Int
+    , tdoAddress :: Text
+    , tdoValue :: Text
+    , tdoDatum :: Maybe Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON TxDetailOutput where
+    toJSON o =
+        object
+            [ "index" .= tdoIndex o
+            , "address" .= tdoAddress o
+            , "value" .= tdoValue o
+            , "datum" .= tdoDatum o
+            ]
+
+instance FromJSON TxDetailOutput where
+    parseJSON =
+        withObject "TxDetailOutput" $ \o ->
+            TxDetailOutput
+                <$> o .: "index"
+                <*> o .: "address"
+                <*> o .: "value"
+                <*> o .:? "datum"
 
 {- | Uniform 4xx body: human-readable message plus an optional
 field name that points the operator at the source of the

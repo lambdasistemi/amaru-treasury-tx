@@ -500,12 +500,37 @@ entryBodyTurtle dir (ix, entry)
                 pure (Right (TE.encodeUtf8 (T.pack out)))
             Right (ExitFailure code, out, err) ->
                 pure
-                    ( Left
-                        ( HistoryCqRdfFailed
-                            code
-                            (processOutputText out err)
+                    ( Right
+                        ( entryBodyFailureTurtle
+                            ix
+                            entry
+                            ( HistoryCqRdfFailed
+                                code
+                                (processOutputText out err)
+                            )
                         )
                     )
+
+entryBodyFailureTurtle
+    :: Int
+    -> TxSummaryEntry
+    -> HistorySparqlError
+    -> ByteString
+entryBodyFailureTurtle ix entry err =
+    TE.encodeUtf8 $
+        T.unlines
+            [ "<urn:amaru-treasury-tx:history:"
+                <> T.pack (show ix)
+                <> "> atx:rdfEmissionWarning ["
+            , "  a atx:RdfEmissionWarning ;"
+            , "  atx:txid " <> turtleString (entryTxIdText entry) <> " ;"
+            , "  atx:message "
+                <> turtleString (renderHistorySparqlError err)
+                <> " ;"
+            , "  atx:emitter \"cq-rdf\""
+            , "] ."
+            , ""
+            ]
 
 -- ---------------------------------------------------------------------------
 -- arq runner

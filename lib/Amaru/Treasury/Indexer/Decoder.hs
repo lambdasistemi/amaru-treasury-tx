@@ -321,18 +321,16 @@ classifyTx extra tx = fromRegistryMint <|> fromRationale
         _ -> Nothing
 
 inboundScopes :: [(ByteString, ScopeId)] -> ConwayTx -> [ScopeId]
-inboundScopes addressMappings tx
-    | redeemerCount tx /= 0 = []
-    | otherwise =
-        unique
-            [ scope
-            | txOut <- toList (tx ^. bodyTxL . outputsTxBodyL)
-            , Just scope <-
-                [ lookup
-                    (textBytes (renderAddress (txOut ^. addrTxOutL)))
-                    addressMappings
-                ]
+inboundScopes addressMappings tx =
+    unique
+        [ scope
+        | txOut <- toList (tx ^. bodyTxL . outputsTxBodyL)
+        , Just scope <-
+            [ lookup
+                (textBytes (renderAddress (txOut ^. addrTxOutL)))
+                addressMappings
             ]
+        ]
 
 unique :: (Ord a) => [a] -> [a]
 unique = go Set.empty

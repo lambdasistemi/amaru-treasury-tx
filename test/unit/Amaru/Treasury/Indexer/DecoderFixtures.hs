@@ -25,6 +25,7 @@ module Amaru.Treasury.Indexer.DecoderFixtures
     , contingencyDisburseFixture
     , mintRegistryFixture
     , inboundFundingFixture
+    , inboundFundingWithRedeemerFixture
     , inboundFundingAddress
     , invalidBlockTx
     ) where
@@ -162,6 +163,16 @@ the decoder classifies it only through the output address mapping.
 inboundFundingFixture :: RoleFixture
 inboundFundingFixture =
     syntheticFixture (scopeText CoreDevelopment) inboundFundingTx
+
+{- | Inbound funding that still carries the original script redeemers.
+It has no treasury rationale metadata, so address interest alone must
+classify it inbound.
+-}
+inboundFundingWithRedeemerFixture :: RoleFixture
+inboundFundingWithRedeemerFixture =
+    syntheticFixture
+        (scopeText CoreDevelopment)
+        (disburseBaseTx & auxDataTxL .~ SNothing)
 
 inboundFundingAddress :: ByteString
 inboundFundingAddress = TE.encodeUtf8 (firstOutputAddress inboundFundingTx)

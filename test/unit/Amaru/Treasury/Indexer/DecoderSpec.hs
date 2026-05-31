@@ -50,6 +50,7 @@ import Amaru.Treasury.Indexer.DecoderFixtures
     , disburseFixture
     , inboundFundingAddress
     , inboundFundingFixture
+    , inboundFundingWithRedeemerFixture
     , invalidBlockTx
     , mintRegistryFixture
     , reorganizeFixture
@@ -152,4 +153,18 @@ spec = describe "treasuryDecodeTx" $ do
             fmap summaryDirection (firstEntry entries)
                 `shouldBe` Just "inbound"
             fmap summaryRedeemer (firstEntry entries)
+                `shouldBe` Just Nothing
+        it "decodes a script settlement payment to a treasury address" $ do
+            let settlementEntries =
+                    treasuryDecodeTxWithInterest
+                        []
+                        [(inboundFundingAddress, CoreDevelopment)]
+                        suppliedSlot
+                        (fixtureTx inboundFundingWithRedeemerFixture)
+            fmap length settlementEntries `shouldBe` Just 1
+            fmap summaryScope (firstEntry settlementEntries)
+                `shouldBe` Just "core_development"
+            fmap summaryDirection (firstEntry settlementEntries)
+                `shouldBe` Just "inbound"
+            fmap summaryRedeemer (firstEntry settlementEntries)
                 `shouldBe` Just Nothing

@@ -18,8 +18,29 @@ DEFAULT_PHASE=scaffold
 DEFAULT_TIMEOUT_SECONDS=900
 AMARU_EXE=""
 CLI_SMOKE_REGISTRY_TIMEOUT_SECONDS="${CLI_SMOKE_REGISTRY_TIMEOUT_SECONDS:-60}"
-GOVERNANCE_WITHDRAWAL_LOVELACE=2000000
+# Materialized treasury funding. Sized so the multidest-disburse phase
+# (#326) can pay TWO beneficiary outputs plus a treasury leftover, each
+# clearing the ~1 ADA min-UTxO floor (2 ADA could not cover three
+# treasury-funded outputs). Every phase computes its leftover/amounts
+# dynamically from this, so the single-destination disburse phase is
+# unaffected by the bump.
+GOVERNANCE_WITHDRAWAL_LOVELACE=5000000
 DISBURSE_LOVELACE=1000000
+# Two distinct destination amounts for the #326 multidest-disburse proof.
+# Their sum is the redeemer-authorized total leaving the treasury and must
+# leave a leftover >= min-UTxO (5_000_000 - 2_700_000 = 2_300_000).
+MULTIDEST_DEST_A_LOVELACE=1500000
+MULTIDEST_DEST_B_LOVELACE=1200000
+# Second destination address for the #326 multidest-disburse proof.
+# destA is the host-provided beneficiary; destB is a fixed, valid devnet
+# (addr_test) payment address DISTINCT from both the beneficiary and the
+# funding/wallet address, so the two payouts go to genuinely different
+# addresses. The smoke must drive only the shipped amaru-treasury-tx CLI
+# (not the node CLI) and amaru exposes no address-derivation command, so
+# this address is precomputed offline and pinned here. Its key is
+# intentionally discarded: the devnet is ephemeral and this output is only
+# a payout target for the on-chain N>1-output proof, never spent.
+MULTIDEST_DEST_B_ADDR="addr_test1vzkamv3jhm9czywn45keqdy4wzu24m2gknxa2ds57x0wgkst834nq"
 GOVERNANCE_ANCHOR_URL="https://example.invalid/amaru-devnet-governance.json"
 GOVERNANCE_ANCHOR_HASH="000000000000000000000000000000000000000000000000000000000000002a"
 
@@ -35,7 +56,8 @@ Options:
   --inside-devnet            Mark that the script runs inside the DevNet host callback;
                              skips DevNet bring-up and trusts CARDANO_NODE_SOCKET_PATH.
   --phase <name>             scaffold | preflight | vault-preflight | registry-stake |
-                             governance | disburse | reorganize | full
+                             governance | disburse | multidest-disburse |
+                             reorganize | full
                              (default: scaffold).
   --timeout-seconds <int>    Per-phase polling timeout in seconds (default: 900).
   --force                    Allow a non-empty existing --run-dir.
@@ -93,7 +115,7 @@ preflight_for_phase() {
             require_tool cabal
             require_tool tr
             ;;
-        governance | disburse | full | reorganize)
+        governance | disburse | multidest-disburse | full | reorganize)
             require_tool jq
             require_tool cabal
             require_tool tr
@@ -1483,6 +1505,284 @@ disburse_phase() {
     log "disburse: complete (summary in $summary_json)"
 }
 
+# ----------------------------------------------------------------------
+# #326 slice C — on-chain proof that ONE disburse with N>1 beneficiary
+# outputs is accepted by the real Sundae treasury + permissions
+# validators (the prove-then-build gate for epic #325).
+#
+# HONEST SCOPE NOTE: on this devnet only `core_development` is registered
+# on-chain. Registering the Contingency scope (the source the shipped
+# `contingency-disburse-wizard` hard-codes) is disproportionate bootstrap
+# surgery: Contingency has no owner key (owner=null) and a 4-owner-
+# multisig permissions model, and `verifyRegistry` walks the chain, so a
+# fabricated metadata cannot stand in (its metadata-only fallback fires
+# only when the scope_owners NFT is spent, which this devnet never does).
+#
+# So the N>1 ON-CHAIN proof is driven via `disburse-wizard --scope
+# core_development` (which verifies on-chain) to obtain a real intent with
+# the genuine on-chain scope block, then a jq-rewrite to slice-A's
+# two-element `destinations` array, then the REAL `tx-build`
+# (translateDisburse -> disburseAdaProgram, byte-for-byte the program the
+# contingency wizard would emit) + witness + submit. The contingency
+# `--to`/scope-resolution CLI surface is already covered by slice B unit
+# tests; THIS phase proves the one thing that was unproven before: a
+# 2-beneficiary disburse is accepted by the live validators.
+# ----------------------------------------------------------------------
+multidest_disburse_phase() {
+    local run_dir=$1
+    local timeout_seconds=$2
+    local phase_dir="$run_dir/phases/multidest-disburse"
+    mkdir -p "$phase_dir"
+
+    governance_phase "$run_dir" "$timeout_seconds"
+
+    require_env CARDANO_NODE_SOCKET_PATH
+    require_env CLI_SMOKE_FUNDING_ADDR
+    require_env CLI_SMOKE_FUNDING_SKEY
+    require_env CLI_SMOKE_FUNDING_KEY_HASH
+    require_env CLI_SMOKE_BENEFICIARY_ADDR
+    require_file "funding signing key" "$CLI_SMOKE_FUNDING_SKEY"
+
+    AMARU_EXE=$(resolve_amaru_exe)
+    log "multidest-disburse: using $AMARU_EXE"
+
+    local registry_json="$run_dir/registry-init/registry.json"
+    local materialized_json="$run_dir/governance-withdrawal-init/materialized.json"
+    require_file "registry.json" "$registry_json"
+    require_file "governance materialization" "$materialized_json"
+
+    local materialized_lovelace treasury_input treasury_address
+    materialized_lovelace=$(jq -r '.materializedAdaLovelace' \
+        "$materialized_json") \
+        || die "multidest-disburse: cannot read materialized lovelace"
+    treasury_input=$(jq -r '.treasuryMaterializedTxIn' \
+        "$materialized_json") \
+        || die "multidest-disburse: cannot read treasury input"
+    treasury_address=$(jq -r '.treasuryAddress' "$materialized_json") \
+        || die "multidest-disburse: cannot read treasury address"
+
+    local dest_a_lovelace="$MULTIDEST_DEST_A_LOVELACE"
+    local dest_b_lovelace="$MULTIDEST_DEST_B_LOVELACE"
+    local total_lovelace=$((dest_a_lovelace + dest_b_lovelace))
+    local treasury_leftover_lovelace=$((materialized_lovelace - total_lovelace))
+    if [[ "$treasury_leftover_lovelace" -le 0 ]]; then
+        die "multidest-disburse: leftover non-positive ($materialized_lovelace - $total_lovelace); bump GOVERNANCE_WITHDRAWAL_LOVELACE"
+    fi
+
+    # Two DISTINCT destinations: destA is the host-provided beneficiary,
+    # destB is the pinned MULTIDEST_DEST_B_ADDR. They go to genuinely
+    # different addresses (faithful to contingency funding several
+    # scopes). The validator does not constrain payout address type.
+    local dest_a_addr="$CLI_SMOKE_BENEFICIARY_ADDR"
+    local dest_b_addr="$MULTIDEST_DEST_B_ADDR"
+    if [[ "$dest_a_addr" == "$dest_b_addr" ]]; then
+        die "multidest-disburse: destination addresses must be distinct"
+    fi
+
+    local passphrase_file="$phase_dir/disburse.passphrase"
+    printf 'cli-smoke-multidest-disburse' >"$passphrase_file"
+    chmod 0600 "$passphrase_file"
+
+    local funding_vault="$phase_dir/funding.vault.age"
+    log "multidest-disburse: create funding vault"
+    create_devnet_vault \
+        "$CLI_SMOKE_FUNDING_SKEY" \
+        "devnet_funding" \
+        "DevNet funding key (multidest-disburse)" \
+        "$funding_vault" \
+        "$passphrase_file"
+
+    local intents_dir="$phase_dir/intents"
+    local diag_dir="$phase_dir/diagnostics"
+    mkdir -p "$intents_dir" "$diag_dir"
+
+    local out_dir="$run_dir/multidest-disburse"
+    mkdir -p "$out_dir"
+    local metadata="$out_dir/metadata.json"
+    jq -n \
+        --slurpfile reg "$registry_json" \
+        --argjson budget "$materialized_lovelace" \
+        '{
+            scope_owners: $reg[0].anchors.scopesDeployedAt,
+            treasuries: {
+                core_development: {
+                    owner: $reg[0].owners.scopeOwnerKeyHash,
+                    budget: $budget,
+                    address: $reg[0].addresses.treasuryAddress,
+                    treasury_script: {
+                        hash: $reg[0].scripts.treasuryScriptHash,
+                        deployed_at: $reg[0].anchors.treasuryDeployedAt
+                    },
+                    permissions_script: {
+                        hash: $reg[0].scripts.permissionsScriptHash,
+                        deployed_at: $reg[0].anchors.permissionsDeployedAt
+                    },
+                    registry_script: {
+                        hash: $reg[0].policies.registryPolicyId,
+                        deployed_at: $reg[0].anchors.registryDeployedAt
+                    }
+                }
+            }
+        }' >"$metadata"
+
+    # 1. Build a single-destination intent for the SUM via the real
+    #    disburse-wizard on core_development (verifies on-chain). This
+    #    fills the genuine scope block and computes
+    #    treasuryLeftoverLovelace = treasury input - sum.
+    local base_intent="$intents_dir/base.intent.json"
+    log "multidest-disburse: disburse-wizard (core_development, sum=$total_lovelace)"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        disburse-wizard \
+        --wallet-addr "$CLI_SMOKE_FUNDING_ADDR" \
+        --metadata "$metadata" \
+        --scope core_development \
+        --treasury-txin "$treasury_input" \
+        --unit ada \
+        --amount "$total_lovelace" \
+        --beneficiary-addr "$dest_a_addr" \
+        --description "CLI DevNet smoke multi-destination disburse" \
+        --justification "Issue 326 N>1 beneficiary on-chain proof" \
+        --destination-label "CLI smoke multi-destination" \
+        --log "$diag_dir/base.intent.log" \
+        --out "$base_intent"
+
+    # 2. Rewrite the disburse payload to slice-A's two-element
+    #    destinations array. destA + destB == the wizard's amount, so the
+    #    wizard-computed treasuryLeftoverLovelace stays valid (leftover =
+    #    treasury input - sum). This is byte-identical to what the
+    #    contingency wizard's mkTreasuryDisburse emits for two scopes.
+    local disburse_intent="$intents_dir/multidest.intent.json"
+    jq \
+        --arg destA "$dest_a_addr" \
+        --argjson amtA "$dest_a_lovelace" \
+        --arg destB "$dest_b_addr" \
+        --argjson amtB "$dest_b_lovelace" \
+        '.disburse |= (
+            del(.amount)
+            | del(.beneficiaryAddress)
+            | .destinations = [
+                {beneficiaryAddress: $destA, amount: $amtA},
+                {beneficiaryAddress: $destB, amount: $amtB}
+            ]
+        )' \
+        "$base_intent" >"$disburse_intent" \
+        || die "multidest-disburse: jq rewrite to destinations array failed"
+
+    # 3. Build -> witness -> attach -> submit the REAL multi-destination
+    #    tx on the live devnet.
+    local disburse_txid
+    disburse_txid=$(build_sign_submit \
+        "multidest-disburse" \
+        "$disburse_intent" \
+        "$funding_vault" \
+        "devnet_funding" \
+        "$CLI_SMOKE_FUNDING_KEY_HASH" \
+        "$passphrase_file") \
+        || die "multidest-disburse: build/sign/submit failed (validator rejection here is the CRITICAL epic finding -> Q-005)"
+
+    # 4. Assert the accepted tx's shape: leftover (output 0) + two
+    #    beneficiaries (outputs 1,2) + wallet change (output 3).
+    local report="$run_dir/diagnostics/multidest-disburse.report.json"
+    local out_count
+    out_count=$(jq -r '.result.report.outputs | length' "$report") \
+        || die "multidest-disburse: cannot read outputs"
+    if [[ "$out_count" != "4" ]]; then
+        die "multidest-disburse: expected 4 outputs (leftover + 2 beneficiaries + wallet change), got $out_count"
+    fi
+
+    local o0_addr o0_lov o1_addr o1_lov o2_addr o2_lov fee_lovelace
+    o0_addr=$(jq -r '.result.report.outputs[0].address' "$report")
+    o0_lov=$(jq -r '.result.report.outputs[0].value.lovelace' "$report")
+    o1_addr=$(jq -r '.result.report.outputs[1].address' "$report")
+    o1_lov=$(jq -r '.result.report.outputs[1].value.lovelace' "$report")
+    o2_addr=$(jq -r '.result.report.outputs[2].address' "$report")
+    o2_lov=$(jq -r '.result.report.outputs[2].value.lovelace' "$report")
+    fee_lovelace=$(jq -r '.result.report.identity.feeLovelace' "$report")
+
+    # The Sundae treasury validator enforces conservation on the
+    # TREASURY (leftover) output only: leftover == treasury input -
+    # redeemer.amount. The redeemer authorizes Sigma = destA + destB
+    # leaving the treasury, so leftover == input - Sigma is THE on-chain
+    # proof of both "leftover = input - Sigma" and "redeemer = Sigma".
+    # The validator does NOT constrain the per-beneficiary split, and the
+    # tx-build balancer routes a small fee share onto the last beneficiary
+    # output, so we assert the beneficiaries collectively receive Sigma
+    # minus a fee contribution bounded by the tx fee -- not byte-exact
+    # per-beneficiary amounts.
+    if [[ "$o0_addr" != "$treasury_address" ]]; then
+        die "multidest-disburse: leftover (output 0) address mismatch"
+    fi
+    if [[ "$o0_lov" != "$treasury_leftover_lovelace" ]]; then
+        die "multidest-disburse: leftover expected $treasury_leftover_lovelace (= input - Sigma), got $o0_lov"
+    fi
+    if [[ $((materialized_lovelace - o0_lov)) != "$total_lovelace" ]]; then
+        die "multidest-disburse: input - leftover ($((materialized_lovelace - o0_lov))) != Sigma ($total_lovelace) -- redeemer mismatch"
+    fi
+    if [[ "$o1_addr" != "$dest_a_addr" ]]; then
+        die "multidest-disburse: beneficiary A (output 1) address mismatch"
+    fi
+    if [[ "$o2_addr" != "$dest_b_addr" ]]; then
+        die "multidest-disburse: beneficiary B (output 2) address mismatch"
+    fi
+    if [[ "$o1_addr" == "$o2_addr" ]]; then
+        die "multidest-disburse: the two beneficiary outputs must be distinct addresses"
+    fi
+    if [[ "$o1_lov" -le 0 || "$o2_lov" -le 0 ]]; then
+        die "multidest-disburse: both beneficiary outputs must be positive (got $o1_lov, $o2_lov)"
+    fi
+    local beneficiary_total=$((o1_lov + o2_lov))
+    local treasury_fee_share=$((total_lovelace - beneficiary_total))
+    if [[ "$treasury_fee_share" -lt 0 ]]; then
+        die "multidest-disburse: beneficiaries received $beneficiary_total > Sigma $total_lovelace"
+    fi
+    if [[ "$treasury_fee_share" -gt "$fee_lovelace" ]]; then
+        die "multidest-disburse: treasury fee share $treasury_fee_share exceeds tx fee $fee_lovelace"
+    fi
+
+    log "multidest-disburse: ACCEPTED on-chain txid=$disburse_txid outputs=$out_count leftover=$o0_lov sigma=$total_lovelace beneficiaries=$beneficiary_total (destA=$o1_lov destB=$o2_lov, treasury-fee-share=$treasury_fee_share) fee=$fee_lovelace"
+
+    local summary_json="$out_dir/summary.json"
+    jq -n \
+        --arg runDirectory "$run_dir" \
+        --arg disburseTxId "$disburse_txid" \
+        --arg disburseIntent "$disburse_intent" \
+        --arg treasuryInput "$treasury_input" \
+        --arg treasuryAddress "$treasury_address" \
+        --arg destAAddress "$dest_a_addr" \
+        --arg destBAddress "$dest_b_addr" \
+        --argjson outputCount "$out_count" \
+        --argjson treasuryInputLovelace "$materialized_lovelace" \
+        --argjson treasuryLeftoverLovelace "$o0_lov" \
+        --argjson destALovelace "$o1_lov" \
+        --argjson destBLovelace "$o2_lov" \
+        --argjson sumLovelace "$total_lovelace" \
+        --argjson feeLovelace "$fee_lovelace" \
+        '{
+            phase: "multidest-disburse",
+            status: "passed",
+            network: "devnet",
+            note: "On devnet only core_development is registered on-chain; the contingency source/scope-resolution surface is covered by slice B unit tests. This phase proves the on-chain acceptance of an N>1 beneficiary disburse via the real tx-build + validators.",
+            runDirectory: $runDirectory,
+            disburseTxId: $disburseTxId,
+            disburseIntent: $disburseIntent,
+            outputCount: $outputCount,
+            treasuryInput: $treasuryInput,
+            treasuryAddress: $treasuryAddress,
+            treasuryInputLovelace: $treasuryInputLovelace,
+            treasuryLeftoverLovelace: $treasuryLeftoverLovelace,
+            destinations: [
+                {address: $destAAddress, lovelace: $destALovelace},
+                {address: $destBAddress, lovelace: $destBLovelace}
+            ],
+            sumLovelace: $sumLovelace,
+            feeLovelace: $feeLovelace
+        }' >"$summary_json"
+
+    cp "$summary_json" "$phase_dir/summary.json"
+    log "multidest-disburse: complete (summary in $summary_json)"
+}
+
 # Issue #87 S2 — live reorganize phase body.
 #
 # Chains after disburse_phase, asserts the core_development
@@ -1874,6 +2174,11 @@ main() {
             require_inside_devnet "$inside_devnet" "$phase" \
                 "$run_dir" "$timeout_seconds" "$force"
             disburse_phase "$run_dir" "$timeout_seconds"
+            ;;
+        multidest-disburse)
+            require_inside_devnet "$inside_devnet" "$phase" \
+                "$run_dir" "$timeout_seconds" "$force"
+            multidest_disburse_phase "$run_dir" "$timeout_seconds"
             ;;
         full)
             require_inside_devnet "$inside_devnet" "$phase" \

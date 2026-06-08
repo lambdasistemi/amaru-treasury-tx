@@ -50,13 +50,26 @@ address from verified metadata and builds the beneficiary list; reject
 - Proof: parser unit tests (repeat flag, reject Contingency, reject
   empty, scope:ada parse errors).
 
-### Slice C — Devnet 2-destination proof
-A devnet test that builds and submits a 2-destination contingency
-disburse against the local devnet node and asserts acceptance.
-- Files: `test/devnet/Amaru/Treasury/Devnet/` (mirror the existing
-  `DisburseSubmitSpec` pattern), cabal `other-modules`.
-- Proof: the devnet spec passes (`just devnet-*` / the devnet test
-  target).
+### Slice C — Devnet 2-destination proof (Option B′)
+Prove on a live devnet that the real Sundae treasury + permissions
+validators accept a single disburse with 2 beneficiary outputs. The
+contingency wizard can't run on devnet (only `core_development` is
+registered; `verifyRegistry` aborts pre-submission for unregistered
+scopes — `Registry/Verify.hs:214-220`; registering Contingency is
+disproportionate). Vehicle B′:
+1. `disburse-wizard --scope core_development` → real single-dest intent.
+2. `jq`-rewrite to slice-A's 2-destination `destinations` array; set
+   `treasuryLeftoverLovelace = input − Σ`; bump treasury funding for
+   2 ≥min-UTxO outputs.
+3. `build_sign_submit` on the live devnet → real 2-output tx.
+4. Assert 4 outputs [leftover, destA, destB, walletChange], redeemer =
+   Σ, leftover = input − Σ, ACCEPTED on-chain; record the txid.
+- Files: `scripts/smoke/smoke.sh` (new multi-dest disburse phase), smoke
+  helpers; projection unit tests as needed; cabal if wiring changes.
+- Proof: the smoke phase submits + asserts on the live devnet.
+- Honesty: the smoke + commit document that this proves the on-chain
+  N>1 output shape via the core_development treasury; the contingency
+  CLI/scope-resolution is covered by slice-B unit tests.
 
 ## Risk notes
 

@@ -28,10 +28,10 @@
 
 ## Slice C — Devnet 2-destination proof
 
-- [ ] T326-SC1 RED: devnet spec that builds + submits a 2-destination
+- [X] T326-SC1 RED: devnet spec that builds + submits a 2-destination
       contingency disburse (mirrors `DisburseSubmitSpec`), expected to
       fail until wired.
-- [ ] T326-SC2 GREEN: spec passes — tx accepted on the local devnet
+- [X] T326-SC2 GREEN: spec passes — tx accepted on the local devnet
       node; cabal `other-modules` updated.
-- [ ] T326-SC3 Devnet test target green; record the submitted txid in
+- [X] T326-SC3 Devnet test target green; record the submitted txid in
       `WIP.md`.

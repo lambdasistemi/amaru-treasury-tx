@@ -29,6 +29,8 @@ module Amaru.Treasury.Cli.DisburseWizard
     , traceDisburseRegistryView
     , traceDisburseResolverEnv
     , traceDisburseEnv
+    , destinationScopeAddress
+    , contingencyDestinationLabel
     ) where
 
 import Control.Applicative ((<|>))

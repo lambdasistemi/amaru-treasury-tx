@@ -26,6 +26,10 @@ module Amaru.Treasury.Wizard.Disburse
     ( -- * Intent assembly (#277)
       buildDisburseIntent
 
+      -- * Contingency intent assembly (#327)
+    , buildContingencyDisburseIntent
+    , resolveContingencyDestinations
+
       -- * Tx-build (#277)
     , buildDisburseTx
     ) where
@@ -34,8 +38,10 @@ import Control.Exception (SomeException, try)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Except (runExceptT, throwE)
 import Control.Tracer (Tracer, traceWith)
+import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Set qualified as Set
+import Data.Text (Text)
 import Data.Text qualified as T
 
 import Ouroboros.Network.Magic (NetworkMagic (..))
@@ -57,11 +63,15 @@ import Amaru.Treasury.Cli.Common
     , resolveNetworkName
     )
 import Amaru.Treasury.Cli.DisburseWizard
-    ( DisburseWizardOpts (..)
+    ( ContingencyDisburseOpts (..)
+    , DisburseWizardOpts (..)
+    , contingencyDestinationLabel
+    , destinationScopeAddress
     , providerToDisburseResolverEnv
     , traceDisburseEnv
     , traceDisburseRegistryView
     , traceDisburseResolverEnv
+    , validateContingencyDisburseInputControl
     , validateDisburseWizardInputControl
     , verifyDisburseRegistry
     )
@@ -69,6 +79,7 @@ import Amaru.Treasury.Cli.TxBuild
     ( requiredUtxos
     , txBuildReportContext
     )
+import Amaru.Treasury.Constants (Unit (..))
 import Amaru.Treasury.IntentJSON
     ( DisburseDestination (..)
     , SAction (..)
@@ -80,6 +91,7 @@ import Amaru.Treasury.Report
     , buildTransactionReport
     , txCborHexFromBytes
     )
+import Amaru.Treasury.Scope (ScopeId (..))
 import Amaru.Treasury.Tx.DisburseWizard qualified as Disburse
 import Amaru.Treasury.Tx.DisburseWizard.Trace
     ( DisburseWizardEvent (..)
@@ -325,6 +337,283 @@ buildDisburseIntent g opts@DisburseWizardOpts{..} backend tr =
         liftIO (traceWith tr (DweIntentReady dwOptsOut))
 
         pure (SomeTreasuryIntent SDisburse intent)
+
+-- ---------------------------------------------------------------------------
+-- Contingency intent assembly
+
+{- | Translate operator @(scope, lovelace)@ destinations into
+typed 'DisburseDestination's — one per input, in operator
+order.  The treasury address of each destination scope is
+supplied by the resolver; 'buildContingencyDisburseIntent'
+passes
+'Amaru.Treasury.Cli.DisburseWizard.destinationScopeAddress'
+applied to the verified registry.  The first resolver 'Left'
+short-circuits the whole list.
+
+Pure and resolver-agnostic so the @N destinations →
+N-element payload@ translation is testable without a live
+backend.
+-}
+resolveContingencyDestinations
+    :: (ScopeId -> Either Text Text)
+    -- ^ resolve a destination scope to its treasury address
+    -> NonEmpty (ScopeId, Integer)
+    -- ^ operator destinations, in flag order
+    -> Either Text (NonEmpty DisburseDestination)
+resolveContingencyDestinations resolveAddr =
+    traverse
+        ( \(scope, lovelace) ->
+            (`DisburseDestination` lovelace) <$> resolveAddr scope
+        )
+
+{- | Pure-ish entry point for the
+@contingency-disburse-wizard@ intent construction (no process
+exits).  The contingency sibling of 'buildDisburseIntent'.
+
+Differs from 'buildDisburseIntent' in three places:
+
+  * the registry is verified for @Contingency ∪ {destination
+    scopes}@ (not just the source) so each destination
+    treasury address resolves from verified metadata;
+  * each destination scope's treasury address is resolved
+    from the verified registry via
+    'resolveContingencyDestinations' /
+    'Amaru.Treasury.Cli.DisburseWizard.destinationScopeAddress',
+    in operator order;
+  * the 'Disburse.DisburseAnswers' are the fixed contingency
+    shape — source = @contingency@, unit = ADA, one output per
+    destination, rationale event @"disburse"@ / label
+    @"Contingency disburse"@ / destination label naming the
+    destination scopes.
+
+Everything downstream (resolver env, translation, tx-build
+via 'buildDisburseTx') is reused unchanged.  Mirrors the CLI
+'Amaru.Treasury.Cli.DisburseWizard.runContingencyDisburse',
+which stays in place and host-terminating.
+-}
+buildContingencyDisburseIntent
+    :: GlobalOpts
+    -> ContingencyDisburseOpts
+    -> Backend
+    -> Tracer IO DisburseWizardEvent
+    -> IO (Either WizardFailure SomeTreasuryIntent)
+buildContingencyDisburseIntent
+    g
+    opts@ContingencyDisburseOpts{..}
+    backend
+    tr =
+        runExceptT $ do
+            -- 1. Input-control validation (operator-supplied
+            --    @--exclude-utxo@ / @--extra-tx-in@ sets).
+            case validateContingencyDisburseInputControl opts of
+                Right () -> pure ()
+                Left ce ->
+                    throwE
+                        ( InputControl
+                            FieldExcludeUtxo
+                            (renderInputControlError ce)
+                        )
+
+            -- 2. Network resolution from CLI flags.
+            networkName <- case resolveNetworkName g of
+                Right t -> pure t
+                Left e ->
+                    throwE (ResolveNetworkUnsupported (T.pack e))
+
+            let NetworkMagic magic = goNetworkMagic g
+            liftIO
+                ( traceWith
+                    tr
+                    (DweNetwork networkName (fromIntegral magic))
+                )
+            liftIO (traceWith tr (DweMetadata cdOptsMetadataPath))
+
+            -- 3. Registry verification for the source
+            --    @contingency@ scope unioned with every
+            --    destination scope, so destination treasury
+            --    addresses resolve from verified metadata.
+            let verifyScopes =
+                    Set.fromList
+                        ( Contingency
+                            : map
+                                fst
+                                (NE.toList cdOptsDestinations)
+                        )
+            verified <-
+                liftIO
+                    ( verifyDisburseRegistry
+                        backend
+                        cdOptsMetadataPath
+                        verifyScopes
+                        networkName
+                    )
+            registry <- case verified of
+                Left e ->
+                    throwE
+                        ( ResolveRegistryVerify
+                            ("verify: " <> T.pack (show e))
+                        )
+                Right r -> pure r
+            rv <-
+                case Disburse.registryViewFromVerified
+                    Contingency
+                    registry of
+                    Left e ->
+                        throwE
+                            ( ResolveRegistryVerify
+                                ("project: " <> T.pack (show e))
+                            )
+                    Right view -> pure view
+
+            liftIO (traceDisburseRegistryView tr Contingency rv)
+
+            -- 4. Resolve each destination scope's treasury
+            --    address from the verified registry, in
+            --    operator order.
+            destinations <-
+                case resolveContingencyDestinations
+                    (`destinationScopeAddress` registry)
+                    cdOptsDestinations of
+                    Left e -> throwE (ResolveRegistryVerify e)
+                    Right ds -> pure ds
+
+            let renv =
+                    traceDisburseResolverEnv tr $
+                        providerToDisburseResolverEnv backend
+
+            -- 5. Build the contingency answers + resolver
+            --    input: source = contingency, unit = ADA, one
+            --    output per destination, fixed rationale.
+            let answers =
+                    Disburse.DisburseAnswers
+                        { Disburse.daScope = Contingency
+                        , Disburse.daUnit = ADA
+                        , Disburse.daDestinations = destinations
+                        , Disburse.daValidityHours =
+                            cdOptsValidityHours
+                        , Disburse.daRationale =
+                            Disburse.RationaleAnswers
+                                { Disburse.raDescription =
+                                    cdOptsDescription
+                                , Disburse.raJustification =
+                                    cdOptsJustification
+                                , Disburse.raDestinationLabel =
+                                    contingencyDestinationLabel
+                                        cdOptsDestinations
+                                , Disburse.raEvent =
+                                    Just "disburse"
+                                , Disburse.raLabel =
+                                    Just "Contingency disburse"
+                                }
+                        , Disburse.daRationaleReferences = []
+                        , Disburse.daExtraSigners = []
+                        }
+                ri =
+                    Disburse.ResolverInput
+                        { Disburse.riNetwork = networkName
+                        , Disburse.riWalletAddrBech32 =
+                            cdOptsWalletAddr
+                        , Disburse.riDestinations = destinations
+                        , Disburse.riScope = Contingency
+                        , Disburse.riUnit = ADA
+                        , Disburse.riRegistry = rv
+                        , Disburse.riValidityHours =
+                            cdOptsValidityHours
+                        , Disburse.riTreasuryTxIns = []
+                        }
+
+            -- 6. Resolve the chain-derived disburse env.
+            er <-
+                liftIO
+                    ( Disburse.resolveDisburseEnvIC
+                        renv
+                        cdOptsExcludeSet
+                        cdOptsForcedSet
+                        ri
+                    )
+            env <- case er of
+                Left
+                    (Disburse.ResolverExtraTxInNotOnWallet refs) ->
+                        throwE
+                            ( ResolveResolver
+                                ( "contingency-disburse-wizard: extra input not found on wallet: "
+                                    <> T.intercalate
+                                        ", "
+                                        (map outRefText refs)
+                                )
+                            )
+                Left
+                    ( Disburse.ResolverWalletShortfallWithExcludes
+                            avail
+                            required
+                            refs
+                        ) ->
+                        throwE
+                            ( ResolveResolver
+                                ( Disburse.renderDisburseWalletShortfallWithExcludes
+                                    ( "wallet shortfall available="
+                                        <> T.pack (show avail)
+                                        <> " required="
+                                        <> T.pack (show required)
+                                    )
+                                    refs
+                                )
+                            )
+                Left
+                    ( Disburse.ResolverTreasuryShortfallWithExcludes
+                            avail
+                            required
+                            refs
+                        ) ->
+                        throwE
+                            ( ResolveResolver
+                                ( Disburse.renderDisburseWalletShortfallWithExcludes
+                                    ( "treasury shortfall available="
+                                        <> T.pack (show avail)
+                                        <> " required="
+                                        <> T.pack (show required)
+                                    )
+                                    refs
+                                )
+                            )
+                Left e ->
+                    throwE
+                        ( ResolveResolver
+                            ("resolve: " <> T.pack (show e))
+                        )
+                Right (e, _outcome) -> pure e
+
+            liftIO (traceDisburseEnv tr env)
+
+            -- 7. Translate operator answers into the typed
+            --    intent.
+            intent <-
+                case Disburse.disburseToTreasuryIntent
+                    env
+                    answers of
+                    Left de ->
+                        throwE
+                            ( InternalTranslate
+                                ( "translate: "
+                                    <> T.pack
+                                        ( show
+                                            ( de
+                                                :: Disburse.DisburseError
+                                            )
+                                        )
+                                )
+                            )
+                    Right i -> pure i
+
+            -- 8. Trailing trace events.
+            liftIO
+                ( traceWith tr $
+                    DweUpperBoundResolved
+                        (tiValidityUpperBoundSlot intent)
+                )
+            liftIO (traceWith tr (DweIntentReady cdOptsOut))
+
+            pure (SomeTreasuryIntent SDisburse intent)
 
 -- ---------------------------------------------------------------------------
 -- Tx-build

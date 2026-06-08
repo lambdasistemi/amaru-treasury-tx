@@ -2,16 +2,16 @@
 
 ## Slice A — buildContingencyDisburseIntent (pure builder)
 
-- [ ] T327-SA1 RED: unit test asserting `buildContingencyDisburseIntent`
+- [X] T327-SA1 RED: unit test asserting `buildContingencyDisburseIntent`
       exists with the documented signature (type-witness) + a
       translation test that N destinations produce an N-element
       `dapBeneficiaries` / `diDestinations`.
-- [ ] T327-SA2 GREEN: implement `buildContingencyDisburseIntent` in
+- [X] T327-SA2 GREEN: implement `buildContingencyDisburseIntent` in
       `Wizard/Disburse.hs` (verify Contingency ∪ destinations, resolve
       each destination treasury address, build the contingency
       DisburseAnswers list, reuse buildDisburseTx). Export the resolver
       helper from `Cli/DisburseWizard.hs` if needed.
-- [ ] T327-SA3 `just ci` green.
+- [X] T327-SA3 `just ci` green.
 
 ## Slice B — HTTP endpoint + wiring + tests
 

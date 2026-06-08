@@ -1701,15 +1701,14 @@ multidest_disburse_phase() {
     fee_lovelace=$(jq -r '.result.report.identity.feeLovelace' "$report")
 
     # The Sundae treasury validator enforces conservation on the
-    # TREASURY (leftover) output only: leftover == treasury input -
+    # TREASURY (leftover) output: leftover == treasury input -
     # redeemer.amount. The redeemer authorizes Sigma = destA + destB
     # leaving the treasury, so leftover == input - Sigma is THE on-chain
     # proof of both "leftover = input - Sigma" and "redeemer = Sigma".
-    # The validator does NOT constrain the per-beneficiary split, and the
-    # tx-build balancer routes a small fee share onto the last beneficiary
-    # output, so we assert the beneficiaries collectively receive Sigma
-    # minus a fee contribution bounded by the tx fee -- not byte-exact
-    # per-beneficiary amounts.
+    # Each beneficiary must receive its EXACT authored amount: the tx fee
+    # is absorbed by the wallet change (last output), never skimmed off a
+    # scope output (#326 fee-index fix -- the fee-alignment output index
+    # is the wallet change at N+1, not a hardcoded index 2).
     if [[ "$o0_addr" != "$treasury_address" ]]; then
         die "multidest-disburse: leftover (output 0) address mismatch"
     fi
@@ -1728,19 +1727,22 @@ multidest_disburse_phase() {
     if [[ "$o1_addr" == "$o2_addr" ]]; then
         die "multidest-disburse: the two beneficiary outputs must be distinct addresses"
     fi
-    if [[ "$o1_lov" -le 0 || "$o2_lov" -le 0 ]]; then
-        die "multidest-disburse: both beneficiary outputs must be positive (got $o1_lov, $o2_lov)"
+    # EXACT per-beneficiary amounts -- a fee skimmed off a scope output
+    # (the pre-#326-fix bug) would make these fall short.
+    if [[ "$o1_lov" != "$dest_a_lovelace" ]]; then
+        die "multidest-disburse: beneficiary A got $o1_lov, expected EXACT $dest_a_lovelace (fee must come from wallet change, not a scope output)"
     fi
-    local beneficiary_total=$((o1_lov + o2_lov))
-    local treasury_fee_share=$((total_lovelace - beneficiary_total))
-    if [[ "$treasury_fee_share" -lt 0 ]]; then
-        die "multidest-disburse: beneficiaries received $beneficiary_total > Sigma $total_lovelace"
+    if [[ "$o2_lov" != "$dest_b_lovelace" ]]; then
+        die "multidest-disburse: beneficiary B got $o2_lov, expected EXACT $dest_b_lovelace (fee must come from wallet change, not a scope output)"
     fi
-    if [[ "$treasury_fee_share" -gt "$fee_lovelace" ]]; then
-        die "multidest-disburse: treasury fee share $treasury_fee_share exceeds tx fee $fee_lovelace"
+    # The wallet change (last output, index 3) carries the fee.
+    local o3_lov
+    o3_lov=$(jq -r '.result.report.outputs[3].value.lovelace' "$report")
+    if [[ "$o3_lov" -le 0 ]]; then
+        die "multidest-disburse: wallet change (output 3) must be positive (got $o3_lov)"
     fi
 
-    log "multidest-disburse: ACCEPTED on-chain txid=$disburse_txid outputs=$out_count leftover=$o0_lov sigma=$total_lovelace beneficiaries=$beneficiary_total (destA=$o1_lov destB=$o2_lov, treasury-fee-share=$treasury_fee_share) fee=$fee_lovelace"
+    log "multidest-disburse: ACCEPTED on-chain txid=$disburse_txid outputs=$out_count leftover=$o0_lov sigma=$total_lovelace destA=$o1_lov(exact) destB=$o2_lov(exact) walletChange=$o3_lov fee=$fee_lovelace"
 
     local summary_json="$out_dir/summary.json"
     jq -n \

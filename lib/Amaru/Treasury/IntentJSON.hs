@@ -52,6 +52,9 @@ module Amaru.Treasury.IntentJSON
       -- * Per-action input records
     , SwapInputs (..)
     , DisburseInputs (..)
+    , DisburseDestination (..)
+    , diAmount
+    , diBeneficiaryAddress
     , WithdrawInputs (..)
     , ReorganizeInputs (..)
     , RegistryInitSeedSplitInputs (..)
@@ -639,38 +642,107 @@ instance ToJSON SwapInputs where
             , "usdmToken" .= swiUsdmToken
             ]
 
+{- | A single ADA beneficiary output: the destination
+address and the lovelace amount sent to it. The
+multi-destination disburse carries a non-empty list of
+these in operator order.
+-}
+data DisburseDestination = DisburseDestination
+    { ddBeneficiaryAddress :: !Text
+    , ddAmount :: !Integer
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON DisburseDestination where
+    parseJSON =
+        withObject "DisburseDestination" $ \o ->
+            DisburseDestination
+                <$> o .: "beneficiaryAddress"
+                <*> o .: "amount"
+
+instance ToJSON DisburseDestination where
+    toJSON DisburseDestination{..} =
+        object
+            [ "beneficiaryAddress" .= ddBeneficiaryAddress
+            , "amount" .= ddAmount
+            ]
+
 {- | Disburse-action payload. Mirrors feature 004's
 'Amaru.Treasury.Tx.DisburseIntentJSON.DisburseInputsJSON'
-on the same JSON keys.
+on the same JSON keys, generalized to a non-empty list of
+beneficiary outputs.
+
+A one-element 'diDestinations' encodes to (and decodes
+from) the original flat @amount@ / @beneficiaryAddress@
+keys, so single-destination intents are byte-identical to
+the original schema. Two or more destinations encode as a
+@destinations@ array.
 -}
 data DisburseInputs = DisburseInputs
     { diUnit :: !Text
     -- ^ @"ada"@ or @"usdm"@
-    , diAmount :: !Integer
-    , diBeneficiaryAddress :: !Text
+    , diDestinations :: !(NonEmpty DisburseDestination)
+    -- ^ beneficiary outputs in operator order; one element
+    --     is the single-beneficiary disburse
     , diUsdmPolicy :: !Text
     , diUsdmToken :: !Text
     }
     deriving stock (Eq, Show)
 
+{- | Head beneficiary lovelace amount. Single-destination
+accessor preserved for the USDM path and report rendering.
+-}
+diAmount :: DisburseInputs -> Integer
+diAmount = ddAmount . NE.head . diDestinations
+
+{- | Head beneficiary address. Single-destination accessor
+preserved for the USDM path and report rendering.
+-}
+diBeneficiaryAddress :: DisburseInputs -> Text
+diBeneficiaryAddress =
+    ddBeneficiaryAddress . NE.head . diDestinations
+
 instance FromJSON DisburseInputs where
-    parseJSON = withObject "DisburseInputs" $ \o ->
-        DisburseInputs
-            <$> o .: "unit"
-            <*> o .: "amount"
-            <*> o .: "beneficiaryAddress"
-            <*> o .: "usdmPolicy"
-            <*> o .: "usdmToken"
+    parseJSON = withObject "DisburseInputs" $ \o -> do
+        unit <- o .: "unit"
+        usdmPolicy <- o .: "usdmPolicy"
+        usdmToken <- o .: "usdmToken"
+        mDestinations <- o .:? "destinations"
+        destinations <- case mDestinations of
+            Just ds -> case NE.nonEmpty ds of
+                Just nonEmpty -> pure nonEmpty
+                Nothing ->
+                    fail
+                        "DisburseInputs: destinations must be non-empty"
+            Nothing -> do
+                amount <- o .: "amount"
+                addr <- o .: "beneficiaryAddress"
+                pure (NE.singleton (DisburseDestination addr amount))
+        pure
+            DisburseInputs
+                { diUnit = unit
+                , diDestinations = destinations
+                , diUsdmPolicy = usdmPolicy
+                , diUsdmToken = usdmToken
+                }
 
 instance ToJSON DisburseInputs where
     toJSON DisburseInputs{..} =
-        object
+        object (base <> destinationFields)
+      where
+        base =
             [ "unit" .= diUnit
-            , "amount" .= diAmount
-            , "beneficiaryAddress" .= diBeneficiaryAddress
             , "usdmPolicy" .= diUsdmPolicy
             , "usdmToken" .= diUsdmToken
             ]
+        destinationFields = case NE.toList diDestinations of
+            [single] ->
+                [ "amount" .= ddAmount single
+                , "beneficiaryAddress"
+                    .= ddBeneficiaryAddress single
+                ]
+            _ ->
+                ["destinations" .= NE.toList diDestinations]
 
 {- | Withdraw-action payload. Carries the treasury stake
 script hash plus the positive reward balance the wizard
@@ -1996,13 +2068,16 @@ translateDisburse ti = do
                     SlotNo (tiValidityUpperBoundSlot ti)
                 }
     intent <- case T.toLower (diUnit disb) of
-        "ada" ->
+        "ada" -> do
+            beneficiaries <-
+                traverse
+                    parseDestination
+                    (diDestinations disb)
             Right $
                 DisburseAdaIntent
                     fields
                     DisburseAdaPayload
-                        { dapAmountLovelace =
-                            Coin (diAmount disb)
+                        { dapBeneficiaries = beneficiaries
                         , dapLeftoverLovelace =
                             Coin
                                 ( sjTreasuryLeftoverLovelace
@@ -2032,6 +2107,16 @@ translateDisburse ti = do
                     rationaleMetadatum body registryPolicy
                 }
     pure (shared, intent)
+
+{- | Parse one ADA beneficiary output into the resolved
+@(address, lovelace)@ pair consumed by
+'disburseAdaProgram'.
+-}
+parseDestination
+    :: DisburseDestination -> Either String (Addr, Coin)
+parseDestination d = do
+    addr <- parseAddr (ddBeneficiaryAddress d)
+    pure (addr, Coin (ddAmount d))
 
 translateDisburseUsdm
     :: ScopeJSON

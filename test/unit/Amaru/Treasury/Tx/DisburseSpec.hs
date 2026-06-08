@@ -125,6 +125,8 @@ import Amaru.Treasury.ChainContext.Fixture
 import Amaru.Treasury.Constants (minUtxoDepositLovelace)
 import Amaru.Treasury.IntentJSON
     ( Action (..)
+    , DisburseDestination (..)
+    , DisburseInputs (..)
     , SAction (..)
     , SomeTreasuryIntent (..)
     , TranslatedShared (..)
@@ -134,7 +136,10 @@ import Amaru.Treasury.IntentJSON
     , translateIntent
     )
 import Amaru.Treasury.PParams (readPParamsFile)
-import Amaru.Treasury.Redeemer (disburseUsdmRedeemer)
+import Amaru.Treasury.Redeemer
+    ( disburseAdaRedeemer
+    , disburseUsdmRedeemer
+    )
 import Amaru.Treasury.Tx.Disburse
     ( DisburseAdaPayload (..)
     , DisburseIntent (..)
@@ -167,6 +172,7 @@ import Data.ByteString.Lazy qualified as BSL
 import System.Directory (doesFileExist)
 import System.Environment (lookupEnv)
 
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -234,9 +240,34 @@ fields =
 payload :: DisburseAdaPayload
 payload =
     DisburseAdaPayload
-        { dapAmountLovelace = Coin 50_000_000
+        { dapBeneficiaries =
+            (keyAddr 99, Coin 50_000_000) :| []
         , dapLeftoverLovelace = Coin 1_400_000_000_000
         }
+
+{- | A two-destination ADA payload. Output 0 is the
+treasury leftover; outputs 1 and 2 are the two
+beneficiaries in operator order. The spend redeemer
+authorizes Σ = 50_000_000 + 30_000_000 = 80_000_000.
+-}
+multiPayload :: DisburseAdaPayload
+multiPayload =
+    DisburseAdaPayload
+        { dapBeneficiaries =
+            (keyAddr 99, Coin 50_000_000)
+                :| [(keyAddr 98, Coin 30_000_000)]
+        , dapLeftoverLovelace = Coin 1_400_000_000_000
+        }
+
+-- | Σ of the two-destination payload's beneficiary lovelace.
+multiBeneficiarySum :: Integer
+multiBeneficiarySum = 50_000_000 + 30_000_000
+
+-- | Expected ADA spend-redeemer CBOR hex for a total amount.
+expectedAdaRedeemerHex :: Integer -> BS.ByteString
+expectedAdaRedeemerHex total =
+    B16.encode . BSL.toStrict . Codec.serialise $
+        disburseAdaRedeemer total
 
 usdmPolicy :: PolicyID
 usdmPolicy = PolicyID (ScriptHash (mkHash28 88))
@@ -375,6 +406,80 @@ spec = do
                             ( "expected two outputs, saw "
                                 <> show (length outs)
                             )
+
+    describe "disburseAdaProgram — multi-destination ADA" $ do
+        let multiTx =
+                draft
+                    emptyPParams
+                    (disburseAdaProgram fields multiPayload)
+            multiBody = multiTx ^. bodyTxL
+            multiOuts = toList (multiBody ^. outputsTxBodyL)
+        it
+            "produces leftover + one output per beneficiary (3 outputs)"
+            $ length multiOuts `shouldBe` 3
+        it
+            "emits leftover first, then beneficiaries in operator order"
+            $ map (^. coinTxOutL) multiOuts
+                `shouldBe` [ Coin 1_400_000_000_000
+                           , Coin 50_000_000
+                           , Coin 30_000_000
+                           ]
+        it
+            "spend redeemer authorizes Σ of beneficiary lovelace"
+            $ do
+                let Redeemers redeemers =
+                        multiTx ^. witsTxL . rdmrsTxWitsL
+                    redeemerHexes =
+                        [ B16.encode . BSL.toStrict $
+                            serialize
+                                (eraProtVerLow @ConwayEra)
+                                dat
+                        | (_, (dat, _)) <- Map.toAscList redeemers
+                        ]
+                redeemerHexes
+                    `shouldContain` [ expectedAdaRedeemerHex
+                                        multiBeneficiarySum
+                                    ]
+
+    describe "DisburseInputs multi-destination JSON" $ do
+        it
+            "round-trips a 2-destination payload via the destinations array"
+            $ do
+                let inputs =
+                        DisburseInputs
+                            { diUnit = "ada"
+                            , diDestinations =
+                                DisburseDestination
+                                    "addr1_a"
+                                    50_000_000
+                                    :| [ DisburseDestination
+                                            "addr1_b"
+                                            30_000_000
+                                       ]
+                            , diUsdmPolicy = ""
+                            , diUsdmToken = ""
+                            }
+                Aeson.eitherDecode (Aeson.encode inputs)
+                    `shouldBe` Right inputs
+        it
+            "decodes legacy flat single-destination keys to a singleton"
+            $ do
+                let bytes =
+                        "{\"unit\":\"ada\",\"amount\":50000000\
+                        \,\"beneficiaryAddress\":\"addr1_a\"\
+                        \,\"usdmPolicy\":\"\",\"usdmToken\":\"\"}"
+                    expected =
+                        DisburseInputs
+                            { diUnit = "ada"
+                            , diDestinations =
+                                DisburseDestination
+                                    "addr1_a"
+                                    50_000_000
+                                    :| []
+                            , diUsdmPolicy = ""
+                            , diUsdmToken = ""
+                            }
+                Aeson.eitherDecode bytes `shouldBe` Right expected
 
     -- Keystone invariant. This is the test that would have
     -- caught #215 at unit-test time: the wizard's USDM
@@ -516,8 +621,8 @@ spec = do
                     tsNetwork shared `shouldBe` "mainnet"
                     case translated of
                         DisburseAdaIntent _ ada ->
-                            dapAmountLovelace ada
-                                `shouldBe` Coin 50_000_000
+                            fmap snd (dapBeneficiaries ada)
+                                `shouldBe` (Coin 50_000_000 :| [])
                         DisburseUsdmIntent{} ->
                             expectationFailure
                                 "expected ADA disburse payload"

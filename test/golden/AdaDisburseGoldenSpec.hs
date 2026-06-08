@@ -50,6 +50,14 @@ import Amaru.Treasury.IntentJSON
 fixtureDir :: FilePath
 fixtureDir = "test/fixtures/disburse/ada"
 
+{- | Two-destination ADA disburse fixture. Reuses the
+single-destination frozen 'ChainContext' under
+'fixtureDir'; its intent splits the same Σ across two
+beneficiary outputs.
+-}
+multiDir :: FilePath
+multiDir = "test/fixtures/disburse/ada-2dest"
+
 newtype BashOracle = BashOracle Text
 
 instance FromJSON BashOracle where
@@ -59,37 +67,64 @@ instance FromJSON BashOracle where
 
 spec :: Spec
 spec =
-    describe "ada-disburse golden (frozen ChainContext)"
-        $ it
+    describe "ada-disburse golden (frozen ChainContext)" $ do
+        it
             "rebuilds the local target; bash oracle differs by fee"
-        $ do
-            intent <-
-                decodeTreasuryIntentFile
-                    (fixtureDir <> "/intent.json")
-            some <- case intent of
-                Left e -> error ("intent JSON: " <> e)
-                Right ok -> pure ok
-            fixture <- readSwapFixture fixtureDir
-            let ctx = toFrozenContext fixture
-            tbr <- runFromIntent ctx some
-            let actualHex =
-                    B16.encode
-                        (BSL.toStrict (brCborBytes tbr))
-            BashOracle oracleText <-
-                BS.readFile (fixtureDir <> "/bash.oracle.tx.json")
-                    >>= either
-                        (error . ("oracle JSON: " <>))
-                        pure
-                        . eitherDecodeStrict'
-            let oracleHex = Text.encodeUtf8 oracleText
-                expectedPath = fixtureDir <> "/body.cbor"
-            update <- lookupEnv "UPDATE_GOLDENS"
-            when (update == Just "1") $
-                BS.writeFile expectedPath actualHex
-            expected <- BS.readFile (fixtureDir <> "/body.cbor")
-            actualHex `shouldBe` expected
-            -- The bash/cardano-cli oracle prices the
-            -- unsigned body with a conservative witness
-            -- estimate. The local builder prices the
-            -- expected signed tx witnesses instead.
-            actualHex `shouldNotBe` oracleHex
+            $ do
+                intent <-
+                    decodeTreasuryIntentFile
+                        (fixtureDir <> "/intent.json")
+                some <- case intent of
+                    Left e -> error ("intent JSON: " <> e)
+                    Right ok -> pure ok
+                fixture <- readSwapFixture fixtureDir
+                let ctx = toFrozenContext fixture
+                tbr <- runFromIntent ctx some
+                let actualHex =
+                        B16.encode
+                            (BSL.toStrict (brCborBytes tbr))
+                BashOracle oracleText <-
+                    BS.readFile
+                        (fixtureDir <> "/bash.oracle.tx.json")
+                        >>= either
+                            (error . ("oracle JSON: " <>))
+                            pure
+                            . eitherDecodeStrict'
+                let oracleHex = Text.encodeUtf8 oracleText
+                    expectedPath = fixtureDir <> "/body.cbor"
+                update <- lookupEnv "UPDATE_GOLDENS"
+                when (update == Just "1") $
+                    BS.writeFile expectedPath actualHex
+                expected <- BS.readFile (fixtureDir <> "/body.cbor")
+                actualHex `shouldBe` expected
+                -- The bash/cardano-cli oracle prices the
+                -- unsigned body with a conservative witness
+                -- estimate. The local builder prices the
+                -- expected signed tx witnesses instead.
+                actualHex `shouldNotBe` oracleHex
+        it
+            "rebuilds the 2-destination target (leftover + 2 beneficiary outputs)"
+            $ do
+                intent <-
+                    decodeTreasuryIntentFile
+                        (multiDir <> "/intent.json")
+                some <- case intent of
+                    Left e -> error ("intent JSON: " <> e)
+                    Right ok -> pure ok
+                fixture <- readSwapFixture fixtureDir
+                let ctx = toFrozenContext fixture
+                tbr <- runFromIntent ctx some
+                let actualHex =
+                        B16.encode
+                            (BSL.toStrict (brCborBytes tbr))
+                    expectedPath = multiDir <> "/body.cbor"
+                update <- lookupEnv "UPDATE_GOLDENS"
+                when (update == Just "1") $
+                    BS.writeFile expectedPath actualHex
+                expected <- BS.readFile expectedPath
+                actualHex `shouldBe` expected
+                -- A 2-destination disburse is a different
+                -- transaction than the single-destination
+                -- golden built from the same context.
+                n1 <- BS.readFile (fixtureDir <> "/body.cbor")
+                actualHex `shouldNotBe` n1

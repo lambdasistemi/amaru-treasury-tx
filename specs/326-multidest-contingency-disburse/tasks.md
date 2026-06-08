@@ -2,16 +2,16 @@
 
 ## Slice A — Typed ADA intent + tx-build carry a destination list
 
-- [ ] T326-SA1 RED: golden CBOR fixture for a 2-destination ADA disburse
+- [X] T326-SA1 RED: golden CBOR fixture for a 2-destination ADA disburse
       (3 outputs: leftover + 2 beneficiaries) and a unit test asserting
       redeemer `amount` = Σ and leftover = input − Σ; assert existing
       single-destination golden is unchanged.
-- [ ] T326-SA2 GREEN: lift `DisburseAdaPayload` + the ADA arm of
+- [X] T326-SA2 GREEN: lift `DisburseAdaPayload` + the ADA arm of
       `disburseToTreasuryIntent` / `resolveDisburseEnvIC` to a non-empty
       beneficiary list; loop `payTo` in `disburseAdaProgram`; redeemer
       `amount` = Σ; leftover = input − Σ; intent JSON schema carries the
       list. Single-destination callers pass singletons.
-- [ ] T326-SA3 Regenerate goldens; confirm N=1 byte-identical; `just ci`
+- [X] T326-SA3 Regenerate goldens; confirm N=1 byte-identical; `just ci`
       green.
 
 ## Slice B — contingency-disburse-wizard repeatable destinations

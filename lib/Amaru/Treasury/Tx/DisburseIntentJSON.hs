@@ -74,6 +74,7 @@ import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Maybe (fromJust)
 import Data.Text (Text)
@@ -435,8 +436,11 @@ buildIntent DisburseIntentJSON{..} fields =
                 DisburseAdaIntent
                     fields
                     DisburseAdaPayload
-                        { dapAmountLovelace =
-                            Coin (dijAmount dijDisburse)
+                        { dapBeneficiaries =
+                            NE.singleton
+                                ( difBeneficiaryAddress fields
+                                , Coin (dijAmount dijDisburse)
+                                )
                         , dapLeftoverLovelace =
                             Coin
                                 ( dsjTreasuryLeftoverLovelace

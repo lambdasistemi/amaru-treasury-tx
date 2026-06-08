@@ -84,6 +84,7 @@ import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Short qualified as SBS
 import Data.Char (isDigit)
 import Data.List qualified as L
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
@@ -102,6 +103,7 @@ import Amaru.Treasury.Constants
     )
 import Amaru.Treasury.IntentJSON
     ( Action (..)
+    , DisburseDestination (..)
     , DisburseInputs (..)
     , RationaleJSON (..)
     , RationaleReferenceJSON (..)
@@ -1327,9 +1329,13 @@ mkTreasuryDisburse env ans =
     let nc = deNetworkConstants env
     in  DisburseInputs
             { diUnit = unitText (daUnit ans)
-            , diAmount = daAmount ans
-            , diBeneficiaryAddress =
-                deBeneficiaryAddrBech32 env
+            , diDestinations =
+                NE.singleton
+                    DisburseDestination
+                        { ddBeneficiaryAddress =
+                            deBeneficiaryAddrBech32 env
+                        , ddAmount = daAmount ans
+                        }
             , diUsdmPolicy = ncUsdmPolicy nc
             , diUsdmToken = ncUsdmToken nc
             }

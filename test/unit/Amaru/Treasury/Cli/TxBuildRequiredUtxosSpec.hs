@@ -39,6 +39,7 @@ and wallet extras it has always queried.
 -}
 module Amaru.Treasury.Cli.TxBuildRequiredUtxosSpec (spec) where
 
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -52,7 +53,8 @@ import Test.Hspec
 
 import Amaru.Treasury.Cli.TxBuild (requiredUtxos)
 import Amaru.Treasury.IntentJSON
-    ( DisburseInputs (..)
+    ( DisburseDestination (..)
+    , DisburseInputs (..)
     , GovernanceWithdrawalInitMaterializationInputs (..)
     , RationaleJSON (..)
     , RegistryInitMintInputs (..)
@@ -490,8 +492,13 @@ disburseSome =
             , tiPayload =
                 DisburseInputs
                     { diUnit = "ada"
-                    , diAmount = 1_000_000
-                    , diBeneficiaryAddress = walletAddrBech32
+                    , diDestinations =
+                        DisburseDestination
+                            { ddBeneficiaryAddress =
+                                walletAddrBech32
+                            , ddAmount = 1_000_000
+                            }
+                            :| []
                     , diUsdmPolicy = placeholderHash28
                     , diUsdmToken = ""
                     }

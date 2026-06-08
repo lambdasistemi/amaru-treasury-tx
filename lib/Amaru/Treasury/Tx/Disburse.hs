@@ -43,6 +43,7 @@ import Cardano.Ledger.TxIn (TxIn)
 import Control.Monad (forM_, void)
 import Data.ByteString (ByteString)
 import Data.ByteString.Short qualified as SBS
+import Data.List.NonEmpty (NonEmpty)
 import Data.Map.Strict qualified as Map
 
 import Cardano.Tx.Build
@@ -100,13 +101,21 @@ data DisburseIntentFields = DisburseIntentFields
     }
     deriving stock (Show, Eq)
 
-{- | ADA-disburse-specific payload: the lovelace amount
-sent to the beneficiary and the lovelace amount returned
-to the treasury as leftover.
+{- | ADA-disburse-specific payload: a non-empty list of
+beneficiary outputs (each an address and a lovelace
+amount) and the lovelace amount returned to the treasury
+as leftover.
+
+The list generalizes the original single-beneficiary
+disburse to N beneficiaries in operator order; the spend
+redeemer authorizes the sum of the beneficiary lovelace.
+A one-element list is byte-identical to the original
+single-beneficiary build.
 -}
 data DisburseAdaPayload = DisburseAdaPayload
-    { dapAmountLovelace :: !Coin
-    -- ^ amount of ADA to send to the beneficiary
+    { dapBeneficiaries :: !(NonEmpty (Addr, Coin))
+    -- ^ beneficiary outputs in operator order:
+    --     @(beneficiary address, lovelace)@
     , dapLeftoverLovelace :: !Coin
     -- ^ leftover ADA returned to the treasury address
     }
@@ -149,13 +158,19 @@ data DisburseIntent
 @build_transaction.sh@: spend wallet fuel + treasury
 UTxOs, attach the four reference inputs (scopes,
 permissions, treasury, registry), withdraw-zero on the
-permissions reward account, two outputs (leftover →
-treasury, amount → beneficiary), required signers, and
-the validity upper bound.
+permissions reward account, then the outputs — the
+treasury leftover first (output 0), followed by one
+output per beneficiary in operator order — required
+signers, and the validity upper bound.
+
+The spend redeemer authorizes the @sum@ of the
+beneficiary lovelace amounts leaving the treasury. A
+single-beneficiary payload reproduces the original
+two-output build byte-for-byte.
 
 Takes the shared 'DisburseIntentFields' and the
 ADA-specific 'DisburseAdaPayload' separately so the
-USDM builder in T038 can share the same field record.
+USDM builder can share the same field record.
 -}
 disburseAdaProgram
     :: DisburseIntentFields
@@ -164,10 +179,11 @@ disburseAdaProgram
 disburseAdaProgram f p = do
     _ <- spend (difWalletUtxo f)
     collateral (difWalletUtxo f)
-    let spendRedeemer =
+    let totalLovelace =
+            sum (unCoin . snd <$> dapBeneficiaries p)
+        spendRedeemer =
             RawPlutusData $
-                disburseAdaRedeemer
-                    (unCoin (dapAmountLovelace p))
+                disburseAdaRedeemer totalLovelace
     forM_ (difTreasuryUtxos f) $ \txin ->
         void (spendScript txin spendRedeemer)
     reference (difScopesDeployedAt f)
@@ -182,10 +198,8 @@ disburseAdaProgram f p = do
         payTo
             (difTreasuryAddress f)
             (lovelaceValue (dapLeftoverLovelace p))
-    _ <-
-        payTo
-            (difBeneficiaryAddress f)
-            (lovelaceValue (dapAmountLovelace p))
+    forM_ (dapBeneficiaries p) $ \(addr, amount) ->
+        void (payTo addr (lovelaceValue amount))
     forM_ (difSigners f) requireSignature
     validTo (difUpperBound f)
 

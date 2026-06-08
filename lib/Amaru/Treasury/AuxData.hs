@@ -31,6 +31,7 @@ module Amaru.Treasury.AuxData
     , rationaleMetadatum
     , splitUri
     , splitLabel
+    , chunkRationale
     ) where
 
 import Data.ByteString (ByteString)
@@ -134,7 +135,11 @@ rationaleMetadatum body registryPolicyId =
                 )
             ,
                 ( S "description"
-                , List (map S (rbDescription body))
+                , List
+                    ( map
+                        S
+                        (concatMap chunkRationale (rbDescription body))
+                    )
                 )
             ,
                 ( S "destination"
@@ -142,7 +147,11 @@ rationaleMetadatum body registryPolicyId =
                 )
             ,
                 ( S "justification"
-                , List (map S (rbJustification body))
+                , List
+                    ( map
+                        S
+                        (concatMap chunkRationale (rbJustification body))
+                    )
                 )
             ]
 
@@ -221,6 +230,38 @@ checkChunks chunks =
   where
     overCap :: Text -> Bool
     overCap = (> 64) . BS.length . TE.encodeUtf8
+
+{- | Split a free-text rationale string into chunks each at
+most 64 UTF-8 bytes — the ledger's per-metadatum-string cap.
+
+Splitting is on UTF-8 byte length, never across a Unicode
+code point, so multi-byte characters (e.g. @\"₳\"@) stay
+intact. A string already within the cap is returned
+unchanged as a single-element list, so existing
+short-rationale transactions are byte-identical. Used for
+@body.description@ and @body.justification@, which the
+metadatum schema already models as chunk lists.
+-}
+chunkRationale :: Text -> [Text]
+chunkRationale t
+    | utf8Len t <= 64 = [t]
+    | otherwise =
+        let prefix = greedyPrefix t
+        in  prefix : chunkRationale (T.drop (T.length prefix) t)
+  where
+    utf8Len :: Text -> Int
+    utf8Len = BS.length . TE.encodeUtf8
+
+    -- Longest leading substring whose UTF-8 encoding is
+    -- <= 64 bytes. A single code point is at most 4 bytes,
+    -- so the loop always makes progress.
+    greedyPrefix :: Text -> Text
+    greedyPrefix s = go (T.length s)
+      where
+        go k
+            | k <= 1 = T.take 1 s
+            | utf8Len (T.take k s) <= 64 = T.take k s
+            | otherwise = go (k - 1)
 
 {- | The rationale used by @swap.sh@: a "disburse" event
 labelled @"Swap ADA\<-\>USDM"@ targeting Network

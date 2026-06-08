@@ -15,11 +15,11 @@
 
 ## Slice B — HTTP endpoint + wiring + tests
 
-- [ ] T327-SB1 RED: `ServerSpec` response round-trip + mapper rejection
+- [X] T327-SB1 RED: `ServerSpec` response round-trip + mapper rejection
       tests (Contingency destination rejected; empty list rejected).
-- [ ] T327-SB2 GREEN: `BuildContingencyDisburse.hs` (request/mapper/
+- [X] T327-SB2 GREEN: `BuildContingencyDisburse.hs` (request/mapper/
       runner, reuse `DisburseBuildResponse`); wire endpoint into
       `Server.hs` + api `Main.hs`; add module to cabal.
-- [ ] T327-SB3 `just ci` green + live API smoke: POST a 2-destination
+- [X] T327-SB3 `just ci` green + live API smoke: POST a 2-destination
       contingency disburse, assert intent.json + CBOR + report present,
       fee from wallet fuel not a scope output. Record evidence in WIP.md.

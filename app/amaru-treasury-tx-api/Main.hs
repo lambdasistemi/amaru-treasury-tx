@@ -80,6 +80,9 @@ import Cardano.Node.Client.UTxOIndexer.Follower
     )
 import Cardano.Node.Client.UTxOIndexer.Types (SlotNo (..))
 
+import Amaru.Treasury.Api.BuildContingencyDisburse
+    ( runBuildContingencyDisburse
+    )
 import Amaru.Treasury.Api.BuildDisburse (runBuildDisburse)
 import Amaru.Treasury.Api.BuildReorganize (runBuildReorganize)
 import Amaru.Treasury.Api.BuildSwap (runBuildSwap)
@@ -233,6 +236,7 @@ main = do
                                         backend
                                         (runBuildSwap g)
                                         (runBuildDisburse g)
+                                        (runBuildContingencyDisburse g)
                                         (runBuildReorganize g)
                                 readProvider =
                                     mkBuildProvider apiIdx backend
@@ -303,6 +307,9 @@ main = do
                                             bhBuildSwap buildHandlers
                                         , hBuildDisburse =
                                             bhBuildDisburse buildHandlers
+                                        , hBuildContingencyDisburse =
+                                            bhBuildContingencyDisburse
+                                                buildHandlers
                                         , hBuildReorganize =
                                             bhBuildReorganize
                                                 buildHandlers

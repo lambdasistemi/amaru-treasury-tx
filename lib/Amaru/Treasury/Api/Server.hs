@@ -90,6 +90,9 @@ import Servant.API
     )
 import Servant.Server.Internal.Handler (Handler (..))
 
+import Amaru.Treasury.Api.BuildContingencyDisburse
+    ( ContingencyDisburseBuildRequest
+    )
 import Amaru.Treasury.Api.BuildDisburse
     ( DisburseBuildRequest
     , DisburseBuildResponse
@@ -230,6 +233,10 @@ type JsonAPI =
                     :> ReqBody '[JSON] DisburseBuildRequest
                     :> Post '[JSON] DisburseBuildResponse
                 :<|> "build"
+                    :> "contingency-disburse"
+                    :> ReqBody '[JSON] ContingencyDisburseBuildRequest
+                    :> Post '[JSON] DisburseBuildResponse
+                :<|> "build"
                     :> "reorganize"
                     :> ReqBody '[JSON] ReorganizeBuildRequest
                     :> Post '[JSON] ReorganizeBuildResponse
@@ -299,6 +306,15 @@ data Handlers = Handlers
     --   'Amaru.Treasury.Wizard.Disburse.buildDisburseIntent'
     --   then 'buildDisburseTx' against the server's
     --   long-lived 'Backend'.
+    , hBuildContingencyDisburse
+        :: ContingencyDisburseBuildRequest
+        -> IO DisburseBuildResponse
+    -- ^ Build a contingency-disburse intent + tx from a
+    --   wire-shape request (#327).  Reuses
+    --   'DisburseBuildResponse'; the binary's implementation
+    --   calls
+    --   'Amaru.Treasury.Wizard.Disburse.buildContingencyDisburseIntent'
+    --   then the shared @buildDisburseTx@.
     , hBuildReorganize
         :: ReorganizeBuildRequest
         -> IO ReorganizeBuildResponse
@@ -314,35 +330,48 @@ data Handlers = Handlers
     --   directory-server; in tests it is a tiny 404 stub.
     }
 
--- | The three API build endpoints after provider wiring.
+-- | The API build endpoints after provider wiring.
 data BuildHandlers = BuildHandlers
     { bhBuildSwap :: SwapBuildRequest -> IO SwapBuildResponse
     , bhBuildDisburse
         :: DisburseBuildRequest
+        -> IO DisburseBuildResponse
+    , bhBuildContingencyDisburse
+        :: ContingencyDisburseBuildRequest
         -> IO DisburseBuildResponse
     , bhBuildReorganize
         :: ReorganizeBuildRequest
         -> IO ReorganizeBuildResponse
     }
 
-{- | Construct the three build handlers from one shared
-provider.
--}
+-- | Construct the build handlers from one shared provider.
 mkBuildHandlers
     :: ApiIndexer cf op
     -> Provider IO
     -> (Provider IO -> SwapBuildRequest -> IO SwapBuildResponse)
     -> (Provider IO -> DisburseBuildRequest -> IO DisburseBuildResponse)
+    -> ( Provider IO
+         -> ContingencyDisburseBuildRequest
+         -> IO DisburseBuildResponse
+       )
     -> (Provider IO -> ReorganizeBuildRequest -> IO ReorganizeBuildResponse)
     -> BuildHandlers
-mkBuildHandlers apiIdx realProvider buildSwap buildDisburse buildReorganize =
-    BuildHandlers
-        { bhBuildSwap = buildSwap buildProvider
-        , bhBuildDisburse = buildDisburse buildProvider
-        , bhBuildReorganize = buildReorganize buildProvider
-        }
-  where
-    buildProvider = mkBuildProvider apiIdx realProvider
+mkBuildHandlers
+    apiIdx
+    realProvider
+    buildSwap
+    buildDisburse
+    buildContingencyDisburse
+    buildReorganize =
+        BuildHandlers
+            { bhBuildSwap = buildSwap buildProvider
+            , bhBuildDisburse = buildDisburse buildProvider
+            , bhBuildContingencyDisburse =
+                buildContingencyDisburse buildProvider
+            , bhBuildReorganize = buildReorganize buildProvider
+            }
+      where
+        buildProvider = mkBuildProvider apiIdx realProvider
 
 -- | Build the servant 'Server' from the 'Handlers' record.
 mkServer :: Handlers -> Server DashboardAPI
@@ -365,6 +394,7 @@ mkServer Handlers{..} =
         :<|> scopeHistoryShaclH
         :<|> buildSwapH
         :<|> buildDisburseH
+        :<|> buildContingencyDisburseH
         :<|> buildReorganizeH
     )
         :<|> hRawHandler
@@ -442,6 +472,12 @@ mkServer Handlers{..} =
     buildDisburseH
         :: DisburseBuildRequest -> Handler DisburseBuildResponse
     buildDisburseH req = liftIO (hBuildDisburse req)
+
+    buildContingencyDisburseH
+        :: ContingencyDisburseBuildRequest
+        -> Handler DisburseBuildResponse
+    buildContingencyDisburseH req =
+        liftIO (hBuildContingencyDisburse req)
 
     buildReorganizeH
         :: ReorganizeBuildRequest

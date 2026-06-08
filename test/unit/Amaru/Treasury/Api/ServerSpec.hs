@@ -22,6 +22,8 @@ module Amaru.Treasury.Api.ServerSpec (spec) where
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as LBS
+import Data.Either (isLeft)
+import Data.List.NonEmpty qualified as NE
 import Data.Tagged (Tagged (..))
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
 import Network.HTTP.Types (status200, status404)
@@ -38,6 +40,11 @@ import Network.Wai.Test qualified as WaiTest
 import Servant qualified
 import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
 
+import Amaru.Treasury.Api.BuildContingencyDisburse
+    ( ContingencyDestinationRequest (..)
+    , ContingencyDisburseBuildRequest (..)
+    , mapToContingencyDisburseOpts
+    )
 import Amaru.Treasury.Api.BuildDisburse
     ( DisburseBuildResponse (..)
     )
@@ -75,6 +82,9 @@ import Amaru.Treasury.Api.Types
     , TxDetailOutput (..)
     , TxDetailResponse (..)
     )
+import Amaru.Treasury.Cli.DisburseWizard
+    ( ContingencyDisburseOpts (..)
+    )
 import Amaru.Treasury.Inspect.Render (encodeReport)
 import Amaru.Treasury.Inspect.Types
     ( ChainTip (..)
@@ -87,6 +97,10 @@ import Amaru.Treasury.Inspect.Types
     )
 import Amaru.Treasury.Scope (ScopeId (..))
 import Amaru.Treasury.Wizard.Failure (FieldId (..))
+import Amaru.Treasury.Wizard.InputControl
+    ( ExclusionSet (..)
+    , ForcedInclusionSet (..)
+    )
 
 spec :: Spec
 spec = do
@@ -356,6 +370,57 @@ spec = do
         it "internal-error arm round-trips" $
             roundtrips reorganizeInternalErrorResp
 
+    describe "mapToContingencyDisburseOpts" $ do
+        let mkDest s a =
+                ContingencyDestinationRequest
+                    { scope = s
+                    , amountAda = a
+                    }
+            baseReq dests =
+                ContingencyDisburseBuildRequest
+                    { walletAddr = "addr_test1wallet"
+                    , metadataPath = "journal/2026/metadata.json"
+                    , destinations = dests
+                    , validityHours = Nothing
+                    , description = "rainy day"
+                    , justification = "council motion 7"
+                    }
+        it "rejects an empty destinations list" $
+            mapToContingencyDisburseOpts (baseReq [])
+                `shouldSatisfy` isLeft
+        it "rejects contingency as a destination scope" $
+            mapToContingencyDisburseOpts
+                (baseReq [mkDest Contingency 1.0])
+                `shouldSatisfy` isLeft
+        it
+            "maps a valid 2-destination request to the expected \
+            \ContingencyDisburseOpts (ADA -> lovelace, order \
+            \preserved)"
+            $ mapToContingencyDisburseOpts
+                ( baseReq
+                    [ mkDest CoreDevelopment 1.0
+                    , mkDest Middleware 2.5
+                    ]
+                )
+                `shouldBe` Right
+                    ContingencyDisburseOpts
+                        { cdOptsWalletAddr = "addr_test1wallet"
+                        , cdOptsMetadataPath =
+                            "journal/2026/metadata.json"
+                        , cdOptsOut = Nothing
+                        , cdOptsLog = Nothing
+                        , cdOptsDestinations =
+                            NE.fromList
+                                [ (CoreDevelopment, 1000000)
+                                , (Middleware, 2500000)
+                                ]
+                        , cdOptsValidityHours = Nothing
+                        , cdOptsDescription = "rainy day"
+                        , cdOptsJustification = "council motion 7"
+                        , cdOptsExcludeSet = ExclusionSet []
+                        , cdOptsForcedSet = ForcedInclusionSet []
+                        }
+
 -- ---------------------------------------------------------------------------
 -- Helpers
 
@@ -439,6 +504,8 @@ stubHandlers =
                     , sbrBuildFailureTag = Nothing
                     }
         , hBuildDisburse = \_ -> pure disburseIntentFailureResp
+        , hBuildContingencyDisburse = \_ ->
+            pure disburseIntentFailureResp
         , hBuildReorganize = \_ -> pure reorganizeIntentFailureResp
         , hRawHandler = stubRawHandler
         }

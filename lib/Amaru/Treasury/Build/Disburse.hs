@@ -66,7 +66,7 @@ import Amaru.Treasury.Build.Result
     )
 import Amaru.Treasury.ChainContext (ChainContext (..))
 import Amaru.Treasury.Tx.Disburse
-    ( DisburseAdaPayload
+    ( DisburseAdaPayload (..)
     , DisburseIntent (..)
     , DisburseIntentFields (..)
     , DisburseUsdmPayload (..)
@@ -150,6 +150,14 @@ runDisburseAdaAction ctx fields payload rationale walletAddr = do
         program = do
             disburseAdaProgram fields payload
             setMetadata label1694 rationale
+        -- Output layout: treasury leftover (0), one output per
+        -- beneficiary (1..N), then the wallet change appended
+        -- last (N+1). The fee delta is absorbed by the wallet
+        -- change, never skimmed off a beneficiary. N=1 keeps
+        -- changeIx = 2, byte-identical to the original
+        -- single-beneficiary build.
+        changeIx :: Int
+        changeIx = 1 + length (dapBeneficiaries payload)
         noCtxIO :: InterpretIO q
         noCtxIO =
             InterpretIO $
@@ -172,7 +180,7 @@ runDisburseAdaAction ctx fields payload rationale walletAddr = do
                     BuildPhaseBuild
                     (diagnosticFromTxBuildError (e :: TxBuild.BuildError ()))
         Right tx0 -> do
-            tx <- case alignCardanoCliBuildFee pp refUtxos 2 tx0 of
+            tx <- case alignCardanoCliBuildFee pp refUtxos changeIx tx0 of
                 Left e ->
                     throwE $
                         actionBuildError
@@ -224,7 +232,7 @@ runDisburseAdaAction ctx fields payload rationale walletAddr = do
                         indexedOutputAt 0 body
                     , brPerChunkOverheadLovelace = Coin 0
                     , brWalletChangeOutput =
-                        indexedOutputAt 2 body
+                        indexedOutputAt changeIx body
                     , brCollateralInput =
                         collateralInputFrom body walletInputUtxos
                     , brCollateralReturn =

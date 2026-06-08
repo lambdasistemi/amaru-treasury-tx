@@ -8,6 +8,7 @@ License     : Apache-2.0
 module Amaru.Treasury.Cli.EnvelopeSpec (spec) where
 
 import Data.List (isInfixOf)
+import Data.List.NonEmpty qualified as NE
 import Data.Text qualified as T
 import Options.Applicative
     ( ParserResult (..)
@@ -239,8 +240,8 @@ spec =
         it "rejects contingency as an contingency-disburse-wizard destination" $
             parseCmd
                 ( replaceArg
-                    "network_compliance"
-                    "contingency"
+                    "network_compliance:200000.5"
+                    "contingency:200000.5"
                     contingencyDisburseArgs
                 )
                 `shouldBe` Left "parse failure"
@@ -286,10 +287,7 @@ parseContingencyDisburse
 parseContingencyDisburse args =
     case parseCliArgs args of
         Success (_, CmdContingencyDisburse o) ->
-            Right
-                ( cdOptsDestinationScope o
-                , cdOptsAdaLovelace o
-                )
+            Right (NE.head (cdOptsDestinations o))
         Success{} -> Left "wrong command"
         Failure{} -> Left "parse failure"
         CompletionInvoked{} -> Left "completion invoked"
@@ -368,10 +366,8 @@ contingencyDisburseArgs =
     , "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz"
     , "--metadata"
     , "metadata-mainnet.json"
-    , "--destination-scope"
-    , "network_compliance"
-    , "--ada"
-    , "200000.5"
+    , "--to"
+    , "network_compliance:200000.5"
     , "--description"
     , "Top up Network Compliance"
     , "--justification"

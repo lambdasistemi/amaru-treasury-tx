@@ -49,8 +49,20 @@ new redeemer.
   flag `--to <scope>:<ada>`; rejects `Contingency` as a destination and
   rejects an empty destination set; each destination scope's treasury
   address is resolved from verified metadata.
-- FR6 — A devnet test builds AND submits a 2-destination contingency
-  disburse and asserts on-chain acceptance (live-boundary proof).
+- FR6 — A live devnet submission proves the real Sundae treasury +
+  permissions validators accept a single disburse with N>1 beneficiary
+  outputs (the on-chain risk). Vehicle: on devnet only
+  `core_development` is registered on-chain, and registering the
+  Contingency scope is disproportionate bootstrap surgery
+  (`owner: null` + 4-owner multisig), and `contingency-disburse-wizard`
+  aborts in `verifyRegistry` pre-submission for unregistered scopes
+  (`Registry/Verify.hs:214-220`). So the proof is driven via
+  `disburse-wizard --scope core_development` + a `jq`-rewrite of the
+  intent to slice-A's 2-destination `destinations` shape, then the REAL
+  tx-build (`disburseAdaProgram`) + sign + submit. The contingency
+  `--to`/scope-resolution surface is covered by slice-B unit tests; FR6
+  proves the previously-unproven on-chain N>1 output acceptance. A
+  rejection would be a critical epic finding (pause #327).
 
 ## Success criteria
 

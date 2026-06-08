@@ -34,6 +34,7 @@ import Control.Exception (SomeException, try)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Except (runExceptT, throwE)
 import Control.Tracer (Tracer, traceWith)
+import Data.List.NonEmpty qualified as NE
 import Data.Set qualified as Set
 import Data.Text qualified as T
 
@@ -69,7 +70,8 @@ import Amaru.Treasury.Cli.TxBuild
     , txBuildReportContext
     )
 import Amaru.Treasury.IntentJSON
-    ( SAction (..)
+    ( DisburseDestination (..)
+    , SAction (..)
     , SomeTreasuryIntent (..)
     , tiValidityUpperBoundSlot
     )
@@ -194,9 +196,12 @@ buildDisburseIntent g opts@DisburseWizardOpts{..} backend tr =
                 Disburse.DisburseAnswers
                     { Disburse.daScope = dwOptsScope
                     , Disburse.daUnit = dwOptsUnit
-                    , Disburse.daAmount = dwOptsAmount
-                    , Disburse.daBeneficiaryAddrBech32 =
-                        dwOptsBeneficiaryAddr
+                    , Disburse.daDestinations =
+                        NE.singleton
+                            ( DisburseDestination
+                                dwOptsBeneficiaryAddr
+                                dwOptsAmount
+                            )
                     , Disburse.daValidityHours = dwOptsValidityHours
                     , Disburse.daRationale =
                         Disburse.RationaleAnswers
@@ -218,11 +223,14 @@ buildDisburseIntent g opts@DisburseWizardOpts{..} backend tr =
                     { Disburse.riNetwork = networkName
                     , Disburse.riWalletAddrBech32 =
                         dwOptsWalletAddr
-                    , Disburse.riBeneficiaryAddrBech32 =
-                        dwOptsBeneficiaryAddr
+                    , Disburse.riDestinations =
+                        NE.singleton
+                            ( DisburseDestination
+                                dwOptsBeneficiaryAddr
+                                dwOptsAmount
+                            )
                     , Disburse.riScope = dwOptsScope
                     , Disburse.riUnit = dwOptsUnit
-                    , Disburse.riAmount = dwOptsAmount
                     , Disburse.riRegistry = rv
                     , Disburse.riValidityHours =
                         dwOptsValidityHours

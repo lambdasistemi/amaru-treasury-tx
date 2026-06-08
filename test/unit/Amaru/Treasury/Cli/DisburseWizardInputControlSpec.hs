@@ -47,6 +47,7 @@ import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as BSL
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Maybe (fromJust)
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -68,7 +69,8 @@ import Test.Hspec
 
 import Amaru.Treasury.Constants (Unit (..))
 import Amaru.Treasury.IntentJSON
-    ( SAction (..)
+    ( DisburseDestination (..)
+    , SAction (..)
     , SomeTreasuryIntent (..)
     , encodeSomeTreasuryIntent
     , tiWallet
@@ -188,10 +190,8 @@ baseContingencyArgs =
     , walletAddrStr
     , "--metadata"
     , "/tmp/metadata.json"
-    , "--destination-scope"
-    , "core_development"
-    , "--ada"
-    , "1.0"
+    , "--to"
+    , "core_development:1.0"
     , "--description"
     , "x"
     , "--justification"
@@ -236,10 +236,13 @@ baseRi registry =
     ResolverInput
         { riNetwork = "mainnet"
         , riWalletAddrBech32 = walletAddrText
-        , riBeneficiaryAddrBech32 = T.pack beneficiaryAddrStr
+        , riDestinations =
+            DisburseDestination
+                (T.pack beneficiaryAddrStr)
+                50_000_000
+                :| []
         , riScope = CoreDevelopment
         , riUnit = ADA
-        , riAmount = 50_000_000
         , riRegistry = registry
         , riValidityHours = Nothing
         , riTreasuryTxIns = []

@@ -514,6 +514,7 @@ test-suite unit-tests
     Amaru.Treasury.BuildSpec
     Amaru.Treasury.Cli.CommonSpec
     Amaru.Treasury.Cli.ConfigSpec
+    Amaru.Treasury.Cli.ContingencyDisburseWizardParserSpec
     Amaru.Treasury.Cli.DisburseWizardInputControlSpec
     Amaru.Treasury.Cli.EnvelopeSpec
     Amaru.Treasury.Cli.GovernanceWithdrawalInitWizardInputControlSpec

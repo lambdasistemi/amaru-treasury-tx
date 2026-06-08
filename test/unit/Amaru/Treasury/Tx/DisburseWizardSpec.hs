@@ -22,6 +22,8 @@ import Data.Aeson qualified as Aeson
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as BSL
 import Data.ByteString.Short qualified as SBS
+import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromJust)
@@ -40,7 +42,9 @@ import Test.QuickCheck
 
 import Amaru.Treasury.Constants (Unit (..))
 import Amaru.Treasury.IntentJSON
-    ( RationaleJSON (..)
+    ( DisburseDestination (..)
+    , DisburseInputs (..)
+    , RationaleJSON (..)
     , RationaleReferenceJSON (..)
     , SAction (..)
     , TreasuryIntent (..)
@@ -326,11 +330,14 @@ spec =
                             { riNetwork = "mainnet"
                             , riWalletAddrBech32 =
                                 wsAddress (deWalletSelection env)
-                            , riBeneficiaryAddrBech32 =
-                                "addr_test1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+                            , riDestinations =
+                                NE.singleton
+                                    ( DisburseDestination
+                                        "addr_test1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
+                                        1
+                                    )
                             , riScope = CoreDevelopment
                             , riUnit = USDM
-                            , riAmount = 1
                             , riRegistry = deRegistry env
                             , riValidityHours = Nothing
                             , riTreasuryTxIns = []
@@ -382,11 +389,16 @@ spec =
                                 { riNetwork = "mainnet"
                                 , riWalletAddrBech32 =
                                     wsAddress (deWalletSelection env)
-                                , riBeneficiaryAddrBech32 =
-                                    wsAddress (deWalletSelection env)
+                                , riDestinations =
+                                    NE.singleton
+                                        ( DisburseDestination
+                                            ( wsAddress
+                                                (deWalletSelection env)
+                                            )
+                                            1_500_000
+                                        )
                                 , riScope = CoreDevelopment
                                 , riUnit = ADA
-                                , riAmount = 1_500_000
                                 , riRegistry = deRegistry env
                                 , riValidityHours = Nothing
                                 , riTreasuryTxIns = [requested]
@@ -400,6 +412,93 @@ spec =
                                 , dtsLeftoverUsdm = 0
                                 , dtsLeftoverOtherAssets = mempty
                                 }
+
+        describe "multi-destination ADA (slice B)" $ do
+            it
+                "resolver leftover = treasury input − Σ destination amounts"
+                $ do
+                    env <-
+                        eitherDecodeStrict
+                            "test/fixtures/disburse-wizard/env.ada.json"
+                    let walletAddr =
+                            wsAddress (deWalletSelection env)
+                        treasuryTxIn = mkTxIn 1
+                        stub =
+                            ResolverEnv
+                                { reEnvQueryWalletUtxos =
+                                    \_ ->
+                                        pure
+                                            [
+                                                ( txInToText (mkTxIn 7)
+                                                , walletFeeSlackLovelace
+                                                , False
+                                                )
+                                            ]
+                                , reEnvQueryTreasuryUtxos =
+                                    \_ ->
+                                        pure
+                                            [
+                                                ( treasuryTxIn
+                                                , mkValue 3_000_000 0 0
+                                                )
+                                            ]
+                                , reEnvComputeUpperBound =
+                                    \_ -> pure (Right 42)
+                                }
+                        ri =
+                            ResolverInput
+                                { riNetwork = "mainnet"
+                                , riWalletAddrBech32 = walletAddr
+                                , riDestinations =
+                                    DisburseDestination
+                                        walletAddr
+                                        1_000_000
+                                        :| [ DisburseDestination
+                                                walletAddr
+                                                1_500_000
+                                           ]
+                                , riScope = CoreDevelopment
+                                , riUnit = ADA
+                                , riRegistry = deRegistry env
+                                , riValidityHours = Nothing
+                                , riTreasuryTxIns = [treasuryTxIn]
+                                }
+                    r <- resolveDisburseEnv stub ri
+                    (dtsLeftoverLovelace . deTreasurySelection <$> r)
+                        `shouldBe` Right 500_000
+
+            it
+                "two-destination answers produce a two-element intent destination list"
+                $ do
+                    env0 <-
+                        eitherDecodeStrict
+                            "test/fixtures/disburse-wizard/env.ada.json"
+                    answers0 <-
+                        eitherDecodeStrict
+                            "test/fixtures/disburse-wizard/answers.ada.json"
+                    let addrA = "addr1_a"
+                        addrB = "addr1_b"
+                        env =
+                            env0
+                                { deBeneficiaryAddrsBech32 =
+                                    addrA :| [addrB]
+                                }
+                        answers =
+                            answers0
+                                { daDestinations =
+                                    DisburseDestination addrA 30_000_000
+                                        :| [ DisburseDestination
+                                                addrB
+                                                20_000_000
+                                           ]
+                                }
+                    intent <-
+                        expectRight
+                            (disburseToTreasuryIntent env answers)
+                    fmap
+                        ddAmount
+                        (NE.toList (diDestinations (tiPayload intent)))
+                        `shouldBe` [30_000_000, 20_000_000]
 
 eitherDecodeStrict :: (Aeson.FromJSON a) => FilePath -> IO a
 eitherDecodeStrict p = do

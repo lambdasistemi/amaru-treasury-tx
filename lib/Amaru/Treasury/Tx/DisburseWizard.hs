@@ -84,6 +84,7 @@ import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Short qualified as SBS
 import Data.Char (isDigit)
 import Data.List qualified as L
+import Data.List.NonEmpty (NonEmpty (..))
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
@@ -178,14 +179,12 @@ data DisburseAnswers = DisburseAnswers
     , daUnit :: !Unit
     -- ^ ADA or USDM (from
     --     'Amaru.Treasury.Constants').
-    , daAmount :: !Integer
-    -- ^ For 'ADA': lovelace.
-    --   For 'USDM': smallest USDM unit (USDM has 6
-    --   decimal places).
-    , daBeneficiaryAddrBech32 :: !Text
-    -- ^ Validated bech32 @addr…@ string. Parsed once
-    --   by the resolver; carried verbatim into
-    --   the JSON intent.
+    , daDestinations :: !(NonEmpty DisburseDestination)
+    -- ^ Non-empty list of beneficiary outputs in operator
+    --   order. Each carries a bech32 @addr…@ string and an
+    --   amount (lovelace for 'ADA'; smallest USDM unit for
+    --   'USDM'). 'ADA' may carry N destinations; 'USDM'
+    --   stays single-beneficiary (one element).
     , daValidityHours :: !(Maybe Word16)
     -- ^ Optional signing window in hours. 'Nothing' = the
     --   resolver asks the chain horizon helper for
@@ -250,11 +249,11 @@ data DisburseEnv = DisburseEnv
     , deScopeView :: !ScopeView
     , deTreasurySelection :: !DisburseTreasurySelection
     , deWalletSelection :: !WalletSelection
-    , deBeneficiaryAddrBech32 :: !Text
-    -- ^ The bech32 string the operator passed; parsed
-    --   and network-checked by the resolver before this
-    --   record is built. Carried verbatim into the
-    --   JSON intent.
+    , deBeneficiaryAddrsBech32 :: !(NonEmpty Text)
+    -- ^ The bech32 beneficiary address(es) the operator
+    --   passed, in operator order; parsed and
+    --   network-checked by the resolver before this record
+    --   is built. Carried verbatim into the JSON intent.
     }
     deriving stock (Eq, Show)
 
@@ -271,7 +270,8 @@ failure, network mismatch) live in a sibling
 reach this enum.
 -}
 data DisburseError
-    = -- | @daAmount@ is 0 or negative.
+    = -- | A destination amount in @daDestinations@ is 0 or
+      -- negative.
       DisburseAmountNotPositive
     | -- | @daValidityHours = Just 0@.
       DisburseValidityHoursZero
@@ -301,11 +301,20 @@ data DisburseError
 instance FromJSON DisburseAnswers where
     parseJSON = withObject "DisburseAnswers" $ \o -> do
         scope <- o .: "scope"
-        DisburseAnswers scope
-            <$> o .: "unit"
-            <*> o .: "amount"
-            <*> o .: "beneficiaryAddrBech32"
-            <*> o .:? "validityHours"
+        unit <- o .: "unit"
+        mDest <- o .:? "destinations"
+        destinations <- case mDest of
+            Just ds -> case NE.nonEmpty ds of
+                Just ne -> pure ne
+                Nothing ->
+                    fail
+                        "DisburseAnswers: destinations must be non-empty"
+            Nothing -> do
+                amount <- o .: "amount"
+                addr <- o .: "beneficiaryAddrBech32"
+                pure (NE.singleton (DisburseDestination addr amount))
+        DisburseAnswers scope unit destinations
+            <$> o .:? "validityHours"
             <*> o .: "rationale"
             <*> (fromMaybe [] <$> o .:? "rationaleReferences")
             <*> (fromMaybe [] <$> o .:? "extraSigners")
@@ -320,7 +329,17 @@ instance FromJSON DisburseTreasurySelection where
                 <*> (fromMaybe mempty <$> o .:? "leftoverOtherAssets")
 
 instance FromJSON DisburseEnv where
-    parseJSON = withObject "DisburseEnv" $ \o ->
+    parseJSON = withObject "DisburseEnv" $ \o -> do
+        let parseAddrs = do
+                mAddrs <- o .:? "beneficiaryAddrsBech32"
+                case mAddrs of
+                    Just addrs -> case NE.nonEmpty addrs of
+                        Just ne -> pure ne
+                        Nothing ->
+                            fail
+                                "DisburseEnv: beneficiaryAddrsBech32 must be non-empty"
+                    Nothing ->
+                        NE.singleton <$> o .: "beneficiaryAddrBech32"
         DisburseEnv
             <$> o .: "network"
             <*> o .: "upperBoundSlot"
@@ -329,7 +348,7 @@ instance FromJSON DisburseEnv where
             <*> o .: "scopeView"
             <*> o .: "treasurySelection"
             <*> o .: "walletSelection"
-            <*> o .: "beneficiaryAddrBech32"
+            <*> parseAddrs
 
 -- ----------------------------------------------------
 -- Pure translation
@@ -398,7 +417,7 @@ validate
     :: DisburseEnv -> DisburseAnswers -> Either DisburseError ()
 validate env ans = do
     when
-        (daAmount ans <= 0)
+        (any ((<= 0) . ddAmount) (daDestinations ans))
         (Left DisburseAmountNotPositive)
     case daValidityHours ans of
         Just 0 -> Left DisburseValidityHoursZero
@@ -605,10 +624,12 @@ verified registry projection.
 data ResolverInput = ResolverInput
     { riNetwork :: !Text
     , riWalletAddrBech32 :: !Text
-    , riBeneficiaryAddrBech32 :: !Text
+    , riDestinations :: !(NonEmpty DisburseDestination)
+    -- ^ Non-empty list of beneficiary outputs (address +
+    --   amount) in operator order. Treasury/wallet selection
+    --   and leftover math use the sum of the amounts.
     , riScope :: !ScopeId
     , riUnit :: !Unit
-    , riAmount :: !Integer
     , riRegistry :: !RegistryView
     , riValidityHours :: !(Maybe Word16)
     -- ^ Operator-supplied @--validity-hours@; 'Nothing' = use
@@ -888,8 +909,9 @@ resolveDisburseEnvIC ResolverEnv{..} excl forced ri =
                                                         forcedTexts
                                                             <> walletTail
                                                     }
-                                            , deBeneficiaryAddrBech32 =
-                                                riBeneficiaryAddrBech32 ri
+                                            , deBeneficiaryAddrsBech32 =
+                                                ddBeneficiaryAddress
+                                                    <$> riDestinations ri
                                             }
                                 in  pure (Right (env, outcome))
 
@@ -900,21 +922,21 @@ resolveDisburseEnvIC ResolverEnv{..} excl forced ri =
                     usdmPolicy
                     usdmAsset
                     treasuryUtxos
-                    (riAmount ri)
+                    (riTotalAmount ri)
             USDM ->
                 selectDisburseUsdm
                     usdmPolicy
                     usdmAsset
                     minUtxoDepositLovelace
                     treasuryUtxos
-                    (riAmount ri)
+                    (riTotalAmount ri)
 
     selectionShortfall usdmPolicy usdmAsset treasuryUtxos =
         case riUnit ri of
             ADA ->
                 ResolverShortfall
                     (sum (lovelaceOf . snd <$> treasuryUtxos))
-                    (riAmount ri)
+                    (riTotalAmount ri)
             USDM ->
                 let availableUsdm =
                         sum
@@ -924,11 +946,11 @@ resolveDisburseEnvIC ResolverEnv{..} excl forced ri =
                             )
                     availableLovelace =
                         sum (lovelaceOf . snd <$> treasuryUtxos)
-                in  if availableUsdm < riAmount ri
+                in  if availableUsdm < riTotalAmount ri
                         then
                             ResolverShortfall
                                 availableUsdm
-                                (riAmount ri)
+                                (riTotalAmount ri)
                         else
                             ResolverShortfall
                                 availableLovelace
@@ -1046,6 +1068,13 @@ filterRequestedTreasuryUtxos requested utxos =
             let requestedSet = Set.fromList requested
             in  filter ((`Set.member` requestedSet) . fst) utxos
 
+{- | Sum of the destination amounts. For 'ADA' this is the
+total lovelace leaving the treasury; for 'USDM' there is a
+single destination, so the sum equals that one amount.
+-}
+riTotalAmount :: ResolverInput -> Integer
+riTotalAmount = sum . fmap ddAmount . riDestinations
+
 validateResolverAddresses
     :: ResolverInput -> Either ResolverError ()
 validateResolverAddresses ri = do
@@ -1053,10 +1082,14 @@ validateResolverAddresses ri = do
         (riNetwork ri)
         (riWalletAddrBech32 ri)
         ResolverWalletNetworkMismatch
-    checkAddressNetwork
-        (riNetwork ri)
-        (riBeneficiaryAddrBech32 ri)
-        ResolverBeneficiaryNetworkMismatch
+    mapM_
+        ( \d ->
+            checkAddressNetwork
+                (riNetwork ri)
+                (ddBeneficiaryAddress d)
+                ResolverBeneficiaryNetworkMismatch
+        )
+        (riDestinations ri)
 
 checkAddressNetwork
     :: Text
@@ -1258,9 +1291,9 @@ mkDisburse env ans =
     let nc = deNetworkConstants env
     in  DisburseInputsJSON
             { dijUnit = unitText (daUnit ans)
-            , dijAmount = daAmount ans
+            , dijAmount = ddAmount (NE.head (daDestinations ans))
             , dijBeneficiaryAddress =
-                deBeneficiaryAddrBech32 env
+                NE.head (deBeneficiaryAddrsBech32 env)
             , dijUsdmPolicy = ncUsdmPolicy nc
             , dijUsdmToken = ncUsdmToken nc
             }
@@ -1330,12 +1363,15 @@ mkTreasuryDisburse env ans =
     in  DisburseInputs
             { diUnit = unitText (daUnit ans)
             , diDestinations =
-                NE.singleton
-                    DisburseDestination
-                        { ddBeneficiaryAddress =
-                            deBeneficiaryAddrBech32 env
-                        , ddAmount = daAmount ans
-                        }
+                NE.zipWith
+                    ( \addr d ->
+                        DisburseDestination
+                            { ddBeneficiaryAddress = addr
+                            , ddAmount = ddAmount d
+                            }
+                    )
+                    (deBeneficiaryAddrsBech32 env)
+                    (daDestinations ans)
             , diUsdmPolicy = ncUsdmPolicy nc
             , diUsdmToken = ncUsdmToken nc
             }

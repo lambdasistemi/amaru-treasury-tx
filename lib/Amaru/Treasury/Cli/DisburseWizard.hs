@@ -35,6 +35,8 @@ import Control.Applicative ((<|>))
 import Control.Tracer (Tracer (..), traceWith)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Char (isDigit, toLower)
+import Data.List.NonEmpty (NonEmpty)
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe, listToMaybe, mapMaybe)
 import Data.Set qualified as Set
@@ -57,6 +59,7 @@ import Options.Applicative
     , option
     , optional
     , short
+    , some
     , strOption
     )
 import Ouroboros.Network.Magic (NetworkMagic (..))
@@ -77,7 +80,8 @@ import Amaru.Treasury.Cli.Common
     )
 import Amaru.Treasury.Constants (Unit (..))
 import Amaru.Treasury.IntentJSON
-    ( RationaleReferenceJSON (..)
+    ( DisburseDestination (..)
+    , RationaleReferenceJSON (..)
     , SAction (..)
     , SomeTreasuryIntent (..)
     , encodeSomeTreasuryIntent
@@ -172,8 +176,10 @@ data ContingencyDisburseOpts = ContingencyDisburseOpts
     , cdOptsMetadataPath :: !FilePath
     , cdOptsOut :: !(Maybe FilePath)
     , cdOptsLog :: !(Maybe FilePath)
-    , cdOptsDestinationScope :: !ScopeId
-    , cdOptsAdaLovelace :: !Integer
+    , cdOptsDestinations :: !(NonEmpty (ScopeId, Integer))
+    -- ^ Repeatable @--to \<scope\>:\<ada\>@ destinations, in
+    --   flag order. Each is an owned (non-contingency) scope
+    --   and a lovelace amount.
     , cdOptsValidityHours :: !(Maybe Word16)
     , cdOptsDescription :: !Text
     , cdOptsJustification :: !Text
@@ -339,20 +345,16 @@ contingencyDisburseOptsP =
                         "Where to write step-by-step trace lines (defaults to stderr)"
                 )
             )
-        <*> option
-            ownedScopeReader
-            ( long "destination-scope"
-                <> long "to-scope"
-                <> metavar "NAME"
-                <> help
-                    "Destination treasury scope: core_development|ops_and_use_cases|network_compliance|middleware"
-            )
-        <*> option
-            adaReader
-            ( long "ada"
-                <> metavar "ADA"
-                <> help
-                    "ADA amount to move from contingency; decimals up to 6 places are accepted"
+        <*> ( NE.fromList
+                <$> some
+                    ( option
+                        toDestinationReader
+                        ( long "to"
+                            <> metavar "SCOPE:ADA"
+                            <> help
+                                "Destination treasury scope and ADA amount as <scope>:<ada>; repeat for multiple beneficiaries. Scope is core_development|ops_and_use_cases|network_compliance|middleware; ada accepts up to 6 decimal places."
+                        )
+                    )
             )
         <*> optional
             ( option
@@ -396,15 +398,38 @@ validateContingencyDisburseInputControl
 validateContingencyDisburseInputControl o =
     validateInputControl (cdOptsExcludeSet o) (cdOptsForcedSet o)
 
+{- | Parse an owned (non-contingency) scope name.
+@contingency@ is rejected: it is the emergency source, not a
+disburse destination.
+-}
+ownedScopeFromText :: String -> Either String ScopeId
+ownedScopeFromText raw = do
+    scope <- scopeFromText (T.pack (map toLower raw))
+    case scope of
+        Contingency ->
+            Left
+                "contingency is the emergency source; choose one of core_development|ops_and_use_cases|network_compliance|middleware"
+        _ -> Right scope
+
 ownedScopeReader :: ReadM ScopeId
-ownedScopeReader =
-    eitherReader $ \raw -> do
-        scope <- scopeFromText (T.pack (map toLower raw))
-        case scope of
-            Contingency ->
+ownedScopeReader = eitherReader ownedScopeFromText
+
+{- | Parse a repeatable @--to \<scope\>:\<ada\>@ destination
+into an owned scope and a lovelace amount. Reuses
+'ownedScopeFromText' (rejects @contingency@) and
+'parseAdaToLovelace' (rejects non-positive / >6-decimal ada).
+-}
+toDestinationReader :: ReadM (ScopeId, Integer)
+toDestinationReader =
+    eitherReader $ \raw ->
+        case break (== ':') raw of
+            (scopeStr, ':' : adaStr) -> do
+                scope <- ownedScopeFromText scopeStr
+                lovelace <- parseAdaToLovelace (T.pack adaStr)
+                pure (scope, lovelace)
+            _ ->
                 Left
-                    "contingency is the emergency source; choose one of core_development|ops_and_use_cases|network_compliance|middleware"
-            _ -> Right scope
+                    "expected <scope>:<ada>, e.g. core_development:100"
 
 unitReader :: ReadM Unit
 unitReader =
@@ -412,10 +437,6 @@ unitReader =
         "ada" -> Right ADA
         "usdm" -> Right USDM
         _ -> Left "expected ada or usdm"
-
-adaReader :: ReadM Integer
-adaReader =
-    eitherReader (parseAdaToLovelace . T.pack)
 
 txInReader :: ReadM TxIn
 txInReader =
@@ -569,9 +590,12 @@ runDisburseWizard g opts@DisburseWizardOpts{..} =
                     Disburse.DisburseAnswers
                         { Disburse.daScope = dwOptsScope
                         , Disburse.daUnit = dwOptsUnit
-                        , Disburse.daAmount = dwOptsAmount
-                        , Disburse.daBeneficiaryAddrBech32 =
-                            dwOptsBeneficiaryAddr
+                        , Disburse.daDestinations =
+                            NE.singleton
+                                ( DisburseDestination
+                                    dwOptsBeneficiaryAddr
+                                    dwOptsAmount
+                                )
                         , Disburse.daValidityHours =
                             dwOptsValidityHours
                         , Disburse.daRationale =
@@ -594,11 +618,14 @@ runDisburseWizard g opts@DisburseWizardOpts{..} =
                         { Disburse.riNetwork = networkName
                         , Disburse.riWalletAddrBech32 =
                             dwOptsWalletAddr
-                        , Disburse.riBeneficiaryAddrBech32 =
-                            dwOptsBeneficiaryAddr
+                        , Disburse.riDestinations =
+                            NE.singleton
+                                ( DisburseDestination
+                                    dwOptsBeneficiaryAddr
+                                    dwOptsAmount
+                                )
                         , Disburse.riScope = dwOptsScope
                         , Disburse.riUnit = dwOptsUnit
-                        , Disburse.riAmount = dwOptsAmount
                         , Disburse.riRegistry = rv
                         , Disburse.riValidityHours =
                             dwOptsValidityHours
@@ -618,23 +645,27 @@ runContingencyDisburse g opts@ContingencyDisburseOpts{..} =
         cdOptsLog
         cdOptsMetadataPath
         cdOptsOut
-        (Set.fromList [Contingency, cdOptsDestinationScope])
+        ( Set.fromList
+            (Contingency : map fst (NE.toList cdOptsDestinations))
+        )
         Contingency
         cdOptsExcludeSet
         cdOptsForcedSet
         (validateContingencyDisburseInputControl opts)
         $ \networkName rv verified -> do
-            destinationAddr <-
-                destinationScopeAddress
-                    cdOptsDestinationScope
-                    verified
+            destinations <-
+                traverse
+                    ( \(scope, lovelace) -> do
+                        addr <-
+                            destinationScopeAddress scope verified
+                        pure (DisburseDestination addr lovelace)
+                    )
+                    cdOptsDestinations
             let answers =
                     Disburse.DisburseAnswers
                         { Disburse.daScope = Contingency
                         , Disburse.daUnit = ADA
-                        , Disburse.daAmount = cdOptsAdaLovelace
-                        , Disburse.daBeneficiaryAddrBech32 =
-                            destinationAddr
+                        , Disburse.daDestinations = destinations
                         , Disburse.daValidityHours =
                             cdOptsValidityHours
                         , Disburse.daRationale =
@@ -644,8 +675,8 @@ runContingencyDisburse g opts@ContingencyDisburseOpts{..} =
                                 , Disburse.raJustification =
                                     cdOptsJustification
                                 , Disburse.raDestinationLabel =
-                                    destinationScopeLabel
-                                        cdOptsDestinationScope
+                                    contingencyDestinationLabel
+                                        cdOptsDestinations
                                 , Disburse.raEvent =
                                     Just "disburse"
                                 , Disburse.raLabel =
@@ -659,11 +690,9 @@ runContingencyDisburse g opts@ContingencyDisburseOpts{..} =
                         { Disburse.riNetwork = networkName
                         , Disburse.riWalletAddrBech32 =
                             cdOptsWalletAddr
-                        , Disburse.riBeneficiaryAddrBech32 =
-                            destinationAddr
+                        , Disburse.riDestinations = destinations
                         , Disburse.riScope = Contingency
                         , Disburse.riUnit = ADA
-                        , Disburse.riAmount = cdOptsAdaLovelace
                         , Disburse.riRegistry = rv
                         , Disburse.riValidityHours =
                             cdOptsValidityHours
@@ -1000,9 +1029,16 @@ destinationScopeAddress scope registry =
                 Just refs ->
                     Right (Disburse.trAddress refs)
 
-destinationScopeLabel :: ScopeId -> Text
-destinationScopeLabel scope =
-    scopeDisplayName scope <> " treasury"
+{- | Rationale destination label naming every destination
+treasury scope, in operator order. For a single destination
+this reads @"\<Scope\> treasury"@.
+-}
+contingencyDestinationLabel :: NonEmpty (ScopeId, Integer) -> Text
+contingencyDestinationLabel dests =
+    T.intercalate
+        ", "
+        (scopeDisplayName . fst <$> NE.toList dests)
+        <> " treasury"
 
 scopeDisplayName :: ScopeId -> Text
 scopeDisplayName = \case

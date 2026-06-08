@@ -16,14 +16,14 @@
 
 ## Slice B — contingency-disburse-wizard repeatable destinations
 
-- [ ] T326-SB1 RED: parser unit tests — repeatable `--to <scope>:<ada>`
+- [X] T326-SB1 RED: parser unit tests — repeatable `--to <scope>:<ada>`
       accumulates; rejects `Contingency`; rejects empty set; malformed
       `scope:ada` errors.
-- [ ] T326-SB2 GREEN: `ContingencyDisburseOpts` + parser gain repeatable
+- [X] T326-SB2 GREEN: `ContingencyDisburseOpts` + parser gain repeatable
       `--to`; `runContingencyDisburse` resolves each destination address
       from verified metadata, builds the beneficiary list, verifies
       Contingency ∪ destinations.
-- [ ] T326-SB3 `just ci` green; manual: wizard writes a 3-output
+- [X] T326-SB3 `just ci` green; manual: wizard writes a 3-output
       unsigned intent for `--to a:100 --to b:50`.
 
 ## Slice C — Devnet 2-destination proof

@@ -58,6 +58,7 @@ import Cardano.Slotting.Slot (SlotNo (..))
 
 import Amaru.Treasury.IntentJSON
     ( Action (..)
+    , DisburseDestination (..)
     , DisburseInputs (..)
     , GovernanceWithdrawalInitMaterializationInputs (..)
     , GovernanceWithdrawalInitProposalInputs (..)
@@ -644,10 +645,16 @@ genDisburseInputs :: Gen DisburseInputs
 genDisburseInputs =
     DisburseInputs
         <$> elements ["ada", "usdm"]
-        <*> chooseInteger (1, 10_000_000_000)
-        <*> genBech32Addr
+        <*> genSingletonDestinations
         <*> genHexN 28
         <*> genHexN 4
+
+genSingletonDestinations
+    :: Gen (NonEmpty DisburseDestination)
+genSingletonDestinations = do
+    addr <- genBech32Addr
+    amount <- chooseInteger (1, 10_000_000_000)
+    pure (DisburseDestination addr amount :| [])
 
 genWithdrawInputs :: Gen WithdrawInputs
 genWithdrawInputs =
@@ -1023,8 +1030,11 @@ disburseIntent network =
         )
         ( DisburseInputs
             "ada"
-            50_000_000
-            "addr1qy8ac7qqy0vtulyl7wntmsxc6wex80gvcyjy33qffrhm7sh927ysx5sftuw0dlft05dz3c7revpf7jx0xnlcjz3g69mq4afdhv"
+            ( DisburseDestination
+                "addr1qy8ac7qqy0vtulyl7wntmsxc6wex80gvcyjy33qffrhm7sh927ysx5sftuw0dlft05dz3c7revpf7jx0xnlcjz3g69mq4afdhv"
+                50_000_000
+                :| []
+            )
             "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad"
             "0014df105553444d"
         )

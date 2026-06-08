@@ -110,6 +110,7 @@ import Data.Aeson
 import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as BS8
 import Data.ByteString.Lazy qualified as BSL
+import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Map.Strict qualified as Map
 import Data.Set qualified as Set
 import Data.Text qualified as T
@@ -132,7 +133,8 @@ import Amaru.Treasury.Devnet.GovernanceWithdrawalInit
     , renderAddr
     )
 import Amaru.Treasury.IntentJSON
-    ( DisburseInputs (..)
+    ( DisburseDestination (..)
+    , DisburseInputs (..)
     , RationaleJSON (..)
     , SAction (..)
     , ScopeJSON (..)
@@ -540,8 +542,13 @@ mkDisburseIntent
                 , tiPayload =
                     DisburseInputs
                         { diUnit = "ada"
-                        , diAmount = amountLovelace
-                        , diBeneficiaryAddress = renderAddr beneficiaryAddress
+                        , diDestinations =
+                            DisburseDestination
+                                { ddBeneficiaryAddress =
+                                    renderAddr beneficiaryAddress
+                                , ddAmount = amountLovelace
+                                }
+                                :| []
                         , diUsdmPolicy = ""
                         , diUsdmToken = ""
                         }

@@ -30,13 +30,13 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 
 import Amaru.Treasury.IntentJSON
-    ( DisburseInputs (..)
-    , SAction (..)
+    ( SAction (..)
     , ScopeJSON (..)
     , SomeTreasuryIntent (..)
     , SwapInputs (..)
     , TreasuryIntent (..)
     , WalletJSON (..)
+    , diBeneficiaryAddress
     )
 import Amaru.Treasury.Metadata
     ( ScopeMetadata (..)

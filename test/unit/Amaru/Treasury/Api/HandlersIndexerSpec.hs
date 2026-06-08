@@ -349,6 +349,7 @@ trappedBuildHandlers apiIdx addr =
         (\provider _req -> buildQuery provider)
         (\provider _req -> buildQuery provider)
         (\provider _req -> buildQuery provider)
+        (\provider _req -> buildQuery provider)
   where
     buildQuery :: Provider IO -> IO a
     buildQuery provider = do

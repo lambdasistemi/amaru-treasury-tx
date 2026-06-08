@@ -105,6 +105,7 @@ library
   other-modules:    Paths_amaru_treasury_tx
   exposed-modules:
     Amaru.Treasury
+    Amaru.Treasury.Api.BuildContingencyDisburse
     Amaru.Treasury.Api.BuildDisburse
     Amaru.Treasury.Api.BuildReorganize
     Amaru.Treasury.Api.BuildSwap

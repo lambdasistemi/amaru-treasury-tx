@@ -411,7 +411,7 @@ md-assist-chip {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--md-sys-color-on-surface-variant);
+  color: var(--md-sys-color-on-surface);
 }
 .copy-row__value {
   min-width: 0;
@@ -595,6 +595,7 @@ a.copy-row__value:hover {
 .scope-card__slug {
   color: var(--md-sys-color-on-surface-variant);
   margin-bottom: 18px;
+  font-size: 12px;
   font-family: "Roboto Mono", ui-monospace, monospace;
 }
 .scope-card__loading {
@@ -633,7 +634,7 @@ a.copy-row__value:hover {
   text-transform: uppercase;
   letter-spacing: 0;
   font-weight: 700;
-  color: var(--md-sys-color-on-surface-variant);
+  color: var(--md-sys-color-on-surface);
 }
 
 /* ---------- kv list (one row in md-list) ---------- */

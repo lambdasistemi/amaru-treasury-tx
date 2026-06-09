@@ -41,6 +41,7 @@ import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Effect.Now (now)
 import Foreign.Object as FO
+import Format (formatThousandsN, showAda, showUsdm)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
@@ -644,7 +645,10 @@ modeSpecificSections st = case st.mode of
         ( [ segmentedAmount st.amountMode ]
             <> ( case st.amountMode of
                   ModeUsdm ->
-                    [ fieldNum "USDM target" st.usdm SetUsdm "USDM"
+                    [ fieldNumH "USDM target" st.usdm SetUsdm
+                        "USDM"
+                        Nothing
+                        (usdmHintText st.usdm)
                     , freeTextFieldNum
                         "split_counts"
                         st.books.splitCounts
@@ -724,11 +728,12 @@ modeSpecificSections st = case st.mode of
             "Currency selector + amount in the unit's user-facing \
             \denomination (ADA, not lovelace; USDM, not 1e-6 USDM)."
             ( [ segmentedDisburseUnit st.disburseUnit
-              , fieldNumV "amount"
+              , fieldNumH "amount"
                   st.disburseAmount
                   SetDisburseAmount
                   (disburseAmountSuffix st.disburseUnit)
                   (validateDisburseAmount st.disburseAmount)
+                  (disburseAmountHint st.disburseUnit st.disburseAmount)
               ]
             )
         , formSection "08" "References"
@@ -971,6 +976,7 @@ contingencyAdaField i value_ =
                 [ HH.text "ADA" ]
             ]
         ]
+          <> amountHint (adaHintText value_)
           <> case err of
             Just msg -> [ errorSpan errId msg ]
             Nothing -> []
@@ -1524,6 +1530,22 @@ fieldNumV
   -> Maybe String
   -> H.ComponentHTML Action () m
 fieldNumV label_ value_ action suffix err =
+  fieldNumH label_ value_ action suffix err Nothing
+
+-- | 'fieldNumV' plus an optional derived readback hint shown
+-- | under the input (#338).  The hint is purely informational
+-- | (e.g. the lovelace equivalent of the typed amount); the
+-- | canonical typed value is never rewritten.
+fieldNumH
+  :: forall m
+   . String
+  -> String
+  -> (String -> Action)
+  -> String
+  -> Maybe String
+  -> Maybe String
+  -> H.ComponentHTML Action () m
+fieldNumH label_ value_ action suffix err hint =
   let
     fid = mkInputId label_
     errId = fid <> "-error"
@@ -1564,10 +1586,51 @@ fieldNumV label_ value_ action suffix err =
                 [ HH.text suffix ]
             ]
         ]
+          <> amountHint hint
           <> case err of
             Just msg -> [ errorSpan errId msg ]
             Nothing -> []
       )
+
+-- | Render the derived amount readback row, or nothing when
+-- | there is no hint to show (blank / unparseable input).
+amountHint
+  :: forall m
+   . Maybe String
+  -> Array (H.ComponentHTML Action () m)
+amountHint = case _ of
+  Just t -> [ HH.div [ HP.classes [ cn "field__hint" ] ] [ HH.text t ] ]
+  Nothing -> []
+
+-- | Base-unit readback for an amount field: shows the lovelace
+-- | (ADA) or 1e-6 (USDM) equivalent of the typed amount,
+-- | grouped, so the operator can eyeball it against on-chain
+-- | figures.  'Nothing' when the field is blank or unparseable;
+-- | the canonical typed value is left raw for submit / CLI /
+-- | books.  #338.
+adaHintText :: String -> Maybe String
+adaHintText = scaledHint "lovelace"
+
+usdmHintText :: String -> Maybe String
+usdmHintText = scaledHint "base units"
+
+scaledHint :: String -> String -> Maybe String
+scaledHint unit v = case Number.fromString (String.trim v) of
+  Just n
+    | n > 0.0 ->
+        Just
+          ( "= "
+              <> formatThousandsN (Number.round (n * 1000000.0))
+              <> " "
+              <> unit
+          )
+  _ -> Nothing
+
+-- | Disburse amount hint keyed off the selected unit.
+disburseAmountHint :: DisburseUnit -> String -> Maybe String
+disburseAmountHint = case _ of
+  UnitAda -> adaHintText
+  UnitUsdm -> usdmHintText
 
 -- ---------------------------------------------------------------------------
 -- Booked-variant render helpers (#267)
@@ -2192,7 +2255,9 @@ previewBody st = case st.activeTab of
               { initiallyOpen = true }
           )
           ( Argonaut.fromObject
-              (FO.singleton "details" (intentPreview st))
+              ( FO.singleton "details"
+                  (formatTreeJson (intentPreview st))
+              )
           )
       ]
   TabCli ->
@@ -2238,9 +2303,58 @@ previewBody st = case st.activeTab of
                 { initiallyOpen = true }
             )
             ( Argonaut.fromObject
-                (FO.singleton "details" r)
+                (FO.singleton "details" (formatTreeJson r))
             )
         ]
+
+-- | #338 — rewrite a result-tree 'Json' for readability before
+-- | it reaches 'JsonView'.  The renderer has no numeric hook, so
+-- | lovelace / amount fields would otherwise show raw base units
+-- | (e.g. @1556478040000@).  Walk the tree and replace the number
+-- | under any key that names an amount with its human-readable
+-- | string:
+-- |
+-- |   * a key containing @lovelace@ → ADA (always base units);
+-- |   * a key containing @usdm@     → USDM;
+-- |   * a bare @amount@ key, disambiguated by the sibling @unit@
+-- |     field (@ada@ / @usdm@) the intent carries.
+-- |
+-- | String leaves (addresses, txids, hashes) are left untouched —
+-- | 'JsonView''s default Cardano resolver already truncates them
+-- | to @head…tail@ with the full value on a @title@ tooltip.
+formatTreeJson :: Json -> Json
+formatTreeJson = goValue Nothing Nothing
+  where
+  goValue :: Maybe String -> Maybe String -> Json -> Json
+  goValue unit mKey j =
+    Argonaut.caseJson
+      (const j)
+      (const j)
+      (\n -> formatNumber unit mKey n j)
+      (const j)
+      (\xs -> Argonaut.fromArray (map (goValue unit Nothing) xs))
+      (\o -> goObject o)
+      j
+
+  goObject o =
+    let
+      unit = FO.lookup "unit" o >>= Argonaut.toString
+    in
+      Argonaut.fromObject
+        (FO.mapWithKey (\k v -> goValue unit (Just k) v) o)
+
+  formatNumber unit mKey n j = case mKey of
+    Just k
+      | keyHas "lovelace" k -> Argonaut.fromString (showAda n)
+      | keyHas "usdm" k -> Argonaut.fromString (showUsdm n)
+      | String.toLower k == "amount" -> case unit of
+          Just "usdm" -> Argonaut.fromString (showUsdm n)
+          Just "ada" -> Argonaut.fromString (showAda n)
+          _ -> j
+    _ -> j
+
+  keyHas needle k =
+    String.contains (String.Pattern needle) (String.toLower k)
 
 intentPreview :: State -> Json
 intentPreview st = case st.result of

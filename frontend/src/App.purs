@@ -41,6 +41,7 @@ import Effect.Aff.Class (class MonadAff)
 import Effect.Now (now)
 import Effect.Timer (setInterval)
 import Foreign.Object as FO
+import Format (formatScaled, formatThousands, shortAddr, shortHex)
 import Shell.Clipboard as Clipboard
 import Halogen as H
 import Halogen.HTML as HH
@@ -243,8 +244,8 @@ component =
   totalsStrip totals =
     HH.div
       [ HP.classes [ HH.ClassName "totals" ] ]
-      [ totalTile "Total ADA" (showAda totals.ada)
-      , totalTile "Total USDM" (showUsdm totals.usdm)
+      [ totalTile "Total ADA" (formatScaled totals.ada)
+      , totalTile "Total USDM" (formatScaled totals.usdm)
       , totalTile "Total UTxOs" (formatThousands totals.utxos)
       ]
 
@@ -605,8 +606,8 @@ scopeSummary name j =
   in
     HH.div
       [ HP.classes [ HH.ClassName "stat-grid" ] ]
-      [ stat "ADA" (showAda lovelace)
-      , stat "USDM" (showUsdm usdm)
+      [ stat "ADA" (formatScaled lovelace)
+      , stat "USDM" (formatScaled usdm)
       , stat "UTxOs" (formatThousands utxoCount)
       ]
 
@@ -904,56 +905,6 @@ showShare s =
           _ -> t
   in
     show leading <> "." <> pad3 trailing
-
--- ---------------------------------------------------------------------------
--- Formatting
-
-showAda :: Number -> String
-showAda lovelace =
-  formatThousands (Int.round (lovelace / 1000000.0))
-
-showUsdm :: Number -> String
-showUsdm n = formatThousands (Int.round (n / 1000000.0))
-
-formatThousands :: Int -> String
-formatThousands n =
-  let
-    s = show n
-    chars = CodePoints.toCodePointArray s
-    rev = Array.reverse chars
-    grouped = chunkBy 3 rev
-    withSep =
-      Array.intercalate
-        (CodePoints.toCodePointArray ",")
-        grouped
-  in
-    CodePoints.fromCodePointArray (Array.reverse withSep)
-
-chunkBy :: forall a. Int -> Array a -> Array (Array a)
-chunkBy n xs =
-  case Array.length xs of
-    0 -> []
-    _ ->
-      let
-        { before, after } = Array.splitAt n xs
-      in
-        Array.cons before (chunkBy n after)
-
-shortHex :: String -> String
-shortHex s
-  | CodePoints.length s <= 14 = s
-  | otherwise =
-      CodePoints.take 8 s
-        <> "…"
-        <> CodePoints.drop (CodePoints.length s - 6) s
-
-shortAddr :: String -> String
-shortAddr s
-  | CodePoints.length s <= 18 = s
-  | otherwise =
-      CodePoints.take 11 s
-        <> "…"
-        <> CodePoints.drop (CodePoints.length s - 6) s
 
 firstChainTipSlot :: State -> Maybe Int
 firstChainTipSlot st =

@@ -34,6 +34,7 @@ import Data.Maybe (Maybe(..))
 import Data.Set (Set)
 import Data.Set as Set
 import Data.String as String
+import Format (truncateMid)
 import Data.Time.Duration (Milliseconds(..))
 import Effect (Effect)
 import Effect.Aff (Aff, delay, makeAff, nonCanceler)
@@ -794,18 +795,6 @@ nonEmpty :: Maybe String -> Maybe String
 nonEmpty = case _ of
   Just "" -> Nothing
   other -> other
-
--- | Bech32-style middle truncation: keep the first `pre`
--- | characters and the last `post` characters, joining
--- | them with an ellipsis when the string is longer than
--- | the sum.  Shorter strings pass through.
-truncateMid :: Int -> Int -> String -> String
-truncateMid pre post s
-  | String.length s <= pre + post = s
-  | otherwise =
-      String.take pre s
-        <> "…"
-        <> String.drop (String.length s - post) s
 
 namedEntryRow
   :: forall m

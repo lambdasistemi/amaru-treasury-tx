@@ -8,7 +8,6 @@ License     : Apache-2.0
 module Amaru.Treasury.Cli.EnvelopeSpec (spec) where
 
 import Data.List (isInfixOf)
-import Data.List.NonEmpty qualified as NE
 import Data.Text qualified as T
 import Options.Applicative
     ( ParserResult (..)
@@ -28,8 +27,7 @@ import Amaru.Treasury.Cli
     , parseCliArgs
     )
 import Amaru.Treasury.Cli.DisburseWizard
-    ( ContingencyDisburseOpts (..)
-    , DisburseWizardOpts (..)
+    ( DisburseWizardInput (..)
     )
 import Amaru.Treasury.Cli.Envelope
     ( DeEnvelopeFilterResult (..)
@@ -80,7 +78,7 @@ spec =
             parseCmd ["tx-build", "--out", "-"]
                 `shouldBe` Right "tx-build"
 
-        it "parses generic disburse-wizard for owned scopes only" $
+        it "parses generic disburse-wizard for an owned scope" $
             parseCmd disburseWizardArgs `shouldBe` Right "disburse-wizard"
 
         it "defaults disburse-wizard references to []" $
@@ -220,24 +218,15 @@ spec =
                 )
                 `shouldBe` Right [goodTxIn1, goodTxIn2]
 
-        it "rejects contingency on generic disburse-wizard" $
-            parseCmd
-                ( replaceArg
-                    "network_compliance"
-                    "contingency"
-                    disburseWizardArgs
-                )
-                `shouldBe` Left "parse failure"
-
-        it "parses contingency-disburse-wizard as a contingency ADA disburse" $
+        it "parses --scope contingency --to as a disburse-wizard command" $
             parseCmd contingencyDisburseArgs
-                `shouldBe` Right "contingency-disburse-wizard"
+                `shouldBe` Right "disburse-wizard"
 
-        it "parses contingency-disburse-wizard ADA into lovelace" $
+        it "parses contingency --to ADA into lovelace" $
             parseContingencyDisburse contingencyDisburseArgs
                 `shouldBe` Right (NetworkCompliance, 200000500000)
 
-        it "rejects contingency as an contingency-disburse-wizard destination" $
+        it "rejects contingency as a --to destination" $
             parseCmd
                 ( replaceArg
                     "network_compliance:200000.5"
@@ -286,8 +275,10 @@ parseContingencyDisburse
     :: [String] -> Either String (ScopeId, Integer)
 parseContingencyDisburse args =
     case parseCliArgs args of
-        Success (_, CmdContingencyDisburse o) ->
-            Right (NE.head (cdOptsDestinations o))
+        Success (_, CmdDisburseWizard o) ->
+            case dwiDestinations o of
+                (d : _) -> Right d
+                [] -> Left "no destinations"
         Success{} -> Left "wrong command"
         Failure{} -> Left "parse failure"
         CompletionInvoked{} -> Left "completion invoked"
@@ -296,7 +287,7 @@ parseDisburseTreasuryTxIns :: [String] -> Either String [String]
 parseDisburseTreasuryTxIns args =
     case parseCliArgs args of
         Success (_, CmdDisburseWizard o) ->
-            Right (T.unpack . txInToText <$> dwOptsTreasuryTxIns o)
+            Right (T.unpack . txInToText <$> dwiTreasuryTxIns o)
         Success{} -> Left "wrong command"
         Failure{} -> Left "parse failure"
         CompletionInvoked{} -> Left "completion invoked"
@@ -306,7 +297,7 @@ parseDisburseReferences
 parseDisburseReferences args =
     case parseCliArgs args of
         Success (_, CmdDisburseWizard o) ->
-            Right (dwOptsReferences o)
+            Right (dwiReferences o)
         Success{} -> Left "wrong command"
         Failure{} -> Left "parse failure"
         CompletionInvoked{} -> Left "completion invoked"
@@ -345,7 +336,6 @@ cmdTag = \case
     CmdSwapQuote{} -> "swap-quote"
     CmdSwapCancel{} -> "swap-cancel"
     CmdDisburseWizard{} -> "disburse-wizard"
-    CmdContingencyDisburse{} -> "contingency-disburse-wizard"
     CmdWithdrawWizard{} -> "withdraw-wizard"
     CmdReorganizeWizard{} -> "reorganize-wizard"
     CmdRegistryInitWizard{} -> "registry-init-wizard"
@@ -361,11 +351,13 @@ cmdTag = \case
 
 contingencyDisburseArgs :: [String]
 contingencyDisburseArgs =
-    [ "contingency-disburse-wizard"
+    [ "disburse-wizard"
     , "--wallet-addr"
     , "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz"
     , "--metadata"
     , "metadata-mainnet.json"
+    , "--scope"
+    , "contingency"
     , "--to"
     , "network_compliance:200000.5"
     , "--description"

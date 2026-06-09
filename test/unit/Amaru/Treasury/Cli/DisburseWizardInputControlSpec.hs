@@ -87,10 +87,10 @@ import Amaru.Treasury.Wizard.InputControl
     )
 
 import Amaru.Treasury.Cli.DisburseWizard
-    ( ContingencyDisburseOpts
-    , DisburseWizardOpts
-    , contingencyDisburseOptsP
-    , disburseWizardOptsP
+    ( DisburseRoute (..)
+    , DisburseWizardInput
+    , classifyDisburse
+    , disburseWizardInputP
     , validateContingencyDisburseInputControl
     , validateDisburseWizardInputControl
     )
@@ -190,6 +190,8 @@ baseContingencyArgs =
     , walletAddrStr
     , "--metadata"
     , "/tmp/metadata.json"
+    , "--scope"
+    , "contingency"
     , "--to"
     , "core_development:1.0"
     , "--description"
@@ -198,21 +200,11 @@ baseContingencyArgs =
     , "y"
     ]
 
-parseDisburse :: [String] -> Either String DisburseWizardOpts
-parseDisburse args =
+parseInput :: [String] -> Either String DisburseWizardInput
+parseInput args =
     case execParserPure
         defaultPrefs
-        (info disburseWizardOptsP mempty)
-        args of
-        Success a -> Right a
-        Failure _ -> Left "parse failed"
-        CompletionInvoked _ -> Left "completion invoked"
-
-parseContingency :: [String] -> Either String ContingencyDisburseOpts
-parseContingency args =
-    case execParserPure
-        defaultPrefs
-        (info contingencyDisburseOptsP mempty)
+        (info disburseWizardInputP mempty)
         args of
         Success a -> Right a
         Failure _ -> Left "parse failed"
@@ -274,15 +266,20 @@ spec =
                                    , "--extra-tx-in"
                                    , T.unpack walletRefA
                                    ]
-                    case parseDisburse argv of
+                    case parseInput argv of
                         Left err ->
                             errorWithoutStackTrace
                                 ("expected parse success: " <> err)
-                        Right opts ->
-                            validateDisburseWizardInputControl opts
-                                `shouldBe` Left
-                                    (Contradiction [outRefA])
-                it "contingency-disburse-wizard fails fast at flag-validation" $ do
+                        Right input ->
+                            case classifyDisburse input of
+                                Right (RouteSingle opts) ->
+                                    validateDisburseWizardInputControl opts
+                                        `shouldBe` Left
+                                            (Contradiction [outRefA])
+                                other ->
+                                    errorWithoutStackTrace
+                                        ("expected RouteSingle: " <> show other)
+                it "contingency disburse fails fast at flag-validation" $ do
                     let argv =
                             baseContingencyArgs
                                 ++ [ "--exclude-utxo"
@@ -290,14 +287,19 @@ spec =
                                    , "--extra-tx-in"
                                    , T.unpack walletRefA
                                    ]
-                    case parseContingency argv of
+                    case parseInput argv of
                         Left err ->
                             errorWithoutStackTrace
                                 ("expected parse success: " <> err)
-                        Right opts ->
-                            validateContingencyDisburseInputControl opts
-                                `shouldBe` Left
-                                    (Contradiction [outRefA])
+                        Right input ->
+                            case classifyDisburse input of
+                                Right (RouteContingency opts) ->
+                                    validateContingencyDisburseInputControl opts
+                                        `shouldBe` Left
+                                            (Contradiction [outRefA])
+                                other ->
+                                    errorWithoutStackTrace
+                                        ("expected RouteContingency: " <> show other)
 
             -- T014 exclusion filters wallet pool
             describe "T014 exclusion filters the wallet pool" $ do

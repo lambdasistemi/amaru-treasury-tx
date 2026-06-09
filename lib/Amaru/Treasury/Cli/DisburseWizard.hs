@@ -14,10 +14,12 @@ parser, provider adapter, tracing, registry projection,
 and intent writing.
 -}
 module Amaru.Treasury.Cli.DisburseWizard
-    ( DisburseWizardOpts (..)
+    ( DisburseWizardInput (..)
+    , DisburseWizardOpts (..)
     , ContingencyDisburseOpts (..)
-    , disburseWizardOptsP
-    , contingencyDisburseOptsP
+    , DisburseRoute (..)
+    , disburseWizardInputP
+    , classifyDisburse
     , runDisburseWizard
     , runContingencyDisburse
     , validateDisburseWizardInputControl
@@ -40,7 +42,7 @@ import Data.Char (isDigit, toLower)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
-import Data.Maybe (fromMaybe, listToMaybe, mapMaybe)
+import Data.Maybe (fromMaybe, isJust, listToMaybe, mapMaybe)
 import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -61,11 +63,11 @@ import Options.Applicative
     , option
     , optional
     , short
-    , some
     , strOption
     )
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.Exit (ExitCode (..), exitWith)
+import System.IO (stderr)
 
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Mary.Value (MaryValue (..))
@@ -194,9 +196,71 @@ data ContingencyDisburseOpts = ContingencyDisburseOpts
     }
     deriving stock (Eq, Show)
 
-disburseWizardOptsP :: Parser DisburseWizardOpts
-disburseWizardOptsP =
-    DisburseWizardOpts
+{- | Scope-agnostic parse of the unified @disburse-wizard@
+surface (#334).
+
+@disburse-wizard@ no longer has a sibling
+@contingency-disburse-wizard@ subcommand: the source scope
+drives the operation. This record is what 'disburseWizardInputP'
+produces; 'classifyDisburse' then routes it by @--scope@ into
+either a single-beneficiary 'DisburseWizardOpts' or a
+multi-destination 'ContingencyDisburseOpts'. The
+single-beneficiary value flags are 'Maybe' here because a
+@--scope contingency@ invocation omits them in favour of the
+repeatable @--to \<scope\>:\<ada\>@ destinations.
+-}
+data DisburseWizardInput = DisburseWizardInput
+    { dwiWalletAddr :: !Text
+    , dwiMetadataPath :: !FilePath
+    , dwiOut :: !(Maybe FilePath)
+    , dwiLog :: !(Maybe FilePath)
+    , dwiScope :: !ScopeId
+    -- ^ any scope, including @contingency@ (which selects the
+    --   multi-destination route).
+    , dwiUnit :: !(Maybe Unit)
+    -- ^ single-disburse only; @contingency@ forces ADA.
+    , dwiAmount :: !(Maybe Integer)
+    -- ^ single-disburse only.
+    , dwiBeneficiaryAddr :: !(Maybe Text)
+    -- ^ single-disburse only.
+    , dwiDestinations :: ![(ScopeId, Integer)]
+    -- ^ repeatable @--to \<scope\>:\<ada\>@; contingency only.
+    , dwiValidityHours :: !(Maybe Word16)
+    , dwiDescription :: !Text
+    , dwiJustification :: !Text
+    , dwiDestinationLabel :: !(Maybe Text)
+    -- ^ single-disburse only.
+    , dwiEvent :: !(Maybe Text)
+    -- ^ single-disburse only.
+    , dwiLabel :: !(Maybe Text)
+    -- ^ single-disburse only.
+    , dwiReferences :: ![RationaleReferenceJSON]
+    -- ^ single-disburse only.
+    , dwiSigners :: ![Text]
+    -- ^ single-disburse only.
+    , dwiTreasuryTxIns :: ![TxIn]
+    -- ^ single-disburse only.
+    , dwiExcludeSet :: !ExclusionSet
+    , dwiForcedSet :: !ForcedInclusionSet
+    }
+    deriving stock (Eq, Show)
+
+{- | The route 'classifyDisburse' selects from a
+'DisburseWizardInput', by source scope. Each carries the
+validated option record the matching runner already consumes,
+so the produced @intent.json@ is identical to the retired
+subcommands'.
+-}
+data DisburseRoute
+    = -- | @--scope \<owned\>@ — single beneficiary address.
+      RouteSingle DisburseWizardOpts
+    | -- | @--scope contingency --to \<scope\>:\<ada\>@.
+      RouteContingency ContingencyDisburseOpts
+    deriving stock (Eq, Show)
+
+disburseWizardInputP :: Parser DisburseWizardInput
+disburseWizardInputP =
+    DisburseWizardInput
         <$> strOption
             ( long "wallet-addr"
                 <> metavar "BECH32"
@@ -225,34 +289,45 @@ disburseWizardOptsP =
                 )
             )
         <*> option
-            ownedScopeReader
+            anyScopeReader
             ( long "scope"
                 <> metavar "NAME"
                 <> help
-                    "core_development|ops_and_use_cases|network_compliance|middleware"
+                    "core_development|ops_and_use_cases|network_compliance|middleware|contingency (contingency requires --to)"
             )
-        <*> ( fromMaybe USDM
-                <$> optional
-                    ( option
-                        unitReader
-                        ( long "unit"
-                            <> metavar "ada|usdm"
-                            <> help
-                                "Disbursement unit (defaults to usdm)"
-                        )
-                    )
+        <*> optional
+            ( option
+                unitReader
+                ( long "unit"
+                    <> metavar "ada|usdm"
+                    <> help
+                        "Disbursement unit (single disburse; defaults to usdm; not for --scope contingency)"
+                )
             )
-        <*> option
-            auto
-            ( long "amount"
-                <> metavar "INT"
-                <> help
-                    "Amount in the unit's smallest denomination: lovelace for ADA, 1e-6 USDM for USDM"
+        <*> optional
+            ( option
+                auto
+                ( long "amount"
+                    <> metavar "INT"
+                    <> help
+                        "Amount in the unit's smallest denomination: lovelace for ADA, 1e-6 USDM for USDM (single disburse)"
+                )
             )
-        <*> strOption
-            ( long "beneficiary-addr"
-                <> metavar "BECH32"
-                <> help "Beneficiary address"
+        <*> optional
+            ( strOption
+                ( long "beneficiary-addr"
+                    <> metavar "BECH32"
+                    <> help "Beneficiary address (single disburse)"
+                )
+            )
+        <*> many
+            ( option
+                toDestinationReader
+                ( long "to"
+                    <> metavar "SCOPE:ADA"
+                    <> help
+                        "Destination treasury scope and ADA amount as <scope>:<ada>; repeat for multiple beneficiaries. Use with --scope contingency. Scope is core_development|ops_and_use_cases|network_compliance|middleware; ada accepts up to 6 decimal places."
+                )
             )
         <*> optional
             ( option
@@ -274,10 +349,12 @@ disburseWizardOptsP =
                 <> metavar "TEXT"
                 <> help "Rationale: justification"
             )
-        <*> strOption
-            ( long "destination-label"
-                <> metavar "TEXT"
-                <> help "Rationale: destination label"
+        <*> optional
+            ( strOption
+                ( long "destination-label"
+                    <> metavar "TEXT"
+                    <> help "Rationale: destination label (single disburse)"
+                )
             )
         <*> optional
             ( strOption
@@ -317,69 +394,112 @@ disburseWizardOptsP =
         <*> (ExclusionSet <$> excludeUtxoP)
         <*> (ForcedInclusionSet <$> extraTxInP)
 
-contingencyDisburseOptsP :: Parser ContingencyDisburseOpts
-contingencyDisburseOptsP =
-    ContingencyDisburseOpts
-        <$> strOption
-            ( long "wallet-addr"
-                <> metavar "BECH32"
-                <> help "Wallet address (fuel + collateral)"
-            )
-        <*> strOption
-            ( long "metadata"
-                <> metavar "PATH"
-                <> help "Path to local journal/2026 metadata.json"
-            )
-        <*> optional
-            ( strOption
-                ( long "out"
-                    <> short 'o'
-                    <> metavar "PATH"
-                    <> help
-                        "Where to write intent.json (defaults to stdout)"
-                )
-            )
-        <*> optional
-            ( strOption
-                ( long "log"
-                    <> metavar "PATH"
-                    <> help
-                        "Where to write step-by-step trace lines (defaults to stderr)"
-                )
-            )
-        <*> ( NE.fromList
-                <$> some
-                    ( option
-                        toDestinationReader
-                        ( long "to"
-                            <> metavar "SCOPE:ADA"
-                            <> help
-                                "Destination treasury scope and ADA amount as <scope>:<ada>; repeat for multiple beneficiaries. Scope is core_development|ops_and_use_cases|network_compliance|middleware; ada accepts up to 6 decimal places."
-                        )
+{- | Route a parsed 'DisburseWizardInput' by source scope into
+the option record the matching runner consumes. @--scope
+contingency@ selects the multi-destination route; any other
+(owned) scope selects the single-beneficiary route.
+
+The rule is scope-driven and strict: @--scope contingency@
+takes its destinations from the repeatable @--to
+\<scope\>:\<ada\>@ flag and rejects the single-disburse value
+flags (@--beneficiary-addr@, @--amount@, @--unit@,
+@--destination-label@, the rationale overrides, extra signers,
+and treasury-txin selectors); an owned scope requires
+@--beneficiary-addr@\/@--amount@\/@--destination-label@ and
+rejects @--to@.
+-}
+classifyDisburse :: DisburseWizardInput -> Either Text DisburseRoute
+classifyDisburse input =
+    case dwiScope input of
+        Contingency -> RouteContingency <$> contingencyRoute input
+        _ -> RouteSingle <$> singleRoute input
+
+{- | Build the single-beneficiary 'DisburseWizardOpts' from a
+non-contingency 'DisburseWizardInput'. Rejects @--to@ and
+requires the beneficiary value flags.
+-}
+singleRoute :: DisburseWizardInput -> Either Text DisburseWizardOpts
+singleRoute DisburseWizardInput{..}
+    | not (null dwiDestinations) =
+        Left
+            "--to <scope>:<ada> is only valid with --scope contingency"
+    | otherwise =
+        case (dwiBeneficiaryAddr, dwiAmount, dwiDestinationLabel) of
+            (Just addr, Just amount, Just label) ->
+                Right
+                    DisburseWizardOpts
+                        { dwOptsWalletAddr = dwiWalletAddr
+                        , dwOptsMetadataPath = dwiMetadataPath
+                        , dwOptsOut = dwiOut
+                        , dwOptsLog = dwiLog
+                        , dwOptsScope = dwiScope
+                        , dwOptsUnit = fromMaybe USDM dwiUnit
+                        , dwOptsAmount = amount
+                        , dwOptsBeneficiaryAddr = addr
+                        , dwOptsValidityHours = dwiValidityHours
+                        , dwOptsDescription = dwiDescription
+                        , dwOptsJustification = dwiJustification
+                        , dwOptsDestinationLabel = label
+                        , dwOptsEvent = dwiEvent
+                        , dwOptsLabel = dwiLabel
+                        , dwOptsReferences = dwiReferences
+                        , dwOptsSigners = dwiSigners
+                        , dwOptsTreasuryTxIns = dwiTreasuryTxIns
+                        , dwOptsExcludeSet = dwiExcludeSet
+                        , dwOptsForcedSet = dwiForcedSet
+                        }
+            _ ->
+                Left
+                    ( "--scope "
+                        <> scopeText dwiScope
+                        <> " requires --beneficiary-addr, --amount, and --destination-label"
                     )
-            )
-        <*> optional
-            ( option
-                auto
-                ( long "validity-hours"
-                    <> metavar "HOURS"
-                    <> help
-                        "Optional. Omit to use the chain's \
-                        \current horizon (longest safe slot)."
-                )
-            )
-        <*> strOption
-            ( long "description"
-                <> metavar "TEXT"
-                <> help "Rationale: description"
-            )
-        <*> strOption
-            ( long "justification"
-                <> metavar "TEXT"
-                <> help "Rationale: justification"
-            )
-        <*> (ExclusionSet <$> excludeUtxoP)
-        <*> (ForcedInclusionSet <$> extraTxInP)
+
+{- | Build the multi-destination 'ContingencyDisburseOpts' from a
+@--scope contingency@ 'DisburseWizardInput'. Requires at least
+one @--to@ and rejects every single-disburse flag.
+-}
+contingencyRoute
+    :: DisburseWizardInput -> Either Text ContingencyDisburseOpts
+contingencyRoute DisburseWizardInput{..} =
+    case NE.nonEmpty dwiDestinations of
+        Nothing ->
+            Left
+                "--scope contingency requires at least one --to <scope>:<ada> destination"
+        Just dests
+            | null violations ->
+                Right
+                    ContingencyDisburseOpts
+                        { cdOptsWalletAddr = dwiWalletAddr
+                        , cdOptsMetadataPath = dwiMetadataPath
+                        , cdOptsOut = dwiOut
+                        , cdOptsLog = dwiLog
+                        , cdOptsDestinations = dests
+                        , cdOptsValidityHours = dwiValidityHours
+                        , cdOptsDescription = dwiDescription
+                        , cdOptsJustification = dwiJustification
+                        , cdOptsExcludeSet = dwiExcludeSet
+                        , cdOptsForcedSet = dwiForcedSet
+                        }
+            | otherwise ->
+                Left
+                    ( "--scope contingency does not accept single-disburse flags: "
+                        <> T.intercalate ", " violations
+                        <> "; use --to <scope>:<ada> instead"
+                    )
+  where
+    violations =
+        concat
+            [ ["--beneficiary-addr" | isJust dwiBeneficiaryAddr]
+            , ["--amount" | isJust dwiAmount]
+            , ["--unit" | isJust dwiUnit]
+            , ["--destination-label" | isJust dwiDestinationLabel]
+            , ["--event" | isJust dwiEvent]
+            , ["--label" | isJust dwiLabel]
+            , ["--reference-uri" | not (null dwiReferences)]
+            , ["--extra-signer" | not (null dwiSigners)]
+            , ["--treasury-txin" | not (null dwiTreasuryTxIns)]
+            ]
 
 {- | Pre-flight check for @--exclude-utxo@ / @--extra-tx-in@
 contradictions on the @disburse-wizard@ subcommand.
@@ -413,8 +533,13 @@ ownedScopeFromText raw = do
                 "contingency is the emergency source; choose one of core_development|ops_and_use_cases|network_compliance|middleware"
         _ -> Right scope
 
-ownedScopeReader :: ReadM ScopeId
-ownedScopeReader = eitherReader ownedScopeFromText
+{- | Parse any scope name, including @contingency@. Used by the
+unified @disburse-wizard@ @--scope@ flag; 'classifyDisburse'
+routes on the result.
+-}
+anyScopeReader :: ReadM ScopeId
+anyScopeReader =
+    eitherReader (scopeFromText . T.pack . map toLower)
 
 {- | Parse a repeatable @--to \<scope\>:\<ada\>@ destination
 into an owned scope and a lovelace amount. Reuses
@@ -571,11 +696,28 @@ decimalDigitsToInteger =
         (\acc c -> acc * 10 + toInteger (fromEnum c - fromEnum '0'))
         0
 
+{- | Dispatch the unified @disburse-wizard@ surface by source
+scope (#334). 'classifyDisburse' selects the single-beneficiary
+or contingency route; a classification failure aborts with a
+clear usage message before any node work.
+-}
 runDisburseWizard
+    :: GlobalOpts
+    -> DisburseWizardInput
+    -> IO ()
+runDisburseWizard g input =
+    case classifyDisburse input of
+        Left err -> do
+            TIO.hPutStrLn stderr ("disburse-wizard: " <> err)
+            exitWith (ExitFailure 2)
+        Right (RouteSingle opts) -> runDisburseSingle g opts
+        Right (RouteContingency opts) -> runContingencyDisburse g opts
+
+runDisburseSingle
     :: GlobalOpts
     -> DisburseWizardOpts
     -> IO ()
-runDisburseWizard g opts@DisburseWizardOpts{..} =
+runDisburseSingle g opts@DisburseWizardOpts{..} =
     runDisburseCommand
         "disburse-wizard"
         g

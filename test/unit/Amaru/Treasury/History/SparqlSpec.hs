@@ -58,6 +58,7 @@ import Amaru.Treasury.History.Sparql
     , parseHistoryShapeName
     , renderHistoryQueryName
     , renderHistoryShapeName
+    , runHistoryShaclTurtle
     , runNamedHistoryQuery
     , runNamedHistoryShacl
     )
@@ -173,6 +174,31 @@ spec =
                     expectationFailure
                         ("expected SHACL success, got " <> show err)
 
+        describe "unified-graph SHACL" $ do
+            it "conforms a metadata entity over the cardano vocab" $ do
+                md <- loadMetadata
+                result <-
+                    runNamedHistoryShacl HistoryEntryShape (Just md) []
+                case result of
+                    Right report -> do
+                        hsrShape report `shouldBe` HistoryEntryShape
+                        hsrConforms report `shouldBe` True
+                    Left err ->
+                        expectationFailure
+                            ("expected SHACL success, got " <> show err)
+
+            it "rejects a cardano:Entity missing its treasury:role" $ do
+                result <-
+                    runHistoryShaclTurtle
+                        HistoryEntryShape
+                        malformedEntityTurtle
+                case result of
+                    Right report ->
+                        hsrConforms report `shouldBe` False
+                    Left err ->
+                        expectationFailure
+                            ("expected SHACL report, got " <> show err)
+
         it "skips a transaction body when cq-rdf exits non-zero" $ do
             withSystemTempDirectory "atx-failing-cq-rdf" $ \binDir -> do
                 let cqRdf = binDir </> "cq-rdf"
@@ -276,6 +302,25 @@ spec =
 
 loadMetadata :: IO TreasuryMetadata
 loadMetadata = readMetadataFile "test/fixtures/metadata.json"
+
+{- | A @cardano:Entity@ overlay node missing its required
+@treasury:role@. The migrated entity shape must flag it
+non-conformant; the pre-migration shapes (which targeted only
+@atx:HistoryEntry@) ignore it.
+-}
+malformedEntityTurtle :: ByteString
+malformedEntityTurtle =
+    TE.encodeUtf8 $
+        T.unlines
+            [ "@prefix atx: <https://lambdasistemi.github.io/amaru-treasury-tx/vocab/history#> ."
+            , "@prefix cardano: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/cardano#> ."
+            , "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> ."
+            , ""
+            , "[] a cardano:Entity ;"
+            , "  rdfs:label \"broken\" ;"
+            , "  atx:scope \"core_development\" ;"
+            , "  cardano:bech32 \"addr1xbroken\" ."
+            ]
 
 -- | Mainnet @core_development@ treasury address from the fixture.
 coreTreasuryAddress :: Text

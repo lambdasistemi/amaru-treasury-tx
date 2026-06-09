@@ -48,6 +48,7 @@ module Amaru.Treasury.History.Sparql
     , parseHistoryShapeName
     , renderHistoryShapeName
     , runNamedHistoryShacl
+    , runHistoryShaclTurtle
 
       -- * Errors
     , HistorySparqlError (..)
@@ -339,6 +340,20 @@ runNamedHistoryShacl name metadata entries = do
     case lattice of
         Left err -> pure (Left err)
         Right ttl -> runShacl name (shapeBytes name) ttl
+
+{- | Validate an arbitrary unified-graph Turtle document — @cq-rdf@
+ledger bodies plus the amaru @cardano:Entity@ / @atx:HistoryEntry@
+metadata overlay — against one named, embedded SHACL shape set, using
+Apache Jena @shacl@. Unlike 'runNamedHistoryShacl' this does not rebuild
+a lattice from indexer rows, so callers can check a graph they already
+hold (or a crafted fixture) against the shipped shapes.
+-}
+runHistoryShaclTurtle
+    :: HistoryShapeName
+    -> ByteString
+    -> IO (Either HistorySparqlError HistoryShaclResult)
+runHistoryShaclTurtle name =
+    runShacl name (shapeBytes name)
 
 {- | Apply the shared history filters, returning the original indexer
 entries in index order.

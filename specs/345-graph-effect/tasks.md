@@ -12,5 +12,5 @@
 - [X] T345-S2c Golden on a contingency disburse + a swap build; gate green.
 
 ## Slice S3 — Operate Graph tab
-- [ ] T345-S3a Operate result panel Graph tab rendering the resolved spend→produce effect (reuse Format + resolution).
-- [ ] T345-S3b nix build .#frontend + live dev smoke on /operate Graph tab.
+- [X] T345-S3a Operate result panel Graph tab rendering the resolved spend→produce effect (reuse Format + resolution).
+- [X] T345-S3b nix build .#frontend + live dev smoke on /operate Graph tab.

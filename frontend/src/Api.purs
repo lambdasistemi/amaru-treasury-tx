@@ -114,10 +114,18 @@ type ProjectedSwapOrder =
   , scooperFee :: Number
   }
 
+-- | One transaction input resolved against the indexed UTxO
+-- | state (#345 S1). An input the indexer still holds carries
+-- | its source treasury @{scope, role}@ and value with
+-- | @resolved = true@; an input it no longer holds (spent +
+-- | pruned, or external) carries @resolved = false@ and null
+-- | scope/role/value.
 type TxDetailInput =
   { txIn :: String
   , scope :: Maybe String
-  , value :: String
+  , role :: Maybe String
+  , value :: Maybe ValueSummary
+  , resolved :: Boolean
   }
 
 type TxDetailOutput =
@@ -144,6 +152,20 @@ type TxDetailResponse =
   , inputs :: Array TxDetailInput
   , outputs :: Array TxDetailOutput
   , lines :: Array String
+  }
+
+-- | Resolved spend→produce projection of an unsigned tx
+-- | (#345 S2), ridden in-band on the build response under
+-- | @\<prefix\>GraphEffect@. Mirrors the backend
+-- | @Amaru.Treasury.Api.GraphEffect.GraphEffect@: @spends@
+-- | reuse the tx-detail input shape (each input outref
+-- | resolved to its source @{scope, role}@ + value) and
+-- | @produces@ reuse the tx-detail output shape, so the
+-- | build-time effect and the @\/v1\/tx@ detail share one
+-- | resolved row vocabulary.
+type GraphEffect =
+  { spends :: Array TxDetailInput
+  , produces :: Array TxDetailOutput
   }
 
 type ScopeHistoryFilters =

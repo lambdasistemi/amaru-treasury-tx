@@ -1,6 +1,6 @@
 ---
 name: amaru-treasury-tx
-description: "Operator reference for driving `amaru-treasury-tx` on mainnet: portable release install, build, witness, assemble, inspect, validate, submit, and archive with the project's own subcommands plus `cardano-tx-tools`. Load for `amaru-treasury-tx`, `attach-witness`, `treasury-inspect`, `disburse-wizard`, `contingency-disburse-wizard`, `withdraw-wizard`, `swap-wizard`, `swap-cancel`, submitted transaction archive checks, `submit.log` completeness checks, mainnet treasury signing/submission, `journal/2026/metadata.json`, the `registry_script.hash` typo, or age-encrypted witness vaults. Prefer this over hand-rolling CBOR or cardano-cli for treasury work."
+description: "Operator reference for driving `amaru-treasury-tx` on mainnet: portable release install, build, witness, assemble, inspect, validate, submit, and archive with the project's own subcommands plus `cardano-tx-tools`. Load for `amaru-treasury-tx`, `attach-witness`, `treasury-inspect`, `disburse-wizard` (use `--scope contingency --to <scope>:<ada>` for a contingency disburse), `withdraw-wizard`, `swap-wizard`, `swap-cancel`, submitted transaction archive checks, `submit.log` completeness checks, mainnet treasury signing/submission, `journal/2026/metadata.json`, the `registry_script.hash` typo, or age-encrypted witness vaults. Prefer this over hand-rolling CBOR or cardano-cli for treasury work."
 ---
 
 # amaru-treasury-tx operator workflow
@@ -483,7 +483,7 @@ Run `amaru-treasury-tx <verb> --help` for the canonical flag list. Common
 verbs and the role each plays:
 
 - **Wizards** (produce a unified `intent.json`):
-  `disburse-wizard`, `contingency-disburse-wizard`, `withdraw-wizard`,
+  `disburse-wizard` (use `--scope contingency --to <scope>:<ada>` for a contingency disburse), `withdraw-wizard`,
   `swap-wizard`, `swap-cancel`. All take `--wallet-addr`, `--metadata`,
   scope/amount/rationale flags, optional `--validity-hours`, write
   `intent.json` and a `--log`.
@@ -580,7 +580,7 @@ file names so downstream tools and human review both work:
 
 ```
 /tmp/attx-<issue>/<flow-name>/
-├── wizard.log           # contingency-disburse-wizard step trace
+├── wizard.log           # disburse-wizard step trace
 ├── intent.json          # unified intent (wizard --out)
 ├── build.log            # tx-build step trace
 ├── report.json          # deterministic build report (tx-build --report)

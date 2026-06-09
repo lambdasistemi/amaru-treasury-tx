@@ -17,7 +17,7 @@ Haskell port of the bash recipes in
 - [Architecture overview](architecture.md) — modules and data flow.
 - [Trust model](trust-model.md) — what the wizard verifies, what the operator must assert.
 - [Swap recipe](swap.md) — building an existing swap intent with `tx-build`.
-- [Disburse](disburse.md) — resolving owned-scope ADA or USDM disbursements with `disburse-wizard`, contingency ADA disburses from contingency with `contingency-disburse-wizard`, or building an existing disburse intent with `tx-build`.
+- [Disburse](disburse.md) — resolving owned-scope ADA or USDM disbursements with `disburse-wizard`, multi-scope contingency ADA disburses with `disburse-wizard --scope contingency --to <scope>:<ada>`, or building an existing disburse intent with `tx-build`.
 - [Withdraw](withdraw.md) — resolving treasury rewards with `withdraw-wizard` or building an existing withdraw intent.
 - [Wizard input control](wizard-input-control.md) — `--exclude-utxo` / `--extra-tx-in` flags shared by every wizard that selects wallet or treasury UTxOs (#184).
 - [Local devnet smoke](local-devnet-smoke.md) — opt-in live `cardano-node-clients` devnet node check.
@@ -35,8 +35,7 @@ Haskell port of the bash recipes in
 | `swap-wizard` | Verify upstream `metadata.json` against the chain, resolve UTxOs + tip, emit a unified swap `intent.json` (typed step trace via `WizardEvent`). |
 | `swap-cancel` | Verify an explicitly supplied pending SundaeSwap order and build unsigned cancellation CBOR that returns the order value to the selected treasury. |
 | `withdraw-wizard` | Verify upstream `metadata.json` against the chain, resolve the treasury reward account + reward balance, emit a unified withdraw `intent.json`, or exit cleanly when rewards are zero. |
-| `disburse-wizard` | Verify upstream `metadata.json` against the chain, resolve wallet and treasury UTxOs, emit a unified ADA or USDM disburse `intent.json`. USDM is the default unit. |
-| `contingency-disburse-wizard` | Verify contingency and destination-scope registry state, move ADA from `contingency` to an owned treasury scope, and emit a unified disburse `intent.json`. |
+| `disburse-wizard` | Verify upstream `metadata.json` against the chain, resolve wallet and treasury UTxOs, emit a unified ADA or USDM disburse `intent.json`. USDM is the default unit. With `--scope contingency`, disburses ADA from the contingency treasury to one or more destination scopes via repeatable `--to <scope>:<ada>` (each scope receives its exact amount; fee from the wallet). |
 | `tx-build` | Turn a unified `intent.json` into unsigned Conway CBOR; re-evaluates every redeemer against a live `ChainContext` (typed step trace via `BuildEvent`) and can write a deterministic pre-signing report with `--report PATH`. |
 | `vault create` | Import one pasted or streamed Cardano payment signing key (`cardano-cli` `.skey` JSON or `addr_xsk`) into an encrypted age witness vault. |
 | `witness` | Create one detached Conway vkey witness from an encrypted age vault identity. |

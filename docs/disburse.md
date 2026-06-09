@@ -3,8 +3,10 @@
 `disburse-wizard` resolves treasury state into a unified disburse
 `intent.json`, and `tx-build` turns that intent into unsigned Conway
 CBOR. The wizard supports both ADA and USDM; when `--unit` is omitted,
-it defaults to USDM. The same shape applies to
-`contingency-disburse-wizard`.
+it defaults to USDM. The source scope drives the operation: a normal
+scope disburses to a single beneficiary address, while `--scope
+contingency` disburses ADA to one or more destination treasury scopes
+(see [Contingency disburses](#contingency-disburses)).
 
 See [Wizard input control](wizard-input-control.md) for the
 `--exclude-utxo` / `--extra-tx-in` flags shared with every other
@@ -137,47 +139,56 @@ the selected treasury inputs.
 
 ## Contingency disburses
 
-Use `contingency-disburse-wizard` when ADA must move from the `contingency`
-treasury to another scope treasury. This is intentionally narrower
-than `disburse-wizard`:
+Disburse ADA from the `contingency` treasury to other scope treasuries
+by selecting `contingency` as the **source scope** — there is no
+separate command or operation. `disburse-wizard --scope contingency` is
+intentionally narrower than a normal-scope disburse:
 
 - the source is always `contingency`;
 - the unit is always ADA;
-- the destination is selected by scope, not by manually pasting an
-  address;
-- the destination scope must be one of:
+- destinations are selected by scope — repeat `--to <scope>:<ada>`, so a
+  single transaction can pay several scopes at once — not by pasting a
+  beneficiary address;
+- each destination scope must be one of:
   `core_development`, `ops_and_use_cases`, `network_compliance`, or
-  `middleware`.
+  `middleware`. `contingency` itself is rejected as a destination.
 
-The `contingency` treasury has no owner key of its own. The command
-therefore emits all four owned scope owners as required signers:
+A normal-scope disburse uses `--beneficiary-addr` / `--amount`;
+`--scope contingency` rejects those and requires at least one `--to`
+(and vice versa — `--to` is only valid with `--scope contingency`).
 
-- `core_development`
-- `ops_and_use_cases`
-- `network_compliance`
-- `middleware`
+The `contingency` treasury has no owner key of its own, so the command
+emits all four owned scope owners as required signers
+(`core_development`, `ops_and_use_cases`, `network_compliance`,
+`middleware`).
 
-For example, to top up Network Compliance with 200,000 ADA:
+For example, to redistribute the contingency treasury across three
+scopes in a single transaction, pinning a funding-rationale document on
+chain:
 
 ```bash
 amaru-treasury-tx \
     --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
-    contingency-disburse-wizard \
+    disburse-wizard \
+        --scope contingency \
         --wallet-addr addr1q... \
         --metadata metadata-mainnet.json \
-        --destination-scope network_compliance \
-        --ada 200000 \
-        --description "Contingency disburse for Network Compliance" \
-        --justification "Treasury reallocation approved by scope owners" \
+        --to core_development:1556478.04 \
+        --to ops_and_use_cases:1397011.20 \
+        --to network_compliance:898203.59 \
+        --description "Contingency redistribution across scopes" \
+        --justification "Approved by scope owners" \
+        --reference-uri ipfs://bafkrei... --reference-label "Funding rationale" \
   | amaru-treasury-tx \
         --node-socket "$CARDANO_NODE_SOCKET_PATH" --network mainnet \
         tx-build
 ```
 
-`--ada` accepts an ADA decimal and converts it to lovelace in the
-emitted intent. The command still emits the unified `disburse` intent
-shape consumed by `tx-build`, but the public CLI surface enforces the
-contingency disburse policy above.
+`--to <scope>:<ada>` accepts an ADA decimal (up to 6 places) and
+converts it to lovelace. Each destination scope receives its **exact**
+authored amount; the transaction fee is taken from the wallet change,
+never skimmed off a scope output. The command emits the unified
+`disburse` intent shape consumed by `tx-build`.
 
 ## Existing intent
 

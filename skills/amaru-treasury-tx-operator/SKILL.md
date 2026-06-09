@@ -1,6 +1,6 @@
 ---
 name: amaru-treasury-tx-operator
-description: End-to-end operator workflow for driving the `amaru-treasury-tx` CLI against the Amaru treasury contracts on any host. Build → witness → assemble → inspect → validate → submit → archive into the in-repo `transactions/` log. Load this whenever the user invokes `amaru-treasury-tx`, `attach-witness`, `treasury-inspect`, any of the `*-wizard` subcommands (`disburse-wizard`, `contingency-disburse-wizard`, `withdraw-wizard`, `swap-wizard`, `swap-cancel`), mentions disbursing / withdrawing / swapping from a treasury, references age-encrypted witness vaults, or talks about archiving an Amaru treasury tx. The first time this skill runs on a new machine it conducts a one-time first-run interview, writes the operator's answers to `~/.config/amaru-treasury-tx/operator.json`, and reuses them thereafter — so subsequent runs propose complete commands instead of asking for paths and identities again.
+description: End-to-end operator workflow for driving the `amaru-treasury-tx` CLI against the Amaru treasury contracts on any host. Build → witness → assemble → inspect → validate → submit → archive into the in-repo `transactions/` log. Load this whenever the user invokes `amaru-treasury-tx`, `attach-witness`, `treasury-inspect`, any of the `*-wizard` subcommands (`disburse-wizard` (use `--scope contingency --to <scope>:<ada>` for a contingency disburse), `withdraw-wizard`, `swap-wizard`, `swap-cancel`), mentions disbursing / withdrawing / swapping from a treasury, references age-encrypted witness vaults, or talks about archiving an Amaru treasury tx. The first time this skill runs on a new machine it conducts a one-time first-run interview, writes the operator's answers to `~/.config/amaru-treasury-tx/operator.json`, and reuses them thereafter — so subsequent runs propose complete commands instead of asking for paths and identities again.
 ---
 
 # `amaru-treasury-tx` operator workflow
@@ -151,7 +151,7 @@ Run `amaru-treasury-tx <verb> --help` for canonical flag lists. The
 verbs and their roles:
 
 - **Wizards** (produce a unified `intent.json`):
-  `disburse-wizard`, `contingency-disburse-wizard`, `withdraw-wizard`,
+  `disburse-wizard` (use `--scope contingency --to <scope>:<ada>` for a contingency disburse), `withdraw-wizard`,
   `swap-wizard`, `swap-cancel`. All take `--wallet-addr`,
   `--metadata`, scope/amount/rationale flags, optional
   `--validity-hours`, and write `intent.json` plus a `--log`.

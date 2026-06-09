@@ -26,6 +26,7 @@ module Amaru.Treasury.Api.History
 import Data.Aeson (decodeStrict)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
+import Data.Foldable (toList)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
@@ -36,7 +37,12 @@ import Lens.Micro ((^.))
 
 import Cardano.Ledger.Alonzo.TxWits (Redeemers (..))
 import Cardano.Ledger.Api.Tx (witsTxL)
+import Cardano.Ledger.Api.Tx.Body (outputsTxBodyL)
+import Cardano.Ledger.Api.Tx.Out (TxOut, datumTxOutL)
 import Cardano.Ledger.Api.Tx.Wits (rdmrsTxWitsL)
+import Cardano.Ledger.Conway (ConwayEra)
+import Cardano.Ledger.Core (bodyTxL)
+import Cardano.Ledger.Plutus.Data qualified as PlutusData
 import Cardano.Node.Client.TxHistoryIndexer.Indexer
     ( HistoryIndexer
     , queryHistory
@@ -53,6 +59,7 @@ import Cardano.Node.Client.TxHistoryIndexer.Types
     , TxSummaryOutput (..)
     )
 import Cardano.Slotting.Slot (SlotNo (..))
+import Cardano.Tx.Ledger (ConwayTx)
 
 import Amaru.Treasury.Api.Types
     ( ScopeHistoryEntry (..)
@@ -85,6 +92,10 @@ import Amaru.Treasury.History.Sparql
 import Amaru.Treasury.Indexer.Decoder
     ( decodeConwayTx
     , treasuryTenantId
+    )
+import Amaru.Treasury.Inspect.SwapOrderProjection
+    ( ProjectedSwapOrder
+    , projectSwapOrderDatum
     )
 import Amaru.Treasury.Inspect.TreasurySpendProjection
     ( ProjectedTreasurySpend
@@ -236,35 +247,58 @@ txDetailResponseFromSummary metadata summary =
         , tdrFee = txsFee summary
         , tdrRequiredSigners = bytesText <$> txsRequiredSigners summary
         , tdrRedeemer = bytesText <$> txsRedeemer summary
-        , tdrProjectedRedeemers = projectedSpendRedeemers summary
+        , tdrProjectedRedeemers = spendRedeemerProjections decodedTx
         , tdrInputs = inputFromSummary <$> txsInputs summary
         , tdrOutputs =
-            zipWith
+            zipWith3
                 (outputFromSummary (outputScopeRoles metadata))
+                (outputSwapProjections decodedTx)
                 [(0 :: Int) ..]
                 (txsOutputs summary)
         , tdrLines = renderTxDetail summary
         }
   where
     key = txsKey summary
+    decodedTx = decodeConwayTx (txsPayload summary)
 
 {- | Typed projections of every @treasury.treasury.spend@ redeemer in
-the transaction, decoded against the embedded CIP-57 blueprint via
-'projectTreasurySpendRedeemer'. The raw redeemer 'Data' is
-reconstructed from the stored transaction CBOR ('txsPayload');
-redeemers that are not a @TreasurySpendRedeemer@ (e.g. the permissions
-withdraw-zero entry) decode to 'Left' and are dropped.
+the reconstructed transaction, decoded against the embedded CIP-57
+blueprint via 'projectTreasurySpendRedeemer'. Redeemers that are not a
+@TreasurySpendRedeemer@ (e.g. the permissions withdraw-zero entry)
+decode to 'Left' and are dropped.
 -}
-projectedSpendRedeemers :: TxSummary -> [ProjectedTreasurySpend]
-projectedSpendRedeemers summary =
-    case decodeConwayTx (txsPayload summary) of
-        Nothing -> []
-        Just tx ->
-            let Redeemers redeemers = tx ^. witsTxL . rdmrsTxWitsL
-            in  [ projected
-                | (redeemer, _exUnits) <- Map.elems redeemers
-                , Right projected <- [projectTreasurySpendRedeemer redeemer]
-                ]
+spendRedeemerProjections :: Maybe ConwayTx -> [ProjectedTreasurySpend]
+spendRedeemerProjections Nothing = []
+spendRedeemerProjections (Just tx) =
+    let Redeemers redeemers = tx ^. witsTxL . rdmrsTxWitsL
+    in  [ projected
+        | (redeemer, _exUnits) <- Map.elems redeemers
+        , Right projected <- [projectTreasurySpendRedeemer redeemer]
+        ]
+
+{- | Per-output SundaeSwap order datum projections, aligned with
+'txsOutputs' order. An output carries 'Just' a projection only when it
+has an inline datum that decodes against the @OrderDatum@ blueprint;
+all other outputs (and a transaction whose CBOR cannot be
+reconstructed) are 'Nothing'.
+-}
+outputSwapProjections :: Maybe ConwayTx -> [Maybe ProjectedSwapOrder]
+outputSwapProjections Nothing = repeat Nothing
+outputSwapProjections (Just tx) =
+    [ outputSwapProjection txOut
+    | txOut <- toList (tx ^. bodyTxL . outputsTxBodyL)
+    ]
+
+outputSwapProjection
+    :: TxOut ConwayEra -> Maybe ProjectedSwapOrder
+outputSwapProjection txOut =
+    case txOut ^. datumTxOutL of
+        PlutusData.Datum binaryDatum ->
+            either
+                (const Nothing)
+                Just
+                (projectSwapOrderDatum (PlutusData.binaryDataToData binaryDatum))
+        _ -> Nothing
 
 inputFromSummary :: TxSummaryInput -> TxDetailInput
 inputFromSummary input =
@@ -275,12 +309,17 @@ inputFromSummary input =
         }
 
 {- | Build one detail output, labelling its address with the owning
-treasury @{scope, role}@ when @roles@ knows it and surfacing the
-structured ledger value.
+treasury @{scope, role}@ when @roles@ knows it, surfacing the
+structured ledger value, and attaching the decoded swap-order datum
+@projection@ when the output carries one.
 -}
 outputFromSummary
-    :: Map Text (Text, Text) -> Int -> TxSummaryOutput -> TxDetailOutput
-outputFromSummary roles ix output =
+    :: Map Text (Text, Text)
+    -> Maybe ProjectedSwapOrder
+    -> Int
+    -> TxSummaryOutput
+    -> TxDetailOutput
+outputFromSummary roles projection ix output =
     TxDetailOutput
         { tdoIndex = ix
         , tdoAddress = address
@@ -288,6 +327,7 @@ outputFromSummary roles ix output =
         , tdoRole = snd <$> resolved
         , tdoValue = decodeValueSummary (tsoValue output)
         , tdoDatum = bytesText <$> tsoDatum output
+        , tdoProjectedDatum = projection
         }
   where
     address = bytesText (tsoAddress output)

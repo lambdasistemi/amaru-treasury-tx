@@ -81,6 +81,9 @@ import Data.Word (Word64)
 import GHC.Generics (Generic)
 import Web.HttpApiData (FromHttpApiData (..))
 
+import Amaru.Treasury.Inspect.SwapOrderProjection
+    ( ProjectedSwapOrder
+    )
 import Amaru.Treasury.Inspect.TreasurySpendProjection
     ( ProjectedTreasurySpend
     )
@@ -375,6 +378,10 @@ data TxDetailOutput = TxDetailOutput
     , tdoRole :: Maybe Text
     , tdoValue :: ValueSummary
     , tdoDatum :: Maybe Text
+    , tdoProjectedDatum :: Maybe ProjectedSwapOrder
+    -- ^ Decoded SundaeSwap order datum (recipient, min-received,
+    -- scooper fee) when the output carries a swap-order inline datum;
+    -- 'Nothing' otherwise.
     }
     deriving stock (Eq, Show)
 
@@ -387,6 +394,7 @@ instance ToJSON TxDetailOutput where
             , "role" .= tdoRole o
             , "value" .= tdoValue o
             , "datum" .= tdoDatum o
+            , "projectedDatum" .= tdoProjectedDatum o
             ]
 
 instance FromJSON TxDetailOutput where
@@ -399,6 +407,7 @@ instance FromJSON TxDetailOutput where
                 <*> o .:? "role"
                 <*> o .: "value"
                 <*> o .:? "datum"
+                <*> o .:? "projectedDatum"
 
 -- | Response returned by @GET /v1/scope/<scope>/utxos@.
 data ScopeUtxosResponse = ScopeUtxosResponse

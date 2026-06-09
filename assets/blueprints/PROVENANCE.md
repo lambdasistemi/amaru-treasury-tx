@@ -16,3 +16,20 @@ recorded source at the recorded commit.
   output). `aiken` is not available in this build environment, so the
   committed compiled blueprint at the pinned commit is vendored verbatim;
   it is the canonical compiled output for the deployed contracts.
+
+## sundae-order.cip57.json
+- Source: `cardano-rdf` case study at
+  `docs/case-studies/2026-05-amaru-treasury/blueprints/sundae-order-typed.cip57.json`
+  (the only typed SundaeSwap order blueprint on disk; the donor
+  amaru-treasury repo vendors the SundaeSwap contracts as Aiken source
+  only, with no compiled order blueprint checked in).
+- Aiken project `sundae/contracts` ("Experimental port of SundaeSwap to
+  Aiken"), compiler Aiken `v1.0.26-alpha+075668b`, plutusVersion v2.
+- Typed datum `types/order/OrderDatum`
+  (@pool_ident, owner, max_protocol_fee, destination, details,
+  extension@) is carried by the `documentation.spend` validator. The
+  sibling `order.spend` validator declares an untyped `Data` datum, so
+  the typed projection selects `documentation.spend`; the `OrderDatum`
+  schema matches the real on-chain SundaeSwap order datum produced by
+  'Amaru.Treasury.Tx.Swap.swapOrderDatum' (verified by the projection
+  golden).

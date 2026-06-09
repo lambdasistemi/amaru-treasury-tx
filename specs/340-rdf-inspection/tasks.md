@@ -12,10 +12,17 @@
 - [ ] T340-S2c Resolve input source addresses + values via the UTxO indexer (`apiIdx`) where available; label known addresses even when value absent. — DEFERRED: inputs are txin refs; labelling needs a UTxO-by-txin lookup (follow-up).
 - [X] T340-S2d Tests for resolution mapping + enriched `/v1/tx/{txid}` shape. `just unit golden` + `nix build .#default`.
 
-## Slice S3 — swap-datum projection via CIP-57 blueprint (backend)
-- [ ] T340-S3a Embed `assets/blueprints/swap-v2-datum.cip57.json` + baked rules; new `Inspect.SwapOrderProjection` over `Cardano.Tx.Blueprint`.
-- [ ] T340-S3b Project recipient/destination/min-receive/scooper-fee into the tx-detail output (structured `projectedDatum`) + through graph emit.
-- [ ] T340-S3c Golden anchored on the `01-amaru-treasury-swap` projected shape. `just unit golden` + `nix build .#default`.
+## Slice S3 — SundaeSwap order datum projection via CIP-57 blueprint (backend)
+Decision A-S3-001: use the REAL typed `sundae/contracts` blueprint (order.spend datum), not the toy fixture.
+- [X] T340-S3a Vendor + embed the real `sundae-order-typed.cip57.json` (order.spend) into `assets/blueprints/` with provenance recorded; add `cardano-tx-tools` lib dep; new `Inspect.SwapOrderProjection` over `Cardano.Tx.Blueprint`.
+- [X] T340-S3b Project recipient/destination/min-receive/scooper-fee into the swap-order tx-detail output (structured `projectedDatum`).
+- [X] T340-S3c Golden anchored on a real amaru swap order datum → expected projected fields. `just unit golden` + `nix build .#default`.
+
+## Slice S3b — amaru treasury datum/redeemer projection via CIP-57 blueprint (backend)
+Decision A-S3-001: also embed amaru's own treasury validator blueprint.
+- [X] T340-S3b-a Vendor + embed the donor `treasury.treasury.spend` blueprint (from `/code/amaru-treasury/treasury-contracts/plutus.json` @15817e6) into `assets/blueprints/` with provenance recorded.
+- [X] T340-S3b-b Project the treasury datum + redeemer (Reorganize/SweepTreasury/Fund/Disburse) onto the tx-detail treasury fields via the same `Cardano.Tx.Blueprint` engine.
+- [X] T340-S3b-c Golden anchored on a real treasury tx (e.g. a Disburse) → expected decoded redeemer/datum. `just unit golden` + `nix build .#default`.
 
 ## Slice S4 — frontend lenses + tx-detail rendering (after destcard PR merges)
 - [ ] T340-S4a `Api.purs`: `fetchScopeHistoryQuery`/`fetchScopeHistoryShacl` + response record types.

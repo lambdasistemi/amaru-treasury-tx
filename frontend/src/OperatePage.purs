@@ -14,6 +14,7 @@ import Prelude
 
 import Control.Alt ((<|>))
 
+import Api as Api
 import Affjax.RequestBody as RB
 import Affjax.ResponseFormat as RF
 import Affjax.Web as AX
@@ -41,7 +42,14 @@ import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Effect.Now (now)
 import Foreign.Object as FO
-import Format (formatThousandsN, formatTreeJson)
+import Format
+  ( assetNameText
+  , formatThousandsN
+  , formatTreeJson
+  , shortAddr
+  , shortHex
+  , showAda
+  )
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
@@ -125,7 +133,7 @@ disburseUnitWire = case _ of
   UnitAda -> "ada"
   UnitUsdm -> "usdm"
 
-data Tab = TabIntent | TabCli | TabCbor | TabReport
+data Tab = TabIntent | TabCli | TabCbor | TabReport | TabGraph
 
 derive instance eqTab :: Eq Tab
 
@@ -135,6 +143,7 @@ tabLabel = case _ of
   TabCli -> "CLI"
   TabCbor -> "CBOR"
   TabReport -> "Report"
+  TabGraph -> "Graph"
 
 -- | Tabs that depend on the tx-build response stay clickable
 -- | even when no data is present yet — the body renders a
@@ -2346,7 +2355,7 @@ lookupString k j = do
 previewTabs :: forall m. Tab -> H.ComponentHTML Action () m
 previewTabs active =
   HH.div [ HP.classes [ cn "preview-tabs" ] ]
-    ( map tab [ TabIntent, TabCli, TabCbor, TabReport ]
+    ( map tab [ TabIntent, TabCli, TabCbor, TabReport, TabGraph ]
     )
   where
   tab t =
@@ -2431,6 +2440,22 @@ previewBody st = case st.activeTab of
                 (FO.singleton "details" (formatTreeJson r))
             )
         ]
+  TabGraph -> case graphEffectPreview st of
+    Nothing ->
+      HH.p_
+        [ HH.text
+            "No graph-effect yet — build the tx to preview its \
+            \resolved spend→produce effect (reorganize builds \
+            \do not resolve one)."
+        ]
+    Just ge ->
+      HH.div
+        [ HP.classes [ cn "json-tree-wrapper" ] ]
+        [ copyBlockButton
+            (Argonaut.stringify ge.json)
+            "Copy graph-effect (JSON)"
+        , graphEffectView ge.effect
+        ]
 
 intentPreview :: State -> Json
 intentPreview st = case st.result of
@@ -2478,6 +2503,244 @@ reportPreview st = case st.result of
       Right parsed -> pure parsed
       Left _ -> pure (Argonaut.fromString s)
   _ -> Nothing
+
+-- ---------------------------------------------------------------------------
+-- Graph tab (#345) — resolved spend→produce effect preview
+
+-- | Extract + decode the resolved graph-effect from the build
+-- | response.  Unlike the stringified @IntentJson@ / @Report@
+-- | blobs, @\<prefix\>GraphEffect@ is a real nested object, so
+-- | it decodes straight into 'Api.GraphEffect'.  Returns both
+-- | the raw 'Json' (for the copy button) and the decoded value
+-- | (for rendering), or 'Nothing' when the tx hasn't been built
+-- | yet, the build failed, or the endpoint resolves no effect
+-- | (a @null@ field — e.g. reorganize).
+graphEffectPreview
+  :: State -> Maybe { json :: Json, effect :: Api.GraphEffect }
+graphEffectPreview st = case st.result of
+  Result j -> do
+    o <- Argonaut.toObject j
+    v <- FO.lookup (responsePrefix st.mode <> "GraphEffect") o
+    case decodeJson v of
+      Right ge -> Just { json: v, effect: ge }
+      Left _ -> Nothing
+  _ -> Nothing
+
+-- | Render the resolved graph-effect as two sections — Spends
+-- | (resolved inputs) and Produces (resolved outputs).  A thin
+-- | renderer: it reuses the same compact-card markup, CSS
+-- | classes and 'Format' helpers the audit @\/v1\/tx@ detail
+-- | uses, so the build-time preview reads identically to the
+-- | indexed detail.
+graphEffectView :: forall w i. Api.GraphEffect -> HH.HTML w i
+graphEffectView ge =
+  HH.div
+    [ HP.classes [ cn "audit-detail__body" ] ]
+    [ graphSection "Spends" ge.spends graphSpendCard
+    , graphSection "Produces" ge.produces graphProduceCard
+    ]
+
+graphSection
+  :: forall a w i
+   . String
+  -> Array a
+  -> (a -> HH.HTML w i)
+  -> HH.HTML w i
+graphSection title rows renderRow =
+  HH.section
+    [ HP.classes [ cn "audit-detail__section" ] ]
+    [ HH.h3_ [ HH.text title ]
+    , if Array.null rows then
+        HH.p
+          [ HP.classes [ cn "audit-detail__empty" ] ]
+          [ HH.text "None" ]
+      else
+        HH.div
+          [ HP.classes [ cn "repeated-row-list" ] ]
+          (map renderRow rows)
+    ]
+
+-- | One spent input: the outref, its resolved source treasury
+-- | scope/role (or @external@ / @unresolved@) and ADA value.
+graphSpendCard :: forall w i. Api.TxDetailInput -> HH.HTML w i
+graphSpendCard input =
+  HH.div
+    [ HP.classes [ cn "repeated-row-card" ] ]
+    [ graphKvMono "tx in" shortHex input.txIn
+    , graphKv "scope"
+        ( if input.resolved then fromMaybe "external" input.scope
+          else "unresolved"
+        )
+    , graphKv "role" (fromMaybe "-" input.role)
+    , graphKv "value" (graphValueText input.value)
+    ]
+
+-- | One produced output: address, resolved scope/role badges,
+-- | ADA value, native-asset chips and either the projected
+-- | SundaeSwap order fields or a truncated raw datum.  Mirrors
+-- | the audit detail's output card.
+graphProduceCard :: forall w i. Api.TxDetailOutput -> HH.HTML w i
+graphProduceCard output =
+  let
+    chips = graphAssetChips output.value.assets <> graphDatumChips output
+  in
+    HH.div
+      [ HP.classes [ cn "repeated-row-card", cn "audit-output-card" ] ]
+      ( [ HH.div
+            [ HP.classes [ cn "repeated-row-card__head" ] ]
+            [ HH.span
+                [ HP.classes [ cn "repeated-row-card__title" ] ]
+                [ HH.text ("output #" <> show output.index) ]
+            , HH.span
+                [ HP.classes [ cn "audit-output-card__badges" ] ]
+                ( [ graphBadge (fromMaybe "external" output.scope) ]
+                    <> graphRoleBadges output.role
+                )
+            ]
+        , HH.div
+            [ HP.classes [ cn "audit-output-card__summary" ] ]
+            [ graphField "address"
+                [ graphMono shortAddr output.address ]
+            , graphField "value"
+                [ HH.code [ HP.classes [ cn "mono" ] ]
+                    [ HH.text (showAda output.value.lovelace) ]
+                ]
+            ]
+        ]
+          <> graphChipRow chips
+      )
+
+-- | The ADA-denominated value of a resolved input, or an em
+-- | dash when the input is unresolved (no value to show).
+graphValueText :: Maybe Api.ValueSummary -> String
+graphValueText = case _ of
+  Just v -> showAda v.lovelace
+  Nothing -> "—"
+
+graphKv :: forall w i. String -> String -> HH.HTML w i
+graphKv label_ value_ =
+  HH.div
+    [ HP.classes [ cn "audit-detail__kv" ] ]
+    [ HH.span_ [ HH.text label_ ]
+    , HH.code_ [ HH.text value_ ]
+    ]
+
+-- | Like 'graphKv' but the value is a long hash/address: shown
+-- | truncated with the full value on a @title@ tooltip.
+graphKvMono
+  :: forall w i. String -> (String -> String) -> String -> HH.HTML w i
+graphKvMono label_ trunc full =
+  HH.div
+    [ HP.classes [ cn "audit-detail__kv" ] ]
+    [ HH.span_ [ HH.text label_ ]
+    , graphMono trunc full
+    ]
+
+graphMono :: forall w i. (String -> String) -> String -> HH.HTML w i
+graphMono trunc full =
+  HH.code
+    [ HP.classes [ cn "mono" ], HP.title full ]
+    [ HH.text (trunc full) ]
+
+graphBadge :: forall w i. String -> HH.HTML w i
+graphBadge value =
+  HH.span
+    [ HP.classes [ cn "audit-badge" ] ]
+    [ HH.text value ]
+
+graphRoleBadges :: forall w i. Maybe String -> Array (HH.HTML w i)
+graphRoleBadges = case _ of
+  Just role -> [ graphBadge role ]
+  Nothing -> []
+
+graphField
+  :: forall w i. String -> Array (HH.HTML w i) -> HH.HTML w i
+graphField label_ body =
+  HH.div
+    [ HP.classes [ cn "audit-output-field" ] ]
+    [ HH.span
+        [ HP.classes [ cn "audit-output-field__label" ] ]
+        [ HH.text label_ ]
+    , HH.span
+        [ HP.classes [ cn "audit-output-field__value" ] ]
+        body
+    ]
+
+graphChipRow
+  :: forall w i. Array (HH.HTML w i) -> Array (HH.HTML w i)
+graphChipRow chips
+  | Array.null chips = []
+  | otherwise =
+      [ HH.div
+          [ HP.classes [ cn "audit-output-card__chips" ] ]
+          chips
+      ]
+
+graphOutputChip
+  :: forall w i. String -> Array (HH.HTML w i) -> HH.HTML w i
+graphOutputChip label_ body =
+  HH.span
+    [ HP.classes [ cn "audit-output-chip" ] ]
+    ( [ HH.span
+          [ HP.classes [ cn "audit-output-chip__label" ] ]
+          [ HH.text label_ ]
+      ]
+        <> body
+    )
+
+graphAssetChips
+  :: forall w i. FO.Object (FO.Object Number) -> Array (HH.HTML w i)
+graphAssetChips assets = do
+  Tuple policy inner <- FO.toUnfoldable assets
+  Tuple name quantity <- FO.toUnfoldable inner
+  pure
+    ( graphOutputChip "asset"
+        [ HH.code
+            [ HP.classes [ cn "mono" ], HP.title policy ]
+            [ HH.text (shortHex policy) ]
+        , HH.span_ [ HH.text "·" ]
+        , HH.code
+            [ HP.classes [ cn "mono" ], HP.title name ]
+            [ HH.text (assetNameText name) ]
+        , HH.span_ [ HH.text ("× " <> formatThousandsN quantity) ]
+        ]
+    )
+
+-- | The projected SundaeSwap order datum (recipient, min
+-- | received, scooper fee) when the output carries one, else
+-- | the truncated raw datum, else nothing.
+graphDatumChips
+  :: forall w i. Api.TxDetailOutput -> Array (HH.HTML w i)
+graphDatumChips output = case output.projectedDatum of
+  Just order ->
+    [ graphOutputChip "datum" [ HH.text "swap order" ]
+    , graphOutputChip "recipient" [ graphMono shortHex order.recipient ]
+    , graphOutputChip "min received"
+        [ graphProjectedAssetInline order.minReceived ]
+    , graphOutputChip "scooper fee"
+        [ HH.text (showAda order.scooperFee) ]
+    ]
+  Nothing -> case output.datum of
+    Just d ->
+      [ graphOutputChip "datum" [ graphMono shortHex d ] ]
+    Nothing -> []
+
+graphProjectedAssetInline
+  :: forall w i. Api.ProjectedAsset -> HH.HTML w i
+graphProjectedAssetInline a
+  | a.policy == "" && a.asset == "" =
+      HH.text (showAda a.quantity)
+  | otherwise =
+      HH.span_
+        [ HH.code
+            [ HP.classes [ cn "mono" ], HP.title a.policy ]
+            [ HH.text (shortHex a.policy) ]
+        , HH.span_ [ HH.text " · " ]
+        , HH.code
+            [ HP.classes [ cn "mono" ], HP.title a.asset ]
+            [ HH.text (assetNameText a.asset) ]
+        , HH.span_ [ HH.text (" × " <> formatThousandsN a.quantity) ]
+        ]
 
 -- | Dispatches to the mode-specific request encoder.  The
 -- | result is what the Build button POSTs and what the

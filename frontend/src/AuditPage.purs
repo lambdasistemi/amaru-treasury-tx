@@ -580,16 +580,28 @@ sectionList title rows renderRow =
     ]
 
 -- | One transaction input rendered as a card: the outref (copy),
--- | its resolved scope (or @unresolved@ — input source-address
--- | resolution is a deferred backend follow-up) and value.
+-- | its resolved source treasury scope/role (or @external@ when
+-- | resolved to a non-treasury address, @unresolved@ when the
+-- | indexer no longer holds the input) and the ADA value.
 inputCard :: forall w. Api.TxDetailInput -> HH.HTML w Action
 inputCard input =
   HH.div
     [ HP.classes [ cn "repeated-row-card" ] ]
     [ kvCopy "tx in" shortHex input.txIn
-    , kv "scope" (fromMaybe "unresolved" input.scope)
-    , kv "value" input.value
+    , kv "scope"
+        ( if input.resolved then fromMaybe "external" input.scope
+          else "unresolved"
+        )
+    , kv "role" (fromMaybe "-" input.role)
+    , kv "value" (inputValueText input.value)
     ]
+
+-- | The ADA-denominated value of a resolved input, or an em
+-- | dash when the input is unresolved (no value to show).
+inputValueText :: Maybe Api.ValueSummary -> String
+inputValueText = case _ of
+  Just v -> showAda v.lovelace
+  Nothing -> "—"
 
 -- | One transaction output rendered as a card: address (copy),
 -- | the resolved treasury scope/role labels (never a raw

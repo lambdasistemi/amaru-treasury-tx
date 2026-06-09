@@ -711,16 +711,22 @@ modeSpecificSections st = case st.mode of
             "One or more (scope, ADA) beneficiaries paid out of \
             \the contingency treasury. Contingency cannot pay \
             \into itself, so it is not an eligible destination."
-            ( contingencyDestinationRows st
-                <>
-                  [ HH.button
-                      [ HP.classes [ cn "btn", cn "btn--ghost" ]
-                      , HE.onClick (\_ -> AddContingencyDestination)
-                      , HP.type_ HP.ButtonButton
+            [ HH.div
+                [ HP.classes [ cn "repeated-row-list", cn "destination-list" ] ]
+                ( contingencyDestinationRows st
+                    <>
+                      [ HH.div
+                          [ HP.classes [ cn "repeated-row-list__actions" ] ]
+                          [ HH.button
+                              [ HP.classes [ cn "btn", cn "btn--ghost" ]
+                              , HE.onClick (\_ -> AddContingencyDestination)
+                              , HP.type_ HP.ButtonButton
+                              ]
+                              [ HH.text "+ Add destination" ]
+                          ]
                       ]
-                      [ HH.text "+ Add destination" ]
-                  ]
-            )
+                )
+            ]
         ]
     | otherwise ->
         [ formSection "03" "Beneficiary"
@@ -755,15 +761,22 @@ modeSpecificSections st = case st.mode of
             \invoices, contracts, proofs).  Mirrors the \
             \rationale.references array in historical \
             \disburse intents under transactions/2026/."
-            ( referencesPicker st
-                <> [ HH.button
-                      [ HP.classes [ cn "btn", cn "btn--ghost" ]
-                      , HE.onClick (\_ -> AddReference)
-                      , HP.type_ HP.ButtonButton
+            [ HH.div
+                [ HP.classes [ cn "repeated-row-list" ] ]
+                ( referencesPicker st
+                    <>
+                      [ HH.div
+                          [ HP.classes [ cn "repeated-row-list__actions" ] ]
+                          [ HH.button
+                              [ HP.classes [ cn "btn", cn "btn--ghost" ]
+                              , HE.onClick (\_ -> AddReference)
+                              , HP.type_ HP.ButtonButton
+                              ]
+                              [ HH.text "+ Add reference" ]
+                          ]
                       ]
-                      [ HH.text "+ Add reference" ]
-                  ]
-            )
+                )
+            ]
         ]
   ModeReorganize ->
     [ formSection "03" "Output shape"
@@ -780,8 +793,9 @@ modeSpecificSections st = case st.mode of
 -- | Render every reference row with the slice-G compound
 -- | named widget for the URI (picking fills label + type
 -- | too) plus plain text inputs for label + type so the
--- | operator can still hand-type a fresh reference.  The
--- | per-row trash stays.
+-- | operator can still hand-type a fresh reference.  Uses
+-- | the same removable-card treatment as contingency
+-- | destination rows.
 referencesPicker
   :: forall m
    . State
@@ -796,37 +810,55 @@ referenceRow
   -> ReferenceRow
   -> H.ComponentHTML Action () m
 referenceRow st i row =
-  HH.div [ HP.classes [ cn "reference-row" ] ]
-    [ namedField
-        (ReferenceSlot i)
-        st.openNamedDropdown
-        st.books.references
-        ("ref-uri-" <> show i)
-        row.uri
-        (SetReferenceUri i)
-        "ipfs://bafy…"
-        true
-    , plainField
-        ("ref-type-" <> show i)
-        row.refType
-        (SetReferenceType i)
-        "Other"
-        false
-    , plainField
-        ("ref-label-" <> show i)
-        row.label
-        (SetReferenceLabel i)
-        "Invoice INV-635 — ACME"
-        false
-    , HH.button
-        [ HP.classes [ cn "btn", cn "btn--ghost" ]
-        , HE.onClick (\_ -> RemoveReference i)
-        , HP.title "Remove this reference"
-        , HP.attr (HH.AttrName "aria-label")
-            ("Remove reference " <> show (i + 1))
-        , HP.type_ HP.ButtonButton
+  HH.div [ HP.classes [ cn "repeated-row-card", cn "reference-card" ] ]
+    [ HH.div [ HP.classes [ cn "repeated-row-card__head" ] ]
+        [ HH.span [ HP.classes [ cn "repeated-row-card__title" ] ]
+            [ HH.text ("Reference " <> show (i + 1)) ]
+        , HH.button
+            [ HP.classes
+                [ cn "btn"
+                , cn "btn--ghost"
+                , cn "repeated-row-card__remove"
+                ]
+            , HE.onClick (\_ -> RemoveReference i)
+            , HP.title "Remove this reference"
+            , HP.attr (HH.AttrName "aria-label")
+                ("Remove reference " <> show (i + 1))
+            , HP.type_ HP.ButtonButton
+            ]
+            [ HH.element (HH.ElemName "md-icon") []
+                [ HH.text "delete" ]
+            , HH.span_ [ HH.text "Remove" ]
+            ]
         ]
-        [ HH.text "×" ]
+    , HH.div
+        [ HP.classes
+            [ cn "repeated-row-card__fields"
+            , cn "reference-card__fields"
+            ]
+        ]
+        [ namedField
+            (ReferenceSlot i)
+            st.openNamedDropdown
+            st.books.references
+            ("ref-uri-" <> show i)
+            row.uri
+            (SetReferenceUri i)
+            "ipfs://bafy…"
+            true
+        , plainField
+            ("ref-type-" <> show i)
+            row.refType
+            (SetReferenceType i)
+            "Other"
+            false
+        , plainField
+            ("ref-label-" <> show i)
+            row.label
+            (SetReferenceLabel i)
+            "Invoice INV-635 — ACME"
+            false
+        ]
     ]
 
 -- | Plain text input with no `<datalist>` companion.
@@ -869,9 +901,8 @@ plainField _label value_ action placeholder mono =
       ]
 
 -- | Render every contingency destination row (scope select +
--- | ADA input + per-row trash button).  Reuses the
--- | `.reference-row` flex layout so the destination rows line
--- | up exactly like the disburse reference rows.
+-- | ADA input + per-row remove button) as a dedicated card,
+-- | keeping the field controls and state actions unchanged.
 contingencyDestinationRows
   :: forall m
    . State
@@ -887,18 +918,36 @@ contingencyDestinationRow
   -> ContingencyDestination
   -> H.ComponentHTML Action () m
 contingencyDestinationRow i d =
-  HH.div [ HP.classes [ cn "reference-row" ] ]
-    [ contingencyScopeSelect i d.scope
-    , contingencyAdaField i d.ada
-    , HH.button
-        [ HP.classes [ cn "btn", cn "btn--ghost" ]
-        , HE.onClick (\_ -> RemoveContingencyDestination i)
-        , HP.title "Remove this destination"
-        , HP.attr (HH.AttrName "aria-label")
-            ("Remove destination " <> show (i + 1))
-        , HP.type_ HP.ButtonButton
+  HH.div [ HP.classes [ cn "repeated-row-card", cn "destination-card" ] ]
+    [ HH.div [ HP.classes [ cn "repeated-row-card__head" ] ]
+        [ HH.span [ HP.classes [ cn "repeated-row-card__title" ] ]
+            [ HH.text ("Destination " <> show (i + 1)) ]
+        , HH.button
+            [ HP.classes
+                [ cn "btn"
+                , cn "btn--ghost"
+                , cn "repeated-row-card__remove"
+                ]
+            , HE.onClick (\_ -> RemoveContingencyDestination i)
+            , HP.title "Remove this destination"
+            , HP.attr (HH.AttrName "aria-label")
+                ("Remove destination " <> show (i + 1))
+            , HP.type_ HP.ButtonButton
+            ]
+            [ HH.element (HH.ElemName "md-icon") []
+                [ HH.text "delete" ]
+            , HH.span_ [ HH.text "Remove" ]
+            ]
         ]
-        [ HH.text "×" ]
+    , HH.div
+        [ HP.classes
+            [ cn "repeated-row-card__fields"
+            , cn "destination-card__fields"
+            ]
+        ]
+        [ contingencyScopeSelect i d.scope
+        , contingencyAdaField i d.ada
+        ]
     ]
 
 -- | Destination-scope `<select>` for one row.  Lists only the

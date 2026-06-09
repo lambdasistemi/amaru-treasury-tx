@@ -266,21 +266,77 @@ input[type="number"].field__input { -moz-appearance: textfield; }
 .signer-chip__req { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.85; }
 .signers-picker__hint { flex-basis: 100%; font-size: 12px; color: var(--md-sys-color-on-surface-variant); line-height: 1.5; margin-top: 4px; }
 
-/* ---------- rationale references (disburse mode) ----------
-   Each row carries three inputs (IPFS URI, @type, label) plus
-   a remove (×) button.  Mirror the array shape historical
-   disburse intents under transactions/2026/ ship in the
-   rationale.references field. */
-.reference-row {
-  display: grid;
-  grid-template-columns:
-    minmax(0, 2fr) minmax(0, 1fr) minmax(0, 2fr) auto;
-  gap: 8px;
-  align-items: end;
-  margin-bottom: 8px;
+/* ---------- repeated form rows ----------
+   Shared card layout for removable row sets on /operate:
+   rationale references and contingency destinations.  The
+   controls inside remain the shared `.field` /
+   `.field__input` / `.btn` primitives. */
+.repeated-row-list,
+.destination-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-@media (max-width: 700px) {
-  .reference-row { grid-template-columns: 1fr; }
+.repeated-row-list__actions {
+  display: flex;
+  justify-content: flex-start;
+  padding-top: 2px;
+}
+.repeated-row-card,
+.destination-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--app-radius);
+  background: var(--md-sys-color-surface-container);
+}
+.repeated-row-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.repeated-row-card__title {
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.repeated-row-card__fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.reference-card__fields {
+  grid-template-columns:
+    minmax(0, 2fr) minmax(0, 1fr) minmax(0, 2fr);
+}
+.destination-card__fields {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.repeated-row-card__remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+.repeated-row-card__remove md-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+@media (max-width: 600px) {
+  .repeated-row-card__head { align-items: flex-start; }
+  .repeated-row-card__fields,
+  .reference-card__fields,
+  .destination-card__fields { grid-template-columns: 1fr; }
+  .repeated-row-card__remove { align-self: flex-start; }
+  .repeated-row-list__actions .btn { width: 100%; }
 }
 .signers-picker__hint .mono { font-size: 11px; }
 

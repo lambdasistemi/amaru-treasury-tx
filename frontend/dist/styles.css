@@ -1050,3 +1050,75 @@ md-list-item {
     border-bottom: 0;
   }
 }
+
+/* ---------- repeated form rows ----------
+   Kept in sync with style-build.css for removable row sets
+   on /operate: rationale references and contingency
+   destinations. */
+.repeated-row-list,
+.destination-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.repeated-row-list__actions {
+  display: flex;
+  justify-content: flex-start;
+  padding-top: 2px;
+}
+.repeated-row-card,
+.destination-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--app-radius);
+  background: var(--md-sys-color-surface-container);
+}
+.repeated-row-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.repeated-row-card__title {
+  font-family: "Roboto Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.repeated-row-card__fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+.reference-card__fields {
+  grid-template-columns:
+    minmax(0, 2fr) minmax(0, 1fr) minmax(0, 2fr);
+}
+.destination-card__fields {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.repeated-row-card__remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  white-space: nowrap;
+}
+.repeated-row-card__remove md-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+@media (max-width: 600px) {
+  .repeated-row-card__head { align-items: flex-start; }
+  .repeated-row-card__fields,
+  .reference-card__fields,
+  .destination-card__fields { grid-template-columns: 1fr; }
+  .repeated-row-card__remove { align-self: flex-start; }
+  .repeated-row-list__actions .btn { width: 100%; }
+}

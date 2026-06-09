@@ -25,8 +25,7 @@ import Amaru.Treasury.Cli.Common
     , withSocket
     )
 import Amaru.Treasury.Cli.DisburseWizard
-    ( runContingencyDisburse
-    , runDisburseWizard
+    ( runDisburseWizard
     )
 import Amaru.Treasury.Cli.Envelope
     ( runDeEnvelope
@@ -104,9 +103,6 @@ main = withUtf8 . withUpdateCheckMain $ do
         CmdDisburseWizard dwo ->
             withSocket g $ \socket ->
                 runDisburseWizard g{goSocketPath = Just socket} dwo
-        CmdContingencyDisburse eto ->
-            withSocket g $ \socket ->
-                runContingencyDisburse g{goSocketPath = Just socket} eto
         CmdWithdrawWizard wo ->
             withSocket g $ \socket ->
                 runWithdrawWizard g{goSocketPath = Just socket} wo

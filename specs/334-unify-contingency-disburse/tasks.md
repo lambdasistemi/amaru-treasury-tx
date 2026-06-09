@@ -1,11 +1,11 @@
 # Tasks — #334
 
 ## Slice A — CLI unify
-- [ ] T334-SA1 RED: parser/wizard tests for `disburse-wizard --scope
+- [X] T334-SA1 RED: parser/wizard tests for `disburse-wizard --scope
       contingency --to <scope>:<ada>` + rejection of beneficiary-addr/no-`--to`.
-- [ ] T334-SA2 GREEN: fold contingency into disburse-wizard; remove the
+- [X] T334-SA2 GREEN: fold contingency into disburse-wizard; remove the
       separate subcommand; same intent.json; non-contingency unchanged.
-- [ ] T334-SA3 `just ci` green; intent.json parity check vs old command.
+- [X] T334-SA3 `just ci` green; intent.json parity check vs old command.
 
 ## Slice B — UI unify
 - [ ] T334-SB1 Remove ModeContingencyDisburse; 3-mode selector; fold all

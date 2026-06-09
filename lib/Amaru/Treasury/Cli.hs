@@ -67,10 +67,8 @@ import Amaru.Treasury.Cli.Config
     , resolveTreasuryInspectConfig
     )
 import Amaru.Treasury.Cli.DisburseWizard
-    ( ContingencyDisburseOpts
-    , DisburseWizardOpts
-    , contingencyDisburseOptsP
-    , disburseWizardOptsP
+    ( DisburseWizardInput
+    , disburseWizardInputP
     )
 import Amaru.Treasury.Cli.GovernanceWithdrawalInitWizard
     ( GovernanceWithdrawalInitWizardOpts
@@ -143,8 +141,7 @@ data Cmd
     = CmdSwapWizard WizardOpts
     | CmdSwapQuote SwapQuoteOpts
     | CmdSwapCancel SwapCancelOpts
-    | CmdDisburseWizard DisburseWizardOpts
-    | CmdContingencyDisburse ContingencyDisburseOpts
+    | CmdDisburseWizard DisburseWizardInput
     | CmdWithdrawWizard WithdrawOpts
     | CmdRegistryInitWizard RegistryInitWizardOpts
     | CmdStakeRewardInitWizard StakeRewardInitWizardOpts
@@ -211,17 +208,9 @@ cmdP =
             <> command
                 "disburse-wizard"
                 ( info
-                    (CmdDisburseWizard <$> disburseWizardOptsP)
+                    (CmdDisburseWizard <$> disburseWizardInputP)
                     ( progDesc
-                        "Produce a disburse intent.json from registry and treasury UTxO state"
-                    )
-                )
-            <> command
-                "contingency-disburse-wizard"
-                ( info
-                    (CmdContingencyDisburse <$> contingencyDisburseOptsP)
-                    ( progDesc
-                        "Move ADA from the contingency treasury to another treasury scope"
+                        "Produce a disburse intent.json from registry and treasury UTxO state (--scope contingency --to <scope>:<ada> for contingency disburse)"
                     )
                 )
             <> command

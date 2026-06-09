@@ -81,6 +81,9 @@ import Data.Word (Word64)
 import GHC.Generics (Generic)
 import Web.HttpApiData (FromHttpApiData (..))
 
+import Amaru.Treasury.Inspect.TreasurySpendProjection
+    ( ProjectedTreasurySpend
+    )
 import Amaru.Treasury.Inspect.Types
     ( PendingSwapOrder
     , TreasuryUtxo
@@ -288,6 +291,7 @@ data TxDetailResponse = TxDetailResponse
     , tdrFee :: Maybe Word64
     , tdrRequiredSigners :: [Text]
     , tdrRedeemer :: Maybe Text
+    , tdrProjectedRedeemers :: [ProjectedTreasurySpend]
     , tdrInputs :: [TxDetailInput]
     , tdrOutputs :: [TxDetailOutput]
     , tdrLines :: [Text]
@@ -306,6 +310,7 @@ instance ToJSON TxDetailResponse where
             , "fee" .= tdrFee r
             , "requiredSigners" .= tdrRequiredSigners r
             , "redeemer" .= tdrRedeemer r
+            , "projectedRedeemers" .= tdrProjectedRedeemers r
             , "inputs" .= tdrInputs r
             , "outputs" .= tdrOutputs r
             , "lines" .= tdrLines r
@@ -324,6 +329,7 @@ instance FromJSON TxDetailResponse where
                 <*> o .:? "fee"
                 <*> o .: "requiredSigners"
                 <*> o .:? "redeemer"
+                <*> o .: "projectedRedeemers"
                 <*> o .: "inputs"
                 <*> o .: "outputs"
                 <*> o .: "lines"

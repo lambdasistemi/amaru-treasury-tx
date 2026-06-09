@@ -17,6 +17,7 @@ category:           Cardano
 build-type:         Simple
 extra-doc-files:    CHANGELOG.md
 extra-source-files:
+  assets/blueprints/treasury-spend.cip57.json
   assets/plutus/permissions.cbor
   assets/plutus/README.md
   assets/plutus/scopes.cbor
@@ -188,6 +189,7 @@ library
     Amaru.Treasury.Inspect.Render
     Amaru.Treasury.Inspect.Schema
     Amaru.Treasury.Inspect.SwapOrderDatum
+    Amaru.Treasury.Inspect.TreasurySpendProjection
     Amaru.Treasury.Inspect.Types
     Amaru.Treasury.IntentJSON
     Amaru.Treasury.IntentJSON.Common
@@ -548,6 +550,7 @@ test-suite unit-tests
     Amaru.Treasury.Indexer.DecoderSpec
     Amaru.Treasury.Inspect.SchemaSpec
     Amaru.Treasury.Inspect.SwapOrderDatumSpec
+    Amaru.Treasury.Inspect.TreasurySpendProjectionSpec
     Amaru.Treasury.IntentJSONSchemaSpec
     Amaru.Treasury.IntentJSONSpec
     Amaru.Treasury.LedgerParseSpec

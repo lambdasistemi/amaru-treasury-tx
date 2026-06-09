@@ -32,7 +32,11 @@ import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
+import Lens.Micro ((^.))
 
+import Cardano.Ledger.Alonzo.TxWits (Redeemers (..))
+import Cardano.Ledger.Api.Tx (witsTxL)
+import Cardano.Ledger.Api.Tx.Wits (rdmrsTxWitsL)
 import Cardano.Node.Client.TxHistoryIndexer.Indexer
     ( HistoryIndexer
     , queryHistory
@@ -78,7 +82,14 @@ import Amaru.Treasury.History.Sparql
     , runNamedHistoryQuery
     , runNamedHistoryShacl
     )
-import Amaru.Treasury.Indexer.Decoder (treasuryTenantId)
+import Amaru.Treasury.Indexer.Decoder
+    ( decodeConwayTx
+    , treasuryTenantId
+    )
+import Amaru.Treasury.Inspect.TreasurySpendProjection
+    ( ProjectedTreasurySpend
+    , projectTreasurySpendRedeemer
+    )
 import Amaru.Treasury.Metadata
     ( ScopeMetadata (..)
     , TreasuryMetadata (..)
@@ -225,6 +236,7 @@ txDetailResponseFromSummary metadata summary =
         , tdrFee = txsFee summary
         , tdrRequiredSigners = bytesText <$> txsRequiredSigners summary
         , tdrRedeemer = bytesText <$> txsRedeemer summary
+        , tdrProjectedRedeemers = projectedSpendRedeemers summary
         , tdrInputs = inputFromSummary <$> txsInputs summary
         , tdrOutputs =
             zipWith
@@ -235,6 +247,24 @@ txDetailResponseFromSummary metadata summary =
         }
   where
     key = txsKey summary
+
+{- | Typed projections of every @treasury.treasury.spend@ redeemer in
+the transaction, decoded against the embedded CIP-57 blueprint via
+'projectTreasurySpendRedeemer'. The raw redeemer 'Data' is
+reconstructed from the stored transaction CBOR ('txsPayload');
+redeemers that are not a @TreasurySpendRedeemer@ (e.g. the permissions
+withdraw-zero entry) decode to 'Left' and are dropped.
+-}
+projectedSpendRedeemers :: TxSummary -> [ProjectedTreasurySpend]
+projectedSpendRedeemers summary =
+    case decodeConwayTx (txsPayload summary) of
+        Nothing -> []
+        Just tx ->
+            let Redeemers redeemers = tx ^. witsTxL . rdmrsTxWitsL
+            in  [ projected
+                | (redeemer, _exUnits) <- Map.elems redeemers
+                , Right projected <- [projectTreasurySpendRedeemer redeemer]
+                ]
 
 inputFromSummary :: TxSummaryInput -> TxDetailInput
 inputFromSummary input =

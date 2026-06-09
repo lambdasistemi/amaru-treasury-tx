@@ -61,6 +61,7 @@ module Amaru.Treasury.Indexer.Decoder
     , treasuryDecodeTx
     , treasuryDecodeTxWith
     , treasuryDecodeTxWithInterest
+    , decodeConwayTx
 
       -- * Dynamic registry-policy scope mappings
     , registryScopeMappingsFromMetadata

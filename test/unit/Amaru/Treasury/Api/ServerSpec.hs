@@ -86,6 +86,10 @@ import Amaru.Treasury.Cli.DisburseWizard
     ( ContingencyDisburseOpts (..)
     )
 import Amaru.Treasury.Inspect.Render (encodeReport)
+import Amaru.Treasury.Inspect.TreasurySpendProjection
+    ( ProjectedAsset (..)
+    , ProjectedTreasurySpend (..)
+    )
 import Amaru.Treasury.Inspect.Types
     ( ChainTip (..)
     , DeploymentAnchor (..)
@@ -671,6 +675,18 @@ stubTxDetail =
         , tdrFee = Just 2
         , tdrRequiredSigners = ["signer-a"]
         , tdrRedeemer = Just "redeemer-summary"
+        , tdrProjectedRedeemers =
+            [ ProjectedTreasurySpend
+                { ptsVariant = "Disburse"
+                , ptsAmount =
+                    [ ProjectedAsset
+                        { paPolicy = ""
+                        , paAsset = ""
+                        , paQuantity = 5000000
+                        }
+                    ]
+                }
+            ]
         , tdrInputs =
             [ TxDetailInput
                 { tdiTxIn = "input#0"

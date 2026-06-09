@@ -8,9 +8,9 @@
 - [X] T334-SA3 `just ci` green; intent.json parity check vs old command.
 
 ## Slice B — UI unify
-- [ ] T334-SB1 Remove ModeContingencyDisburse; 3-mode selector; fold all
+- [X] T334-SB1 Remove ModeContingencyDisburse; 3-mode selector; fold all
       case sites into ModeDisburse.
-- [ ] T334-SB2 Disburse form branches on scope (Contingency → dest rows +
+- [X] T334-SB2 Disburse form branches on scope (Contingency → dest rows +
       contingency endpoint; else address + disburse endpoint); scopePicker
       mode-aware (Swap/Reorganize exclude Contingency).
-- [ ] T334-SB3 `nix build .#frontend` green; browser smoke.
+- [X] T334-SB3 `nix build .#frontend` green; browser smoke.

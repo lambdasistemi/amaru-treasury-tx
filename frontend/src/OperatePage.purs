@@ -97,19 +97,17 @@ derive instance eqRateMode :: Eq RateMode
 -- | rationale, signers, preview tabs) is shared; only the
 -- | mode-specific sections + request/response prefix
 -- | switch (#277 / #280).
--- | #329 — 'ModeContingencyDisburse' drives the contingency
--- | disburse wizard: it pays N @(scope, ADA)@ beneficiaries
--- | out of the contingency treasury.  Source scope is always
--- | @contingency@ and the unit is always ADA, so — unlike the
--- | generic disburse mode — the form has destination rows
--- | instead of a single beneficiary and no unit selector.  It
--- | reuses the disburse response shape (@dbr*@), so
--- | 'responsePrefix' returns @"dbr"@ for it.
+-- | #334 — there is no separate contingency-disburse mode:
+-- | picking 'Contingency' as the source scope in 'ModeDisburse'
+-- | is what turns the disburse form into a multi-scope
+-- | contingency disburse (destination rows instead of a single
+-- | beneficiary, no unit selector, POST
+-- | @/v1/build/contingency-disburse@).  It reuses the disburse
+-- | response shape (@dbr*@), so 'responsePrefix' returns @"dbr"@.
 data TxMode
   = ModeSwap
   | ModeDisburse
   | ModeReorganize
-  | ModeContingencyDisburse
 
 derive instance eqTxMode :: Eq TxMode
 
@@ -262,14 +260,15 @@ recordSubmittedBooks st = do
     ModeSwap -> do
       recordFreeText SplitCountsBook st.split
       recordFreeText SlippageBpsBook st.slippageBps
-    ModeDisburse -> do
-      recordNamed WalletsBook st.beneficiaryAddr
-      for_ st.references recordSubmittedReference
-    ModeReorganize -> pure unit
     -- Contingency disburse has no beneficiary address or
     -- references; wallet / rationale / validity are already
     -- recorded by the shared prefix above.
-    ModeContingencyDisburse -> pure unit
+    ModeDisburse
+      | st.scope == Contingency -> pure unit
+      | otherwise -> do
+          recordNamed WalletsBook st.beneficiaryAddr
+          for_ st.references recordSubmittedReference
+    ModeReorganize -> pure unit
 
 -- | Record one reference triple submitted via the
 -- | reference row on '/operate'.  Dedup-on-URI: if a
@@ -493,7 +492,7 @@ render st =
               { themeLabel: themeLabel st.theme
               , onToggleTheme: ToggleTheme
               }
-          , siteHeader st.mode
+          , siteHeader st.mode st.scope
           , HH.div [ HP.classes [ cn "build-layout" ] ]
               [ formColumn st
               , previewColumn st
@@ -502,8 +501,8 @@ render st =
           ]
     )
 
-siteHeader :: forall m. TxMode -> H.ComponentHTML Action () m
-siteHeader mode =
+siteHeader :: forall m. TxMode -> Scope -> H.ComponentHTML Action () m
+siteHeader mode scope =
   HH.div [ HP.classes [ cn "site-header" ] ]
     [ HH.h1
         [ HP.classes
@@ -529,10 +528,11 @@ siteHeader mode =
   where
   title = case mode of
     ModeSwap -> "Build swap transaction"
-    ModeDisburse -> "Build disburse transaction"
+    ModeDisburse
+      | scope == Contingency ->
+          "Build contingency disburse transaction"
+      | otherwise -> "Build disburse transaction"
     ModeReorganize -> "Build reorganize transaction"
-    ModeContingencyDisburse ->
-      "Build contingency disburse transaction"
 
 -- ---------------------------------------------------------------------------
 -- Form column
@@ -545,7 +545,7 @@ formColumn st =
       , modeSelector st.mode
       , formSection "01" "Scope"
           "Choose the registered scope you are spending from."
-          [ scopePicker st.scope ]
+          [ scopePicker st.mode st.scope ]
       , formSection "02" "Wallet"
           "Operator bech32 address — fuel + collateral + change."
           [ namedFieldV
@@ -609,7 +609,7 @@ formColumn st =
                     "Reorganize is authorised by the scope owner \
                     \alone; extra signers are accepted but not \
                     \required by the permissions script."
-                  ModeContingencyDisburse ->
+                  ModeDisburse | st.scope == Contingency ->
                     "Contingency disburse derives its required \
                     \signers on-chain; extra signers are accepted \
                     \but not required here."
@@ -619,7 +619,7 @@ formColumn st =
               [ signersPicker st.scope st.extraSigners
               , case st.mode of
                   ModeReorganize -> HH.text ""
-                  ModeContingencyDisburse -> HH.text ""
+                  ModeDisburse | st.scope == Contingency -> HH.text ""
                   _ -> case validateSigners st.extraSigners of
                     Just msg -> fieldError msg
                     Nothing -> HH.text ""
@@ -684,48 +684,68 @@ modeSpecificSections st = case st.mode of
               )
         )
     ]
-  ModeDisburse ->
-    [ formSection "03" "Beneficiary"
-        "Bech32 mainnet address that receives the disbursement."
-        [ namedFieldV
-            BeneficiarySlot
-            st.openNamedDropdown
-            st.books.wallets
-            "beneficiary"
-            st.beneficiaryAddr
-            SetBeneficiaryAddr
-            "addr1q…"
-            true
-            ( validateBeneficiaryAddr st.beneficiaryAddr
-                <|> serverFieldError st "beneficiary_addr"
+  -- #334 — Contingency as the source scope makes the disburse
+  -- form a multi-scope contingency disburse (destination rows);
+  -- any other scope is the single beneficiary-address disburse.
+  ModeDisburse
+    | st.scope == Contingency ->
+        [ formSection "03" "Destinations"
+            "One or more (scope, ADA) beneficiaries paid out of \
+            \the contingency treasury. Contingency cannot pay \
+            \into itself, so it is not an eligible destination."
+            ( contingencyDestinationRows st
+                <>
+                  [ HH.button
+                      [ HP.classes [ cn "btn", cn "btn--ghost" ]
+                      , HE.onClick (\_ -> AddContingencyDestination)
+                      , HP.type_ HP.ButtonButton
+                      ]
+                      [ HH.text "+ Add destination" ]
+                  ]
             )
         ]
-    , formSection "04" "Amount"
-        "Currency selector + amount in the unit's user-facing \
-        \denomination (ADA, not lovelace; USDM, not 1e-6 USDM)."
-        ( [ segmentedDisburseUnit st.disburseUnit
-          , fieldNumV "amount"
-              st.disburseAmount
-              SetDisburseAmount
-              (disburseAmountSuffix st.disburseUnit)
-              (validateDisburseAmount st.disburseAmount)
-          ]
-        )
-    , formSection "08" "References"
-        "Off-chain CIP-1694 evidence (IPFS CIDs for \
-        \invoices, contracts, proofs).  Mirrors the \
-        \rationale.references array in historical \
-        \disburse intents under transactions/2026/."
-        ( referencesPicker st
-            <> [ HH.button
-                  [ HP.classes [ cn "btn", cn "btn--ghost" ]
-                  , HE.onClick (\_ -> AddReference)
-                  , HP.type_ HP.ButtonButton
-                  ]
-                  [ HH.text "+ Add reference" ]
+    | otherwise ->
+        [ formSection "03" "Beneficiary"
+            "Bech32 mainnet address that receives the disbursement."
+            [ namedFieldV
+                BeneficiarySlot
+                st.openNamedDropdown
+                st.books.wallets
+                "beneficiary"
+                st.beneficiaryAddr
+                SetBeneficiaryAddr
+                "addr1q…"
+                true
+                ( validateBeneficiaryAddr st.beneficiaryAddr
+                    <|> serverFieldError st "beneficiary_addr"
+                )
+            ]
+        , formSection "04" "Amount"
+            "Currency selector + amount in the unit's user-facing \
+            \denomination (ADA, not lovelace; USDM, not 1e-6 USDM)."
+            ( [ segmentedDisburseUnit st.disburseUnit
+              , fieldNumV "amount"
+                  st.disburseAmount
+                  SetDisburseAmount
+                  (disburseAmountSuffix st.disburseUnit)
+                  (validateDisburseAmount st.disburseAmount)
               ]
-        )
-    ]
+            )
+        , formSection "08" "References"
+            "Off-chain CIP-1694 evidence (IPFS CIDs for \
+            \invoices, contracts, proofs).  Mirrors the \
+            \rationale.references array in historical \
+            \disburse intents under transactions/2026/."
+            ( referencesPicker st
+                <> [ HH.button
+                      [ HP.classes [ cn "btn", cn "btn--ghost" ]
+                      , HE.onClick (\_ -> AddReference)
+                      , HP.type_ HP.ButtonButton
+                      ]
+                      [ HH.text "+ Add reference" ]
+                  ]
+            )
+        ]
   ModeReorganize ->
     [ formSection "03" "Output shape"
         "Keep a single merged treasury output, or split \
@@ -736,22 +756,6 @@ modeSpecificSections st = case st.mode of
             st.splitNativeAssets
             SetSplitNativeAssets
         ]
-    ]
-  ModeContingencyDisburse ->
-    [ formSection "03" "Destinations"
-        "One or more (scope, ADA) beneficiaries paid out of \
-        \the contingency treasury. Contingency cannot pay \
-        \into itself, so it is not an eligible destination."
-        ( contingencyDestinationRows st
-            <>
-              [ HH.button
-                  [ HP.classes [ cn "btn", cn "btn--ghost" ]
-                  , HE.onClick (\_ -> AddContingencyDestination)
-                  , HP.type_ HP.ButtonButton
-                  ]
-                  [ HH.text "+ Add destination" ]
-              ]
-        )
     ]
 
 -- | Render every reference row with the slice-G compound
@@ -984,10 +988,6 @@ modeSelector active =
         (Tuple (active == ModeDisburse) (SetMode ModeDisburse))
     , Tuple "Reorganize"
         (Tuple (active == ModeReorganize) (SetMode ModeReorganize))
-    , Tuple "Contingency Disburse"
-        ( Tuple (active == ModeContingencyDisburse)
-            (SetMode ModeContingencyDisburse)
-        )
     ]
 
 -- | All form-level validation errors keyed by section.
@@ -1006,17 +1006,18 @@ formErrors st =
       -- Contingency disburse carries no signer field on the
       -- wire (the builder derives required signers on-chain),
       -- so the shared "pick a co-signer" gate doesn't apply.
-      ModeContingencyDisburse -> Nothing
+      ModeDisburse | st.scope == Contingency -> Nothing
       _ -> validateSigners st.extraSigners
     modeErrs = case st.mode of
       ModeSwap -> []
-      ModeDisburse ->
-        Array.catMaybes
-          [ validateBeneficiaryAddr st.beneficiaryAddr
-          , validateDisburseAmount st.disburseAmount
-          ]
+      ModeDisburse
+        | st.scope == Contingency -> contingencyErrors st
+        | otherwise ->
+            Array.catMaybes
+              [ validateBeneficiaryAddr st.beneficiaryAddr
+              , validateDisburseAmount st.disburseAmount
+              ]
       ModeReorganize -> []
-      ModeContingencyDisburse -> contingencyErrors st
   in
     Array.catMaybes [ addrErr, signersErr ] <> modeErrs
 
@@ -1044,14 +1045,15 @@ serverFieldError st fieldId = case st.result of
 -- | responses carry @dbr*@ fields, reorganize responses
 -- | carry @rbr*@ fields (mirrors the Haskell record-field
 -- | prefixes one-to-one).
+-- | Contingency disburse runs under 'ModeDisburse' (source
+-- | scope @contingency@) and reuses the disburse response
+-- | carrier ('DisburseBuildResponse'), so its wire fields are
+-- | @dbr*@ too.
 responsePrefix :: TxMode -> String
 responsePrefix = case _ of
   ModeSwap -> "sbr"
   ModeDisburse -> "dbr"
   ModeReorganize -> "rbr"
-  -- Contingency disburse reuses the disburse response carrier
-  -- ('DisburseBuildResponse'), so its wire fields are @dbr*@.
-  ModeContingencyDisburse -> "dbr"
 
 -- | Bech32 sanity for the operator wallet input.  Doesn't
 -- | re-implement the full bech32 decoder (the api will
@@ -1216,7 +1218,8 @@ sectionState sec st = case sec of
             (validateWalletAddr st.walletAddr)
         ]
           <> case st.mode of
-            ModeDisburse ->
+            -- Contingency disburse has no beneficiary field.
+            ModeDisburse | st.scope /= Contingency ->
               [ fieldState st.beneficiaryAddr
                   (validateBeneficiaryAddr st.beneficiaryAddr)
               ]
@@ -1241,26 +1244,27 @@ sectionState sec st = case sec of
                     ]
               )
         )
-    ModeDisburse ->
-      combineFields
-        [ fieldState st.disburseAmount
-            (validateDisburseAmount st.disburseAmount)
-        ]
-    ModeReorganize -> SectionComplete
     -- The "Amount" chip stands in for the destination rows on
     -- contingency: empty list is pending, otherwise fold each
     -- row's ADA field through the shared amount validator.
-    ModeContingencyDisburse ->
-      case st.contingencyDestinations of
-        [] -> SectionPending
-        ds ->
-          combineFields
-            ( map
-                ( \d ->
-                    fieldState d.ada (validateDisburseAmount d.ada)
+    ModeDisburse
+      | st.scope == Contingency ->
+          case st.contingencyDestinations of
+            [] -> SectionPending
+            ds ->
+              combineFields
+                ( map
+                    ( \d ->
+                        fieldState d.ada (validateDisburseAmount d.ada)
+                    )
+                    ds
                 )
-                ds
-            )
+      | otherwise ->
+          combineFields
+            [ fieldState st.disburseAmount
+                (validateDisburseAmount st.disburseAmount)
+            ]
+    ModeReorganize -> SectionComplete
 
   SecRationale ->
     -- Description / justification / destination-label
@@ -1279,7 +1283,8 @@ sectionState sec st = case sec of
           ]
 
   SecReferences -> case st.mode of
-    ModeDisburse ->
+    -- Contingency disburse has no references section.
+    ModeDisburse | st.scope /= Contingency ->
       -- Reference rows are optional, but a row that's been
       -- started and left half-filled is invalid (the
       -- operator clearly intended to add an entry).
@@ -1292,7 +1297,7 @@ sectionState sec st = case sec of
     ModeReorganize -> SectionComplete
     -- Contingency drops signers from the wire, so the chip is
     -- never blocking.
-    ModeContingencyDisburse -> SectionComplete
+    ModeDisburse | st.scope == Contingency -> SectionComplete
     _ -> case st.extraSigners of
       [] -> SectionPending
       _ -> SectionComplete
@@ -1309,24 +1314,27 @@ sectionFocusId sec st = case sec of
       then "operate-wallet"
     else case st.mode of
       ModeDisburse
-        | isJust (validateBeneficiaryAddr st.beneficiaryAddr) ->
+        | st.scope /= Contingency
+        , isJust (validateBeneficiaryAddr st.beneficiaryAddr) ->
             "operate-beneficiary"
       _ -> "operate-wallet"
   SecAmount -> case st.mode of
     ModeSwap -> case st.amountMode of
       ModeUsdm -> "operate-usdm-target"
       ModeAllAda -> "operate-split_counts"
-    ModeDisburse -> "operate-amount"
+    ModeDisburse
+      | st.scope == Contingency ->
+          case Array.head st.contingencyDestinations of
+            Just _ -> "operate-contingency-ada-0"
+            Nothing -> "operate-wallet"
+      | otherwise -> "operate-amount"
     ModeReorganize -> "operate-validity_hours"
-    ModeContingencyDisburse ->
-      case Array.head st.contingencyDestinations of
-        Just _ -> "operate-contingency-ada-0"
-        Nothing -> "operate-wallet"
   SecRationale -> "operate-descriptions"
   SecReferences -> case st.mode of
-    ModeDisburse -> case Array.head st.references of
-      Just _ -> "operate-ref-uri-0"
-      Nothing -> "operate-wallet"
+    ModeDisburse | st.scope /= Contingency ->
+      case Array.head st.references of
+        Just _ -> "operate-ref-uri-0"
+        Nothing -> "operate-wallet"
     _ -> "operate-wallet"
   SecSigners -> "operate-signers-picker"
 
@@ -1964,10 +1972,19 @@ segmented options =
         options
     )
 
-scopePicker :: forall m. Scope -> H.ComponentHTML Action () m
-scopePicker active =
+-- | #334 — the scope picker is mode-aware: Disburse may spend
+-- | from any scope (including 'Contingency', which selects the
+-- | contingency disburse form); Swap and Reorganize spend from
+-- | an owned scope only ('ownedScopes' excludes 'Contingency').
+scopePicker :: forall m. TxMode -> Scope -> H.ComponentHTML Action () m
+scopePicker mode active =
   HH.div [ HP.classes [ cn "scope-picker" ] ]
-    ( map (pill active) allScopes )
+    ( map (pill active) (scopePickerScopes mode) )
+
+scopePickerScopes :: TxMode -> Array Scope
+scopePickerScopes = case _ of
+  ModeDisburse -> allScopes
+  _ -> ownedScopes
 
 pill :: forall m. Scope -> Scope -> H.ComponentHTML Action () m
 pill active s =
@@ -2278,9 +2295,10 @@ reportPreview st = case st.result of
 requestJson :: State -> Json
 requestJson st = case st.mode of
   ModeSwap -> swapRequestJson st
-  ModeDisburse -> disburseRequestJson st
+  ModeDisburse
+    | st.scope == Contingency -> contingencyDisburseRequestJson st
+    | otherwise -> disburseRequestJson st
   ModeReorganize -> reorganizeRequestJson st
-  ModeContingencyDisburse -> contingencyDisburseRequestJson st
 
 swapRequestJson :: State -> Json
 swapRequestJson st =
@@ -2482,15 +2500,13 @@ cliCommand st =
         <> " |\n"
         <> txBuildSegment
     ModeDisburse ->
-      disburseCliCommand st
+      ( if st.scope == Contingency then contingencyDisburseCliCommand st
+        else disburseCliCommand st
+      )
         <> " |\n"
         <> txBuildSegment
     ModeReorganize ->
       reorganizeCliCommand st
-        <> " |\n"
-        <> txBuildSegment
-    ModeContingencyDisburse ->
-      contingencyDisburseCliCommand st
         <> " |\n"
         <> txBuildSegment
 
@@ -2587,16 +2603,18 @@ reorganizeCliCommand st =
         ]
     )
 
--- | CLI preview for the @contingency-disburse-wizard@
--- | subcommand.  Mirrors 'reorganizeCliCommand''s
--- | continuation handling (@intercalate " \\\n"@ over a
--- | filtered line array); one @--to \<scope\>:\<ada\>@ flag
--- | per destination, matching the backend's @renderCli@.
+-- | CLI preview for a contingency disburse.  #334 unified the
+-- | CLI: a contingency disburse is now @disburse-wizard --scope
+-- | contingency --to \<scope\>:\<ada\>@ (one @--to@ per
+-- | destination), not a separate subcommand.  Mirrors
+-- | 'reorganizeCliCommand''s continuation handling
+-- | (@intercalate " \\\n"@ over a filtered line array).
 contingencyDisburseCliCommand :: State -> String
 contingencyDisburseCliCommand st =
   Array.intercalate " \\\n"
     ( Array.filter ((/=) "")
-        ( [ "amaru-treasury-tx contingency-disburse-wizard"
+        ( [ "amaru-treasury-tx disburse-wizard"
+          , "  --scope contingency"
           , "  --wallet-addr " <> walletForCli st.walletAddr
           , "  --metadata " <> st.metadataPath
           ]
@@ -2993,14 +3011,16 @@ modeWire = case _ of
   ModeSwap -> "swap"
   ModeDisburse -> "disburse"
   ModeReorganize -> "reorganize"
-  ModeContingencyDisburse -> "contingency-disburse"
 
 modeFromWire :: String -> Maybe TxMode
 modeFromWire = case _ of
   "swap" -> Just ModeSwap
   "disburse" -> Just ModeDisburse
   "reorganize" -> Just ModeReorganize
-  "contingency-disburse" -> Just ModeContingencyDisburse
+  -- #334 — the retired contingency-disburse mode folded into
+  -- Disburse + scope==contingency; restore legacy drafts there
+  -- (their saved @scope: contingency@ re-selects the form).
+  "contingency-disburse" -> Just ModeDisburse
   _ -> Nothing
 
 amountModeWire :: AmountMode -> String
@@ -3283,7 +3303,18 @@ handleAction = case _ of
     -- Reset the response on mode switch so a stale
     -- swap-shaped body doesn't drive the disburse-shaped
     -- preview helpers (and vice versa).
-    H.modify_ \st -> st { mode = m, result = NotStarted }
+    -- #334 — only Disburse may spend from Contingency, so if the
+    -- operator leaves a contingency disburse for Swap/Reorganize
+    -- (whose pickers exclude Contingency) snap the source scope
+    -- back to an owned scope.
+    H.modify_ \st ->
+      let
+        scope' =
+          if m /= ModeDisburse && st.scope == Contingency then
+            CoreDevelopment
+          else st.scope
+      in
+        st { mode = m, scope = scope', result = NotStarted }
     scheduleAutoSave
   SetWalletAddr s -> do
     H.modify_ \st -> st { walletAddr = s }
@@ -3409,10 +3440,11 @@ handleAction = case _ of
     H.modify_ \s -> s { result = Pending }
     r <- H.liftAff case st.mode of
       ModeSwap -> postBuild "/v1/build/swap" st
-      ModeDisburse -> postBuild "/v1/build/disburse" st
+      ModeDisburse
+        | st.scope == Contingency ->
+            postBuild "/v1/build/contingency-disburse" st
+        | otherwise -> postBuild "/v1/build/disburse" st
       ModeReorganize -> postBuild "/v1/build/reorganize" st
-      ModeContingencyDisburse ->
-        postBuild "/v1/build/contingency-disburse" st
     -- Record supplied values into their books regardless of
     -- outcome — the operator's intent is the same either
     -- way; a backend failure shouldn't lose a freshly

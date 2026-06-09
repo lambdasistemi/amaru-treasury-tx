@@ -18,6 +18,7 @@ import Amaru.Treasury.Build
 
 data ProducedOutputRole
     = OutputSwapOrder
+    | OutputBeneficiary
     | OutputTreasuryLeftover
     | OutputWalletChange
     | OutputCollateralReturn
@@ -32,6 +33,7 @@ instance ToJSON ProducedOutputRole where
 instance FromJSON ProducedOutputRole where
     parseJSON = withText "ProducedOutputRole" $ \case
         "swapOrder" -> pure OutputSwapOrder
+        "beneficiary" -> pure OutputBeneficiary
         "treasuryLeftover" -> pure OutputTreasuryLeftover
         "walletChange" -> pure OutputWalletChange
         "collateralReturn" -> pure OutputCollateralReturn
@@ -42,6 +44,7 @@ instance FromJSON ProducedOutputRole where
 classifyOutputRole :: BuildResult -> Int -> ProducedOutputRole
 classifyOutputRole result index
     | Set.member index swapOrderIndexes = OutputSwapOrder
+    | Set.member index beneficiaryIndexes = OutputBeneficiary
     | Just index == (fst <$> brTreasuryLeftoverOutput result) =
         OutputTreasuryLeftover
     | Just index == (fst <$> brWalletChangeOutput result) =
@@ -50,10 +53,13 @@ classifyOutputRole result index
   where
     swapOrderIndexes =
         Set.fromList (fst <$> brSundaeOrderOutputs result)
+    beneficiaryIndexes =
+        Set.fromList (fst <$> brBeneficiaryOutputs result)
 
 producedOutputRoleText :: ProducedOutputRole -> Text
 producedOutputRoleText = \case
     OutputSwapOrder -> "swapOrder"
+    OutputBeneficiary -> "beneficiary"
     OutputTreasuryLeftover -> "treasuryLeftover"
     OutputWalletChange -> "walletChange"
     OutputCollateralReturn -> "collateralReturn"

@@ -427,11 +427,12 @@ spec = describe "Amaru.Treasury.Report" $ do
         toJSON (roleOutput <$> allProducedOutputRoles)
             `shouldBe` toJSON
                 [ roleJson 0 "swapOrder"
-                , roleJson 1 "treasuryLeftover"
-                , roleJson 2 "walletChange"
-                , roleJson 3 "collateralReturn"
-                , roleJson 4 "metadata"
-                , roleJson 5 "unknown"
+                , roleJson 1 "beneficiary"
+                , roleJson 2 "treasuryLeftover"
+                , roleJson 3 "walletChange"
+                , roleJson 4 "collateralReturn"
+                , roleJson 5 "metadata"
+                , roleJson 6 "unknown"
                 ]
 
 decodedReport :: Either String Value
@@ -848,6 +849,7 @@ expectedSwapMetadataHash =
 allProducedOutputRoles :: [ProducedOutputRole]
 allProducedOutputRoles =
     [ OutputSwapOrder
+    , OutputBeneficiary
     , OutputTreasuryLeftover
     , OutputWalletChange
     , OutputCollateralReturn
@@ -868,11 +870,12 @@ roleOutput role =
 roleIndex :: ProducedOutputRole -> Int
 roleIndex = \case
     OutputSwapOrder -> 0
-    OutputTreasuryLeftover -> 1
-    OutputWalletChange -> 2
-    OutputCollateralReturn -> 3
-    OutputMetadata -> 4
-    OutputUnknown -> 5
+    OutputBeneficiary -> 1
+    OutputTreasuryLeftover -> 2
+    OutputWalletChange -> 3
+    OutputCollateralReturn -> 4
+    OutputMetadata -> 5
+    OutputUnknown -> 6
 
 roleJson :: Int -> Text -> Value
 roleJson index role =

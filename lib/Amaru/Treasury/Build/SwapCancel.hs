@@ -179,6 +179,7 @@ runSwapCancelAction ctx intent = do
                     , brWalletInputs = [walletUtxo]
                     , brTreasuryInputs = []
                     , brSundaeOrderOutputs = []
+                    , brBeneficiaryOutputs = []
                     , brTreasuryLeftoverOutput =
                         indexedOutputAt 0 body
                     , brPerChunkOverheadLovelace = Coin 0

@@ -244,6 +244,7 @@ runReorganizeAction ctx intent rationale walletAddr = do
             , brWalletInputs = walletInputUtxos
             , brTreasuryInputs = selectedSubset
             , brSundaeOrderOutputs = []
+            , brBeneficiaryOutputs = []
             , brTreasuryLeftoverOutput =
                 indexedOutputAt 0 body
             , brPerChunkOverheadLovelace = Coin 0

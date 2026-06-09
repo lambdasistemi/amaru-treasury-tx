@@ -46,6 +46,10 @@ import Amaru.Treasury.ChainContext.Fixture
 import Amaru.Treasury.IntentJSON
     ( decodeTreasuryIntentFile
     )
+import Amaru.Treasury.Report.Classify
+    ( ProducedOutputRole (..)
+    , classifyOutputRole
+    )
 
 fixtureDir :: FilePath
 fixtureDir = "test/fixtures/disburse/ada"
@@ -128,3 +132,13 @@ spec =
                 -- golden built from the same context.
                 n1 <- BS.readFile (fixtureDir <> "/body.cbor")
                 actualHex `shouldNotBe` n1
+                -- The two destination outputs (indexes 1, 2)
+                -- classify as beneficiaries, not as the
+                -- catch-all OutputUnknown. Layout is leftover
+                -- (0), beneficiaries (1, 2), wallet change (3).
+                (classifyOutputRole tbr <$> [0 .. 3])
+                    `shouldBe` [ OutputTreasuryLeftover
+                               , OutputBeneficiary
+                               , OutputBeneficiary
+                               , OutputWalletChange
+                               ]

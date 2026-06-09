@@ -173,6 +173,7 @@ producedOutputSchema =
             ( "role"
             , enumTextSchema
                 [ "swapOrder"
+                , "beneficiary"
                 , "treasuryLeftover"
                 , "walletChange"
                 , "collateralReturn"

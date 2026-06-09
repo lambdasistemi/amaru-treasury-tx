@@ -60,6 +60,9 @@ data BuildResult = BuildResult
     -- ^ treasury-owned inputs spent by the build
     , brSundaeOrderOutputs :: ![(Int, TxOut ConwayEra)]
     -- ^ final Sundae order outputs, paired with ledger output indexes
+    , brBeneficiaryOutputs :: ![(Int, TxOut ConwayEra)]
+    -- ^ disburse beneficiary (destination) outputs, paired with
+    --     ledger output indexes. Empty for non-disburse builds.
     , brTreasuryLeftoverOutput :: !(Maybe (Int, TxOut ConwayEra))
     -- ^ final treasury leftover output, when present
     , brPerChunkOverheadLovelace :: !Coin

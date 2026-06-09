@@ -44,6 +44,7 @@ import Amaru.Treasury.Build.Common
     ( alignCardanoCliBuildFee
     , collateralInputFrom
     , indexedOutputAt
+    , indexedOutputs
     , strictMaybe
     , txIdText
     , validateFinalPhase1
@@ -228,6 +229,8 @@ runDisburseAdaAction ctx fields payload rationale walletAddr = do
                     , brWalletInputs = walletInputUtxos
                     , brTreasuryInputs = treasuryInputUtxos
                     , brSundaeOrderOutputs = []
+                    , brBeneficiaryOutputs =
+                        indexedOutputs 1 (changeIx - 1) body
                     , brTreasuryLeftoverOutput =
                         indexedOutputAt 0 body
                     , brPerChunkOverheadLovelace = Coin 0
@@ -357,6 +360,8 @@ runDisburseUsdmAction ctx fields payload rationale walletAddr = do
                     , brWalletInputs = walletInputUtxos
                     , brTreasuryInputs = treasuryInputUtxos
                     , brSundaeOrderOutputs = []
+                    , brBeneficiaryOutputs =
+                        indexedOutputs 1 1 body
                     , brTreasuryLeftoverOutput =
                         indexedOutputAt 0 body
                     , brPerChunkOverheadLovelace = Coin 0

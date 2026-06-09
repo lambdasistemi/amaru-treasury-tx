@@ -139,7 +139,7 @@ data HistoryQueryName
     | -- | Operator overlay entity identifier counts.
       EntityOccurrencesQuery
     | -- | Resolve a known on-chain identity to its scope and role from
-      --   the metadata-derived @atx:TreasuryEntity@ triples.
+      --   the metadata-derived @cardano:Entity@ triples.
       AddressResolutionQuery
     deriving stock (Eq, Ord, Show, Enum, Bounded)
 
@@ -481,17 +481,38 @@ buildHistoryLattice includeBodies md entries =
                         : bodies
                     )
 
-{- | Emit @address → entity@ triples from verified treasury metadata.
+{- | How a treasury identity binds into the unified cardano-ledger-rdf
+graph: a bech32 address, a hashed leaf keyed by the @cq-rdf@ Identifier
+IRI, or a UTxO reference literal.
+-}
+data EntityKey
+    = -- | A bech32 address; joins body @cardano:Address@ nodes through
+      --   the shared @cardano:bech32@ literal.
+      KeyBech32 !Text
+    | -- | A @(leafType, hex)@ hashed leaf; joins the body credential's
+      --   @cardano:hasIdentifier <urn:cardano:id:leafType:hex>@ node.
+      KeyIdentifier !Text !Text
+    | -- | A @txid#ix@ UTxO reference literal (@cardano:fromTxOutRef@).
+      KeyTxOutRef !Text
 
-Each known on-chain identity becomes one @atx:TreasuryEntity@ blank node
-carrying its lookup handle (@atx:address@), machine @atx:role@, owning
-@atx:scope@, and human @atx:label@: the per-scope treasury address, the
-scope owner key, the permissions reward account, and the
-registry/scopes/treasury-script references. The label vocabulary mirrors
-"Amaru.Treasury.Report.Identity" so resolved labels match the report.
+{- | Emit @entity@ triples from verified treasury metadata, in the
+cardano-ledger-rdf @cardano:@ vocabulary.
 
-Returns an empty graph when no metadata is available; the @atx:@ prefix
-is declared by 'historyMetadataTurtle', which always precedes this block.
+Each known on-chain identity becomes one @cardano:Entity@ blank node
+carrying its human @rdfs:label@, machine @treasury:role@, owning amaru
+@atx:scope@, and a join binding into the ledger-body graph: the per-scope
+treasury address binds by @cardano:bech32@; the scope owner key, the
+permissions reward account, and the registry/treasury reference scripts
+bind by @cardano:hasIdentifier@ to the SAME @urn:cardano:id:...@
+'cardano:Identifier' node @cq-rdf@ emits in @body@ output; the
+scope-owners NFT UTxO binds by @cardano:fromTxOutRef@. Resolution then
+joins the body graph rather than a parallel @atx:@ island. The label
+vocabulary mirrors "Amaru.Treasury.Report.Identity" so resolved labels
+match the report.
+
+Returns an empty graph when no metadata is available; the @cardano:@,
+@rdfs:@, @treasury:@, and @atx:@ prefixes are declared by
+'historyMetadataTurtle', which always precedes this block.
 -}
 metadataEntityTriples :: Maybe TreasuryMetadata -> ByteString
 metadataEntityTriples Nothing = BS.empty
@@ -499,7 +520,7 @@ metadataEntityTriples (Just metadata) =
     TE.encodeUtf8 $
         T.unlines $
             entityTriples
-                (tmScopeOwners metadata)
+                (KeyTxOutRef (tmScopeOwners metadata))
                 "all"
                 "scopes"
                 "scope owners registry"
@@ -511,7 +532,7 @@ scopeEntities :: ScopeId -> ScopeMetadata -> [Text]
 scopeEntities scope sm =
     concat
         [ entityTriples
-            (smAddress sm)
+            (KeyBech32 (smAddress sm))
             (scopeText scope)
             "treasury"
             (scopeRole scope "treasury")
@@ -519,38 +540,68 @@ scopeEntities scope sm =
             []
             ( \owner ->
                 entityTriples
-                    owner
+                    (KeyIdentifier "PaymentKey" owner)
                     (scopeText scope)
                     "owner"
                     (scopeRole scope "scope owner")
             )
             (smOwner sm)
         , entityTriples
-            (srHash (smPermissions sm))
+            (KeyIdentifier "StakeScript" (srHash (smPermissions sm)))
             (scopeText scope)
             "permissions.reward_account"
             (scopeRole scope "permissions reward account")
         , entityTriples
-            (srHash (smRegistry sm))
+            (KeyIdentifier "ScriptHash" (srHash (smRegistry sm)))
             (scopeText scope)
             "registry"
             (scopeRole scope "registry reference")
         , entityTriples
-            (srHash (smTreasury sm))
+            (KeyIdentifier "ScriptHash" (srHash (smTreasury sm)))
             (scopeText scope)
             "treasury-script"
             (scopeRole scope "treasury reference script")
         ]
 
-entityTriples :: Text -> Text -> Text -> Text -> [Text]
-entityTriples address scope role label =
-    [ "[] a atx:TreasuryEntity ;"
-    , "  atx:address " <> turtleString address <> " ;"
+entityTriples :: EntityKey -> Text -> Text -> Text -> [Text]
+entityTriples key scope role label =
+    [ "[] a cardano:Entity ;"
+    , "  rdfs:label " <> turtleString label <> " ;"
     , "  atx:scope " <> turtleString scope <> " ;"
-    , "  atx:role " <> turtleString role <> " ;"
-    , "  atx:label " <> turtleString label <> " ."
-    , ""
+    , "  treasury:role " <> turtleString role <> " ;"
+    , "  " <> keyLine <> " ."
     ]
+        <> identifierBlock
+        <> [""]
+  where
+    (keyLine, identifierBlock) = case key of
+        KeyBech32 addr ->
+            ("cardano:bech32 " <> turtleString addr, [])
+        KeyTxOutRef ref ->
+            ("cardano:fromTxOutRef " <> turtleString ref, [])
+        KeyIdentifier leaf hex ->
+            let iri = identifierIri leaf hex
+            in  ( "cardano:hasIdentifier <" <> iri <> ">"
+                ,
+                    [ ""
+                    , "<" <> iri <> "> a cardano:Identifier ;"
+                    , "  cardano:leafType "
+                        <> turtleString leaf
+                        <> " ;"
+                    , "  cardano:bytesHex "
+                        <> turtleString hex
+                        <> " ."
+                    ]
+                )
+
+{- | The @urn:cardano:id:<leafType>:<hex>@ IRI @cq-rdf@ uses for a
+content-addressed hashed leaf: the shared node a metadata
+@cardano:Entity@ and a ledger-body credential both reference, so the two
+graphs join on identity.
+-}
+identifierIri :: Text -> Text -> Text
+identifierIri leaf hex =
+    "urn:cardano:id:" <> leaf <> ":" <> hex
 
 scopeRole :: ScopeId -> Text -> Text
 scopeRole scope role =
@@ -562,6 +613,8 @@ historyMetadataTurtle entries =
         T.unlines $
             [ "@prefix atx: <https://lambdasistemi.github.io/amaru-treasury-tx/vocab/history#> ."
             , "@prefix cardano: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/cardano#> ."
+            , "@prefix treasury: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/treasury#> ."
+            , "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> ."
             , "@prefix xsd: <http://www.w3.org/2001/XMLSchema#> ."
             , ""
             ]

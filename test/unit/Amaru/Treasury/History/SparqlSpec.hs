@@ -208,22 +208,37 @@ spec =
                 renderHistoryQueryName AddressResolutionQuery
                     `shouldBe` "address-resolution"
 
-            it "emits a treasury address→entity triple from metadata" $ do
+            it "emits a treasury entity in cardano-ledger-rdf vocab" $ do
                 md <- loadMetadata
                 lattice <- buildHistoryLattice False (Just md) []
                 case lattice of
                     Right ttl -> do
                         let turtle = TE.decodeUtf8 ttl
+                        -- The treasury identity is now a first-class
+                        -- cardano:Entity: bech32 via cardano:bech32,
+                        -- role via the cq-rdf treasury overlay term,
+                        -- label via rdfs:label, scope via the retained
+                        -- amaru atx:scope extension.
                         for_
-                            [ "atx:TreasuryEntity"
-                            , "atx:address " <> quoted coreTreasuryAddress
+                            [ "a cardano:Entity"
+                            , "cardano:bech32 " <> quoted coreTreasuryAddress
                             , "atx:scope \"core_development\""
-                            , "atx:role \"treasury\""
-                            , "atx:label \"core_development treasury\""
+                            , "treasury:role \"treasury\""
+                            , "rdfs:label \"core_development treasury\""
+                            , -- script-ref identities are keyed by the
+                              -- SAME urn:cardano:id Identifier scheme
+                              -- cq-rdf's body emit uses, so resolution
+                              -- joins the body graph, not an island.
+                              "cardano:hasIdentifier <urn:cardano:id:ScriptHash:"
+                            , "a cardano:Identifier"
+                            , "cardano:leafType \"ScriptHash\""
                             ]
                             $ \needle ->
                                 (needle, needle `T.isInfixOf` turtle)
                                     `shouldBe` (needle, True)
+                        -- The bespoke atx:TreasuryEntity island is gone.
+                        ("atx:TreasuryEntity" `T.isInfixOf` turtle)
+                            `shouldBe` False
                     Left err ->
                         expectationFailure
                             ("expected lattice success, got " <> show err)

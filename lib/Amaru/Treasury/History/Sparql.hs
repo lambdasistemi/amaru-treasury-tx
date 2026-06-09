@@ -33,6 +33,9 @@ module Amaru.Treasury.History.Sparql
     , renderHistoryQueryName
     , runNamedHistoryQuery
 
+      -- * Lattice construction
+    , buildHistoryLattice
+
       -- * Query results
     , HistoryQueryResult (..)
     , historyQueryRowsTsv
@@ -83,6 +86,13 @@ import Cardano.Node.Client.TxHistoryIndexer.Types
     )
 import Cardano.Slotting.Slot (SlotNo (..))
 
+import Amaru.Treasury.Metadata
+    ( ScopeMetadata (..)
+    , ScriptRef (..)
+    , TreasuryMetadata (..)
+    )
+import Amaru.Treasury.Scope (ScopeId, scopeText)
+
 -- | User-facing filters shared by CLI and HTTP history surfaces.
 data HistoryFilter = HistoryFilter
     { hfRole :: !(Maybe Text)
@@ -128,6 +138,9 @@ data HistoryQueryName
       SpendEdgesQuery
     | -- | Operator overlay entity identifier counts.
       EntityOccurrencesQuery
+    | -- | Resolve a known on-chain identity to its scope and role from
+      --   the metadata-derived @atx:TreasuryEntity@ triples.
+      AddressResolutionQuery
     deriving stock (Eq, Ord, Show, Enum, Bounded)
 
 instance ToHttpApiData HistoryQueryName where
@@ -149,6 +162,7 @@ parseHistoryQueryName raw =
         "asset-flow" -> Right AssetFlowQuery
         "spend-edges" -> Right SpendEdgesQuery
         "entity-occurrences" -> Right EntityOccurrencesQuery
+        "address-resolution" -> Right AddressResolutionQuery
         other ->
             Left $
                 "unknown history RDF query '"
@@ -166,6 +180,7 @@ renderHistoryQueryName = \case
     AssetFlowQuery -> "asset-flow"
     SpendEdgesQuery -> "spend-edges"
     EntityOccurrencesQuery -> "entity-occurrences"
+    AddressResolutionQuery -> "address-resolution"
 
 -- | SPARQL result table.
 data HistoryQueryResult = HistoryQueryResult
@@ -300,10 +315,12 @@ will fail if @cq-rdf@ cannot emit RDF for a non-empty payload.
 -}
 runNamedHistoryQuery
     :: HistoryQueryName
+    -> Maybe TreasuryMetadata
     -> [TxSummaryEntry]
     -> IO (Either HistorySparqlError HistoryQueryResult)
-runNamedHistoryQuery name entries = do
-    lattice <- buildHistoryLattice (queryNeedsBodies name) entries
+runNamedHistoryQuery name metadata entries = do
+    lattice <-
+        buildHistoryLattice (queryNeedsBodies name) metadata entries
     case lattice of
         Left err -> pure (Left err)
         Right ttl -> runArq name (queryBytes name) ttl
@@ -313,10 +330,12 @@ shape set.
 -}
 runNamedHistoryShacl
     :: HistoryShapeName
+    -> Maybe TreasuryMetadata
     -> [TxSummaryEntry]
     -> IO (Either HistorySparqlError HistoryShaclResult)
-runNamedHistoryShacl name entries = do
-    lattice <- buildHistoryLattice (shapeNeedsBodies name) entries
+runNamedHistoryShacl name metadata entries = do
+    lattice <-
+        buildHistoryLattice (shapeNeedsBodies name) metadata entries
     case lattice of
         Left err -> pure (Left err)
         Right ttl -> runShacl name (shapeBytes name) ttl
@@ -362,7 +381,7 @@ assetTxIds
 assetTxIds HistoryFilter{hfAsset = Nothing} entries =
     pure (Right (Set.fromList (entryTxIdText <$> entries)))
 assetTxIds HistoryFilter{hfAsset = Just needle} entries = do
-    mAssets <- runNamedHistoryQuery AssetFlowQuery entries
+    mAssets <- runNamedHistoryQuery AssetFlowQuery Nothing entries
     pure $ do
         result <- mAssets
         let rows = resultRows result
@@ -397,6 +416,7 @@ queryNeedsBodies = \case
     AssetFlowQuery -> True
     SpendEdgesQuery -> True
     EntityOccurrencesQuery -> False
+    AddressResolutionQuery -> False
 
 queryBytes :: HistoryQueryName -> ByteString
 queryBytes = \case
@@ -410,6 +430,10 @@ queryBytes = \case
         $(embedFile "lib/Amaru/Treasury/History/queries/spend-edges.rq")
     EntityOccurrencesQuery ->
         $(embedFile "lib/Amaru/Treasury/History/queries/entity-occurrences.rq")
+    AddressResolutionQuery ->
+        $( embedFile
+            "lib/Amaru/Treasury/History/queries/address-resolution.rq"
+         )
 
 shapeNeedsBodies :: HistoryShapeName -> Bool
 shapeNeedsBodies = \case
@@ -429,11 +453,19 @@ shapeBytes = \case
 -- ---------------------------------------------------------------------------
 -- Lattice construction
 
+{- | Assemble the local RDF lattice for a set of indexed history rows.
+
+The result always carries the ATX metadata triples for every entry and,
+when @md@ is supplied, the metadata-derived @address → entity@ triples.
+Ledger-body triples emitted by @cq-rdf@ are appended only when
+@includeBodies@ is set.
+-}
 buildHistoryLattice
     :: Bool
+    -> Maybe TreasuryMetadata
     -> [TxSummaryEntry]
     -> IO (Either HistorySparqlError ByteString)
-buildHistoryLattice includeBodies entries =
+buildHistoryLattice includeBodies md entries =
     withSystemTempDirectory "amaru-history-cq-rdf" $ \dir -> do
         bodyChunks <-
             if includeBodies
@@ -444,7 +476,85 @@ buildHistoryLattice includeBodies entries =
             Right $
                 BS.intercalate
                     "\n"
-                    (historyMetadataTurtle entries : bodies)
+                    ( historyMetadataTurtle entries
+                        : metadataEntityTriples md
+                        : bodies
+                    )
+
+{- | Emit @address → entity@ triples from verified treasury metadata.
+
+Each known on-chain identity becomes one @atx:TreasuryEntity@ blank node
+carrying its lookup handle (@atx:address@), machine @atx:role@, owning
+@atx:scope@, and human @atx:label@: the per-scope treasury address, the
+scope owner key, the permissions reward account, and the
+registry/scopes/treasury-script references. The label vocabulary mirrors
+"Amaru.Treasury.Report.Identity" so resolved labels match the report.
+
+Returns an empty graph when no metadata is available; the @atx:@ prefix
+is declared by 'historyMetadataTurtle', which always precedes this block.
+-}
+metadataEntityTriples :: Maybe TreasuryMetadata -> ByteString
+metadataEntityTriples Nothing = BS.empty
+metadataEntityTriples (Just metadata) =
+    TE.encodeUtf8 $
+        T.unlines $
+            entityTriples
+                (tmScopeOwners metadata)
+                "all"
+                "scopes"
+                "scope owners registry"
+                <> concatMap
+                    (uncurry scopeEntities)
+                    (Map.toList (tmTreasuries metadata))
+
+scopeEntities :: ScopeId -> ScopeMetadata -> [Text]
+scopeEntities scope sm =
+    concat
+        [ entityTriples
+            (smAddress sm)
+            (scopeText scope)
+            "treasury"
+            (scopeRole scope "treasury")
+        , maybe
+            []
+            ( \owner ->
+                entityTriples
+                    owner
+                    (scopeText scope)
+                    "owner"
+                    (scopeRole scope "scope owner")
+            )
+            (smOwner sm)
+        , entityTriples
+            (srHash (smPermissions sm))
+            (scopeText scope)
+            "permissions.reward_account"
+            (scopeRole scope "permissions reward account")
+        , entityTriples
+            (srHash (smRegistry sm))
+            (scopeText scope)
+            "registry"
+            (scopeRole scope "registry reference")
+        , entityTriples
+            (srHash (smTreasury sm))
+            (scopeText scope)
+            "treasury-script"
+            (scopeRole scope "treasury reference script")
+        ]
+
+entityTriples :: Text -> Text -> Text -> Text -> [Text]
+entityTriples address scope role label =
+    [ "[] a atx:TreasuryEntity ;"
+    , "  atx:address " <> turtleString address <> " ;"
+    , "  atx:scope " <> turtleString scope <> " ;"
+    , "  atx:role " <> turtleString role <> " ;"
+    , "  atx:label " <> turtleString label <> " ."
+    , ""
+    ]
+
+scopeRole :: ScopeId -> Text -> Text
+scopeRole scope role =
+    scopeText scope <> " " <> role
 
 historyMetadataTurtle :: [TxSummaryEntry] -> ByteString
 historyMetadataTurtle entries =

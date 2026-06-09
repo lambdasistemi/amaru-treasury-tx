@@ -1,10 +1,10 @@
 # Tasks — #340
 
 ## Slice S1 — address→entity triples + resolver query (backend)
-- [ ] T340-S1a Thread `Maybe TreasuryMetadata` into `buildHistoryLattice` + `runNamedHistoryQuery` + `Api/History.hs` query path.
-- [ ] T340-S1b `metadataEntityTriples`: emit address→entity triples (treasury addr, owner key, permissions reward account, registry/scopes/treasury-script refs) using `Report.Identity` label vocab.
-- [ ] T340-S1c `AddressResolutionQuery` constructor + `History/queries/address-resolution.rq` (embedFile) + parse/render names + `queryNeedsBodies=False`.
-- [ ] T340-S1d Golden: emitted-triples snapshot + resolver rows for pinned metadata. `just unit golden` + `nix build .#default`.
+- [X] T340-S1a Thread `Maybe TreasuryMetadata` into `buildHistoryLattice` + `runNamedHistoryQuery` + `Api/History.hs` query path.
+- [X] T340-S1b `metadataEntityTriples`: emit address→entity triples (treasury addr, owner key, permissions reward account, registry/scopes/treasury-script refs) using `Report.Identity` label vocab.
+- [X] T340-S1c `AddressResolutionQuery` constructor + `History/queries/address-resolution.rq` (embedFile) + parse/render names + `queryNeedsBodies=False`.
+- [X] T340-S1d Golden: emitted-triples snapshot + resolver rows for pinned metadata. `just unit golden` + `nix build .#default`.
 
 ## Slice S2 — tx-detail per-output {scope,role} + values (backend)
 - [ ] T340-S2a Add `tdoScope`/`tdoRole` to `TxDetailOutput` (+ ToJSON + schema asset regen).

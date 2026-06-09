@@ -300,9 +300,11 @@ main = do
                                         , hScopeHistoryQuery =
                                             queryScopeHistoryQueryResponse
                                                 (aiHistory apiIdx)
+                                                (Just metadata)
                                         , hScopeHistoryShacl =
                                             queryScopeHistoryShaclResponse
                                                 (aiHistory apiIdx)
+                                                (Just metadata)
                                         , hBuildSwap =
                                             bhBuildSwap buildHandlers
                                         , hBuildDisburse =

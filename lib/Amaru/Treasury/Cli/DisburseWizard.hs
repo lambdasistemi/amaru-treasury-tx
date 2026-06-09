@@ -187,6 +187,10 @@ data ContingencyDisburseOpts = ContingencyDisburseOpts
     , cdOptsValidityHours :: !(Maybe Word16)
     , cdOptsDescription :: !Text
     , cdOptsJustification :: !Text
+    , cdOptsReferences :: ![RationaleReferenceJSON]
+    -- ^ optional external rationale references (e.g. an
+    --   @ipfs://@ funding-rationale document) pinned into the
+    --   on-chain @body.references[]@.
     , cdOptsExcludeSet :: !ExclusionSet
     -- ^ Operator-supplied @--exclude-utxo@ refs, in flag
     -- order (#184).
@@ -478,6 +482,7 @@ contingencyRoute DisburseWizardInput{..} =
                         , cdOptsValidityHours = dwiValidityHours
                         , cdOptsDescription = dwiDescription
                         , cdOptsJustification = dwiJustification
+                        , cdOptsReferences = dwiReferences
                         , cdOptsExcludeSet = dwiExcludeSet
                         , cdOptsForcedSet = dwiForcedSet
                         }
@@ -496,7 +501,6 @@ contingencyRoute DisburseWizardInput{..} =
             , ["--destination-label" | isJust dwiDestinationLabel]
             , ["--event" | isJust dwiEvent]
             , ["--label" | isJust dwiLabel]
-            , ["--reference-uri" | not (null dwiReferences)]
             , ["--extra-signer" | not (null dwiSigners)]
             , ["--treasury-txin" | not (null dwiTreasuryTxIns)]
             ]
@@ -826,7 +830,8 @@ runContingencyDisburse g opts@ContingencyDisburseOpts{..} =
                                 , Disburse.raLabel =
                                     Just "Contingency disburse"
                                 }
-                        , Disburse.daRationaleReferences = []
+                        , Disburse.daRationaleReferences =
+                            cdOptsReferences
                         , Disburse.daExtraSigners = []
                         }
                 ri =

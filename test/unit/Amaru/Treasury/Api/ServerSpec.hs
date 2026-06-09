@@ -417,6 +417,7 @@ spec = do
                         , cdOptsValidityHours = Nothing
                         , cdOptsDescription = "rainy day"
                         , cdOptsJustification = "council motion 7"
+                        , cdOptsReferences = []
                         , cdOptsExcludeSet = ExclusionSet []
                         , cdOptsForcedSet = ForcedInclusionSet []
                         }

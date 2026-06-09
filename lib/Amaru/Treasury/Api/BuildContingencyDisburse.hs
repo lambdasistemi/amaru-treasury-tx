@@ -175,6 +175,7 @@ mapToContingencyDisburseOpts ContingencyDisburseBuildRequest{..} = do
             , cdOptsValidityHours = validityHours
             , cdOptsDescription = description
             , cdOptsJustification = justification
+            , cdOptsReferences = []
             , cdOptsExcludeSet = ExclusionSet []
             , cdOptsForcedSet = ForcedInclusionSet []
             }

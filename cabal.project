@@ -34,8 +34,8 @@ source-repository-package
 source-repository-package
   type: git
   location: https://github.com/lambdasistemi/cardano-ledger-rdf
-  tag: ceb7a66802321d3abf8b1b630ff08c0e20e5545f
-  --sha256: 0xm4p21fsr4r3ih1qclf6bjhn8m8w6amad6q0lx1wpzrxr8y83ln
+  tag: 27b68fc0f8eda2f8b2f66db7728781888e60bbea
+  --sha256: 17hin3sp2p385wnkvm3ygbc234kk1ycccqixn1rsz47vxhbg8pxl
 
 -- Provider, Submitter, N2C, and devnet helpers remain in cardano-node-clients.
 -- Pinned to the merged main commit that bundles both upstream PRs

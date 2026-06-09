@@ -73,6 +73,7 @@ import Amaru.Treasury.History.Sparql
     , runNamedHistoryShacl
     )
 import Amaru.Treasury.Indexer.Decoder (treasuryTenantId)
+import Amaru.Treasury.Metadata (TreasuryMetadata)
 import Amaru.Treasury.Scope
     ( ScopeId
     , scopeText
@@ -97,12 +98,13 @@ queryScopeHistoryFilteredResponse idx scope flt = do
 -- | Run one named RDF/SPARQL query over one indexed treasury scope.
 queryScopeHistoryQueryResponse
     :: HistoryIndexer
+    -> Maybe TreasuryMetadata
     -> ScopeId
     -> HistoryQueryName
     -> IO ScopeHistoryQueryResponse
-queryScopeHistoryQueryResponse idx scope queryName = do
+queryScopeHistoryQueryResponse idx metadata scope queryName = do
     entries <- queryScopeEntries idx scope
-    result <- runNamedHistoryQuery queryName entries
+    result <- runNamedHistoryQuery queryName metadata entries
     case result of
         Right resultTable ->
             pure
@@ -118,12 +120,13 @@ queryScopeHistoryQueryResponse idx scope queryName = do
 -- | Run one named RDF/SHACL validation over one indexed treasury scope.
 queryScopeHistoryShaclResponse
     :: HistoryIndexer
+    -> Maybe TreasuryMetadata
     -> ScopeId
     -> HistoryShapeName
     -> IO ScopeHistoryShaclResponse
-queryScopeHistoryShaclResponse idx scope shapeName = do
+queryScopeHistoryShaclResponse idx metadata scope shapeName = do
     entries <- queryScopeEntries idx scope
-    result <- runNamedHistoryShacl shapeName entries
+    result <- runNamedHistoryShacl shapeName metadata entries
     case result of
         Right resultReport ->
             pure

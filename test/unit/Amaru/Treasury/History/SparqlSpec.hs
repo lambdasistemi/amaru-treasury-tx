@@ -12,6 +12,10 @@ import Control.Exception (bracket_)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.Foldable (for_)
+import Data.List (find)
+import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as TE
 import Data.Word (Word64)
 import System.Directory
     ( Permissions (executable)
@@ -46,13 +50,20 @@ import Amaru.Treasury.History.Sparql
     , HistoryQueryResult (..)
     , HistoryShaclResult (..)
     , HistoryShapeName (..)
+    , buildHistoryLattice
     , emptyHistoryFilter
     , filterHistoryEntries
     , historyShaclResultLines
+    , parseHistoryQueryName
     , parseHistoryShapeName
+    , renderHistoryQueryName
     , renderHistoryShapeName
     , runNamedHistoryQuery
     , runNamedHistoryShacl
+    )
+import Amaru.Treasury.Metadata
+    ( TreasuryMetadata
+    , readMetadataFile
     )
 
 spec :: Spec
@@ -72,6 +83,7 @@ spec =
             result <-
                 runNamedHistoryQuery
                     HistoryEntriesQuery
+                    Nothing
                     [mkEntry 3 "0102" "disburse" "outbound"]
             case result of
                 Right table -> do
@@ -147,6 +159,7 @@ spec =
             result <-
                 runNamedHistoryShacl
                     HistoryEntryShape
+                    Nothing
                     [mkEntry 3 "0102" "disburse" "outbound"]
             case result of
                 Right report -> do
@@ -172,6 +185,7 @@ spec =
                     result <-
                         runNamedHistoryQuery
                             TxCountQuery
+                            Nothing
                             [ mkEntryWithPayload
                                 3
                                 "0102"
@@ -186,6 +200,80 @@ spec =
                                 , hqrColumns = ["transactions"]
                                 , hqrRows = [["0"]]
                                 }
+
+        describe "address resolution" $ do
+            it "parses and renders the resolver query name" $ do
+                parseHistoryQueryName "address-resolution"
+                    `shouldBe` Right AddressResolutionQuery
+                renderHistoryQueryName AddressResolutionQuery
+                    `shouldBe` "address-resolution"
+
+            it "emits a treasury address→entity triple from metadata" $ do
+                md <- loadMetadata
+                lattice <- buildHistoryLattice False (Just md) []
+                case lattice of
+                    Right ttl -> do
+                        let turtle = TE.decodeUtf8 ttl
+                        for_
+                            [ "atx:TreasuryEntity"
+                            , "atx:address " <> quoted coreTreasuryAddress
+                            , "atx:scope \"core_development\""
+                            , "atx:role \"treasury\""
+                            , "atx:label \"core_development treasury\""
+                            ]
+                            $ \needle ->
+                                (needle, needle `T.isInfixOf` turtle)
+                                    `shouldBe` (needle, True)
+                    Left err ->
+                        expectationFailure
+                            ("expected lattice success, got " <> show err)
+
+            it "resolves a treasury address to scope/role/label" $ do
+                md <- loadMetadata
+                result <-
+                    runNamedHistoryQuery
+                        AddressResolutionQuery
+                        (Just md)
+                        []
+                case result of
+                    Right table -> do
+                        hqrColumns table
+                            `shouldBe` ["address", "scope", "role", "label"]
+                        case find
+                            ((== coreTreasuryAddress) . headOr)
+                            (hqrRows table) of
+                            Just row ->
+                                row
+                                    `shouldBe` [ coreTreasuryAddress
+                                               , "core_development"
+                                               , "treasury"
+                                               , "core_development treasury"
+                                               ]
+                            Nothing ->
+                                expectationFailure
+                                    ( "no resolver row for treasury "
+                                        <> "address; rows: "
+                                        <> show (hqrRows table)
+                                    )
+                    Left err ->
+                        expectationFailure
+                            ("expected resolver success, got " <> show err)
+
+loadMetadata :: IO TreasuryMetadata
+loadMetadata = readMetadataFile "test/fixtures/metadata.json"
+
+-- | Mainnet @core_development@ treasury address from the fixture.
+coreTreasuryAddress :: Text
+coreTreasuryAddress =
+    "addr1x90mk0jjjhppr36ethwj8kewpgyrxyc7q6qucl4gqru96dzlh\
+    \vl999wzz8r4jhway0djuzsgxvf3up5pe3l2sq8ct56qtjz6ah"
+
+quoted :: Text -> Text
+quoted t = "\"" <> t <> "\""
+
+headOr :: [Text] -> Text
+headOr [] = ""
+headOr (x : _) = x
 
 mkEntry
     :: Word64

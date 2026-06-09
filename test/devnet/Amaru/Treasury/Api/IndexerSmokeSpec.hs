@@ -1691,9 +1691,9 @@ smokeHandlers apiIdx backend globalOpts metadata anchor swapAddr =
                 swapAddr
         , hScopeHistory = queryScopeHistoryFilteredResponse (aiHistory apiIdx)
         , hScopeHistoryQuery =
-            queryScopeHistoryQueryResponse (aiHistory apiIdx)
+            queryScopeHistoryQueryResponse (aiHistory apiIdx) (Just metadata)
         , hScopeHistoryShacl =
-            queryScopeHistoryShaclResponse (aiHistory apiIdx)
+            queryScopeHistoryShaclResponse (aiHistory apiIdx) (Just metadata)
         , hBuildSwap = bhBuildSwap buildHandlers
         , hBuildDisburse = bhBuildDisburse buildHandlers
         , hBuildReorganize = bhBuildReorganize buildHandlers

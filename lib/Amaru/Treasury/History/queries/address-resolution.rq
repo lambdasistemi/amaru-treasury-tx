@@ -1,0 +1,19 @@
+# Resolve an on-chain identity to its treasury scope and role.
+#
+# Reads the metadata-derived atx:TreasuryEntity triples that the
+# application emits beside the Cardano ledger RDF graph. One row is one
+# known identity: its lookup handle (?address), the owning scope, the
+# machine role, and the human-readable label. The query is intentionally
+# fixed; CLI/HTTP callers select this named query, not arbitrary SPARQL.
+
+PREFIX atx: <https://lambdasistemi.github.io/amaru-treasury-tx/vocab/history#>
+
+SELECT ?address ?scope ?role ?label
+WHERE {
+  ?e a atx:TreasuryEntity ;
+     atx:address ?address ;
+     atx:scope ?scope ;
+     atx:role ?role ;
+     atx:label ?label .
+}
+ORDER BY ?address

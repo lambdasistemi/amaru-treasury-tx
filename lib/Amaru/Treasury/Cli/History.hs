@@ -294,7 +294,8 @@ runHistory opts = do
                         dieHistory
                             "history: pass only one of --rdf-query or --shacl"
                     (Just queryName, Nothing) -> do
-                        result <- runNamedHistoryQuery queryName entries
+                        result <-
+                            runNamedHistoryQuery queryName Nothing entries
                         case result of
                             Right table ->
                                 mapM_
@@ -303,7 +304,8 @@ runHistory opts = do
                             Left err ->
                                 dieHistory (renderHistorySparqlError err)
                     (Nothing, Just shapeName) -> do
-                        result <- runNamedHistoryShacl shapeName entries
+                        result <-
+                            runNamedHistoryShacl shapeName Nothing entries
                         case result of
                             Right report ->
                                 mapM_

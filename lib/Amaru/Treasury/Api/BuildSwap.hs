@@ -52,6 +52,7 @@ import Data.Word (Word16)
 import GHC.Generics (Generic)
 import System.IO (stderr)
 
+import Amaru.Treasury.Api.GraphEffect (GraphEffect)
 import Amaru.Treasury.Backend (Backend)
 import Amaru.Treasury.Build.Trace (renderBuildEvent)
 import Amaru.Treasury.Cli.Common (GlobalOpts)
@@ -179,6 +180,13 @@ data SwapBuildResponse = SwapBuildResponse
     -- ^ Constructor name of the 'BuildFailure' on
     --   tx-build failure (#269); 'Nothing' if intent
     --   assembly failed OR build succeeded.
+    , sbrGraphEffect :: Maybe GraphEffect
+    -- ^ Resolved graph-effect projection of the unsigned tx
+    --   (#345): inputs + outputs resolved to treasury
+    --   @{scope, role}@ entities + values + projected datums.
+    --   Present iff tx build succeeded and the indexed UTxO
+    --   state could resolve it; attached additively by the
+    --   build handler, not the runner.
     }
     deriving (Eq, Show, Generic)
     deriving anyclass (FromJSON, ToJSON)
@@ -346,6 +354,7 @@ runBuildSwap g backend req = do
                                 , sbrFailureField = Nothing
                                 , sbrFailureReason = Nothing
                                 , sbrBuildFailureTag = Nothing
+                                , sbrGraphEffect = Nothing
                                 }
                     -- #269 — after intent assembly succeeds,
                     -- run the tx-build stage against the same
@@ -443,6 +452,7 @@ runBuildSwap g backend req = do
             , sbrFailureField = fieldOf wf
             , sbrFailureReason = Just (renderWizardFailure wf)
             , sbrBuildFailureTag = Nothing
+            , sbrGraphEffect = Nothing
             }
 
 {- | The constructor tag of a 'WizardFailure' as a stable

@@ -58,6 +58,7 @@ import Cardano.Node.Client.Provider
     )
 import Cardano.Node.Client.Provider qualified as Provider
 import Cardano.Node.Client.UTxOIndexer.Provider qualified as IndexedProvider
+import Control.Monad ((>=>))
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Except (throwE)
 import Data.Proxy (Proxy (..))
@@ -95,7 +96,7 @@ import Amaru.Treasury.Api.BuildContingencyDisburse
     )
 import Amaru.Treasury.Api.BuildDisburse
     ( DisburseBuildRequest
-    , DisburseBuildResponse
+    , DisburseBuildResponse (..)
     )
 import Amaru.Treasury.Api.BuildReorganize
     ( ReorganizeBuildRequest
@@ -103,10 +104,14 @@ import Amaru.Treasury.Api.BuildReorganize
     )
 import Amaru.Treasury.Api.BuildSwap
     ( SwapBuildRequest
-    , SwapBuildResponse
+    , SwapBuildResponse (..)
+    )
+import Amaru.Treasury.Api.GraphEffect
+    ( graphEffectFromCborHex
     )
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
+    , snapshotUtxosByTxIn
     )
 import Amaru.Treasury.Api.State
     ( ScopeUtxoFilter (..)
@@ -344,9 +349,18 @@ data BuildHandlers = BuildHandlers
         -> IO ReorganizeBuildResponse
     }
 
--- | Construct the build handlers from one shared provider.
+{- | Construct the build handlers from one shared provider.
+
+Each disburse\/swap handler additively attaches the #345 resolved
+graph-effect: after the build returns its unsigned tx hex, the handler
+projects it via 'graphEffectFromCborHex' using the same indexed UTxO
+read the @\/v1\/tx@ detail uses ('snapshotUtxosByTxIn') and the
+verified @metadata@ for @{scope, role}@ resolution. The build runners
+are untouched; they leave the field 'Nothing' and the handler fills it.
+-}
 mkBuildHandlers
     :: ApiIndexer cf op
+    -> Maybe TreasuryMetadata
     -> Provider IO
     -> (Provider IO -> SwapBuildRequest -> IO SwapBuildResponse)
     -> (Provider IO -> DisburseBuildRequest -> IO DisburseBuildResponse)
@@ -358,20 +372,41 @@ mkBuildHandlers
     -> BuildHandlers
 mkBuildHandlers
     apiIdx
+    metadata
     realProvider
     buildSwap
     buildDisburse
     buildContingencyDisburse
     buildReorganize =
         BuildHandlers
-            { bhBuildSwap = buildSwap buildProvider
-            , bhBuildDisburse = buildDisburse buildProvider
+            { bhBuildSwap =
+                buildSwap buildProvider >=> attachSwapGraphEffect
+            , bhBuildDisburse =
+                buildDisburse buildProvider >=> attachDisburseGraphEffect
             , bhBuildContingencyDisburse =
                 buildContingencyDisburse buildProvider
+                    >=> attachDisburseGraphEffect
             , bhBuildReorganize = buildReorganize buildProvider
             }
       where
         buildProvider = mkBuildProvider apiIdx realProvider
+        resolveUtxos = snapshotUtxosByTxIn apiIdx
+
+        attachDisburseGraphEffect resp =
+            case dbrCborHex resp of
+                Just hex -> do
+                    effect <-
+                        graphEffectFromCborHex metadata resolveUtxos hex
+                    pure resp{dbrGraphEffect = effect}
+                Nothing -> pure resp
+
+        attachSwapGraphEffect resp =
+            case sbrCborHex resp of
+                Just hex -> do
+                    effect <-
+                        graphEffectFromCborHex metadata resolveUtxos hex
+                    pure resp{sbrGraphEffect = effect}
+                Nothing -> pure resp
 
 -- | Build the servant 'Server' from the 'Handlers' record.
 mkServer :: Handlers -> Server DashboardAPI

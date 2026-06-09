@@ -536,6 +536,7 @@ stubHandlers =
                     , sbrFailureField = Nothing
                     , sbrFailureReason = Just "stub handler"
                     , sbrBuildFailureTag = Nothing
+                    , sbrGraphEffect = Nothing
                     }
         , hBuildDisburse = \_ -> pure disburseIntentFailureResp
         , hBuildContingencyDisburse = \_ ->
@@ -746,6 +747,7 @@ disburseSuccessResp =
         , dbrFailureField = Nothing
         , dbrFailureReason = Nothing
         , dbrBuildFailureTag = Nothing
+        , dbrGraphEffect = Nothing
         }
 
 disburseIntentFailureResp :: DisburseBuildResponse
@@ -760,6 +762,7 @@ disburseIntentFailureResp =
         , dbrFailureField = Just FieldWalletAddr
         , dbrFailureReason = Just "input wallet_addr: bech32 parse"
         , dbrBuildFailureTag = Nothing
+        , dbrGraphEffect = Nothing
         }
 
 disburseBuildFailureResp :: DisburseBuildResponse
@@ -774,6 +777,7 @@ disburseBuildFailureResp =
         , dbrFailureField = Nothing
         , dbrFailureReason = Just "build: insufficient fee"
         , dbrBuildFailureTag = Just "BuildBuildError"
+        , dbrGraphEffect = Nothing
         }
 
 disburseInternalErrorResp :: DisburseBuildResponse
@@ -788,6 +792,7 @@ disburseInternalErrorResp =
         , dbrFailureField = Nothing
         , dbrFailureReason = Just "uncaught exception: timeout"
         , dbrBuildFailureTag = Nothing
+        , dbrGraphEffect = Nothing
         }
 
 -- ---------------------------------------------------------------------------

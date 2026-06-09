@@ -58,6 +58,12 @@ import Test.Hspec
     , shouldSatisfy
     )
 
+import Amaru.Treasury.Api.BuildDisburse
+    ( DisburseBuildResponse (..)
+    )
+import Amaru.Treasury.Api.BuildSwap
+    ( SwapBuildResponse (..)
+    )
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer
     , IndexerConfig (..)
@@ -345,16 +351,59 @@ trappedBuildHandlers :: ApiIndexer cf op -> Addr -> BuildHandlers
 trappedBuildHandlers apiIdx addr =
     mkBuildHandlers
         apiIdx
+        Nothing
         trappedProvider
-        (\provider _req -> buildQuery provider)
-        (\provider _req -> buildQuery provider)
-        (\provider _req -> buildQuery provider)
-        (\provider _req -> buildQuery provider)
+        (\provider _req -> buildQuery provider >> pure emptySwapResponse)
+        (\provider _req -> buildQuery provider >> pure emptyDisburseResponse)
+        (\provider _req -> buildQuery provider >> pure emptyDisburseResponse)
+        ( \provider _req -> buildQuery provider >> pure (error "unused reorganize response")
+        )
   where
-    buildQuery :: Provider IO -> IO a
+    -- The build slots only exist to prove the read goes through the
+    -- indexer-backed provider; the swap\/disburse handlers post-process
+    -- their response (the #345 graph-effect attach), so those two slots
+    -- return a concrete all-'Nothing' response whose @cborHex@ is
+    -- 'Nothing' — a clean attach pass-through — rather than a bottom.
+    buildQuery :: Provider IO -> IO ()
     buildQuery provider = do
         _ <- queryUTxOs provider addr
-        pure (error "unused build response")
+        pure ()
+
+{- | An all-'Nothing' swap build response: no CBOR, so the graph-effect
+attach is a pass-through.
+-}
+emptySwapResponse :: SwapBuildResponse
+emptySwapResponse =
+    SwapBuildResponse
+        { sbrIntentJson = Nothing
+        , sbrCli = Nothing
+        , sbrCborHex = Nothing
+        , sbrCborEnvelope = Nothing
+        , sbrReport = Nothing
+        , sbrFailureTag = Nothing
+        , sbrFailureField = Nothing
+        , sbrFailureReason = Nothing
+        , sbrBuildFailureTag = Nothing
+        , sbrGraphEffect = Nothing
+        }
+
+{- | An all-'Nothing' disburse build response (used for both the
+disburse and contingency-disburse slots).
+-}
+emptyDisburseResponse :: DisburseBuildResponse
+emptyDisburseResponse =
+    DisburseBuildResponse
+        { dbrIntentJson = Nothing
+        , dbrCli = Nothing
+        , dbrCborHex = Nothing
+        , dbrCborEnvelope = Nothing
+        , dbrReport = Nothing
+        , dbrFailureTag = Nothing
+        , dbrFailureField = Nothing
+        , dbrFailureReason = Nothing
+        , dbrBuildFailureTag = Nothing
+        , dbrGraphEffect = Nothing
+        }
 
 apiMainSource :: FilePath
 apiMainSource = "app/amaru-treasury-tx-api/Main.hs"

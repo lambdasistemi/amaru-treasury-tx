@@ -307,6 +307,7 @@ runBuildContingencyDisburse g backend req = do
                                 , dbrFailureField = Nothing
                                 , dbrFailureReason = Nothing
                                 , dbrBuildFailureTag = Nothing
+                                , dbrGraphEffect = Nothing
                                 }
                     let trB =
                             Tracer
@@ -403,6 +404,7 @@ runBuildContingencyDisburse g backend req = do
             , dbrFailureField = fieldOf wf
             , dbrFailureReason = Just (renderWizardFailure wf)
             , dbrBuildFailureTag = Nothing
+            , dbrGraphEffect = Nothing
             }
 
 {- | Constructor tag of a 'WizardFailure' as a stable string.

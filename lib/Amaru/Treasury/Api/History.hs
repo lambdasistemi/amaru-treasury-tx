@@ -22,6 +22,8 @@ module Amaru.Treasury.Api.History
     , inputFromSummary
     , outputFromSummary
     , outputScopeRoles
+    , outputSwapProjection
+    , renderInputAddress
     ) where
 
 import Data.Aeson (decodeStrict)

@@ -1,0 +1,62 @@
+{
+    "produces": [
+        {
+            "address": "addr1x90mk0jjjhppr36ethwj8kewpgyrxyc7q6qucl4gqru96dzlhvl999wzz8r4jhway0djuzsgxvf3up5pe3l2sq8ct56qtjz6ah",
+            "datum": null,
+            "index": 0,
+            "projectedDatum": null,
+            "role": "treasury",
+            "scope": "core_development",
+            "value": {
+                "assets": {},
+                "lovelace": 2574949000000
+            }
+        },
+        {
+            "address": "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu",
+            "datum": null,
+            "index": 1,
+            "projectedDatum": null,
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 50000000
+            }
+        },
+        {
+            "address": "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu",
+            "datum": null,
+            "index": 2,
+            "projectedDatum": null,
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 50006838852
+            }
+        }
+    ],
+    "spends": [
+        {
+            "resolved": true,
+            "role": null,
+            "scope": null,
+            "txIn": "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0",
+            "value": {
+                "assets": {},
+                "lovelace": 50007239276
+            }
+        },
+        {
+            "resolved": true,
+            "role": "treasury",
+            "scope": "core_development",
+            "txIn": "7e5a1506d86ae1581197393a14d081ffc4750d7df954e2e4a79936d6a16410f8#0",
+            "value": {
+                "assets": {},
+                "lovelace": 2574999000000
+            }
+        }
+    ]
+}

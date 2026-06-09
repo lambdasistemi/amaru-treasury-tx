@@ -112,6 +112,7 @@ library
     Amaru.Treasury.Api.BuildReorganize
     Amaru.Treasury.Api.BuildSwap
     Amaru.Treasury.Api.Config
+    Amaru.Treasury.Api.GraphEffect
     Amaru.Treasury.Api.History
     Amaru.Treasury.Api.Indexer
     Amaru.Treasury.Api.Indexer.Internal
@@ -682,6 +683,7 @@ test-suite golden-tests
     Amaru.Treasury.Tx.StakeRewardInitWizardScriptAccountSpec
     EnvelopeOracleSpec
     GovernanceWithdrawalInitIntentSpec
+    GraphEffectGoldenSpec
     PlaceholderSpec
     RegistryInitIntentSpec
     RegistryWalkGoldenSpec

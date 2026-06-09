@@ -7,9 +7,9 @@
 - [X] T345-S1d just unit + golden + nix build .#default green.
 
 ## Slice S2 — graph-effect on the build path
-- [ ] T345-S2a Emit resolved+projected graph-effect for the unsigned ConwayTx via Cardano.Tx.Graph.Emit (inputs+outputs+datums, cardano-ledger-rdf vocab).
-- [ ] T345-S2b Add the structured graph-effect to the build response.
-- [ ] T345-S2c Golden on a contingency disburse + a swap build; gate green.
+- [X] T345-S2a Emit resolved+projected graph-effect for the unsigned ConwayTx via Cardano.Tx.Graph.Emit (inputs+outputs+datums, cardano-ledger-rdf vocab).
+- [X] T345-S2b Add the structured graph-effect to the build response.
+- [X] T345-S2c Golden on a contingency disburse + a swap build; gate green.
 
 ## Slice S3 — Operate Graph tab
 - [ ] T345-S3a Operate result panel Graph tab rendering the resolved spend→produce effect (reuse Format + resolution).

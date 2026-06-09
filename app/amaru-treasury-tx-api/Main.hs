@@ -234,6 +234,7 @@ main = do
                             let buildHandlers =
                                     mkBuildHandlers
                                         apiIdx
+                                        (Just metadata)
                                         backend
                                         (runBuildSwap g)
                                         (runBuildDisburse g)

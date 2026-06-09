@@ -1,0 +1,710 @@
+{
+    "produces": [
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 0,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 1,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 2,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 3,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 4,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 5,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 6,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 7,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 8,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 9,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 10,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 11,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 12,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 13,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 14,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 15,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 16,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 17,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 18,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 19,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 20,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 21,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 22,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 23,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 24,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 25,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 26,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 27,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 28,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 29,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 30,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 31,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 3062500000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 12503280000
+            }
+        },
+        {
+            "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "datum": "inlineDatum",
+            "index": 32,
+            "projectedDatum": {
+                "minReceived": {
+                    "asset": "0014df105553444d",
+                    "policy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+                    "quantity": 2000000000
+                },
+                "recipient": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+                "scooperFee": 1280000
+            },
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 8166545306
+            }
+        },
+        {
+            "address": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
+            "datum": null,
+            "index": 33,
+            "projectedDatum": null,
+            "role": "treasury",
+            "scope": "network_compliance",
+            "value": {
+                "assets": {},
+                "lovelace": 1041728494694
+            }
+        },
+        {
+            "address": "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu",
+            "datum": null,
+            "index": 34,
+            "projectedDatum": null,
+            "role": null,
+            "scope": null,
+            "value": {
+                "assets": {},
+                "lovelace": 50006215897
+            }
+        }
+    ],
+    "spends": [
+        {
+            "resolved": true,
+            "role": null,
+            "scope": null,
+            "txIn": "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0",
+            "value": {
+                "assets": {},
+                "lovelace": 50007239276
+            }
+        },
+        {
+            "resolved": true,
+            "role": "treasury",
+            "scope": "network_compliance",
+            "txIn": "64f27254f3c0311fb2e672cdb87de200089a596aa90dc09f8be4248540267cf0#0",
+            "value": {
+                "assets": {},
+                "lovelace": 1450000000000
+            }
+        }
+    ]
+}

@@ -6,7 +6,8 @@
 -- | the /operate result trees and the /books snapshot rows so
 -- | every surface renders ADA / USDM / hashes the same way.
 module Format
-  ( formatThousands
+  ( assetNameText
+  , formatThousands
   , formatThousandsN
   , formatScaled
   , formatTreeJson
@@ -22,11 +23,13 @@ import Prelude
 import Data.Argonaut.Core (Json)
 import Data.Argonaut.Core as Argonaut
 import Data.Array as Array
+import Data.Char as Char
 import Data.Int as Int
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Monoid (power)
 import Data.Number.Format (fixed, toStringWith)
 import Data.String as String
+import Data.String.CodeUnits as CodeUnits
 import Data.String.CodePoints as CodePoints
 import Foreign.Object as FO
 
@@ -92,6 +95,14 @@ shortAddr s
         <> "…"
         <> CodePoints.drop (CodePoints.length s - 6) s
 
+-- | Render a Cardano asset-name hex string. Printable ASCII asset
+-- | names are decoded for operators (`52454749545259` →
+-- | `REGISTRY`); non-printable names keep the normal short hex
+-- | treatment. Callers should keep the original hex in `title`.
+assetNameText :: String -> String
+assetNameText hex =
+  fromMaybe (shortHex hex) (decodePrintableHex hex)
+
 -- | #338 — rewrite a result-tree 'Json' for readability before
 -- | it reaches the JSON-tree renderer.  The renderer has no
 -- | numeric hook, so lovelace / amount fields would otherwise
@@ -155,6 +166,36 @@ truncateMid pre post s
 
 -- ---------------------------------------------------------------------------
 -- Internals
+
+decodePrintableHex :: String -> Maybe String
+decodePrintableHex hex
+  | CodeUnits.length hex == 0 = Nothing
+  | not (Int.even (CodeUnits.length hex)) = Nothing
+  | otherwise = do
+      bytes <- hexBytes hex
+      chars <- printableChars bytes
+      pure (CodeUnits.fromCharArray chars)
+
+hexBytes :: String -> Maybe (Array Int)
+hexBytes s
+  | CodeUnits.length s == 0 = Just []
+  | otherwise = do
+      byte <- Int.fromStringAs Int.hexadecimal (CodeUnits.take 2 s)
+      rest <- hexBytes (CodeUnits.drop 2 s)
+      pure (Array.cons byte rest)
+
+printableChars :: Array Int -> Maybe (Array Char)
+printableChars bytes =
+  let
+    chars = Array.mapMaybe printableChar bytes
+  in
+    if Array.length chars == Array.length bytes then Just chars
+    else Nothing
+
+printableChar :: Int -> Maybe Char
+printableChar byte
+  | byte >= 32 && byte <= 126 = Char.fromCharCode byte
+  | otherwise = Nothing
 
 -- | Insert `,` every three digits, from the right, into an
 -- | already-rendered digit string.

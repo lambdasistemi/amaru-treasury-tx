@@ -232,6 +232,14 @@ input[type="number"].field__input { -moz-appearance: textfield; }
 .scope-pill__meta { display: flex; width: 100%; justify-content: space-between; align-items: baseline; gap: 8px; }
 .scope-pill__slug { font: 500 10px/1 "Roboto Mono", ui-monospace, monospace; letter-spacing: 0.04em; color: var(--md-sys-color-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .scope-pill__ada { font: 700 11px/1 "Roboto Mono", ui-monospace, monospace; font-variant-numeric: tabular-nums; color: var(--md-sys-color-on-surface); white-space: nowrap; }
+/* #338 SB3 — tighten the scope picker on phones so the five
+   pills (Disburse includes Contingency) wrap to a 2-up grid
+   instead of overflowing a narrow viewport. */
+@media (max-width: 600px) {
+  .scope-picker { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 4px; }
+  .scope-pill { padding: 10px; }
+  .scope-pill__name { font-size: 12px; }
+}
 
 /* ---------- signers picker ---------- */
 .signers-picker { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -251,6 +259,11 @@ input[type="number"].field__input { -moz-appearance: textfield; }
 .signer-chip[data-active="true"] { background: var(--md-sys-color-primary-container); border-color: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary-container); }
 .signer-chip__check { color: var(--md-sys-color-primary); font-weight: 700; }
 :root[data-theme="dark"] .signer-chip__check { color: var(--md-sys-color-on-primary-container); }
+/* #338 SB5 — read-only required-signer chip for the contingency
+   case: looks active (it will sign) but is not interactive. */
+.signer-chip--required { cursor: default; }
+.signer-chip--required:hover { border-color: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary-container); }
+.signer-chip__req { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.85; }
 .signers-picker__hint { flex-basis: 100%; font-size: 12px; color: var(--md-sys-color-on-surface-variant); line-height: 1.5; margin-top: 4px; }
 
 /* ---------- rationale references (disburse mode) ----------
@@ -354,6 +367,12 @@ input[type="number"].field__input { -moz-appearance: textfield; }
 .books-group--empty {
   font-size: 1rem;
   font-weight: 600;
+}
+/* #338 SB4 — post-import success summary line. */
+.books-import-summary {
+  color: var(--md-sys-color-primary);
+  font-weight: 600;
+  margin: 0;
 }
 
 /* #289 slice G — fade the per-card Copy / Export buttons

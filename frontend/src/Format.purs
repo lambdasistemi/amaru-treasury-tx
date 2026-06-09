@@ -9,6 +9,7 @@ module Format
   ( formatThousands
   , formatThousandsN
   , formatScaled
+  , formatTreeJson
   , showAda
   , showUsdm
   , shortAddr
@@ -18,12 +19,16 @@ module Format
 
 import Prelude
 
+import Data.Argonaut.Core (Json)
+import Data.Argonaut.Core as Argonaut
 import Data.Array as Array
 import Data.Int as Int
+import Data.Maybe (Maybe(..))
 import Data.Monoid (power)
 import Data.Number.Format (fixed, toStringWith)
 import Data.String as String
 import Data.String.CodePoints as CodePoints
+import Foreign.Object as FO
 
 -- | Group an integer's digits with `,` thousands separators,
 -- | e.g. `formatThousands 1556478 == "1,556,478"`.
@@ -86,6 +91,56 @@ shortAddr s
       CodePoints.take 11 s
         <> "…"
         <> CodePoints.drop (CodePoints.length s - 6) s
+
+-- | #338 — rewrite a result-tree 'Json' for readability before
+-- | it reaches the JSON-tree renderer.  The renderer has no
+-- | numeric hook, so lovelace / amount fields would otherwise
+-- | show raw base units (e.g. @1556478040000@).  Walk the tree
+-- | and replace the number under any key that names an amount
+-- | with its human-readable string:
+-- |
+-- |   * a key containing @lovelace@ → ADA (always base units);
+-- |   * a key containing @usdm@     → USDM;
+-- |   * a bare @amount@ key, disambiguated by the sibling @unit@
+-- |     field (@ada@ / @usdm@) the intent carries.
+-- |
+-- | String leaves (addresses, txids, hashes) are left untouched —
+-- | the renderer's default Cardano resolver already truncates
+-- | them to @head…tail@ with the full value on a @title@ tooltip.
+-- | Shared by the /operate result trees and the / (View) tree.
+formatTreeJson :: Json -> Json
+formatTreeJson = goValue Nothing Nothing
+  where
+  goValue :: Maybe String -> Maybe String -> Json -> Json
+  goValue unit mKey j =
+    Argonaut.caseJson
+      (const j)
+      (const j)
+      (\n -> formatNumber unit mKey n j)
+      (const j)
+      (\xs -> Argonaut.fromArray (map (goValue unit Nothing) xs))
+      (\o -> goObject o)
+      j
+
+  goObject o =
+    let
+      unit = FO.lookup "unit" o >>= Argonaut.toString
+    in
+      Argonaut.fromObject
+        (FO.mapWithKey (\k v -> goValue unit (Just k) v) o)
+
+  formatNumber unit mKey n j = case mKey of
+    Just k
+      | keyHas "lovelace" k -> Argonaut.fromString (showAda n)
+      | keyHas "usdm" k -> Argonaut.fromString (showUsdm n)
+      | String.toLower k == "amount" -> case unit of
+          Just "usdm" -> Argonaut.fromString (showUsdm n)
+          Just "ada" -> Argonaut.fromString (showAda n)
+          _ -> j
+    _ -> j
+
+  keyHas needle k =
+    String.contains (String.Pattern needle) (String.toLower k)
 
 -- | Generic middle truncation: keep the first `pre` and last
 -- | `post` characters, joined with an ellipsis when the string

@@ -229,6 +229,10 @@ type State =
   , clearConfirm :: Maybe FreeTextBookKey
   , theme :: Theme.Theme
   , importDialog :: ImportDialogState
+  -- #338 SB4 — one-line summary shown after a successful
+  -- import (entry counts per affected book), cleared the
+  -- next time the import dialog opens.
+  , importSummary :: Maybe String
   , confirmingRemove :: Maybe RemoveTarget
   , recentlyCopied :: Maybe String
   -- #289 slice G — groups whose disclosure is currently
@@ -252,6 +256,7 @@ initialState =
   , clearConfirm: Nothing
   , theme: Theme.Dark
   , importDialog: emptyImportDialog
+  , importSummary: Nothing
   , confirmingRemove: Nothing
   , recentlyCopied: Nothing
   , collapsedGroups: Set.empty
@@ -331,6 +336,7 @@ render st =
               \box-sizing:border-box"
           ]
           ( [ topOfPageActions ]
+              <> importSummaryView st
               <> emptyStateNotice st
               <> booksGroupSection st
           )
@@ -338,6 +344,20 @@ render st =
       ]
         <> importDialogView st
     )
+
+-- | #338 SB4 — post-import success banner.  Empty until an
+-- | import completes; cleared again when the dialog reopens.
+importSummaryView
+  :: forall m. State -> Array (H.ComponentHTML Action () m)
+importSummaryView st = case st.importSummary of
+  Just msg ->
+    [ HH.div
+        [ HP.classes [ cn "field__hint", cn "books-import-summary" ]
+        , HP.attr (HH.AttrName "role") "status"
+        ]
+        [ HH.text ("✓ " <> msg) ]
+    ]
+  Nothing -> []
 
 topOfPageActions :: forall m. H.ComponentHTML Action () m
 topOfPageActions =
@@ -361,6 +381,9 @@ topOfPageActions =
     , HH.button
         [ HP.classes [ cn "btn", cn "btn--ghost" ]
         , HP.type_ HP.ButtonButton
+        , HP.title
+            "Merge a books bundle (JSON exported from another \
+            \browser or teammate) into your saved values."
         , HE.onClick (\_ -> OpenImport)
         ]
         [ HH.text "Import…" ]
@@ -795,6 +818,23 @@ nonEmpty :: Maybe String -> Maybe String
 nonEmpty = case _ of
   Just "" -> Nothing
   other -> other
+
+-- | #338 SB4 — one-line post-import summary: how many entries
+-- | were added, across how many books, and how many parse
+-- | warnings were surfaced.
+importSummaryText :: Int -> Int -> Int -> String
+importSummaryText added nBooks warns =
+  "Imported "
+    <> show added
+    <> plural added " new entry" " new entries"
+    <> " across "
+    <> show nBooks
+    <> plural nBooks " book" " books"
+    <> if warns > 0 then
+         " (" <> show warns <> plural warns " warning" " warnings" <> ")"
+       else ""
+  where
+  plural n one many = if n == 1 then one else many
 
 namedEntryRow
   :: forall m
@@ -1892,7 +1932,9 @@ handleAction = case _ of
 
   OpenImport ->
     H.modify_ \s -> s
-      { importDialog = emptyImportDialog { open = true } }
+      { importDialog = emptyImportDialog { open = true }
+      , importSummary = Nothing
+      }
 
   CloseImport ->
     H.modify_ \s -> s { importDialog = emptyImportDialog }
@@ -2031,9 +2073,23 @@ handleAction = case _ of
           replaceNamed OperateHistoryBook
             after.operateHistory
         books' <- H.liftEffect loadAllBooks
+        let
+          added =
+            Array.foldl
+              (\acc d -> acc + (d.afterCount - d.beforeCount))
+              0
+              preview.diffRows
+          nBooks =
+            Array.length
+              ( Array.filter
+                  (\d -> d.afterCount > d.beforeCount)
+                  preview.diffRows
+              )
+          warns = Array.length preview.warnings
         H.modify_ \s -> s
           { books = books'
           , importDialog = emptyImportDialog
+          , importSummary = Just (importSummaryText added nBooks warns)
           , collapsedGroups =
               collapseAllEmpty books' s.collapsedGroups
           }

@@ -41,7 +41,7 @@ import Effect.Aff.Class (class MonadAff)
 import Effect.Now (now)
 import Effect.Timer (setInterval)
 import Foreign.Object as FO
-import Format (formatScaled, formatThousands, shortAddr, shortHex)
+import Format (formatScaled, formatThousands, formatTreeJson, shortAddr, shortHex)
 import Shell.Clipboard as Clipboard
 import Halogen as H
 import Halogen.HTML as HH
@@ -392,7 +392,7 @@ component =
                     ]
                 , JsonView.render
                     ( Argonaut.fromObject
-                        (FO.singleton "details" j)
+                        (FO.singleton "details" (formatTreeJson j))
                     )
                 ]
             ]

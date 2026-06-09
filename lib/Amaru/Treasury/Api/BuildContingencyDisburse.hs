@@ -64,7 +64,8 @@ import Amaru.Treasury.Cli.DisburseWizard
     ( ContingencyDisburseOpts (..)
     )
 import Amaru.Treasury.IntentJSON
-    ( encodeSomeTreasuryIntent
+    ( RationaleReferenceJSON
+    , encodeSomeTreasuryIntent
     )
 import Amaru.Treasury.Report
     ( TxBuildSuccess (..)
@@ -129,6 +130,13 @@ data ContingencyDisburseBuildRequest = ContingencyDisburseBuildRequest
     , validityHours :: Maybe Word16
     , description :: Text
     , justification :: Text
+    , references :: [RationaleReferenceJSON]
+    -- ^ Off-chain CIP-1694 rationale references (IPFS CIDs
+    --   for invoices, contracts, proofs).  Pass-through to
+    --   'cdOptsReferences', mirroring the non-contingency
+    --   'Amaru.Treasury.Api.BuildDisburse.dbrReferences'.
+    --   The Operate UI always sends this key (empty array
+    --   when none).
     }
     deriving (Eq, Show, Generic)
     deriving anyclass (FromJSON, ToJSON)
@@ -175,7 +183,7 @@ mapToContingencyDisburseOpts ContingencyDisburseBuildRequest{..} = do
             , cdOptsValidityHours = validityHours
             , cdOptsDescription = description
             , cdOptsJustification = justification
-            , cdOptsReferences = []
+            , cdOptsReferences = references
             , cdOptsExcludeSet = ExclusionSet []
             , cdOptsForcedSet = ForcedInclusionSet []
             }

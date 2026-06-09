@@ -95,6 +95,9 @@ import Amaru.Treasury.Inspect.Types
     , ScopeTotals (..)
     , TreasuryUtxo (..)
     )
+import Amaru.Treasury.IntentJSON
+    ( RationaleReferenceJSON (..)
+    )
 import Amaru.Treasury.Scope (ScopeId (..))
 import Amaru.Treasury.Wizard.Failure (FieldId (..))
 import Amaru.Treasury.Wizard.InputControl
@@ -384,6 +387,17 @@ spec = do
                     , validityHours = Nothing
                     , description = "rainy day"
                     , justification = "council motion 7"
+                    , references = []
+                    }
+            sampleRef =
+                RationaleReferenceJSON
+                    { rjrUri = "ipfs://bafkreicontingencyrationale"
+                    , rjrType = "Other"
+                    , rjrLabel = "council motion 7 minutes"
+                    }
+            reqWithRefs =
+                (baseReq [mkDest CoreDevelopment 1.0])
+                    { references = [sampleRef]
                     }
         it "rejects an empty destinations list" $
             mapToContingencyDisburseOpts (baseReq [])
@@ -421,6 +435,17 @@ spec = do
                         , cdOptsExcludeSet = ExclusionSet []
                         , cdOptsForcedSet = ForcedInclusionSet []
                         }
+        it
+            "passes CIP-1694 references through to \
+            \cdOptsReferences (mirrors the non-contingency \
+            \disburse)"
+            $ fmap
+                cdOptsReferences
+                (mapToContingencyDisburseOpts reqWithRefs)
+                `shouldBe` Right [sampleRef]
+        it "round-trips a request carrying references" $
+            Aeson.decode (Aeson.encode reqWithRefs)
+                `shouldBe` Just reqWithRefs
 
 -- ---------------------------------------------------------------------------
 -- Helpers

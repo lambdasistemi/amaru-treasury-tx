@@ -100,6 +100,7 @@ import Amaru.Treasury.Api.History
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
     , IndexerConfig (..)
+    , snapshotUtxosByTxIn
     , withApiIndexer
     )
 import Amaru.Treasury.Api.LagGuard
@@ -253,6 +254,7 @@ main = do
                                         , hBuildIdentity = buildId
                                         , hTxDetail =
                                             queryTxDetailResponse
+                                                (snapshotUtxosByTxIn apiIdx)
                                                 (aiHistory apiIdx)
                                                 (Just metadata)
                                         , hRegistry =

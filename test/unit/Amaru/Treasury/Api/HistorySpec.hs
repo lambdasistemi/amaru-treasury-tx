@@ -17,6 +17,13 @@ import Data.Text (Text)
 import Data.Text.Encoding qualified as TE
 import Data.Word (Word64)
 
+import Cardano.Ledger.Api.Tx.Out (TxOut, mkBasicTxOut)
+import Cardano.Ledger.Coin (Coin (..))
+import Cardano.Ledger.Conway (ConwayEra)
+import Cardano.Ledger.Mary.Value
+    ( MaryValue (..)
+    , MultiAsset (..)
+    )
 import Cardano.Node.Client.TxHistoryIndexer.Indexer
     ( appendHistory
     , withInMemoryHistoryIndexer
@@ -28,6 +35,7 @@ import Cardano.Node.Client.TxHistoryIndexer.Types
     , TxId (..)
     , TxRole (..)
     , TxSummaryEntry (..)
+    , TxSummaryInput (..)
     , TxSummaryKey (..)
     , TxSummaryOutput (..)
     )
@@ -41,17 +49,20 @@ import Test.Hspec
     )
 
 import Amaru.Treasury.Api.History
-    ( outputFromSummary
+    ( inputFromSummary
+    , outputFromSummary
     , outputScopeRoles
     , queryScopeHistoryResponse
     )
 import Amaru.Treasury.Api.Types
     ( ScopeHistoryEntry (..)
     , ScopeHistoryResponse (..)
+    , TxDetailInput (..)
     , TxDetailOutput (..)
     )
 import Amaru.Treasury.Cli.History (scopeHistoryScope)
 import Amaru.Treasury.Indexer.Decoder (treasuryTenantId)
+import Amaru.Treasury.LedgerParse (addrFromText)
 import Amaru.Treasury.Metadata (TreasuryMetadata, readMetadataFile)
 import Amaru.Treasury.Report.Accounting (ValueSummary (..))
 import Amaru.Treasury.Scope (ScopeId (..))
@@ -146,6 +157,51 @@ spec =
                             (mkOutput coreTreasuryAddress 35000000)
                 decode (encode out) `shouldBe` Just out
 
+        describe "tx-detail input resolution" $ do
+            it "labels a resolved treasury input outref with scope, role, value" $ do
+                md <- loadMetadata
+                let inp =
+                        inputFromSummary
+                            (outputScopeRoles (Just md))
+                            (Just (mkTxOut coreTreasuryAddress 1560000))
+                            (mkInput "aa00#0")
+                tdiScope inp `shouldBe` Just "core_development"
+                tdiRole inp `shouldBe` Just "treasury"
+                tdiValue inp `shouldBe` Just (mkValue 1560000)
+                tdiResolved inp `shouldBe` True
+
+            it "marks an unresolved input outref unknown (spent + pruned)" $ do
+                md <- loadMetadata
+                let inp =
+                        inputFromSummary
+                            (outputScopeRoles (Just md))
+                            Nothing
+                            (mkInput "bb11#1")
+                tdiScope inp `shouldBe` Nothing
+                tdiRole inp `shouldBe` Nothing
+                tdiValue inp `shouldBe` Nothing
+                tdiResolved inp `shouldBe` False
+
+            it "leaves a resolved non-treasury input unlabelled but valued" $ do
+                let inp =
+                        inputFromSummary
+                            Map.empty
+                            (Just (mkTxOut coreTreasuryAddress 5000000))
+                            (mkInput "cc22#2")
+                tdiScope inp `shouldBe` Nothing
+                tdiRole inp `shouldBe` Nothing
+                tdiValue inp `shouldBe` Just (mkValue 5000000)
+                tdiResolved inp `shouldBe` True
+
+            it "carries scope, role, value through input JSON" $ do
+                md <- loadMetadata
+                let inp =
+                        inputFromSummary
+                            (outputScopeRoles (Just md))
+                            (Just (mkTxOut coreTreasuryAddress 1560000))
+                            (mkInput "aa00#0")
+                decode (encode inp) `shouldBe` Just inp
+
 loadMetadata :: IO TreasuryMetadata
 loadMetadata = readMetadataFile "test/fixtures/metadata.json"
 
@@ -174,6 +230,30 @@ mkOutput address lovelace =
         { tsoAddress = TE.encodeUtf8 address
         , tsoValue = BSL.toStrict (encode (mkValue lovelace))
         , tsoDatum = Nothing
+        }
+
+{- | A produced 'TxOut' at @address@ carrying @lovelace@, standing
+in for the UTxO the indexer resolves from an input outref.
+-}
+mkTxOut :: Text -> Integer -> TxOut ConwayEra
+mkTxOut address lovelace =
+    case addrFromText address of
+        Right addr ->
+            mkBasicTxOut
+                addr
+                (MaryValue (Coin lovelace) (MultiAsset Map.empty))
+        Left err -> error ("mkTxOut: " <> err)
+
+{- | A summary input row whose @txIn@ carries the rendered
+@txid#ix@ outref bytes; scope/value are the decoder's unresolved
+placeholders.
+-}
+mkInput :: Text -> TxSummaryInput
+mkInput txin =
+    TxSummaryInput
+        { tsiTxIn = TE.encodeUtf8 txin
+        , tsiScope = Nothing
+        , tsiValue = "unknown"
         }
 
 mkEntry

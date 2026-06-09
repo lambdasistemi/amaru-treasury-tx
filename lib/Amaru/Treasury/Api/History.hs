@@ -19,6 +19,7 @@ module Amaru.Treasury.Api.History
     , historyResponseFromEntries
     , historyEntryFromSummary
     , txDetailResponseFromSummary
+    , inputFromSummary
     , outputFromSummary
     , outputScopeRoles
     ) where
@@ -26,23 +27,41 @@ module Amaru.Treasury.Api.History
 import Data.Aeson (decodeStrict)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
+import Data.Either (fromRight)
 import Data.Foldable (toList)
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromMaybe)
+import Data.Set (Set)
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Lens.Micro ((^.))
 
+import Cardano.Ledger.Address
+    ( Addr
+    , getNetwork
+    , serialiseAddr
+    )
 import Cardano.Ledger.Alonzo.TxWits (Redeemers (..))
 import Cardano.Ledger.Api.Tx (witsTxL)
-import Cardano.Ledger.Api.Tx.Body (outputsTxBodyL)
-import Cardano.Ledger.Api.Tx.Out (TxOut, datumTxOutL)
+import Cardano.Ledger.Api.Tx.Body
+    ( inputsTxBodyL
+    , outputsTxBodyL
+    )
+import Cardano.Ledger.Api.Tx.Out
+    ( TxOut
+    , addrTxOutL
+    , datumTxOutL
+    , valueTxOutL
+    )
 import Cardano.Ledger.Api.Tx.Wits (rdmrsTxWitsL)
+import Cardano.Ledger.BaseTypes (Network (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (bodyTxL)
 import Cardano.Ledger.Plutus.Data qualified as PlutusData
+import Cardano.Ledger.TxIn qualified as Ledger
 import Cardano.Node.Client.TxHistoryIndexer.Indexer
     ( HistoryIndexer
     , queryHistory
@@ -60,6 +79,7 @@ import Cardano.Node.Client.TxHistoryIndexer.Types
     )
 import Cardano.Slotting.Slot (SlotNo (..))
 import Cardano.Tx.Ledger (ConwayTx)
+import Codec.Binary.Bech32 qualified as Bech32
 
 import Amaru.Treasury.Api.Types
     ( ScopeHistoryEntry (..)
@@ -108,6 +128,7 @@ import Amaru.Treasury.Metadata
 import Amaru.Treasury.Report.Accounting
     ( ValueSummary
     , emptyValue
+    , valueSummary
     )
 import Amaru.Treasury.Scope
     ( ScopeId
@@ -174,20 +195,55 @@ queryScopeHistoryShaclResponse idx metadata scope shapeName = do
                     }
         Left err -> fail (T.unpack (renderHistorySparqlError err))
 
-{- | Query the local history store for one transaction detail.
+{- | Query the local history store for one transaction detail and
+resolve its inputs against the indexed UTxO state.
 
-@metadata@, when supplied, lets each output address be resolved to
-its owning treasury @{scope, role}@; pass 'Nothing' to skip
-resolution.
+@metadata@, when supplied, lets each output /and resolved input/
+address be resolved to its owning treasury @{scope, role}@; pass
+'Nothing' to skip resolution.
+
+@resolveUtxos@ looks each input outref up in the indexed UTxO state —
+in the API container this is
+'Amaru.Treasury.Api.Indexer.snapshotUtxosByTxIn', which returns the
+produced 'TxOut' for inputs the indexer still holds and omits those
+that are spent and pruned. The produced output's source address and
+value then label the input the same way outputs are labelled.
 -}
 queryTxDetailResponse
-    :: HistoryIndexer
+    :: (Set Ledger.TxIn -> IO (Map Ledger.TxIn (TxOut ConwayEra)))
+    -> HistoryIndexer
     -> Maybe TreasuryMetadata
     -> TxIdParam
     -> IO (Maybe TxDetailResponse)
-queryTxDetailResponse idx metadata (TxIdParam txid) =
-    fmap (txDetailResponseFromSummary metadata)
-        <$> queryTxDetail idx txid
+queryTxDetailResponse resolveUtxos idx metadata (TxIdParam txid) =
+    queryTxDetail idx txid
+        >>= traverse (resolveTxDetail resolveUtxos metadata)
+
+{- | Resolve a tx summary's input outrefs against the indexed UTxO
+state, then build the HTTP detail response. The body inputs are taken
+in the deterministic ascending order the indexer decoder uses to file
+'txsInputs', so the resolved 'TxOut's align positionally with the
+summary's input rows.
+-}
+resolveTxDetail
+    :: (Set Ledger.TxIn -> IO (Map Ledger.TxIn (TxOut ConwayEra)))
+    -> Maybe TreasuryMetadata
+    -> TxSummary
+    -> IO TxDetailResponse
+resolveTxDetail resolveUtxos metadata summary = do
+    let inputs =
+            maybe [] bodyInputsAsc (decodeConwayTx (txsPayload summary))
+    utxos <- resolveUtxos (Set.fromList inputs)
+    let resolved = [Map.lookup txIn utxos | txIn <- inputs]
+    pure (txDetailResponseFromSummary metadata resolved summary)
+
+{- | Transaction body inputs in the deterministic ascending order the
+indexer decoder ('Amaru.Treasury.Indexer.Decoder') uses to build
+'txsInputs', so a resolved 'TxOut' list zips positionally with the
+summary input rows.
+-}
+bodyInputsAsc :: ConwayTx -> [Ledger.TxIn]
+bodyInputsAsc tx = Set.toAscList (tx ^. bodyTxL . inputsTxBodyL)
 
 queryScopeEntries :: HistoryIndexer -> ScopeId -> IO [TxSummaryEntry]
 queryScopeEntries idx scope =
@@ -229,14 +285,21 @@ scopeHistoryScope =
 {- | Convert the CLI tx-detail summary into the HTTP response shape.
 
 When @metadata@ is supplied, each output address is resolved to its
-owning treasury @{scope, role}@. Input source addresses and values
-are not resolved here: the summary carries inputs only as
-@txid#ix@ references, and resolving them needs a per-input UTxO
-lookup the local history handle does not perform.
+owning treasury @{scope, role}@. @resolvedInputs@ carries, positionally
+aligned with the summary's input rows, the produced 'TxOut' each input
+outref points at when the indexed UTxO state still holds it ('Just') or
+'Nothing' when it is spent and pruned; a resolved input's source
+address is labelled the same way an output address is. The list is
+padded with 'Nothing' so a short or empty resolution (e.g. a tx whose
+CBOR could not be reconstructed) leaves every input unresolved rather
+than dropping rows.
 -}
 txDetailResponseFromSummary
-    :: Maybe TreasuryMetadata -> TxSummary -> TxDetailResponse
-txDetailResponseFromSummary metadata summary =
+    :: Maybe TreasuryMetadata
+    -> [Maybe (TxOut ConwayEra)]
+    -> TxSummary
+    -> TxDetailResponse
+txDetailResponseFromSummary metadata resolvedInputs summary =
     TxDetailResponse
         { tdrSlot = unSlotNo (tskSlot key)
         , tdrTxId = txIdText (tskTxId key)
@@ -248,7 +311,11 @@ txDetailResponseFromSummary metadata summary =
         , tdrRequiredSigners = bytesText <$> txsRequiredSigners summary
         , tdrRedeemer = bytesText <$> txsRedeemer summary
         , tdrProjectedRedeemers = spendRedeemerProjections decodedTx
-        , tdrInputs = inputFromSummary <$> txsInputs summary
+        , tdrInputs =
+            zipWith
+                (inputFromSummary (outputScopeRoles metadata))
+                (resolvedInputs <> repeat Nothing)
+                (txsInputs summary)
         , tdrOutputs =
             zipWith3
                 (outputFromSummary (outputScopeRoles metadata))
@@ -300,13 +367,65 @@ outputSwapProjection txOut =
                 (projectSwapOrderDatum (PlutusData.binaryDataToData binaryDatum))
         _ -> Nothing
 
-inputFromSummary :: TxSummaryInput -> TxDetailInput
-inputFromSummary input =
-    TxDetailInput
-        { tdiTxIn = bytesText (tsiTxIn input)
-        , tdiScope = scopeTextOf <$> tsiScope input
-        , tdiValue = bytesText (tsiValue input)
-        }
+{- | Build one detail input. When the indexed UTxO state still holds
+the produced output the @txid#ix@ outref points at (@Just txOut@),
+render its source address and look it up in the same @roles@ map the
+outputs use to label the input's owning treasury @{scope, role}@,
+surface the structured produced value, and mark it @resolved@. When the
+source UTxO is spent and pruned (@Nothing@), the input keeps null
+scope\/role\/value and @resolved = False@ as the explicit marker.
+-}
+inputFromSummary
+    :: Map Text (Text, Text)
+    -> Maybe (TxOut ConwayEra)
+    -> TxSummaryInput
+    -> TxDetailInput
+inputFromSummary roles mResolved input =
+    case mResolved of
+        Just txOut ->
+            TxDetailInput
+                { tdiTxIn = txInText
+                , tdiScope = fst <$> resolved
+                , tdiRole = snd <$> resolved
+                , tdiValue = Just (valueSummary (txOut ^. valueTxOutL))
+                , tdiResolved = True
+                }
+          where
+            resolved =
+                Map.lookup
+                    (renderInputAddress (txOut ^. addrTxOutL))
+                    roles
+        Nothing ->
+            TxDetailInput
+                { tdiTxIn = txInText
+                , tdiScope = Nothing
+                , tdiRole = Nothing
+                , tdiValue = Nothing
+                , tdiResolved = False
+                }
+  where
+    txInText = bytesText (tsiTxIn input)
+
+{- | Bech32-render a resolved input's source address into the same
+string form the indexer decoder writes for output addresses (the
+@smAddress@ keys 'outputScopeRoles' is built from), so one @roles@ map
+labels both inputs and outputs. Mirrors the decoder's
+@serialiseAddr@ + network-tagged HRP encoding.
+-}
+renderInputAddress :: Addr -> Text
+renderInputAddress addr =
+    Bech32.encodeLenient
+        hrp
+        (Bech32.dataPartFromBytes (serialiseAddr addr))
+  where
+    hrp =
+        fromRight
+            (error "renderInputAddress: invalid hrp")
+            (Bech32.humanReadablePartFromText prefix)
+    prefix =
+        case getNetwork addr of
+            Mainnet -> "addr"
+            Testnet -> "addr_test"
 
 {- | Build one detail output, labelling its address with the owning
 treasury @{scope, role}@ when @roles@ knows it, surfacing the

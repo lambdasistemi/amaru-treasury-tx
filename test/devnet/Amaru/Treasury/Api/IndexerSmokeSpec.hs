@@ -236,6 +236,7 @@ import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
     , IndexerConfig (..)
     , snapshotUtxosAt
+    , snapshotUtxosByTxIn
     , withApiIndexer
     )
 import Amaru.Treasury.Api.LagGuard
@@ -1648,7 +1649,10 @@ smokeHandlers apiIdx backend globalOpts metadata anchor swapAddr =
         , hRecentTxs = RecentTxManifest []
         , hBuildIdentity = stubBuildIdentity
         , hTxDetail =
-            queryTxDetailResponse (aiHistory apiIdx) (Just metadata)
+            queryTxDetailResponse
+                (snapshotUtxosByTxIn apiIdx)
+                (aiHistory apiIdx)
+                (Just metadata)
         , hRegistry = pure (registryResponseFromMetadata metadata)
         , hScripts = pure (scriptsResponseFromMetadata metadata)
         , hPending =

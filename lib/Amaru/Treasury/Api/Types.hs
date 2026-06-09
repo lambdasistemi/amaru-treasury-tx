@@ -337,11 +337,25 @@ instance FromJSON TxDetailResponse where
                 <*> o .: "outputs"
                 <*> o .: "lines"
 
--- | One indexed input in a transaction detail response.
+{- | One indexed input in a transaction detail response.
+
+@scope@/@role@ name the owning treasury entity when the input's
+source UTxO was resolved from the indexed UTxO state and its address
+is a known on-chain identity (resolved from verified metadata,
+mirroring the @atx:TreasuryEntity@ vocabulary the outputs use); they
+are 'Nothing' for a resolved input outside the treasury, and along
+with @value@ all 'Nothing' when the indexer no longer holds the spent
+source UTxO. @value@, when present, is the structured ledger value of
+the produced output the @txIn@ outref points at. @resolved@ is the
+explicit marker: 'True' when the source UTxO was found and labelled,
+'False' when it is spent and pruned from the indexed state.
+-}
 data TxDetailInput = TxDetailInput
     { tdiTxIn :: Text
     , tdiScope :: Maybe Text
-    , tdiValue :: Text
+    , tdiRole :: Maybe Text
+    , tdiValue :: Maybe ValueSummary
+    , tdiResolved :: Bool
     }
     deriving stock (Eq, Show)
 
@@ -350,7 +364,9 @@ instance ToJSON TxDetailInput where
         object
             [ "txIn" .= tdiTxIn i
             , "scope" .= tdiScope i
+            , "role" .= tdiRole i
             , "value" .= tdiValue i
+            , "resolved" .= tdiResolved i
             ]
 
 instance FromJSON TxDetailInput where
@@ -359,7 +375,9 @@ instance FromJSON TxDetailInput where
             TxDetailInput
                 <$> o .: "txIn"
                 <*> o .:? "scope"
-                <*> o .: "value"
+                <*> o .:? "role"
+                <*> o .:? "value"
+                <*> o .: "resolved"
 
 {- | One indexed output in a transaction detail response.
 

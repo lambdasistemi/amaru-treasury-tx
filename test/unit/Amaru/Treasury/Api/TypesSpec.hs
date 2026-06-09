@@ -175,7 +175,9 @@ genTxDetailInput =
     TxDetailInput
         <$> genShortText
         <*> oneof [pure Nothing, Just <$> genShortText]
-        <*> genShortText
+        <*> oneof [pure Nothing, Just <$> genShortText]
+        <*> oneof [pure Nothing, Just <$> genValueSummary]
+        <*> arbitrary
 
 genTxDetailOutput :: Gen TxDetailOutput
 genTxDetailOutput =

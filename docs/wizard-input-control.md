@@ -20,8 +20,7 @@ Wizards in scope (every wizard that touches a wallet or per-unit
 treasury candidate pool):
 
 - `swap-wizard`
-- `disburse-wizard`
-- `contingency-disburse-wizard`
+- `disburse-wizard` (including `--scope contingency`)
 - `withdraw-wizard`
 - `registry-init-wizard` (all four sub-actions)
 - `stake-reward-init-wizard` (both sub-actions)

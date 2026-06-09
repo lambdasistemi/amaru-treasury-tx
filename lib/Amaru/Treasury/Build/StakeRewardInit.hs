@@ -200,6 +200,7 @@ materializeResult ctx walletInputUtxos result =
                     , brWalletInputs = walletInputUtxos
                     , brTreasuryInputs = []
                     , brSundaeOrderOutputs = []
+                    , brBeneficiaryOutputs = []
                     , brTreasuryLeftoverOutput = Nothing
                     , brPerChunkOverheadLovelace = Coin 0
                     , brWalletChangeOutput = Nothing

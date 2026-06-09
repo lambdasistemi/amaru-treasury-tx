@@ -62,6 +62,7 @@
                 "role": {
                     "enum": [
                         "swapOrder",
+                        "beneficiary",
                         "treasuryLeftover",
                         "walletChange",
                         "collateralReturn",

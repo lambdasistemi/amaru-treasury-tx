@@ -243,6 +243,7 @@ runSwapAction ctx intent rationale walletInput walletAddr = do
                             0
                             (length (siSwapOrders intent))
                             body
+                    , brBeneficiaryOutputs = []
                     , brTreasuryLeftoverOutput =
                         indexedOutputAt
                             (length (siSwapOrders intent))

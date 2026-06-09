@@ -23,8 +23,8 @@ repository cardano-haskell-packages
 source-repository-package
   type: git
   location: https://github.com/lambdasistemi/cardano-tx-tools
-  tag: 587076b053b58b193a126b745acb282cf8cc8b0e
-  --sha256: 1sr2r7xnl0q0a6jf4mfvvf37wn4cxf5s15bjra9am8z9a1rh6c80
+  tag: 2bd36e28ce3fd8a33ef7f6f78834d45d513ac73f
+  --sha256: 0cajphs357c4p8a2qyvab2r6xmznpydbcq4g0xik1975c01vcb15
 
 -- Cardano Ledger RDF emitter used by #246 history SPARQL filters,
 -- named query surfaces, and SHACL validation. ATX calls the upstream

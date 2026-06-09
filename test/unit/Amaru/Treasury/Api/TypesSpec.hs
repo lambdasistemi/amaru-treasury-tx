@@ -42,6 +42,10 @@ import Amaru.Treasury.Api.Types
     , TxDetailOutput (..)
     , TxDetailResponse (..)
     )
+import Amaru.Treasury.Inspect.TreasurySpendProjection
+    ( ProjectedAsset (..)
+    , ProjectedTreasurySpend (..)
+    )
 import Amaru.Treasury.Report.Accounting (ValueSummary (..))
 import Amaru.Treasury.Scope (ScopeId, allScopes)
 
@@ -144,9 +148,24 @@ genTxDetailResponse =
         <*> oneof [pure Nothing, Just <$> arbitrary]
         <*> listOf genShortText
         <*> oneof [pure Nothing, Just <$> genShortText]
+        <*> listOf genProjectedTreasurySpend
         <*> listOf genTxDetailInput
         <*> listOf genTxDetailOutput
         <*> listOf genShortText
+
+genProjectedTreasurySpend :: Gen ProjectedTreasurySpend
+genProjectedTreasurySpend =
+    ProjectedTreasurySpend
+        <$> elements
+            ["Reorganize", "SweepTreasury", "Fund", "Disburse"]
+        <*> listOf genProjectedAsset
+
+genProjectedAsset :: Gen ProjectedAsset
+genProjectedAsset =
+    ProjectedAsset
+        <$> genShortText
+        <*> genShortText
+        <*> arbitrary
 
 genTxDetailInput :: Gen TxDetailInput
 genTxDetailInput =

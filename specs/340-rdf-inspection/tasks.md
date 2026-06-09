@@ -7,10 +7,10 @@
 - [X] T340-S1d Golden: emitted-triples snapshot + resolver rows for pinned metadata. `just unit golden` + `nix build .#default`.
 
 ## Slice S2 — tx-detail per-output {scope,role} + values (backend)
-- [ ] T340-S2a Add `tdoScope`/`tdoRole` to `TxDetailOutput` (+ ToJSON + schema asset regen).
-- [ ] T340-S2b Resolve each output address → {scope, role} via metadata map (reuse `Report.Identity`).
-- [ ] T340-S2c Resolve input source addresses + values via the UTxO indexer (`apiIdx`) where available; label known addresses even when value absent.
-- [ ] T340-S2d Tests for resolution mapping + enriched `/v1/tx/{txid}` shape. `just unit golden` + `nix build .#default`.
+- [X] T340-S2a Add `tdoScope`/`tdoRole` to `TxDetailOutput` (+ ToJSON + schema asset regen).
+- [X] T340-S2b Resolve each output address → {scope, role} via metadata map (reuse `Report.Identity`).
+- [ ] T340-S2c Resolve input source addresses + values via the UTxO indexer (`apiIdx`) where available; label known addresses even when value absent. — DEFERRED: inputs are txin refs; labelling needs a UTxO-by-txin lookup (follow-up).
+- [X] T340-S2d Tests for resolution mapping + enriched `/v1/tx/{txid}` shape. `just unit golden` + `nix build .#default`.
 
 ## Slice S3 — swap-datum projection via CIP-57 blueprint (backend)
 - [ ] T340-S3a Embed `assets/blueprints/swap-v2-datum.cip57.json` + baked rules; new `Inspect.SwapOrderProjection` over `Cardano.Tx.Blueprint`.

@@ -19,10 +19,16 @@ module Amaru.Treasury.Api.History
     , historyResponseFromEntries
     , historyEntryFromSummary
     , txDetailResponseFromSummary
+    , outputFromSummary
+    , outputScopeRoles
     ) where
 
+import Data.Aeson (decodeStrict)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
+import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -73,7 +79,14 @@ import Amaru.Treasury.History.Sparql
     , runNamedHistoryShacl
     )
 import Amaru.Treasury.Indexer.Decoder (treasuryTenantId)
-import Amaru.Treasury.Metadata (TreasuryMetadata)
+import Amaru.Treasury.Metadata
+    ( ScopeMetadata (..)
+    , TreasuryMetadata (..)
+    )
+import Amaru.Treasury.Report.Accounting
+    ( ValueSummary
+    , emptyValue
+    )
 import Amaru.Treasury.Scope
     ( ScopeId
     , scopeText
@@ -139,11 +152,20 @@ queryScopeHistoryShaclResponse idx metadata scope shapeName = do
                     }
         Left err -> fail (T.unpack (renderHistorySparqlError err))
 
--- | Query the local history store for one transaction detail.
+{- | Query the local history store for one transaction detail.
+
+@metadata@, when supplied, lets each output address be resolved to
+its owning treasury @{scope, role}@; pass 'Nothing' to skip
+resolution.
+-}
 queryTxDetailResponse
-    :: HistoryIndexer -> TxIdParam -> IO (Maybe TxDetailResponse)
-queryTxDetailResponse idx (TxIdParam txid) =
-    fmap txDetailResponseFromSummary <$> queryTxDetail idx txid
+    :: HistoryIndexer
+    -> Maybe TreasuryMetadata
+    -> TxIdParam
+    -> IO (Maybe TxDetailResponse)
+queryTxDetailResponse idx metadata (TxIdParam txid) =
+    fmap (txDetailResponseFromSummary metadata)
+        <$> queryTxDetail idx txid
 
 queryScopeEntries :: HistoryIndexer -> ScopeId -> IO [TxSummaryEntry]
 queryScopeEntries idx scope =
@@ -182,9 +204,17 @@ scopeHistoryScope :: ScopeId -> HistoryScope
 scopeHistoryScope =
     HistoryScope . TE.encodeUtf8 . scopeText
 
--- | Convert the CLI tx-detail summary into the HTTP response shape.
-txDetailResponseFromSummary :: TxSummary -> TxDetailResponse
-txDetailResponseFromSummary summary =
+{- | Convert the CLI tx-detail summary into the HTTP response shape.
+
+When @metadata@ is supplied, each output address is resolved to its
+owning treasury @{scope, role}@. Input source addresses and values
+are not resolved here: the summary carries inputs only as
+@txid#ix@ references, and resolving them needs a per-input UTxO
+lookup the local history handle does not perform.
+-}
+txDetailResponseFromSummary
+    :: Maybe TreasuryMetadata -> TxSummary -> TxDetailResponse
+txDetailResponseFromSummary metadata summary =
     TxDetailResponse
         { tdrSlot = unSlotNo (tskSlot key)
         , tdrTxId = txIdText (tskTxId key)
@@ -197,7 +227,10 @@ txDetailResponseFromSummary summary =
         , tdrRedeemer = bytesText <$> txsRedeemer summary
         , tdrInputs = inputFromSummary <$> txsInputs summary
         , tdrOutputs =
-            zipWith outputFromSummary [(0 :: Int) ..] (txsOutputs summary)
+            zipWith
+                (outputFromSummary (outputScopeRoles metadata))
+                [(0 :: Int) ..]
+                (txsOutputs summary)
         , tdrLines = renderTxDetail summary
         }
   where
@@ -211,14 +244,49 @@ inputFromSummary input =
         , tdiValue = bytesText (tsiValue input)
         }
 
-outputFromSummary :: Int -> TxSummaryOutput -> TxDetailOutput
-outputFromSummary ix output =
+{- | Build one detail output, labelling its address with the owning
+treasury @{scope, role}@ when @roles@ knows it and surfacing the
+structured ledger value.
+-}
+outputFromSummary
+    :: Map Text (Text, Text) -> Int -> TxSummaryOutput -> TxDetailOutput
+outputFromSummary roles ix output =
     TxDetailOutput
         { tdoIndex = ix
-        , tdoAddress = bytesText (tsoAddress output)
-        , tdoValue = bytesText (tsoValue output)
+        , tdoAddress = address
+        , tdoScope = fst <$> resolved
+        , tdoRole = snd <$> resolved
+        , tdoValue = decodeValueSummary (tsoValue output)
         , tdoDatum = bytesText <$> tsoDatum output
         }
+  where
+    address = bytesText (tsoAddress output)
+    resolved = Map.lookup address roles
+
+{- | Address → @(scope, role)@ for the known treasury outputs in
+verified metadata.
+
+Only the per-scope treasury address (@smAddress@) can appear as a
+payment output, so it is the sole entry: it resolves to its scope
+and the @treasury@ role, matching the @atx:TreasuryEntity@ role
+vocabulary emitted for RDF inspection. Owner key-hashes and script
+references are never output addresses, so they are intentionally
+absent. Returns an empty map when no metadata is available.
+-}
+outputScopeRoles :: Maybe TreasuryMetadata -> Map Text (Text, Text)
+outputScopeRoles Nothing = Map.empty
+outputScopeRoles (Just metadata) =
+    Map.fromList
+        [ (smAddress sm, (scopeText scope, "treasury"))
+        | (scope, sm) <- Map.toList (tmTreasuries metadata)
+        ]
+
+{- | Decode the indexer's structured value bytes back into a
+'ValueSummary'; the decoder always stores valid JSON, so a decode
+miss degrades to the empty value rather than failing the response.
+-}
+decodeValueSummary :: BS.ByteString -> ValueSummary
+decodeValueSummary = fromMaybe emptyValue . decodeStrict
 
 txIdText :: TxId -> Text
 txIdText = hexText . unTxId

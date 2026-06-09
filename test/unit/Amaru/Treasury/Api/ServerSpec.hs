@@ -98,6 +98,7 @@ import Amaru.Treasury.Inspect.Types
 import Amaru.Treasury.IntentJSON
     ( RationaleReferenceJSON (..)
     )
+import Amaru.Treasury.Report.Accounting (ValueSummary (..))
 import Amaru.Treasury.Scope (ScopeId (..))
 import Amaru.Treasury.Wizard.Failure (FieldId (..))
 import Amaru.Treasury.Wizard.InputControl
@@ -681,7 +682,10 @@ stubTxDetail =
             [ TxDetailOutput
                 { tdoIndex = 0
                 , tdoAddress = "addr1..."
-                , tdoValue = "40 lovelace"
+                , tdoScope = Just "core_development"
+                , tdoRole = Just "treasury"
+                , tdoValue =
+                    ValueSummary{vsLovelace = 40, vsAssets = mempty}
                 , tdoDatum = Just "inlineDatum"
                 }
             ]

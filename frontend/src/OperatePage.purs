@@ -727,6 +727,27 @@ modeSpecificSections st = case st.mode of
                       ]
                 )
             ]
+        , formSection "08" "References"
+            "Off-chain CIP-1694 evidence (IPFS CIDs for \
+            \invoices, contracts, proofs).  Mirrors the \
+            \rationale.references array in historical \
+            \disburse intents under transactions/2026/."
+            [ HH.div
+                [ HP.classes [ cn "repeated-row-list" ] ]
+                ( referencesPicker st
+                    <>
+                      [ HH.div
+                          [ HP.classes [ cn "repeated-row-list__actions" ] ]
+                          [ HH.button
+                              [ HP.classes [ cn "btn", cn "btn--ghost" ]
+                              , HE.onClick (\_ -> AddReference)
+                              , HP.type_ HP.ButtonButton
+                              ]
+                              [ HH.text "+ Add reference" ]
+                          ]
+                      ]
+                )
+            ]
         ]
     | otherwise ->
         [ formSection "03" "Beneficiary"
@@ -1352,8 +1373,10 @@ sectionState sec st = case sec of
           ]
 
   SecReferences -> case st.mode of
-    -- Contingency disburse has no references section.
-    ModeDisburse | st.scope /= Contingency ->
+    -- Both the single-beneficiary and the contingency
+    -- disburse carry references; the chip tracks the shared
+    -- 'st.references' rows for either scope.
+    ModeDisburse ->
       -- Reference rows are optional, but a row that's been
       -- started and left half-filled is invalid (the
       -- operator clearly intended to add an entry).
@@ -1400,7 +1423,7 @@ sectionFocusId sec st = case sec of
     ModeReorganize -> "operate-validity_hours"
   SecRationale -> "operate-descriptions"
   SecReferences -> case st.mode of
-    ModeDisburse | st.scope /= Contingency ->
+    ModeDisburse ->
       case Array.head st.references of
         Just _ -> "operate-ref-uri-0"
         Nothing -> "operate-wallet"
@@ -2576,6 +2599,8 @@ contingencyDisburseRequestJson st =
     , Tuple "description" (Argonaut.fromString st.description)
     , Tuple "justification"
         (Argonaut.fromString st.justification)
+    , Tuple "references"
+        (Argonaut.fromArray (map referenceJson st.references))
     ]
 
 -- | Encode one destination row to the wire shape

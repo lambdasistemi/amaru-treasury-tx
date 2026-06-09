@@ -117,6 +117,7 @@ spec =
                     out =
                         outputFromSummary
                             roles
+                            Nothing
                             0
                             (mkOutput coreTreasuryAddress 35000000)
                 tdoAddress out `shouldBe` coreTreasuryAddress
@@ -128,6 +129,7 @@ spec =
                 let out =
                         outputFromSummary
                             Map.empty
+                            Nothing
                             1
                             (mkOutput externalAddress 5000000)
                 tdoScope out `shouldBe` Nothing
@@ -139,6 +141,7 @@ spec =
                 let out =
                         outputFromSummary
                             (outputScopeRoles (Just md))
+                            Nothing
                             0
                             (mkOutput coreTreasuryAddress 35000000)
                 decode (encode out) `shouldBe` Just out

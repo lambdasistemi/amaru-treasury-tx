@@ -42,6 +42,9 @@ import Amaru.Treasury.Api.Types
     , TxDetailOutput (..)
     , TxDetailResponse (..)
     )
+import Amaru.Treasury.Inspect.SwapOrderProjection
+    ( ProjectedSwapOrder (..)
+    )
 import Amaru.Treasury.Inspect.TreasurySpendProjection
     ( ProjectedAsset (..)
     , ProjectedTreasurySpend (..)
@@ -183,6 +186,14 @@ genTxDetailOutput =
         <*> oneof [pure Nothing, Just <$> genShortText]
         <*> genValueSummary
         <*> oneof [pure Nothing, Just <$> genShortText]
+        <*> oneof [pure Nothing, Just <$> genProjectedSwapOrder]
+
+genProjectedSwapOrder :: Gen ProjectedSwapOrder
+genProjectedSwapOrder =
+    ProjectedSwapOrder
+        <$> genShortText
+        <*> genProjectedAsset
+        <*> arbitrary
 
 genValueSummary :: Gen ValueSummary
 genValueSummary =

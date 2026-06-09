@@ -86,6 +86,9 @@ import Amaru.Treasury.Cli.DisburseWizard
     ( ContingencyDisburseOpts (..)
     )
 import Amaru.Treasury.Inspect.Render (encodeReport)
+import Amaru.Treasury.Inspect.SwapOrderProjection
+    ( ProjectedSwapOrder (..)
+    )
 import Amaru.Treasury.Inspect.TreasurySpendProjection
     ( ProjectedAsset (..)
     , ProjectedTreasurySpend (..)
@@ -703,6 +706,18 @@ stubTxDetail =
                 , tdoValue =
                     ValueSummary{vsLovelace = 40, vsAssets = mempty}
                 , tdoDatum = Just "inlineDatum"
+                , tdoProjectedDatum =
+                    Just
+                        ProjectedSwapOrder
+                            { psoRecipient = "abcd"
+                            , psoMinReceived =
+                                ProjectedAsset
+                                    { paPolicy = "c4"
+                                    , paAsset = "5553444d"
+                                    , paQuantity = 95
+                                    }
+                            , psoScooperFee = 2500000
+                            }
                 }
             ]
         , tdrLines =

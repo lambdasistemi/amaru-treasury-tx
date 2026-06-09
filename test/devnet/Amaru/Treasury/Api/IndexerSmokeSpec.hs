@@ -1647,7 +1647,8 @@ smokeHandlers apiIdx backend globalOpts metadata anchor swapAddr =
                             <> show e
         , hRecentTxs = RecentTxManifest []
         , hBuildIdentity = stubBuildIdentity
-        , hTxDetail = queryTxDetailResponse (aiHistory apiIdx)
+        , hTxDetail =
+            queryTxDetailResponse (aiHistory apiIdx) (Just metadata)
         , hRegistry = pure (registryResponseFromMetadata metadata)
         , hScripts = pure (scriptsResponseFromMetadata metadata)
         , hPending =

@@ -85,6 +85,7 @@ import Amaru.Treasury.Inspect.Types
     ( PendingSwapOrder
     , TreasuryUtxo
     )
+import Amaru.Treasury.Report.Accounting (ValueSummary)
 import Amaru.Treasury.Scope (ScopeId)
 
 {- | Payload of @GET /v1/version@. Constructed entirely at
@@ -351,11 +352,22 @@ instance FromJSON TxDetailInput where
                 <*> o .:? "scope"
                 <*> o .: "value"
 
--- | One indexed output in a transaction detail response.
+{- | One indexed output in a transaction detail response.
+
+@scope@/@role@ name the owning treasury entity when the output
+address is a known on-chain identity (resolved from verified
+metadata, mirroring the RDF @atx:TreasuryEntity@ vocabulary); both
+are 'Nothing' for an address outside the treasury. @value@ is the
+structured ledger value (lovelace + native assets), surfaced as a
+nested object rather than a stringified blob so clients can render
+it ADA-denominated.
+-}
 data TxDetailOutput = TxDetailOutput
     { tdoIndex :: Int
     , tdoAddress :: Text
-    , tdoValue :: Text
+    , tdoScope :: Maybe Text
+    , tdoRole :: Maybe Text
+    , tdoValue :: ValueSummary
     , tdoDatum :: Maybe Text
     }
     deriving stock (Eq, Show)
@@ -365,6 +377,8 @@ instance ToJSON TxDetailOutput where
         object
             [ "index" .= tdoIndex o
             , "address" .= tdoAddress o
+            , "scope" .= tdoScope o
+            , "role" .= tdoRole o
             , "value" .= tdoValue o
             , "datum" .= tdoDatum o
             ]
@@ -375,6 +389,8 @@ instance FromJSON TxDetailOutput where
             TxDetailOutput
                 <$> o .: "index"
                 <*> o .: "address"
+                <*> o .:? "scope"
+                <*> o .:? "role"
                 <*> o .: "value"
                 <*> o .:? "datum"
 

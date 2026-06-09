@@ -254,6 +254,7 @@ main = do
                                         , hTxDetail =
                                             queryTxDetailResponse
                                                 (aiHistory apiIdx)
+                                                (Just metadata)
                                         , hRegistry =
                                             pure $
                                                 registryResponseFromMetadata

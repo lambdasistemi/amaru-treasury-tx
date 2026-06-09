@@ -9,6 +9,8 @@ License     : Apache-2.0
 module Amaru.Treasury.Api.TypesSpec (spec) where
 
 import Data.Aeson (decode, encode)
+import Data.Map.Strict (Map)
+import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Time
@@ -40,6 +42,7 @@ import Amaru.Treasury.Api.Types
     , TxDetailOutput (..)
     , TxDetailResponse (..)
     )
+import Amaru.Treasury.Report.Accounting (ValueSummary (..))
 import Amaru.Treasury.Scope (ScopeId, allScopes)
 
 spec :: Spec
@@ -157,8 +160,24 @@ genTxDetailOutput =
     TxDetailOutput
         <$> arbitrary
         <*> genShortText
-        <*> genShortText
         <*> oneof [pure Nothing, Just <$> genShortText]
+        <*> oneof [pure Nothing, Just <$> genShortText]
+        <*> genValueSummary
+        <*> oneof [pure Nothing, Just <$> genShortText]
+
+genValueSummary :: Gen ValueSummary
+genValueSummary =
+    ValueSummary
+        <$> arbitrary
+        <*> (Map.fromList <$> listOf genAssetEntry)
+
+genAssetEntry :: Gen (Text, Map Text Integer)
+genAssetEntry =
+    (,)
+        <$> genShortText
+        <*> ( Map.fromList
+                <$> listOf ((,) <$> genShortText <*> arbitrary)
+            )
 
 genApiError :: Gen ApiError
 genApiError =

@@ -7,6 +7,6 @@
 - [X] T346-S1d Goldens/unit (hermetic checks, real cq-rdf) + nix build .#default green.
 
 ## Slice S2 — SHACL migration
-- [ ] T346-S2a Rewrite History/shapes/*.shacl.ttl against cardano-ledger-rdf vocab; validate the unified graph.
-- [ ] T346-S2b Update runNamedHistoryShacl wiring if shape targets/names change.
-- [ ] T346-S2c Goldens/unit for SHACL conformance; just ci + hermetic checks green.
+- [X] T346-S2a Rewrite History/shapes/*.shacl.ttl against cardano-ledger-rdf vocab; validate the unified graph.
+- [X] T346-S2b Update runNamedHistoryShacl wiring if shape targets/names change.
+- [X] T346-S2c Goldens/unit for SHACL conformance; just ci + hermetic checks green.

@@ -1,4 +1,24 @@
+# SHACL shapes for the amaru history-metadata overlay (no ledger bodies).
+#
+# Two node shapes validate the overlay graph that
+# `Amaru.Treasury.History.Sparql` emits beside the cq-rdf ledger bodies:
+#
+#   * atx:HistoryEntryShape  — the per-tx history annotations, kept as an
+#     amaru vocabulary extension (#346 S1: slot/scope/role/direction are
+#     app-level history facts, not ledger facts).
+#   * atx:TreasuryEntityShape — the metadata identities, migrated in #346
+#     S1 to the cardano-ledger-rdf `cardano:` vocabulary. Each is a
+#     cardano:Entity carrying the amaru overlay annotations
+#     (rdfs:label / atx:scope / treasury:role) and a join binding into the
+#     ledger-body graph (cardano:hasIdentifier / cardano:bech32 /
+#     cardano:fromTxOutRef). Shape IRIs stay in the atx: namespace; the
+#     TARGET is the cardano: class, so this validates the unified vocab
+#     rather than re-asserting cardano facts as a bespoke duplicate.
+
 @prefix atx: <https://lambdasistemi.github.io/amaru-treasury-tx/vocab/history#> .
+@prefix cardano: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/cardano#> .
+@prefix treasury: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/treasury#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
@@ -40,3 +60,29 @@ atx:HistoryEntryShape a sh:NodeShape ;
     sh:maxCount 1 ;
     sh:datatype xsd:string
   ] .
+
+atx:TreasuryEntityShape a sh:NodeShape ;
+  sh:targetClass cardano:Entity ;
+  sh:property [
+    sh:path rdfs:label ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:datatype xsd:string
+  ] ;
+  sh:property [
+    sh:path atx:scope ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:datatype xsd:string
+  ] ;
+  sh:property [
+    sh:path treasury:role ;
+    sh:minCount 1 ;
+    sh:maxCount 1 ;
+    sh:datatype xsd:string
+  ] ;
+  sh:or (
+    [ sh:path cardano:hasIdentifier ; sh:minCount 1 ]
+    [ sh:path cardano:bech32 ; sh:minCount 1 ]
+    [ sh:path cardano:fromTxOutRef ; sh:minCount 1 ]
+  ) .

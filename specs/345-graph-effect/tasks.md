@@ -1,10 +1,10 @@
 # Tasks — #345
 
 ## Slice S1 — input resolution via UTxO outref lookup
-- [ ] T345-S1a Assess ApiIndexer/UTxOIndexer outref→TxOut capability; record path or Q-file options.
-- [ ] T345-S1b Thread the UTxO read into tx-detail input resolution: source address → {scope,role} + value (reuse #340/#346 resolver).
-- [ ] T345-S1c Surface resolved inputs on /v1/tx/{txid}; tests (hermetic).
-- [ ] T345-S1d just unit + golden + nix build .#default green.
+- [X] T345-S1a Assess ApiIndexer/UTxOIndexer outref→TxOut capability; record path or Q-file options.
+- [X] T345-S1b Thread the UTxO read into tx-detail input resolution: source address → {scope,role} + value (reuse #340/#346 resolver).
+- [X] T345-S1c Surface resolved inputs on /v1/tx/{txid}; tests (hermetic).
+- [X] T345-S1d just unit + golden + nix build .#default green.
 
 ## Slice S2 — graph-effect on the build path
 - [ ] T345-S2a Emit resolved+projected graph-effect for the unsigned ConwayTx via Cardano.Tx.Graph.Emit (inputs+outputs+datums, cardano-ledger-rdf vocab).

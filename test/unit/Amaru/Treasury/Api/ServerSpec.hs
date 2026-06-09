@@ -694,7 +694,10 @@ stubTxDetail =
             [ TxDetailInput
                 { tdiTxIn = "input#0"
                 , tdiScope = Just "core_development"
-                , tdiValue = "42 lovelace"
+                , tdiRole = Just "treasury"
+                , tdiValue =
+                    Just ValueSummary{vsLovelace = 42, vsAssets = mempty}
+                , tdiResolved = True
                 }
             ]
         , tdrOutputs =

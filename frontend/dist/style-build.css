@@ -330,6 +330,79 @@ input[type="number"].field__input { -moz-appearance: textfield; }
   font-size: 18px;
   line-height: 1;
 }
+.audit-output-card {
+  gap: 8px;
+  padding: 10px;
+}
+.audit-output-card__badges {
+  min-width: 0;
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.audit-output-card__summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(9rem, 0.6fr);
+  gap: 8px 12px;
+  align-items: center;
+}
+.audit-output-field {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.audit-output-field__label,
+.audit-output-chip__label {
+  flex: 0 0 auto;
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.audit-output-field__value {
+  min-width: 0;
+  color: var(--md-sys-color-on-surface);
+}
+.audit-output-card .audit-copy {
+  gap: 4px;
+}
+.audit-output-card .audit-copy .copy-icon-btn {
+  width: 26px;
+  height: 26px;
+}
+.audit-output-card .audit-copy .copy-icon-btn md-icon {
+  font-size: 17px;
+}
+.audit-output-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.audit-output-chip {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--app-radius);
+  background: var(--md-sys-color-surface-container-low);
+  color: var(--md-sys-color-on-surface);
+  font-size: 12px;
+  line-height: 1.2;
+}
+.audit-output-chip code {
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--md-sys-color-on-surface);
+}
 @media (max-width: 600px) {
   .repeated-row-card__head { align-items: flex-start; }
   .repeated-row-card__fields,
@@ -337,6 +410,12 @@ input[type="number"].field__input { -moz-appearance: textfield; }
   .destination-card__fields { grid-template-columns: 1fr; }
   .repeated-row-card__remove { align-self: flex-start; }
   .repeated-row-list__actions .btn { width: 100%; }
+  .audit-output-card__summary { grid-template-columns: 1fr; }
+  .audit-output-field {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
 }
 .signers-picker__hint .mono { font-size: 11px; }
 

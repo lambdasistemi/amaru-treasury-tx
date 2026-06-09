@@ -13,7 +13,8 @@ import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (class MonadAff)
 import Foreign.Object as FO
 import Format
-  ( formatThousands
+  ( assetNameText
+  , formatThousands
   , formatThousandsN
   , shortAddr
   , shortHex
@@ -142,8 +143,8 @@ component =
           [ HP.classes [ cn "audit-page" ] ]
           [ auditHeader
           , auditControls st
-          , auditBody st
           , lensPanel st
+          , auditBody st
           ]
       , Shell.siteFooter
           { buildIdentityLine: "tx audit view - indexer history API" }
@@ -526,7 +527,6 @@ txDetail detail =
     , sectionList "Required signers" detail.requiredSigners identity
     , cardSection "Inputs" detail.inputs inputCard
     , cardSection "Outputs" detail.outputs outputCard
-    , sectionList "Lines" detail.lines identity
     ]
 
 -- | A detail section whose rows are rich HTML cards
@@ -598,62 +598,159 @@ inputCard input =
 -- | truncated raw datum.
 outputCard :: forall w. Api.TxDetailOutput -> HH.HTML w Action
 outputCard output =
-  HH.div
-    [ HP.classes [ cn "repeated-row-card" ] ]
-    ( [ HH.div
-          [ HP.classes [ cn "repeated-row-card__head" ] ]
-          [ HH.span
-              [ HP.classes [ cn "repeated-row-card__title" ] ]
-              [ HH.text ("output #" <> show output.index) ]
-          , badge (fromMaybe "external" output.scope)
-          ]
-      , kvCopy "address" shortAddr output.address
-      ]
-        <> roleRows output.role
-        <> [ kv "value" (showAda output.value.lovelace) ]
-        <> assetRows output.value.assets
-        <> datumRows output
-    )
+  let
+    chips = assetChips output.value.assets <> datumChips output
+  in
+    HH.div
+      [ HP.classes [ cn "repeated-row-card", cn "audit-output-card" ] ]
+      ( [ HH.div
+            [ HP.classes [ cn "repeated-row-card__head" ] ]
+            [ HH.span
+                [ HP.classes [ cn "repeated-row-card__title" ] ]
+                [ HH.text ("output #" <> show output.index) ]
+            , HH.span
+                [ HP.classes [ cn "audit-output-card__badges" ] ]
+                ( [ badge (fromMaybe "external" output.scope) ]
+                    <> roleBadges output.role
+                )
+            ]
+        , HH.div
+            [ HP.classes [ cn "audit-output-card__summary" ] ]
+            [ compactField "address"
+                [ copyInline "address" shortAddr output.address ]
+            , compactField "value"
+                [ HH.code [ HP.classes [ cn "mono" ] ]
+                    [ HH.text (showAda output.value.lovelace) ]
+                ]
+            ]
+        ]
+          <> chipRow chips
+      )
 
--- | The output's resolved role label, omitted when the output is
--- | outside the treasury.
-roleRows :: forall w. Maybe String -> Array (HH.HTML w Action)
-roleRows = case _ of
-  Just role -> [ kv "role" role ]
+chipRow
+  :: forall w
+   . Array (HH.HTML w Action)
+  -> Array (HH.HTML w Action)
+chipRow chips
+  | Array.null chips = []
+  | otherwise =
+      [ HH.div
+          [ HP.classes [ cn "audit-output-card__chips" ] ]
+          chips
+      ]
+
+roleBadges :: forall w i. Maybe String -> Array (HH.HTML w i)
+roleBadges = case _ of
+  Just role -> [ badge role ]
   Nothing -> []
 
--- | One @kv@ row per native asset held in the output value.
-assetRows
+compactField
+  :: forall w
+   . String
+  -> Array (HH.HTML w Action)
+  -> HH.HTML w Action
+compactField label_ body =
+  HH.div
+    [ HP.classes [ cn "audit-output-field" ] ]
+    [ HH.span
+        [ HP.classes [ cn "audit-output-field__label" ] ]
+        [ HH.text label_ ]
+    , HH.span
+        [ HP.classes [ cn "audit-output-field__value" ] ]
+        body
+    ]
+
+copyInline
+  :: forall w
+   . String
+  -> (String -> String)
+  -> String
+  -> HH.HTML w Action
+copyInline label_ trunc full =
+  HH.span
+    [ HP.classes [ cn "audit-copy" ] ]
+    [ HH.code
+        [ HP.classes [ cn "mono" ], HP.title full ]
+        [ HH.text (trunc full) ]
+    , HH.button
+        [ HP.classes [ cn "copy-icon-btn" ]
+        , HP.type_ HP.ButtonButton
+        , HP.title ("Copy " <> label_)
+        , HP.attr (HH.AttrName "aria-label") ("Copy " <> label_)
+        , HE.onClick (\_ -> CopyText full)
+        ]
+        [ md "md-icon" [] [ HH.text "content_copy" ] ]
+    ]
+
+assetChips
   :: forall w
    . FO.Object (FO.Object Number)
   -> Array (HH.HTML w Action)
-assetRows assets = do
+assetChips assets = do
   Tuple policy inner <- FO.toUnfoldable assets
   Tuple name quantity <- FO.toUnfoldable inner
   pure
-    ( kv "asset"
-        ( shortHex policy
-            <> " · "
-            <> shortHex name
-            <> " × "
-            <> formatThousandsN quantity
-        )
+    ( outputChip "asset"
+        [ HH.code
+            [ HP.classes [ cn "mono" ], HP.title policy ]
+            [ HH.text (shortHex policy) ]
+        , HH.span_ [ HH.text "·" ]
+        , HH.code
+            [ HP.classes [ cn "mono" ], HP.title name ]
+            [ HH.text (assetNameText name) ]
+        , HH.span_ [ HH.text ("× " <> formatThousandsN quantity) ]
+        ]
     )
 
 -- | The projected SundaeSwap order datum (recipient, min
 -- | received, scooper fee) when the output carries one, else the
 -- | truncated raw datum, else nothing.
-datumRows :: forall w. Api.TxDetailOutput -> Array (HH.HTML w Action)
-datumRows output = case output.projectedDatum of
+datumChips :: forall w. Api.TxDetailOutput -> Array (HH.HTML w Action)
+datumChips output = case output.projectedDatum of
   Just order ->
-    [ kv "datum" "swap order"
-    , kvCopy "recipient" shortHex order.recipient
-    , kv "min received" (projectedAssetText order.minReceived)
-    , kv "scooper fee" (showAda order.scooperFee)
+    [ outputChip "datum" [ HH.text "swap order" ]
+    , outputChip "recipient"
+        [ copyInline "recipient" shortHex order.recipient ]
+    , outputChip "min received"
+        [ projectedAssetInline order.minReceived ]
+    , outputChip "scooper fee"
+        [ HH.text (showAda order.scooperFee) ]
     ]
   Nothing -> case output.datum of
-    Just d -> [ kvCopy "datum" shortHex d ]
+    Just d ->
+      [ outputChip "datum" [ copyInline "datum" shortHex d ] ]
     Nothing -> []
+
+outputChip
+  :: forall w
+   . String
+  -> Array (HH.HTML w Action)
+  -> HH.HTML w Action
+outputChip label_ body =
+  HH.span
+    [ HP.classes [ cn "audit-output-chip" ] ]
+    ( [ HH.span
+          [ HP.classes [ cn "audit-output-chip__label" ] ]
+          [ HH.text label_ ]
+      ]
+        <> body
+    )
+
+projectedAssetInline :: forall w i. Api.ProjectedAsset -> HH.HTML w i
+projectedAssetInline a
+  | a.policy == "" && a.asset == "" =
+      HH.text (showAda a.quantity)
+  | otherwise =
+      HH.span_
+        [ HH.code
+            [ HP.classes [ cn "mono" ], HP.title a.policy ]
+            [ HH.text (shortHex a.policy) ]
+        , HH.span_ [ HH.text " · " ]
+        , HH.code
+            [ HP.classes [ cn "mono" ], HP.title a.asset ]
+            [ HH.text (assetNameText a.asset) ]
+        , HH.span_ [ HH.text (" × " <> formatThousandsN a.quantity) ]
+        ]
 
 -- | One projected treasury-spend redeemer rendered as a card:
 -- | the variant badge plus an @amount@ row per projected asset.
@@ -692,7 +789,7 @@ projectedAssetText a
   | otherwise =
       shortHex a.policy
         <> " · "
-        <> shortHex a.asset
+        <> assetNameText a.asset
         <> " × "
         <> formatThousandsN a.quantity
 

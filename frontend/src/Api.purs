@@ -25,6 +25,7 @@ import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..))
 import Effect.Aff (Aff, delay)
+import Foreign.Object (Object)
 
 type BuildIdentity =
   { biBuildTime :: String
@@ -57,6 +58,62 @@ type ScopeHistoryResponse =
   , entries :: Array ScopeHistoryEntry
   }
 
+-- | Result of a named RDF/SPARQL history query
+-- | (`/v1/scope/<scope>/txs/query?name=<q>`). The UI is a thin
+-- | renderer: it only picks a backend-known query name and shows
+-- | the `columns`/`rows` cells verbatim — no SPARQL client-side.
+type ScopeHistoryQueryResponse =
+  { scope :: String
+  , query :: String
+  , columns :: Array String
+  , rows :: Array (Array String)
+  }
+
+-- | Result of a named SHACL history validation
+-- | (`/v1/scope/<scope>/txs/shacl?name=<shape>`). `report` is the
+-- | raw SHACL report text, empty when the selected shape conforms.
+type ScopeHistoryShaclResponse =
+  { scope :: String
+  , shape :: String
+  , conforms :: Boolean
+  , report :: String
+  }
+
+-- | Structured ledger value: lovelace plus a nested
+-- | policy → asset → quantity map. Mirrors the backend
+-- | `ValueSummary`. Lovelace / quantities are `Number` because
+-- | they routinely exceed the 32-bit `Int` range.
+type ValueSummary =
+  { lovelace :: Number
+  , assets :: Object (Object Number)
+  }
+
+-- | One policy/asset/quantity triple projected from a decoded
+-- | datum or redeemer. An empty `policy` and `asset` denote ADA
+-- | (lovelace).
+type ProjectedAsset =
+  { policy :: String
+  , asset :: String
+  , quantity :: Number
+  }
+
+-- | Decoded treasury-spend redeemer (CIP-57 blueprint): the
+-- | variant name (Reorganize / SweepTreasury / Fund / Disburse)
+-- | and the projected amount.
+type ProjectedTreasurySpend =
+  { variant :: String
+  , amount :: Array ProjectedAsset
+  }
+
+-- | Decoded SundaeSwap order datum (CIP-57 blueprint): the
+-- | recipient credential hash, the minimum received asset and
+-- | the scooper fee in lovelace.
+type ProjectedSwapOrder =
+  { recipient :: String
+  , minReceived :: ProjectedAsset
+  , scooperFee :: Number
+  }
+
 type TxDetailInput =
   { txIn :: String
   , scope :: Maybe String
@@ -66,8 +123,11 @@ type TxDetailInput =
 type TxDetailOutput =
   { index :: Int
   , address :: String
-  , value :: String
+  , scope :: Maybe String
+  , role :: Maybe String
+  , value :: ValueSummary
   , datum :: Maybe String
+  , projectedDatum :: Maybe ProjectedSwapOrder
   }
 
 type TxDetailResponse =
@@ -80,6 +140,7 @@ type TxDetailResponse =
   , fee :: Maybe Int
   , requiredSigners :: Array String
   , redeemer :: Maybe String
+  , projectedRedeemers :: Array ProjectedTreasurySpend
   , inputs :: Array TxDetailInput
   , outputs :: Array TxDetailOutput
   , lines :: Array String
@@ -151,6 +212,41 @@ fetchScopeHistory scope filters =
               , { key: "until", value: filters.until }
               , { key: "limit", value: filters.limit }
               ]
+        )
+    )
+
+-- | Run a backend-known SPARQL query over one scope's RDF
+-- | history lattice. @queryName@ must be one of the server's
+-- | fixed names (e.g. @asset-flow@, @spend-edges@,
+-- | @address-resolution@); the server rejects anything else.
+fetchScopeHistoryQuery
+  :: String
+  -> String
+  -> Aff (Either String ScopeHistoryQueryResponse)
+fetchScopeHistoryQuery scope queryName =
+  withTimeout
+    ( getJson
+        ( "/v1/scope/"
+            <> encodeURIComponent scope
+            <> "/txs/query?name="
+            <> encodeURIComponent queryName
+        )
+    )
+
+-- | Validate one scope's RDF history lattice against a
+-- | backend-known SHACL shape (e.g. @history-entry@,
+-- | @indexed-tx-body@).
+fetchScopeHistoryShacl
+  :: String
+  -> String
+  -> Aff (Either String ScopeHistoryShaclResponse)
+fetchScopeHistoryShacl scope shapeName =
+  withTimeout
+    ( getJson
+        ( "/v1/scope/"
+            <> encodeURIComponent scope
+            <> "/txs/shacl?name="
+            <> encodeURIComponent shapeName
         )
     )
 

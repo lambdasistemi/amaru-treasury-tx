@@ -9,8 +9,16 @@ import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String as String
+import Data.Tuple (Tuple(..))
 import Effect.Aff.Class (class MonadAff)
-import Format (formatThousands, shortAddr, shortHex)
+import Foreign.Object as FO
+import Format
+  ( formatThousands
+  , formatThousandsN
+  , shortAddr
+  , shortHex
+  , showAda
+  )
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
@@ -32,6 +40,22 @@ data DetailState
   | DetailNotFound String
   | DetailFailed String
 
+-- | State of the RDF lens: a named SPARQL query result or a
+-- | named SHACL validation result over the selected scope's
+-- | history lattice.
+data LensState
+  = LensIdle
+  | LensLoading
+  | LensQuery Api.ScopeHistoryQueryResponse
+  | LensShacl Api.ScopeHistoryShaclResponse
+  | LensFailed String
+
+-- | A parsed lens selection: a backend-known query name or a
+-- | backend-known SHACL shape name.
+data LensKind
+  = LensQueryKind String
+  | LensShaclKind String
+
 type Filters =
   { role :: String
   , asset :: String
@@ -47,6 +71,8 @@ type State =
   , history :: LoadState
   , selectedTx :: Maybe Api.ScopeHistoryEntry
   , detail :: DetailState
+  , lensSel :: String
+  , lens :: LensState
   , theme :: Theme.Theme
   }
 
@@ -64,6 +90,8 @@ data Action
   | ApplyFilters
   | ResetFilters
   | SelectTx Api.ScopeHistoryEntry
+  | SetLens String
+  | RunLens
   | CopyText String
 
 initialFilters :: Filters
@@ -83,6 +111,8 @@ initialState =
   , history: Loading
   , selectedTx: Nothing
   , detail: DetailIdle
+  , lensSel: defaultLensSel
+  , lens: LensIdle
   , theme: Theme.Dark
   }
 
@@ -113,6 +143,7 @@ component =
           [ auditHeader
           , auditControls st
           , auditBody st
+          , lensPanel st
           ]
       , Shell.siteFooter
           { buildIdentityLine: "tx audit view - indexer history API" }
@@ -165,6 +196,7 @@ component =
         { selectedScope = scopeFromSlug slug
         , selectedTx = Nothing
         , detail = DetailIdle
+        , lens = LensIdle
         }
       handleAction LoadHistory
 
@@ -201,6 +233,29 @@ component =
     SelectTx tx -> do
       H.modify_ \s -> s { selectedTx = Just tx }
       loadTxDetail tx
+
+    SetLens value ->
+      H.modify_ \s -> s { lensSel = value }
+
+    RunLens -> do
+      st <- H.get
+      H.modify_ \s -> s { lens = LensLoading }
+      let scope = Shell.scopeSlug st.selectedScope
+      case parseLensSel st.lensSel of
+        LensQueryKind name -> do
+          res <- H.liftAff (Api.fetchScopeHistoryQuery scope name)
+          H.modify_ \s -> s
+            { lens = case res of
+                Right ok -> LensQuery ok
+                Left err -> LensFailed err
+            }
+        LensShaclKind name -> do
+          res <- H.liftAff (Api.fetchScopeHistoryShacl scope name)
+          H.modify_ \s -> s
+            { lens = case res of
+                Right ok -> LensShacl ok
+                Left err -> LensFailed err
+            }
 
     CopyText value -> H.liftEffect (Clipboard.writeText value)
 
@@ -462,11 +517,40 @@ txDetail detail =
         Just h -> kvCopy "block hash" shortHex h
         Nothing -> kv "block hash" "-"
     , kv "fee" (maybeText (\f -> formatThousands f <> " lovelace") detail.fee)
-    , kv "redeemer" (fromMaybe "-" detail.redeemer)
+    , case detail.redeemer of
+        Just r -> kvCopy "redeemer" shortHex r
+        Nothing -> kv "redeemer" "-"
+    , cardSection "Projected redeemers"
+        detail.projectedRedeemers
+        redeemerCard
     , sectionList "Required signers" detail.requiredSigners identity
-    , sectionList "Inputs" detail.inputs inputRow
-    , sectionList "Outputs" detail.outputs outputRow
+    , cardSection "Inputs" detail.inputs inputCard
+    , cardSection "Outputs" detail.outputs outputCard
     , sectionList "Lines" detail.lines identity
+    ]
+
+-- | A detail section whose rows are rich HTML cards
+-- | (`.repeated-row-card`) rather than plain mono text. Used for
+-- | inputs / outputs / projected redeemers, where each row
+-- | carries resolved labels, copy buttons and projected fields.
+cardSection
+  :: forall a w
+   . String
+  -> Array a
+  -> (a -> HH.HTML w Action)
+  -> HH.HTML w Action
+cardSection title rows renderRow =
+  HH.section
+    [ HP.classes [ cn "audit-detail__section" ] ]
+    [ HH.h3_ [ HH.text title ]
+    , if Array.null rows then
+        HH.p
+          [ HP.classes [ cn "audit-detail__empty" ] ]
+          [ HH.text "None" ]
+      else
+        HH.div
+          [ HP.classes [ cn "repeated-row-list" ] ]
+          (map renderRow rows)
     ]
 
 sectionList
@@ -495,24 +579,296 @@ sectionList title rows renderRow =
           )
     ]
 
-inputRow :: Api.TxDetailInput -> String
-inputRow input =
-  shortHex input.txIn
-    <> " | "
-    <> fromMaybe "-" input.scope
-    <> " | "
-    <> input.value
+-- | One transaction input rendered as a card: the outref (copy),
+-- | its resolved scope (or @unresolved@ — input source-address
+-- | resolution is a deferred backend follow-up) and value.
+inputCard :: forall w. Api.TxDetailInput -> HH.HTML w Action
+inputCard input =
+  HH.div
+    [ HP.classes [ cn "repeated-row-card" ] ]
+    [ kvCopy "tx in" shortHex input.txIn
+    , kv "scope" (fromMaybe "unresolved" input.scope)
+    , kv "value" input.value
+    ]
 
-outputRow :: Api.TxDetailOutput -> String
-outputRow output =
-  "#"
-    <> show output.index
-    <> " | "
-    <> shortAddr output.address
-    <> " | "
-    <> output.value
-    <> " | datum "
-    <> fromMaybe "-" output.datum
+-- | One transaction output rendered as a card: address (copy),
+-- | the resolved treasury scope/role labels (never a raw
+-- | @null@), the ADA-denominated value plus any native assets,
+-- | and either the projected SundaeSwap order fields or a
+-- | truncated raw datum.
+outputCard :: forall w. Api.TxDetailOutput -> HH.HTML w Action
+outputCard output =
+  HH.div
+    [ HP.classes [ cn "repeated-row-card" ] ]
+    ( [ HH.div
+          [ HP.classes [ cn "repeated-row-card__head" ] ]
+          [ HH.span
+              [ HP.classes [ cn "repeated-row-card__title" ] ]
+              [ HH.text ("output #" <> show output.index) ]
+          , badge (fromMaybe "external" output.scope)
+          ]
+      , kvCopy "address" shortAddr output.address
+      ]
+        <> roleRows output.role
+        <> [ kv "value" (showAda output.value.lovelace) ]
+        <> assetRows output.value.assets
+        <> datumRows output
+    )
+
+-- | The output's resolved role label, omitted when the output is
+-- | outside the treasury.
+roleRows :: forall w. Maybe String -> Array (HH.HTML w Action)
+roleRows = case _ of
+  Just role -> [ kv "role" role ]
+  Nothing -> []
+
+-- | One @kv@ row per native asset held in the output value.
+assetRows
+  :: forall w
+   . FO.Object (FO.Object Number)
+  -> Array (HH.HTML w Action)
+assetRows assets = do
+  Tuple policy inner <- FO.toUnfoldable assets
+  Tuple name quantity <- FO.toUnfoldable inner
+  pure
+    ( kv "asset"
+        ( shortHex policy
+            <> " · "
+            <> shortHex name
+            <> " × "
+            <> formatThousandsN quantity
+        )
+    )
+
+-- | The projected SundaeSwap order datum (recipient, min
+-- | received, scooper fee) when the output carries one, else the
+-- | truncated raw datum, else nothing.
+datumRows :: forall w. Api.TxDetailOutput -> Array (HH.HTML w Action)
+datumRows output = case output.projectedDatum of
+  Just order ->
+    [ kv "datum" "swap order"
+    , kvCopy "recipient" shortHex order.recipient
+    , kv "min received" (projectedAssetText order.minReceived)
+    , kv "scooper fee" (showAda order.scooperFee)
+    ]
+  Nothing -> case output.datum of
+    Just d -> [ kvCopy "datum" shortHex d ]
+    Nothing -> []
+
+-- | One projected treasury-spend redeemer rendered as a card:
+-- | the variant badge plus an @amount@ row per projected asset.
+redeemerCard
+  :: forall w i. Api.ProjectedTreasurySpend -> HH.HTML w i
+redeemerCard spend =
+  HH.div
+    [ HP.classes [ cn "repeated-row-card" ] ]
+    ( [ HH.div
+          [ HP.classes [ cn "repeated-row-card__head" ] ]
+          [ HH.span
+              [ HP.classes [ cn "repeated-row-card__title" ] ]
+              [ HH.text "treasury spend" ]
+          , badge spend.variant
+          ]
+      ]
+        <>
+          ( if Array.null spend.amount then
+              [ HH.p
+                  [ HP.classes [ cn "audit-detail__empty" ] ]
+                  [ HH.text "no amount" ]
+              ]
+            else
+              map
+                (\a -> kv "amount" (projectedAssetText a))
+                spend.amount
+          )
+    )
+
+-- | Render a projected asset. Empty policy + asset names denote
+-- | ADA (lovelace); otherwise show the truncated policy/asset and
+-- | the grouped quantity.
+projectedAssetText :: Api.ProjectedAsset -> String
+projectedAssetText a
+  | a.policy == "" && a.asset == "" = showAda a.quantity
+  | otherwise =
+      shortHex a.policy
+        <> " · "
+        <> shortHex a.asset
+        <> " × "
+        <> formatThousandsN a.quantity
+
+-- | #340 — the RDF lens: pick a backend-known SPARQL query or
+-- | SHACL shape and render its result over the selected scope's
+-- | history lattice. A thin renderer — the UI never sends SPARQL
+-- | or SHACL, only a fixed name the server recognises.
+lensPanel :: forall w. State -> HH.HTML w Action
+lensPanel st =
+  HH.section
+    [ HP.classes [ cn "audit-detail", cn "audit-lens" ] ]
+    [ HH.h2
+        [ HP.classes [ cn "md-typescale-title-medium" ] ]
+        [ HH.text "RDF lens" ]
+    , HH.p
+        [ HP.classes [ cn "audit-detail__empty" ] ]
+        [ HH.text
+            ( "Named SPARQL queries and SHACL shapes over the "
+                <> Shell.scopeLong st.selectedScope
+                <> " history lattice."
+            )
+        ]
+    , HH.div
+        [ HP.classes [ cn "audit-controls" ] ]
+        [ selectField
+            { label: "lens"
+            , value: st.lensSel
+            , onChange: SetLens
+            , options: lensOptions
+            }
+        , HH.div
+            [ HP.classes [ cn "audit-controls__actions" ] ]
+            [ HH.button
+                [ HP.classes
+                    [ cn "audit-btn", cn "audit-btn--primary" ]
+                , HP.type_ HP.ButtonButton
+                , HE.onClick (\_ -> RunLens)
+                ]
+                [ md "md-icon" [] [ HH.text "play_arrow" ]
+                , HH.span_ [ HH.text "Run" ]
+                ]
+            ]
+        ]
+    , lensResults st.lens
+    ]
+
+lensResults :: forall w. LensState -> HH.HTML w Action
+lensResults = case _ of
+  LensIdle ->
+    stateMessage
+      "No lens run"
+      "Pick a query or shape and press Run."
+  LensLoading ->
+    stateMessage
+      "Running lens"
+      "Waiting for the RDF engine response."
+  LensFailed err ->
+    if isLagging503 err then
+      stateMessage
+        "Indexer lagging"
+        "The API returned 503 while the indexer catches up."
+    else
+      stateMessage "Lens request failed" err
+  LensQuery resp -> lensQueryTable resp
+  LensShacl resp -> lensShaclReport resp
+
+lensQueryTable
+  :: forall w i. Api.ScopeHistoryQueryResponse -> HH.HTML w i
+lensQueryTable resp =
+  HH.section
+    [ HP.classes [ cn "audit-detail__section" ] ]
+    [ HH.h3_
+        [ HH.text
+            ( resp.query
+                <> " — "
+                <> show (Array.length resp.rows)
+                <> " rows"
+            )
+        ]
+    , if Array.null resp.rows then
+        HH.p
+          [ HP.classes [ cn "audit-detail__empty" ] ]
+          [ HH.text "No rows." ]
+      else
+        HH.div
+          [ HP.classes [ cn "audit-table-wrap" ] ]
+          [ HH.table
+              [ HP.classes [ cn "audit-table" ] ]
+              [ HH.thead_
+                  [ HH.tr_
+                      ( map
+                          (\c -> HH.th_ [ HH.text c ])
+                          resp.columns
+                      )
+                  ]
+              , HH.tbody_ (map lensRow resp.rows)
+              ]
+          ]
+    ]
+
+lensRow :: forall w i. Array String -> HH.HTML w i
+lensRow cells =
+  HH.tr_
+    ( map
+        ( \c ->
+            HH.td [ HP.classes [ cn "mono" ] ] [ HH.text c ]
+        )
+        cells
+    )
+
+lensShaclReport
+  :: forall w i. Api.ScopeHistoryShaclResponse -> HH.HTML w i
+lensShaclReport resp =
+  HH.section
+    [ HP.classes [ cn "audit-detail__section" ] ]
+    [ HH.h3_ [ HH.text resp.shape ]
+    , kv "conforms" (if resp.conforms then "yes" else "no")
+    , if resp.conforms then
+        HH.p
+          [ HP.classes [ cn "audit-detail__empty" ] ]
+          [ HH.text "No violations." ]
+      else
+        HH.ul_
+          ( map
+              ( \ln ->
+                  HH.li
+                    [ HP.classes [ cn "mono" ] ]
+                    [ HH.text ln ]
+              )
+              (reportLines resp.report)
+          )
+    ]
+
+reportLines :: String -> Array String
+reportLines = String.split (String.Pattern "\n")
+
+-- | The backend-known SPARQL query names (the server rejects
+-- | any other value).
+lensQueryNames :: Array String
+lensQueryNames =
+  [ "history-entries"
+  , "tx-count"
+  , "asset-flow"
+  , "spend-edges"
+  , "entity-occurrences"
+  , "address-resolution"
+  ]
+
+-- | The backend-known SHACL shape names.
+lensShapeNames :: Array String
+lensShapeNames = [ "history-entry", "indexed-tx-body" ]
+
+-- | Dropdown options: every query name then every shape name,
+-- | each tagged so 'parseLensSel' can route the request.
+lensOptions :: Array { value :: String, label :: String }
+lensOptions =
+  map
+    (\n -> { value: "query:" <> n, label: "query · " <> n })
+    lensQueryNames
+    <> map
+      (\n -> { value: "shacl:" <> n, label: "shacl · " <> n })
+      lensShapeNames
+
+defaultLensSel :: String
+defaultLensSel = "query:history-entries"
+
+-- | Route a tagged dropdown value to a query or a shape request.
+parseLensSel :: String -> LensKind
+parseLensSel s =
+  case String.stripPrefix (String.Pattern "shacl:") s of
+    Just name -> LensShaclKind name
+    Nothing ->
+      LensQueryKind
+        ( fromMaybe s
+            (String.stripPrefix (String.Pattern "query:") s)
+        )
 
 stateMessage :: forall w i. String -> String -> HH.HTML w i
 stateMessage title body =

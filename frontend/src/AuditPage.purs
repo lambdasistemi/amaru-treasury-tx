@@ -9,14 +9,15 @@ import Data.Array as Array
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String as String
-import Data.String.CodePoints as CodePoints
 import Effect.Aff.Class (class MonadAff)
+import Format (formatThousands, shortAddr, shortHex)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Routing (Route(..))
 import Shell as Shell
+import Shell.Clipboard as Clipboard
 import Theme as Theme
 
 data LoadState
@@ -63,6 +64,7 @@ data Action
   | ApplyFilters
   | ResetFilters
   | SelectTx Api.ScopeHistoryEntry
+  | CopyText String
 
 initialFilters :: Filters
 initialFilters =
@@ -199,6 +201,8 @@ component =
     SelectTx tx -> do
       H.modify_ \s -> s { selectedTx = Just tx }
       loadTxDetail tx
+
+    CopyText value -> H.liftEffect (Clipboard.writeText value)
 
   loadTxDetail
     :: Api.ScopeHistoryEntry
@@ -377,7 +381,7 @@ historyRow selectedTx entry =
       )
       [ HH.td
           [ HP.classes [ cn "mono" ] ]
-          [ HH.text (show entry.slot) ]
+          [ HH.text (formatThousands entry.slot) ]
       , HH.td_
           [ HH.button
               [ HP.classes [ cn "audit-link-btn", cn "mono" ]
@@ -385,7 +389,7 @@ historyRow selectedTx entry =
               , HP.title entry.txid
               , HE.onClick (\_ -> SelectTx entry)
               ]
-              [ HH.text (shortTx entry.txid) ]
+              [ HH.text (shortHex entry.txid) ]
           ]
       , HH.td_ [ badge entry.role ]
       , HH.td_ [ badge entry.direction ]
@@ -420,8 +424,8 @@ detailContent tx (DetailLoaded response) =
   txDetail response
 detailContent tx detail =
   HH.div_
-    [ kv "slot" (show tx.slot)
-    , kv "txid" tx.txid
+    [ kv "slot" (formatThousands tx.slot)
+    , kvCopy "txid" shortHex tx.txid
     , kv "role" tx.role
     , kv "direction" tx.direction
     , case detail of
@@ -445,17 +449,19 @@ detailContent tx detail =
             "The selected transaction detail is ready."
     ]
 
-txDetail :: forall w i. Api.TxDetailResponse -> HH.HTML w i
+txDetail :: forall w. Api.TxDetailResponse -> HH.HTML w Action
 txDetail detail =
   HH.div
     [ HP.classes [ cn "audit-detail__body" ] ]
-    [ kv "slot" (show detail.slot)
-    , kv "txid" detail.txid
+    [ kv "slot" (formatThousands detail.slot)
+    , kvCopy "txid" shortHex detail.txid
     , kv "scope" detail.scope
     , kv "role" detail.role
     , kv "direction" detail.direction
-    , kv "block hash" (fromMaybe "-" detail.blockHash)
-    , kv "fee" (maybeText show detail.fee)
+    , case detail.blockHash of
+        Just h -> kvCopy "block hash" shortHex h
+        Nothing -> kv "block hash" "-"
+    , kv "fee" (maybeText (\f -> formatThousands f <> " lovelace") detail.fee)
     , kv "redeemer" (fromMaybe "-" detail.redeemer)
     , sectionList "Required signers" detail.requiredSigners identity
     , sectionList "Inputs" detail.inputs inputRow
@@ -491,7 +497,7 @@ sectionList title rows renderRow =
 
 inputRow :: Api.TxDetailInput -> String
 inputRow input =
-  input.txIn
+  shortHex input.txIn
     <> " | "
     <> fromMaybe "-" input.scope
     <> " | "
@@ -502,7 +508,7 @@ outputRow output =
   "#"
     <> show output.index
     <> " | "
-    <> output.address
+    <> shortAddr output.address
     <> " | "
     <> output.value
     <> " | datum "
@@ -524,6 +530,36 @@ kv label_ value_ =
     [ HP.classes [ cn "audit-detail__kv" ] ]
     [ HH.span_ [ HH.text label_ ]
     , HH.code_ [ HH.text value_ ]
+    ]
+
+-- | #338 SB1 — like 'kv' but the value is a long hash/address:
+-- | shown truncated (the full value on a `title` tooltip) next
+-- | to a copy button that writes the full value to the
+-- | clipboard.  Mirrors the dashboard copy-row affordance.
+kvCopy
+  :: forall w
+   . String
+  -> (String -> String)
+  -> String
+  -> HH.HTML w Action
+kvCopy label_ trunc full =
+  HH.div
+    [ HP.classes [ cn "audit-detail__kv" ] ]
+    [ HH.span_ [ HH.text label_ ]
+    , HH.span
+        [ HP.classes [ cn "audit-copy" ] ]
+        [ HH.code
+            [ HP.classes [ cn "mono" ], HP.title full ]
+            [ HH.text (trunc full) ]
+        , HH.button
+            [ HP.classes [ cn "copy-icon-btn" ]
+            , HP.type_ HP.ButtonButton
+            , HP.title ("Copy " <> label_)
+            , HP.attr (HH.AttrName "aria-label") ("Copy " <> label_)
+            , HE.onClick (\_ -> CopyText full)
+            ]
+            [ md "md-icon" [] [ HH.text "content_copy" ] ]
+        ]
     ]
 
 badge :: forall w i. String -> HH.HTML w i
@@ -603,14 +639,6 @@ scopeFromSlug slug =
         (\scope -> Shell.scopeSlug scope == slug)
         Shell.allScopes
     )
-
-shortTx :: String -> String
-shortTx tx
-  | CodePoints.length tx <= 18 = tx
-  | otherwise =
-      CodePoints.take 10 tx
-        <> "..."
-        <> CodePoints.drop (CodePoints.length tx - 8) tx
 
 isLagging503 :: String -> Boolean
 isLagging503 err =

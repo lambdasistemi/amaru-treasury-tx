@@ -886,6 +886,25 @@ md-list-item {
   overflow-wrap: anywhere;
   color: var(--md-sys-color-on-surface);
 }
+/* #338 SB1 — truncated hash/address value + inline copy button
+   inside an audit detail kv row. */
+.audit-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.audit-copy code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--md-sys-color-on-surface);
+}
+.audit-copy .copy-icon-btn {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+}
 .audit-detail__body {
   margin-top: 14px;
 }
@@ -997,5 +1016,37 @@ md-list-item {
   }
   .site-footer {
     gap: 10px;
+  }
+}
+
+/* #338 SB3 / SB1 — phone layout at ≤390px.  Per-scope stat
+   tiles drop to a 2-up grid (3-up is too cramped), and the
+   audit results table stops forcing a 680px scroll-strip:
+   each row stacks its cells so the operator can read history
+   without horizontal scrolling. */
+@media (max-width: 390px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .audit-table {
+    min-width: 0;
+  }
+  .audit-table thead {
+    display: none;
+  }
+  .audit-table,
+  .audit-table tbody,
+  .audit-table tr,
+  .audit-table td {
+    display: block;
+    width: 100%;
+  }
+  .audit-table tr {
+    padding: 6px 0;
+    border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  }
+  .audit-table td {
+    padding: 4px 12px;
+    border-bottom: 0;
   }
 }

@@ -41,7 +41,7 @@ import Effect.Class (liftEffect)
 import Effect.Exception (error)
 import Effect.Now (now)
 import Foreign.Object as FO
-import Format (formatThousandsN, showAda, showUsdm)
+import Format (formatThousandsN, formatTreeJson)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
@@ -546,7 +546,18 @@ formColumn st =
       , modeSelector st.mode
       , formSection "01" "Scope"
           "Choose the registered scope you are spending from."
-          [ scopePicker st.mode st.scope ]
+          [ scopePicker st.mode st.scope
+          , case st.mode of
+              ModeDisburse ->
+                HH.div [ HP.classes [ cn "field__hint" ] ]
+                  [ HH.text
+                      "Selecting Contingency turns Disburse into a \
+                      \multi-scope payout: you add one (destination \
+                      \scope, ADA) row per beneficiary instead of a \
+                      \single beneficiary address."
+                  ]
+              _ -> HH.text ""
+          ]
       , formSection "02" "Wallet"
           "Operator bech32 address — fuel + collateral + change."
           [ namedFieldV
@@ -617,7 +628,10 @@ formColumn st =
                   _ ->
                     "Other scope owners that must co-sign."
               )
-              [ signersPicker st.scope st.extraSigners
+              [ case st.mode of
+                  ModeDisburse | st.scope == Contingency ->
+                    contingencySignersReadOnly
+                  _ -> signersPicker st.scope st.extraSigners
               , case st.mode of
                   ModeReorganize -> HH.text ""
                   ModeDisburse | st.scope == Contingency -> HH.text ""
@@ -2106,6 +2120,45 @@ signersPicker current selected =
           <> [ HH.text (scopeLong s) ]
       )
 
+-- | #338 SB5 — contingency disburse always requires all four
+-- | owned scope owners to sign (the builder derives them
+-- | on-chain; 'contingencyDisburseRequestJson' carries no
+-- | signer field).  So for the contingency case the signers
+-- | section is read-only: it lists the four required owners
+-- | rather than offering a meaningless extra-signers choice.
+contingencySignersReadOnly
+  :: forall m. H.ComponentHTML Action () m
+contingencySignersReadOnly =
+  HH.div
+    [ HP.classes [ cn "signers-picker" ]
+    , HP.id "operate-signers-picker"
+    , HP.attr (HH.AttrName "tabindex") "-1"
+    ]
+    ( map ownerChip ownedScopes
+        <>
+          [ HH.span [ HP.classes [ cn "signers-picker__hint" ] ]
+              [ HH.text
+                  "A contingency disbursement requires signatures \
+                  \from all four scope owners. Selecting fewer is \
+                  \meaningless — the transaction always requires all \
+                  \four."
+              ]
+          ]
+    )
+  where
+  ownerChip s =
+    HH.div
+      [ HP.classes [ cn "signer-chip", cn "signer-chip--required" ]
+      , HP.attr (HH.AttrName "data-active") "true"
+      , HP.title (scopeLong s <> " — required signer")
+      ]
+      [ HH.span [ HP.classes [ cn "signer-chip__check" ] ]
+          [ HH.text "✓" ]
+      , HH.text (scopeLong s)
+      , HH.span [ HP.classes [ cn "signer-chip__req" ] ]
+          [ HH.text "required" ]
+      ]
+
 buildActions
   :: forall m
    . Array String
@@ -2306,55 +2359,6 @@ previewBody st = case st.activeTab of
                 (FO.singleton "details" (formatTreeJson r))
             )
         ]
-
--- | #338 — rewrite a result-tree 'Json' for readability before
--- | it reaches 'JsonView'.  The renderer has no numeric hook, so
--- | lovelace / amount fields would otherwise show raw base units
--- | (e.g. @1556478040000@).  Walk the tree and replace the number
--- | under any key that names an amount with its human-readable
--- | string:
--- |
--- |   * a key containing @lovelace@ → ADA (always base units);
--- |   * a key containing @usdm@     → USDM;
--- |   * a bare @amount@ key, disambiguated by the sibling @unit@
--- |     field (@ada@ / @usdm@) the intent carries.
--- |
--- | String leaves (addresses, txids, hashes) are left untouched —
--- | 'JsonView''s default Cardano resolver already truncates them
--- | to @head…tail@ with the full value on a @title@ tooltip.
-formatTreeJson :: Json -> Json
-formatTreeJson = goValue Nothing Nothing
-  where
-  goValue :: Maybe String -> Maybe String -> Json -> Json
-  goValue unit mKey j =
-    Argonaut.caseJson
-      (const j)
-      (const j)
-      (\n -> formatNumber unit mKey n j)
-      (const j)
-      (\xs -> Argonaut.fromArray (map (goValue unit Nothing) xs))
-      (\o -> goObject o)
-      j
-
-  goObject o =
-    let
-      unit = FO.lookup "unit" o >>= Argonaut.toString
-    in
-      Argonaut.fromObject
-        (FO.mapWithKey (\k v -> goValue unit (Just k) v) o)
-
-  formatNumber unit mKey n j = case mKey of
-    Just k
-      | keyHas "lovelace" k -> Argonaut.fromString (showAda n)
-      | keyHas "usdm" k -> Argonaut.fromString (showUsdm n)
-      | String.toLower k == "amount" -> case unit of
-          Just "usdm" -> Argonaut.fromString (showUsdm n)
-          Just "ada" -> Argonaut.fromString (showAda n)
-          _ -> j
-    _ -> j
-
-  keyHas needle k =
-    String.contains (String.Pattern needle) (String.toLower k)
 
 intentPreview :: State -> Json
 intentPreview st = case st.result of

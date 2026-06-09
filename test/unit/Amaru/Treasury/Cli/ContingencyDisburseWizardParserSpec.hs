@@ -147,6 +147,7 @@ expectedContingencyOpts =
         , cdOptsValidityHours = Nothing
         , cdOptsDescription = "Emergency top-up"
         , cdOptsJustification = "Approved by council"
+        , cdOptsReferences = []
         , cdOptsExcludeSet = ExclusionSet []
         , cdOptsForcedSet = ForcedInclusionSet []
         }
@@ -185,6 +186,23 @@ spec =
                            ]
                     )
                     `shouldBe` Right (RouteContingency expectedContingencyOpts)
+
+            it "threads --reference-uri into cdOptsReferences" $
+                case classifyArgs
+                    ( baseArgv
+                        <> [ "--to"
+                           , "middleware:50"
+                           , "--reference-uri"
+                           , "ipfs://bafkreitest"
+                           ]
+                    ) of
+                    Right (RouteContingency opts) -> do
+                        length (cdOptsReferences opts) `shouldBe` 1
+                        show (cdOptsReferences opts)
+                            `shouldSatisfy` ("ipfs://bafkreitest" `isInfixOf`)
+                    other ->
+                        expectationFailure
+                            ("expected RouteContingency, got: " <> show other)
 
             it "accepts fractional ADA in --to (decimals to 6 places)" $
                 case classifyArgs (baseArgv <> ["--to", "middleware:1.5"]) of

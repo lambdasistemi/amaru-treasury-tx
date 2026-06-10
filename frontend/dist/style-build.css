@@ -420,14 +420,6 @@ input[type="number"].field__input { -moz-appearance: textfield; }
 .signers-picker__hint .mono { font-size: 11px; }
 
 /* ---------- buttons + actions ---------- */
-.build-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 6px 0 12px;
-  flex-wrap: wrap;
-  align-items: center;
-}
 
 /* #289 slice C — WCAG 2.1 SC 2.5.5: every interactive
    target on /operate must be ≥ 44×44 px.  Inputs already
@@ -503,7 +495,7 @@ input[type="number"].field__input { -moz-appearance: textfield; }
 
 /* #289 slice D — sectioned progress indicator.  A
    horizontal row of state chips above the form, plus a
-   right-edge "Jump to Build" shortcut.  The row wraps on
+   right-edge Reset action.  The row wraps on
    narrow viewports (mirrors slice A's topbar flex-wrap
    pattern) and scrolls horizontally as a last resort. */
 .operate-progress {
@@ -551,6 +543,9 @@ input[type="number"].field__input { -moz-appearance: textfield; }
   font-weight: 700;
   font-size: 14px;
   line-height: 1;
+}
+.operate-progress__reset {
+  margin-left: auto;
 }
 .btn {
   border: 1px solid transparent;

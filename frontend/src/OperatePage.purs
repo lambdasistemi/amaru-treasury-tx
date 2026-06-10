@@ -553,7 +553,6 @@ formColumn st =
     ( [ progressIndicator st
       , draftsBar st
       , modeSelector st.mode
-      , buildActions st
       , formSection "01" "Scope"
           "Choose the registered scope you are spending from."
           [ scopePicker st.mode st.scope
@@ -1086,9 +1085,8 @@ modeSelector active =
     ]
 
 -- | All form-level validation errors keyed by section.
--- | Used by 'buildActions' to show live status, by the
--- | reactive build scheduler to gate requests, and by the
--- | form to surface inline messages.
+-- | Used by the reactive build scheduler to gate requests
+-- | and by the form to surface inline messages.
 formErrors :: State -> Array String
 formErrors st =
   let
@@ -2237,21 +2235,6 @@ contingencySignersReadOnly =
           [ HH.text "required" ]
       ]
 
-buildActions
-  :: forall m
-   . State
-  -> H.ComponentHTML Action () m
-buildActions st =
-  HH.div [ HP.classes [ cn "build-actions" ] ]
-    [ HH.button
-        [ HP.classes [ cn "btn", cn "btn--ghost" ]
-        , HP.id "operate-reset-btn"
-        , HE.onClick (\_ -> ClickReset)
-        ]
-        [ HH.text "Reset" ]
-    , buildStatusPill (Just "operate-build-status") st
-    ]
-
 -- ---------------------------------------------------------------------------
 -- Preview column
 
@@ -3221,7 +3204,20 @@ progressIndicator st =
     , HP.attr (HH.AttrName "aria-label")
         "Form completion progress"
     ]
-    (map (progressChip st) allSections)
+    (map (progressChip st) allSections <> [ progressResetButton ])
+
+progressResetButton :: forall m. H.ComponentHTML Action () m
+progressResetButton =
+  HH.button
+    [ HP.classes
+        [ cn "btn"
+        , cn "btn--ghost"
+        , cn "operate-progress__reset"
+        ]
+    , HP.id "operate-reset-btn"
+    , HE.onClick (\_ -> ClickReset)
+    ]
+    [ HH.text "Reset" ]
 
 progressChip
   :: forall m

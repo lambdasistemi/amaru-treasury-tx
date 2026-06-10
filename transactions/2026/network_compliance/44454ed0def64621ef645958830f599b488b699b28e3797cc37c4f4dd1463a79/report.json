@@ -1,0 +1,213 @@
+{
+    "intent": {
+        "action": "swap",
+        "network": "mainnet",
+        "rationale": {
+            "description": "Sweep network_compliance ADA to USDM at floor 0.245",
+            "destinationLabel": "Network Compliance treasury",
+            "event": "disburse",
+            "justification": "Required to pay Antithesis as vendor",
+            "label": "Swap ADA<->USDM"
+        },
+        "schema": 1,
+        "scope": {
+            "id": "network_compliance",
+            "permissionsDeployedAt": "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+            "permissionsRewardAccount": "a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094",
+            "registryDeployedAt": "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2",
+            "registryPolicyId": "38c627d45835744a2d6c727124f2b5852e5564aeab3f608e0e84ea6d",
+            "scopesDeployedAt": "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0",
+            "treasuryAddress": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
+            "treasuryDeployedAt": "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+            "treasuryLeftoverLovelace": 2000000,
+            "treasuryLeftoverOtherAssets": {},
+            "treasuryLeftoverUsdm": 0,
+            "treasuryScriptHash": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+            "treasuryUtxos": [
+                "3ecffded917bb6aac602ae47ceb107b4c16c791e0956001565a920cfb1c03c6f#2",
+                "488e5b417aa4f573528057fd1d7ab6de4f7ad06e296f945ee4097d8a94ee62e7#1"
+            ]
+        },
+        "signers": [
+            "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+            "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+        ],
+        "swap": {
+            "amountLovelace": 41705173876,
+            "chunkSizeLovelace": 41705173876,
+            "coreOwner": "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb",
+            "extraPerChunkLovelace": 3280000,
+            "middlewareOwner": "97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2",
+            "networkComplianceOwner": "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+            "opsOwner": "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+            "poolId": "64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef",
+            "rateDenominator": 1000000,
+            "rateNumerator": 245000,
+            "sundaeProtocolFeeLovelace": 1280000,
+            "swapOrderAddress": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "usdmPolicy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+            "usdmToken": "0014df105553444d"
+        },
+        "validityUpperBoundSlot": 187910327,
+        "wallet": {
+            "address": "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz",
+            "extraTxIns": [],
+            "txIn": "3ecffded917bb6aac602ae47ceb107b4c16c791e0956001565a920cfb1c03c6f#3"
+        }
+    },
+    "result": {
+        "report": {
+            "identity": {
+                "bodySizeBytes": 1669,
+                "feeLovelace": 471355,
+                "totalCollateralLovelace": 707033,
+                "txId": "44454ed0def64621ef645958830f599b488b699b28e3797cc37c4f4dd1463a79",
+                "validityInterval": {
+                    "invalidBefore": null,
+                    "invalidHereafter": 187910327
+                }
+            },
+            "metadata": {
+                "auxiliaryDataHash": "a7385916d5283fa1f2b273f25472e72363f4ddd751b635972c684935b9b21cd8",
+                "cip1694LabelPresent": true
+            },
+            "network": "mainnet",
+            "outputs": [
+                {
+                    "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+                    "datum": "inlineDatum",
+                    "index": 0,
+                    "role": "swapOrder",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 41708453876
+                    }
+                },
+                {
+                    "address": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
+                    "datum": null,
+                    "index": 1,
+                    "role": "treasuryLeftover",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 2000000
+                    }
+                },
+                {
+                    "address": "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz",
+                    "datum": null,
+                    "index": 2,
+                    "role": "walletChange",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 89922784
+                    }
+                }
+            ],
+            "referenceInputs": [
+                "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0",
+                "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+                "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+                "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2"
+            ],
+            "schema": 1,
+            "signers": [
+                {
+                    "keyHash": "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+                    "scope": "network_compliance",
+                    "source": "selectedScopeOwner"
+                },
+                {
+                    "keyHash": "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+                    "scope": null,
+                    "source": "extraSigner"
+                }
+            ],
+            "treasuryAccounting": {
+                "inputTotal": {
+                    "assets": {},
+                    "lovelace": 41710453876
+                },
+                "inputs": [
+                    {
+                        "txIn": "3ecffded917bb6aac602ae47ceb107b4c16c791e0956001565a920cfb1c03c6f#2",
+                        "value": {
+                            "assets": {},
+                            "lovelace": 41708453876
+                        }
+                    },
+                    {
+                        "txIn": "488e5b417aa4f573528057fd1d7ab6de4f7ad06e296f945ee4097d8a94ee62e7#1",
+                        "value": {
+                            "assets": {},
+                            "lovelace": 2000000
+                        }
+                    }
+                ],
+                "netDebit": {
+                    "assets": {},
+                    "lovelace": 41708453876
+                },
+                "perChunkOverheadLovelace": 3280000,
+                "sundaeOrderTotal": {
+                    "assets": {},
+                    "lovelace": 41708453876
+                },
+                "treasuryLeftover": {
+                    "assets": {},
+                    "lovelace": 2000000
+                }
+            },
+            "validation": {
+                "bodySizeBytes": 1669,
+                "feeLovelace": 471355,
+                "intentNetwork": "mainnet",
+                "networkMatches": true,
+                "redeemerCount": 3,
+                "redeemerFailures": 0,
+                "socketNetworkMagic": 764824073,
+                "validationStatus": "ok",
+                "validityInterval": {
+                    "invalidBefore": null,
+                    "invalidHereafter": 187910327
+                }
+            },
+            "walletAccounting": {
+                "changeOutput": {
+                    "txIn": "44454ed0def64621ef645958830f599b488b699b28e3797cc37c4f4dd1463a79#2",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 89922784
+                    }
+                },
+                "collateralInput": {
+                    "txIn": "3ecffded917bb6aac602ae47ceb107b4c16c791e0956001565a920cfb1c03c6f#3",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 90394139
+                    }
+                },
+                "collateralReturn": {
+                    "txIn": "44454ed0def64621ef645958830f599b488b699b28e3797cc37c4f4dd1463a79#collateral-return",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 89687106
+                    }
+                },
+                "feeLovelace": 471355,
+                "inputs": [
+                    {
+                        "txIn": "3ecffded917bb6aac602ae47ceb107b4c16c791e0956001565a920cfb1c03c6f#3",
+                        "value": {
+                            "assets": {},
+                            "lovelace": 90394139
+                        }
+                    }
+                ],
+                "netSpendLovelace": 471355,
+                "withdrawalLovelace": 0
+            }
+        },
+        "tx-cbor": "84ac00d90102838258203ecffded917bb6aac602ae47ceb107b4c16c791e0956001565a920cfb1c03c6f028258203ecffded917bb6aac602ae47ceb107b4c16c791e0956001565a920cfb1c03c6f03825820488e5b417aa4f573528057fd1d7ab6de4f7ad06e296f945ee4097d8a94ee62e7010dd90102818258203ecffded917bb6aac602ae47ceb107b4c16c791e0956001565a920cfb1c03c6f0312d901028482582011ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf540082582025ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d86109502825820810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c00825820e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c020183a300583931fa6a58bbe2d0ff05534431c8e2f0ef2cbdc1602a8456e4b13c8f307732201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d011b00000009b6047ff4028201d818590157d8799fd8799f581c64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540efffd87c9f029fd8799f581c7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffbffd8799f581cf3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2effd8799f581c8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1ffd8799f581c97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2ffffff1a00138800d8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffd8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffffffffd87980ffd87a9f9f40401b00000009b5d27374ff9f581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad480014df105553444d1b000000026106c2b0ffffd87980ff8258393132201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d1a001e8480825839018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c31a055c1ce010825839018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c31a05588442111a000ac9d9021a0007313b031a0b3348b705a1581df1a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094000ed9010282581c8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1581cf3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e0b5820a03595b9b55711d95a79cd1fe6fc0ce872d4df1ec47195f7566d604be8e627ee075820a7385916d5283fa1f2b273f25472e72363f4ddd751b635972c684935b9b21cd8a105a382000082d87c9fa140a1401b00000009b6047ff4ff821a0007b3f31a0a2c015682000282d87c9fa140a1401b00000009b6047ff4ff821a0007d4b71a0a7c20e08203008280821a0003a1511a04d50acaf5d90103a100a119069ea464626f6479a6656576656e74686469736275727365656c6162656c6f53776170204144413c2d3e5553444d6a7265666572656e636573806b6465736372697074696f6e8178335377656570206e6574776f726b5f636f6d706c69616e63652041444120746f205553444d20617420666c6f6f7220302e3234356b64657374696e6174696f6ea1656c6162656c781b4e6574776f726b20436f6d706c69616e63652074726561737572796d6a757374696669636174696f6e817824526571756972656420746f2070617920416e74697468657369732061732076656e646f726840636f6e7465787483783e68747470733a2f2f6769746875622e636f6d2f53756e646165537761702d66696e616e63652f74726561737572792d636f6e7472616374732f626c6f622f782861643433313664306433366364656637383066383566633265633862333037653634356464633261781e2f6f6666636861696e2f7372632f6d657461646174612f737065632e6d6468696e7374616e6365783833386336323764343538333537343461326436633732373132346632623538353265353536346165616233663630386530653834656136646d68617368416c676f726974686d6b626c616b6532622d323536"
+    }
+}

@@ -4,6 +4,13 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.19.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.18.0...v0.2.19.0) (2026-06-10)
+
+### Features
+
+* **frontend:** reactive debounced tx build on /operate ([216f16b](https://github.com/lambdasistemi/amaru-treasury-tx/commit/216f16b842236635cf18a07f3c778801803cdc71))
+* **frontend:** /operate actions row at top, drop result jump ([8eef539](https://github.com/lambdasistemi/amaru-treasury-tx/commit/8eef539bec61e6f837ae5ec27a6c7ed5f19ed5a0))
+
 ## [0.2.18.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.17.0...v0.2.18.0) (2026-06-10)
 
 ### Features

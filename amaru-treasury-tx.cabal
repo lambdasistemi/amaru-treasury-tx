@@ -1,6 +1,6 @@
 cabal-version:      3.4
 name:               amaru-treasury-tx
-version:            0.2.18.0
+version:            0.2.19.0
 synopsis:           Build unsigned Amaru treasury transactions
 description:
   Haskell port of the Amaru treasury bash recipes

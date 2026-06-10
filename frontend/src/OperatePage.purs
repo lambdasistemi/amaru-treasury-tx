@@ -133,7 +133,14 @@ disburseUnitWire = case _ of
   UnitAda -> "ada"
   UnitUsdm -> "usdm"
 
-data Tab = TabIntent | TabCli | TabCbor | TabReport | TabGraph | TabTtl
+data Tab
+  = TabIntent
+  | TabCli
+  | TabCbor
+  | TabReport
+  | TabGraph
+  | TabTtl
+  | TabProofs
 
 derive instance eqTab :: Eq Tab
 
@@ -145,6 +152,7 @@ tabLabel = case _ of
   TabReport -> "Report"
   TabGraph -> "Graph"
   TabTtl -> "TTL"
+  TabProofs -> "Proofs"
 
 -- | Tabs that depend on the tx-build response stay clickable
 -- | even when no data is present yet — the body renders a
@@ -2372,7 +2380,7 @@ previewTabs active =
   HH.div [ HP.classes [ cn "preview-tabs" ] ]
     [ group "How" [ TabIntent, TabCli, TabReport ]
     , group "What" [ TabCbor, TabTtl ]
-    , group "Analysis" [ TabGraph ]
+    , group "Analysis" [ TabGraph, TabProofs ]
     ]
   where
   group label tabs =
@@ -2491,6 +2499,21 @@ previewBody st = case st.activeTab of
             "Copy graph-effect (JSON)"
         , graphEffectView ge.effect
         ]
+  TabProofs -> case proofsPreview st of
+    Just pr | not (Array.null pr.proofs) ->
+      HH.div
+        [ HP.classes [ cn "json-tree-wrapper" ] ]
+        ( [ copyBlockButton
+              (Argonaut.stringify pr.json)
+              "Copy proofs (JSON)"
+          ] <> map proofView pr.proofs
+        )
+    _ ->
+      HH.p_
+        [ HH.text
+            "No proofs yet — build the tx to run the SPARQL \
+            \proof suite."
+        ]
 
 intentPreview :: State -> Json
 intentPreview st = case st.result of
@@ -2569,6 +2592,85 @@ graphEffectPreview st = case st.result of
       Right ge -> Just { json: v, effect: ge }
       Left _ -> Nothing
   _ -> Nothing
+
+-- | One SPARQL proof table from the build response (#358):
+-- | the stable proof name plus its result columns and rows.
+type ProofResult =
+  { name :: String
+  , columns :: Array String
+  , rows :: Array (Array String)
+  }
+
+-- | The @\<prefix\>Proofs@ array of the build response — like
+-- | the graph-effect a real nested value, so it decodes
+-- | generically without a generated Api type.  Returns the raw
+-- | 'Json' (for the copy button) beside the decoded tables, or
+-- | 'Nothing' when the tx hasn't been built, the build failed,
+-- | or the backend could not run the suite (a @null@ field).
+proofsPreview
+  :: State -> Maybe { json :: Json, proofs :: Array ProofResult }
+proofsPreview st = case st.result of
+  Result j -> do
+    o <- Argonaut.toObject j
+    v <- FO.lookup (responsePrefix st.mode <> "Proofs") o
+    case decodeJson v of
+      Right proofs -> Just { json: v, proofs }
+      Left _ -> Nothing
+  _ -> Nothing
+
+-- | One proof as a titled section over the same table classes
+-- | the audit SPARQL lens uses, so the build-time proofs read
+-- | identically to the indexed history tables.
+proofView :: forall w i. ProofResult -> HH.HTML w i
+proofView proof =
+  HH.section
+    [ HP.classes [ cn "audit-detail__section" ] ]
+    [ HH.h3_ [ HH.text (humaniseProofName proof.name) ]
+    , if Array.null proof.rows then
+        HH.p
+          [ HP.classes [ cn "audit-detail__empty" ] ]
+          [ HH.text "No rows." ]
+      else
+        HH.div
+          [ HP.classes [ cn "audit-table-wrap" ] ]
+          [ HH.table
+              [ HP.classes [ cn "audit-table" ] ]
+              [ HH.thead_
+                  [ HH.tr_
+                      ( map
+                          (\c -> HH.th_ [ HH.text c ])
+                          proof.columns
+                      )
+                  ]
+              , HH.tbody_ (map proofRow proof.rows)
+              ]
+          ]
+    ]
+
+proofRow :: forall w i. Array String -> HH.HTML w i
+proofRow cells =
+  HH.tr_
+    ( map
+        ( \c ->
+            HH.td [ HP.classes [ cn "mono" ] ] [ HH.text c ]
+        )
+        cells
+    )
+
+-- | @value-conservation@ → @Value conservation@: kebab to a
+-- | sentence-cased heading.
+humaniseProofName :: String -> String
+humaniseProofName name =
+  case String.uncons spaced of
+    Nothing -> spaced
+    Just { head, tail } ->
+      String.toUpper (String.singleton head) <> tail
+  where
+  spaced =
+    String.replaceAll
+      (String.Pattern "-")
+      (String.Replacement " ")
+      name
 
 -- | Render the resolved graph-effect as two sections — Spends
 -- | (resolved inputs) and Produces (resolved outputs).  A thin

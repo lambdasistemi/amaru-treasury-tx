@@ -470,13 +470,10 @@ data Action
   | SetSaveDraftName String
   | ConfirmSaveDraft
   | CancelSaveDraft
-  -- #289 slice D — progress-chip jump.  Carries an
+  -- #289 slice D — progress-chip jump. Carries an
   -- already-resolved input id so the handler is a thin
-  -- `_focusById` wrapper (no State lookup at action-fire
-  -- time, which keeps the chip render-and-click pure
-  -- with respect to the snapshot it was rendered from).
+  -- `_focusById` wrapper.
   | JumpToSection String
-  | FocusResultPanel
 
 -- ---------------------------------------------------------------------------
 -- Component
@@ -556,6 +553,7 @@ formColumn st =
     ( [ progressIndicator st
       , draftsBar st
       , modeSelector st.mode
+      , buildActions st
       , formSection "01" "Scope"
           "Choose the registered scope you are spending from."
           [ scopePicker st.mode st.scope
@@ -651,10 +649,6 @@ formColumn st =
                     Just msg -> fieldError msg
                     Nothing -> HH.text ""
               ]
-          -- Metadata is the server's own --metadata config —
-          -- never on the wire, never an operator input.  The
-          -- CLI preview renders a <metadata.json> placeholder.
-          , buildActions st
           ]
     )
 
@@ -2267,7 +2261,6 @@ previewColumn st =
     [ HH.div
         [ HP.classes [ cn "preview-card" ]
         , HP.id "operate-result-panel"
-        , HP.attr (HH.AttrName "tabindex") "-1"
         ]
         [ buildStatus st
         , previewTabs st.activeTab
@@ -3215,14 +3208,9 @@ copyBlockButton payload label =
 -- ---------------------------------------------------------------------------
 -- #288 — drafts / history bar + snapshot serialization
 
--- | #289 slice D — sectioned progress indicator.  Five
+-- | #289 slice D — sectioned progress indicator. Five
 -- | section chips (Identity / Amount / Rationale /
--- | References / Signers) plus a result-panel jump at
--- | the right edge (slice B picked Pattern A, so the
--- | action bar is inline at the form-flow end on mobile
--- | and the jump shortcut is the ergonomic way to reach
--- | the live build result without scrolling on a 390 px
--- | viewport).
+-- | References / Signers).
 -- | Sits ABOVE the drafts bar so it's the first thing the
 -- | operator sees on the page.
 progressIndicator
@@ -3233,9 +3221,7 @@ progressIndicator st =
     , HP.attr (HH.AttrName "aria-label")
         "Form completion progress"
     ]
-    ( map (progressChip st) allSections
-        <> [ jumpToResultChip st ]
-    )
+    (map (progressChip st) allSections)
 
 progressChip
   :: forall m
@@ -3275,30 +3261,6 @@ progressChip st sec =
           [ HH.text glyph ]
       , HH.text (sectionLabel sec)
       ]
-
--- | Right-edge result affordance.  With reactive builds
--- | there is no Build button to focus, so the shortcut
--- | scrolls to the live result panel instead.
-jumpToResultChip
-  :: forall m. State -> H.ComponentHTML Action () m
-jumpToResultChip st =
-  let
-    blocked = not (Array.null (formErrors st))
-    stateAttr = if blocked then "pending" else "complete"
-  in
-    HH.button
-      [ HP.classes
-          [ cn "btn"
-          , cn "operate-progress__chip"
-          , cn "operate-progress__chip--build"
-          ]
-      , HP.attr (HH.AttrName "data-state") stateAttr
-      , HP.attr (HH.AttrName "aria-label")
-          "Jump to build result panel"
-      , HP.type_ HP.ButtonButton
-      , HE.onClick (\_ -> FocusResultPanel)
-      ]
-      [ HH.text "Result ▼" ]
 
 -- | Top-of-/operate bar carrying the `Drafts ▾` picker, the
 -- | `Save as draft…` button (and its inline editor), and the
@@ -4070,8 +4032,6 @@ handleAction = case _ of
       _ -> pure unit
   CancelSaveDraft -> H.modify_ \s -> s { saveDialog = Nothing }
   JumpToSection inputId -> H.liftEffect (_focusById inputId)
-  FocusResultPanel ->
-    H.liftEffect (_focusById "operate-result-panel")
 
 -- | POST the active request body to the given endpoint and
 -- | decode the response as opaque JSON.  Same boilerplate

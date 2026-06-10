@@ -424,31 +424,9 @@ input[type="number"].field__input { -moz-appearance: textfield; }
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding: 6px 0 16px;
-  position: sticky;
-  bottom: 0;
-  background: linear-gradient(to top, var(--md-sys-color-background) 60%, transparent);
-  z-index: 5;
-}
-
-/* #289 slice B — Pattern A scoped to mobile.  On phones the
-   single-column form flow means a sticky bottom bar covers
-   the wallet field and any below-input validation errors,
-   so we drop sticky positioning (and its gradient backdrop)
-   below 600 px and let the action bar render inline at the
-   flow end.  Desktop keeps the existing sticky behaviour —
-   the 2-column layout has the preview column on the right,
-   so a sticky bottom bar on the form column doesn't cover
-   content during normal scrolling.  Slice D will add a
-   "Jump to Build" affordance via the progress indicator
-   for the mobile path. */
-@media (max-width: 600px) {
-  .build-actions {
-    position: static;
-    background: transparent;
-    padding-top: 12px;
-    z-index: auto;
-  }
+  padding: 6px 0 12px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 /* #289 slice C — WCAG 2.1 SC 2.5.5: every interactive
@@ -568,10 +546,6 @@ input[type="number"].field__input { -moz-appearance: textfield; }
 .operate-progress__chip[data-state="pending"] {
   /* Default surface — the operator can see where they
      haven't been yet without it visually shouting. */
-}
-.operate-progress__chip--build {
-  margin-left: auto;
-  font-weight: 700;
 }
 .operate-progress__glyph {
   font-weight: 700;

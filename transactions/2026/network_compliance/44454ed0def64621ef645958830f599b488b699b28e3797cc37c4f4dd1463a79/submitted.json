@@ -1,0 +1,19 @@
+{
+  "txid": "44454ed0def64621ef645958830f599b488b699b28e3797cc37c4f4dd1463a79",
+  "block": null,
+  "block_height": null,
+  "slot": null,
+  "block_time": null,
+  "timestamp": "2026-05-21T19:36:02Z",
+  "submitter": "paolino@cardano-mainnet (n2c socket)",
+  "fee_lovelace": 471355,
+  "valid_contract": true,
+  "inclusion_evidence": {
+    "method": "tx-validate-mempool-short-circuit",
+    "tip_slot_at_check": 187825880,
+    "tip_block_height_at_check": 13447994,
+    "tip_block_hash_at_check": "8d01766d28fa47d94bd5cd3ad0223981da7833431bc374fc6b08494398ecc500",
+    "tip_checked_at": "2026-05-21T19:36:30Z",
+    "note": "block/slot/block_height/block_time fields are null because this session used local n2c only (no indexer); tx-validate on signed-tx.hex returned ConwayMempoolFailure 'All inputs are spent' which proves chain inclusion before the tip above. Backfill these fields when a Blockfrost/koios session is available."
+  }
+}

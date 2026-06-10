@@ -37,6 +37,9 @@ module Amaru.Treasury.Api.BuildSwap
 
       -- * Handler runner
     , runBuildSwap
+
+      -- * CLI preview
+    , renderCli
     ) where
 
 import Control.Exception (SomeException, try)
@@ -99,7 +102,6 @@ import Amaru.Treasury.Wizard.Swap
 data SwapBuildRequest = SwapBuildRequest
     { sbrScope :: ScopeId
     , sbrWalletAddr :: Text
-    , sbrMetadataPath :: FilePath
     , sbrAmount :: SwapAmount
     , sbrRate :: SwapRate
     , sbrValidityHours :: Maybe Word16
@@ -206,8 +208,13 @@ exclude/extra-tx-in lists default to empty in this slice
 (#263 PR A scope).
 -}
 mapToWizardOpts
-    :: SwapBuildRequest -> Either WizardFailure WizardOpts
-mapToWizardOpts SwapBuildRequest{..} = do
+    :: FilePath
+    -- ^ Server-configured metadata path; never a wire
+    --   field (a client-supplied path would let any web
+    --   caller pick which server-side file is opened).
+    -> SwapBuildRequest
+    -> Either WizardFailure WizardOpts
+mapToWizardOpts serverMetadataPath SwapBuildRequest{..} = do
     order <- case sbrAmount of
         AmountFixedUsdm usdm chunkSpec ->
             Right (FixedUsdm usdm (mapChunk chunkSpec))
@@ -246,7 +253,7 @@ mapToWizardOpts SwapBuildRequest{..} = do
     Right
         WizardOpts
             { wOptsWalletAddr = sbrWalletAddr
-            , wOptsMetadataPath = sbrMetadataPath
+            , wOptsMetadataPath = serverMetadataPath
             , wOptsOut = Nothing
             , wOptsLog = Nothing
             , wOptsScope = sbrScope
@@ -283,14 +290,19 @@ Mapping failure families to status codes is deferred to a
 future commit (see #263 PR A scope).
 -}
 runBuildSwap
-    :: GlobalOpts -> Backend -> SwapBuildRequest -> IO SwapBuildResponse
-runBuildSwap g backend req = do
+    :: GlobalOpts
+    -> FilePath
+    -- ^ Server-configured metadata path
+    -> Backend
+    -> SwapBuildRequest
+    -> IO SwapBuildResponse
+runBuildSwap g serverMetadataPath backend req = do
     TIO.hPutStrLn
         stderr
         ( "amaru-treasury-tx-api: POST /v1/build/swap scope="
             <> T.pack (show (sbrScope req))
         )
-    case mapToWizardOpts req of
+    case mapToWizardOpts serverMetadataPath req of
         Left wf -> do
             TIO.hPutStrLn
                 stderr
@@ -490,6 +502,11 @@ buildFailureTag = \case
 {- | Render the equivalent @amaru-treasury-tx swap-wizard@
 CLI invocation for a request.  Convenience for operators
 who want to reproduce the build locally.
+
+@--metadata@ renders the neutral @\<metadata.json\>@
+placeholder: the operator substitutes their local copy, and
+the server's own filesystem path never leaks into the
+response.
 -}
 renderCli :: SwapBuildRequest -> Text
 renderCli SwapBuildRequest{..} =
@@ -498,7 +515,7 @@ renderCli SwapBuildRequest{..} =
         ( "amaru-treasury-tx swap-wizard"
             : ("--scope " <> T.pack (show sbrScope))
             : ("--wallet-addr " <> sbrWalletAddr)
-            : ("--metadata " <> T.pack sbrMetadataPath)
+            : "--metadata <metadata.json>"
             : amountArgs sbrAmount
                 <> rateArgs sbrRate
                 <> validityArgs sbrValidityHours

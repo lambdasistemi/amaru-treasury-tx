@@ -387,10 +387,10 @@ spec = do
                     { scope = s
                     , amountAda = a
                     }
+            serverMetadataPath = "journal/2026/metadata.json"
             baseReq dests =
                 ContingencyDisburseBuildRequest
                     { walletAddr = "addr_test1wallet"
-                    , metadataPath = "journal/2026/metadata.json"
                     , destinations = dests
                     , validityHours = Nothing
                     , description = "rainy day"
@@ -408,10 +408,13 @@ spec = do
                     { references = [sampleRef]
                     }
         it "rejects an empty destinations list" $
-            mapToContingencyDisburseOpts (baseReq [])
+            mapToContingencyDisburseOpts
+                serverMetadataPath
+                (baseReq [])
                 `shouldSatisfy` isLeft
         it "rejects contingency as a destination scope" $
             mapToContingencyDisburseOpts
+                serverMetadataPath
                 (baseReq [mkDest Contingency 1.0])
                 `shouldSatisfy` isLeft
         it
@@ -419,6 +422,7 @@ spec = do
             \ContingencyDisburseOpts (ADA -> lovelace, order \
             \preserved)"
             $ mapToContingencyDisburseOpts
+                serverMetadataPath
                 ( baseReq
                     [ mkDest CoreDevelopment 1.0
                     , mkDest Middleware 2.5
@@ -449,7 +453,10 @@ spec = do
             \disburse)"
             $ fmap
                 cdOptsReferences
-                (mapToContingencyDisburseOpts reqWithRefs)
+                ( mapToContingencyDisburseOpts
+                    serverMetadataPath
+                    reqWithRefs
+                )
                 `shouldBe` Right [sampleRef]
         it "round-trips a request carrying references" $
             Aeson.decode (Aeson.encode reqWithRefs)

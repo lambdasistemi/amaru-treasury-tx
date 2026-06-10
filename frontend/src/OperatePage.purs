@@ -354,7 +354,6 @@ type State =
   , justification :: String
   , destinationLabel :: String
   , extraSigners :: Array Scope
-  , metadataPath :: String
   , activeTab :: Tab
   , result :: BuildResult
   , theme :: Theme.Theme
@@ -403,7 +402,6 @@ initialState =
   , justification: ""
   , destinationLabel: "core_development"
   , extraSigners: []
-  , metadataPath: "/etc/amaru-treasury/metadata.json"
   , activeTab: TabIntent
   , result: NotStarted
   , theme: Theme.Dark
@@ -450,7 +448,6 @@ data Action
   | SetJustification String
   | SetDestinationLabel String
   | ToggleSigner Scope
-  | SetMetadataPath String
   | SetTab Tab
   | ClickReset
   | ClickBuild
@@ -648,10 +645,9 @@ formColumn st =
                     Just msg -> fieldError msg
                     Nothing -> HH.text ""
               ]
-          -- Metadata is baked into the image (single-tenant
-          -- deploy) — no per-request override.  Keeps
-          -- 'state.metadataPath' for the CLI preview, but the
-          -- form no longer pretends it's an operator input.
+          -- Metadata is the server's own --metadata config —
+          -- never on the wire, never an operator input.  The
+          -- CLI preview renders a <metadata.json> placeholder.
           , buildActions (formErrors st)
           ]
     )
@@ -2758,7 +2754,6 @@ swapRequestJson st =
   Argonaut.fromObject $ FO.fromFoldable
     [ Tuple "sbrScope" (Argonaut.fromString (scopeSlug st.scope))
     , Tuple "sbrWalletAddr" (Argonaut.fromString st.walletAddr)
-    , Tuple "sbrMetadataPath" (Argonaut.fromString st.metadataPath)
     , Tuple "sbrAmount" (amountJson st)
     , Tuple "sbrRate" (rateJson st)
     , Tuple "sbrValidityHours" (validityJson st.validityHours)
@@ -2786,7 +2781,6 @@ disburseRequestJson st =
     , Tuple "dbrWalletAddr" (Argonaut.fromString st.walletAddr)
     , Tuple "dbrBeneficiaryAddr"
         (Argonaut.fromString st.beneficiaryAddr)
-    , Tuple "dbrMetadataPath" (Argonaut.fromString st.metadataPath)
     , Tuple "dbrUnit"
         ( Argonaut.fromString
             (disburseUnitWire st.disburseUnit)
@@ -2827,7 +2821,6 @@ reorganizeRequestJson st =
   Argonaut.fromObject $ FO.fromFoldable
     [ Tuple "rbrScope" (Argonaut.fromString (scopeSlug st.scope))
     , Tuple "rbrWalletAddr" (Argonaut.fromString st.walletAddr)
-    , Tuple "rbrMetadataPath" (Argonaut.fromString st.metadataPath)
     , Tuple "rbrSplitNativeAssets"
         (Argonaut.fromBoolean st.splitNativeAssets)
     , Tuple "rbrValidityHours" (validityJson st.validityHours)
@@ -2850,8 +2843,6 @@ contingencyDisburseRequestJson :: State -> Json
 contingencyDisburseRequestJson st =
   Argonaut.fromObject $ FO.fromFoldable
     [ Tuple "walletAddr" (Argonaut.fromString st.walletAddr)
-    , Tuple "metadataPath"
-        (Argonaut.fromString st.metadataPath)
     , Tuple "destinations"
         ( Argonaut.fromArray
             ( map contingencyDestinationJson
@@ -2980,7 +2971,7 @@ swapCliCommand st =
         [ "amaru-treasury-tx swap-wizard \\"
         , "  --scope " <> scopeSlug st.scope <> " \\"
         , "  --wallet-addr " <> walletForCli st.walletAddr <> " \\"
-        , "  --metadata " <> st.metadataPath <> " \\"
+        , "  --metadata <metadata.json> \\"
         , amountFlags st
         , rateFlags st
         , validityFlag st.validityHours
@@ -3005,7 +2996,7 @@ disburseCliCommand st =
         , "  --beneficiary-addr "
             <> beneficiaryForCli st.beneficiaryAddr
             <> " \\"
-        , "  --metadata " <> st.metadataPath <> " \\"
+        , "  --metadata <metadata.json> \\"
         , "  --unit "
             <> disburseUnitWire st.disburseUnit
             <> " \\"
@@ -3044,7 +3035,7 @@ reorganizeCliCommand st =
         [ "amaru-treasury-tx reorganize-wizard"
         , "  --scope " <> scopeSlug st.scope
         , "  --wallet-addr " <> walletForCli st.walletAddr
-        , "  --metadata " <> st.metadataPath
+        , "  --metadata <metadata.json>"
         , validityFlagBare st.validityHours
         , optionalTextFlag "--description" st.description
         , optionalTextFlag "--justification" st.justification
@@ -3071,7 +3062,7 @@ contingencyDisburseCliCommand st =
         ( [ "amaru-treasury-tx disburse-wizard"
           , "  --scope contingency"
           , "  --wallet-addr " <> walletForCli st.walletAddr
-          , "  --metadata " <> st.metadataPath
+          , "  --metadata <metadata.json>"
           ]
             <> map contingencyDestFlag st.contingencyDestinations
             <>
@@ -3874,7 +3865,6 @@ handleAction = case _ of
               st.extraSigners <> [ s ]
         }
     scheduleAutoSave
-  SetMetadataPath s -> H.modify_ \st -> st { metadataPath = s }
   SetTab t -> H.modify_ \st -> st { activeTab = t }
   ClickReset -> do
     -- Reset is an operator-initiated abandon of the

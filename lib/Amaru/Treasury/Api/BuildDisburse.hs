@@ -37,6 +37,9 @@ module Amaru.Treasury.Api.BuildDisburse
 
       -- * Handler runner
     , runBuildDisburse
+
+      -- * CLI preview
+    , renderCli
     ) where
 
 import Control.Exception (SomeException, try)
@@ -103,7 +106,6 @@ data DisburseBuildRequest = DisburseBuildRequest
     { dbrScope :: ScopeId
     , dbrWalletAddr :: Text
     , dbrBeneficiaryAddr :: Text
-    , dbrMetadataPath :: FilePath
     , dbrUnit :: Text
     -- ^ Currency selector; @"ada"@ or @"usdm"@
     --   (case-insensitive).  Mapper rejects other values.
@@ -180,6 +182,11 @@ data DisburseBuildResponse = DisburseBuildResponse
 in-process 'DisburseWizardOpts' that 'buildDisburseIntent'
 consumes.
 
+The metadata path is the SERVER's configured @--metadata@
+(threaded from the binary's own config), never a wire
+field: a client-supplied path would let any web caller
+pick which server-side file the builder opens.
+
 Returns 'Left' on inputs whose translation can fail before
 the wizard runs at all: unrecognised unit and non-positive
 amount.  Other validation (bech32, scope membership,
@@ -192,15 +199,17 @@ those fields in a later slice if the dashboard ever needs
 to surface them).
 -}
 mapToDisburseWizardOpts
-    :: DisburseBuildRequest
+    :: FilePath
+    -- ^ Server-configured metadata path
+    -> DisburseBuildRequest
     -> Either WizardFailure DisburseWizardOpts
-mapToDisburseWizardOpts DisburseBuildRequest{..} = do
+mapToDisburseWizardOpts serverMetadataPath DisburseBuildRequest{..} = do
     unit <- parseUnit dbrUnit
     amountInteger <- toSmallestUnit unit dbrAmount
     Right
         DisburseWizardOpts
             { dwOptsWalletAddr = dbrWalletAddr
-            , dwOptsMetadataPath = dbrMetadataPath
+            , dwOptsMetadataPath = serverMetadataPath
             , dwOptsOut = Nothing
             , dwOptsLog = Nothing
             , dwOptsScope = dbrScope
@@ -269,16 +278,18 @@ returns a 200 with those fields populated.
 -}
 runBuildDisburse
     :: GlobalOpts
+    -> FilePath
+    -- ^ Server-configured metadata path
     -> Backend
     -> DisburseBuildRequest
     -> IO DisburseBuildResponse
-runBuildDisburse g backend req = do
+runBuildDisburse g serverMetadataPath backend req = do
     TIO.hPutStrLn
         stderr
         ( "amaru-treasury-tx-api: POST /v1/build/disburse scope="
             <> T.pack (show (dbrScope req))
         )
-    case mapToDisburseWizardOpts req of
+    case mapToDisburseWizardOpts serverMetadataPath req of
         Left wf -> do
             TIO.hPutStrLn
                 stderr
@@ -471,6 +482,11 @@ buildFailureTag = \case
 {- | Render the equivalent @amaru-treasury-tx disburse-wizard@
 CLI invocation for a request.  Convenience for operators
 who want to reproduce the build locally.
+
+@--metadata@ renders the neutral @\<metadata.json\>@
+placeholder: the operator substitutes their local copy, and
+the server's own filesystem path never leaks into the
+response.
 -}
 renderCli :: DisburseBuildRequest -> Text
 renderCli DisburseBuildRequest{..} =
@@ -480,7 +496,7 @@ renderCli DisburseBuildRequest{..} =
             : ("--scope " <> T.pack (show dbrScope))
             : ("--wallet-addr " <> dbrWalletAddr)
             : ("--beneficiary-addr " <> dbrBeneficiaryAddr)
-            : ("--metadata " <> T.pack dbrMetadataPath)
+            : "--metadata <metadata.json>"
             : ("--unit " <> T.toLower dbrUnit)
             : ("--amount " <> T.pack (show dbrAmount))
             : validityArgs dbrValidityHours

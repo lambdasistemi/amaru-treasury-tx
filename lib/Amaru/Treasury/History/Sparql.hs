@@ -35,6 +35,8 @@ module Amaru.Treasury.History.Sparql
 
       -- * Lattice construction
     , buildHistoryLattice
+    , turtlePrefixLines
+    , metadataEntityTriples
 
       -- * Query results
     , HistoryQueryResult (..)
@@ -622,17 +624,27 @@ scopeRole :: ScopeId -> Text -> Text
 scopeRole scope role =
     scopeText scope <> " " <> role
 
+{- | The @\@prefix@ declarations every Turtle document this module
+assembles opens with: @atx:@, @cardano:@, @treasury:@, @rdfs:@,
+and @xsd:@. Exported so sibling emitters (the build-response TTL
+of "Amaru.Treasury.Api.Ttl") declare the same vocabulary before
+reusing 'metadataEntityTriples'.
+-}
+turtlePrefixLines :: [Text]
+turtlePrefixLines =
+    [ "@prefix atx: <https://lambdasistemi.github.io/amaru-treasury-tx/vocab/history#> ."
+    , "@prefix cardano: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/cardano#> ."
+    , "@prefix treasury: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/treasury#> ."
+    , "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> ."
+    , "@prefix xsd: <http://www.w3.org/2001/XMLSchema#> ."
+    ]
+
 historyMetadataTurtle :: [TxSummaryEntry] -> ByteString
 historyMetadataTurtle entries =
     TE.encodeUtf8 $
         T.unlines $
-            [ "@prefix atx: <https://lambdasistemi.github.io/amaru-treasury-tx/vocab/history#> ."
-            , "@prefix cardano: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/cardano#> ."
-            , "@prefix treasury: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/treasury#> ."
-            , "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> ."
-            , "@prefix xsd: <http://www.w3.org/2001/XMLSchema#> ."
-            , ""
-            ]
+            turtlePrefixLines
+                <> [""]
                 <> concat
                     [ entryMetadata ix entry
                     | (ix, entry) <- zip [(0 :: Int) ..] entries

@@ -171,6 +171,11 @@ data DisburseBuildResponse = DisburseBuildResponse
     --   Present iff tx build succeeded and the indexed UTxO
     --   state could resolve the projection; attached
     --   additively by the build handler, not the runner.
+    , dbrTtl :: Maybe Text
+    -- ^ RDF Turtle lattice of the unsigned tx (#357): prefix
+    --   block + metadata entity overlay + @cq-rdf body@
+    --   triples.  Best-effort like the graph-effect; attached
+    --   additively by the build handler, not the runner.
     }
     deriving (Eq, Show, Generic)
     deriving anyclass (FromJSON, ToJSON)
@@ -352,6 +357,7 @@ runBuildDisburse g serverMetadataPath backend req = do
                                 , dbrFailureReason = Nothing
                                 , dbrBuildFailureTag = Nothing
                                 , dbrGraphEffect = Nothing
+                                , dbrTtl = Nothing
                                 }
                     let trB =
                             Tracer
@@ -444,6 +450,7 @@ runBuildDisburse g serverMetadataPath backend req = do
             , dbrFailureReason = Just (renderWizardFailure wf)
             , dbrBuildFailureTag = Nothing
             , dbrGraphEffect = Nothing
+            , dbrTtl = Nothing
             }
 
 {- | Constructor tag of a 'WizardFailure' as a stable

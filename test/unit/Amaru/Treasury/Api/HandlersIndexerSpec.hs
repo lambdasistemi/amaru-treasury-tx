@@ -61,6 +61,9 @@ import Test.Hspec
 import Amaru.Treasury.Api.BuildDisburse
     ( DisburseBuildResponse (..)
     )
+import Amaru.Treasury.Api.BuildReorganize
+    ( ReorganizeBuildResponse (..)
+    )
 import Amaru.Treasury.Api.BuildSwap
     ( SwapBuildResponse (..)
     )
@@ -356,14 +359,15 @@ trappedBuildHandlers apiIdx addr =
         (\provider _req -> buildQuery provider >> pure emptySwapResponse)
         (\provider _req -> buildQuery provider >> pure emptyDisburseResponse)
         (\provider _req -> buildQuery provider >> pure emptyDisburseResponse)
-        ( \provider _req -> buildQuery provider >> pure (error "unused reorganize response")
+        ( \provider _req -> buildQuery provider >> pure emptyReorganizeResponse
         )
   where
     -- The build slots only exist to prove the read goes through the
-    -- indexer-backed provider; the swap\/disburse handlers post-process
-    -- their response (the #345 graph-effect attach), so those two slots
-    -- return a concrete all-'Nothing' response whose @cborHex@ is
-    -- 'Nothing' — a clean attach pass-through — rather than a bottom.
+    -- indexer-backed provider; every handler post-processes its
+    -- response (the #345 graph-effect and #357 TTL attaches), so the
+    -- slots return a concrete all-'Nothing' response whose @cborHex@
+    -- is 'Nothing' — a clean attach pass-through — rather than a
+    -- bottom.
     buildQuery :: Provider IO -> IO ()
     buildQuery provider = do
         _ <- queryUTxOs provider addr
@@ -385,6 +389,7 @@ emptySwapResponse =
         , sbrFailureReason = Nothing
         , sbrBuildFailureTag = Nothing
         , sbrGraphEffect = Nothing
+        , sbrTtl = Nothing
         }
 
 {- | An all-'Nothing' disburse build response (used for both the
@@ -403,6 +408,25 @@ emptyDisburseResponse =
         , dbrFailureReason = Nothing
         , dbrBuildFailureTag = Nothing
         , dbrGraphEffect = Nothing
+        , dbrTtl = Nothing
+        }
+
+{- | An all-'Nothing' reorganize build response: no CBOR, so the TTL
+attach is a pass-through.
+-}
+emptyReorganizeResponse :: ReorganizeBuildResponse
+emptyReorganizeResponse =
+    ReorganizeBuildResponse
+        { rbrIntentJson = Nothing
+        , rbrCli = Nothing
+        , rbrCborHex = Nothing
+        , rbrCborEnvelope = Nothing
+        , rbrReport = Nothing
+        , rbrFailureTag = Nothing
+        , rbrFailureField = Nothing
+        , rbrFailureReason = Nothing
+        , rbrBuildFailureTag = Nothing
+        , rbrTtl = Nothing
         }
 
 apiMainSource :: FilePath

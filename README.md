@@ -31,6 +31,25 @@ built on the
 [`cardano-node-clients`](https://github.com/lambdasistemi/cardano-node-clients)
 `TxBuild` DSL.
 
+## Live operator UI
+
+A hosted operator web app runs at
+**<https://amaru-treasury.plutimus.com>** — a browser SPA backed by the
+`amaru-treasury-tx-api` server (with an embedded chain-sync indexer):
+
+- **View** — live dashboard across the five registered scopes.
+- **Audit** — indexer-backed transaction history and tx detail with
+  RDF-resolved scope/role labels, decoded swap/treasury datums, and the
+  named SPARQL / SHACL **RDF lenses** over the history lattice.
+- **Operate** — build unsigned swap / disburse / reorganize transactions
+  from the browser (the same wizards as the CLI), with a **Graph** tab
+  that previews the resolved spend→produce effect before signing.
+- **Books** — saved operator values (wallets, references) with
+  import/export.
+
+The app builds unsigned transactions only; signing and submission stay
+off the server.
+
 ## Documentation
 
 The full operator and developer documentation lives at

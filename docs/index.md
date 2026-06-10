@@ -8,6 +8,12 @@ assembling/submitting signed transactions on top of the
 Haskell port of the bash recipes in
 [`pragma-org/amaru-treasury/journal/2026/`][recipes].
 
+A hosted operator web app runs at
+**<https://amaru-treasury.plutimus.com>** — View (dashboard), Audit
+(history + RDF-resolved tx detail + SPARQL/SHACL lenses), Operate (build
+unsigned txs in the browser, with a Graph tab previewing the resolved
+spend→produce effect), and Books. It builds unsigned transactions only.
+
 ## Quick links
 
 - [**Quickstart**](quickstart.md) — wizard-to-`tx-build` pipes, pre-signing report review, and vault-backed witness creation.

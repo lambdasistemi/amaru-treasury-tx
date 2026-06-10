@@ -545,6 +545,7 @@ stubHandlers =
                     , sbrBuildFailureTag = Nothing
                     , sbrGraphEffect = Nothing
                     , sbrTtl = Nothing
+                    , sbrProofs = Nothing
                     }
         , hBuildDisburse = \_ -> pure disburseIntentFailureResp
         , hBuildContingencyDisburse = \_ ->
@@ -757,6 +758,7 @@ disburseSuccessResp =
         , dbrBuildFailureTag = Nothing
         , dbrGraphEffect = Nothing
         , dbrTtl = Nothing
+        , dbrProofs = Nothing
         }
 
 disburseIntentFailureResp :: DisburseBuildResponse
@@ -773,6 +775,7 @@ disburseIntentFailureResp =
         , dbrBuildFailureTag = Nothing
         , dbrGraphEffect = Nothing
         , dbrTtl = Nothing
+        , dbrProofs = Nothing
         }
 
 disburseBuildFailureResp :: DisburseBuildResponse
@@ -789,6 +792,7 @@ disburseBuildFailureResp =
         , dbrBuildFailureTag = Just "BuildBuildError"
         , dbrGraphEffect = Nothing
         , dbrTtl = Nothing
+        , dbrProofs = Nothing
         }
 
 disburseInternalErrorResp :: DisburseBuildResponse
@@ -805,6 +809,7 @@ disburseInternalErrorResp =
         , dbrBuildFailureTag = Nothing
         , dbrGraphEffect = Nothing
         , dbrTtl = Nothing
+        , dbrProofs = Nothing
         }
 
 -- ---------------------------------------------------------------------------
@@ -825,6 +830,7 @@ reorganizeSuccessResp =
         , rbrFailureReason = Nothing
         , rbrBuildFailureTag = Nothing
         , rbrTtl = Nothing
+        , rbrProofs = Nothing
         }
 
 reorganizeIntentFailureResp :: ReorganizeBuildResponse
@@ -840,6 +846,7 @@ reorganizeIntentFailureResp =
         , rbrFailureReason = Just "input wallet_addr: bech32 parse"
         , rbrBuildFailureTag = Nothing
         , rbrTtl = Nothing
+        , rbrProofs = Nothing
         }
 
 reorganizeBuildFailureResp :: ReorganizeBuildResponse
@@ -855,6 +862,7 @@ reorganizeBuildFailureResp =
         , rbrFailureReason = Just "build: checks failed"
         , rbrBuildFailureTag = Just "BuildBuildError"
         , rbrTtl = Nothing
+        , rbrProofs = Nothing
         }
 
 reorganizeInternalErrorResp :: ReorganizeBuildResponse
@@ -870,6 +878,7 @@ reorganizeInternalErrorResp =
         , rbrFailureReason = Just "uncaught exception: timeout"
         , rbrBuildFailureTag = Nothing
         , rbrTtl = Nothing
+        , rbrProofs = Nothing
         }
 
 stubRawHandler :: Tagged Servant.Handler Application

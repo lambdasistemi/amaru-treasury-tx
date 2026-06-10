@@ -1,0 +1,39 @@
+# Datum / redeemer proof for one freshly built unsigned tx.
+#
+# One row is one script-data artifact the cq-rdf body graph carries:
+# an output datum (kind "datum", locus "output <ix>") or a redeemer
+# (kind "redeemer", locus "<purpose> <ix>"). Hash is the blake2b-256
+# script-data hash cq-rdf emits as the urn:cardano:id:DatumHash leaf;
+# bytes is the raw Plutus Data CBOR hex when the body inlines it
+# (empty for hash-only datums). Witness-set scripts and datum
+# *placements* beyond outputs/redeemers are not in cq-rdf's body
+# output; this proof reports what the body graph holds and nothing
+# else.
+
+PREFIX cardano: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/cardano#>
+
+SELECT ?kind ?locus ?hash ?bytes
+WHERE {
+  {
+    ?tx a cardano:Transaction ;
+        cardano:hasOutput ?out .
+    ?out cardano:hasIndex ?ix ;
+         cardano:hasDatum ?d .
+    ?d cardano:hasHash/cardano:bytesHex ?hash .
+    OPTIONAL { ?d cardano:hasRawBytes ?raw . }
+    BIND ("datum" AS ?kind)
+    BIND (CONCAT("output ", STR(?ix)) AS ?locus)
+  } UNION {
+    ?tx a cardano:Transaction ;
+        cardano:hasRedeemer ?r .
+    ?r cardano:hasPurpose ?purpose ;
+       cardano:hasIndex ?ix ;
+       cardano:hasData ?d .
+    ?d cardano:hasHash/cardano:bytesHex ?hash .
+    OPTIONAL { ?d cardano:hasRawBytes ?raw . }
+    BIND ("redeemer" AS ?kind)
+    BIND (CONCAT(?purpose, " ", STR(?ix)) AS ?locus)
+  }
+  BIND (COALESCE(?raw, "") AS ?bytes)
+}
+ORDER BY ?kind ?locus

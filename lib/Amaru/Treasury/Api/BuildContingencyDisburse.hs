@@ -319,6 +319,7 @@ runBuildContingencyDisburse g serverMetadataPath backend req = do
                                 , dbrBuildFailureTag = Nothing
                                 , dbrGraphEffect = Nothing
                                 , dbrTtl = Nothing
+                                , dbrProofs = Nothing
                                 }
                     let trB =
                             Tracer
@@ -417,6 +418,7 @@ runBuildContingencyDisburse g serverMetadataPath backend req = do
             , dbrBuildFailureTag = Nothing
             , dbrGraphEffect = Nothing
             , dbrTtl = Nothing
+            , dbrProofs = Nothing
             }
 
 {- | Constructor tag of a 'WizardFailure' as a stable string.

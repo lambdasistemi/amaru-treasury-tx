@@ -390,6 +390,7 @@ emptySwapResponse =
         , sbrBuildFailureTag = Nothing
         , sbrGraphEffect = Nothing
         , sbrTtl = Nothing
+        , sbrProofs = Nothing
         }
 
 {- | An all-'Nothing' disburse build response (used for both the
@@ -409,6 +410,7 @@ emptyDisburseResponse =
         , dbrBuildFailureTag = Nothing
         , dbrGraphEffect = Nothing
         , dbrTtl = Nothing
+        , dbrProofs = Nothing
         }
 
 {- | An all-'Nothing' reorganize build response: no CBOR, so the TTL
@@ -427,6 +429,7 @@ emptyReorganizeResponse =
         , rbrFailureReason = Nothing
         , rbrBuildFailureTag = Nothing
         , rbrTtl = Nothing
+        , rbrProofs = Nothing
         }
 
 apiMainSource :: FilePath

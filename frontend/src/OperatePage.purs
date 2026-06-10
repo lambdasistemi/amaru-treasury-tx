@@ -133,17 +133,18 @@ disburseUnitWire = case _ of
   UnitAda -> "ada"
   UnitUsdm -> "usdm"
 
-data Tab = TabIntent | TabCli | TabCbor | TabReport | TabGraph
+data Tab = TabIntent | TabCli | TabCbor | TabReport | TabGraph | TabTtl
 
 derive instance eqTab :: Eq Tab
 
 tabLabel :: Tab -> String
 tabLabel = case _ of
-  TabIntent -> "intent.json"
+  TabIntent -> "Intent"
   TabCli -> "CLI"
   TabCbor -> "CBOR"
   TabReport -> "Report"
   TabGraph -> "Graph"
+  TabTtl -> "TTL"
 
 -- | Tabs that depend on the tx-build response stay clickable
 -- | even when no data is present yet — the body renders a
@@ -2362,12 +2363,25 @@ lookupString k j = do
   v <- FO.lookup k o
   Argonaut.toString v
 
+-- | The build-result tabs, partitioned into three labelled
+-- | groups: How (the operator's request and its echoes),
+-- | What (the tx artifacts to sign/submit), Analysis
+-- | (resolved projections of the unsigned tx).
 previewTabs :: forall m. Tab -> H.ComponentHTML Action () m
 previewTabs active =
   HH.div [ HP.classes [ cn "preview-tabs" ] ]
-    ( map tab [ TabIntent, TabCli, TabCbor, TabReport, TabGraph ]
-    )
+    [ group "How" [ TabIntent, TabCli, TabReport ]
+    , group "What" [ TabCbor, TabTtl ]
+    , group "Analysis" [ TabGraph ]
+    ]
   where
+  group label tabs =
+    HH.div [ HP.classes [ cn "preview-tab-group" ] ]
+      ( [ HH.span
+            [ HP.classes [ cn "preview-tab-group__label" ] ]
+            [ HH.text label ]
+        ] <> map tab tabs
+      )
   tab t =
     let
       disabled = tabDisabled t
@@ -2450,6 +2464,17 @@ previewBody st = case st.activeTab of
                 (FO.singleton "details" (formatTreeJson r))
             )
         ]
+  TabTtl -> case ttlPreview st of
+    Nothing ->
+      HH.p_ [ HH.text "Tx not built yet." ]
+    Just ttl ->
+      HH.div
+        [ HP.classes [ cn "json-tree-wrapper" ] ]
+        [ copyBlockButton ttl "Copy graph.ttl"
+        , HH.pre
+            [ HP.classes [ cn "cbor-hex" ] ]
+            [ HH.text ttl ]
+        ]
   TabGraph -> case graphEffectPreview st of
     Nothing ->
       HH.p_
@@ -2498,6 +2523,15 @@ cborEnvelopePreview :: State -> Maybe String
 cborEnvelopePreview st = case st.result of
   Result j ->
     lookupString (responsePrefix st.mode <> "CborEnvelope") j
+  _ -> Nothing
+
+-- | Extract the RDF Turtle lattice of the unsigned tx
+-- | ('@prefix@Ttl', #357) from the server response, or
+-- | 'Nothing' if the build hasn't run yet / the server's
+-- | best-effort TTL emission failed.
+ttlPreview :: State -> Maybe String
+ttlPreview st = case st.result of
+  Result j -> lookupString (responsePrefix st.mode <> "Ttl") j
   _ -> Nothing
 
 -- | Extract the parsed @report.json@ from the server

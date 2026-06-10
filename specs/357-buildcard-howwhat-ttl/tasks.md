@@ -6,5 +6,5 @@
 - [X] T357-SA wire `attach*Ttl` in Server.hs; gate green; commit
 
 ## Slice B — frontend How/What groups + TTL tab
-- [ ] T357-SB add TabTtl + grouped previewTabs (How/What/Analysis)
-- [ ] T357-SB TabTtl body + ttlPreview; build + dev smoke; commit
+- [X] T357-SB add TabTtl + grouped previewTabs (How/What/Analysis)
+- [X] T357-SB TabTtl body + ttlPreview; build + dev smoke; commit

@@ -463,6 +463,7 @@ runSmoke = do
                                                     apiIdx
                                                     backend
                                                     globalOpts
+                                                    metadataPath
                                                     metadata
                                                     anchor
                                                     swapAddr
@@ -973,7 +974,7 @@ postBuildDisburseAndSubmit
     -> FilePath
     -> DevnetRegistryAnchors
     -> IO TxId
-postBuildDisburseAndSubmit manager port submitter metadataPath _anchors = do
+postBuildDisburseAndSubmit manager port submitter _metadataPath _anchors = do
     res <-
         postJson
             manager
@@ -983,7 +984,6 @@ postBuildDisburseAndSubmit manager port submitter metadataPath _anchors = do
                 { dbrScope = CoreDevelopment
                 , dbrWalletAddr = renderAddr genesisAddr
                 , dbrBeneficiaryAddr = renderAddr genesisAddr
-                , dbrMetadataPath = metadataPath
                 , dbrUnit = "ada"
                 , dbrAmount = 5
                 , dbrValidityHours = Nothing
@@ -1019,7 +1019,7 @@ postBuildReorganizeAndSubmit
     -> Submitter IO
     -> FilePath
     -> IO TxId
-postBuildReorganizeAndSubmit manager port submitter metadataPath = do
+postBuildReorganizeAndSubmit manager port submitter _metadataPath = do
     res <-
         postJson
             manager
@@ -1028,7 +1028,6 @@ postBuildReorganizeAndSubmit manager port submitter metadataPath = do
             ReorganizeBuildRequest
                 { rbrScope = CoreDevelopment
                 , rbrWalletAddr = renderAddr genesisAddr
-                , rbrMetadataPath = metadataPath
                 , rbrValidityHours = Nothing
                 , rbrDescription = Just "Devnet API smoke reorganize"
                 , rbrJustification = Just "HTTP POST build smoke"
@@ -1623,102 +1622,111 @@ smokeHandlers
     :: ApiIndexer cf op
     -> Provider IO
     -> GlobalOpts
+    -> FilePath
+    -- ^ Server-side metadata path for the build runners
     -> TreasuryMetadata
     -> DeploymentAnchor
     -> Addr
     -> Handlers
-smokeHandlers apiIdx backend globalOpts metadata anchor swapAddr =
-    Handlers
-        { hInspectReport = \scope -> do
-            r <-
-                Servant.runHandler $
-                    mkInspectHandler
-                        apiIdx
-                        backend
-                        metadata
-                        anchor
-                        swapAddr
-                        scope
-            case r of
-                Right rep -> pure rep
-                Left e ->
-                    error $
-                        "smokeHandlers: mkInspectHandler\
-                        \ returned ServerError: "
-                            <> show e
-        , hRecentTxs = RecentTxManifest []
-        , hBuildIdentity = stubBuildIdentity
-        , hTxDetail =
-            queryTxDetailResponse
-                (snapshotUtxosByTxIn apiIdx)
-                (aiHistory apiIdx)
-                (Just metadata)
-        , hRegistry = pure (registryResponseFromMetadata metadata)
-        , hScripts = pure (scriptsResponseFromMetadata metadata)
-        , hPending =
-            queryPending
-                readProvider
-                metadata
-                swapAddr
-        , hTip = pure (TipResponse 0)
-        , hParams =
-            pure
-                ParamsResponse
-                    { parEra = "conway"
-                    , parSummary = "smoke handler"
-                    }
-        , hSubmit = \_ ->
-            pure
-                SubmitResponse
-                    { subStatus = "unavailable"
-                    , subTxId = Nothing
-                    , subReason = Just "smoke handler submit not wired"
-                    }
-        , hHealth =
-            pure
-                HealthResponse
-                    { hrStatus = "ready"
-                    , hrProcessedSlot = 0
-                    , hrTipSlot = 0
-                    , hrLagSlots = 0
-                    , hrThresholdSlots = 0
-                    , hrUpdatedAt = biBuildTime stubBuildIdentity
-                    }
-        , hScopeState =
-            queryScopeState
-                readProvider
-                metadata
-                swapAddr
-        , hScopeUtxos =
-            queryScopeUtxos
-                readProvider
-                metadata
-                swapAddr
-        , hScopeHistory = queryScopeHistoryFilteredResponse (aiHistory apiIdx)
-        , hScopeHistoryQuery =
-            queryScopeHistoryQueryResponse (aiHistory apiIdx) (Just metadata)
-        , hScopeHistoryShacl =
-            queryScopeHistoryShaclResponse (aiHistory apiIdx) (Just metadata)
-        , hBuildSwap = bhBuildSwap buildHandlers
-        , hBuildDisburse = bhBuildDisburse buildHandlers
-        , hBuildReorganize = bhBuildReorganize buildHandlers
-        , hRawHandler =
-            Tagged $ \_req respond ->
-                respond $
-                    responseLBS
-                        status404
-                        [("Content-Type", "text/plain")]
-                        "smoke: raw not served"
-        }
-  where
-    buildHandlers =
-        mkBuildHandlers
-            apiIdx
-            backend
-            (runBuildSwap globalOpts)
-            (runBuildDisburse globalOpts)
-            (runBuildReorganize globalOpts)
-    readProvider = mkBuildProvider apiIdx backend
+smokeHandlers
+    apiIdx
+    backend
+    globalOpts
+    metadataPath
+    metadata
+    anchor
+    swapAddr =
+        Handlers
+            { hInspectReport = \scope -> do
+                r <-
+                    Servant.runHandler $
+                        mkInspectHandler
+                            apiIdx
+                            backend
+                            metadata
+                            anchor
+                            swapAddr
+                            scope
+                case r of
+                    Right rep -> pure rep
+                    Left e ->
+                        error $
+                            "smokeHandlers: mkInspectHandler\
+                            \ returned ServerError: "
+                                <> show e
+            , hRecentTxs = RecentTxManifest []
+            , hBuildIdentity = stubBuildIdentity
+            , hTxDetail =
+                queryTxDetailResponse
+                    (snapshotUtxosByTxIn apiIdx)
+                    (aiHistory apiIdx)
+                    (Just metadata)
+            , hRegistry = pure (registryResponseFromMetadata metadata)
+            , hScripts = pure (scriptsResponseFromMetadata metadata)
+            , hPending =
+                queryPending
+                    readProvider
+                    metadata
+                    swapAddr
+            , hTip = pure (TipResponse 0)
+            , hParams =
+                pure
+                    ParamsResponse
+                        { parEra = "conway"
+                        , parSummary = "smoke handler"
+                        }
+            , hSubmit = \_ ->
+                pure
+                    SubmitResponse
+                        { subStatus = "unavailable"
+                        , subTxId = Nothing
+                        , subReason = Just "smoke handler submit not wired"
+                        }
+            , hHealth =
+                pure
+                    HealthResponse
+                        { hrStatus = "ready"
+                        , hrProcessedSlot = 0
+                        , hrTipSlot = 0
+                        , hrLagSlots = 0
+                        , hrThresholdSlots = 0
+                        , hrUpdatedAt = biBuildTime stubBuildIdentity
+                        }
+            , hScopeState =
+                queryScopeState
+                    readProvider
+                    metadata
+                    swapAddr
+            , hScopeUtxos =
+                queryScopeUtxos
+                    readProvider
+                    metadata
+                    swapAddr
+            , hScopeHistory = queryScopeHistoryFilteredResponse (aiHistory apiIdx)
+            , hScopeHistoryQuery =
+                queryScopeHistoryQueryResponse (aiHistory apiIdx) (Just metadata)
+            , hScopeHistoryShacl =
+                queryScopeHistoryShaclResponse (aiHistory apiIdx) (Just metadata)
+            , hBuildSwap = bhBuildSwap buildHandlers
+            , hBuildDisburse = bhBuildDisburse buildHandlers
+            , hBuildReorganize = bhBuildReorganize buildHandlers
+            , hRawHandler =
+                Tagged $ \_req respond ->
+                    respond $
+                        responseLBS
+                            status404
+                            [("Content-Type", "text/plain")]
+                            "smoke: raw not served"
+            }
+      where
+        buildHandlers =
+            mkBuildHandlers
+                apiIdx
+                backend
+                (runBuildSwap globalOpts metadataPath)
+                (runBuildDisburse globalOpts metadataPath)
+                (runBuildReorganize globalOpts metadataPath)
+        readProvider = mkBuildProvider apiIdx backend
 
 stubBuildIdentity :: BuildIdentity
 stubBuildIdentity =

@@ -231,15 +231,22 @@ main = do
                             putStrLn
                                 "amaru-treasury-tx-api: indexer \
                                 \ready; binding warp"
-                            let buildHandlers =
+                            -- The build runners read metadata from
+                            -- the SERVER's own --metadata; the HTTP
+                            -- surface carries no client path.
+                            let metadataPath = arcMetadata opts
+                                buildHandlers =
                                     mkBuildHandlers
                                         apiIdx
                                         (Just metadata)
                                         backend
-                                        (runBuildSwap g)
-                                        (runBuildDisburse g)
-                                        (runBuildContingencyDisburse g)
-                                        (runBuildReorganize g)
+                                        (runBuildSwap g metadataPath)
+                                        (runBuildDisburse g metadataPath)
+                                        ( runBuildContingencyDisburse
+                                            g
+                                            metadataPath
+                                        )
+                                        (runBuildReorganize g metadataPath)
                                 readProvider =
                                     mkBuildProvider apiIdx backend
                                 handlers =

@@ -38,6 +38,9 @@ module Amaru.Treasury.Api.BuildReorganize
 
       -- * Handler runner
     , runBuildReorganize
+
+      -- * CLI preview
+    , renderCli
     ) where
 
 import Control.Exception (SomeException, try)
@@ -114,7 +117,6 @@ resolver auto-picks the wallet UTxO.
 data ReorganizeBuildRequest = ReorganizeBuildRequest
     { rbrScope :: ScopeId
     , rbrWalletAddr :: Text
-    , rbrMetadataPath :: FilePath
     , rbrValidityHours :: Maybe Word16
     , rbrDescription :: Maybe Text
     , rbrJustification :: Maybe Text
@@ -188,31 +190,37 @@ caller never writes a file, never opens a log, and the
 wizard auto-picks the wallet seed UTxO.
 -}
 mapToReorganizeWizardOpts
-    :: ReorganizeBuildRequest
+    :: FilePath
+    -- ^ Server-configured metadata path; never a wire
+    --   field (a client-supplied path would let any web
+    --   caller pick which server-side file is opened).
+    -> ReorganizeBuildRequest
     -> Either WizardFailure ReorganizeWizardOpts
-mapToReorganizeWizardOpts ReorganizeBuildRequest{..} =
-    Right
-        ReorganizeWizardOpts
-            { rwoCommon =
-                CommonFlags
-                    { cfWalletAddr = rbrWalletAddr
-                    , cfMetadataPath = rbrMetadataPath
-                    , cfOut = ""
-                    , cfLog = Nothing
-                    , cfScope = rbrScope
-                    , cfValidityHours = rbrValidityHours
-                    , cfDescription = rbrDescription
-                    , cfJustification = rbrJustification
-                    , cfDestinationLabel = rbrDestinationLabel
-                    , cfEvent = rbrEvent
-                    , cfLabel = rbrLabel
-                    , cfForce = False
-                    , cfExcludeSet = ExclusionSet []
-                    , cfForcedSet = ForcedInclusionSet []
-                    }
-            , rwoFundingSeedTxIn = Nothing
-            , rwoSplitNativeAssets = rbrSplitNativeAssets == Just True
-            }
+mapToReorganizeWizardOpts
+    serverMetadataPath
+    ReorganizeBuildRequest{..} =
+        Right
+            ReorganizeWizardOpts
+                { rwoCommon =
+                    CommonFlags
+                        { cfWalletAddr = rbrWalletAddr
+                        , cfMetadataPath = serverMetadataPath
+                        , cfOut = ""
+                        , cfLog = Nothing
+                        , cfScope = rbrScope
+                        , cfValidityHours = rbrValidityHours
+                        , cfDescription = rbrDescription
+                        , cfJustification = rbrJustification
+                        , cfDestinationLabel = rbrDestinationLabel
+                        , cfEvent = rbrEvent
+                        , cfLabel = rbrLabel
+                        , cfForce = False
+                        , cfExcludeSet = ExclusionSet []
+                        , cfForcedSet = ForcedInclusionSet []
+                        }
+                , rwoFundingSeedTxIn = Nothing
+                , rwoSplitNativeAssets = rbrSplitNativeAssets == Just True
+                }
 
 -- ---------------------------------------------------------------------------
 -- Handler runner
@@ -231,16 +239,18 @@ returns a 200 with those fields populated.
 -}
 runBuildReorganize
     :: GlobalOpts
+    -> FilePath
+    -- ^ Server-configured metadata path
     -> Backend
     -> ReorganizeBuildRequest
     -> IO ReorganizeBuildResponse
-runBuildReorganize g backend req = do
+runBuildReorganize g serverMetadataPath backend req = do
     TIO.hPutStrLn
         stderr
         ( "amaru-treasury-tx-api: POST /v1/build/reorganize scope="
             <> T.pack (show (rbrScope req))
         )
-    case mapToReorganizeWizardOpts req of
+    case mapToReorganizeWizardOpts serverMetadataPath req of
         Left wf -> do
             TIO.hPutStrLn
                 stderr
@@ -447,7 +457,7 @@ renderCli ReorganizeBuildRequest{..} =
         ( "amaru-treasury-tx reorganize-wizard"
             : ("--scope " <> T.pack (show rbrScope))
             : ("--wallet-addr " <> rbrWalletAddr)
-            : ("--metadata " <> T.pack rbrMetadataPath)
+            : "--metadata <metadata.json>"
             : validityArgs rbrValidityHours
                 <> maybeQuotedArg
                     "--description "

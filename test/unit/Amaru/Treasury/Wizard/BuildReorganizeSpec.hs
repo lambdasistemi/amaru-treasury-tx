@@ -93,7 +93,9 @@ spec = describe "Amaru.Treasury.Wizard.Reorganize" $ do
             seq sig True `shouldBe` True
 
     it "maps HTTP split-native-assets into the wizard opts" $
-        case mapToReorganizeWizardOpts splitNativeAssetsRequest of
+        case mapToReorganizeWizardOpts
+            "metadata.json"
+            splitNativeAssetsRequest of
             Left err ->
                 fail ("expected mapper success, got: " <> show err)
             Right opts ->
@@ -104,7 +106,6 @@ splitNativeAssetsRequest =
     ReorganizeBuildRequest
         { rbrScope = CoreDevelopment
         , rbrWalletAddr = "addr1qexample"
-        , rbrMetadataPath = "/etc/amaru-treasury/metadata.json"
         , rbrValidityHours = Nothing
         , rbrDescription = Nothing
         , rbrJustification = Nothing

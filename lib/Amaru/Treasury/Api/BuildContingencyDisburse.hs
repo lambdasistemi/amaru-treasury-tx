@@ -38,6 +38,9 @@ module Amaru.Treasury.Api.BuildContingencyDisburse
 
       -- * Handler runner
     , runBuildContingencyDisburse
+
+      -- * CLI preview
+    , renderCli
     ) where
 
 import Control.Exception (SomeException, try)
@@ -123,7 +126,6 @@ Operate UI POSTs to.
 -}
 data ContingencyDisburseBuildRequest = ContingencyDisburseBuildRequest
     { walletAddr :: Text
-    , metadataPath :: FilePath
     , destinations :: [ContingencyDestinationRequest]
     -- ^ Non-empty on the happy path; the mapper rejects an
     --   empty list with a typed 'WizardFailure'.
@@ -162,52 +164,58 @@ shortfall, …) lives downstream in
 lists default to empty, matching the disburse-side mapper.
 -}
 mapToContingencyDisburseOpts
-    :: ContingencyDisburseBuildRequest
+    :: FilePath
+    -- ^ Server-configured metadata path; never a wire
+    --   field (a client-supplied path would let any web
+    --   caller pick which server-side file is opened).
+    -> ContingencyDisburseBuildRequest
     -> Either WizardFailure ContingencyDisburseOpts
-mapToContingencyDisburseOpts ContingencyDisburseBuildRequest{..} = do
-    dests <- case destinations of
-        [] ->
-            Left
-                ( InputInvalid
-                    FieldScope
-                    "destinations must not be empty"
-                )
-        (d : ds) -> traverse toDestination (d :| ds)
-    Right
-        ContingencyDisburseOpts
-            { cdOptsWalletAddr = walletAddr
-            , cdOptsMetadataPath = metadataPath
-            , cdOptsOut = Nothing
-            , cdOptsLog = Nothing
-            , cdOptsDestinations = dests
-            , cdOptsValidityHours = validityHours
-            , cdOptsDescription = description
-            , cdOptsJustification = justification
-            , cdOptsReferences = references
-            , cdOptsExcludeSet = ExclusionSet []
-            , cdOptsForcedSet = ForcedInclusionSet []
-            }
-  where
-    toDestination
-        :: ContingencyDestinationRequest
-        -> Either WizardFailure (ScopeId, Integer)
-    toDestination ContingencyDestinationRequest{..}
-        | scope == Contingency =
-            Left
-                ( InputScopeUnsupported
-                    FieldScope
-                    "contingency cannot be a disburse destination"
-                )
-        | amountAda > 0 =
-            Right (scope, floor (amountAda * 1_000_000))
-        | otherwise =
-            Left
-                ( InputOutOfRange
-                    FieldScope
-                    ( "destination amount must be positive, got "
-                        <> T.pack (show amountAda)
+mapToContingencyDisburseOpts
+    serverMetadataPath
+    ContingencyDisburseBuildRequest{..} = do
+        dests <- case destinations of
+            [] ->
+                Left
+                    ( InputInvalid
+                        FieldScope
+                        "destinations must not be empty"
                     )
-                )
+            (d : ds) -> traverse toDestination (d :| ds)
+        Right
+            ContingencyDisburseOpts
+                { cdOptsWalletAddr = walletAddr
+                , cdOptsMetadataPath = serverMetadataPath
+                , cdOptsOut = Nothing
+                , cdOptsLog = Nothing
+                , cdOptsDestinations = dests
+                , cdOptsValidityHours = validityHours
+                , cdOptsDescription = description
+                , cdOptsJustification = justification
+                , cdOptsReferences = references
+                , cdOptsExcludeSet = ExclusionSet []
+                , cdOptsForcedSet = ForcedInclusionSet []
+                }
+      where
+        toDestination
+            :: ContingencyDestinationRequest
+            -> Either WizardFailure (ScopeId, Integer)
+        toDestination ContingencyDestinationRequest{..}
+            | scope == Contingency =
+                Left
+                    ( InputScopeUnsupported
+                        FieldScope
+                        "contingency cannot be a disburse destination"
+                    )
+            | amountAda > 0 =
+                Right (scope, floor (amountAda * 1_000_000))
+            | otherwise =
+                Left
+                    ( InputOutOfRange
+                        FieldScope
+                        ( "destination amount must be positive, got "
+                            <> T.pack (show amountAda)
+                        )
+                    )
 
 -- ---------------------------------------------------------------------------
 -- Handler runner
@@ -226,17 +234,19 @@ those fields populated.  Same four-arm plumbing as
 -}
 runBuildContingencyDisburse
     :: GlobalOpts
+    -> FilePath
+    -- ^ Server-configured metadata path
     -> Backend
     -> ContingencyDisburseBuildRequest
     -> IO DisburseBuildResponse
-runBuildContingencyDisburse g backend req = do
+runBuildContingencyDisburse g serverMetadataPath backend req = do
     TIO.hPutStrLn
         stderr
         ( "amaru-treasury-tx-api: POST /v1/build/contingency-disburse \
           \destinations="
             <> T.pack (show (length (destinations req)))
         )
-    case mapToContingencyDisburseOpts req of
+    case mapToContingencyDisburseOpts serverMetadataPath req of
         Left wf -> do
             TIO.hPutStrLn
                 stderr
@@ -451,7 +461,7 @@ renderCli ContingencyDisburseBuildRequest{..} =
         " \\\n  "
         ( "amaru-treasury-tx contingency-disburse-wizard"
             : ("--wallet-addr " <> walletAddr)
-            : ("--metadata " <> T.pack metadataPath)
+            : "--metadata <metadata.json>"
             : map toFlag destinations
                 <> validityArgs validityHours
                 <> [ "--description " <> quote description

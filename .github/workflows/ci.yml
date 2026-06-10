@@ -129,6 +129,41 @@ jobs:
             --artifacts-dir "${{ steps.build.outputs.out }}" \
             --artifact-version "${{ steps.build.outputs.version }}"
 
+  dep-graph-drift:
+    name: Dependency graph up to date
+    if: github.event_name == 'pull_request'
+    runs-on: nixos
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+          path: checkout
+      - uses: cachix/cachix-action@v17
+        with:
+          name: paolino
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      # Deterministic render (staleness: false) — a pure function of
+      # flake.lock + cabal.project, so this only fails when the committed
+      # graph is actually out of date with the pins, never because an
+      # upstream repo advanced its HEAD.
+      - name: Regenerate dependency graph
+        uses: paolino/dev-assets/dep-graph@main
+        with:
+          language: haskell
+          flake-path: checkout
+          owner-regex: "paolino|lambdasistemi|cardano-foundation|pragma-org"
+          output: /tmp/dependencies.fresh.md
+          title: "amaru-treasury-tx dependency graph"
+          staleness: "false"
+      - name: Compare with committed copy
+        working-directory: checkout
+        run: |
+          if ! diff -u docs/dependencies.md /tmp/dependencies.fresh.md; then
+            echo "::error::docs/dependencies.md is stale. Regenerate it with the dep-graph action (staleness: false) and commit the result." >&2
+            exit 1
+          fi
+          echo "dependency graph is up to date"
+
   darwin-vault-tty:
     name: Darwin vault TTY smoke
     runs-on: macos-14

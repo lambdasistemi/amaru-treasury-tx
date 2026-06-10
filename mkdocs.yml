@@ -63,6 +63,7 @@ nav:
   - Home: index.md
   - Quickstart: quickstart.md
   - Architecture: architecture.md
+  - Dependencies: dependencies.md
   - Trust model: trust-model.md
   - Swap recipe: swap.md
   - Disburse: disburse.md

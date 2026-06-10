@@ -41,6 +41,19 @@ jobs:
           name: paolino
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
+      # Regenerate the dependency graph live so the published site always
+      # reflects flake.lock + cabal.project HEAD, including current pin
+      # staleness vs upstream. Not committed; the committed copy
+      # (docs/dependencies.md) is the deterministic one gated in CI.
+      - name: Refresh dependency graph
+        uses: paolino/dev-assets/dep-graph@main
+        with:
+          language: haskell
+          flake-path: checkout
+          owner-regex: "paolino|lambdasistemi|cardano-foundation|pragma-org"
+          output: checkout/docs/dependencies.md
+          title: "amaru-treasury-tx dependency graph"
+
       - name: Build docs
         working-directory: checkout
         run: >-

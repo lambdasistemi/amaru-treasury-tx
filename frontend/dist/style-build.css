@@ -582,13 +582,31 @@ input[type="number"].field__input { -moz-appearance: textfield; }
   border-bottom: 1px solid var(--md-sys-color-outline-variant);
   background: var(--md-sys-color-surface-container);
 }
+.preview-tab-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.preview-tab-group + .preview-tab-group {
+  margin-left: 12px;
+  padding-left: 12px;
+  border-left: 1px solid var(--md-sys-color-outline-variant);
+}
+.preview-tab-group__label {
+  color: var(--md-sys-color-on-surface-variant);
+  font: 700 10px/1 "Roboto Mono", ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-right: 4px;
+  opacity: 0.75;
+}
 .preview-tab {
   background: transparent; border: 0;
   padding: 6px 10px;
   border-radius: 6px;
   font: 500 11px/1 "Roboto Mono", ui-monospace, monospace;
   letter-spacing: 0.08em;
-  text-transform: lowercase;
+  text-transform: none;
   color: var(--md-sys-color-on-surface-variant);
   cursor: pointer;
   transition: all 0.12s ease;

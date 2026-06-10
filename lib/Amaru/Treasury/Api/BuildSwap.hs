@@ -189,6 +189,11 @@ data SwapBuildResponse = SwapBuildResponse
     --   Present iff tx build succeeded and the indexed UTxO
     --   state could resolve it; attached additively by the
     --   build handler, not the runner.
+    , sbrTtl :: Maybe Text
+    -- ^ RDF Turtle lattice of the unsigned tx (#357): prefix
+    --   block + metadata entity overlay + @cq-rdf body@
+    --   triples.  Best-effort like the graph-effect; attached
+    --   additively by the build handler, not the runner.
     }
     deriving (Eq, Show, Generic)
     deriving anyclass (FromJSON, ToJSON)
@@ -367,6 +372,7 @@ runBuildSwap g serverMetadataPath backend req = do
                                 , sbrFailureReason = Nothing
                                 , sbrBuildFailureTag = Nothing
                                 , sbrGraphEffect = Nothing
+                                , sbrTtl = Nothing
                                 }
                     -- #269 — after intent assembly succeeds,
                     -- run the tx-build stage against the same
@@ -465,6 +471,7 @@ runBuildSwap g serverMetadataPath backend req = do
             , sbrFailureReason = Just (renderWizardFailure wf)
             , sbrBuildFailureTag = Nothing
             , sbrGraphEffect = Nothing
+            , sbrTtl = Nothing
             }
 
 {- | The constructor tag of a 'WizardFailure' as a stable

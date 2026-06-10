@@ -100,7 +100,7 @@ import Amaru.Treasury.Api.BuildDisburse
     )
 import Amaru.Treasury.Api.BuildReorganize
     ( ReorganizeBuildRequest
-    , ReorganizeBuildResponse
+    , ReorganizeBuildResponse (..)
     )
 import Amaru.Treasury.Api.BuildSwap
     ( SwapBuildRequest
@@ -116,6 +116,7 @@ import Amaru.Treasury.Api.Indexer
 import Amaru.Treasury.Api.State
     ( ScopeUtxoFilter (..)
     )
+import Amaru.Treasury.Api.Ttl (buildTxLattice)
 import Amaru.Treasury.Api.Types
     ( BuildIdentity
     , HealthResponse
@@ -357,6 +358,10 @@ projects it via 'graphEffectFromCborHex' using the same indexed UTxO
 read the @\/v1\/tx@ detail uses ('snapshotUtxosByTxIn') and the
 verified @metadata@ for @{scope, role}@ resolution. The build runners
 are untouched; they leave the field 'Nothing' and the handler fills it.
+
+Every handler also attaches the #357 RDF Turtle lattice of the
+unsigned tx ('buildTxLattice') the same way: best-effort, from the
+response cbor hex, leaving the field 'Nothing' on any failure.
 -}
 mkBuildHandlers
     :: ApiIndexer cf op
@@ -380,13 +385,20 @@ mkBuildHandlers
     buildReorganize =
         BuildHandlers
             { bhBuildSwap =
-                buildSwap buildProvider >=> attachSwapGraphEffect
+                buildSwap buildProvider
+                    >=> attachSwapGraphEffect
+                    >=> attachSwapTtl
             , bhBuildDisburse =
-                buildDisburse buildProvider >=> attachDisburseGraphEffect
+                buildDisburse buildProvider
+                    >=> attachDisburseGraphEffect
+                    >=> attachDisburseTtl
             , bhBuildContingencyDisburse =
                 buildContingencyDisburse buildProvider
                     >=> attachDisburseGraphEffect
-            , bhBuildReorganize = buildReorganize buildProvider
+                    >=> attachDisburseTtl
+            , bhBuildReorganize =
+                buildReorganize buildProvider
+                    >=> attachReorganizeTtl
             }
       where
         buildProvider = mkBuildProvider apiIdx realProvider
@@ -406,6 +418,27 @@ mkBuildHandlers
                     effect <-
                         graphEffectFromCborHex metadata resolveUtxos hex
                     pure resp{sbrGraphEffect = effect}
+                Nothing -> pure resp
+
+        attachDisburseTtl resp =
+            case dbrCborHex resp of
+                Just hex -> do
+                    ttl <- buildTxLattice metadata hex
+                    pure resp{dbrTtl = ttl}
+                Nothing -> pure resp
+
+        attachSwapTtl resp =
+            case sbrCborHex resp of
+                Just hex -> do
+                    ttl <- buildTxLattice metadata hex
+                    pure resp{sbrTtl = ttl}
+                Nothing -> pure resp
+
+        attachReorganizeTtl resp =
+            case rbrCborHex resp of
+                Just hex -> do
+                    ttl <- buildTxLattice metadata hex
+                    pure resp{rbrTtl = ttl}
                 Nothing -> pure resp
 
 -- | Build the servant 'Server' from the 'Handlers' record.

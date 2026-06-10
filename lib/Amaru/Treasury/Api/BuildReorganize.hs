@@ -165,6 +165,11 @@ data ReorganizeBuildResponse = ReorganizeBuildResponse
     -- ^ Constructor name of the 'BuildFailure' on tx-build
     --   failure; 'Nothing' if intent assembly failed OR
     --   build succeeded.
+    , rbrTtl :: Maybe Text
+    -- ^ RDF Turtle lattice of the unsigned tx (#357): prefix
+    --   block + metadata entity overlay + @cq-rdf body@
+    --   triples.  Best-effort; attached additively by the
+    --   build handler, not the runner.
     }
     deriving (Eq, Show, Generic)
     deriving anyclass (FromJSON, ToJSON)
@@ -312,6 +317,7 @@ runBuildReorganize g serverMetadataPath backend req = do
                                 , rbrFailureField = Nothing
                                 , rbrFailureReason = Nothing
                                 , rbrBuildFailureTag = Nothing
+                                , rbrTtl = Nothing
                                 }
                     let trB =
                             Tracer
@@ -403,6 +409,7 @@ runBuildReorganize g serverMetadataPath backend req = do
             , rbrFailureField = fieldOf wf
             , rbrFailureReason = Just (renderWizardFailure wf)
             , rbrBuildFailureTag = Nothing
+            , rbrTtl = Nothing
             }
 
 {- | Constructor tag of a 'WizardFailure' as a stable

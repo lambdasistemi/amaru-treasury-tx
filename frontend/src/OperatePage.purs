@@ -101,7 +101,7 @@ data RateMode = RateOperator | RateOverride
 derive instance eqRateMode :: Eq RateMode
 
 -- | Top-level mode selector — chooses which wizard the
--- | form drives and which HTTP endpoint the Build button
+-- | form drives and which HTTP endpoint the build request
 -- | posts to.  The page chrome (topbar, scope picker,
 -- | rationale, signers, preview tabs) is shared; only the
 -- | mode-specific sections + request/response prefix
@@ -201,7 +201,7 @@ ownedScopes = Array.filter (notEq Contingency) allScopes
 -- | #267 — operator history "books" cached in component
 -- | state.  Two named books ('wallets' + 'references') and
 -- | six free-text books.  Loaded at 'Initialize' and
--- | refreshed after every 'ClickBuild' so dropdowns
+-- | refreshed after every 'RunBuild' so dropdowns
 -- | reflect freshly-recorded entries without a page
 -- | refresh.
 type Books =
@@ -228,7 +228,7 @@ emptyBooks =
   }
 
 -- | Load every per-field book in one pass.  Called by
--- | 'Initialize' and re-called after each 'ClickBuild'.
+-- | 'Initialize' and re-called after each 'RunBuild'.
 loadAllBooks :: Effect Books
 loadAllBooks = do
   ws <- loadNamed WalletsBook
@@ -251,7 +251,7 @@ loadAllBooks = do
     }
 
 -- | Record every operator-supplied field that has a book.
--- | Called from 'ClickBuild' after the backend round-trip
+-- | Called from 'RunBuild' after the backend round-trip
 -- | (success OR failure — the operator's intent is the
 -- | same either way).  'Shell.Book' drops empty /
 -- | whitespace values on its own, so per-mode branches
@@ -372,6 +372,11 @@ type State =
   -- form-mutation action).  Killed + re-scheduled on every
   -- mutation so rapid typing collapses into a single write.
   , autoSaveFiber :: Maybe (Fiber Unit)
+  -- Active debounced auto-build fiber (500 ms after the last
+  -- request-changing form mutation).  Killed + re-scheduled on
+  -- every mutation so stale responses cannot overwrite newer
+  -- edits.
+  , autoBuildFiber :: Maybe H.ForkId
   }
 
 data BuildResult
@@ -414,6 +419,7 @@ initialState =
   , pickedDraftName: Nothing
   , saveDialog: Nothing
   , autoSaveFiber: Nothing
+  , autoBuildFiber: Nothing
   }
 
 data Action
@@ -450,7 +456,7 @@ data Action
   | ToggleSigner Scope
   | SetTab Tab
   | ClickReset
-  | ClickBuild
+  | RunBuild
   | BooksLoaded Books
   | ToggleNamedDropdown NamedDropdownId
   | PickNamed NamedDropdownId NamedEntry
@@ -470,7 +476,7 @@ data Action
   -- time, which keeps the chip render-and-click pure
   -- with respect to the snapshot it was rendered from).
   | JumpToSection String
-  | FocusBuildButton
+  | FocusResultPanel
 
 -- ---------------------------------------------------------------------------
 -- Component
@@ -648,7 +654,7 @@ formColumn st =
           -- Metadata is the server's own --metadata config —
           -- never on the wire, never an operator input.  The
           -- CLI preview renders a <metadata.json> placeholder.
-          , buildActions (formErrors st)
+          , buildActions st
           ]
     )
 
@@ -1086,8 +1092,9 @@ modeSelector active =
     ]
 
 -- | All form-level validation errors keyed by section.
--- | Used by 'buildActions' to disable the Build button and
--- | by the form to surface inline messages.
+-- | Used by 'buildActions' to show live status, by the
+-- | reactive build scheduler to gate requests, and by the
+-- | form to surface inline messages.
 formErrors :: State -> Array String
 formErrors st =
   let
@@ -2238,35 +2245,18 @@ contingencySignersReadOnly =
 
 buildActions
   :: forall m
-   . Array String
+   . State
   -> H.ComponentHTML Action () m
-buildActions errs =
-  let
-    blocked = not (Array.null errs)
-    title = case errs of
-      [] -> "Build unsigned tx"
-      _ ->
-        "fix form errors:\n• "
-          <> T.joinWith "\n• " (map identity errs)
-  in
-    HH.div [ HP.classes [ cn "build-actions" ] ]
-      [ HH.button
-          [ HP.classes [ cn "btn", cn "btn--ghost" ]
-          , HP.id "operate-reset-btn"
-          , HE.onClick (\_ -> ClickReset)
-          ]
-          [ HH.text "Reset" ]
-      , HH.button
-          ( [ HP.classes [ cn "btn", cn "btn--filled" ]
-            , HP.id "operate-build-btn"
-            , HP.title title
-            , HE.onClick (\_ -> ClickBuild)
-            ]
-              <>
-                if blocked then [ HP.disabled true ] else []
-          )
-          [ HH.text "Build unsigned tx" ]
-      ]
+buildActions st =
+  HH.div [ HP.classes [ cn "build-actions" ] ]
+    [ HH.button
+        [ HP.classes [ cn "btn", cn "btn--ghost" ]
+        , HP.id "operate-reset-btn"
+        , HE.onClick (\_ -> ClickReset)
+        ]
+        [ HH.text "Reset" ]
+    , buildStatusPill (Just "operate-build-status") st
+    ]
 
 -- ---------------------------------------------------------------------------
 -- Preview column
@@ -2274,7 +2264,11 @@ buildActions errs =
 previewColumn :: forall m. State -> H.ComponentHTML Action () m
 previewColumn st =
   HH.div [ HP.classes [ cn "preview-column" ] ]
-    [ HH.div [ HP.classes [ cn "preview-card" ] ]
+    [ HH.div
+        [ HP.classes [ cn "preview-card" ]
+        , HP.id "operate-result-panel"
+        , HP.attr (HH.AttrName "tabindex") "-1"
+        ]
         [ buildStatus st
         , previewTabs st.activeTab
         , HH.div [ HP.classes [ cn "preview-body" ] ]
@@ -2283,64 +2277,108 @@ previewColumn st =
     ]
 
 -- | Pre-tabs status pill so the operator gets immediate
--- | visual feedback when the Build button fires. Without
+-- | visual feedback when a reactive build runs. Without
 -- | this, Pending + Result-with-failure both leave the
 -- | preview pane visually identical to the pre-click state
 -- | (intent.json tab shows the request-state preview either
 -- | way).
 buildStatus :: forall m. State -> H.ComponentHTML Action () m
-buildStatus st = case st.result of
-  NotStarted ->
+buildStatus = buildStatusPill Nothing
+
+buildStatusPill
+  :: forall m
+   . Maybe String
+  -> State
+  -> H.ComponentHTML Action () m
+buildStatusPill mId st =
+  let
+    summary = buildStatusSummary st
+    idProps = case mId of
+      Just elId -> [ HP.id elId ]
+      Nothing -> []
+  in
     HH.div
-      [ HP.classes [ cn "report-status" ]
-      , HP.attr (HH.AttrName "data-ok") "true"
-      ]
+      ( [ HP.classes [ cn "report-status" ]
+        , HP.attr (HH.AttrName "data-ok") (boolAttr summary.ok)
+        , HP.title summary.title
+        ]
+          <> idProps
+      )
       [ HH.span [ HP.classes [ cn "report-status__dot" ] ] []
-      , HH.text "ready"
+      , HH.text summary.label
       ]
-  Pending ->
-    HH.div
-      [ HP.classes [ cn "report-status" ]
-      , HP.attr (HH.AttrName "data-ok") "true"
-      ]
-      [ HH.span [ HP.classes [ cn "report-status__dot" ] ] []
-      , HH.text "building…"
-      ]
-  Result j ->
+
+buildStatusSummary
+  :: State
+  -> { ok :: Boolean, label :: String, title :: String }
+buildStatusSummary st = case formErrors st of
+  [] -> case st.result of
+    NotStarted ->
+      { ok: true
+      , label: "ready"
+      , title: "ready"
+      }
+    Pending ->
+      { ok: true
+      , label: "building…"
+      , title: "building unsigned transaction"
+      }
+    Result j ->
+      let
+        result = resultStatusSummary st.mode j
+      in
+        { ok: result.ok
+        , label: result.label
+        , title: result.label
+        }
+  errs ->
     let
-      p = responsePrefix st.mode
-      -- Failure precedence: intent-failure > build-failure
-      -- (an intent-failure short-circuits tx-build).
-      iTag = lookupString (p <> "FailureTag") j
-      bTag = lookupString (p <> "BuildFailureTag") j
-      reason = lookupString (p <> "FailureReason") j
-      hasCbor = case lookupString (p <> "CborHex") j of
-        Just _ -> true
-        Nothing -> false
-      hasIntent = case lookupString (p <> "IntentJson") j of
-        Just _ -> true
-        Nothing -> false
-      -- Three terminal states: built, intent-failure,
-      -- build-failure.  "ok" only when the tx CBOR is in
-      -- the response.
-      label = case iTag, bTag, reason of
-        Just t, _, Just r -> "intent: " <> t <> " — " <> r
-        Just t, _, Nothing -> "intent: " <> t
-        Nothing, Just t, Just r -> "build: " <> t <> " — " <> r
-        Nothing, Just t, Nothing -> "build: " <> t
-        Nothing, Nothing, _
-          | hasCbor -> "built"
-          | hasIntent -> "intent ready, tx-build pending"
-          | otherwise -> "response received"
-      ok = hasCbor
+      n = Array.length errs
+      fieldWord = if n == 1 then "field" else "fields"
     in
-      HH.div
-        [ HP.classes [ cn "report-status" ]
-        , HP.attr (HH.AttrName "data-ok") (boolAttr ok)
-        ]
-        [ HH.span [ HP.classes [ cn "report-status__dot" ] ] []
-        , HH.text label
-        ]
+      { ok: false
+      , label: "fix " <> show n <> " " <> fieldWord
+      , title: formErrorsTitle errs
+      }
+
+formErrorsTitle :: Array String -> String
+formErrorsTitle errs = case errs of
+  [] -> "ready"
+  _ -> "fix form errors:\n• " <> T.joinWith "\n• " errs
+
+resultStatusSummary
+  :: TxMode
+  -> Json
+  -> { ok :: Boolean, label :: String }
+resultStatusSummary mode j =
+  let
+    p = responsePrefix mode
+    -- Failure precedence: intent-failure > build-failure
+    -- (an intent-failure short-circuits tx-build).
+    iTag = lookupString (p <> "FailureTag") j
+    bTag = lookupString (p <> "BuildFailureTag") j
+    reason = lookupString (p <> "FailureReason") j
+    hasCbor = case lookupString (p <> "CborHex") j of
+      Just _ -> true
+      Nothing -> false
+    hasIntent = case lookupString (p <> "IntentJson") j of
+      Just _ -> true
+      Nothing -> false
+    -- Three terminal states: built, intent-failure,
+    -- build-failure.  "ok" only when the tx CBOR is in
+    -- the response.
+    label = case iTag, bTag, reason of
+      Just t, _, Just r -> "intent: " <> t <> " — " <> r
+      Just t, _, Nothing -> "intent: " <> t
+      Nothing, Just t, Just r -> "build: " <> t <> " — " <> r
+      Nothing, Just t, Nothing -> "build: " <> t
+      Nothing, Nothing, _
+        | hasCbor -> "built"
+        | hasIntent -> "intent ready, tx-build pending"
+        | otherwise -> "response received"
+    ok = hasCbor
+  in
+    { ok, label }
 
 lookupString :: String -> Json -> Maybe String
 lookupString k j = do
@@ -2739,7 +2777,7 @@ graphProjectedAssetInline a
         ]
 
 -- | Dispatches to the mode-specific request encoder.  The
--- | result is what the Build button POSTs and what the
+-- | result is what the build request POSTs and what the
 -- | intent.json preview tab shows in the pre-submit state.
 requestJson :: State -> Json
 requestJson st = case st.mode of
@@ -3179,11 +3217,12 @@ copyBlockButton payload label =
 
 -- | #289 slice D — sectioned progress indicator.  Five
 -- | section chips (Identity / Amount / Rationale /
--- | References / Signers) plus a "Jump to Build" chip at
+-- | References / Signers) plus a result-panel jump at
 -- | the right edge (slice B picked Pattern A, so the
 -- | action bar is inline at the form-flow end on mobile
--- | and the jump shortcut is the only ergonomic way to
--- | reach Build without scrolling on a 390 px viewport).
+-- | and the jump shortcut is the ergonomic way to reach
+-- | the live build result without scrolling on a 390 px
+-- | viewport).
 -- | Sits ABOVE the drafts bar so it's the first thing the
 -- | operator sees on the page.
 progressIndicator
@@ -3195,7 +3234,7 @@ progressIndicator st =
         "Form completion progress"
     ]
     ( map (progressChip st) allSections
-        <> [ jumpToBuildChip st ]
+        <> [ jumpToResultChip st ]
     )
 
 progressChip
@@ -3237,15 +3276,12 @@ progressChip st sec =
       , HH.text (sectionLabel sec)
       ]
 
--- | Right-edge "Jump to Build" affordance.  Slice B chose
--- | Pattern A (drop sticky on mobile, inline action bar at
--- | the form-flow end), so this chip is the operator's
--- | shortcut to reach the Build button without a 1700-px
--- | scroll on a phone.  The chip's enabled / disabled
--- | visual mirrors the Build button's `formErrors` gate.
-jumpToBuildChip
+-- | Right-edge result affordance.  With reactive builds
+-- | there is no Build button to focus, so the shortcut
+-- | scrolls to the live result panel instead.
+jumpToResultChip
   :: forall m. State -> H.ComponentHTML Action () m
-jumpToBuildChip st =
+jumpToResultChip st =
   let
     blocked = not (Array.null (formErrors st))
     stateAttr = if blocked then "pending" else "complete"
@@ -3258,11 +3294,11 @@ jumpToBuildChip st =
           ]
       , HP.attr (HH.AttrName "data-state") stateAttr
       , HP.attr (HH.AttrName "aria-label")
-          "Jump to Build button"
+          "Jump to build result panel"
       , HP.type_ HP.ButtonButton
-      , HE.onClick (\_ -> FocusBuildButton)
+      , HE.onClick (\_ -> FocusResultPanel)
       ]
-      [ HH.text "Build ▼" ]
+      [ HH.text "Result ▼" ]
 
 -- | Top-of-/operate bar carrying the `Drafts ▾` picker, the
 -- | `Save as draft…` button (and its inline editor), and the
@@ -3709,6 +3745,40 @@ scheduleAutoSave = do
       )
   H.modify_ _ { autoSaveFiber = Just fib }
 
+-- | Schedule a 500 ms debounced build of the current request.
+-- | Any pending or in-flight build fork is killed first so an
+-- | older backend response cannot overwrite a newer edit.  When
+-- | client-side form validation is failing, the fork is not
+-- | re-created and the result area moves to the live error
+-- | status instead.
+scheduleAutoBuild
+  :: forall output m
+   . MonadAff m
+  => H.HalogenM State Action () output m Unit
+scheduleAutoBuild = do
+  st <- H.get
+  case st.autoBuildFiber of
+    Just fib -> H.kill fib
+    Nothing -> pure unit
+  if Array.null (formErrors st) then do
+    H.modify_ _ { result = Pending, autoBuildFiber = Nothing }
+    fib <- H.fork do
+      H.liftAff (delay (Milliseconds 500.0))
+      handleAction RunBuild
+    H.modify_ _ { autoBuildFiber = Just fib }
+  else
+    H.modify_ _ { result = NotStarted, autoBuildFiber = Nothing }
+
+recordFormEdit
+  :: forall output m
+   . MonadAff m
+  => (State -> State)
+  -> H.HalogenM State Action () output m Unit
+recordFormEdit f = do
+  H.modify_ f
+  scheduleAutoSave
+  scheduleAutoBuild
+
 -- ---------------------------------------------------------------------------
 -- Handlers
 
@@ -3738,13 +3808,14 @@ handleAction = case _ of
       Just (OperateSnapshotE e) ->
         H.modify_ (restoreSnapshot e.snapshot)
       _ -> pure unit
+    scheduleAutoBuild
   ToggleTheme -> do
     st <- H.get
     t' <- H.liftEffect (toggleThemeEff st.theme)
     H.modify_ \s -> s { theme = t' }
-  SetScope s -> do
-    H.modify_ \st -> st { scope = s, destinationLabel = scopeSlug s }
-    scheduleAutoSave
+  SetScope s ->
+    recordFormEdit \st -> st
+      { scope = s, destinationLabel = scopeSlug s }
   SetMode m -> do
     -- Reset the response on mode switch so a stale
     -- swap-shaped body doesn't drive the disburse-shaped
@@ -3753,7 +3824,7 @@ handleAction = case _ of
     -- operator leaves a contingency disburse for Swap/Reorganize
     -- (whose pickers exclude Contingency) snap the source scope
     -- back to an owned scope.
-    H.modify_ \st ->
+    recordFormEdit \st ->
       let
         scope' =
           if m /= ModeDisburse && st.scope == Contingency then
@@ -3761,102 +3832,66 @@ handleAction = case _ of
           else st.scope
       in
         st { mode = m, scope = scope', result = NotStarted }
-    scheduleAutoSave
-  SetWalletAddr s -> do
-    H.modify_ \st -> st { walletAddr = s }
-    scheduleAutoSave
-  SetAmountMode m -> do
-    H.modify_ \st -> st { amountMode = m }
-    scheduleAutoSave
-  SetUsdm s -> do
-    H.modify_ \st -> st { usdm = s }
-    scheduleAutoSave
-  SetSplit s -> do
-    H.modify_ \st -> st { split = s }
-    scheduleAutoSave
-  SetRateMode m -> do
-    H.modify_ \st -> st { rateMode = m }
-    scheduleAutoSave
-  SetAdaUsdm s -> do
-    H.modify_ \st -> st { adaUsdm = s }
-    scheduleAutoSave
-  SetSlippageBps s -> do
-    H.modify_ \st -> st { slippageBps = s }
-    scheduleAutoSave
-  SetMinRate s -> do
-    H.modify_ \st -> st { minRate = s }
-    scheduleAutoSave
-  SetBeneficiaryAddr s -> do
-    H.modify_ \st -> st { beneficiaryAddr = s }
-    scheduleAutoSave
-  SetDisburseUnit u -> do
-    H.modify_ \st -> st { disburseUnit = u }
-    scheduleAutoSave
-  SetDisburseAmount s -> do
-    H.modify_ \st -> st { disburseAmount = s }
-    scheduleAutoSave
-  AddContingencyDestination -> do
-    H.modify_ \st -> st
+  SetWalletAddr s -> recordFormEdit \st -> st { walletAddr = s }
+  SetAmountMode m -> recordFormEdit \st -> st { amountMode = m }
+  SetUsdm s -> recordFormEdit \st -> st { usdm = s }
+  SetSplit s -> recordFormEdit \st -> st { split = s }
+  SetRateMode m -> recordFormEdit \st -> st { rateMode = m }
+  SetAdaUsdm s -> recordFormEdit \st -> st { adaUsdm = s }
+  SetSlippageBps s ->
+    recordFormEdit \st -> st { slippageBps = s }
+  SetMinRate s -> recordFormEdit \st -> st { minRate = s }
+  SetBeneficiaryAddr s ->
+    recordFormEdit \st -> st { beneficiaryAddr = s }
+  SetDisburseUnit u ->
+    recordFormEdit \st -> st { disburseUnit = u }
+  SetDisburseAmount s ->
+    recordFormEdit \st -> st { disburseAmount = s }
+  AddContingencyDestination ->
+    recordFormEdit \st -> st
       { contingencyDestinations =
           st.contingencyDestinations <> [ emptyContingencyDestination ]
       }
-    scheduleAutoSave
-  RemoveContingencyDestination i -> do
-    H.modify_ \st -> st
+  RemoveContingencyDestination i ->
+    recordFormEdit \st -> st
       { contingencyDestinations = removeAt i st.contingencyDestinations }
-    scheduleAutoSave
-  SetContingencyDestScope i s -> do
-    H.modify_ \st -> st
+  SetContingencyDestScope i s ->
+    recordFormEdit \st -> st
       { contingencyDestinations =
           updateAt i (\d -> d { scope = s }) st.contingencyDestinations
       }
-    scheduleAutoSave
-  SetContingencyDestAda i s -> do
-    H.modify_ \st -> st
+  SetContingencyDestAda i s ->
+    recordFormEdit \st -> st
       { contingencyDestinations =
           updateAt i (\d -> d { ada = s }) st.contingencyDestinations
       }
-    scheduleAutoSave
-  AddReference -> do
-    H.modify_ \st -> st
+  AddReference ->
+    recordFormEdit \st -> st
       { references = st.references <> [ emptyReferenceRow ] }
-    scheduleAutoSave
-  RemoveReference i -> do
-    H.modify_ \st -> st
+  RemoveReference i ->
+    recordFormEdit \st -> st
       { references = removeAt i st.references }
-    scheduleAutoSave
-  SetReferenceUri i s -> do
-    H.modify_ \st -> st
+  SetReferenceUri i s ->
+    recordFormEdit \st -> st
       { references = updateAt i (\r -> r { uri = s }) st.references
       }
-    scheduleAutoSave
-  SetReferenceType i s -> do
-    H.modify_ \st -> st
+  SetReferenceType i s ->
+    recordFormEdit \st -> st
       { references = updateAt i (\r -> r { refType = s }) st.references
       }
-    scheduleAutoSave
-  SetReferenceLabel i s -> do
-    H.modify_ \st -> st
+  SetReferenceLabel i s ->
+    recordFormEdit \st -> st
       { references = updateAt i (\r -> r { label = s }) st.references
       }
-    scheduleAutoSave
-  SetSplitNativeAssets enabled -> do
-    H.modify_ \st -> st { splitNativeAssets = enabled }
-    scheduleAutoSave
-  SetValidityHours s -> do
-    H.modify_ \st -> st { validityHours = s }
-    scheduleAutoSave
-  SetDescription s -> do
-    H.modify_ \st -> st { description = s }
-    scheduleAutoSave
-  SetJustification s -> do
-    H.modify_ \st -> st { justification = s }
-    scheduleAutoSave
-  SetDestinationLabel s -> do
-    H.modify_ \st -> st { destinationLabel = s }
-    scheduleAutoSave
-  ToggleSigner s -> do
-    H.modify_ \st ->
+  SetSplitNativeAssets enabled ->
+    recordFormEdit \st -> st { splitNativeAssets = enabled }
+  SetValidityHours s -> recordFormEdit \st -> st { validityHours = s }
+  SetDescription s -> recordFormEdit \st -> st { description = s }
+  SetJustification s -> recordFormEdit \st -> st { justification = s }
+  SetDestinationLabel s ->
+    recordFormEdit \st -> st { destinationLabel = s }
+  ToggleSigner s ->
+    recordFormEdit \st ->
       st
         { extraSigners =
             if Array.elem s st.extraSigners then
@@ -3864,7 +3899,6 @@ handleAction = case _ of
             else
               st.extraSigners <> [ s ]
         }
-    scheduleAutoSave
   SetTab t -> H.modify_ \st -> st { activeTab = t }
   ClickReset -> do
     -- Reset is an operator-initiated abandon of the
@@ -3876,47 +3910,55 @@ handleAction = case _ of
     case st.autoSaveFiber of
       Just fib -> H.liftAff (killFiber (error "reset") fib)
       Nothing -> pure unit
+    case st.autoBuildFiber of
+      Just fib -> H.kill fib
+      Nothing -> pure unit
     H.liftEffect $ removeNamed OperateDraftsBook autoSaveName
     drafts' <- H.liftEffect (loadNamedVisible OperateDraftsBook)
     history' <- H.liftEffect (loadNamedVisible OperateHistoryBook)
     H.put (initialState { drafts = drafts', history = history' })
-  ClickBuild -> do
+  RunBuild -> do
     st <- H.get
-    H.modify_ \s -> s { result = Pending }
-    r <- H.liftAff case st.mode of
-      ModeSwap -> postBuild "/v1/build/swap" st
-      ModeDisburse
-        | st.scope == Contingency ->
-            postBuild "/v1/build/contingency-disburse" st
-        | otherwise -> postBuild "/v1/build/disburse" st
-      ModeReorganize -> postBuild "/v1/build/reorganize" st
-    -- Record supplied values into their books regardless of
-    -- outcome — the operator's intent is the same either
-    -- way; a backend failure shouldn't lose a freshly
-    -- typed wallet address.  Reloading after-the-fact means
-    -- the next render's dropdowns include the just-added
-    -- entry without a page refresh.
-    H.liftEffect (recordSubmittedBooks st)
-    books' <- H.liftEffect loadAllBooks
-    H.modify_ \s -> s { result = Result r, books = books' }
-    -- #288 — successful build (response carries the tx
-    -- CBOR) clears the auto-save slot AND appends a fresh
-    -- timestamped entry to operate_history (FR-007).
-    -- Failure paths leave both books untouched.
-    let p = responsePrefix st.mode
-    case lookupString (p <> "CborHex") r of
-      Just _ -> do
-        H.liftEffect $ removeNamed OperateDraftsBook autoSaveName
-        ts <- H.liftEffect timestampZ
-        H.liftEffect $ addNamed OperateHistoryBook
-          ( OperateSnapshotE
-              { name: ts, snapshot: snapshotState st }
-          )
-        drafts'' <- H.liftEffect (loadNamedVisible OperateDraftsBook)
-        history'' <- H.liftEffect (loadNamedVisible OperateHistoryBook)
-        H.modify_ \s -> s
-          { drafts = drafts'', history = history'' }
-      Nothing -> pure unit
+    if Array.null (formErrors st) then do
+      H.modify_ \s -> s { result = Pending }
+      r <- H.liftAff case st.mode of
+        ModeSwap -> postBuild "/v1/build/swap" st
+        ModeDisburse
+          | st.scope == Contingency ->
+              postBuild "/v1/build/contingency-disburse" st
+          | otherwise -> postBuild "/v1/build/disburse" st
+        ModeReorganize -> postBuild "/v1/build/reorganize" st
+      -- Record supplied values into their books regardless of
+      -- outcome — the operator's intent is the same either
+      -- way; a backend failure shouldn't lose a freshly
+      -- typed wallet address.  Reloading after-the-fact means
+      -- the next render's dropdowns include the just-added
+      -- entry without a page refresh.
+      H.liftEffect (recordSubmittedBooks st)
+      books' <- H.liftEffect loadAllBooks
+      H.modify_ \s -> s
+        { result = Result r, books = books', autoBuildFiber = Nothing }
+      -- #288 — successful build (response carries the tx
+      -- CBOR) clears the auto-save slot AND appends a fresh
+      -- timestamped entry to operate_history (FR-007).
+      -- Failure paths leave both books untouched.
+      let p = responsePrefix st.mode
+      case lookupString (p <> "CborHex") r of
+        Just _ -> do
+          H.liftEffect $ removeNamed OperateDraftsBook autoSaveName
+          ts <- H.liftEffect timestampZ
+          H.liftEffect $ addNamed OperateHistoryBook
+            ( OperateSnapshotE
+                { name: ts, snapshot: snapshotState st }
+            )
+          drafts'' <- H.liftEffect (loadNamedVisible OperateDraftsBook)
+          history'' <- H.liftEffect (loadNamedVisible OperateHistoryBook)
+          H.modify_ \s -> s
+            { drafts = drafts'', history = history'' }
+        Nothing -> pure unit
+    else
+      H.modify_ \s ->
+        s { result = NotStarted, autoBuildFiber = Nothing }
   BooksLoaded books -> H.modify_ \s -> s { books = books }
   ToggleNamedDropdown slot -> H.modify_ \s ->
     s
@@ -3952,6 +3994,7 @@ handleAction = case _ of
             }
         _ -> s { openNamedDropdown = Nothing }
     scheduleAutoSave
+    scheduleAutoBuild
   NamedInputKeyDown ev -> case KE.key ev of
     "Escape" ->
       H.modify_ \s -> s { openNamedDropdown = Nothing }
@@ -3981,6 +4024,7 @@ handleAction = case _ of
         -- (not from whatever was in the slot before the
         -- pick).
         scheduleAutoSave
+        scheduleAutoBuild
       _ -> H.modify_ _ { draftsDropdownOpen = false }
   PickHistoryEntry name -> do
     st <- H.get
@@ -3991,6 +4035,7 @@ handleAction = case _ of
           , historyDropdownOpen = false
           }
         scheduleAutoSave
+        scheduleAutoBuild
       _ -> H.modify_ _ { historyDropdownOpen = false }
   OpenSaveDraft ->
     H.modify_ \s -> s
@@ -4025,8 +4070,8 @@ handleAction = case _ of
       _ -> pure unit
   CancelSaveDraft -> H.modify_ \s -> s { saveDialog = Nothing }
   JumpToSection inputId -> H.liftEffect (_focusById inputId)
-  FocusBuildButton ->
-    H.liftEffect (_focusById "operate-build-btn")
+  FocusResultPanel ->
+    H.liftEffect (_focusById "operate-result-panel")
 
 -- | POST the active request body to the given endpoint and
 -- | decode the response as opaque JSON.  Same boilerplate

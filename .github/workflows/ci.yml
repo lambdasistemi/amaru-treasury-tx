@@ -158,7 +158,10 @@ jobs:
       - name: Compare with committed copy
         working-directory: checkout
         run: |
-          if ! diff -u docs/dependencies.md /tmp/dependencies.fresh.md; then
+          # git diff --no-index: git is always on the nixos runner; bare
+          # diff(1) is not.
+          if ! git --no-pager diff --no-index --exit-code \
+                 docs/dependencies.md /tmp/dependencies.fresh.md; then
             echo "::error::docs/dependencies.md is stale. Regenerate it with the dep-graph action (staleness: false) and commit the result." >&2
             exit 1
           fi

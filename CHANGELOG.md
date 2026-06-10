@@ -4,6 +4,39 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.18.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.17.0...v0.2.18.0) (2026-06-10)
+
+### Features
+
+* **disburse:** ADA intent and tx build carry N beneficiary outputs ([58b0260](https://github.com/lambdasistemi/amaru-treasury-tx/commit/58b0260a6bb6131bcb00a6cf2785c63ab137702f))
+* **cli:** contingency-disburse-wizard accepts multiple destinations ([5154cd7](https://github.com/lambdasistemi/amaru-treasury-tx/commit/5154cd784e4255cd472ca55de89ef777807ab1e9))
+* **wizard:** pure buildContingencyDisburseIntent for N destinations ([1282337](https://github.com/lambdasistemi/amaru-treasury-tx/commit/12823375bf0b13ff295d64da020177847d7832f3))
+* **api:** /v1/build/contingency-disburse endpoint ([7843144](https://github.com/lambdasistemi/amaru-treasury-tx/commit/78431441653643e345a10f5dbc567d692b7c7621))
+* **frontend:** Operate Contingency Disburse mode with destination rows ([881bcdf](https://github.com/lambdasistemi/amaru-treasury-tx/commit/881bcdf0809dd8324ba414d2e14479a6378367ac))
+* **cli:** thread rationale references through contingency disburse ([6a5b49b](https://github.com/lambdasistemi/amaru-treasury-tx/commit/6a5b49b55a5926169a1a2c7ad7496c3dee3ca505))
+* **frontend:** shared Format module — readable ADA amounts + truncated hashes ([97c9c72](https://github.com/lambdasistemi/amaru-treasury-tx/commit/97c9c72efb2e24724a8c67e57d0e273121fd6938))
+* **frontend:** P2 consistency, mobile layout, contingency all-signers UI ([23fe79c](https://github.com/lambdasistemi/amaru-treasury-tx/commit/23fe79c2724180c6848c2f1ab67b70274ed9366a))
+* **frontend:** align operate destination and reference cards ([051e9b5](https://github.com/lambdasistemi/amaru-treasury-tx/commit/051e9b5c7d13a982837209a526424379ae441459))
+* **disburse:** contingency disburse carries CIP-1694 references (IPFS) ([0952f30](https://github.com/lambdasistemi/amaru-treasury-tx/commit/0952f30e91b95f29ec87a086ffb7717003ed7cb7))
+* **history:** metadata address→entity triples + address-resolution query ([4c0d004](https://github.com/lambdasistemi/amaru-treasury-tx/commit/4c0d004cc8f89e9636f573827c487796e0269d03))
+* **api:** resolve tx-detail output {scope,role} + structured values ([f8f2e90](https://github.com/lambdasistemi/amaru-treasury-tx/commit/f8f2e9099243becd6a5332c5ad0a36ac4d7d4d3c))
+* **inspect:** project treasury spend redeemer via embedded CIP-57 blueprint ([3d2dddf](https://github.com/lambdasistemi/amaru-treasury-tx/commit/3d2dddf6f645476dcdbf9ce9ed236eb3167a77e6))
+* **inspect:** project swap order datums via embedded CIP-57 blueprint ([c6e16cb](https://github.com/lambdasistemi/amaru-treasury-tx/commit/c6e16cb84d908fa864c6e764adfda21af8710e11))
+* **frontend:** SPARQL lenses + resolved/projected tx-detail rendering ([de3a9e1](https://github.com/lambdasistemi/amaru-treasury-tx/commit/de3a9e10a665ea95cf6ebd41574e5b4806ba559b))
+* **frontend:** readable audit transaction detail ([0367ac6](https://github.com/lambdasistemi/amaru-treasury-tx/commit/0367ac6935fe2575e8a36e1f035be99fd2f48dd5))
+* **history:** emit metadata entities in cardano-ledger-rdf vocab, joined to the body graph ([59410e2](https://github.com/lambdasistemi/amaru-treasury-tx/commit/59410e22e8f1747db2cd96ef8710d433062db003))
+* **history:** SHACL shapes validate the unified cardano-ledger-rdf graph ([4381685](https://github.com/lambdasistemi/amaru-treasury-tx/commit/4381685285e411034ab6da30405af451e48d590d))
+* **api:** resolve tx-detail inputs via UTxO outref lookup ([002b312](https://github.com/lambdasistemi/amaru-treasury-tx/commit/002b312fc48adad699e464df67c876697226a859))
+* **api:** emit resolved graph-effect for the unsigned tx build ([d826ef1](https://github.com/lambdasistemi/amaru-treasury-tx/commit/d826ef173e9e0762e5ce9a345f05e3dc9d33c4c0))
+* **frontend:** Operate Graph tab — resolved spend→produce effect preview ([730a14b](https://github.com/lambdasistemi/amaru-treasury-tx/commit/730a14b78f97f478f6c93d5eb4db7309f34ea103))
+
+### Bug Fixes
+
+* **disburse:** take multi-destination fee from wallet change, not a scope ([638ad29](https://github.com/lambdasistemi/amaru-treasury-tx/commit/638ad29efa9d3e4cb98cf1a7838f5b8a4552c1dc))
+* **auxdata:** chunk rationale description/justification to 64-byte cap ([2ce998a](https://github.com/lambdasistemi/amaru-treasury-tx/commit/2ce998af90896de7952d3630cb5751573dc6ebae))
+* **report:** classify disburse destination outputs as beneficiary ([100e8e6](https://github.com/lambdasistemi/amaru-treasury-tx/commit/100e8e6e421eaf141cddf55ec074a4a251e020aa))
+* **api:** use server-configured metadata, drop client-supplied metadataPath ([6965d1f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/6965d1f8dcf489924ef0744a06b80694e6576694))
+
 ## [0.2.17.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.16.0...v0.2.17.0) (2026-05-31)
 
 ### Features

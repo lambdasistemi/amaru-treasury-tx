@@ -6,5 +6,5 @@
 - [X] T358-SA proofs field on responses + attach*Proofs in Server.hs; gate; commit
 
 ## Slice B — frontend Analysis group
-- [ ] T358-SB Analysis body: spend→produce + 3 proof tables; proofsPreview
-- [ ] T358-SB build + dev smoke; commit
+- [X] T358-SB Analysis body: spend→produce + 3 proof tables; proofsPreview
+- [X] T358-SB build + dev smoke; commit

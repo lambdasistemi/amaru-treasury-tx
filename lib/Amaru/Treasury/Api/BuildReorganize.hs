@@ -56,6 +56,7 @@ import Data.Word (Word16)
 import GHC.Generics (Generic)
 import System.IO (stderr)
 
+import Amaru.Treasury.Api.Proofs (ProofResult)
 import Amaru.Treasury.Backend (Backend)
 import Amaru.Treasury.Build.Trace (renderBuildEvent)
 import Amaru.Treasury.Cli.Common (GlobalOpts)
@@ -170,6 +171,11 @@ data ReorganizeBuildResponse = ReorganizeBuildResponse
     --   block + metadata entity overlay + @cq-rdf body@
     --   triples.  Best-effort; attached additively by the
     --   build handler, not the runner.
+    , rbrProofs :: Maybe [ProofResult]
+    -- ^ SPARQL proof suite over the built-tx lattice (#358):
+    --   value conservation, recipient resolution, and
+    --   datum\/redeemer rows.  Best-effort like the ttl;
+    --   attached additively by the build handler.
     }
     deriving (Eq, Show, Generic)
     deriving anyclass (FromJSON, ToJSON)
@@ -318,6 +324,7 @@ runBuildReorganize g serverMetadataPath backend req = do
                                 , rbrFailureReason = Nothing
                                 , rbrBuildFailureTag = Nothing
                                 , rbrTtl = Nothing
+                                , rbrProofs = Nothing
                                 }
                     let trB =
                             Tracer
@@ -410,6 +417,7 @@ runBuildReorganize g serverMetadataPath backend req = do
             , rbrFailureReason = Just (renderWizardFailure wf)
             , rbrBuildFailureTag = Nothing
             , rbrTtl = Nothing
+            , rbrProofs = Nothing
             }
 
 {- | Constructor tag of a 'WizardFailure' as a stable

@@ -1,0 +1,36 @@
+# Recipient resolution proof for one freshly built unsigned tx.
+#
+# One row is one output of the built transaction: its index, its
+# bech32 address, and the treasury {scope, role} the address resolves
+# to through the metadata-derived cardano:Entity overlay (see
+# address-resolution.rq for the entity join contract). An address no
+# entity claims is labelled "external" on both columns.
+#
+# The inner FILTER (not a shared ?bech32 variable) keeps the entity
+# join from matching arbitrary entities when an output address has no
+# bech32 form: an unbound variable inside OPTIONAL would join
+# everything, an error-raising FILTER joins nothing.
+
+PREFIX cardano:  <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/cardano#>
+PREFIX treasury: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/treasury#>
+PREFIX atx:      <https://lambdasistemi.github.io/amaru-treasury-tx/vocab/history#>
+
+SELECT ?index ?address ?scope ?role
+WHERE {
+  ?tx a cardano:Transaction ;
+      cardano:hasOutput ?out .
+  ?out cardano:hasIndex ?index ;
+       cardano:atAddress ?addr .
+  OPTIONAL { ?addr cardano:bech32 ?bech32 . }
+  BIND (COALESCE(?bech32, STR(?addr)) AS ?address)
+  OPTIONAL {
+    ?e a cardano:Entity ;
+       cardano:bech32 ?entityAddr ;
+       atx:scope ?entityScope ;
+       treasury:role ?entityRole .
+    FILTER (?entityAddr = ?bech32)
+  }
+  BIND (COALESCE(?entityScope, "external") AS ?scope)
+  BIND (COALESCE(?entityRole, "external") AS ?role)
+}
+ORDER BY ?index

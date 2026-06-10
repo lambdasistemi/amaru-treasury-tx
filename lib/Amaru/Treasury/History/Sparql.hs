@@ -41,6 +41,7 @@ module Amaru.Treasury.History.Sparql
       -- * Query results
     , HistoryQueryResult (..)
     , historyQueryRowsTsv
+    , runArqTable
 
       -- * SHACL validation
     , HistoryShapeName (..)
@@ -731,6 +732,23 @@ runArq
     -> ByteString
     -> IO (Either HistorySparqlError HistoryQueryResult)
 runArq name query ttl =
+    fmap (uncurry (HistoryQueryResult name))
+        <$> runArqTable query ttl
+
+{- | Run one SPARQL query over one Turtle document through Apache
+Jena @arq@, returning the result table as @(columns, rows)@ —
+column names without the leading @?@, cells in column order.
+The generic core of 'runNamedHistoryQuery'; sibling surfaces
+(the build-response proofs of "Amaru.Treasury.Api.Proofs") run
+their own embedded queries through the same runner.
+-}
+runArqTable
+    :: ByteString
+    -- ^ SPARQL query text.
+    -> ByteString
+    -- ^ Turtle document to query.
+    -> IO (Either HistorySparqlError ([Text], [[Text]]))
+runArqTable query ttl =
     withSystemTempDirectory "amaru-history-rdf" $ \dir -> do
         let dataPath = dir </> "history.ttl"
             queryPath = dir </> "query.rq"
@@ -753,7 +771,7 @@ runArq name query ttl =
             Left (ioe :: IOException) ->
                 pure (Left (HistoryArqUnavailable (T.pack (show ioe))))
             Right (ExitSuccess, out, _) ->
-                pure (parseTsv name (T.pack out))
+                pure (parseTsvTable (T.pack out))
             Right (ExitFailure code, _, err) ->
                 pure (Left (HistoryArqFailed code (T.pack err)))
 
@@ -811,19 +829,12 @@ shaclReportFails report =
         || "sh:Violation" `List.isInfixOf` report
         || "http://www.w3.org/ns/shacl#Violation" `List.isInfixOf` report
 
-parseTsv
-    :: HistoryQueryName
-    -> Text
-    -> Either HistorySparqlError HistoryQueryResult
-parseTsv name raw =
+parseTsvTable
+    :: Text
+    -> Either HistorySparqlError ([Text], [[Text]])
+parseTsvTable raw =
     case T.lines raw of
-        [] ->
-            Right
-                HistoryQueryResult
-                    { hqrQuery = name
-                    , hqrColumns = []
-                    , hqrRows = []
-                    }
+        [] -> Right ([], [])
         header : rows ->
             let columns = cleanHeader <$> T.splitOn "\t" header
                 parsedRows =
@@ -832,13 +843,7 @@ parseTsv name raw =
                     , not (T.null row)
                     ]
             in  if all ((== length columns) . length) parsedRows
-                    then
-                        Right
-                            HistoryQueryResult
-                                { hqrQuery = name
-                                , hqrColumns = columns
-                                , hqrRows = parsedRows
-                                }
+                    then Right (columns, parsedRows)
                     else
                         Left
                             ( HistoryResultMalformed

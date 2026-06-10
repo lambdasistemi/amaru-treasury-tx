@@ -1,0 +1,80 @@
+# Value conservation proof for one freshly built unsigned tx.
+#
+# The lattice carries the cq-rdf body graph of the built transaction
+# plus one resolved-value node per spent input, emitted by the
+# application under the SAME urn:cardano:utxo:<txid>:<ix> IRI scheme
+# and value vocabulary cq-rdf uses for outputs. One row is one asset:
+# the sum the tx consumes (resolved inputs + reward withdrawals) must
+# equal the sum it produces (outputs, plus the fee for ada).
+# Collateral never moves on a phase-1-valid tx and the build surfaces
+# never mint, so neither side counts them.
+
+PREFIX cardano: <https://lambdasistemi.github.io/cardano-ledger-rdf/vocab/cardano#>
+PREFIX rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+SELECT ?asset ?inputs ?outputsPlusFee ?balanced
+WHERE {
+  {
+    SELECT ?asset
+           (SUM(IF(?side = "in", ?q, 0)) AS ?inputs)
+           (SUM(IF(?side = "out", ?q, 0)) AS ?outputs)
+    WHERE {
+      {
+        # ada carried by each resolved spent input
+        ?tx a cardano:Transaction ;
+            cardano:hasInput/cardano:fromTxOutRef ?ref .
+        ?ref cardano:hasTxId/cardano:bytesHex ?srcTx ;
+             cardano:hasIndex ?srcIx .
+        BIND (IRI(CONCAT("urn:cardano:utxo:",
+                         ?srcTx, ":", STR(?srcIx))) AS ?src)
+        ?src cardano:lovelace ?q .
+        FILTER (?q != 0)
+        BIND ("ada" AS ?asset)
+        BIND ("in" AS ?side)
+      } UNION {
+        # native assets carried by each resolved spent input
+        ?tx a cardano:Transaction ;
+            cardano:hasInput/cardano:fromTxOutRef ?ref .
+        ?ref cardano:hasTxId/cardano:bytesHex ?srcTx ;
+             cardano:hasIndex ?srcIx .
+        BIND (IRI(CONCAT("urn:cardano:utxo:",
+                         ?srcTx, ":", STR(?srcIx))) AS ?src)
+        ?src cardano:hasAssetValue/rdf:rest*/rdf:first ?av .
+        ?av cardano:hasIdentifier/cardano:bytesHex ?asset ;
+            cardano:quantity ?q .
+        BIND ("in" AS ?side)
+      } UNION {
+        # reward-account withdrawals consume on the input side
+        ?tx a cardano:Transaction ;
+            cardano:hasWithdrawal/cardano:lovelace ?q .
+        FILTER (?q != 0)
+        BIND ("ada" AS ?asset)
+        BIND ("in" AS ?side)
+      } UNION {
+        # ada produced by each output of the built tx
+        ?tx a cardano:Transaction ;
+            cardano:hasOutput ?out .
+        ?out cardano:lovelace ?q .
+        FILTER (?q != 0)
+        BIND ("ada" AS ?asset)
+        BIND ("out" AS ?side)
+      } UNION {
+        # native assets produced by each output of the built tx
+        ?tx a cardano:Transaction ;
+            cardano:hasOutput ?out .
+        ?out cardano:hasAssetValue/rdf:rest*/rdf:first ?av .
+        ?av cardano:hasIdentifier/cardano:bytesHex ?asset ;
+            cardano:quantity ?q .
+        BIND ("out" AS ?side)
+      }
+    }
+    GROUP BY ?asset
+  }
+  ?feeTx a cardano:Transaction ;
+         cardano:hasFee ?fee .
+  BIND (IF(?asset = "ada", ?outputs + ?fee, ?outputs)
+        AS ?outputsPlusFee)
+  BIND (IF(?inputs = ?outputsPlusFee, "true", "false")
+        AS ?balanced)
+}
+ORDER BY ?asset

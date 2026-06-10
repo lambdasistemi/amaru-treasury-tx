@@ -113,6 +113,7 @@ import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
     , snapshotUtxosByTxIn
     )
+import Amaru.Treasury.Api.Proofs (runBuildProofs)
 import Amaru.Treasury.Api.State
     ( ScopeUtxoFilter (..)
     )
@@ -362,6 +363,10 @@ are untouched; they leave the field 'Nothing' and the handler fills it.
 Every handler also attaches the #357 RDF Turtle lattice of the
 unsigned tx ('buildTxLattice') the same way: best-effort, from the
 response cbor hex, leaving the field 'Nothing' on any failure.
+
+Finally each handler attaches the #358 SPARQL proof suite
+('runBuildProofs') over the resolved lattice — same indexed UTxO
+read, same best-effort contract.
 -}
 mkBuildHandlers
     :: ApiIndexer cf op
@@ -388,17 +393,21 @@ mkBuildHandlers
                 buildSwap buildProvider
                     >=> attachSwapGraphEffect
                     >=> attachSwapTtl
+                    >=> attachSwapProofs
             , bhBuildDisburse =
                 buildDisburse buildProvider
                     >=> attachDisburseGraphEffect
                     >=> attachDisburseTtl
+                    >=> attachDisburseProofs
             , bhBuildContingencyDisburse =
                 buildContingencyDisburse buildProvider
                     >=> attachDisburseGraphEffect
                     >=> attachDisburseTtl
+                    >=> attachDisburseProofs
             , bhBuildReorganize =
                 buildReorganize buildProvider
                     >=> attachReorganizeTtl
+                    >=> attachReorganizeProofs
             }
       where
         buildProvider = mkBuildProvider apiIdx realProvider
@@ -439,6 +448,30 @@ mkBuildHandlers
                 Just hex -> do
                     ttl <- buildTxLattice metadata hex
                     pure resp{rbrTtl = ttl}
+                Nothing -> pure resp
+
+        attachDisburseProofs resp =
+            case dbrCborHex resp of
+                Just hex -> do
+                    proofs <-
+                        runBuildProofs metadata resolveUtxos hex
+                    pure resp{dbrProofs = proofs}
+                Nothing -> pure resp
+
+        attachSwapProofs resp =
+            case sbrCborHex resp of
+                Just hex -> do
+                    proofs <-
+                        runBuildProofs metadata resolveUtxos hex
+                    pure resp{sbrProofs = proofs}
+                Nothing -> pure resp
+
+        attachReorganizeProofs resp =
+            case rbrCborHex resp of
+                Just hex -> do
+                    proofs <-
+                        runBuildProofs metadata resolveUtxos hex
+                    pure resp{rbrProofs = proofs}
                 Nothing -> pure resp
 
 -- | Build the servant 'Server' from the 'Handlers' record.

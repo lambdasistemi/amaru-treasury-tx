@@ -56,6 +56,7 @@ import GHC.Generics (Generic)
 import System.IO (stderr)
 
 import Amaru.Treasury.Api.GraphEffect (GraphEffect)
+import Amaru.Treasury.Api.Proofs (ProofResult)
 import Amaru.Treasury.Backend (Backend)
 import Amaru.Treasury.Build.Trace (renderBuildEvent)
 import Amaru.Treasury.Cli.Common (GlobalOpts)
@@ -194,6 +195,11 @@ data SwapBuildResponse = SwapBuildResponse
     --   block + metadata entity overlay + @cq-rdf body@
     --   triples.  Best-effort like the graph-effect; attached
     --   additively by the build handler, not the runner.
+    , sbrProofs :: Maybe [ProofResult]
+    -- ^ SPARQL proof suite over the built-tx lattice (#358):
+    --   value conservation, recipient resolution, and
+    --   datum\/redeemer rows.  Best-effort like the ttl;
+    --   attached additively by the build handler.
     }
     deriving (Eq, Show, Generic)
     deriving anyclass (FromJSON, ToJSON)
@@ -373,6 +379,7 @@ runBuildSwap g serverMetadataPath backend req = do
                                 , sbrBuildFailureTag = Nothing
                                 , sbrGraphEffect = Nothing
                                 , sbrTtl = Nothing
+                                , sbrProofs = Nothing
                                 }
                     -- #269 — after intent assembly succeeds,
                     -- run the tx-build stage against the same
@@ -472,6 +479,7 @@ runBuildSwap g serverMetadataPath backend req = do
             , sbrBuildFailureTag = Nothing
             , sbrGraphEffect = Nothing
             , sbrTtl = Nothing
+            , sbrProofs = Nothing
             }
 
 {- | The constructor tag of a 'WizardFailure' as a stable

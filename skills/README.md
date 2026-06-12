@@ -31,6 +31,19 @@ and library names so a matching prompt finds the skill.
 
 ## Skills in this repo
 
+### `amaru-treasury-tx-guide/`
+
+Orientation for working *on* this codebase: repository map, build /
+test / run commands, where each feature is implemented, how `tx-build`
+dispatches on the intent action, where the intent schema and golden
+fixtures live, and where the answers to common user questions are
+documented. Load this first when navigating or modifying the repo.
+
+Triggers: "where is the swap/disburse/withdraw builder", "how does the
+API indexer work", "how do I add a CLI flag or a wizard", `just ci` /
+`just smoke` / `nix flake check`, GHC 9.12.3 + haskell.nix, fourmolu
+70-column, and questions about what the repo does.
+
 ### `amaru-treasury-tx-operator/`
 
 End-to-end operator workflow for the treasury tx pipeline:

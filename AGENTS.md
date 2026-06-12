@@ -1,80 +1,114 @@
-# amaru-treasury-tx-issue70 Development Guidelines
+# Repository Agent Guide
 
-Auto-generated from all feature plans. Last updated: 2026-05-24
+Cross-tool entry point for AI coding agents working in this repository
+(see [agents.md](https://agents.md)). Human readers should start at the
+[README](README.md) and the documentation site at
+<https://lambdasistemi.github.io/amaru-treasury-tx/>.
 
-## Active Technologies
-- Haskell (GHC 9.12.3 via haskell.nix; constitution supports GHC 9.6+) + `cardano-node-clients`, public sublibrary `cardano-node-clients:devnet`, `cardano-node` binary, `optparse-applicative`, `aeson`, `directory`, `time`, Hspec (080-local-devnet-smoke)
-- Filesystem run directories only: socket/log transcript, timing evidence, intent JSON, unsigned CBOR, signed DevNet harness CBOR, submit/materialization proof, report JSON/Markdown (080-local-devnet-smoke/#83)
-- Haskell, GHC 9.6+ via the repository Nix shell. + `cardano-node-clients`, `cardano-tx-tools`, (157-flatten-devnet-cli)
-- filesystem only — `bootstrap-intent.json` (input to (157-flatten-devnet-cli)
-- Haskell, GHC 9.6+ via the repository Nix shell + `cardano-tx-tools` via `cabal.project` (191-bump-tx-tools)
-- Haskell, GHC 9.6+ (matches `cardano-node-clients`); PureScript / Halogen for the frontend tabs. + `cardano-node-clients` (`TxBuild` DSL, `Backend`/`Provider IO`), `cardano-ledger-conway` (Conway tx body, balancing), `cardano-tx-tools` (`Cardano.Tx.Build`, `setMetadata`), `servant-server` (HTTP endpoint), `aeson` (response shape), `browser-json-tree` flake input (frontend rendering of the Report tab). (270-build-swap-typed)
-- Filesystem only — `intent.json`, `tx.cbor`, `report.json` (CLI output); HTTP response carries the same payloads in-band. No database, no on-disk state for the API. (270-build-swap-typed)
+## What this repo is
 
-- Haskell, GHC 9.6+ (070-quote-derived-swap-params)
-- Cabal single-package CLI with haskell.nix flake checks
-- Existing `optparse-applicative`, `aeson`, `aeson-pretty`, `time`,
-  `text`, and Cardano ledger/client dependencies
+`amaru-treasury-tx` is a Haskell CLI for operating the Amaru treasury on
+Cardano. Typed wizards verify the upstream
+`pragma-org/amaru-treasury/journal/2026/metadata.json` against the
+on-chain registry NFT and build-time-pinned Plutus blobs, emit a unified
+`intent.json`, and `tx-build` turns that intent into unsigned Conway
+CBOR — re-evaluating every redeemer against a live `ChainContext` before
+writing bytes. The same binary creates age-encrypted vault-backed
+witnesses, merges them, and submits via a local node socket. A separate
+`amaru-treasury-tx-api` executable serves a read-only HTTP API + browser
+SPA backed by an embedded chain-sync indexer. It is a Haskell port of
+the bash recipes in the upstream journal, built on the
+[`cardano-node-clients` `TxBuild` DSL](https://github.com/lambdasistemi/cardano-node-clients).
 
-## Project Structure
+## How to work here
 
-```text
-app/amaru-treasury-tx/
-lib/Amaru/Treasury/
-test/unit/
-test/golden/
-test/fixtures/
-docs/
-specs/
+Everything runs inside the Nix shell.
+
+```bash
+nix develop                 # GHC 9.12.3 via haskell.nix + cabal, just, fourmolu, hlint
+just build                  # cabal build all -O0
+just unit                   # hspec unit tests   (just unit "<match>" to focus)
+just golden                 # golden CBOR/report fixtures
+just format                 # fourmolu -i + cabal-fmt -i
+just hlint
+just schema-check           # diff committed JSON Schemas against the emitters
+just smoke                  # offline CLI-surface smoke checks
+just ci                     # build + schema-check + unit + golden + format-check + hlint + smoke + release-check
+nix flake check             # full flake checks (what CI runs)
 ```
 
-## Commands
+Opt-in, node-backed (not part of `just ci`):
 
-- `just ci`
-- `just cabal-check`
-- `just schema-check`
-- `nix flake check`
+```bash
+just devnet-smoke node                                   # library devnet node smoke
+just devnet-cli-smoke --phase full --timeout-seconds 900 # shipped-CLI devnet proof
+just devnet-api-smoke                                    # #242 API live-boundary smoke
+```
 
-## Code Style
+### Code style
 
-- Haskell modules use explicit export lists, Haddock on exports,
-  fourmolu formatting, and warnings clean enough for `-Werror`.
-- Transaction builders stay pure; IO belongs in CLI/backend seams.
-- New quote-derived swap logic should keep arithmetic pure and quote
-  fetching behind an injectable source.
+- Fourmolu, **70-character** column limit, 4-space indentation, leading
+  commas/arrows; `cabal-fmt` for the `.cabal` file.
+- `GHC2021`, explicit export lists, Haddock on every export.
+- `-Werror` via the `common warnings` block.
+- Conventional Commits; linear history (rebase merge).
+- See the `/haskell` and `/nix` skills for project-wide conventions.
 
-## Recent Changes
-- 270-build-swap-typed: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`); PureScript / Halogen for the frontend tabs. + `cardano-node-clients` (`TxBuild` DSL, `Backend`/`Provider IO`), `cardano-ledger-conway` (Conway tx body, balancing), `cardano-tx-tools` (`Cardano.Tx.Build`, `setMetadata`), `servant-server` (HTTP endpoint), `aeson` (response shape), `browser-json-tree` flake input (frontend rendering of the Report tab).
-- 191-bump-tx-tools: Added Haskell, GHC 9.6+ via the repository Nix shell + `cardano-tx-tools` via `cabal.project`
-- 157-flatten-devnet-cli: Added Haskell, GHC 9.6+ via the repository Nix shell. + `cardano-node-clients`, `cardano-tx-tools`,
+### Primary dependencies
 
-  audit artifact, quote source abstraction, and offline proof strategy.
+- [`cardano-node-clients`](https://github.com/lambdasistemi/cardano-node-clients)
+  — the `TxBuild q e a` DSL and the `Provider IO` record-of-functions.
+- `cardano-ledger-conway` — Conway-era body, witnesses, balancing.
+- `cardano-ledger-api` — `estimateMinFeeTx` and balancing helpers.
+- `cardano-tx-tools`, `plutus-tx` (`ToData`/`FromData`),
+  `optparse-applicative`, `aeson`, `servant-server` (API),
+  `contra-tracer` (typed step traces).
 
-<!-- MANUAL ADDITIONS START -->
+## Repository map
+
+| Path | Purpose |
+| :--- | :------ |
+| `lib/Amaru/Treasury/` | Library: pure builders, wizards, intent schema, CLI parsers, API, indexer, RDF history. |
+| `lib/Amaru/Treasury/Cli/` | `optparse-applicative` subcommand parsers + runners (the CLI surface). |
+| `lib/Amaru/Treasury/Build/` | `tx-build` action runners (swap, disburse, withdraw, reorganize, …). |
+| `lib/Amaru/Treasury/Tx/` | Pure `TxBuild q e ()` programs per action. |
+| `lib/Amaru/Treasury/Api/` | `amaru-treasury-tx-api` HTTP server, config, lag guard, indexer wiring. |
+| `app/` | Nine executables (see `amaru-treasury-tx.cabal`); `app/amaru-treasury-tx/Main.hs` is the main CLI entry point. |
+| `frontend/` | PureScript + Halogen SPA (spago), bundled into the API container. |
+| `docs/` | MkDocs site sources (`mkdocs.yml` nav). |
+| `skills/` | Vendor-neutral Agent Skills (see below). |
+| `test/` | `unit`, `golden`, `red`, `devnet` suites + `test/fixtures/`. |
+| `transactions/` | In-repo archive of submitted mainnet treasury transactions per scope. |
+| `scripts/` | Smoke harness (`scripts/smoke/`), release helpers (`scripts/release/`). |
+| `nix/`, `flake.nix`, `justfile` | Build/release tooling — do not edit for docs work. |
 
 ## Skills
 
 Activatable, vendor-neutral [Agent Skills](https://agentskills.io/home)
-live under `skills/`. Any compatible agent (Claude Code, OpenAI
-Codex, Cursor, GitHub Copilot, Gemini CLI, OpenCode, Goose, …) will
-discover them by name/description and load the body when triggered.
+live under `skills/`. Any compatible agent (Claude Code, OpenAI Codex,
+Cursor, GitHub Copilot, Gemini CLI, OpenCode, Goose, …) discovers them
+by name/description and loads the body when triggered.
 
+- [`skills/amaru-treasury-tx-guide/`](skills/amaru-treasury-tx-guide/) —
+  orientation for working *on* this codebase: repository map, build /
+  test / run, where each feature lives, and where the answers to common
+  user questions live. Load this first when navigating or modifying the
+  repo.
 - [`skills/amaru-treasury-tx-operator/`](skills/amaru-treasury-tx-operator/) —
-  end-to-end operator workflow: build → witness → assemble → inspect
-  → validate → submit → archive into `transactions/`. **The first
-  time this skill runs on a host it conducts a one-time interview
-  and writes the operator's answers to
-  `~/.config/amaru-treasury-tx/operator.json`**, then reuses them
-  for every subsequent run. Triggers: `amaru-treasury-tx`, any
-  `*-wizard` subcommand, `attach-witness`, `treasury-inspect`,
-  signing for the Amaru treasury, archiving a submitted tx.
+  end-to-end operator workflow for driving the CLI *in production*:
+  build → witness → assemble → inspect → validate → submit → archive
+  into `transactions/`. The first time it runs on a host it conducts a
+  one-time interview and caches the operator's paths/identities to
+  `~/.config/amaru-treasury-tx/operator.json`. Triggers:
+  `amaru-treasury-tx`, any `*-wizard` subcommand, `attach-witness`,
+  `treasury-inspect`, signing/archiving an Amaru treasury tx.
 
 ## First-run setup for new operators
 
-If you're an LLM agent loaded into this repo for the first time on
-a new host, before doing anything else check whether
-`~/.config/amaru-treasury-tx/operator.json` exists. If it doesn't,
-load `skills/amaru-treasury-tx-operator/SKILL.md` and walk through
-its first-run interview. Subsequent sessions read the file
-silently — no re-asking.
-<!-- MANUAL ADDITIONS END -->
+If you're an agent loaded into this repo for the first time on a new
+host and the task involves *running* the CLI against a node, check
+whether `~/.config/amaru-treasury-tx/operator.json` exists before doing
+anything else. If it doesn't, load
+`skills/amaru-treasury-tx-operator/SKILL.md` and walk through its
+first-run interview. Subsequent sessions read the file silently — no
+re-asking.

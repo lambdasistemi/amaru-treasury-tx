@@ -121,6 +121,7 @@ library
     Amaru.Treasury.Api.Introspect
     Amaru.Treasury.Api.LagGuard
     Amaru.Treasury.Api.Proofs
+    Amaru.Treasury.Api.RateLimit
     Amaru.Treasury.Api.Readiness
     Amaru.Treasury.Api.Readiness.Internal
     Amaru.Treasury.Api.Server

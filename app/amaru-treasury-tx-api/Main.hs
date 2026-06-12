@@ -106,6 +106,7 @@ import Amaru.Treasury.Api.Introspect (introspectTx)
 import Amaru.Treasury.Api.LagGuard
     ( withLagGuard
     )
+import Amaru.Treasury.Api.RateLimit (newApiLimiter)
 import Amaru.Treasury.Api.Readiness
     ( Readiness (..)
     , ReadinessHandle (..)
@@ -228,6 +229,7 @@ main = do
                             -- The build runners read metadata from
                             -- the SERVER's own --metadata; the HTTP
                             -- surface carries no client path.
+                            limiter <- newApiLimiter
                             let metadataPath = arcMetadata opts
                                 buildHandlers =
                                     mkBuildHandlers
@@ -293,6 +295,7 @@ main = do
                                                 readProvider
                                                 metadata
                                                 (arcSocket opts)
+                                        , hLimiter = limiter
                                         , hHealth =
                                             healthResponse readiness
                                         , hScopeState =

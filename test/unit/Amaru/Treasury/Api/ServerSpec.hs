@@ -24,11 +24,12 @@ import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Either (isLeft)
+import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.List.NonEmpty qualified as NE
 import Data.Tagged (Tagged (..))
 import Data.Text (Text)
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
-import Network.HTTP.Types (status200, status404)
+import Network.HTTP.Types (status200, status404, status429)
 import Network.HTTP.Types.Method (methodPost)
 import Network.HTTP.Types.Status (statusCode)
 import Network.Wai
@@ -40,7 +41,16 @@ import Network.Wai
 import Network.Wai.Test (SResponse, runSession)
 import Network.Wai.Test qualified as WaiTest
 import Servant qualified
-import Test.Hspec (Spec, describe, it, shouldBe, shouldSatisfy)
+import System.IO.Unsafe (unsafePerformIO)
+import Test.Hspec
+    ( Expectation
+    , Spec
+    , describe
+    , expectationFailure
+    , it
+    , shouldBe
+    , shouldSatisfy
+    )
 
 import Amaru.Treasury.Api.BuildContingencyDisburse
     ( ContingencyDestinationRequest (..)
@@ -54,9 +64,17 @@ import Amaru.Treasury.Api.BuildReorganize
     ( ReorganizeBuildResponse (..)
     )
 import Amaru.Treasury.Api.BuildSwap
-    ( SwapBuildResponse (..)
+    ( SwapAmount (..)
+    , SwapBuildRequest (..)
+    , SwapBuildResponse (..)
+    , SwapRate (..)
     )
 import Amaru.Treasury.Api.Introspect (introspectTx)
+import Amaru.Treasury.Api.RateLimit
+    ( ApiLimiter
+    , newApiLimiter
+    , withApiLimiter
+    )
 import Amaru.Treasury.Api.Server
     ( Handlers (..)
     , mkApplication
@@ -315,6 +333,72 @@ spec = do
                         ["txid" .= sampleSubmitTxId]
                     )
 
+        it
+            "rate-limits build and submit with one shared limiter"
+            $ do
+                limiter <- newApiLimiter
+                buildCalls <- newIORef (0 :: Int)
+                submitCalls <- newIORef (0 :: Int)
+                let handlers =
+                        stubHandlers
+                            { hLimiter = limiter
+                            , hBuildSwap = \_ -> do
+                                modifyIORef' buildCalls (+ 1)
+                                pure stubSwapBuildResponse
+                            , hSubmit = \_ -> do
+                                modifyIORef' submitCalls (+ 1)
+                                pure (Right stubSubmit)
+                            }
+                held <-
+                    withApiLimiter limiter $ do
+                        buildRes <-
+                            runSession
+                                ( WaiTest.srequest
+                                    ( waiPostJson
+                                        "/v1/build/swap"
+                                        (Aeson.encode sampleSwapBuildRequest)
+                                    )
+                                )
+                                (mkApplication handlers)
+                        submitRes <-
+                            runSession
+                                ( WaiTest.srequest
+                                    ( waiPostJson
+                                        "/v1/submit"
+                                        (Aeson.encode (SubmitRequest "00"))
+                                    )
+                                )
+                                (mkApplication handlers)
+                        pure (Right (buildRes, submitRes))
+                case held of
+                    Left err ->
+                        expectationFailure $
+                            "test could not hold limiter: " <> show err
+                    Right (buildRes, submitRes) -> do
+                        assertRateLimited buildRes
+                        assertRateLimited submitRes
+                buildCount <- readIORef buildCalls
+                submitCount <- readIORef submitCalls
+                buildCount `shouldBe` 0
+                submitCount `shouldBe` 0
+
+        it "does not rate-limit read-only endpoints" $ do
+            limiter <- newApiLimiter
+            let handlers = stubHandlers{hLimiter = limiter}
+            held <-
+                withApiLimiter limiter $ do
+                    res <-
+                        runSession
+                            (WaiTest.srequest (waiGet "/v1/version"))
+                            (mkApplication handlers)
+                    pure (Right res)
+            case held of
+                Left err ->
+                    expectationFailure $
+                        "test could not hold limiter: " <> show err
+                Right res ->
+                    WaiTest.simpleStatus res `shouldBe` status200
+
         it "returns readiness health" $ do
             res <-
                 runSession
@@ -541,6 +625,16 @@ statusCodeOf r = statusCode (WaiTest.simpleStatus r)
 is4xx :: Int -> Bool
 is4xx c = c >= 400 && c < 500
 
+assertRateLimited :: SResponse -> Expectation
+assertRateLimited res = do
+    WaiTest.simpleStatus res `shouldBe` status429
+    case Aeson.decode (WaiTest.simpleBody res) :: Maybe ApiError of
+        Just ApiError{aeField = Nothing} -> pure ()
+        other ->
+            expectationFailure $
+                "expected ApiError with aeField = Nothing, got "
+                    <> show other
+
 -- ---------------------------------------------------------------------------
 -- Stub Handlers
 
@@ -562,6 +656,7 @@ stubHandlers =
         , hParams = pure stubParams
         , hSubmit = \_ -> pure (Right stubSubmit)
         , hHealth = pure stubHealth
+        , hLimiter = stubLimiter
         , hScopeState = \scope ->
             pure stubScopeState{ssScope = scope}
         , hScopeUtxos = \scope _filter ->
@@ -584,27 +679,49 @@ stubHandlers =
                     , shsrConforms = True
                     , shsrReport = ""
                     }
-        , hBuildSwap = \_ ->
-            pure
-                SwapBuildResponse
-                    { sbrIntentJson = Nothing
-                    , sbrCli = Nothing
-                    , sbrCborHex = Nothing
-                    , sbrCborEnvelope = Nothing
-                    , sbrReport = Nothing
-                    , sbrFailureTag = Just "Stub"
-                    , sbrFailureField = Nothing
-                    , sbrFailureReason = Just "stub handler"
-                    , sbrBuildFailureTag = Nothing
-                    , sbrGraphEffect = Nothing
-                    , sbrTtl = Nothing
-                    , sbrProofs = Nothing
-                    }
+        , hBuildSwap = \_ -> pure stubSwapBuildResponse
         , hBuildDisburse = \_ -> pure disburseIntentFailureResp
         , hBuildContingencyDisburse = \_ ->
             pure disburseIntentFailureResp
         , hBuildReorganize = \_ -> pure reorganizeIntentFailureResp
         , hRawHandler = stubRawHandler
+        }
+
+stubLimiter :: ApiLimiter
+{-# NOINLINE stubLimiter #-}
+stubLimiter = unsafePerformIO newApiLimiter
+
+sampleSwapBuildRequest :: SwapBuildRequest
+sampleSwapBuildRequest =
+    SwapBuildRequest
+        { sbrScope = CoreDevelopment
+        , sbrWalletAddr = "addr_test1wallet"
+        , sbrAmount = AmountAllAda 2
+        , sbrRate = RateMin 0.5
+        , sbrValidityHours = Nothing
+        , sbrDescription = "d"
+        , sbrJustification = "j"
+        , sbrDestinationLabel = "core_development"
+        , sbrEvent = Nothing
+        , sbrLabel = Nothing
+        , sbrSigners = []
+        }
+
+stubSwapBuildResponse :: SwapBuildResponse
+stubSwapBuildResponse =
+    SwapBuildResponse
+        { sbrIntentJson = Nothing
+        , sbrCli = Nothing
+        , sbrCborHex = Nothing
+        , sbrCborEnvelope = Nothing
+        , sbrReport = Nothing
+        , sbrFailureTag = Just "Stub"
+        , sbrFailureField = Nothing
+        , sbrFailureReason = Just "stub handler"
+        , sbrBuildFailureTag = Nothing
+        , sbrGraphEffect = Nothing
+        , sbrTtl = Nothing
+        , sbrProofs = Nothing
         }
 
 stubRegistry :: RegistryResponse

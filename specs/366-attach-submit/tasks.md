@@ -20,14 +20,14 @@
 
 ## Slice 2 - Submit Preflight And Broadcast Injection
 
-- [ ] T366004 RED: add failing submit tests proving non-treasury and
+- [X] T366004 RED: add failing submit tests proving non-treasury and
   Phase-1-invalid transactions return 4xx and do not call the mocked
   broadcast dependency.
-- [ ] T366005 GREEN: add API submit helper that decodes, classifies
+- [X] T366005 GREEN: add API submit helper that decodes, classifies
   treasury shape, samples Phase-1 context, runs
   `validateFinalPhase1`, calls the reusable `submitSignedTx` path only
   after preflight passes, and returns `{ "txid": ... }` on success.
-- [ ] T366006 VERIFY: run `nix develop --quiet -c just unit "Submit"`
+- [X] T366006 VERIFY: run `nix develop --quiet -c just unit "Submit"`
   and `./gate.sh`, then commit
   `feat(api): preflight and submit treasury transactions` with
   `Tasks: T366004, T366005, T366006`.

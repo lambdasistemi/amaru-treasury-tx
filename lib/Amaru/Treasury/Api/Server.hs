@@ -310,7 +310,7 @@ data Handlers = Handlers
     , hPending :: Maybe ScopeId -> IO PendingResponse
     , hTip :: IO TipResponse
     , hParams :: IO ParamsResponse
-    , hSubmit :: SubmitRequest -> IO SubmitResponse
+    , hSubmit :: !(SubmitRequest -> IO (Either ApiError SubmitResponse))
     , hHealth :: IO HealthResponse
     , hScopeState :: ScopeId -> IO ScopeSection
     , hScopeUtxos :: ScopeId -> ScopeUtxoFilter -> IO ScopeUtxosResponse
@@ -564,7 +564,14 @@ mkServer Handlers{..} =
     pendingH scope = liftIO (hPending scope)
 
     submitH :: SubmitRequest -> Handler SubmitResponse
-    submitH req = liftIO (hSubmit req)
+    submitH req = do
+        result <- liftIO (hSubmit req)
+        case result of
+            Left apiErr ->
+                Handler $
+                    throwE
+                        err400{errBody = Aeson.encode apiErr}
+            Right resp -> pure resp
 
     scopeStateH :: ScopeId -> Handler ScopeSection
     scopeStateH scope = liftIO (hScopeState scope)

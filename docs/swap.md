@@ -625,17 +625,17 @@ The frozen swap fixture envelope at
 | Report field | Fixture value |
 |---|---:|
 | `result.report.walletAccounting.inputs[0].value.lovelace` | 50,007,239,276 |
-| `result.report.walletAccounting.changeOutput.value.lovelace` | 50,006,199,573 |
-| `result.report.walletAccounting.collateralReturn.value.lovelace` | 50,005,679,721 |
-| `result.report.walletAccounting.feeLovelace` | 1,039,703 |
-| `result.report.walletAccounting.netSpendLovelace` | 1,039,703 |
+| `result.report.walletAccounting.changeOutput.value.lovelace` | 50,006,215,897 |
+| `result.report.walletAccounting.collateralReturn.value.lovelace` | 50,005,704,207 |
+| `result.report.walletAccounting.feeLovelace` | 1,023,379 |
+| `result.report.walletAccounting.netSpendLovelace` | 1,023,379 |
 | `result.report.treasuryAccounting.inputTotal.lovelace` | 1,450,000,000,000 |
 | `result.report.treasuryAccounting.sundaeOrderTotal.lovelace` | 408,271,505,306 |
 | `result.report.treasuryAccounting.perChunkOverheadLovelace` | 3,280,000 |
 | `result.report.treasuryAccounting.treasuryLeftover.lovelace` | 1,041,728,494,694 |
 | `result.report.treasuryAccounting.netDebit.lovelace` | 408,271,505,306 |
-| `result.report.validation.feeLovelace` | 1,039,703 |
-| `result.report.validation.bodySizeBytes` | 14,954 |
+| `result.report.validation.feeLovelace` | 1,023,379 |
+| `result.report.validation.bodySizeBytes` | 14,987 |
 | `result.report.validation.socketNetworkMagic` | 764,824,073 |
 | `result.report.validation.redeemerCount` | 2 |
 | `result.report.validation.redeemerFailures` | 0 |

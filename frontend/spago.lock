@@ -11,6 +11,7 @@
             "argonaut",
             "argonaut-codecs",
             "arrays",
+            "browser-json-tree",
             "console",
             "datetime",
             "effect",
@@ -31,8 +32,12 @@
             "tuples",
             "web-dom",
             "web-events",
-            "web-html"
+            "web-html",
+            "web-uievents"
           ]
+        },
+        "test": {
+          "dependencies": []
         }
       }
     },
@@ -627,7 +632,11 @@
         "zipperarray": "2.0.0"
       }
     },
-    "extra_packages": {}
+    "extra_packages": {
+      "browser-json-tree": {
+        "path": "./vendor/browser-json-tree"
+      }
+    }
   },
   "packages": {
     "aff": {
@@ -804,6 +813,23 @@
         "either",
         "newtype",
         "prelude",
+        "tuples"
+      ]
+    },
+    "browser-json-tree": {
+      "type": "local",
+      "path": "./vendor/browser-json-tree",
+      "dependencies": [
+        "argonaut-core",
+        "arrays",
+        "effect",
+        "foreign-object",
+        "halogen",
+        "integers",
+        "maybe",
+        "numbers",
+        "prelude",
+        "strings",
         "tuples"
       ]
     },

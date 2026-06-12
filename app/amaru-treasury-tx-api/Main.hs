@@ -139,6 +139,7 @@ import Amaru.Treasury.Api.Types
     , SubmitResponse (..)
     , TipResponse (..)
     )
+import Amaru.Treasury.Api.VerifyWitness (verifyWitness)
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
@@ -263,6 +264,7 @@ main = do
                                         , hBuildIdentity = buildId
                                         , hIntrospect =
                                             introspectTx (Just metadata)
+                                        , hVerifyWitness = verifyWitness
                                         , hTxDetail =
                                             queryTxDetailResponse
                                                 (snapshotUtxosByTxIn apiIdx)

@@ -54,6 +54,7 @@ import Amaru.Treasury.Api.BuildReorganize
 import Amaru.Treasury.Api.BuildSwap
     ( SwapBuildResponse (..)
     )
+import Amaru.Treasury.Api.Introspect (introspectTx)
 import Amaru.Treasury.Api.Server
     ( Handlers (..)
     , mkApplication
@@ -82,6 +83,7 @@ import Amaru.Treasury.Api.Types
     , TxDetailOutput (..)
     , TxDetailResponse (..)
     )
+import Amaru.Treasury.Api.VerifyWitness (verifyWitness)
 import Amaru.Treasury.Cli.DisburseWizard
     ( ContingencyDisburseOpts (..)
     )
@@ -500,6 +502,8 @@ stubHandlers =
         { hInspectReport = \_scope -> pure stubReport
         , hRecentTxs = RecentTxManifest []
         , hBuildIdentity = stubBuildIdentity
+        , hIntrospect = introspectTx Nothing
+        , hVerifyWitness = verifyWitness
         , hTxDetail = \_ -> pure (Just stubTxDetail)
         , hRegistry = pure stubRegistry
         , hScripts = pure stubScripts

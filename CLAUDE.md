@@ -1,90 +1,16 @@
-# amaru-treasury-tx Development Guidelines
+# CLAUDE.md
 
-Auto-generated from feature plans. Last updated: 2026-05-24
+This project's agent guidance is maintained in **[AGENTS.md](AGENTS.md)**
+— the portable, cross-tool entry point. Claude Code reads this file
+automatically; start from AGENTS.md for:
 
-## Active Technologies
-- Haskell, GHC 9.6+ (matches `cardano-node-clients`). (005-unified-tx-build)
-- filesystem only — `intent.json` (wizard output), (005-unified-tx-build)
-- Haskell, GHC 9.6+ (matches `cardano-node-clients`). (004-disburse-wizard)
-- filesystem only — `intent.json` (wizard output), (004-disburse-wizard)
-- Haskell, GHC 9.6+ (matches `cardano-node-clients`). + `cardano-node-clients` (`TxBuild q e a` DSL, `selectWallet` location), `cardano-ledger-conway` (Conway tx body for `inputsTxBodyL`/`collateralInputsTxBodyL`), `aeson` (intent.json shape). (007-aggregate-wallet-utxos)
-- filesystem only — `intent.json` (wizard output, builder input). No DB or persistent state added by this feature. (007-aggregate-wallet-utxos)
-- filesystem only — `report.json` (input), `report.md` (074-report-render)
-- Haskell, GHC 9.6+ via the repository Nix shell. + `cardano-node-clients`, `cardano-tx-tools`, (157-flatten-devnet-cli)
-- filesystem only — `bootstrap-intent.json` (input to (157-flatten-devnet-cli)
-- Haskell, GHC 9.6+ (matches `cardano-node-clients`) + `cardano-node-clients` (Provider IO + N2C), `cardano-tx-tools` (`TxBuild` DSL), `cardano-ledger-conway` (Conway tx body), `plutus-tx` (`ToData`/`FromData`), `aeson` (intent.json), `contra-tracer` (informational logging) (259-swap-wizard-pure)
-- filesystem only — `intent.json` (CLI output, builder input), `report.json` (builder output). No DB. (259-swap-wizard-pure)
-- Haskell, GHC 9.6+ (matches `cardano-node-clients`); PureScript / Halogen for the frontend tabs. + `cardano-node-clients` (`TxBuild` DSL, `Backend`/`Provider IO`), `cardano-ledger-conway` (Conway tx body, balancing), `cardano-tx-tools` (`Cardano.Tx.Build`, `setMetadata`), `servant-server` (HTTP endpoint), `aeson` (response shape), `browser-json-tree` flake input (frontend rendering of the Report tab). (270-build-swap-typed)
-- Filesystem only — `intent.json`, `tx.cbor`, `report.json` (CLI output); HTTP response carries the same payloads in-band. No database, no on-disk state for the API. (270-build-swap-typed)
+- what this repo is,
+- how to work here (`nix develop`, `just build` / `unit` / `golden` /
+  `ci`, `nix flake check`),
+- code style (fourmolu 70-column, `GHC2021`, `-Werror`),
+- the repository map and primary dependencies,
+- the Agent Skills under `skills/` (`amaru-treasury-tx-guide`,
+  `amaru-treasury-tx-operator`).
 
-- Haskell, GHC 9.6+ (matches `cardano-node-clients`)
-- Cabal + Nix flake (haskell.nix, IOG cache)
-- Hspec + golden CBOR fixtures + QuickCheck for properties
-- `optparse-applicative` for CLI parsing
-- `plutus-tx` for `ToData`/`FromData` (Plutus Core data values)
-
-## Primary dependencies
-
-- [`cardano-node-clients`](https://github.com/lambdasistemi/cardano-node-clients)
-  for the `TxBuild q e a` DSL and the `Provider IO` record-of-functions.
-- `cardano-ledger-conway` for Conway-era body, witnesses, balancing.
-- `cardano-ledger-api` for `estimateMinFeeTx` and balancing helpers.
-
-## Project Structure
-
-```text
-amaru-treasury-tx/
-├── flake.nix
-├── nix/
-│   ├── project.nix          # haskell.nix cabalProject' (CHaP)
-│   ├── checks.nix
-│   ├── apps.nix
-│   └── fix-libs.nix
-├── cabal.project            # SRP pin: cardano-node-clients @ main
-├── amaru-treasury-tx.cabal
-├── README.md
-├── justfile
-├── lib/Amaru/Treasury/      # pure builders
-│   ├── Metadata.hs
-│   ├── Scope.hs
-│   ├── Constants.hs
-│   ├── Redeemer.hs
-│   ├── Backend.hs           # alias around Cardano.Node.Client.Provider
-│   ├── Backend/N2C.hs       # impure (constructs Provider IO)
-│   ├── Tx/{Disburse,Reorganize,Withdraw}.hs
-│   └── Summary.hs
-├── app/amaru-treasury-tx/Main.hs
-└── test/{unit,fixtures}
-```
-
-## Commands
-
-```bash
-just build        # cabal build all -O0
-just unit         # hspec unit tests
-just format       # fourmolu -i
-just hlint
-just ci           # build + tests + format-check + hlint
-nix build .#default
-nix run .#unit
-nix run .#lint
-```
-
-## Code Style
-
-- Fourmolu, 70-character column limit, leading commas/arrows.
-- 4-space indentation; explicit export lists; Haddock on every export.
-- `-Werror` enabled via the `common warnings` block.
-- Conventional Commits.
-- Linear history; rebase merge.
-- See the `/haskell` and `/nix` skills for project-wide details.
-
-## Recent Changes
-- 270-build-swap-typed: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`); PureScript / Halogen for the frontend tabs. + `cardano-node-clients` (`TxBuild` DSL, `Backend`/`Provider IO`), `cardano-ledger-conway` (Conway tx body, balancing), `cardano-tx-tools` (`Cardano.Tx.Build`, `setMetadata`), `servant-server` (HTTP endpoint), `aeson` (response shape), `browser-json-tree` flake input (frontend rendering of the Report tab).
-- 270-build-swap-typed: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`); PureScript / Halogen for the frontend tabs. + `cardano-node-clients` (`TxBuild` DSL, `Backend`/`Provider IO`), `cardano-ledger-conway` (Conway tx body, balancing), `cardano-tx-tools` (`Cardano.Tx.Build`, `setMetadata`), `servant-server` (HTTP endpoint), `aeson` (response shape), `browser-json-tree` flake input (frontend rendering of the Report tab).
-- 259-swap-wizard-pure: Added Haskell, GHC 9.6+ (matches `cardano-node-clients`) + `cardano-node-clients` (Provider IO + N2C), `cardano-tx-tools` (`TxBuild` DSL), `cardano-ledger-conway` (Conway tx body), `plutus-tx` (`ToData`/`FromData`), `aeson` (intent.json), `contra-tracer` (informational logging)
-
-  research, data model, contracts, quickstart.
-
-<!-- MANUAL ADDITIONS START -->
-<!-- MANUAL ADDITIONS END -->
+Keep durable guidance in AGENTS.md, not here, so every agent (not just
+Claude Code) sees it.

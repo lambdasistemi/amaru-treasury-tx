@@ -6,30 +6,30 @@ acceptance.
 
 ## Slice S1 — `POST /v1/tx/introspect`
 
-- [ ] T101 RED: `test/unit/Amaru/Treasury/Api/IntrospectSpec.hs` asserting,
+- [X] T101 RED: `test/unit/Amaru/Treasury/Api/IntrospectSpec.hs` asserting,
   against `test/fixtures/118-vault-witness/`:
   (a) `introspectTx Nothing (IntrospectRequest <unsigned.cbor.hex>)` returns
   `Right` with the fixture txid, `requiredSigners == [<key.hash>]`,
   `invalidHereafter == Just <fixture TTL>` (or `Nothing` — read the actual
   fixture), and `scope == Nothing`;
   (b) garbage hex returns `Left ApiError` (SC-002, FR-002).
-- [ ] T102 GREEN: `lib/Amaru/Treasury/Api/Introspect.hs` exporting
+- [X] T102 GREEN: `lib/Amaru/Treasury/Api/Introspect.hs` exporting
   `introspectTx :: Maybe TreasuryMetadata -> IntrospectRequest -> Either
   ApiError IntrospectResponse`, reusing `decodeWitnessTransaction`,
   `witnessTransactionFacts`, `renderGuardKeyHash`, `txIdText`, and `vldtTxBodyL`
   for the TTL. `scope` best-effort (`Nothing` with `Nothing` metadata).
-- [ ] T103 `IntrospectRequest` + `IntrospectResponse` carriers in
+- [X] T103 `IntrospectRequest` + `IntrospectResponse` carriers in
   `Api/Types.hs` with explicit `ToJSON`/`FromJSON` per the wire shape in
   plan.md; export them.
-- [ ] T104 Route `"tx" :> "introspect" :> ReqBody :> Post` in `JsonAPI`, the
+- [X] T104 Route `"tx" :> "introspect" :> ReqBody :> Post` in `JsonAPI`, the
   pure `hIntrospect :: IntrospectRequest -> Either ApiError IntrospectResponse`
   field on `Handlers`, and `mkServer` wiring that maps `Left` to `err400` with
   the `ApiError` JSON body (FR-002).
-- [ ] T105 Binary wiring in `app/amaru-treasury-tx-api/Main.hs`:
+- [X] T105 Binary wiring in `app/amaru-treasury-tx-api/Main.hs`:
   `hIntrospect = introspectTx <serverMetadata>`.
-- [ ] T106 `.cabal`: expose `Amaru.Treasury.Api.Introspect` (library) and add
+- [X] T106 `.cabal`: expose `Amaru.Treasury.Api.Introspect` (library) and add
   `Amaru.Treasury.Api.IntrospectSpec` to `unit-tests` other-modules.
-- [ ] T107 `./gate.sh` green; one commit
+- [X] T107 `./gate.sh` green; one commit
   `feat(365): stateless POST /v1/tx/introspect endpoint`.
 
 ## Slice S2 — `POST /v1/verify-witness`

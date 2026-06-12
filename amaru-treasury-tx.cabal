@@ -117,6 +117,7 @@ library
     Amaru.Treasury.Api.History
     Amaru.Treasury.Api.Indexer
     Amaru.Treasury.Api.Indexer.Internal
+    Amaru.Treasury.Api.Introspect
     Amaru.Treasury.Api.LagGuard
     Amaru.Treasury.Api.Proofs
     Amaru.Treasury.Api.Readiness
@@ -510,6 +511,7 @@ test-suite unit-tests
     Amaru.Treasury.Api.HandlersIndexerSpec
     Amaru.Treasury.Api.HistorySpec
     Amaru.Treasury.Api.IndexerSpec
+    Amaru.Treasury.Api.IntrospectSpec
     Amaru.Treasury.Api.LagGuardSpec
     Amaru.Treasury.Api.ProofsSpec
     Amaru.Treasury.Api.ReadinessSpec

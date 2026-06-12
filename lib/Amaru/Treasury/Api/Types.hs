@@ -34,6 +34,8 @@ module Amaru.Treasury.Api.Types
       -- * Indexed transaction detail
     , TxIdParam (..)
     , txIdParamHex
+    , IntrospectRequest (..)
+    , IntrospectResponse (..)
     , TxDetailResponse (..)
     , TxDetailInput (..)
     , TxDetailOutput (..)
@@ -282,6 +284,47 @@ instance FromHttpApiData TxIdParam where
 txIdParamHex :: TxIdParam -> Text
 txIdParamHex (TxIdParam (TxId bytes)) =
     TE.decodeUtf8 (B16.encode bytes)
+
+-- | Request body accepted by @POST /v1/tx/introspect@.
+newtype IntrospectRequest = IntrospectRequest
+    { itrCborHex :: Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON IntrospectRequest where
+    toJSON r = object ["cborHex" .= itrCborHex r]
+
+instance FromJSON IntrospectRequest where
+    parseJSON =
+        withObject "IntrospectRequest" $ \o ->
+            IntrospectRequest <$> o .: "cborHex"
+
+-- | Response returned by @POST /v1/tx/introspect@.
+data IntrospectResponse = IntrospectResponse
+    { irTxid :: Text
+    , irRequiredSigners :: [Text]
+    , irInvalidHereafter :: Maybe Word64
+    , irScope :: Maybe Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON IntrospectResponse where
+    toJSON r =
+        object
+            [ "txid" .= irTxid r
+            , "requiredSigners" .= irRequiredSigners r
+            , "invalidHereafter" .= irInvalidHereafter r
+            , "scope" .= irScope r
+            ]
+
+instance FromJSON IntrospectResponse where
+    parseJSON =
+        withObject "IntrospectResponse" $ \o ->
+            IntrospectResponse
+                <$> o .: "txid"
+                <*> o .: "requiredSigners"
+                <*> o .:? "invalidHereafter"
+                <*> o .:? "scope"
 
 -- | Response returned by @GET /v1/tx/<txid>@.
 data TxDetailResponse = TxDetailResponse

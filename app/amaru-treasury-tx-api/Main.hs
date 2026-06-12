@@ -103,6 +103,7 @@ import Amaru.Treasury.Api.Indexer
     , snapshotUtxosByTxIn
     , withApiIndexer
     )
+import Amaru.Treasury.Api.Introspect (introspectTx)
 import Amaru.Treasury.Api.LagGuard
     ( withLagGuard
     )
@@ -260,6 +261,8 @@ main = do
                                                 swapAddr
                                         , hRecentTxs = manifest
                                         , hBuildIdentity = buildId
+                                        , hIntrospect =
+                                            introspectTx (Just metadata)
                                         , hTxDetail =
                                             queryTxDetailResponse
                                                 (snapshotUtxosByTxIn apiIdx)

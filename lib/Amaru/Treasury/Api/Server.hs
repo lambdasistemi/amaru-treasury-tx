@@ -61,6 +61,7 @@ import Cardano.Node.Client.UTxOIndexer.Provider qualified as IndexedProvider
 import Control.Monad ((>=>))
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Except (throwE)
+import Data.Aeson qualified as Aeson
 import Data.Proxy (Proxy (..))
 import Data.Tagged (Tagged)
 import Data.Text (Text)
@@ -70,7 +71,9 @@ import Network.HTTP.Media ((//))
 import Network.Wai (Application)
 import Servant
     ( Server
+    , err400
     , err404
+    , errBody
     , serve
     , (:<|>) (..)
     )
@@ -119,8 +122,11 @@ import Amaru.Treasury.Api.State
     )
 import Amaru.Treasury.Api.Ttl (buildTxLattice)
 import Amaru.Treasury.Api.Types
-    ( BuildIdentity
+    ( ApiError
+    , BuildIdentity
     , HealthResponse
+    , IntrospectRequest
+    , IntrospectResponse
     , ParamsResponse
     , PendingResponse
     , RecentTxManifest
@@ -179,6 +185,10 @@ type JsonAPI =
                     :> Get '[JSON] RecentTxManifest
                 :<|> "version"
                     :> Get '[JSON] BuildIdentity
+                :<|> "tx"
+                    :> "introspect"
+                    :> ReqBody '[JSON] IntrospectRequest
+                    :> Post '[JSON] IntrospectResponse
                 :<|> "tx"
                     :> Capture "txid" TxIdParam
                     :> Get '[JSON] TxDetailResponse
@@ -279,6 +289,10 @@ data Handlers = Handlers
     { hInspectReport :: ScopeId -> IO InspectReport
     , hRecentTxs :: RecentTxManifest
     , hBuildIdentity :: BuildIdentity
+    , hIntrospect
+        :: ~( IntrospectRequest
+              -> Either ApiError IntrospectResponse
+            )
     , hTxDetail :: TxIdParam -> IO (Maybe TxDetailResponse)
     , hRegistry :: IO RegistryResponse
     , hScripts :: IO ScriptsResponse
@@ -480,6 +494,7 @@ mkServer Handlers{..} =
     ( inspectH
         :<|> pure hRecentTxs
         :<|> pure hBuildIdentity
+        :<|> introspectH
         :<|> txDetailH
         :<|> liftIO hRegistry
         :<|> liftIO hScripts
@@ -502,6 +517,15 @@ mkServer Handlers{..} =
   where
     inspectH :: ScopeId -> Handler InspectReport
     inspectH scope = liftIO (hInspectReport scope)
+
+    introspectH :: IntrospectRequest -> Handler IntrospectResponse
+    introspectH req =
+        case hIntrospect req of
+            Left apiErr ->
+                Handler $
+                    throwE
+                        err400{errBody = Aeson.encode apiErr}
+            Right resp -> pure resp
 
     txDetailH :: TxIdParam -> Handler TxDetailResponse
     txDetailH txid = do

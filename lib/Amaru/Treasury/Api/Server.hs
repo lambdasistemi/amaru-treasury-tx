@@ -73,6 +73,7 @@ import Servant
     ( Server
     , err400
     , err404
+    , err429
     , errBody
     , serve
     , (:<|>) (..)
@@ -117,6 +118,10 @@ import Amaru.Treasury.Api.Indexer
     , snapshotUtxosByTxIn
     )
 import Amaru.Treasury.Api.Proofs (runBuildProofs)
+import Amaru.Treasury.Api.RateLimit
+    ( ApiLimiter
+    , withApiLimiter
+    )
 import Amaru.Treasury.Api.State
     ( ScopeUtxoFilter (..)
     )
@@ -311,6 +316,7 @@ data Handlers = Handlers
     , hTip :: IO TipResponse
     , hParams :: IO ParamsResponse
     , hSubmit :: !(SubmitRequest -> IO (Either ApiError SubmitResponse))
+    , hLimiter :: !ApiLimiter
     , hHealth :: IO HealthResponse
     , hScopeState :: ScopeId -> IO ScopeSection
     , hScopeUtxos :: ScopeId -> ScopeUtxoFilter -> IO ScopeUtxosResponse
@@ -565,12 +571,29 @@ mkServer Handlers{..} =
 
     submitH :: SubmitRequest -> Handler SubmitResponse
     submitH req = do
-        result <- liftIO (hSubmit req)
+        limited <-
+            liftIO $
+                withApiLimiter hLimiter (Right <$> hSubmit req)
+        case limited of
+            Left apiErr ->
+                throwApiError err429 apiErr
+            Right (Left apiErr) ->
+                throwApiError err400 apiErr
+            Right (Right resp) -> pure resp
+
+    throwApiError err apiErr =
+        Handler $
+            throwE
+                err{errBody = Aeson.encode apiErr}
+
+    rateLimited :: IO a -> Handler a
+    rateLimited action = do
+        result <-
+            liftIO $
+                withApiLimiter hLimiter (Right <$> action)
         case result of
             Left apiErr ->
-                Handler $
-                    throwE
-                        err400{errBody = Aeson.encode apiErr}
+                throwApiError err429 apiErr
             Right resp -> pure resp
 
     scopeStateH :: ScopeId -> Handler ScopeSection
@@ -625,22 +648,22 @@ mkServer Handlers{..} =
         liftIO (hScopeHistoryShacl scope shapeName)
 
     buildSwapH :: SwapBuildRequest -> Handler SwapBuildResponse
-    buildSwapH req = liftIO (hBuildSwap req)
+    buildSwapH req = rateLimited (hBuildSwap req)
 
     buildDisburseH
         :: DisburseBuildRequest -> Handler DisburseBuildResponse
-    buildDisburseH req = liftIO (hBuildDisburse req)
+    buildDisburseH req = rateLimited (hBuildDisburse req)
 
     buildContingencyDisburseH
         :: ContingencyDisburseBuildRequest
         -> Handler DisburseBuildResponse
     buildContingencyDisburseH req =
-        liftIO (hBuildContingencyDisburse req)
+        rateLimited (hBuildContingencyDisburse req)
 
     buildReorganizeH
         :: ReorganizeBuildRequest
         -> Handler ReorganizeBuildResponse
-    buildReorganizeH req = liftIO (hBuildReorganize req)
+    buildReorganizeH req = rateLimited (hBuildReorganize req)
 
 {- | Bake the 'Handlers' into a WAI 'Application' ready to be
 run by warp.

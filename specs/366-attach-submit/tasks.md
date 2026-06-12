@@ -34,12 +34,12 @@
 
 ## Slice 3 - Shared Build/Submit Rate Limit
 
-- [ ] T366007 RED: add failing tests showing build and submit share the
+- [X] T366007 RED: add failing tests showing build and submit share the
   same limiter semantics, saturated requests return 429, and the
   underlying build/submit action is not executed.
-- [ ] T366008 GREEN: add or reuse a shared API limiter and wire it
+- [X] T366008 GREEN: add or reuse a shared API limiter and wire it
   around all `/v1/build/*` handlers and `/v1/submit`.
-- [ ] T366009 VERIFY: run `nix develop --quiet -c just unit "Server"`
+- [X] T366009 VERIFY: run `nix develop --quiet -c just unit "Server"`
   and `./gate.sh`, then commit
   `feat(api): share rate limit for build and submit` with
   `Tasks: T366007, T366008, T366009`.

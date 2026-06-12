@@ -62,19 +62,25 @@ plugins:
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
-  - Architecture: architecture.md
-  - Dependencies: dependencies.md
-  - Trust model: trust-model.md
-  - Swap recipe: swap.md
-  - Disburse: disburse.md
-  - Withdraw: withdraw.md
-  - Reorganize: reorganize.md
-  - Inspect: inspect.md
-  - Treasury history RDF demo: history-rdf-demo.md
-  - Treasury history RDF case study: history-rdf-case-study.md
-  - API container indexer: api-container-indexer.md
-  - Local devnet smoke: local-devnet-smoke.md
-  - ChainContext: chain-context.md
-  - Freeze workflow: freeze-workflow.md
-  - Parity report: parity.md
-  - Release automation: release.md
+  - User guide:
+      - Swap recipe: swap.md
+      - Disburse: disburse.md
+      - Withdraw: withdraw.md
+      - Reorganize: reorganize.md
+      - Inspect: inspect.md
+      - Report render: report-render.md
+      - Wizard input control: wizard-input-control.md
+      - Treasury history RDF demo: history-rdf-demo.md
+      - Treasury history RDF case study: history-rdf-case-study.md
+      - API container indexer: api-container-indexer.md
+      - DevNet bootstrap: devnet-bootstrap.md
+  - Architecture:
+      - Overview: architecture.md
+      - Trust model: trust-model.md
+      - ChainContext: chain-context.md
+      - Dependencies: dependencies.md
+  - Development:
+      - Freeze workflow: freeze-workflow.md
+      - Local devnet smoke: local-devnet-smoke.md
+      - Parity report: parity.md
+      - Release automation: release.md

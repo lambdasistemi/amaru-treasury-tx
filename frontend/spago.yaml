@@ -14,6 +14,7 @@ package:
     - either
     - foldable-traversable
     - maybe
+    - nullable
     - strings
     - ordered-collections
     - refs
@@ -35,16 +36,9 @@ package:
     outfile: dist/index.js
     platform: browser
     type: app
-  # #289 slice B — `test:` block dropped.  No `Test.Main`
-  # exists in the source tree, and the `spec` test dep
-  # dragged in 50+ transitive packages (ansi, avar, mmorph,
-  # …) that aren't in spago.lock's closure.  When
-  # `spago bundle --offline` regenerates an out-of-date
-  # lockfile it pulls the full test closure too, fails the
-  # offline check on a random missing transitive package,
-  # and aborts.  Removing the unused test surface keeps the
-  # closure to the 83 packages mkSpagoDerivation actually
-  # stages.  Restore this block once a Test.Main is added.
+  test:
+    main: Test.Main
+    dependencies: []
 
 workspace:
   packageSet:

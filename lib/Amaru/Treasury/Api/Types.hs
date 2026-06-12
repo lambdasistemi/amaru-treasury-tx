@@ -38,6 +38,8 @@ module Amaru.Treasury.Api.Types
     , IntrospectResponse (..)
     , VerifyWitnessRequest (..)
     , VerifyWitnessResponse (..)
+    , AttachRequest (..)
+    , AttachResponse (..)
     , TxDetailResponse (..)
     , TxDetailInput (..)
     , TxDetailOutput (..)
@@ -376,6 +378,41 @@ instance FromJSON VerifyWitnessResponse where
                 <$> o .: "ok"
                 <*> o .: "signerKeyHash"
                 <*> o .: "reason"
+
+-- | Request body accepted by @POST /v1/attach@.
+data AttachRequest = AttachRequest
+    { arUnsignedTx :: Text
+    , arWitnesses :: [Text]
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON AttachRequest where
+    toJSON r =
+        object
+            [ "unsignedTx" .= arUnsignedTx r
+            , "witnesses" .= arWitnesses r
+            ]
+
+instance FromJSON AttachRequest where
+    parseJSON =
+        withObject "AttachRequest" $ \o ->
+            AttachRequest
+                <$> o .: "unsignedTx"
+                <*> o .: "witnesses"
+
+-- | Response returned by @POST /v1/attach@.
+newtype AttachResponse = AttachResponse
+    { arCborHex :: Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON AttachResponse where
+    toJSON r = object ["cborHex" .= arCborHex r]
+
+instance FromJSON AttachResponse where
+    parseJSON =
+        withObject "AttachResponse" $ \o ->
+            AttachResponse <$> o .: "cborHex"
 
 -- | Response returned by @GET /v1/tx/<txid>@.
 data TxDetailResponse = TxDetailResponse

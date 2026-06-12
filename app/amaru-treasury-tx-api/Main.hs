@@ -80,6 +80,7 @@ import Cardano.Node.Client.UTxOIndexer.Follower
     )
 import Cardano.Node.Client.UTxOIndexer.Types (SlotNo (..))
 
+import Amaru.Treasury.Api.Attach (attachTx)
 import Amaru.Treasury.Api.BuildContingencyDisburse
     ( runBuildContingencyDisburse
     )
@@ -265,6 +266,7 @@ main = do
                                         , hIntrospect =
                                             introspectTx (Just metadata)
                                         , hVerifyWitness = verifyWitness
+                                        , hAttach = attachTx
                                         , hTxDetail =
                                             queryTxDetailResponse
                                                 (snapshotUtxosByTxIn apiIdx)

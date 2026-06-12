@@ -7,13 +7,13 @@
 
 ## Slice 1 - Attach Endpoint
 
-- [ ] T366001 RED: add failing attach tests for raw witness,
+- [X] T366001 RED: add failing attach tests for raw witness,
   cardano-cli envelope witness, body txid preservation, malformed
   input, empty witness list, and complete `ServerSpec` handler stub.
-- [ ] T366002 GREEN: add `AttachRequest`/`AttachResponse`, API attach
+- [X] T366002 GREEN: add `AttachRequest`/`AttachResponse`, API attach
   helper reusing `Amaru.Treasury.Tx.AttachWitness`, `POST /v1/attach`,
   strict `hAttach`, and cabal/test wiring.
-- [ ] T366003 VERIFY: run `nix develop --quiet -c just unit "Attach"`
+- [X] T366003 VERIFY: run `nix develop --quiet -c just unit "Attach"`
   and `./gate.sh`, then commit
   `feat(api): add stateless attach endpoint` with
   `Tasks: T366001, T366002, T366003`.
@@ -50,4 +50,3 @@
 - [ ] T366011 Audit PR body against delivered behavior and update it.
 - [ ] T366012 Drop `gate.sh` in `chore: drop gate.sh (ready for review)`.
 - [ ] T366013 Run finalization audit and mark PR #374 ready for review.
-

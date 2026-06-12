@@ -60,7 +60,10 @@ import Amaru.Treasury.Api.Server
     , mkApplication
     )
 import Amaru.Treasury.Api.Types
-    ( BuildIdentity (..)
+    ( ApiError (..)
+    , AttachRequest (..)
+    , AttachResponse (..)
+    , BuildIdentity (..)
     , HealthResponse (..)
     , ParamsResponse (..)
     , PendingResponse (..)
@@ -253,6 +256,45 @@ spec = do
                     (mkApplication stubHandlers)
             WaiTest.simpleStatus res `shouldBe` status200
             Aeson.decode (WaiTest.simpleBody res) `shouldBe` Just stubParams
+
+        it "attaches witnesses through the handler" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        ( waiPostJson
+                            "/v1/attach"
+                            ( Aeson.encode
+                                (AttachRequest "unsigned" ["witness"])
+                            )
+                        )
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res) `shouldBe` Just stubAttach
+
+        it "maps attach validation failures to a 4xx response" $ do
+            let apiErr =
+                    ApiError
+                        { aeMessage = "bad witness"
+                        , aeField = Just "witnesses"
+                        }
+                handlers =
+                    stubHandlers
+                        { hAttach = \_ -> Left apiErr
+                        }
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        ( waiPostJson
+                            "/v1/attach"
+                            ( Aeson.encode
+                                (AttachRequest "unsigned" ["witness"])
+                            )
+                        )
+                    )
+                    (mkApplication handlers)
+            statusCodeOf res `shouldSatisfy` is4xx
+            Aeson.decode (WaiTest.simpleBody res) `shouldBe` Just apiErr
 
         it "submits a signed transaction request" $ do
             res <-
@@ -504,6 +546,7 @@ stubHandlers =
         , hBuildIdentity = stubBuildIdentity
         , hIntrospect = introspectTx Nothing
         , hVerifyWitness = verifyWitness
+        , hAttach = \_ -> Right stubAttach
         , hTxDetail = \_ -> pure (Just stubTxDetail)
         , hRegistry = pure stubRegistry
         , hScripts = pure stubScripts
@@ -625,6 +668,9 @@ stubSubmit =
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
         , subReason = Nothing
         }
+
+stubAttach :: AttachResponse
+stubAttach = AttachResponse "signed"
 
 stubHealth :: HealthResponse
 stubHealth =

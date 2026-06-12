@@ -70,5 +70,5 @@ acceptance.
 
 ## Orchestrator-owned finalization
 
-- [ ] T300 PR body audit; `chore: drop gate.sh (ready for review)`; `gh pr
+- [X] T300 PR body audit; `chore: drop gate.sh (ready for review)`; `gh pr
   ready 371`.

@@ -1,0 +1,13 @@
+{
+  "txid": "a8c5852b130c075d43d07d87270e820e2e667b3cb0297ecb55c78abb7efbda15",
+  "block": 13541331,
+  "block_height": 13541331,
+  "slot": 189720368,
+  "block_time": "2026-06-12T17:50:59Z",
+  "timestamp": "2026-06-12T18:00:44Z",
+  "submitter": "paolino@cardano-mainnet (n2c socket)",
+  "fee_lovelace": 433688,
+  "valid_contract": true,
+  "epoch": 636,
+  "source": "koios tx_info (block_height/absolute_slot/tx_timestamp/fee); inclusion cross-checked via cardano-cli utxo query showing a8c5852b…#0 and a8c5852b…#1 at the swap-order address"
+}

@@ -46,7 +46,7 @@
 
 ## Finalization
 
-- [ ] T366010 Run final `./gate.sh` at HEAD.
-- [ ] T366011 Audit PR body against delivered behavior and update it.
-- [ ] T366012 Drop `gate.sh` in `chore: drop gate.sh (ready for review)`.
-- [ ] T366013 Run finalization audit and mark PR #374 ready for review.
+- [X] T366010 Run final `./gate.sh` at HEAD.
+- [X] T366011 Audit PR body against delivered behavior and update it.
+- [X] T366012 Drop `gate.sh` in `chore: drop gate.sh (ready for review)`.
+- [X] T366013 Run finalization audit and mark PR #374 ready for review.

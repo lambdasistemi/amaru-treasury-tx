@@ -23,6 +23,7 @@
             "js-timers",
             "maybe",
             "now",
+            "nullable",
             "numbers",
             "ordered-collections",
             "parallel",

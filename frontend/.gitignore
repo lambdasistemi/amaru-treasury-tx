@@ -11,3 +11,5 @@ dist/bundle.js
 test/playwright/screenshots/
 test/playwright/test-results/
 test/playwright/playwright-report/
+test-results/
+playwright-report/

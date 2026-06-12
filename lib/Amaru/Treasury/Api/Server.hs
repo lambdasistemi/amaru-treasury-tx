@@ -123,6 +123,8 @@ import Amaru.Treasury.Api.State
 import Amaru.Treasury.Api.Ttl (buildTxLattice)
 import Amaru.Treasury.Api.Types
     ( ApiError
+    , AttachRequest
+    , AttachResponse
     , BuildIdentity
     , HealthResponse
     , IntrospectRequest
@@ -194,6 +196,9 @@ type JsonAPI =
                 :<|> "verify-witness"
                     :> ReqBody '[JSON] VerifyWitnessRequest
                     :> Post '[JSON] VerifyWitnessResponse
+                :<|> "attach"
+                    :> ReqBody '[JSON] AttachRequest
+                    :> Post '[JSON] AttachResponse
                 :<|> "tx"
                     :> Capture "txid" TxIdParam
                     :> Get '[JSON] TxDetailResponse
@@ -298,6 +303,7 @@ data Handlers = Handlers
         :: IntrospectRequest
         -> Either ApiError IntrospectResponse
     , hVerifyWitness :: VerifyWitnessRequest -> VerifyWitnessResponse
+    , hAttach :: !(AttachRequest -> Either ApiError AttachResponse)
     , hTxDetail :: TxIdParam -> IO (Maybe TxDetailResponse)
     , hRegistry :: IO RegistryResponse
     , hScripts :: IO ScriptsResponse
@@ -501,6 +507,7 @@ mkServer Handlers{..} =
         :<|> pure hBuildIdentity
         :<|> introspectH
         :<|> verifyWitnessH
+        :<|> attachH
         :<|> txDetailH
         :<|> liftIO hRegistry
         :<|> liftIO hScripts
@@ -536,6 +543,15 @@ mkServer Handlers{..} =
     verifyWitnessH
         :: VerifyWitnessRequest -> Handler VerifyWitnessResponse
     verifyWitnessH req = pure (hVerifyWitness req)
+
+    attachH :: AttachRequest -> Handler AttachResponse
+    attachH req =
+        case hAttach req of
+            Left apiErr ->
+                Handler $
+                    throwE
+                        err400{errBody = Aeson.encode apiErr}
+            Right resp -> pure resp
 
     txDetailH :: TxIdParam -> Handler TxDetailResponse
     txDetailH txid = do

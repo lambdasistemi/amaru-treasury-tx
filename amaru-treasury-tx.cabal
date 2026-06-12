@@ -108,6 +108,7 @@ library
   other-modules:    Paths_amaru_treasury_tx
   exposed-modules:
     Amaru.Treasury
+    Amaru.Treasury.Api.Attach
     Amaru.Treasury.Api.BuildContingencyDisburse
     Amaru.Treasury.Api.BuildDisburse
     Amaru.Treasury.Api.BuildReorganize
@@ -507,6 +508,7 @@ test-suite unit-tests
   default-language:   GHC2021
   autogen-modules:    Paths_amaru_treasury_tx
   other-modules:
+    Amaru.Treasury.Api.AttachSpec
     Amaru.Treasury.Api.BuildMetadataSpec
     Amaru.Treasury.Api.ConfigSpec
     Amaru.Treasury.Api.HandlersIndexerSpec

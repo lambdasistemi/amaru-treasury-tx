@@ -36,6 +36,8 @@ module Amaru.Treasury.Api.Types
     , txIdParamHex
     , IntrospectRequest (..)
     , IntrospectResponse (..)
+    , VerifyWitnessRequest (..)
+    , VerifyWitnessResponse (..)
     , TxDetailResponse (..)
     , TxDetailInput (..)
     , TxDetailOutput (..)
@@ -325,6 +327,55 @@ instance FromJSON IntrospectResponse where
                 <*> o .: "requiredSigners"
                 <*> o .:? "invalidHereafter"
                 <*> o .:? "scope"
+
+-- | Request body accepted by @POST /v1/verify-witness@.
+data VerifyWitnessRequest = VerifyWitnessRequest
+    { vwrUnsignedTx :: Text
+    , vwrWitness :: Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON VerifyWitnessRequest where
+    toJSON r =
+        object
+            [ "unsignedTx" .= vwrUnsignedTx r
+            , "witness" .= vwrWitness r
+            ]
+
+instance FromJSON VerifyWitnessRequest where
+    parseJSON =
+        withObject "VerifyWitnessRequest" $ \o ->
+            VerifyWitnessRequest
+                <$> o .: "unsignedTx"
+                <*> o .: "witness"
+
+{- | Response returned by @POST /v1/verify-witness@.
+
+The type is intentionally pure data: all negative verification outcomes
+are represented as @ok = false@ rather than exceptions.
+-}
+data VerifyWitnessResponse = VerifyWitnessResponse
+    { vwrOk :: Bool
+    , vwrSignerKeyHash :: Maybe Text
+    , vwrReason :: Maybe Text
+    }
+    deriving stock (Eq, Show)
+
+instance ToJSON VerifyWitnessResponse where
+    toJSON r =
+        object
+            [ "ok" .= vwrOk r
+            , "signerKeyHash" .= vwrSignerKeyHash r
+            , "reason" .= vwrReason r
+            ]
+
+instance FromJSON VerifyWitnessResponse where
+    parseJSON =
+        withObject "VerifyWitnessResponse" $ \o ->
+            VerifyWitnessResponse
+                <$> o .: "ok"
+                <*> o .: "signerKeyHash"
+                <*> o .: "reason"
 
 -- | Response returned by @GET /v1/tx/<txid>@.
 data TxDetailResponse = TxDetailResponse

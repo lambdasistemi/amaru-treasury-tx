@@ -141,6 +141,8 @@ import Amaru.Treasury.Api.Types
     , TipResponse
     , TxDetailResponse
     , TxIdParam
+    , VerifyWitnessRequest
+    , VerifyWitnessResponse
     )
 import Amaru.Treasury.Cli.TreasuryInspect (runInspectFromBackend)
 import Amaru.Treasury.History.Sparql
@@ -189,6 +191,9 @@ type JsonAPI =
                     :> "introspect"
                     :> ReqBody '[JSON] IntrospectRequest
                     :> Post '[JSON] IntrospectResponse
+                :<|> "verify-witness"
+                    :> ReqBody '[JSON] VerifyWitnessRequest
+                    :> Post '[JSON] VerifyWitnessResponse
                 :<|> "tx"
                     :> Capture "txid" TxIdParam
                     :> Get '[JSON] TxDetailResponse
@@ -290,9 +295,9 @@ data Handlers = Handlers
     , hRecentTxs :: RecentTxManifest
     , hBuildIdentity :: BuildIdentity
     , hIntrospect
-        :: ~( IntrospectRequest
-              -> Either ApiError IntrospectResponse
-            )
+        :: IntrospectRequest
+        -> Either ApiError IntrospectResponse
+    , hVerifyWitness :: VerifyWitnessRequest -> VerifyWitnessResponse
     , hTxDetail :: TxIdParam -> IO (Maybe TxDetailResponse)
     , hRegistry :: IO RegistryResponse
     , hScripts :: IO ScriptsResponse
@@ -495,6 +500,7 @@ mkServer Handlers{..} =
         :<|> pure hRecentTxs
         :<|> pure hBuildIdentity
         :<|> introspectH
+        :<|> verifyWitnessH
         :<|> txDetailH
         :<|> liftIO hRegistry
         :<|> liftIO hScripts
@@ -526,6 +532,10 @@ mkServer Handlers{..} =
                     throwE
                         err400{errBody = Aeson.encode apiErr}
             Right resp -> pure resp
+
+    verifyWitnessH
+        :: VerifyWitnessRequest -> Handler VerifyWitnessResponse
+    verifyWitnessH req = pure (hVerifyWitness req)
 
     txDetailH :: TxIdParam -> Handler TxDetailResponse
     txDetailH txid = do

@@ -34,7 +34,7 @@ acceptance.
 
 ## Slice S2 — `POST /v1/verify-witness`
 
-- [ ] T201 RED: `test/unit/Amaru/Treasury/Api/VerifyWitnessSpec.hs` asserting,
+- [X] T201 RED: `test/unit/Amaru/Treasury/Api/VerifyWitnessSpec.hs` asserting,
   against `test/fixtures/118-vault-witness/` (+ `106-cardano-cli-oracle` tx
   body, + the wrong-key vault identity via `createWitness`):
   (a) matching `witness.expected.hex` over `unsigned.cbor.hex` →
@@ -46,23 +46,26 @@ acceptance.
   `ok = False`, signature does not verify;
   (d) malformed witness hex (`"deadbeef"`) → `ok = False`, malformed
   (SC-004).
-- [ ] T202 GREEN: `lib/Amaru/Treasury/Api/VerifyWitness.hs` exporting
+- [X] T202 GREEN: `lib/Amaru/Treasury/Api/VerifyWitness.hs` exporting
   `verifyWitness :: VerifyWitnessRequest -> VerifyWitnessResponse` (total,
   pure), reusing `decodeWitnessTransaction`, `witnessTransactionFacts` (for the
   required-signer set + body hash), `decodeVKeyWitnessHex`, `verifySignedDSIGN`,
   `hashKey`, and `renderGuardKeyHash`.
-- [ ] T203 `VerifyWitnessRequest` + `VerifyWitnessResponse` carriers in
+- [X] T203 `VerifyWitnessRequest` + `VerifyWitnessResponse` carriers in
   `Api/Types.hs` with explicit `ToJSON`/`FromJSON` per plan.md; export them.
-- [ ] T204 Route `"verify-witness" :> ReqBody :> Post` in `JsonAPI`, the pure
+- [X] T204 Route `"verify-witness" :> ReqBody :> Post` in `JsonAPI`, the pure
+  (Q-003: `test/unit/Amaru/Treasury/Api/ServerSpec.hs` added to owned set —
+  both `Handlers` fields made strict, `stubHandlers` completed with
+  `hIntrospect = introspectTx Nothing` + `hVerifyWitness = verifyWitness`.)
   `hVerifyWitness :: VerifyWitnessRequest -> VerifyWitnessResponse` field on
   `Handlers`, and `mkServer` wiring (`pure . hVerifyWitness`).
-- [ ] T205 Binary wiring in `app/amaru-treasury-tx-api/Main.hs`:
+- [X] T205 Binary wiring in `app/amaru-treasury-tx-api/Main.hs`:
   `hVerifyWitness = verifyWitness`.
-- [ ] T206 `.cabal`: expose `Amaru.Treasury.Api.VerifyWitness` (library) and
+- [X] T206 `.cabal`: expose `Amaru.Treasury.Api.VerifyWitness` (library) and
   add `Amaru.Treasury.Api.VerifyWitnessSpec` to `unit-tests` other-modules.
-- [ ] T207 Statelessness assertion comment + test note that `verifyWitness` /
+- [X] T207 Statelessness assertion comment + test note that `verifyWitness` /
   `introspectTx` are pure (no `IO`, no store) — the type is the SC-005 proof.
-- [ ] T208 `./gate.sh` green; one commit
+- [X] T208 `./gate.sh` green; one commit
   `feat(365): stateless POST /v1/verify-witness endpoint`.
 
 ## Orchestrator-owned finalization

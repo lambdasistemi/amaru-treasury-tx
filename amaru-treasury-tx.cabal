@@ -126,6 +126,7 @@ library
     Amaru.Treasury.Api.State
     Amaru.Treasury.Api.Ttl
     Amaru.Treasury.Api.Types
+    Amaru.Treasury.Api.VerifyWitness
     Amaru.Treasury.AuxData
     Amaru.Treasury.Backend
     Amaru.Treasury.Backend.N2C
@@ -518,6 +519,7 @@ test-suite unit-tests
     Amaru.Treasury.Api.ServerSpec
     Amaru.Treasury.Api.TtlSpec
     Amaru.Treasury.Api.TypesSpec
+    Amaru.Treasury.Api.VerifyWitnessSpec
     Amaru.Treasury.AuxDataSpec
     Amaru.Treasury.Build.CommonSpec
     Amaru.Treasury.Build.GovernanceWithdrawalInitSpec

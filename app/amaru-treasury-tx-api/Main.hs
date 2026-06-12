@@ -44,7 +44,6 @@ import Data.Streaming.Network (HostPreference)
 import Data.String (IsString (..))
 import Data.Text (Text)
 import Data.Text qualified as T
-import Data.Text.Encoding qualified as TE
 import Data.Word (Word16, Word64)
 import Network.Wai
     ( Middleware
@@ -57,7 +56,6 @@ import Network.Wai.Handler.Warp
     , setHost
     , setPort
     )
-import Ouroboros.Network.Magic (NetworkMagic)
 import Servant.Server (runHandler)
 import Servant.Server.StaticFiles (serveDirectoryFileServer)
 import System.Exit (die)
@@ -131,13 +129,12 @@ import Amaru.Treasury.Api.State
     , registryResponseFromMetadata
     , scriptsResponseFromMetadata
     )
+import Amaru.Treasury.Api.Submit (submitTxProduction)
 import Amaru.Treasury.Api.Types
     ( BuildIdentity
     , HealthResponse (..)
     , ParamsResponse (..)
     , RecentTxManifest
-    , SubmitRequest (..)
-    , SubmitResponse (..)
     , TipResponse (..)
     )
 import Amaru.Treasury.Api.VerifyWitness (verifyWitness)
@@ -164,12 +161,6 @@ import Amaru.Treasury.Metadata
     , readMetadataFile
     )
 import Amaru.Treasury.Scope (ScopeId)
-import Amaru.Treasury.Tx.Submit
-    ( SubmitOutcome (..)
-    , renderSubmitOutcome
-    , renderTxId
-    , submitSignedTx
-    )
 
 -- Main
 
@@ -297,8 +288,10 @@ main = do
                                                         T.pack (show params)
                                                     }
                                         , hSubmit =
-                                            runSubmitRequest
+                                            submitTxProduction
                                                 (goNetworkMagic g)
+                                                readProvider
+                                                metadata
                                                 (arcSocket opts)
                                         , hHealth =
                                             healthResponse readiness
@@ -389,33 +382,6 @@ runInspectScope apiIdx backend metadata anchor swapAddr scope = do
                     \threw a Servant.ServerError; this is \
                     \unexpected: "
                         <> show e
-
-runSubmitRequest
-    :: NetworkMagic
-    -> FilePath
-    -> SubmitRequest
-    -> IO SubmitResponse
-runSubmitRequest magic socketPath (SubmitRequest cborHex) = do
-    outcome <- submitSignedTx magic socketPath (TE.encodeUtf8 cborHex)
-    pure $ case outcome of
-        SubmitAccepted txId ->
-            SubmitResponse
-                { subStatus = "accepted"
-                , subTxId = Just (renderTxId txId)
-                , subReason = Nothing
-                }
-        SubmitRejected _ ->
-            SubmitResponse
-                { subStatus = "rejected"
-                , subTxId = Nothing
-                , subReason = Just (renderSubmitOutcome outcome)
-                }
-        SubmitDecodeFailed _ ->
-            SubmitResponse
-                { subStatus = "decode_failed"
-                , subTxId = Nothing
-                , subReason = Just (renderSubmitOutcome outcome)
-                }
 
 healthResponse :: ReadinessHandle -> IO HealthResponse
 healthResponse readiness = do

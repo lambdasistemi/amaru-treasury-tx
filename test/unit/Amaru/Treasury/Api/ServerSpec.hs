@@ -19,12 +19,14 @@ whitespace drift can hide.
 -}
 module Amaru.Treasury.Api.ServerSpec (spec) where
 
+import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as LBS
 import Data.Either (isLeft)
 import Data.List.NonEmpty qualified as NE
 import Data.Tagged (Tagged (..))
+import Data.Text (Text)
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
 import Network.HTTP.Types (status200, status404)
 import Network.HTTP.Types.Method (methodPost)
@@ -296,7 +298,7 @@ spec = do
             statusCodeOf res `shouldSatisfy` is4xx
             Aeson.decode (WaiTest.simpleBody res) `shouldBe` Just apiErr
 
-        it "submits a signed transaction request" $ do
+        it "Submit returns only the txid on success" $ do
             res <-
                 runSession
                     ( WaiTest.srequest
@@ -307,7 +309,11 @@ spec = do
                     )
                     (mkApplication stubHandlers)
             WaiTest.simpleStatus res `shouldBe` status200
-            Aeson.decode (WaiTest.simpleBody res) `shouldBe` Just stubSubmit
+            Aeson.decode (WaiTest.simpleBody res)
+                `shouldBe` Just
+                    ( Aeson.object
+                        ["txid" .= sampleSubmitTxId]
+                    )
 
         it "returns readiness health" $ do
             res <-
@@ -554,7 +560,7 @@ stubHandlers =
             pure stubPending{prScope = scope}
         , hTip = pure stubTip
         , hParams = pure stubParams
-        , hSubmit = \_ -> pure stubSubmit
+        , hSubmit = \_ -> pure (Right stubSubmit)
         , hHealth = pure stubHealth
         , hScopeState = \scope ->
             pure stubScopeState{ssScope = scope}
@@ -660,14 +666,11 @@ stubParams =
         }
 
 stubSubmit :: SubmitResponse
-stubSubmit =
-    SubmitResponse
-        { subStatus = "accepted"
-        , subTxId =
-            Just
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-        , subReason = Nothing
-        }
+stubSubmit = SubmitResponse sampleSubmitTxId
+
+sampleSubmitTxId :: Text
+sampleSubmitTxId =
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
 stubAttach :: AttachResponse
 stubAttach = AttachResponse "signed"

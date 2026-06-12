@@ -761,28 +761,18 @@ instance FromJSON SubmitRequest where
             SubmitRequest <$> o .: "cborHex"
 
 -- | Response returned by @POST /v1/submit@.
-data SubmitResponse = SubmitResponse
-    { subStatus :: Text
-    , subTxId :: Maybe Text
-    , subReason :: Maybe Text
+newtype SubmitResponse = SubmitResponse
+    { subTxid :: Text
     }
     deriving stock (Eq, Show)
 
 instance ToJSON SubmitResponse where
-    toJSON r =
-        object
-            [ "status" .= subStatus r
-            , "txid" .= subTxId r
-            , "reason" .= subReason r
-            ]
+    toJSON r = object ["txid" .= subTxid r]
 
 instance FromJSON SubmitResponse where
     parseJSON =
         withObject "SubmitResponse" $ \o ->
-            SubmitResponse
-                <$> o .: "status"
-                <*> o .:? "txid"
-                <*> o .:? "reason"
+            SubmitResponse <$> o .: "txid"
 
 -- | Response returned by @GET /v1/health@.
 data HealthResponse = HealthResponse

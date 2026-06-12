@@ -33,8 +33,8 @@ haskell_target_match=ok
 
 The checked-in golden asserts both:
 
-1. `test/fixtures/swap/expected.cbor` equals
-   `test/fixtures/swap/target.tx.json.cborHex`.
+1. `test/fixtures/swap/expected.cbor` equals the `cborHex` field
+   of `test/fixtures/swap/target.tx.json`.
 2. Rebuilding with `runFromIntent` against the frozen fixture produces
    that exact target CBOR.
 

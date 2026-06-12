@@ -278,8 +278,9 @@ The Darwin Release workflow uploads the tarball and copies the generated
 formula into the Homebrew tap. The smoke test installs
 `lambdasistemi/tap/amaru-treasury-tx`, runs `brew test`, and checks the
 offline help surfaces plus executable presence for the shipped tools.
-Binary bundling and dylib load-path patching live in
-`nix/darwin-release.nix`.
+Binary bundling and dylib load-path patching live in `flake.nix`
+(`mkAmaruDarwinHomebrewBundle`, wrapping the shared
+`dev-assets` `mkDarwinHomebrewBundle` helper).
 
 ## Linux dev bundles
 

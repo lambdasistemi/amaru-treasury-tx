@@ -25,6 +25,7 @@ import AuditPage as AuditPage
 import BooksPage as BooksPage
 import JsonTree.Behaviour as JsonTreeBehaviour
 import OperatePage as OperatePage
+import PendingPage as PendingPage
 import Routing (Route(..), currentRoute)
 
 main :: Effect Unit
@@ -41,6 +42,9 @@ main = runHalogenAff do
       pure unit
     RouteOperate -> do
       _ <- runUI OperatePage.component unit host
+      pure unit
+    RoutePending -> do
+      _ <- runUI PendingPage.component unit host
       pure unit
     RouteBooks -> do
       _ <- runUI BooksPage.component unit host

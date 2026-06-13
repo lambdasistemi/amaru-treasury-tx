@@ -13,7 +13,12 @@ import Prelude
 
 import Effect (Effect)
 
-data Route = RouteView | RouteAudit | RouteOperate | RouteBooks
+data Route
+  = RouteView
+  | RouteAudit
+  | RouteOperate
+  | RoutePending
+  | RouteBooks
 
 derive instance eqRoute :: Eq Route
 
@@ -23,6 +28,7 @@ currentRoute = do
   pure case p of
     "/audit" -> RouteAudit
     "/operate" -> RouteOperate
+    "/pending" -> RoutePending
     "/books" -> RouteBooks
     _ -> RouteView
 

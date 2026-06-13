@@ -6,19 +6,19 @@ PR: #377
 
 ## Slice 1 - Route, Listing, Lanes, Details
 
-- [ ] T368-S1 Add a RED Playwright CLI test that seeds PendingTx
+- [X] T368-S1 Add a RED Playwright CLI test that seeds PendingTx
   IndexedDB entries and expects `/pending` to render active, expired,
   and history lanes.
-- [ ] T368-S1 Add the `/pending` route through `Routing.purs`,
+- [X] T368-S1 Add the `/pending` route through `Routing.purs`,
   `Main.purs`, and `Shell.purs`.
-- [ ] T368-S1 Add `frontend/src/PendingPage.purs` with store loading,
+- [X] T368-S1 Add `frontend/src/PendingPage.purs` with store loading,
   lane grouping, signer chips using `.signers-picker` /
   `.signer-chip`, and a detail panel with witness roster plus optional
   inputs/outputs projection.
-- [ ] T368-S1 Add Pending page CSS in `frontend/dist/style-build.css`.
-- [ ] T368-S1 Extend the responsive Playwright route matrix to include
+- [X] T368-S1 Add Pending page CSS in `frontend/dist/style-build.css`.
+- [X] T368-S1 Extend the responsive Playwright route matrix to include
   `/pending`.
-- [ ] T368-S1 Run `./gate.sh`; commit as
+- [X] T368-S1 Run `./gate.sh`; commit as
   `feat(frontend): add pending page route and listing`
   with `Tasks: T368-S1`.
 

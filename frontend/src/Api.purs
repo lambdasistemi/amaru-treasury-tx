@@ -46,6 +46,10 @@ type RecentTxManifest =
   { rtmEntries :: Array RecentTxEntry
   }
 
+type TipResponse =
+  { slot :: Int
+  }
+
 type ScopeHistoryEntry =
   { slot :: Int
   , txid :: String
@@ -215,6 +219,9 @@ fetchRecentTxs = withTimeout (getJson "/v1/recent-txs")
 
 fetchVersion :: Aff (Either String BuildIdentity)
 fetchVersion = withTimeout (getJson "/v1/version")
+
+fetchTip :: Aff (Either String TipResponse)
+fetchTip = withTimeout (getJson "/v1/tip")
 
 fetchScopeHistory
   :: String

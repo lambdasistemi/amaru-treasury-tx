@@ -25,6 +25,33 @@ const FAILURE_WITNESSES = [
 ];
 const ATTACHED_CBOR_HEX = 'signed-ready-cbor-hex';
 const SUBMITTED_TXID = 'submitted-ready-txid';
+const REBUILT_CBOR_HEX = 'unsigned-rebuilt-cbor-hex';
+const REBUILT_TXID = 'tx-rebuilt-001';
+const REBUILT_REQUIRED_SIGNERS = ['rebuilt-signer-a', 'rebuilt-signer-b'];
+const REBUILT_INVALID_HEREAFTER = 1_850;
+const REBUILD_BUILD_REQUEST = {
+  network: 'mainnet',
+  scope: 'core_development',
+  swap: {
+    from: {
+      policy: '',
+      asset: '',
+      quantity: '2500000',
+    },
+    to: {
+      policy: 'policy-rebuilt',
+      asset: 'asset-rebuilt',
+    },
+    route: {
+      pool: 'pool1opaque',
+      minimumReceived: '42',
+    },
+  },
+  metadata: {
+    operator: 'slice-4',
+    tags: ['pending', 'rebuild'],
+  },
+};
 
 type GraphValueSummary = {
   lovelace: number;
@@ -175,6 +202,37 @@ const submitEntries: PendingTxEntry[] = [
     supersedes: null,
   },
 ];
+
+const rebuildableEntry: PendingTxEntry = {
+  txid: 'tx-rebuild-original-001',
+  intent: {
+    kind: 'swap',
+    buildEndpoint: '/v1/build/swap',
+    buildRequest: REBUILD_BUILD_REQUEST,
+  },
+  unsignedTxHex: 'unsigned-rebuild-original-hex',
+  scope: 'core_development',
+  requiredSigners: ['old-signer-a', 'old-signer-b'],
+  invalidHereafter: '1500',
+  witnesses: {
+    'old-signer-a': 'old-witness-a-hex',
+    'old-signer-b': 'old-witness-b-hex',
+  },
+  savedAt: '2026-06-13T12:00:00Z',
+  supersedes: null,
+};
+
+const missingRecipeEntry: PendingTxEntry = {
+  txid: 'tx-rebuild-unavailable-001',
+  intent: { kind: 'swap' },
+  unsignedTxHex: 'unsigned-rebuild-unavailable-hex',
+  scope: 'middleware',
+  requiredSigners: ['legacy-signer-a'],
+  invalidHereafter: '1500',
+  witnesses: {},
+  savedAt: '2026-06-13T12:05:00Z',
+  supersedes: null,
+};
 
 test('pending page lists local entries by lane and opens details', async ({
   page,
@@ -519,6 +577,113 @@ test('pending page gates and submits complete active transactions', async ({
       'submit',
       'attach:failure',
     ]);
+  } finally {
+    await server.close();
+  }
+});
+
+test('pending page rebuilds stored recipes and supersedes history', async ({
+  page,
+}) => {
+  const server = await serveDist();
+  const buildRequests: unknown[] = [];
+  const introspectRequests: unknown[] = [];
+
+  try {
+    await page.goto(`${server.url}/`);
+    await seedPendingEntries(page, [rebuildableEntry, missingRecipeEntry]);
+
+    await page.route('**/v1/build/**', async (route) => {
+      expect(route.request().method()).toBe('POST');
+      const pathname = new URL(route.request().url()).pathname;
+      if (pathname !== '/v1/build/swap') {
+        throw new Error(`unexpected build endpoint ${pathname}`);
+      }
+
+      const body = route.request().postDataJSON();
+      buildRequests.push(body);
+      expect(body).toEqual(REBUILD_BUILD_REQUEST);
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ sbrCborHex: REBUILT_CBOR_HEX }),
+      });
+    });
+
+    await page.route('**/v1/tx/introspect', async (route) => {
+      expect(route.request().method()).toBe('POST');
+      const body = route.request().postDataJSON();
+      introspectRequests.push(body);
+      expect(body).toEqual({ cborHex: REBUILT_CBOR_HEX });
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          txid: REBUILT_TXID,
+          requiredSigners: REBUILT_REQUIRED_SIGNERS,
+          invalidHereafter: REBUILT_INVALID_HEREAFTER,
+          scope: 'core_development',
+        }),
+      });
+    });
+
+    await page.goto(`${server.url}/pending`);
+
+    const activeLane = page.getByRole('region', {
+      name: 'Active pending transactions',
+    });
+    const historyLane = page.getByRole('region', {
+      name: 'Pending transaction history',
+    });
+
+    await activeLane
+      .getByRole('button', {
+        name: `View pending transaction ${rebuildableEntry.txid}`,
+      })
+      .click();
+
+    const detail = page.getByRole('region', {
+      name: 'Pending transaction detail',
+    });
+    const rebuildButton = detail.getByRole('button', {
+      name: 'Rebuild transaction',
+    });
+    await expect(rebuildButton).toBeEnabled();
+    await rebuildButton.click();
+
+    await expect(detail).toContainText(REBUILT_TXID);
+
+    const rebuilt = await getPendingEntry(page, REBUILT_TXID);
+    expect(rebuilt?.txid).toBe(REBUILT_TXID);
+    expect(rebuilt?.unsignedTxHex).toBe(REBUILT_CBOR_HEX);
+    expect(rebuilt?.requiredSigners).toEqual(REBUILT_REQUIRED_SIGNERS);
+    expect(rebuilt?.invalidHereafter).toBe(
+      String(REBUILT_INVALID_HEREAFTER),
+    );
+    expect(rebuilt?.witnesses).toEqual({});
+    expect(rebuilt?.supersedes).toBe(rebuildableEntry.txid);
+
+    const original = await getPendingEntry(page, rebuildableEntry.txid);
+    expect(original?.witnesses).toEqual(rebuildableEntry.witnesses);
+
+    await expect(activeLane).toContainText(REBUILT_TXID);
+    await expect(activeLane).toContainText(
+      `supersedes ${rebuildableEntry.txid}`,
+    );
+    await expect(historyLane).toContainText(rebuildableEntry.txid);
+    await expect(historyLane).toContainText(`superseded by ${REBUILT_TXID}`);
+
+    await activeLane
+      .getByRole('button', {
+        name: `View pending transaction ${missingRecipeEntry.txid}`,
+      })
+      .click();
+    await expect(detail).toContainText('rebuild unavailable');
+
+    expect(buildRequests).toEqual([REBUILD_BUILD_REQUEST]);
+    expect(introspectRequests).toEqual([{ cborHex: REBUILT_CBOR_HEX }]);
   } finally {
     await server.close();
   }

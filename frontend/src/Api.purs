@@ -63,6 +63,23 @@ type VerifyWitnessResponse =
   , reason :: Maybe String
   }
 
+type AttachRequest =
+  { unsignedTx :: String
+  , witnesses :: Array String
+  }
+
+type AttachResponse =
+  { cborHex :: String
+  }
+
+type SubmitRequest =
+  { cborHex :: String
+  }
+
+type SubmitResponse =
+  { txid :: String
+  }
+
 type ScopeHistoryEntry =
   { slot :: Int
   , txid :: String
@@ -247,6 +264,23 @@ verifyWitness unsignedTx witness =
         , witness
         }
     )
+
+attach
+  :: String
+  -> Array String
+  -> Aff (Either String AttachResponse)
+attach unsignedTx witnesses =
+  withTimeout
+    ( postJson "/v1/attach"
+        { unsignedTx
+        , witnesses
+        }
+    )
+
+submit :: String -> Aff (Either String SubmitResponse)
+submit cborHex =
+  withTimeout
+    (postJson "/v1/submit" { cborHex })
 
 fetchScopeHistory
   :: String

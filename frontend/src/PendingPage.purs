@@ -42,12 +42,18 @@ type State =
   , witnessText :: String
   , witnessStatus :: Maybe WitnessStatus
   , verifyingWitness :: Boolean
+  , submitStatus :: Maybe SubmitStatus
+  , submittingTxid :: Maybe String
   , theme :: Theme.Theme
   }
 
 data WitnessStatus
   = WitnessSuccess String
   | WitnessFailure String
+
+data SubmitStatus
+  = SubmitSuccess String
+  | SubmitFailure String
 
 type Lanes =
   { active :: Array PendingTx.PendingTxEntry
@@ -62,6 +68,7 @@ data Action
   | SetWitnessText String
   | WitnessFilePicked
   | VerifyWitness
+  | SubmitSelected
 
 initialState :: State
 initialState =
@@ -72,6 +79,8 @@ initialState =
   , witnessText: ""
   , witnessStatus: Nothing
   , verifyingWitness: false
+  , submitStatus: Nothing
+  , submittingTxid: Nothing
   , theme: Theme.Dark
   }
 
@@ -119,6 +128,8 @@ handleAction = case _ of
       , witnessText: ""
       , witnessStatus: Nothing
       , verifyingWitness: false
+      , submitStatus: Nothing
+      , submittingTxid: Nothing
       , theme
       }
   ToggleTheme -> do
@@ -131,6 +142,7 @@ handleAction = case _ of
           { selectedTxid = Just txid
           , witnessText = ""
           , witnessStatus = Nothing
+          , submitStatus = Nothing
           }
       )
   SetWitnessText txt ->
@@ -248,6 +260,46 @@ handleAction = case _ of
                             )
                       }
                   )
+  SubmitSelected -> do
+    st <- H.get
+    case selectedEntry st of
+      Nothing -> pure unit
+      Just entry ->
+        if not (entryCanSubmit st entry) || submitBusy st then
+          pure unit
+        else do
+          let
+            witnesses = collectedWitnesses entry
+          H.modify_
+            ( _
+                { submittingTxid = Just entry.txid
+                , submitStatus = Nothing
+                }
+            )
+          attached <-
+            H.liftAff (Api.attach entry.unsignedTxHex witnesses)
+          case attached of
+            Left err ->
+              H.modify_
+                ( finishSubmit
+                    entry.txid
+                    (SubmitFailure ("Attach failed: " <> err))
+                )
+            Right attachedTx -> do
+              submitted <- H.liftAff (Api.submit attachedTx.cborHex)
+              case submitted of
+                Left err ->
+                  H.modify_
+                    ( finishSubmit
+                        entry.txid
+                        (SubmitFailure ("Submit failed: " <> err))
+                    )
+                Right response ->
+                  H.modify_
+                    ( finishSubmit
+                        entry.txid
+                        (SubmitSuccess response.txid)
+                    )
 
 render
   :: forall m
@@ -444,6 +496,7 @@ detailView st =
             ]
         , witnessRoster entry
         , witnessVerifier st entry
+        , submitPanel st entry
         , graphProjection entry
         ]
 
@@ -569,6 +622,80 @@ witnessStatusView = case _ of
       ]
       [ HH.text msg ]
 
+submitPanel
+  :: forall w
+   . State
+  -> PendingTx.PendingTxEntry
+  -> HH.HTML w Action
+submitPanel st entry =
+  let
+    busy = submitBusy st
+    disabled = busy || not (entryCanSubmit st entry)
+  in
+    HH.section
+      [ HP.classes
+          [ cn "pending-detail__section"
+          , cn "pending-submit"
+          ]
+      ]
+      [ HH.h3_ [ HH.text "Submit" ]
+      , HH.div
+          [ HP.classes [ cn "pending-submit__row" ] ]
+          [ HH.button
+              [ HP.type_ HP.ButtonButton
+              , HP.classes [ cn "btn", cn "btn--filled" ]
+              , HP.disabled disabled
+              , HE.onClick (\_ -> SubmitSelected)
+              ]
+              [ HH.text "Submit transaction" ]
+          ]
+      , submitGateStatus st entry
+      , case st.submitStatus of
+          Nothing -> HH.text ""
+          Just status -> submitStatusView status
+      ]
+
+submitGateStatus
+  :: forall w i
+   . State
+  -> PendingTx.PendingTxEntry
+  -> HH.HTML w i
+submitGateStatus st entry
+  | submitBusy st =
+      HH.p
+        [ HP.classes [ cn "pending-submit__hint" ] ]
+        [ HH.text "Submitting" ]
+  | otherwise = case submitUnavailableReason st entry of
+      Nothing -> HH.text ""
+      Just reason ->
+        HH.p
+          [ HP.classes [ cn "pending-submit__hint" ] ]
+          [ HH.text reason ]
+
+submitStatusView
+  :: forall w i
+   . SubmitStatus
+  -> HH.HTML w i
+submitStatusView = case _ of
+  SubmitSuccess txid ->
+    HH.p
+      [ HP.classes
+          [ cn "pending-submit__status"
+          , cn "pending-submit__status--ok"
+          ]
+      ]
+      [ HH.text "Submitted txid "
+      , HH.code_ [ HH.text txid ]
+      ]
+  SubmitFailure msg ->
+    HH.p
+      [ HP.classes
+          [ cn "pending-submit__status"
+          , cn "pending-submit__status--error"
+          ]
+      ]
+      [ HH.text msg ]
+
 graphProjection
   :: forall w i
    . PendingTx.PendingTxEntry
@@ -688,6 +815,50 @@ signerCollected :: PendingTx.PendingTxEntry -> String -> Boolean
 signerCollected entry signer = case FO.lookup signer entry.witnesses of
   Just _ -> true
   Nothing -> false
+
+collectedWitnesses :: PendingTx.PendingTxEntry -> Array String
+collectedWitnesses entry =
+  Array.mapMaybe
+    (\signer -> FO.lookup signer entry.witnesses)
+    entry.requiredSigners
+
+missingRequiredSigners :: PendingTx.PendingTxEntry -> Array String
+missingRequiredSigners entry =
+  Array.filter (not <<< signerCollected entry) entry.requiredSigners
+
+entryCanSubmit :: State -> PendingTx.PendingTxEntry -> Boolean
+entryCanSubmit st entry =
+  not (entryExpired st.tipSlot entry)
+    && Array.null (missingRequiredSigners entry)
+
+submitUnavailableReason
+  :: State
+  -> PendingTx.PendingTxEntry
+  -> Maybe String
+submitUnavailableReason st entry
+  | entryExpired st.tipSlot entry =
+      Just "Transaction expired"
+  | otherwise =
+      let
+        missing = missingRequiredSigners entry
+      in
+        if Array.null missing then Nothing
+        else Just ("Missing " <> Array.intercalate ", " missing)
+
+submitBusy :: State -> Boolean
+submitBusy st = case st.submittingTxid of
+  Nothing -> false
+  Just _ -> true
+
+finishSubmit :: String -> SubmitStatus -> State -> State
+finishSubmit txid status st =
+  if st.selectedTxid == Just txid then
+    st
+      { submittingTxid = Nothing
+      , submitStatus = Just status
+      }
+  else
+    st { submittingTxid = Nothing }
 
 graphEffectFromIntent :: Json -> Maybe Api.GraphEffect
 graphEffectFromIntent intent = do

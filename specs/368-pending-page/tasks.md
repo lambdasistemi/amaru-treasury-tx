@@ -37,15 +37,15 @@ PR: #377
 
 ## Slice 3 - Attach and Submit
 
-- [ ] T368-S3 Add a RED Playwright CLI test for submit disabled states,
+- [X] T368-S3 Add a RED Playwright CLI test for submit disabled states,
   attach request body, submit request body, and returned txid display.
-- [ ] T368-S3 Add pending-page API helpers for `/v1/attach` and
+- [X] T368-S3 Add pending-page API helpers for `/v1/attach` and
   `/v1/submit`.
-- [ ] T368-S3 Enable Submit only when every required signer has a
+- [X] T368-S3 Enable Submit only when every required signer has a
   stored witness and the entry is not expired.
-- [ ] T368-S3 Wire Submit to call attach first, submit second, show
+- [X] T368-S3 Wire Submit to call attach first, submit second, show
   returned txid, and keep errors visible without mutating witnesses.
-- [ ] T368-S3 Run `./gate.sh`; commit as
+- [X] T368-S3 Run `./gate.sh`; commit as
   `feat(frontend): submit completed pending transactions`
   with `Tasks: T368-S3`.
 

@@ -105,6 +105,8 @@ topbar active opts =
             "Audit" "Audit transaction history"
         , navLink RouteOperate active "/operate"
             "Operate" "Operate — prepare a transaction"
+        , navLink RoutePending active "/pending"
+            "Pending" "Pending co-signing"
         , navLink RouteBooks active "/books"
             "Books" "Manage saved values (Books)"
         ]

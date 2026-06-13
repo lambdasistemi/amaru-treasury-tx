@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { Buffer } from 'node:buffer';
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createServer, type Server } from 'node:http';
@@ -10,6 +11,9 @@ const DB_VERSION = 1;
 const STORE_NAME = 'pending-txs';
 const DIST_ROOT = path.join(process.cwd(), 'dist');
 const CURRENT_SLOT = 1_200;
+const PASTED_WITNESS = 'pasted-witness-b-hex';
+const UPLOADED_REJECTED_WITNESS = 'uploaded-rejected-witness-c-hex';
+const REJECTED_REASON = 'witness does not match any required signer';
 
 type GraphValueSummary = {
   lovelace: number;
@@ -93,6 +97,18 @@ const pendingEntries: PendingTxEntry[] = [
   },
 ];
 
+const witnessVerificationEntry: PendingTxEntry = {
+  txid: 'tx-witness-001',
+  intent: { kind: 'swap' },
+  unsignedTxHex: 'unsigned-witness-tx-hex',
+  scope: 'core_development',
+  requiredSigners: ['signer-a', 'signer-b', 'signer-c'],
+  invalidHereafter: '1500',
+  witnesses: { 'signer-a': 'witness-a-hex' },
+  savedAt: '2026-06-13T10:00:00Z',
+  supersedes: null,
+};
+
 test('pending page lists local entries by lane and opens details', async ({
   page,
 }) => {
@@ -162,6 +178,139 @@ test('pending page lists local entries by lane and opens details', async ({
   }
 });
 
+test('pending page verifies pasted and uploaded witnesses through backend', async ({
+  page,
+}) => {
+  const server = await serveDist();
+  const verifyRequests: Record<string, unknown>[] = [];
+  try {
+    await page.goto(`${server.url}/`);
+    await seedPendingEntries(page, [witnessVerificationEntry]);
+
+    await page.route('**/v1/verify-witness', async (route) => {
+      expect(route.request().method()).toBe('POST');
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      verifyRequests.push(body);
+
+      expect(Object.keys(body).sort()).toEqual(['unsignedTx', 'witness']);
+      expect(body.unsignedTx).toBe(witnessVerificationEntry.unsignedTxHex);
+
+      if (body.witness === PASTED_WITNESS) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: true,
+            signerKeyHash: 'signer-b',
+            reason: null,
+          }),
+        });
+        return;
+      }
+
+      if (body.witness === UPLOADED_REJECTED_WITNESS) {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ok: false,
+            signerKeyHash: null,
+            reason: REJECTED_REASON,
+          }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ok: false,
+          signerKeyHash: null,
+          reason: 'unexpected witness',
+        }),
+      });
+    });
+
+    await page.goto(`${server.url}/pending`);
+
+    const activeLane = page.getByRole('region', {
+      name: 'Active pending transactions',
+    });
+    await activeLane
+      .getByRole('button', {
+        name: 'View pending transaction tx-witness-001',
+      })
+      .click();
+
+    const detail = page.getByRole('region', {
+      name: 'Pending transaction detail',
+    });
+    const witnessBox = detail.getByLabel('Witness hex');
+
+    await witnessBox.fill(PASTED_WITNESS);
+    await detail.getByRole('button', { name: 'Verify witness' }).click();
+
+    await expect(detail).toContainText('Witness accepted for signer-b');
+    await expect(
+      detail
+        .locator('.pending-roster__row[data-active="true"]')
+        .filter({ hasText: 'signer-b' }),
+    ).toContainText('Collected');
+    await expect(
+      page
+        .locator('.signer-chip[data-active="true"]')
+        .filter({ hasText: 'signer-b' }),
+    ).toContainText('Collected');
+
+    const storedAfterPaste = await getPendingEntry(
+      page,
+      witnessVerificationEntry.txid,
+    );
+    expect(storedAfterPaste?.witnesses['signer-a']).toBe('witness-a-hex');
+    expect(storedAfterPaste?.witnesses['signer-b']).toBe(PASTED_WITNESS);
+    expect(storedAfterPaste?.witnesses['signer-c']).toBeUndefined();
+
+    await detail.getByLabel('Witness file').setInputFiles({
+      name: 'rejected.witness',
+      mimeType: 'text/plain',
+      buffer: Buffer.from(UPLOADED_REJECTED_WITNESS, 'utf8'),
+    });
+    await expect(witnessBox).toHaveValue(UPLOADED_REJECTED_WITNESS);
+    await detail.getByRole('button', { name: 'Verify witness' }).click();
+
+    await expect(detail).toContainText(REJECTED_REASON);
+    await expect(
+      detail
+        .locator('.pending-roster__row[data-active="false"]')
+        .filter({ hasText: 'signer-c' }),
+    ).toContainText('Missing');
+
+    const storedAfterReject = await getPendingEntry(
+      page,
+      witnessVerificationEntry.txid,
+    );
+    expect(storedAfterReject?.witnesses['signer-b']).toBe(PASTED_WITNESS);
+    expect(storedAfterReject?.witnesses['signer-c']).toBeUndefined();
+    expect(Object.values(storedAfterReject?.witnesses ?? {})).not.toContain(
+      UPLOADED_REJECTED_WITNESS,
+    );
+
+    expect(verifyRequests).toEqual([
+      {
+        unsignedTx: witnessVerificationEntry.unsignedTxHex,
+        witness: PASTED_WITNESS,
+      },
+      {
+        unsignedTx: witnessVerificationEntry.unsignedTxHex,
+        witness: UPLOADED_REJECTED_WITNESS,
+      },
+    ]);
+  } finally {
+    await server.close();
+  }
+});
+
 async function seedPendingEntries(
   page: Page,
   entries: PendingTxEntry[],
@@ -212,6 +361,47 @@ async function seedPendingEntries(
       db.close();
     },
     { dbName: DB_NAME, dbVersion: DB_VERSION, storeName: STORE_NAME, entries },
+  );
+}
+
+async function getPendingEntry(
+  page: Page,
+  txid: string,
+): Promise<PendingTxEntry | null> {
+  return await page.evaluate(
+    async ({ dbName, dbVersion, storeName, txid }) => {
+      const openDatabase = async (): Promise<IDBDatabase> =>
+        await new Promise<IDBDatabase>((resolve, reject) => {
+          const request = indexedDB.open(dbName, dbVersion);
+          request.onupgradeneeded = () => {
+            const db = request.result;
+            if (!db.objectStoreNames.contains(storeName)) {
+              db.createObjectStore(storeName, { keyPath: 'txid' });
+            }
+          };
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+          request.onblocked = () =>
+            reject(new Error('IndexedDB pending store open blocked'));
+        });
+
+      const db = await openDatabase();
+      try {
+        return await new Promise<PendingTxEntry | null>(
+          (resolve, reject) => {
+            const tx = db.transaction(storeName, 'readonly');
+            const request = tx.objectStore(storeName).get(txid);
+            request.onsuccess = () =>
+              resolve((request.result ?? null) as PendingTxEntry | null);
+            request.onerror = () => reject(request.error);
+            tx.onabort = () => reject(tx.error);
+          },
+        );
+      } finally {
+        db.close();
+      }
+    },
+    { dbName: DB_NAME, dbVersion: DB_VERSION, storeName: STORE_NAME, txid },
   );
 }
 

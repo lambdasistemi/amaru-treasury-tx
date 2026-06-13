@@ -14,6 +14,7 @@ module Api where
 
 import Prelude
 
+import Affjax.RequestBody as RB
 import Affjax.ResponseFormat as RF
 import Affjax.Web as AX
 import Control.Parallel (parOneOf)
@@ -21,6 +22,7 @@ import Data.Array as Array
 import Data.Argonaut.Core (Json)
 import Data.Argonaut.Decode (decodeJson, printJsonDecodeError)
 import Data.Argonaut.Decode.Class (class DecodeJson)
+import Data.Argonaut.Encode (class EncodeJson, encodeJson)
 import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Time.Duration (Milliseconds(..))
@@ -48,6 +50,17 @@ type RecentTxManifest =
 
 type TipResponse =
   { slot :: Int
+  }
+
+type VerifyWitnessRequest =
+  { unsignedTx :: String
+  , witness :: String
+  }
+
+type VerifyWitnessResponse =
+  { ok :: Boolean
+  , signerKeyHash :: Maybe String
+  , reason :: Maybe String
   }
 
 type ScopeHistoryEntry =
@@ -223,6 +236,18 @@ fetchVersion = withTimeout (getJson "/v1/version")
 fetchTip :: Aff (Either String TipResponse)
 fetchTip = withTimeout (getJson "/v1/tip")
 
+verifyWitness
+  :: String
+  -> String
+  -> Aff (Either String VerifyWitnessResponse)
+verifyWitness unsignedTx witness =
+  withTimeout
+    ( postJson "/v1/verify-witness"
+        { unsignedTx
+        , witness
+        }
+    )
+
 fetchScopeHistory
   :: String
   -> ScopeHistoryFilters
@@ -291,6 +316,22 @@ getJson
   -> Aff (Either String a)
 getJson url = do
   res <- AX.get RF.json url
+  pure case res of
+    Left err -> Left (AX.printError err)
+    Right resp ->
+      case decodeJson resp.body of
+        Left err -> Left (printJsonDecodeError err)
+        Right v -> Right v
+
+postJson
+  :: forall req res
+   . EncodeJson req
+  => DecodeJson res
+  => String
+  -> req
+  -> Aff (Either String res)
+postJson url body = do
+  res <- AX.post RF.json url (Just (RB.json (encodeJson body)))
   pure case res of
     Left err -> Left (AX.printError err)
     Right resp ->

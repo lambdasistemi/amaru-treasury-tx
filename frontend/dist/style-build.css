@@ -992,6 +992,35 @@ input[type="number"].field__input { -moz-appearance: textfield; }
   text-align: right;
   color: var(--md-sys-color-on-surface);
 }
+.pending-witness {
+  padding-top: 2px;
+}
+.pending-witness__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+.pending-witness__file {
+  min-width: 0;
+}
+.pending-witness__status {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--app-radius);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+.pending-witness__status--ok {
+  color: var(--md-sys-color-on-primary-container);
+  background: var(--md-sys-color-primary-container);
+}
+.pending-witness__status--error {
+  color: var(--md-sys-color-error);
+  border: 1px solid var(--md-sys-color-error);
+  background: var(--md-sys-color-surface-container);
+}
 @media (max-width: 900px) {
   .pending-layout {
     grid-template-columns: 1fr;
@@ -1006,6 +1035,7 @@ input[type="number"].field__input { -moz-appearance: textfield; }
     padding: 12px;
   }
   .pending-roster__row,
+  .pending-witness__row,
   .pending-kv {
     grid-template-columns: 1fr;
   }

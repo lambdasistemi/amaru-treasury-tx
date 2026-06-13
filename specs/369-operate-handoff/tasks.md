@@ -14,6 +14,6 @@
 
 ## Finalization
 
-- [ ] T369-F1 Update PR metadata for the delivered behavior.
-- [ ] T369-F1 Run final `./gate.sh` and finalization audit.
-- [ ] T369-F1 Drop `gate.sh` in the final ready-for-review commit.
+- [X] T369-F1 Update PR metadata for the delivered behavior.
+- [X] T369-F1 Run final `./gate.sh` and finalization audit.
+- [X] T369-F1 Drop `gate.sh` in the final ready-for-review commit.

@@ -31,15 +31,18 @@ import Data.Foldable (for_)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe, isJust)
 import Data.Number as Number
+import Data.Nullable as Nullable
 import Data.String as String
 import Data.String.Common (joinWith) as T
 import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple (Tuple(..))
 import Effect (Effect)
 import Effect.Aff (Aff, Fiber, delay, forkAff, killFiber)
+import Effect.Aff as Aff
 import Effect.Aff.Class (class MonadAff)
 import Effect.Class (liftEffect)
 import Effect.Exception (error)
+import Effect.Exception as Error
 import Effect.Now (now)
 import Foreign.Object as FO
 import Format
@@ -87,6 +90,7 @@ import Shell
   , toggleThemeEff
   , topbar
   )
+import Store.PendingTx as PendingTx
 import Theme as Theme
 
 -- ---------------------------------------------------------------------------
@@ -386,12 +390,19 @@ type State =
   -- every mutation so stale responses cannot overwrite newer
   -- edits.
   , autoBuildFiber :: Maybe H.ForkId
+  , pendingSaveStatus :: PendingSaveStatus
   }
 
 data BuildResult
   = NotStarted
   | Pending
   | Result Json
+
+data PendingSaveStatus
+  = SaveIdle
+  | SaveSaving
+  | SaveSaved String
+  | SaveFailed String
 
 initialState :: State
 initialState =
@@ -429,6 +440,7 @@ initialState =
   , saveDialog: Nothing
   , autoSaveFiber: Nothing
   , autoBuildFiber: Nothing
+  , pendingSaveStatus: SaveIdle
   }
 
 data Action
@@ -466,6 +478,7 @@ data Action
   | SetTab Tab
   | ClickReset
   | RunBuild
+  | SaveBuiltToPending
   | BooksLoaded Books
   | ToggleNamedDropdown NamedDropdownId
   | PickNamed NamedDropdownId NamedEntry
@@ -2255,11 +2268,43 @@ previewColumn st =
         , HP.id "operate-result-panel"
         ]
         [ buildStatus st
+        , saveToPendingPanel st
         , previewTabs st.activeTab
         , HH.div [ HP.classes [ cn "preview-body" ] ]
             [ previewBody st ]
         ]
     ]
+
+saveToPendingPanel :: forall m. State -> H.ComponentHTML Action () m
+saveToPendingPanel st = case cborHexPreview st of
+  Nothing -> HH.text ""
+  Just _ ->
+    HH.div
+      [ HP.style
+          "display:flex;gap:.5rem;align-items:center;\
+          \flex-wrap:wrap;margin:.75rem 0"
+      ]
+      [ HH.button
+          ( [ HP.classes [ cn "btn", cn "btn--primary" ]
+            , HP.type_ HP.ButtonButton
+            , HE.onClick (\_ -> SaveBuiltToPending)
+            ]
+              <> case st.pendingSaveStatus of
+                SaveSaving -> [ HP.disabled true ]
+                _ -> []
+          )
+          [ HH.text "Save to pending" ]
+      , HH.span
+          [ HP.classes [ cn "field__hint" ] ]
+          [ HH.text (pendingSaveStatusText st.pendingSaveStatus) ]
+      ]
+
+pendingSaveStatusText :: PendingSaveStatus -> String
+pendingSaveStatusText = case _ of
+  SaveIdle -> "Ready to save for co-signing."
+  SaveSaving -> "Saving to pending..."
+  SaveSaved txid -> "Saved to pending: " <> txid
+  SaveFailed msg -> msg
 
 -- | Pre-tabs status pill so the operator gets immediate
 -- | visual feedback when a reactive build runs. Without
@@ -3869,9 +3914,13 @@ recordFormEdit
   => (State -> State)
   -> H.HalogenM State Action () output m Unit
 recordFormEdit f = do
-  H.modify_ f
+  H.modify_ (resetPendingSaveStatus <<< f)
   scheduleAutoSave
   scheduleAutoBuild
+
+resetPendingSaveStatus :: State -> State
+resetPendingSaveStatus st =
+  st { pendingSaveStatus = SaveIdle }
 
 -- ---------------------------------------------------------------------------
 -- Handlers
@@ -4014,14 +4063,9 @@ handleAction = case _ of
   RunBuild -> do
     st <- H.get
     if Array.null (formErrors st) then do
-      H.modify_ \s -> s { result = Pending }
-      r <- H.liftAff case st.mode of
-        ModeSwap -> postBuild "/v1/build/swap" st
-        ModeDisburse
-          | st.scope == Contingency ->
-              postBuild "/v1/build/contingency-disburse" st
-          | otherwise -> postBuild "/v1/build/disburse" st
-        ModeReorganize -> postBuild "/v1/build/reorganize" st
+      H.modify_ \s -> s
+        { result = Pending, pendingSaveStatus = SaveIdle }
+      r <- H.liftAff (postBuild (buildEndpoint st) st)
       -- Record supplied values into their books regardless of
       -- outcome — the operator's intent is the same either
       -- way; a backend failure shouldn't lose a freshly
@@ -4052,7 +4096,48 @@ handleAction = case _ of
         Nothing -> pure unit
     else
       H.modify_ \s ->
-        s { result = NotStarted, autoBuildFiber = Nothing }
+        s
+          { result = NotStarted
+          , autoBuildFiber = Nothing
+          , pendingSaveStatus = SaveIdle
+          }
+  SaveBuiltToPending -> do
+    st <- H.get
+    case cborHexPreview st of
+      Nothing ->
+        H.modify_ \s -> s
+          { pendingSaveStatus =
+              SaveFailed "No built transaction to save."
+          }
+      Just cborHex -> do
+        H.modify_ \s -> s { pendingSaveStatus = SaveSaving }
+        introspected <- H.liftAff (Api.introspectTx cborHex)
+        case introspected of
+          Left err ->
+            H.modify_ \s -> s
+              { pendingSaveStatus =
+                  SaveFailed ("Introspect failed: " <> err)
+              }
+          Right meta -> do
+            savedAt <- H.liftEffect timestampZ
+            stored <-
+              H.liftAff
+                ( Aff.try
+                    ( PendingTx.put
+                        (pendingEntry st cborHex meta savedAt)
+                    )
+                )
+            H.modify_ \s -> case stored of
+              Left err ->
+                s
+                  { pendingSaveStatus =
+                      SaveFailed
+                        ( "Save failed: "
+                            <> Error.message err
+                        )
+                  }
+              Right _ ->
+                s { pendingSaveStatus = SaveSaved meta.txid }
   BooksLoaded books -> H.modify_ \s -> s { books = books }
   ToggleNamedDropdown slot -> H.modify_ \s ->
     s
@@ -4066,11 +4151,13 @@ handleAction = case _ of
         s
           { walletAddr = namedTypedValue entry
           , openNamedDropdown = Nothing
+          , pendingSaveStatus = SaveIdle
           }
       BeneficiarySlot ->
         s
           { beneficiaryAddr = namedTypedValue entry
           , openNamedDropdown = Nothing
+          , pendingSaveStatus = SaveIdle
           }
       ReferenceSlot i -> case entry of
         ReferenceE r ->
@@ -4085,8 +4172,9 @@ handleAction = case _ of
                   )
                   s.references
             , openNamedDropdown = Nothing
+            , pendingSaveStatus = SaveIdle
             }
-        _ -> s { openNamedDropdown = Nothing }
+        _ -> s { openNamedDropdown = Nothing, pendingSaveStatus = SaveIdle }
     scheduleAutoSave
     scheduleAutoBuild
   NamedInputKeyDown ev -> case KE.key ev of
@@ -4111,6 +4199,7 @@ handleAction = case _ of
         H.modify_ \s -> (restoreSnapshot entry.snapshot s)
           { pickedDraftName = Just name
           , draftsDropdownOpen = false
+          , pendingSaveStatus = SaveIdle
           }
         -- The restored state IS the operator's current
         -- working set; mirror it to __autosave__ so a
@@ -4127,6 +4216,7 @@ handleAction = case _ of
         H.modify_ \s -> (restoreSnapshot entry.snapshot s)
           { pickedDraftName = Just name
           , historyDropdownOpen = false
+          , pendingSaveStatus = SaveIdle
           }
         scheduleAutoSave
         scheduleAutoBuild
@@ -4164,6 +4254,43 @@ handleAction = case _ of
       _ -> pure unit
   CancelSaveDraft -> H.modify_ \s -> s { saveDialog = Nothing }
   JumpToSection inputId -> H.liftEffect (_focusById inputId)
+
+buildEndpoint :: State -> String
+buildEndpoint st = case st.mode of
+  ModeSwap -> "/v1/build/swap"
+  ModeDisburse
+    | st.scope == Contingency -> "/v1/build/contingency-disburse"
+    | otherwise -> "/v1/build/disburse"
+  ModeReorganize -> "/v1/build/reorganize"
+
+pendingIntent :: State -> Json
+pendingIntent st =
+  Argonaut.fromObject $ FO.fromFoldable
+    [ Tuple "kind" (Argonaut.fromString (modeWire st.mode))
+    , Tuple "buildEndpoint" (Argonaut.fromString (buildEndpoint st))
+    , Tuple "buildRequest" (requestJson st)
+    ]
+
+pendingEntry
+  :: State
+  -> String
+  -> Api.IntrospectResponse
+  -> String
+  -> PendingTx.PendingTxEntry
+pendingEntry st cborHex meta savedAt =
+  { txid: meta.txid
+  , intent: pendingIntent st
+  , unsignedTxHex: cborHex
+  , scope: fromMaybe (scopeSlug st.scope) meta.scope
+  , requiredSigners: meta.requiredSigners
+  , invalidHereafter:
+      case meta.invalidHereafter of
+        Nothing -> Nullable.null
+        Just slot -> Nullable.notNull (show slot)
+  , witnesses: FO.fromFoldable []
+  , savedAt
+  , supersedes: Nullable.null
+  }
 
 -- | POST the active request body to the given endpoint and
 -- | decode the response as opaque JSON.  Same boilerplate

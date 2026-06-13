@@ -20,14 +20,17 @@ import Affjax.Web as AX
 import Control.Parallel (parOneOf)
 import Data.Array as Array
 import Data.Argonaut.Core (Json)
+import Data.Argonaut.Core as Argonaut
 import Data.Argonaut.Decode (decodeJson, printJsonDecodeError)
 import Data.Argonaut.Decode.Class (class DecodeJson)
 import Data.Argonaut.Encode (class EncodeJson, encodeJson)
 import Data.Either (Either(..))
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromMaybe)
+import Data.String as String
 import Data.Time.Duration (Milliseconds(..))
 import Effect.Aff (Aff, delay)
 import Foreign.Object (Object)
+import Foreign.Object as FO
 
 type BuildIdentity =
   { biBuildTime :: String
@@ -78,6 +81,17 @@ type SubmitRequest =
 
 type SubmitResponse =
   { txid :: String
+  }
+
+type RebuildBuildResponse =
+  { cborHex :: String
+  }
+
+type IntrospectResponse =
+  { txid :: String
+  , requiredSigners :: Array String
+  , invalidHereafter :: Maybe Int
+  , scope :: Maybe String
   }
 
 type ScopeHistoryEntry =
@@ -282,6 +296,41 @@ submit cborHex =
   withTimeout
     (postJson "/v1/submit" { cborHex })
 
+rebuildFromRecipe
+  :: String
+  -> Json
+  -> Aff (Either String RebuildBuildResponse)
+rebuildFromRecipe endpoint buildRequest = case buildCborField endpoint of
+  Nothing -> pure (Left "rebuild unavailable for this entry")
+  Just cborField ->
+    withTimeout do
+      built <- postRawJson endpoint buildRequest
+      pure case built of
+        Left err -> Left err
+        Right json -> case lookupString cborField json of
+          Just cborHex -> Right { cborHex }
+          Nothing ->
+            Left
+              ( fromMaybe
+                  ( "build response did not include "
+                      <> cborField
+                  )
+                  (buildFailureReason endpoint json)
+              )
+
+introspectTx :: String -> Aff (Either String IntrospectResponse)
+introspectTx cborHex =
+  withTimeout
+    (postJson "/v1/tx/introspect" { cborHex })
+
+buildCborField :: String -> Maybe String
+buildCborField = case _ of
+  "/v1/build/swap" -> Just "sbrCborHex"
+  "/v1/build/disburse" -> Just "dbrCborHex"
+  "/v1/build/contingency-disburse" -> Just "dbrCborHex"
+  "/v1/build/reorganize" -> Just "rbrCborHex"
+  _ -> Nothing
+
 fetchScopeHistory
   :: String
   -> ScopeHistoryFilters
@@ -372,6 +421,35 @@ postJson url body = do
       case decodeJson resp.body of
         Left err -> Left (printJsonDecodeError err)
         Right v -> Right v
+
+postRawJson :: String -> Json -> Aff (Either String Json)
+postRawJson url body = do
+  res <- AX.post RF.json url (Just (RB.json body))
+  pure case res of
+    Left err -> Left (AX.printError err)
+    Right resp -> Right resp.body
+
+buildFailureReason :: String -> Json -> Maybe String
+buildFailureReason endpoint json = do
+  cborField <- buildCborField endpoint
+  let
+    prefix = String.take 3 cborField
+    reason = lookupString (prefix <> "FailureReason") json
+    buildTag = lookupString (prefix <> "BuildFailureTag") json
+    intentTag = lookupString (prefix <> "FailureTag") json
+  case intentTag, buildTag, reason of
+    Just tag, _, Just msg -> Just ("intent: " <> tag <> " - " <> msg)
+    Just tag, _, Nothing -> Just ("intent: " <> tag)
+    Nothing, Just tag, Just msg -> Just ("build: " <> tag <> " - " <> msg)
+    Nothing, Just tag, Nothing -> Just ("build: " <> tag)
+    Nothing, Nothing, Just msg -> Just msg
+    Nothing, Nothing, Nothing -> Nothing
+
+lookupString :: String -> Json -> Maybe String
+lookupString key json = do
+  object <- Argonaut.toObject json
+  value <- FO.lookup key object
+  Argonaut.toString value
 
 queryString
   :: Array { key :: String, value :: Maybe String }

@@ -12,7 +12,10 @@ import Data.Argonaut.Core (Json)
 import Data.Argonaut.Core as Argonaut
 import Data.Argonaut.Decode (decodeJson)
 import Data.Array as Array
+import Data.DateTime (date, day, hour, minute, month, second, time, year)
+import Data.DateTime.Instant (toDateTime)
 import Data.Either (Either(..))
+import Data.Enum (fromEnum)
 import Data.Int as Int
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Nullable as Nullable
@@ -23,6 +26,7 @@ import Effect.Aff (Aff, makeAff, nonCanceler)
 import Effect.Aff as Aff
 import Effect.Aff.Class (class MonadAff)
 import Effect.Exception as Error
+import Effect.Now (now)
 import Foreign.Object as FO
 import Format (showAda)
 import Halogen as H
@@ -44,6 +48,8 @@ type State =
   , verifyingWitness :: Boolean
   , submitStatus :: Maybe SubmitStatus
   , submittingTxid :: Maybe String
+  , rebuildStatus :: Maybe RebuildStatus
+  , rebuildingTxid :: Maybe String
   , theme :: Theme.Theme
   }
 
@@ -54,6 +60,15 @@ data WitnessStatus
 data SubmitStatus
   = SubmitSuccess String
   | SubmitFailure String
+
+data RebuildStatus
+  = RebuildSuccess String
+  | RebuildFailure String
+
+type RebuildRecipe =
+  { buildEndpoint :: String
+  , buildRequest :: Json
+  }
 
 type Lanes =
   { active :: Array PendingTx.PendingTxEntry
@@ -69,6 +84,7 @@ data Action
   | WitnessFilePicked
   | VerifyWitness
   | SubmitSelected
+  | RebuildSelected
 
 initialState :: State
 initialState =
@@ -81,6 +97,8 @@ initialState =
   , verifyingWitness: false
   , submitStatus: Nothing
   , submittingTxid: Nothing
+  , rebuildStatus: Nothing
+  , rebuildingTxid: Nothing
   , theme: Theme.Dark
   }
 
@@ -130,6 +148,8 @@ handleAction = case _ of
       , verifyingWitness: false
       , submitStatus: Nothing
       , submittingTxid: Nothing
+      , rebuildStatus: Nothing
+      , rebuildingTxid: Nothing
       , theme
       }
   ToggleTheme -> do
@@ -143,6 +163,7 @@ handleAction = case _ of
           , witnessText = ""
           , witnessStatus = Nothing
           , submitStatus = Nothing
+          , rebuildStatus = Nothing
           }
       )
   SetWitnessText txt ->
@@ -300,6 +321,88 @@ handleAction = case _ of
                         entry.txid
                         (SubmitSuccess response.txid)
                     )
+  RebuildSelected -> do
+    st <- H.get
+    case selectedEntry st of
+      Nothing -> pure unit
+      Just entry ->
+        if rebuildBusy st then
+          pure unit
+        else case rebuildRecipeFromIntent entry.intent of
+          Nothing ->
+            H.modify_
+              ( _
+                  { rebuildStatus =
+                      Just
+                        ( RebuildFailure
+                            "rebuild unavailable for this entry"
+                        )
+                  }
+              )
+          Just recipe -> do
+            H.modify_
+              ( _
+                  { rebuildingTxid = Just entry.txid
+                  , rebuildStatus = Nothing
+                  }
+              )
+            built <-
+              H.liftAff
+                ( Api.rebuildFromRecipe
+                    recipe.buildEndpoint
+                    recipe.buildRequest
+                )
+            case built of
+              Left err ->
+                H.modify_
+                  ( finishRebuild
+                      entry.txid
+                      (RebuildFailure ("Rebuild failed: " <> err))
+                  )
+              Right buildResponse -> do
+                introspected <-
+                  H.liftAff (Api.introspectTx buildResponse.cborHex)
+                case introspected of
+                  Left err ->
+                    H.modify_
+                      ( finishRebuild
+                          entry.txid
+                          (RebuildFailure ("Introspect failed: " <> err))
+                      )
+                  Right meta -> do
+                    savedAt <- H.liftEffect utcTimestamp
+                    let
+                      newEntry =
+                        rebuiltEntry entry buildResponse.cborHex meta savedAt
+                    stored <-
+                      H.liftAff
+                        ( Aff.try do
+                            PendingTx.supersede entry.txid newEntry
+                            PendingTx.list
+                        )
+                    H.modify_ \s -> case stored of
+                      Right entries ->
+                        s
+                          { entries = entries
+                          , selectedTxid = Just meta.txid
+                          , witnessText = ""
+                          , witnessStatus = Nothing
+                          , submitStatus = Nothing
+                          , rebuildStatus =
+                              Just (RebuildSuccess meta.txid)
+                          , rebuildingTxid = Nothing
+                          }
+                      Left err ->
+                        s
+                          { rebuildStatus =
+                              Just
+                                ( RebuildFailure
+                                    ( "Rebuild failed: "
+                                        <> Error.message err
+                                    )
+                                )
+                          , rebuildingTxid = Nothing
+                          }
 
 render
   :: forall m
@@ -444,6 +547,12 @@ entryCard st entry =
             HH.p
               [ HP.classes [ cn "pending-entry-card__history" ] ]
               [ HH.text ("supersedes " <> previous) ]
+      , case supersededBy st.entries entry of
+          Nothing -> HH.text ""
+          Just successor ->
+            HH.p
+              [ HP.classes [ cn "pending-entry-card__history" ] ]
+              [ HH.text ("superseded by " <> successor) ]
       ]
 
 signerChips
@@ -497,6 +606,7 @@ detailView st =
         , witnessRoster entry
         , witnessVerifier st entry
         , submitPanel st entry
+        , rebuildPanel st entry
         , graphProjection entry
         ]
 
@@ -696,6 +806,71 @@ submitStatusView = case _ of
       ]
       [ HH.text msg ]
 
+rebuildPanel
+  :: forall w
+   . State
+  -> PendingTx.PendingTxEntry
+  -> HH.HTML w Action
+rebuildPanel st entry =
+  let
+    busy = rebuildBusy st
+  in
+    HH.section
+      [ HP.classes
+          [ cn "pending-detail__section"
+          , cn "pending-rebuild"
+          ]
+      ]
+      [ HH.h3_ [ HH.text "Rebuild" ]
+      , case rebuildRecipeFromIntent entry.intent of
+          Nothing ->
+            HH.p
+              [ HP.classes [ cn "pending-submit__hint" ] ]
+              [ HH.text "rebuild unavailable for this entry" ]
+          Just _ ->
+            HH.div
+              [ HP.classes [ cn "pending-submit__row" ] ]
+              [ HH.button
+                  [ HP.type_ HP.ButtonButton
+                  , HP.classes [ cn "btn", cn "btn--filled" ]
+                  , HP.disabled busy
+                  , HE.onClick (\_ -> RebuildSelected)
+                  ]
+                  [ HH.text
+                      ( if busy then "Rebuilding"
+                        else "Rebuild transaction"
+                      )
+                  ]
+              ]
+      , case st.rebuildStatus of
+          Nothing -> HH.text ""
+          Just status -> rebuildStatusView status
+      ]
+
+rebuildStatusView
+  :: forall w i
+   . RebuildStatus
+  -> HH.HTML w i
+rebuildStatusView = case _ of
+  RebuildSuccess txid ->
+    HH.p
+      [ HP.classes
+          [ cn "pending-submit__status"
+          , cn "pending-submit__status--ok"
+          ]
+      ]
+      [ HH.text "Rebuilt txid "
+      , HH.code_ [ HH.text txid ]
+      ]
+  RebuildFailure msg ->
+    HH.p
+      [ HP.classes
+          [ cn "pending-submit__status"
+          , cn "pending-submit__status--error"
+          ]
+      ]
+      [ HH.text msg ]
+
 graphProjection
   :: forall w i
    . PendingTx.PendingTxEntry
@@ -789,10 +964,30 @@ entryInHistory
   :: Array PendingTx.PendingTxEntry
   -> PendingTx.PendingTxEntry
   -> Boolean
-entryInHistory entries entry = case Nullable.toMaybe entry.supersedes of
-  Just _ -> true
-  Nothing ->
-    Array.any
+entryInHistory entries entry =
+  supersededByPresent || supersedesAbsentPredecessor
+  where
+  supersededByPresent = case supersededBy entries entry of
+    Just _ -> true
+    Nothing -> false
+
+  supersedesAbsentPredecessor =
+    case Nullable.toMaybe entry.supersedes of
+      Nothing -> false
+      Just previous ->
+        not
+          ( Array.any
+              (\candidate -> candidate.txid == previous)
+              entries
+          )
+
+supersededBy
+  :: Array PendingTx.PendingTxEntry
+  -> PendingTx.PendingTxEntry
+  -> Maybe String
+supersededBy entries entry =
+  _.txid
+    <$> Array.find
       (\candidate -> Nullable.toMaybe candidate.supersedes == Just entry.txid)
       entries
 
@@ -850,6 +1045,11 @@ submitBusy st = case st.submittingTxid of
   Nothing -> false
   Just _ -> true
 
+rebuildBusy :: State -> Boolean
+rebuildBusy st = case st.rebuildingTxid of
+  Nothing -> false
+  Just _ -> true
+
 finishSubmit :: String -> SubmitStatus -> State -> State
 finishSubmit txid status st =
   if st.selectedTxid == Just txid then
@@ -859,6 +1059,48 @@ finishSubmit txid status st =
       }
   else
     st { submittingTxid = Nothing }
+
+finishRebuild :: String -> RebuildStatus -> State -> State
+finishRebuild txid status st =
+  if st.selectedTxid == Just txid then
+    st
+      { rebuildingTxid = Nothing
+      , rebuildStatus = Just status
+      }
+  else
+    st { rebuildingTxid = Nothing }
+
+rebuildRecipeFromIntent :: Json -> Maybe RebuildRecipe
+rebuildRecipeFromIntent intent = do
+  object <- Argonaut.toObject intent
+  buildEndpoint <- FO.lookup "buildEndpoint" object >>= Argonaut.toString
+  _ <- Api.buildCborField buildEndpoint
+  buildRequest <- FO.lookup "buildRequest" object
+  pure { buildEndpoint, buildRequest }
+
+rebuiltEntry
+  :: PendingTx.PendingTxEntry
+  -> String
+  -> Api.IntrospectResponse
+  -> String
+  -> PendingTx.PendingTxEntry
+rebuiltEntry previous cborHex meta savedAt =
+  { txid: meta.txid
+  , intent: previous.intent
+  , unsignedTxHex: cborHex
+  , scope: fromMaybe previous.scope meta.scope
+  , requiredSigners: meta.requiredSigners
+  , invalidHereafter:
+      case meta.invalidHereafter of
+        Nothing -> Nullable.null
+        Just slot -> Nullable.notNull (show slot)
+  , witnesses: emptyWitnesses
+  , savedAt
+  , supersedes: Nullable.null
+  }
+
+emptyWitnesses :: FO.Object String
+emptyWitnesses = FO.fromFoldable []
 
 graphEffectFromIntent :: Json -> Maybe Api.GraphEffect
 graphEffectFromIntent intent = do
@@ -887,6 +1129,34 @@ slotText :: Maybe Int -> String
 slotText = case _ of
   Nothing -> "unknown"
   Just slot -> show slot
+
+utcTimestamp :: Effect String
+utcTimestamp = do
+  inst <- now
+  let
+    dt = toDateTime inst
+    d = date dt
+    t = time dt
+    yy = show (fromEnum (year d))
+    mm = padTwo (fromEnum (month d))
+    dd = padTwo (fromEnum (day d))
+    hh = padTwo (fromEnum (hour t))
+    mi = padTwo (fromEnum (minute t))
+    ss = padTwo (fromEnum (second t))
+  pure
+    ( yy <> "-" <> mm <> "-" <> dd <> "T"
+        <> hh
+        <> ":"
+        <> mi
+        <> ":"
+        <> ss
+        <> "Z"
+    )
+
+padTwo :: Int -> String
+padTwo n
+  | n < 10 = "0" <> show n
+  | otherwise = show n
 
 boolAttr :: Boolean -> String
 boolAttr true = "true"

@@ -51,16 +51,16 @@ PR: #377
 
 ## Slice 4 - Rebuild and Supersede
 
-- [ ] T368-S4 Add a RED Playwright CLI test for rebuild success,
+- [X] T368-S4 Add a RED Playwright CLI test for rebuild success,
   `supersedes` linking, witness reset, and missing-recipe failure.
-- [ ] T368-S4 Read an opaque `{ buildEndpoint, buildRequest }` recipe
+- [X] T368-S4 Read an opaque `{ buildEndpoint, buildRequest }` recipe
   from `entry.intent`; do not invent client-side build logic.
-- [ ] T368-S4 POST the stored recipe to the existing mode-specific
+- [X] T368-S4 POST the stored recipe to the existing mode-specific
   build endpoint, build a fresh PendingTx entry from returned metadata,
   and write it via `Store.PendingTx.supersede`.
-- [ ] T368-S4 Keep superseded entries visible as history and show a
+- [X] T368-S4 Keep superseded entries visible as history and show a
   rebuild-unavailable reason for entries without a recipe.
-- [ ] T368-S4 Run `./gate.sh`; commit as
+- [X] T368-S4 Run `./gate.sh`; commit as
   `feat(frontend): rebuild pending transactions`
   with `Tasks: T368-S4`.
 

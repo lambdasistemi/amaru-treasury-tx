@@ -125,6 +125,7 @@ library
     Amaru.Treasury.Api.Readiness
     Amaru.Treasury.Api.Readiness.Internal
     Amaru.Treasury.Api.Server
+    Amaru.Treasury.Api.SpaFallback
     Amaru.Treasury.Api.State
     Amaru.Treasury.Api.Submit
     Amaru.Treasury.Api.Ttl
@@ -521,6 +522,7 @@ test-suite unit-tests
     Amaru.Treasury.Api.ProofsSpec
     Amaru.Treasury.Api.ReadinessSpec
     Amaru.Treasury.Api.ServerSpec
+    Amaru.Treasury.Api.SpaFallbackSpec
     Amaru.Treasury.Api.SubmitSpec
     Amaru.Treasury.Api.TtlSpec
     Amaru.Treasury.Api.TypesSpec

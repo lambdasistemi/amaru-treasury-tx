@@ -66,9 +66,9 @@ PR: #377
 
 ## Finalization
 
-- [ ] T368-F1 Run final `./gate.sh`.
-- [ ] T368-F2 Update PR #377 body with delivered behavior and proof.
-- [ ] T368-F3 Run finalization audit for commits and this task file.
-- [ ] T368-F4 Drop `gate.sh` in the final
+- [X] T368-F1 Run final `./gate.sh`.
+- [X] T368-F2 Update PR #377 body with delivered behavior and proof.
+- [X] T368-F3 Run finalization audit for commits and this task file.
+- [X] T368-F4 Drop `gate.sh` in the final
   `chore: drop gate.sh (ready for review)` commit.
-- [ ] T368-F5 Mark PR #377 ready for review.
+- [X] T368-F5 Mark PR #377 ready for review.

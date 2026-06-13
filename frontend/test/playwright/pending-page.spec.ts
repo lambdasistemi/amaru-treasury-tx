@@ -29,6 +29,15 @@ const REBUILT_CBOR_HEX = 'unsigned-rebuilt-cbor-hex';
 const REBUILT_TXID = 'tx-rebuilt-001';
 const REBUILT_REQUIRED_SIGNERS = ['rebuilt-signer-a', 'rebuilt-signer-b'];
 const REBUILT_INVALID_HEREAFTER = 1_850;
+const OPERATE_UNSIGNED_CBOR_HEX = 'unsigned-operate-cbor-hex';
+const OPERATE_TXID = 'tx-operate-pending-001';
+const OPERATE_REQUIRED_SIGNERS = [
+  'operate-signer-a',
+  'operate-signer-b',
+];
+const OPERATE_INVALID_HEREAFTER = 1_950;
+const OPERATE_WALLET_ADDR =
+  'addr1qoperatewallet000000000000000000000000000000000000000000000';
 const REBUILD_BUILD_REQUEST = {
   network: 'mainnet',
   scope: 'core_development',
@@ -233,6 +242,120 @@ const missingRecipeEntry: PendingTxEntry = {
   savedAt: '2026-06-13T12:05:00Z',
   supersedes: null,
 };
+
+test('operate saves built transactions to pending with zero witnesses', async ({
+  page,
+}) => {
+  const server = await serveDist();
+  const buildRequests: unknown[] = [];
+  const introspectRequests: unknown[] = [];
+
+  try {
+    await page.route('**/v1/build/**', async (route) => {
+      expect(route.request().method()).toBe('POST');
+      const pathname = new URL(route.request().url()).pathname;
+      expect(pathname).toBe('/v1/build/swap');
+      const body = route.request().postDataJSON();
+      buildRequests.push(body);
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ sbrCborHex: OPERATE_UNSIGNED_CBOR_HEX }),
+      });
+    });
+
+    await page.route('**/v1/tx/introspect', async (route) => {
+      expect(route.request().method()).toBe('POST');
+      const body = route.request().postDataJSON();
+      introspectRequests.push(body);
+      expect(body).toEqual({ cborHex: OPERATE_UNSIGNED_CBOR_HEX });
+
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          txid: OPERATE_TXID,
+          requiredSigners: OPERATE_REQUIRED_SIGNERS,
+          invalidHereafter: OPERATE_INVALID_HEREAFTER,
+          scope: 'core_development',
+        }),
+      });
+    });
+
+    await page.goto(`${server.url}/operate`);
+    await page.getByRole('textbox', { name: 'wallet' }).fill(
+      OPERATE_WALLET_ADDR,
+    );
+    await page
+      .locator('#operate-signers-picker')
+      .getByRole('button', { name: 'Middleware' })
+      .click();
+    await page.getByLabel('description').fill('operate pending proof');
+    await page.getByLabel('justification').fill('handoff proof');
+
+    await expect(page.locator('#operate-result-panel')).toContainText('built');
+
+    const saveToPending = page.getByRole('button', {
+      name: 'Save to pending',
+    });
+    await expect(saveToPending).toBeVisible({ timeout: 2_000 });
+    await saveToPending.click();
+    await expect(page.locator('#operate-result-panel')).toContainText(
+      OPERATE_TXID,
+    );
+
+    await page.getByRole('link', { name: 'Pending co-signing' }).click();
+
+    const activeLane = page.getByRole('region', {
+      name: 'Active pending transactions',
+    });
+    await expect(activeLane).toContainText(OPERATE_TXID);
+    for (const signer of OPERATE_REQUIRED_SIGNERS) {
+      await expect(
+        activeLane
+          .locator('.signer-chip[data-active="false"]')
+          .filter({ hasText: signer }),
+      ).toContainText('Missing');
+    }
+
+    await activeLane
+      .getByRole('button', {
+        name: `View pending transaction ${OPERATE_TXID}`,
+      })
+      .click();
+
+    const detail = page.getByRole('region', {
+      name: 'Pending transaction detail',
+    });
+    for (const signer of OPERATE_REQUIRED_SIGNERS) {
+      await expect(
+        detail
+          .locator('.pending-roster__row[data-active="false"]')
+          .filter({ hasText: signer }),
+      ).toContainText('Missing');
+    }
+
+    const stored = await getPendingEntry(page, OPERATE_TXID);
+    expect(stored?.txid).toBe(OPERATE_TXID);
+    expect(stored?.unsignedTxHex).toBe(OPERATE_UNSIGNED_CBOR_HEX);
+    expect(stored?.requiredSigners).toEqual(OPERATE_REQUIRED_SIGNERS);
+    expect(stored?.invalidHereafter).toBe(String(OPERATE_INVALID_HEREAFTER));
+    expect(stored?.witnesses).toEqual({});
+    expect(stored?.supersedes).toBeNull();
+    expect(stored?.intent).toEqual({
+      kind: 'swap',
+      buildEndpoint: '/v1/build/swap',
+      buildRequest: buildRequests[0],
+    });
+    expect(buildRequests).toHaveLength(1);
+    expect(introspectRequests).toEqual([
+      { cborHex: OPERATE_UNSIGNED_CBOR_HEX },
+    ]);
+  } finally {
+    await server.close();
+  }
+});
 
 test('pending page lists local entries by lane and opens details', async ({
   page,

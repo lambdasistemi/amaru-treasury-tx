@@ -2,14 +2,14 @@
 
 ## Slice 1 - Save Built Operate Tx To Pending
 
-- [ ] T369-S1 Add a failing Playwright proof that saves a mocked
+- [X] T369-S1 Add a failing Playwright proof that saves a mocked
   Operate build to Pending and observes zero witnesses.
-- [ ] T369-S1 Add localized Operate save state/action/rendering for
+- [X] T369-S1 Add localized Operate save state/action/rendering for
   built transactions.
-- [ ] T369-S1 Persist through `Store.PendingTx.put` using
+- [X] T369-S1 Persist through `Store.PendingTx.put` using
   `Api.introspectTx`, empty witnesses, TTL, required signers, and the
   rebuild recipe.
-- [ ] T369-S1 Run focused RED/GREEN proof, `./gate.sh`, navigator
+- [X] T369-S1 Run focused RED/GREEN proof, `./gate.sh`, navigator
   review, and commit one bisect-safe slice.
 
 ## Finalization

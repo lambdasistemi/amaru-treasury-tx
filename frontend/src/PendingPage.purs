@@ -18,6 +18,8 @@ import Data.Maybe (Maybe(..), fromMaybe)
 import Data.Nullable as Nullable
 import Data.String as String
 import Data.Tuple (Tuple(..))
+import Effect (Effect)
+import Effect.Aff (Aff, makeAff, nonCanceler)
 import Effect.Aff as Aff
 import Effect.Aff.Class (class MonadAff)
 import Effect.Exception as Error
@@ -37,8 +39,15 @@ type State =
   , selectedTxid :: Maybe String
   , loadError :: Maybe String
   , tipSlot :: Maybe Int
+  , witnessText :: String
+  , witnessStatus :: Maybe WitnessStatus
+  , verifyingWitness :: Boolean
   , theme :: Theme.Theme
   }
+
+data WitnessStatus
+  = WitnessSuccess String
+  | WitnessFailure String
 
 type Lanes =
   { active :: Array PendingTx.PendingTxEntry
@@ -50,6 +59,9 @@ data Action
   = Initialize
   | ToggleTheme
   | SelectEntry String
+  | SetWitnessText String
+  | WitnessFilePicked
+  | VerifyWitness
 
 initialState :: State
 initialState =
@@ -57,6 +69,9 @@ initialState =
   , selectedTxid: Nothing
   , loadError: Nothing
   , tipSlot: Nothing
+  , witnessText: ""
+  , witnessStatus: Nothing
+  , verifyingWitness: false
   , theme: Theme.Dark
   }
 
@@ -101,6 +116,9 @@ handleAction = case _ of
       , selectedTxid
       , loadError
       , tipSlot
+      , witnessText: ""
+      , witnessStatus: Nothing
+      , verifyingWitness: false
       , theme
       }
   ToggleTheme -> do
@@ -108,7 +126,128 @@ handleAction = case _ of
     next <- H.liftEffect (Shell.toggleThemeEff st.theme)
     H.modify_ (_ { theme = next })
   SelectEntry txid ->
-    H.modify_ (_ { selectedTxid = Just txid })
+    H.modify_
+      ( _
+          { selectedTxid = Just txid
+          , witnessText = ""
+          , witnessStatus = Nothing
+          }
+      )
+  SetWitnessText txt ->
+    H.modify_
+      ( _
+          { witnessText = txt
+          , witnessStatus = Nothing
+          }
+      )
+  WitnessFilePicked -> do
+    picked <- H.liftAff (Aff.try (readFileAff "#pending-witness-file"))
+    H.modify_ \s -> case picked of
+      Right txt ->
+        s
+          { witnessText = String.trim txt
+          , witnessStatus = Nothing
+          }
+      Left err ->
+        s
+          { witnessStatus =
+              Just (WitnessFailure (Error.message err))
+          }
+  VerifyWitness -> do
+    st <- H.get
+    case selectedEntry st of
+      Nothing -> pure unit
+      Just entry -> do
+        let
+          witnessHex = String.trim st.witnessText
+        if witnessHex == "" then
+          H.modify_
+            ( _
+                { witnessStatus =
+                    Just
+                      (WitnessFailure "paste or upload a witness first")
+                }
+            )
+        else do
+          H.modify_
+            ( _
+                { verifyingWitness = true
+                , witnessStatus = Nothing
+                }
+            )
+          verified <-
+            H.liftAff
+              (Api.verifyWitness entry.unsignedTxHex witnessHex)
+          case verified of
+            Left err ->
+              H.modify_
+                ( _
+                    { verifyingWitness = false
+                    , witnessStatus =
+                        Just (WitnessFailure err)
+                    }
+                )
+            Right response ->
+              if response.ok then
+                case response.signerKeyHash of
+                  Nothing ->
+                    H.modify_
+                      ( _
+                          { verifyingWitness = false
+                          , witnessStatus =
+                              Just
+                                ( WitnessFailure
+                                    "verified witness did not include \
+                                    \a signer key hash"
+                                )
+                          }
+                      )
+                  Just signerKeyHash -> do
+                    stored <-
+                      H.liftAff
+                        ( Aff.try do
+                            PendingTx.addWitness
+                              entry.txid
+                              signerKeyHash
+                              witnessHex
+                            PendingTx.list
+                        )
+                    H.modify_ \s -> case stored of
+                      Right entries ->
+                        s
+                          { entries = entries
+                          , selectedTxid = Just entry.txid
+                          , witnessText = ""
+                          , verifyingWitness = false
+                          , witnessStatus =
+                              Just
+                                ( WitnessSuccess
+                                    ( "Witness accepted for "
+                                        <> signerKeyHash
+                                    )
+                                )
+                          }
+                      Left err ->
+                        s
+                          { verifyingWitness = false
+                          , witnessStatus =
+                              Just
+                                (WitnessFailure (Error.message err))
+                          }
+              else
+                H.modify_
+                  ( _
+                      { verifyingWitness = false
+                      , witnessStatus =
+                          Just
+                            ( WitnessFailure
+                                ( fromMaybe
+                                    "witness rejected"
+                                    response.reason
+                                )
+                            )
+                      }
+                  )
 
 render
   :: forall m
@@ -304,6 +443,7 @@ detailView st =
             , HH.code_ [ HH.text entry.scope ]
             ]
         , witnessRoster entry
+        , witnessVerifier st entry
         , graphProjection entry
         ]
 
@@ -337,6 +477,97 @@ rosterRow entry signer =
       , HH.span_
           [ HH.text (if collected then "Collected" else "Missing") ]
       ]
+
+witnessVerifier
+  :: forall w
+   . State
+  -> PendingTx.PendingTxEntry
+  -> HH.HTML w Action
+witnessVerifier st _entry =
+  HH.section
+    [ HP.classes
+        [ cn "pending-detail__section"
+        , cn "pending-witness"
+        ]
+    ]
+    [ HH.h3_ [ HH.text "Add witness" ]
+    , HH.label
+        [ HP.classes [ cn "field" ] ]
+        [ HH.span
+            [ HP.classes [ cn "field__label" ] ]
+            [ HH.text "Witness hex" ]
+        , HH.textarea
+            [ HP.value st.witnessText
+            , HE.onValueInput SetWitnessText
+            , HP.classes
+                [ cn "field__input"
+                , cn "field__input--mono"
+                , cn "field__textarea"
+                ]
+            , HP.attr (HH.AttrName "rows") "5"
+            , HP.attr
+                (HH.AttrName "autocomplete")
+                "off"
+            ]
+        ]
+    , HH.div
+        [ HP.classes [ cn "pending-witness__row" ] ]
+        [ HH.label
+            [ HP.classes [ cn "field", cn "pending-witness__file" ] ]
+            [ HH.span
+                [ HP.classes [ cn "field__label" ] ]
+                [ HH.text "Witness file" ]
+            , HH.input
+                [ HP.type_ HP.InputFile
+                , HP.id "pending-witness-file"
+                , HP.classes [ cn "field__input" ]
+                , HP.attr
+                    (HH.AttrName "accept")
+                    ".hex,.txt,text/plain"
+                , HE.onChange (\_ -> WitnessFilePicked)
+                ]
+            ]
+        , HH.button
+            [ HP.type_ HP.ButtonButton
+            , HP.classes [ cn "btn", cn "btn--filled" ]
+            , HP.disabled
+                ( st.verifyingWitness
+                    || String.trim st.witnessText == ""
+                )
+            , HE.onClick (\_ -> VerifyWitness)
+            ]
+            [ HH.text
+                ( if st.verifyingWitness then "Verifying"
+                  else "Verify witness"
+                )
+            ]
+        ]
+    , case st.witnessStatus of
+        Nothing -> HH.text ""
+        Just status -> witnessStatusView status
+    ]
+
+witnessStatusView
+  :: forall w i
+   . WitnessStatus
+  -> HH.HTML w i
+witnessStatusView = case _ of
+  WitnessSuccess msg ->
+    HH.p
+      [ HP.classes
+          [ cn "pending-witness__status"
+          , cn "pending-witness__status--ok"
+          ]
+      ]
+      [ HH.text msg ]
+  WitnessFailure msg ->
+    HH.p
+      [ HP.classes
+          [ cn "pending-witness__status"
+          , cn "pending-witness__status--error"
+          ]
+      ]
+      [ HH.text msg ]
 
 graphProjection
   :: forall w i
@@ -492,3 +723,17 @@ boolAttr false = "false"
 
 cn :: String -> HH.ClassName
 cn = HH.ClassName
+
+readFileAff :: String -> Aff String
+readFileAff selector = makeAff \cb -> do
+  _readFileFromInput
+    selector
+    (cb <<< Right)
+    (cb <<< Left)
+  pure nonCanceler
+
+foreign import _readFileFromInput
+  :: String
+  -> (String -> Effect Unit)
+  -> (Error.Error -> Effect Unit)
+  -> Effect Unit

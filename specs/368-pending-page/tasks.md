@@ -24,14 +24,14 @@ PR: #377
 
 ## Slice 2 - Witness Verification
 
-- [ ] T368-S2 Add a RED Playwright CLI test for witness paste/upload
+- [X] T368-S2 Add a RED Playwright CLI test for witness paste/upload
   success and failure, with `/v1/verify-witness` mocked.
-- [ ] T368-S2 Add pending-page API helpers for `/v1/verify-witness`
+- [X] T368-S2 Add pending-page API helpers for `/v1/verify-witness`
   without adding browser-side decode/crypto.
-- [ ] T368-S2 Wire paste and file upload to verify, store successful
+- [X] T368-S2 Wire paste and file upload to verify, store successful
   witnesses with `Store.PendingTx.addWitness`, refresh the entry list,
   and render failure reasons without storing.
-- [ ] T368-S2 Run `./gate.sh`; commit as
+- [X] T368-S2 Run `./gate.sh`; commit as
   `feat(frontend): verify pending witnesses`
   with `Tasks: T368-S2`.
 

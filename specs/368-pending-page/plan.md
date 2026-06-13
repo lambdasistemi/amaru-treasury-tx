@@ -100,6 +100,8 @@ message.
 Implementation slices may edit only:
 
 - `frontend/src/PendingPage.purs`
+- `frontend/src/PendingPage.js` if a Pending page FFI export is
+  required
 - `frontend/src/Routing.purs`
 - `frontend/src/Main.purs`
 - `frontend/src/Shell.purs`

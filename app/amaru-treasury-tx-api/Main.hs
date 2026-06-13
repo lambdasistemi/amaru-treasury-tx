@@ -48,7 +48,6 @@ import Data.Word (Word16, Word64)
 import Network.Wai
     ( Middleware
     , mapResponseHeaders
-    , pathInfo
     )
 import Network.Wai.Handler.Warp
     ( defaultSettings
@@ -123,6 +122,7 @@ import Amaru.Treasury.Api.Server
     , mkBuildProvider
     , mkInspectHandler
     )
+import Amaru.Treasury.Api.SpaFallback (spaFallback)
 import Amaru.Treasury.Api.State
     ( queryPending
     , queryScopeState
@@ -468,26 +468,6 @@ computeInterestSet _metadata _sundaeAddr = do
         "amaru-treasury-tx-api: indexer interest set = IndexAll \
         \(wizard takes arbitrary wallet; needs every UTxO)"
     pure IndexAll
-
--- ---------------------------------------------------------------------------
--- SPA fallback middleware
-
-{- | Rewrite known SPA routes (currently only @\/build@) to
-@\/@ so the existing static-asset Raw handler returns the
-Halogen bundle's @index.html@.  Without this, a direct GET
-\/build returns a 404 from servant since no route matches.
-
-The list is intentionally tiny; expand only when the SPA
-adds another top-level path.
--}
-spaFallback :: Middleware
-spaFallback app req respond
-    | pathInfo req `elem` spaPaths =
-        app req{pathInfo = []} respond
-    | otherwise = app req respond
-  where
-    spaPaths :: [[Text]]
-    spaPaths = [["operate"], ["view"], ["books"], ["audit"]]
 
 -- ---------------------------------------------------------------------------
 -- Response-header middleware

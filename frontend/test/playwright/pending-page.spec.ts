@@ -14,6 +14,17 @@ const CURRENT_SLOT = 1_200;
 const PASTED_WITNESS = 'pasted-witness-b-hex';
 const UPLOADED_REJECTED_WITNESS = 'uploaded-rejected-witness-c-hex';
 const REJECTED_REASON = 'witness does not match any required signer';
+const READY_WITNESSES = ['ready-witness-a-hex', 'ready-witness-b-hex'];
+const EXPIRED_WITNESSES = [
+  'expired-witness-a-hex',
+  'expired-witness-b-hex',
+];
+const FAILURE_WITNESSES = [
+  'failure-witness-a-hex',
+  'failure-witness-b-hex',
+];
+const ATTACHED_CBOR_HEX = 'signed-ready-cbor-hex';
+const SUBMITTED_TXID = 'submitted-ready-txid';
 
 type GraphValueSummary = {
   lovelace: number;
@@ -108,6 +119,62 @@ const witnessVerificationEntry: PendingTxEntry = {
   savedAt: '2026-06-13T10:00:00Z',
   supersedes: null,
 };
+
+const submitEntries: PendingTxEntry[] = [
+  {
+    txid: 'tx-ready-submit-001',
+    intent: { kind: 'swap' },
+    unsignedTxHex: 'unsigned-ready-submit-hex',
+    scope: 'core_development',
+    requiredSigners: ['ready-signer-a', 'ready-signer-b'],
+    invalidHereafter: '1500',
+    witnesses: {
+      'ready-signer-a': READY_WITNESSES[0],
+      'ready-signer-b': READY_WITNESSES[1],
+    },
+    savedAt: '2026-06-13T11:00:00Z',
+    supersedes: null,
+  },
+  {
+    txid: 'tx-missing-submit-001',
+    intent: { kind: 'swap' },
+    unsignedTxHex: 'unsigned-missing-submit-hex',
+    scope: 'core_development',
+    requiredSigners: ['missing-signer-a', 'missing-signer-b'],
+    invalidHereafter: '1500',
+    witnesses: { 'missing-signer-a': 'missing-witness-a-hex' },
+    savedAt: '2026-06-13T11:05:00Z',
+    supersedes: null,
+  },
+  {
+    txid: 'tx-expired-submit-001',
+    intent: { kind: 'disburse' },
+    unsignedTxHex: 'unsigned-expired-submit-hex',
+    scope: 'middleware',
+    requiredSigners: ['expired-signer-a', 'expired-signer-b'],
+    invalidHereafter: '1100',
+    witnesses: {
+      'expired-signer-a': EXPIRED_WITNESSES[0],
+      'expired-signer-b': EXPIRED_WITNESSES[1],
+    },
+    savedAt: '2026-06-13T11:10:00Z',
+    supersedes: null,
+  },
+  {
+    txid: 'tx-failure-submit-001',
+    intent: { kind: 'reorganize' },
+    unsignedTxHex: 'unsigned-failure-submit-hex',
+    scope: 'ops_and_use_cases',
+    requiredSigners: ['failure-signer-a', 'failure-signer-b'],
+    invalidHereafter: '1500',
+    witnesses: {
+      'failure-signer-a': FAILURE_WITNESSES[0],
+      'failure-signer-b': FAILURE_WITNESSES[1],
+    },
+    savedAt: '2026-06-13T11:15:00Z',
+    supersedes: null,
+  },
+];
 
 test('pending page lists local entries by lane and opens details', async ({
   page,
@@ -305,6 +372,152 @@ test('pending page verifies pasted and uploaded witnesses through backend', asyn
         unsignedTx: witnessVerificationEntry.unsignedTxHex,
         witness: UPLOADED_REJECTED_WITNESS,
       },
+    ]);
+  } finally {
+    await server.close();
+  }
+});
+
+test('pending page gates and submits complete active transactions', async ({
+  page,
+}) => {
+  const server = await serveDist();
+  const attachRequests: Record<string, unknown>[] = [];
+  const submitRequests: Record<string, unknown>[] = [];
+  const callOrder: string[] = [];
+  const [
+    readyEntry,
+    missingEntry,
+    expiredEntry,
+    failureEntry,
+  ] = submitEntries;
+
+  try {
+    await page.goto(`${server.url}/`);
+    await seedPendingEntries(page, submitEntries);
+
+    await page.route('**/v1/attach', async (route) => {
+      expect(route.request().method()).toBe('POST');
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      attachRequests.push(body);
+
+      if (body.unsignedTx === readyEntry.unsignedTxHex) {
+        expect(body).toEqual({
+          unsignedTx: readyEntry.unsignedTxHex,
+          witnesses: READY_WITNESSES,
+        });
+        callOrder.push('attach:ready');
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ cborHex: ATTACHED_CBOR_HEX }),
+        });
+        return;
+      }
+
+      if (body.unsignedTx === failureEntry.unsignedTxHex) {
+        expect(body).toEqual({
+          unsignedTx: failureEntry.unsignedTxHex,
+          witnesses: FAILURE_WITNESSES,
+        });
+        callOrder.push('attach:failure');
+        await route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'attach refused by backend' }),
+        });
+        return;
+      }
+
+      throw new Error(`unexpected attach request ${JSON.stringify(body)}`);
+    });
+
+    await page.route('**/v1/submit', async (route) => {
+      expect(route.request().method()).toBe('POST');
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      expect(body).toEqual({ cborHex: ATTACHED_CBOR_HEX });
+      submitRequests.push(body);
+      callOrder.push('submit');
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ txid: SUBMITTED_TXID }),
+      });
+    });
+
+    await page.goto(`${server.url}/pending`);
+
+    const activeLane = page.getByRole('region', {
+      name: 'Active pending transactions',
+    });
+    const expiredLane = page.getByRole('region', {
+      name: 'Expired pending transactions',
+    });
+
+    await activeLane
+      .getByRole('button', {
+        name: `View pending transaction ${missingEntry.txid}`,
+      })
+      .click();
+
+    const detail = page.getByRole('region', {
+      name: 'Pending transaction detail',
+    });
+    const submitButton = detail.getByRole('button', {
+      name: 'Submit transaction',
+    });
+
+    await expect(submitButton).toBeDisabled();
+
+    await expiredLane
+      .getByRole('button', {
+        name: `View pending transaction ${expiredEntry.txid}`,
+      })
+      .click();
+    await expect(submitButton).toBeDisabled();
+
+    await activeLane
+      .getByRole('button', {
+        name: `View pending transaction ${readyEntry.txid}`,
+      })
+      .click();
+    await expect(submitButton).toBeEnabled();
+
+    await submitButton.click();
+    await expect(detail).toContainText(SUBMITTED_TXID);
+    expect(attachRequests).toEqual([
+      {
+        unsignedTx: readyEntry.unsignedTxHex,
+        witnesses: READY_WITNESSES,
+      },
+    ]);
+    expect(submitRequests).toEqual([{ cborHex: ATTACHED_CBOR_HEX }]);
+    expect(callOrder).toEqual(['attach:ready', 'submit']);
+
+    await activeLane
+      .getByRole('button', {
+        name: `View pending transaction ${failureEntry.txid}`,
+      })
+      .click();
+    const storedBeforeFailure = await getPendingEntry(
+      page,
+      failureEntry.txid,
+    );
+
+    await submitButton.click();
+    await expect(detail).toContainText('Attach failed');
+
+    const storedAfterFailure = await getPendingEntry(
+      page,
+      failureEntry.txid,
+    );
+    expect(storedAfterFailure?.witnesses).toEqual(
+      storedBeforeFailure?.witnesses,
+    );
+    expect(callOrder).toEqual([
+      'attach:ready',
+      'submit',
+      'attach:failure',
     ]);
   } finally {
     await server.close();

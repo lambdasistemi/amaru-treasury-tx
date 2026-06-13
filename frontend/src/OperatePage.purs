@@ -2280,10 +2280,7 @@ saveToPendingPanel st = case cborHexPreview st of
   Nothing -> HH.text ""
   Just _ ->
     HH.div
-      [ HP.style
-          "display:flex;gap:.5rem;align-items:center;\
-          \flex-wrap:wrap;margin:.75rem 0"
-      ]
+      [ HP.classes [ cn "operate-save-pending" ] ]
       [ HH.button
           ( [ HP.classes [ cn "btn", cn "btn--primary" ]
             , HP.type_ HP.ButtonButton

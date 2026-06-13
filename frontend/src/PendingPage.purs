@@ -561,7 +561,11 @@ signerChips
   -> HH.HTML w i
 signerChips entry =
   HH.div
-    [ HP.classes [ cn "signers-picker" ] ]
+    [ HP.classes
+        [ cn "signers-picker"
+        , cn "pending-entry-card__signers"
+        ]
+    ]
     (map (signerChip entry) entry.requiredSigners)
 
 signerChip

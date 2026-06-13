@@ -137,6 +137,16 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+button,
+input,
+select,
+textarea {
+  max-width: 100%;
+  font: inherit;
+}
+button {
+  overflow-wrap: anywhere;
+}
 html {
   min-width: 320px;
   text-rendering: optimizeLegibility;

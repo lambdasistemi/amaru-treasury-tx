@@ -35,6 +35,7 @@ import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 import Routing (Route(..))
 import Shell as Shell
+import Shell.Clipboard as Clipboard
 import Store.PendingTx as PendingTx
 import Theme as Theme
 
@@ -85,6 +86,7 @@ data Action
   | VerifyWitness
   | SubmitSelected
   | RebuildSelected
+  | CopyText String
 
 initialState :: State
 initialState =
@@ -156,6 +158,7 @@ handleAction = case _ of
     st <- H.get
     next <- H.liftEffect (Shell.toggleThemeEff st.theme)
     H.modify_ (_ { theme = next })
+  CopyText value -> H.liftEffect (Clipboard.writeText value)
   SelectEntry txid ->
     H.modify_
       ( _
@@ -609,12 +612,61 @@ detailView st =
             [ HH.h2 [ HP.title entry.txid ] [ HH.text (shortHex entry.txid) ]
             , HH.code_ [ HH.text entry.scope ]
             ]
+        , distributePanel entry
         , witnessRoster entry
         , witnessVerifier st entry
         , submitPanel st entry
         , rebuildPanel st entry
         , graphProjection entry
         ]
+
+-- | Copy the selected entry's unsigned tx for distribution to
+-- | co-signers, either as raw CBOR hex or as the cardano-cli text
+-- | envelope.
+distributePanel
+  :: forall w
+   . PendingTx.PendingTxEntry
+  -> HH.HTML w Action
+distributePanel entry =
+  HH.section
+    [ HP.classes [ cn "pending-detail__section" ] ]
+    [ HH.h3_ [ HH.text "Distribute" ]
+    , HH.p
+        [ HP.classes [ cn "pending-submit__hint" ] ]
+        [ HH.text "Copy the unsigned transaction to send to co-signers." ]
+    , HH.div
+        [ HP.classes [ cn "pending-submit__row" ] ]
+        [ HH.button
+            [ HP.type_ HP.ButtonButton
+            , HP.classes [ cn "btn", cn "btn--ghost" ]
+            , HP.title "Copy raw CBOR hex"
+            , HE.onClick (\_ -> CopyText entry.unsignedTxHex)
+            ]
+            [ HH.text "Copy CBOR" ]
+        , HH.button
+            [ HP.type_ HP.ButtonButton
+            , HP.classes [ cn "btn", cn "btn--ghost" ]
+            , HP.title "Copy cardano-cli text envelope (Tx ConwayEra)"
+            , HE.onClick (\_ -> CopyText (txEnvelopeJson entry.unsignedTxHex))
+            ]
+            [ HH.text "Copy envelope" ]
+        ]
+    ]
+
+-- | Wrap raw tx CBOR hex as the cardano-cli Conway text envelope,
+-- | byte-identical to the server's @envelope-tx@ output (4-space
+-- | indent, @type@/@description@/@cborHex@ key order, trailing
+-- | newline) so it pipes straight into @cardano-cli transaction
+-- | witness@.
+txEnvelopeJson :: String -> String
+txEnvelopeJson hex =
+  "{\n"
+    <> "    \"type\": \"Tx ConwayEra\",\n"
+    <> "    \"description\": \"Ledger Cddl Format\",\n"
+    <> "    \"cborHex\": \""
+    <> hex
+    <> "\"\n"
+    <> "}\n"
 
 witnessRoster
   :: forall w i

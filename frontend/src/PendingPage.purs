@@ -256,7 +256,7 @@ handleAction = case _ of
                               Just
                                 ( WitnessSuccess
                                     ( "Witness accepted for "
-                                        <> signerKeyHash
+                                        <> shortHex signerKeyHash
                                     )
                                 )
                           }
@@ -583,7 +583,7 @@ signerChip entry signer =
       [ HP.classes [ cn "signer-chip", cn "signer-chip--required" ]
       , HP.attr (HH.AttrName "data-active") (boolAttr collected)
       ]
-      [ HH.span_ [ HH.text signer ]
+      [ HH.span [ HP.title signer ] [ HH.text (shortHex signer) ]
       , HH.span
           [ HP.classes [ cn "signer-chip__req" ] ]
           [ HH.text (if collected then "Collected" else "Missing") ]
@@ -801,7 +801,7 @@ submitStatusView = case _ of
           ]
       ]
       [ HH.text "Submitted txid "
-      , HH.code_ [ HH.text txid ]
+      , HH.code [ HP.title txid ] [ HH.text (shortHex txid) ]
       ]
   SubmitFailure msg ->
     HH.p
@@ -1054,7 +1054,7 @@ submitUnavailableReason st entry
         missing = missingRequiredSigners entry
       in
         if Array.null missing then Nothing
-        else Just ("Missing " <> Array.intercalate ", " missing)
+        else Just ("Missing " <> Array.intercalate ", " (map shortHex missing))
 
 submitBusy :: State -> Boolean
 submitBusy st = case st.submittingTxid of

@@ -376,7 +376,12 @@ handleAction = case _ of
                     savedAt <- H.liftEffect utcTimestamp
                     let
                       newEntry =
-                        rebuiltEntry entry buildResponse.cborHex meta savedAt
+                        rebuiltEntry
+                          entry
+                          buildResponse.cborHex
+                          buildResponse.graphEffect
+                          meta
+                          savedAt
                     stored <-
                       H.liftAff
                         ( Aff.try do
@@ -1149,12 +1154,13 @@ rebuildRecipeFromIntent intent = do
 rebuiltEntry
   :: PendingTx.PendingTxEntry
   -> String
+  -> Maybe Json
   -> Api.IntrospectResponse
   -> String
   -> PendingTx.PendingTxEntry
-rebuiltEntry previous cborHex meta savedAt =
+rebuiltEntry previous cborHex graphEffect meta savedAt =
   { txid: meta.txid
-  , intent: previous.intent
+  , intent: mergeGraphEffect graphEffect previous.intent
   , unsignedTxHex: cborHex
   , scope: fromMaybe previous.scope meta.scope
   , requiredSigners: meta.requiredSigners
@@ -1169,6 +1175,18 @@ rebuiltEntry previous cborHex meta savedAt =
 
 emptyWitnesses :: FO.Object String
 emptyWitnesses = FO.fromFoldable []
+
+-- | Fold a freshly-resolved graph-effect into a rebuilt entry's
+-- | intent under @resolvedGraphEffect@ so the /pending detail panel
+-- | can inspect it.  Replaces any stale effect and leaves the
+-- | rebuild recipe (kind/buildEndpoint/buildRequest) intact.  A
+-- | 'Nothing' effect (e.g. reorganize) leaves the intent unchanged.
+mergeGraphEffect :: Maybe Json -> Json -> Json
+mergeGraphEffect Nothing intent = intent
+mergeGraphEffect (Just effect) intent = case Argonaut.toObject intent of
+  Nothing -> intent
+  Just object ->
+    Argonaut.fromObject (FO.insert "resolvedGraphEffect" effect object)
 
 graphEffectFromIntent :: Json -> Maybe Api.GraphEffect
 graphEffectFromIntent intent = do

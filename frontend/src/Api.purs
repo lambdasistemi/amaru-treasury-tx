@@ -85,6 +85,7 @@ type SubmitResponse =
 
 type RebuildBuildResponse =
   { cborHex :: String
+  , graphEffect :: Maybe Json
   }
 
 type IntrospectResponse =
@@ -308,7 +309,8 @@ rebuildFromRecipe endpoint buildRequest = case buildCborField endpoint of
       pure case built of
         Left err -> Left err
         Right json -> case lookupString cborField json of
-          Just cborHex -> Right { cborHex }
+          Just cborHex ->
+            Right { cborHex, graphEffect: lookupGraphEffect cborField json }
           Nothing ->
             Left
               ( fromMaybe
@@ -450,6 +452,18 @@ lookupString key json = do
   object <- Argonaut.toObject json
   value <- FO.lookup key object
   Argonaut.toString value
+
+-- | The resolved graph-effect that sits beside the cbor field in a
+-- | build response (e.g. @sbrGraphEffect@ next to @sbrCborHex@).
+-- | 'Nothing' when absent or JSON @null@ (e.g. reorganize resolves
+-- | no effect).  Used to backfill a rebuilt pending entry so the
+-- | /pending detail panel can inspect its inputs/outputs.
+lookupGraphEffect :: String -> Json -> Maybe Json
+lookupGraphEffect cborField json = do
+  prefix <- String.stripSuffix (String.Pattern "CborHex") cborField
+  object <- Argonaut.toObject json
+  value <- FO.lookup (prefix <> "GraphEffect") object
+  if Argonaut.isNull value then Nothing else Just value
 
 queryString
   :: Array { key :: String, value :: Maybe String }

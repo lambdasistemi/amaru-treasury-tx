@@ -4265,11 +4265,18 @@ buildEndpoint st = case st.mode of
 
 pendingIntent :: State -> Json
 pendingIntent st =
-  Argonaut.fromObject $ FO.fromFoldable
+  Argonaut.fromObject $ FO.fromFoldable $
     [ Tuple "kind" (Argonaut.fromString (modeWire st.mode))
     , Tuple "buildEndpoint" (Argonaut.fromString (buildEndpoint st))
     , Tuple "buildRequest" (requestJson st)
     ]
+      <> case graphEffectPreview st of
+        -- Persist the resolved graph-effect so the /pending detail
+        -- panel can show the tx's inputs/outputs in place, without
+        -- reloading the entry into Operate.  Key contains
+        -- "GraphEffect" so graphEffectFromIntent picks it up.
+        Just ge -> [ Tuple "resolvedGraphEffect" ge.json ]
+        Nothing -> []
 
 pendingEntry
   :: State

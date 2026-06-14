@@ -28,7 +28,7 @@ import Effect.Aff.Class (class MonadAff)
 import Effect.Exception as Error
 import Effect.Now (now)
 import Foreign.Object as FO
-import Format (showAda)
+import Format (shortAddr, shortHex, showAda)
 import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
@@ -527,8 +527,10 @@ entryCard st entry =
           , HE.onClick (\_ -> SelectEntry entry.txid)
           ]
           [ HH.span
-              [ HP.classes [ cn "pending-entry-card__title" ] ]
-              [ HH.text entry.txid ]
+              [ HP.classes [ cn "pending-entry-card__title" ]
+              , HP.title entry.txid
+              ]
+              [ HH.text (shortHex entry.txid) ]
           , HH.span
               [ HP.classes [ cn "pending-entry-card__meta" ] ]
               [ HH.text
@@ -545,14 +547,18 @@ entryCard st entry =
           Nothing -> HH.text ""
           Just previous ->
             HH.p
-              [ HP.classes [ cn "pending-entry-card__history" ] ]
-              [ HH.text ("supersedes " <> previous) ]
+              [ HP.classes [ cn "pending-entry-card__history" ]
+              , HP.title previous
+              ]
+              [ HH.text ("supersedes " <> shortHex previous) ]
       , case supersededBy st.entries entry of
           Nothing -> HH.text ""
           Just successor ->
             HH.p
-              [ HP.classes [ cn "pending-entry-card__history" ] ]
-              [ HH.text ("superseded by " <> successor) ]
+              [ HP.classes [ cn "pending-entry-card__history" ]
+              , HP.title successor
+              ]
+              [ HH.text ("superseded by " <> shortHex successor) ]
       ]
 
 signerChips
@@ -600,7 +606,7 @@ detailView st =
       Just entry ->
         [ HH.div
             [ HP.classes [ cn "pending-detail__head" ] ]
-            [ HH.h2_ [ HH.text entry.txid ]
+            [ HH.h2 [ HP.title entry.txid ] [ HH.text (shortHex entry.txid) ]
             , HH.code_ [ HH.text entry.scope ]
             ]
         , witnessRoster entry
@@ -636,7 +642,7 @@ rosterRow entry signer =
       [ HP.classes [ cn "pending-roster__row" ]
       , HP.attr (HH.AttrName "data-active") (boolAttr collected)
       ]
-      [ HH.code_ [ HH.text signer ]
+      [ HH.code [ HP.title signer ] [ HH.text (shortHex signer) ]
       , HH.span_
           [ HH.text (if collected then "Collected" else "Missing") ]
       ]
@@ -915,7 +921,7 @@ inputRow :: forall w i. Api.TxDetailInput -> HH.HTML w i
 inputRow input =
   HH.div
     [ HP.classes [ cn "pending-graph-card" ] ]
-    [ kv "input" input.txIn
+    [ kvT "input" shortHex input.txIn
     , kv "scope"
         ( if input.resolved then fromMaybe "external" input.scope
           else "unresolved"
@@ -929,7 +935,7 @@ outputRow output =
   HH.div
     [ HP.classes [ cn "pending-graph-card" ] ]
     [ kv "output" ("#" <> show output.index)
-    , kv "address" output.address
+    , kvT "address" shortAddr output.address
     , kv "scope" (fromMaybe "external" output.scope)
     , kv "role" (fromMaybe "-" output.role)
     , kv "value" (valueText output.value)
@@ -941,6 +947,16 @@ kv label value =
     [ HP.classes [ cn "pending-kv" ] ]
     [ HH.span_ [ HH.text label ]
     , HH.code_ [ HH.text value ]
+    ]
+
+-- | Like `kv`, but middle-truncates a long value (txid/hash/address)
+-- | with the given truncator and keeps the full value in a tooltip.
+kvT :: forall w i. String -> (String -> String) -> String -> HH.HTML w i
+kvT label trunc full =
+  HH.div
+    [ HP.classes [ cn "pending-kv" ] ]
+    [ HH.span_ [ HH.text label ]
+    , HH.code [ HP.title full ] [ HH.text (trunc full) ]
     ]
 
 lanesFor :: State -> Lanes

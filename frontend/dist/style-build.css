@@ -916,7 +916,7 @@ input[type="number"].field__input { -moz-appearance: textfield; }
 }
 .pending-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.45fr);
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.85fr);
   gap: 16px;
   align-items: start;
 }
@@ -1005,7 +1005,7 @@ input[type="number"].field__input { -moz-appearance: textfield; }
 .pending-entry-card__title {
   font: 700 13px/1.3 "Roboto Mono", ui-monospace, monospace;
   color: var(--md-sys-color-on-surface);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 .pending-entry-card__meta,
 .pending-entry-card__history,

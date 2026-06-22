@@ -231,6 +231,7 @@ library
     Amaru.Treasury.Summary
     Amaru.Treasury.Sundae.Contracts
     Amaru.Treasury.Swap.Rerate
+    Amaru.Treasury.Swap.Rerate.Budget
     Amaru.Treasury.Swap.Rerate.Plan
     Amaru.Treasury.Swap.Rerate.Types
     Amaru.Treasury.Tx.AttachWitness
@@ -596,6 +597,7 @@ test-suite unit-tests
     Amaru.Treasury.ScopeSpec
     Amaru.Treasury.Smoke.CliDevnetSmokeSpec
     Amaru.Treasury.SummarySpec
+    Amaru.Treasury.Swap.Rerate.BudgetSpec
     Amaru.Treasury.Swap.Rerate.PlanSpec
     Amaru.Treasury.Swap.RerateSpec
     Amaru.Treasury.Tx.AttachWitnessSpec

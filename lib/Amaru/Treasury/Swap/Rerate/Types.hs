@@ -18,6 +18,11 @@ module Amaru.Treasury.Swap.Rerate.Types
       -- * Planned values
     , PlannedRerate (..)
     , PlannedRerateOrder (..)
+    , RerateBudgetEstimate (..)
+    , RerateBudgetModel (..)
+    , ReratePlan (..)
+    , ReratePlanReason (..)
+    , RerateSplit (..)
 
       -- * Errors
     , RerateError (..)
@@ -28,6 +33,7 @@ import Cardano.Ledger.Hashes (KeyHash, ScriptHash)
 import Cardano.Ledger.Keys (KeyRole (..))
 import Cardano.Ledger.Mary.Value (MaryValue)
 import Cardano.Ledger.TxIn (TxIn)
+import Numeric.Natural (Natural)
 import PlutusCore.Data (Data)
 
 import Amaru.Treasury.Scope (ScopeId)
@@ -128,6 +134,52 @@ data PlannedRerateOrder = PlannedRerateOrder
     -- ^ Replacement inline datum with the new requested USDM.
     , proRequestedUsdm :: !Integer
     -- ^ Requested USDM amount derived from the new rate.
+    }
+    deriving stock (Eq, Show)
+
+-- | Linear budget model for re-rate transactions.
+data RerateBudgetModel = RerateBudgetModel
+    { rbmBaseEstimate :: !RerateBudgetEstimate
+    -- ^ Fixed transaction overhead before selected orders are counted.
+    , rbmPerOrderEstimate :: !RerateBudgetEstimate
+    -- ^ Marginal cost added for each cancelled order.
+    }
+    deriving stock (Eq, Show)
+
+-- | Estimated total budget consumption in all checked dimensions.
+data RerateBudgetEstimate = RerateBudgetEstimate
+    { rbeMemory :: !Natural
+    -- ^ Estimated Plutus execution memory.
+    , rbeSteps :: !Natural
+    -- ^ Estimated Plutus execution steps.
+    , rbeSize :: !Int
+    -- ^ Estimated transaction body size in bytes.
+    }
+    deriving stock (Eq, Show)
+
+-- | Why the budget planner chose its shape.
+data ReratePlanReason
+    = RerateWithinBudget
+    | RerateOverExecutionMemory
+    | RerateOverExecutionSteps
+    | RerateOverTxSize
+    deriving stock (Eq, Show)
+
+-- | Budget-only re-rate shape for one caller selection.
+data ReratePlan order
+    = SingleTx !ReratePlanReason !RerateBudgetEstimate ![order]
+    | Split
+        !ReratePlanReason
+        !RerateBudgetEstimate
+        ![RerateSplit order]
+    deriving stock (Eq, Show)
+
+-- | One atomic split group.
+data RerateSplit order = RerateSplit
+    { rsOrders :: ![order]
+    -- ^ Cancelled orders included in this group.
+    , rsCreatesReplacement :: !Bool
+    -- ^ Whether this group creates the single replacement order.
     }
     deriving stock (Eq, Show)
 

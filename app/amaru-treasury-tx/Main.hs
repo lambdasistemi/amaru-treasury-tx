@@ -62,6 +62,9 @@ import Amaru.Treasury.Cli.SwapCancel
 import Amaru.Treasury.Cli.SwapQuote
     ( runSwapQuote
     )
+import Amaru.Treasury.Cli.SwapRerate
+    ( runSwapRerate
+    )
 import Amaru.Treasury.Cli.TreasuryInspect
     ( runTreasuryInspect
     )
@@ -100,6 +103,8 @@ main = withUtf8 . withUpdateCheckMain $ do
         CmdSwapCancel co ->
             withSocket g $ \socket ->
                 runSwapCancel g{goSocketPath = Just socket} co
+        CmdSwapRerate ro ->
+            runSwapRerate g ro
         CmdDisburseWizard dwo ->
             withSocket g $ \socket ->
                 runDisburseWizard g{goSocketPath = Just socket} dwo

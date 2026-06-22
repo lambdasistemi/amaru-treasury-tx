@@ -176,6 +176,7 @@ library
     Amaru.Treasury.Cli.SwapCommon
     Amaru.Treasury.Cli.SwapOptions
     Amaru.Treasury.Cli.SwapQuote
+    Amaru.Treasury.Cli.SwapRerate
     Amaru.Treasury.Cli.SwapWizard
     Amaru.Treasury.Cli.TreasuryInspect
     Amaru.Treasury.Cli.TxBuild
@@ -559,6 +560,7 @@ test-suite unit-tests
     Amaru.Treasury.Cli.StakeRewardInitWizardInputControlSpec
     Amaru.Treasury.Cli.StakeRewardInitWizardParserSpec
     Amaru.Treasury.Cli.SwapCancelSpec
+    Amaru.Treasury.Cli.SwapRerateSpec
     Amaru.Treasury.Cli.SwapWizardInputControlSpec
     Amaru.Treasury.Cli.TxBuildRequiredUtxosSpec
     Amaru.Treasury.Cli.VaultSpec

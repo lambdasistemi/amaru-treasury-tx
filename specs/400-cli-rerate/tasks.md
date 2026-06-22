@@ -27,13 +27,13 @@ swap-wizard/swap-cancel behavior.
 
 **Independent Test**: `nix develop --quiet -c just unit "SwapRerate"`
 
-- [ ] T400-S1 Add RED parser/branch tests in `test/unit/Amaru/Treasury/Cli/SwapRerateSpec.hs`
-- [ ] T400-S1 Add `Amaru.Treasury.Cli.SwapRerate` to `amaru-treasury-tx.cabal`
-- [ ] T400-S1 Wire `CmdSwapRerate` in `lib/Amaru/Treasury/Cli.hs`
-- [ ] T400-S1 Dispatch `CmdSwapRerate` in `app/amaru-treasury-tx/Main.hs`
-- [ ] T400-S1 Implement parser, option record, selection mode, and report data in `lib/Amaru/Treasury/Cli/SwapRerate.hs`
-- [ ] T400-S1 Verify existing command help remains intact with `nix develop --quiet -c just smoke`
-- [ ] T400-S1 Commit as `feat(cli): add swap rerate command surface`
+- [X] T400-S1 Add RED parser/branch tests in `test/unit/Amaru/Treasury/Cli/SwapRerateSpec.hs`
+- [X] T400-S1 Add `Amaru.Treasury.Cli.SwapRerate` to `amaru-treasury-tx.cabal`
+- [X] T400-S1 Wire `CmdSwapRerate` in `lib/Amaru/Treasury/Cli.hs`
+- [X] T400-S1 Dispatch `CmdSwapRerate` in `app/amaru-treasury-tx/Main.hs`
+- [X] T400-S1 Implement parser, option record, selection mode, and report data in `lib/Amaru/Treasury/Cli/SwapRerate.hs`
+- [X] T400-S1 Verify existing command help remains intact with `nix develop --quiet -c just smoke`
+- [X] T400-S1 Commit as `feat(cli): add swap rerate command surface`
 
 ## Slice 2: Offline Re-Rate Build And Split Fallback
 

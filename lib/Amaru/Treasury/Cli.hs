@@ -108,6 +108,10 @@ import Amaru.Treasury.Cli.SwapQuote
     ( SwapQuoteOpts
     , swapQuoteOptsP
     )
+import Amaru.Treasury.Cli.SwapRerate
+    ( SwapRerateOpts
+    , swapRerateOptsP
+    )
 import Amaru.Treasury.Cli.SwapWizard
     ( WizardOpts
     , wizardOptsP
@@ -141,6 +145,7 @@ data Cmd
     = CmdSwapWizard WizardOpts
     | CmdSwapQuote SwapQuoteOpts
     | CmdSwapCancel SwapCancelOpts
+    | CmdSwapRerate SwapRerateOpts
     | CmdDisburseWizard DisburseWizardInput
     | CmdWithdrawWizard WithdrawOpts
     | CmdRegistryInitWizard RegistryInitWizardOpts
@@ -203,6 +208,14 @@ cmdP =
                     (CmdSwapCancel <$> swapCancelOptsP)
                     ( progDesc
                         "Build an unsigned transaction that cancels one pending SundaeSwap order"
+                    )
+                )
+            <> command
+                "swap-rerate"
+                ( info
+                    (CmdSwapRerate <$> swapRerateOptsP)
+                    ( progDesc
+                        "Build an unsigned transaction that re-rates selected pending SundaeSwap orders"
                     )
                 )
             <> command

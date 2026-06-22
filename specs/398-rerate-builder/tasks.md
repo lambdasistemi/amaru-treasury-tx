@@ -45,6 +45,6 @@
 
 ## Finalization
 
-- [ ] T016 Run `./gate.sh` at HEAD.
-- [ ] T017 Update PR body with delivered behavior and verification.
-- [ ] T018 Drop `gate.sh` in the final ready-for-review commit.
+- [X] T016 Run `./gate.sh` at HEAD.
+- [X] T017 Update PR body with delivered behavior and verification.
+- [X] T018 Drop `gate.sh` in the final ready-for-review commit.

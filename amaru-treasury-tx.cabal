@@ -152,6 +152,7 @@ library
     Amaru.Treasury.Build.StakeRewardInit
     Amaru.Treasury.Build.Swap
     Amaru.Treasury.Build.SwapCancel
+    Amaru.Treasury.Build.SwapRerate
     Amaru.Treasury.Build.Trace
     Amaru.Treasury.Build.Withdraw
     Amaru.Treasury.ChainContext
@@ -536,6 +537,7 @@ test-suite unit-tests
     Amaru.Treasury.Build.NetworkGuardSpec
     Amaru.Treasury.Build.Reorganize.BatchSpec
     Amaru.Treasury.Build.ReorganizeDispatchSpec
+    Amaru.Treasury.Build.SwapRerateSpec
     Amaru.Treasury.Build.WithdrawSpec
     Amaru.Treasury.BuildSpec
     Amaru.Treasury.Cli.CommonSpec

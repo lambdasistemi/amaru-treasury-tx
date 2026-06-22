@@ -24,6 +24,7 @@ import Cardano.Ledger.Coin (Coin)
 data BuildAction
     = BuildActionSwap
     | BuildActionSwapCancel
+    | BuildActionSwapRerate
     | BuildActionDisburse
     | BuildActionWithdraw
     | BuildActionReorganize

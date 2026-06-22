@@ -32,15 +32,15 @@
 
 ## Slice 3 — ChainContext Runner And Phase-1 Proof
 
-- [ ] T011 Add `Amaru.Treasury.Build.SwapRerate` with a
+- [X] T011 Add `Amaru.Treasury.Build.SwapRerate` with a
   `ChainContext`-backed runner that checks required UTxOs, builds,
   evaluates, and serializes the unsigned body.
-- [ ] T012 Call `validateFinalPhase1` and surface typed
+- [X] T012 Call `validateFinalPhase1` and surface typed
   `BuildResult`/diagnostics consistent with existing build runners.
-- [ ] T013 Add frozen-context unit/golden coverage proving the final
+- [X] T013 Add frozen-context unit/golden coverage proving the final
   body passes phase-1 validation.
-- [ ] T014 Add cabal entries for the build runner and tests.
-- [ ] T015 Run focused unit tests and `./gate.sh`, then commit as:
+- [X] T014 Add cabal entries for the build runner and tests.
+- [X] T015 Run focused unit tests and `./gate.sh`, then commit as:
   `feat(rerate): validate re-rate bodies against chain context`.
 
 ## Finalization

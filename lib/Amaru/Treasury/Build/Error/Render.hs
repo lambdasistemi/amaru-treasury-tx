@@ -62,6 +62,7 @@ renderAction :: BuildAction -> Text
 renderAction = \case
     BuildActionSwap -> "swap"
     BuildActionSwapCancel -> "swap-cancel"
+    BuildActionSwapRerate -> "swap-rerate"
     BuildActionDisburse -> "disburse"
     BuildActionWithdraw -> "withdraw"
     BuildActionReorganize -> "reorganize"

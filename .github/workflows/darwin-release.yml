@@ -89,6 +89,15 @@ jobs:
           name: paolino
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
+      - name: Mint a scoped tap token
+        id: tap-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.CI_APP_ID }}
+          private-key: ${{ secrets.CI_APP_PRIVATE_KEY }}
+          owner: lambdasistemi
+          repositories: homebrew-tap
+
       - name: Build, smoke-test, and optionally publish Darwin Homebrew artifacts
         uses: paolino/dev-assets/darwin-homebrew-release@6864b20eb75c3578796e7f667562b5aea8780643
         with:
@@ -109,7 +118,7 @@ jobs:
           tap-name: lambdasistemi/tap
           tap-repository: lambdasistemi/homebrew-tap
           github-token: ${{ github.token }}
-          tap-token: ${{ secrets.TAP_TOKEN }}
+          tap-token: ${{ steps.tap-token.outputs.token }}
           release-check-command: 'scripts/release/check-version-consistency "$TAG"'
           release-notes-command: 'scripts/release/extract-notes "$TAG"'
           release-title: amaru-treasury-tx ${{ env.TAG }}

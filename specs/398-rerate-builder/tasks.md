@@ -2,16 +2,16 @@
 
 ## Slice 1 — Typed Validation And Value Planning
 
-- [ ] T001 Add `Amaru.Treasury.Swap.Rerate.Types` with exported intent,
+- [X] T001 Add `Amaru.Treasury.Swap.Rerate.Types` with exported intent,
   order, scope context, planned order, and typed error shapes.
-- [ ] T002 Add pure planning that rejects empty selections,
+- [X] T002 Add pure planning that rejects empty selections,
   non-positive rates, malformed/off-scope order datums, and
   value-conservation failures.
-- [ ] T003 Add unit tests covering single-order planning,
+- [X] T003 Add unit tests covering single-order planning,
   multi-order planning, off-scope rejection, value conservation, and
   rate-derived requested USDM.
-- [ ] T004 Add the new modules/tests to `amaru-treasury-tx.cabal`.
-- [ ] T005 Run focused unit tests and `./gate.sh`, then commit as:
+- [X] T004 Add the new modules/tests to `amaru-treasury-tx.cabal`.
+- [X] T005 Run focused unit tests and `./gate.sh`, then commit as:
   `feat(rerate): add typed re-rate planning`.
 
 ## Slice 2 — Pure TxBuild Program

@@ -186,8 +186,9 @@ let
     unit = {
       # The history RDF tests shell out to Apache Jena (`arq`,
       # `shacl`) and the `cq-rdf` emitter, so the hermetic check
-      # needs them on PATH — the dev shell has them, but this
-      # sandbox does not inherit it.
+      # needs them on PATH. Keep this in sync with the dev
+      # shell so local `nix develop -c just unit` runs the same
+      # RDF/Jena-backed specs as CI.
       runtimeInputs = [ components.tests.unit-tests ] ++ rdfRuntimeInputs;
       # No `exec` — the check derivation needs the script to
       # return so the wrapping `runCommand` can `touch $out`.

@@ -379,7 +379,10 @@
                 "${linuxReleasePackages.linux-artifact-smoke}/bin/linux-artifact-smoke";
             };
           };
-          devShells.default = project.shell;
+          devShells.default = project.shell.overrideAttrs (old: {
+            buildInputs =
+              (old.buildInputs or [ ]) ++ rdfRuntimeInputs;
+          });
         };
     };
 }

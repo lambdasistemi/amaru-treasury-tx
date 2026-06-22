@@ -152,6 +152,7 @@ library
     Amaru.Treasury.Build.StakeRewardInit
     Amaru.Treasury.Build.Swap
     Amaru.Treasury.Build.SwapCancel
+    Amaru.Treasury.Build.SwapRerate
     Amaru.Treasury.Build.Trace
     Amaru.Treasury.Build.Withdraw
     Amaru.Treasury.ChainContext
@@ -229,6 +230,9 @@ library
     Amaru.Treasury.Scope
     Amaru.Treasury.Summary
     Amaru.Treasury.Sundae.Contracts
+    Amaru.Treasury.Swap.Rerate
+    Amaru.Treasury.Swap.Rerate.Plan
+    Amaru.Treasury.Swap.Rerate.Types
     Amaru.Treasury.Tx.AttachWitness
     Amaru.Treasury.Tx.Disburse
     Amaru.Treasury.Tx.Disburse.Trace
@@ -533,6 +537,7 @@ test-suite unit-tests
     Amaru.Treasury.Build.NetworkGuardSpec
     Amaru.Treasury.Build.Reorganize.BatchSpec
     Amaru.Treasury.Build.ReorganizeDispatchSpec
+    Amaru.Treasury.Build.SwapRerateSpec
     Amaru.Treasury.Build.WithdrawSpec
     Amaru.Treasury.BuildSpec
     Amaru.Treasury.Cli.CommonSpec
@@ -591,6 +596,8 @@ test-suite unit-tests
     Amaru.Treasury.ScopeSpec
     Amaru.Treasury.Smoke.CliDevnetSmokeSpec
     Amaru.Treasury.SummarySpec
+    Amaru.Treasury.Swap.Rerate.PlanSpec
+    Amaru.Treasury.Swap.RerateSpec
     Amaru.Treasury.Tx.AttachWitnessSpec
     Amaru.Treasury.Tx.DisburseBuildSpec
     Amaru.Treasury.Tx.DisburseSpec

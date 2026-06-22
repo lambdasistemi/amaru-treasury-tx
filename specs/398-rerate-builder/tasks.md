@@ -16,18 +16,18 @@
 
 ## Slice 2 — Pure TxBuild Program
 
-- [ ] T006 Add `Amaru.Treasury.Swap.Rerate.rerateProgram` using the
+- [X] T006 Add `Amaru.Treasury.Swap.Rerate.rerateProgram` using the
   planned re-rate shape.
-- [ ] T007 Spend each selected order with `sundaeCancelRedeemer`, use the
+- [X] T007 Spend each selected order with `sundaeCancelRedeemer`, use the
   wallet as collateral, reference the order script and scope refs,
   withdraw zero, emit replacement order outputs, require scope signers,
   and set validity.
-- [ ] T008 Add structural `draft` tests for single-order and multi-order
+- [X] T008 Add structural `draft` tests for single-order and multi-order
   transaction bodies.
-- [ ] T009 Add tests proving replacement outputs include inline datums
+- [X] T009 Add tests proving replacement outputs include inline datums
   built with the new rate and preserve offered ADA plus order extra
   lovelace.
-- [ ] T010 Run focused unit tests and `./gate.sh`, then commit as:
+- [X] T010 Run focused unit tests and `./gate.sh`, then commit as:
   `feat(rerate): build pure cancel-and-reoffer body`.
 
 ## Slice 3 — ChainContext Runner And Phase-1 Proof

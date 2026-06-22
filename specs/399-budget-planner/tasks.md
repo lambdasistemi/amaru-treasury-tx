@@ -10,14 +10,14 @@
 
 ## Slice 1 — Pure Budget Planner
 
-- [ ] T399-S1 Add RED unit tests for within-budget, one-over-line,
+- [X] T399-S1 Add RED unit tests for within-budget, one-over-line,
   large-N multi-split, and exact-limit boundary cases.
-- [ ] T399-S1 Add additive plan/split/reason/estimate types.
-- [ ] T399-S1 Add
+- [X] T399-S1 Add additive plan/split/reason/estimate types.
+- [X] T399-S1 Add
   `Amaru.Treasury.Swap.Rerate.Budget.planRerate`.
-- [ ] T399-S1 Ensure split groups are stable, atomic, individually
+- [X] T399-S1 Ensure split groups are stable, atomic, individually
   within budget where possible, and create the replacement order once.
-- [ ] T399-S1 Register the module and unit spec in the Cabal file.
-- [ ] T399-S1 Run focused unit tests and `./gate.sh`.
-- [ ] T399-S1 Commit:
+- [X] T399-S1 Register the module and unit spec in the Cabal file.
+- [X] T399-S1 Run focused unit tests and `./gate.sh`.
+- [X] T399-S1 Commit:
   `feat(rerate): add budget split planner`.

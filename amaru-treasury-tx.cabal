@@ -37,6 +37,7 @@ extra-source-files:
   scripts/smoke/smoke.sh
   scripts/smoke/swap-quote-docs
   scripts/smoke/swap-quote-override
+  scripts/smoke/swap-rerate-offline
   scripts/smoke/swap-wizard-signers
   scripts/smoke/treasury-inspect
   scripts/smoke/tx-build-pipe

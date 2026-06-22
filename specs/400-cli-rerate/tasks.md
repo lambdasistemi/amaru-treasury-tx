@@ -44,14 +44,14 @@ when over budget.
 **Independent Test**: `nix develop --quiet -c just unit "SwapRerate"`
 and `nix develop --quiet -c just smoke`
 
-- [ ] T400-S2 Add RED unit tests for single-tx, over-budget split, wrong-scope rejection, decline-retract, and no-orders passthrough in `test/unit/Amaru/Treasury/Cli/SwapRerateSpec.hs`
-- [ ] T400-S2 Implement offline input resolution and `runSwapRerate` invocation in `lib/Amaru/Treasury/Cli/SwapRerate.hs`
-- [ ] T400-S2 Implement split report rendering with planner reason in `lib/Amaru/Treasury/Cli/SwapRerate.hs`
-- [ ] T400-S2 Add fixture-backed CLI smoke script `scripts/smoke/swap-rerate-offline`
-- [ ] T400-S2 Wire `scripts/smoke/swap-rerate-offline` into `justfile`
-- [ ] T400-S2 Add required smoke script path/module entries to `amaru-treasury-tx.cabal`
-- [ ] T400-S2 Verify CBOR/report artifact is non-empty and JSON schema-valid in the smoke
-- [ ] T400-S2 Commit as `feat(cli): build offline swap rerate transactions`
+- [X] T400-S2 Add RED unit tests for single-tx, over-budget split, wrong-scope rejection, decline-retract, and no-orders passthrough in `test/unit/Amaru/Treasury/Cli/SwapRerateSpec.hs`
+- [X] T400-S2 Implement offline input resolution and `runSwapRerate` invocation in `lib/Amaru/Treasury/Cli/SwapRerate.hs`
+- [X] T400-S2 Implement split report rendering with planner reason in `lib/Amaru/Treasury/Cli/SwapRerate.hs`
+- [X] T400-S2 Add fixture-backed CLI smoke script `scripts/smoke/swap-rerate-offline`
+- [X] T400-S2 Wire `scripts/smoke/swap-rerate-offline` into `justfile`
+- [X] T400-S2 Add required smoke script path/module entries to `amaru-treasury-tx.cabal`
+- [X] T400-S2 Verify CBOR/report artifact is non-empty and JSON schema-valid in the smoke
+- [X] T400-S2 Commit as `feat(cli): build offline swap rerate transactions`
 
 ## Slice 3: Live Discovery And Devnet Boundary Smoke
 

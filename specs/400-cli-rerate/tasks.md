@@ -70,11 +70,11 @@ plus the new rerate devnet smoke command or named transcript.
 
 ## Phase 4: Finalization
 
-- [ ] T400-F1 Run `./gate.sh` at HEAD and record output
-- [ ] T400-F2 Update PR #408 body with delivered behavior and devnet proof artifact
-- [ ] T400-F3 Confirm every implementation task is checked in this file
-- [ ] T400-F4 Drop `gate.sh` only after the devnet proof requirement is satisfied
-- [ ] T400-F5 Mark PR #408 ready for review
+- [X] T400-F1 Run `./gate.sh` at HEAD and record output
+- [X] T400-F2 Update PR #408 body with delivered behavior and devnet proof artifact
+- [X] T400-F3 Confirm every implementation task is checked in this file
+- [X] T400-F4 Drop `gate.sh` only after the devnet proof requirement is satisfied
+- [X] T400-F5 Mark PR #408 ready for review
 
 ## Dependencies & Execution Order
 

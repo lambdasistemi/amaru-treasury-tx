@@ -19,7 +19,7 @@ while [[ $# -gt 0 ]]; do
       reward_timeout_seconds="${2:?missing value for --reward-timeout-seconds}"
       shift 2
       ;;
-    node|governance|withdraw|swap-ready|mixed-utxo|registry-init|stake-reward-init|governance-withdrawal-init|disburse-submit|all)
+    node|governance|withdraw|swap-ready|scoop-m2|scoop-e2e|mixed-utxo|registry-init|stake-reward-init|governance-withdrawal-init|disburse-submit|all)
       phase="$1"
       shift
       ;;
@@ -30,7 +30,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ "$phase" != "node" && "$phase" != "governance" && "$phase" != "withdraw" && "$phase" != "swap-ready" && "$phase" != "mixed-utxo" && "$phase" != "registry-init" && "$phase" != "stake-reward-init" && "$phase" != "governance-withdrawal-init" && "$phase" != "disburse-submit" && "$phase" != "all" ]]; then
+if [[ "$phase" != "node" && "$phase" != "governance" && "$phase" != "withdraw" && "$phase" != "swap-ready" && "$phase" != "scoop-m2" && "$phase" != "scoop-e2e" && "$phase" != "mixed-utxo" && "$phase" != "registry-init" && "$phase" != "stake-reward-init" && "$phase" != "governance-withdrawal-init" && "$phase" != "disburse-submit" && "$phase" != "all" ]]; then
   echo "devnet-smoke: unknown phase: $phase" >&2
   exit 64
 fi

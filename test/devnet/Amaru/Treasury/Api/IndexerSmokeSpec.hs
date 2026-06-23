@@ -200,6 +200,7 @@ import Servant.Server qualified as Servant
 import System.Environment (lookupEnv)
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
+import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.Files
     ( ownerReadMode
     , setFileMode
@@ -218,6 +219,9 @@ import Amaru.Treasury.Api.BuildDisburse
     , DisburseBuildResponse (..)
     , runBuildDisburse
     )
+import Amaru.Treasury.Api.BuildContingencyDisburse
+    ( runBuildContingencyDisburse
+    )
 import Amaru.Treasury.Api.BuildReorganize
     ( ReorganizeBuildRequest (..)
     , ReorganizeBuildResponse (..)
@@ -232,6 +236,7 @@ import Amaru.Treasury.Api.History
     , queryScopeHistoryShaclResponse
     , queryTxDetailResponse
     )
+import Amaru.Treasury.Api.Introspect (introspectTx)
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
     , IndexerConfig (..)
@@ -251,6 +256,10 @@ import Amaru.Treasury.Api.Readiness
 import Amaru.Treasury.Api.Readiness.Internal
     ( setReadinessForTest
     )
+import Amaru.Treasury.Api.RateLimit
+    ( ApiLimiter
+    , newApiLimiter
+    )
 import Amaru.Treasury.Api.Server
     ( BuildHandlers (..)
     , Handlers (..)
@@ -267,13 +276,15 @@ import Amaru.Treasury.Api.State
     , scriptsResponseFromMetadata
     )
 import Amaru.Treasury.Api.Types
-    ( BuildIdentity (..)
+    ( AttachResponse (..)
+    , BuildIdentity (..)
     , HealthResponse (..)
     , ParamsResponse (..)
     , RecentTxManifest (..)
     , SubmitResponse (..)
     , TipResponse (..)
     )
+import Amaru.Treasury.Api.VerifyWitness (verifyWitness)
 import Amaru.Treasury.Backend.N2C (withLocalNodeClient)
 import Amaru.Treasury.Cli.Common (GlobalOpts (..))
 import Amaru.Treasury.Cli.History
@@ -1656,6 +1667,9 @@ smokeHandlers
                                 <> show e
             , hRecentTxs = RecentTxManifest []
             , hBuildIdentity = stubBuildIdentity
+            , hIntrospect = introspectTx (Just metadata)
+            , hVerifyWitness = verifyWitness
+            , hAttach = \_ -> Right (AttachResponse "smoke-attach-not-wired")
             , hTxDetail =
                 queryTxDetailResponse
                     (snapshotUtxosByTxIn apiIdx)
@@ -1677,11 +1691,8 @@ smokeHandlers
                         }
             , hSubmit = \_ ->
                 pure
-                    SubmitResponse
-                        { subStatus = "unavailable"
-                        , subTxId = Nothing
-                        , subReason = Just "smoke handler submit not wired"
-                        }
+                    (Right (SubmitResponse "smoke-handler-submit-not-wired"))
+            , hLimiter = smokeLimiter
             , hHealth =
                 pure
                     HealthResponse
@@ -1709,6 +1720,8 @@ smokeHandlers
                 queryScopeHistoryShaclResponse (aiHistory apiIdx) (Just metadata)
             , hBuildSwap = bhBuildSwap buildHandlers
             , hBuildDisburse = bhBuildDisburse buildHandlers
+            , hBuildContingencyDisburse =
+                bhBuildContingencyDisburse buildHandlers
             , hBuildReorganize = bhBuildReorganize buildHandlers
             , hRawHandler =
                 Tagged $ \_req respond ->
@@ -1722,11 +1735,17 @@ smokeHandlers
         buildHandlers =
             mkBuildHandlers
                 apiIdx
+                (Just metadata)
                 backend
                 (runBuildSwap globalOpts metadataPath)
                 (runBuildDisburse globalOpts metadataPath)
+                (runBuildContingencyDisburse globalOpts metadataPath)
                 (runBuildReorganize globalOpts metadataPath)
         readProvider = mkBuildProvider apiIdx backend
+
+smokeLimiter :: ApiLimiter
+{-# NOINLINE smokeLimiter #-}
+smokeLimiter = unsafePerformIO newApiLimiter
 
 stubBuildIdentity :: BuildIdentity
 stubBuildIdentity =

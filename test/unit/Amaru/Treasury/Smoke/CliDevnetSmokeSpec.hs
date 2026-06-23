@@ -85,6 +85,7 @@ recognizedPhaseTokens =
     , "disburse"
     , "full"
     , "reorganize"
+    , "rerate"
     ]
 
 {- | Forbidden references for product (non-test) smoke files.
@@ -186,6 +187,20 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
             src <- mustRead hostMainPath
             src `shouldSatisfyContain` "CLI_SMOKE_FUNDING_ADDR"
             src `shouldSatisfyContain` "devnetFundingAddress"
+
+        it "host loudly skips rerate without a PlutusV2 cost model" $ do
+            src <- mustRead hostMainPath
+            src `shouldSatisfyContain` "skipRerateIfNoPlutusV2CostModel"
+            src
+                `shouldSatisfyContain` "SKIPPED: devnet has no \
+                                       \PlutusV2 cost model; blocked on #410"
+            src `shouldSatisfyContain` "hasCostModel PlutusV2"
+            src `shouldSatisfyNotContain` "ensureRerateCostModels"
+            src `shouldSatisfyNotContain` "ppuCostModelsL"
+            src `shouldSatisfyNotContain` "ParameterChange"
+            src `shouldSatisfyNotContain` "ppTechnicalGroup"
+            src `shouldSatisfyNotContain` "patchRerateGenesis"
+            src `shouldSatisfyNotContain` "TestAlonzoHardForkAtEpoch\\\": 1"
 
     describe "vault preflight surface in smoke.sh" $ do
         it "smoke.sh names shipped CLI signing subcommands" $ do
@@ -447,15 +462,33 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
                     multi =
                         sectionBetween
                             "build_sign_submit_multi() {"
+                            "sign_submit_unsigned() {"
+                            src
+                    unsigned =
+                        sectionBetween
+                            "sign_submit_unsigned() {"
+                            "sign_submit_unsigned_multi() {"
+                            src
+                    unsignedMulti =
+                        sectionBetween
+                            "sign_submit_unsigned_multi() {"
                             "create_devnet_vault() {"
                             src
                     singleWitnesses = witnessCommandBlocks single
                     multiWitnesses = witnessCommandBlocks multi
+                    unsignedWitnesses = witnessCommandBlocks unsigned
+                    unsignedMultiWitnesses = witnessCommandBlocks unsignedMulti
                 length singleWitnesses `shouldBe` 1
                 length multiWitnesses `shouldBe` 1
+                length unsignedWitnesses `shouldBe` 1
+                length unsignedMultiWitnesses `shouldBe` 1
                 mapM_
                     (`shouldSatisfyContain` "--force \\")
-                    (singleWitnesses <> multiWitnesses)
+                    ( singleWitnesses
+                        <> multiWitnesses
+                        <> unsignedWitnesses
+                        <> unsignedMultiWitnesses
+                    )
 
     describe "human-tutorial recording wrapper" $ do
         it "scripts/smoke/record-cli-devnet-smoke exists" $ do
@@ -622,6 +655,27 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
             $ do
                 src <- mustRead hostMainPath
                 src `shouldSatisfyContain` "ASSET_PRESERVATION_FAILED"
+
+    describe "swap-rerate live boundary smoke (#400 S3)" $ do
+        it "smoke.sh advertises and dispatches the rerate phase" $ do
+            src <- mustRead smokeScriptPath
+            printHelpFnBody src `shouldSatisfyContain` "rerate"
+            mainPhaseCaseBlock src `shouldSatisfyContain` "rerate)"
+
+        it "rerate phase drives the shipped swap-rerate command" $ do
+            src <- mustRead smokeScriptPath
+            src `shouldSatisfyContain` "rerate_phase()"
+            let body = sectionBetween "rerate_phase() {" "full_phase()" src
+            body `shouldSatisfyContain` "swap-rerate"
+            body `shouldSatisfyContain` "--node-socket"
+            body `shouldSatisfyContain` "phase-2"
+            body `shouldSatisfyContain` "oldOrderTxIn"
+            body `shouldSatisfyContain` "newOrderTxIn"
+
+        it "host recognizes rerate and runs rerate assertions" $ do
+            src <- mustRead hostMainPath
+            src `shouldSatisfyContain` "\"rerate\""
+            src `shouldSatisfyContain` "runRerateAssertionsIfPresent"
 
     describe "reorganize exec-units assertion (#87 S3)" $ do
         it
@@ -825,7 +879,6 @@ substringOffset needle = go 0
         | needle `isPrefixOf` s = Just i
         | otherwise = case s of
             (_ : cs) -> go (i + 1) cs
-            [] -> Nothing
 
 {- | Slice the body of the @reorganize_phase()@ shell function out of
 @scripts/smoke/smoke.sh@. Returns every line between the opening

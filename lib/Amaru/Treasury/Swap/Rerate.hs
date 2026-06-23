@@ -23,6 +23,7 @@ import Control.Monad (forM_, void)
 import Cardano.Tx.Build
     ( TxBuild
     , collateral
+    , payTo
     , payTo'
     , reference
     , requireSignature
@@ -51,6 +52,8 @@ data RerateProgramInputs = RerateProgramInputs
     -- ^ Reference input containing the SundaeSwap order script.
     , rpiSwapOrderAddress :: !Addr
     -- ^ Destination address for every replacement order output.
+    , rpiTreasuryAddress :: !Addr
+    -- ^ Treasury destination that receives each cancelled order value.
     , rpiPermissionsRewardAccount :: !AccountAddress
     -- ^ Amaru permissions reward account for withdraw-zero.
     , rpiScopesDeployedAt :: !TxIn
@@ -100,6 +103,11 @@ rerateProgram inputs planned = do
                 (rpiSwapOrderAddress inputs)
                 (proReplacementValue order)
                 (RawPlutusData (proReplacementDatum order))
+    forM_ (prOrders planned) $ \order ->
+        void $
+            payTo
+                (rpiTreasuryAddress inputs)
+                (proOriginalValue order)
     forM_
         (rscExpectedOwners (prScopeContext planned))
         requireSignature

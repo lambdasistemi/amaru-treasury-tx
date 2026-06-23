@@ -77,7 +77,7 @@ import Cardano.Ledger.Plutus.Data
     , getPlutusData
     )
 import Cardano.Ledger.Plutus.Language
-    ( Language (PlutusV3)
+    ( Language (PlutusV2)
     , Plutus (..)
     , PlutusBinary (..)
     )
@@ -102,6 +102,9 @@ import Amaru.Treasury.ChainContext (ChainContext (..))
 import Amaru.Treasury.ChainContext.Fixture
     ( readSwapFixture
     , toFrozenContext
+    )
+import Amaru.Treasury.Constants
+    ( sundaeOrderScriptHashMainnet
     )
 import Amaru.Treasury.IntentJSON
     ( SAction (..)
@@ -145,6 +148,13 @@ data RerateFixture = RerateFixture
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Build.SwapRerate" $ do
+    it "wraps the Sundae order script as PlutusV2" $ do
+        orderScript <- orderScriptFromBlob sundaeOrderValidatorBlob
+        expectedHash <-
+            expectRightIO $
+                scriptHashFromHex sundaeOrderScriptHashMainnet
+        Core.hashScript @ConwayEra orderScript `shouldBe` expectedHash
+
     it "reports missing required UTxOs before balancing" $ do
         fixture <- rerateFixture
         let ctx =
@@ -224,7 +234,18 @@ assertRerateBody fixture result = do
         other ->
             expectationFailure $
                 "expected one replacement order output, got: " <> show (length other)
-    length (toList (body ^. outputsTxBodyL)) `shouldSatisfy` (>= 2)
+    case toList (body ^. outputsTxBodyL) of
+        _replacement : treasuryReturn : _change -> do
+            treasuryReturn
+                ^. addrTxOutL
+                `shouldBe` rpiTreasuryAddress (rfInputs fixture)
+            treasuryReturn
+                ^. valueTxOutL
+                `shouldBe` proOriginalValue (rfExpectedOrder fixture)
+        outputs ->
+            expectationFailure $
+                "expected replacement, treasury return, and change outputs, got: "
+                    <> show (length outputs)
 
 rerateFixture :: IO RerateFixture
 rerateFixture = do
@@ -238,7 +259,7 @@ rerateFixture = do
             expectationFailure "fixture swap order has no inline datum"
                 *> error "unreachable"
     orderScriptRef <- expectRightIO $ parseTxIn syntheticOrderScriptRef
-    orderScript <- scriptFromBlob sundaeOrderValidatorBlob
+    orderScript <- orderScriptFromBlob sundaeOrderValidatorBlob
     let orderAddress =
             scriptAddr
                 Mainnet
@@ -276,6 +297,7 @@ rerateFixture = do
                 { rpiWalletTxIn = siWalletUtxo swapIntent
                 , rpiOrderScriptRef = orderScriptRef
                 , rpiSwapOrderAddress = orderAddress
+                , rpiTreasuryAddress = siTreasuryAddress swapIntent
                 , rpiPermissionsRewardAccount =
                     siPermissionsRewardAccount swapIntent
                 , rpiScopesDeployedAt = siScopesDeployedAt swapIntent
@@ -403,8 +425,8 @@ inlineDatumData out =
         Datum datum -> Just $ getPlutusData (binaryDataToData datum)
         _ -> Nothing
 
-scriptFromBlob :: BS.ByteString -> IO (Script ConwayEra)
-scriptFromBlob blob =
+orderScriptFromBlob :: BS.ByteString -> IO (Script ConwayEra)
+orderScriptFromBlob blob =
     case mkPlutusScript plutus of
         Just script -> pure (fromPlutusScript script)
         Nothing ->
@@ -412,7 +434,7 @@ scriptFromBlob blob =
                 *> error "unreachable"
   where
     plutus =
-        Plutus @PlutusV3 (PlutusBinary (SBS.toShort blob))
+        Plutus @PlutusV2 (PlutusBinary (SBS.toShort blob))
 
 refScriptTxOut :: Addr -> Script ConwayEra -> TxOut ConwayEra
 refScriptTxOut addr script =

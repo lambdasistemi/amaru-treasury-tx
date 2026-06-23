@@ -69,6 +69,7 @@ smoke:
     scripts/smoke/withdraw-wizard-zero-rewards
     scripts/smoke/withdraw-wizard-pipe
     scripts/smoke/tx-build-pipe
+    scripts/smoke/swap-rerate-offline
     scripts/smoke/treasury-inspect
     scripts/smoke/vault-witness
     scripts/smoke/vault-witness-tty

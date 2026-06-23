@@ -37,6 +37,7 @@ extra-source-files:
   scripts/smoke/smoke.sh
   scripts/smoke/swap-quote-docs
   scripts/smoke/swap-quote-override
+  scripts/smoke/swap-rerate-offline
   scripts/smoke/swap-wizard-signers
   scripts/smoke/treasury-inspect
   scripts/smoke/tx-build-pipe
@@ -176,6 +177,7 @@ library
     Amaru.Treasury.Cli.SwapCommon
     Amaru.Treasury.Cli.SwapOptions
     Amaru.Treasury.Cli.SwapQuote
+    Amaru.Treasury.Cli.SwapRerate
     Amaru.Treasury.Cli.SwapWizard
     Amaru.Treasury.Cli.TreasuryInspect
     Amaru.Treasury.Cli.TxBuild
@@ -432,12 +434,15 @@ executable devnet-cli-smoke-host
     , bech32
     , bytestring
     , cardano-crypto-class
+    , cardano-ledger-alonzo
     , cardano-ledger-api
     , cardano-ledger-conway
     , cardano-ledger-core
     , cardano-ledger-mary
     , cardano-node-clients
     , cardano-node-clients:devnet
+    , cardano-slotting
+    , cardano-tx-tools
     , containers
     , directory
     , filepath
@@ -559,6 +564,7 @@ test-suite unit-tests
     Amaru.Treasury.Cli.StakeRewardInitWizardInputControlSpec
     Amaru.Treasury.Cli.StakeRewardInitWizardParserSpec
     Amaru.Treasury.Cli.SwapCancelSpec
+    Amaru.Treasury.Cli.SwapRerateSpec
     Amaru.Treasury.Cli.SwapWizardInputControlSpec
     Amaru.Treasury.Cli.TxBuildRequiredUtxosSpec
     Amaru.Treasury.Cli.VaultSpec

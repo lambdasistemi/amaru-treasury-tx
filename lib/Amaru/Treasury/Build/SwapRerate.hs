@@ -237,7 +237,7 @@ runSwapRerateAction ctx inputs intent = do
                     , brPerChunkOverheadLovelace =
                         rscOrderExtraLovelace (prScopeContext planned)
                     , brWalletChangeOutput =
-                        indexedOutputAt (length orders) body
+                        indexedOutputAt (2 * length orders) body
                     , brCollateralInput =
                         collateralInputFrom body [walletUtxo]
                     , brCollateralReturn =

@@ -57,7 +57,7 @@ Options:
                              skips DevNet bring-up and trusts CARDANO_NODE_SOCKET_PATH.
   --phase <name>             scaffold | preflight | vault-preflight | registry-stake |
                              governance | disburse | multidest-disburse |
-                             reorganize | full
+                             reorganize | rerate | full
                              (default: scaffold).
   --timeout-seconds <int>    Per-phase polling timeout in seconds (default: 900).
   --force                    Allow a non-empty existing --run-dir.
@@ -115,7 +115,7 @@ preflight_for_phase() {
             require_tool cabal
             require_tool tr
             ;;
-        governance | disburse | multidest-disburse | full | reorganize)
+        governance | disburse | multidest-disburse | full | reorganize | rerate)
             require_tool jq
             require_tool cabal
             require_tool tr
@@ -495,6 +495,134 @@ build_sign_submit_multi() {
     if [[ "$submitted_tx_id" != "$report_tx_id" ]]; then
         log "$label: tx-id mismatch (submit=$submitted_tx_id report=$report_tx_id)"
         return 66
+    fi
+
+    log "$label: tx-id $submitted_tx_id"
+    printf '%s' "$submitted_tx_id"
+}
+
+sign_submit_unsigned() {
+    local label=$1
+    local cbor_path=$2
+    local vault_path=$3
+    local identity=$4
+    local expected_key_hash=$5
+    local passphrase_file=$6
+
+    local witness_path="$run_dir/witnesses/${label}.${identity}.witness.hex"
+    local signed_path="$run_dir/signed/${label}.signed.cbor.hex"
+    local txid_path="$run_dir/submits/${label}.txid"
+    local outcome_path="$run_dir/submits/${label}.outcome"
+
+    mkdir -p "$run_dir/witnesses" "$run_dir/signed" "$run_dir/submits"
+
+    log "$label: witness (identity=$identity)"
+    local witness_status=0
+    "$AMARU_EXE" --network devnet witness \
+        --tx "$cbor_path" \
+        --vault "$vault_path" \
+        --identity "$identity" \
+        --expected-key-hash "$expected_key_hash" \
+        --passphrase-file "$passphrase_file" \
+        --force \
+        --out "$witness_path" \
+        || witness_status=$?
+    if [[ "$witness_status" -ne 0 ]]; then
+        return "$witness_status"
+    fi
+
+    log "$label: attach-witness"
+    local witness_hex
+    witness_hex=$(tr -d '\n' <"$witness_path") || return $?
+    "$AMARU_EXE" attach-witness \
+        --tx "$cbor_path" \
+        --witness "$witness_hex" \
+        --out "$signed_path" \
+        || return $?
+
+    log "$label: submit"
+    "$AMARU_EXE" --network devnet --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        submit --tx "$signed_path" \
+        >"$txid_path" 2>"$outcome_path" \
+        || return $?
+
+    local submitted_tx_id
+    submitted_tx_id=$(tr -d '\n' <"$txid_path") || return $?
+    if [[ -z "$submitted_tx_id" ]]; then
+        log "$label: submit produced empty tx id (see $outcome_path)"
+        return 1
+    fi
+
+    log "$label: tx-id $submitted_tx_id"
+    printf '%s' "$submitted_tx_id"
+}
+
+sign_submit_unsigned_multi() {
+    local label=$1
+    local cbor_path=$2
+    local passphrase_file=$3
+    shift 3
+
+    if [[ "$#" -eq 0 || $(( $# % 3 )) -ne 0 ]]; then
+        log "$label: sign_submit_unsigned_multi needs witness triples"
+        return 67
+    fi
+
+    local signed_path="$run_dir/signed/${label}.signed.cbor.hex"
+    local txid_path="$run_dir/submits/${label}.txid"
+    local outcome_path="$run_dir/submits/${label}.outcome"
+    local attach_args=(attach-witness --tx "$cbor_path" --out "$signed_path")
+
+    mkdir -p "$run_dir/witnesses" "$run_dir/signed" "$run_dir/submits"
+
+    while [[ "$#" -gt 0 ]]; do
+        local vault_path=$1
+        local identity=$2
+        local expected_key_hash=$3
+        shift 3
+
+        local witness_path="$run_dir/witnesses/${label}.${identity}.witness.hex"
+        log "$label: witness (identity=$identity)"
+        {
+            exec 9<"$passphrase_file" || return $?
+            local witness_status=0
+            "$AMARU_EXE" --network devnet witness \
+                --tx "$cbor_path" \
+                --vault "$vault_path" \
+                --identity "$identity" \
+                --expected-key-hash "$expected_key_hash" \
+                --force \
+                --out "$witness_path" \
+                --vault-passphrase-fd 9 \
+                || witness_status=$?
+            exec 9<&-
+            if [[ "$witness_status" -ne 0 ]]; then
+                return "$witness_status"
+            fi
+        } || return $?
+
+        local witness_hex
+        witness_hex=$(tr -d '\n' <"$witness_path") || return $?
+        attach_args+=(--witness "$witness_hex")
+    done
+
+    log "$label: attach-witness"
+    "$AMARU_EXE" "${attach_args[@]}" || return $?
+
+    log "$label: submit"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        submit --tx "$signed_path" \
+        >"$txid_path" 2>"$outcome_path" \
+        || return $?
+
+    sleep 2
+
+    local submitted_tx_id
+    submitted_tx_id=$(tr -d '\n' <"$txid_path") || return $?
+    if [[ -z "$submitted_tx_id" ]]; then
+        log "$label: submit produced empty tx id (see $outcome_path)"
+        return 64
     fi
 
     log "$label: tx-id $submitted_tx_id"
@@ -2000,6 +2128,134 @@ reorganize_phase() {
     log "reorganize: complete (summary in $summary_json)"
 }
 
+rerate_phase() {
+    local run_dir=$1
+    local timeout_seconds=$2
+    local phase_dir="$run_dir/phases/rerate"
+    mkdir -p "$phase_dir"
+
+    require_env CARDANO_NODE_SOCKET_PATH
+    require_env CLI_SMOKE_RERATE_METADATA
+    require_env CLI_SMOKE_RERATE_WALLET_TXIN
+    require_env CLI_SMOKE_RERATE_OLD_ORDER_TXIN
+    require_env CLI_SMOKE_FUNDING_SKEY
+    require_env CLI_SMOKE_FUNDING_KEY_HASH
+    require_env CLI_SMOKE_VOTER_SKEY
+    require_env CLI_SMOKE_VOTER_KEY_HASH
+
+    AMARU_EXE=$(resolve_amaru_exe)
+    log "rerate: using $AMARU_EXE"
+    "$AMARU_EXE" swap-rerate --help >/dev/null 2>&1 \
+        || die "MISSING_SWAP_RERATE: amaru-treasury-tx does not expose 'swap-rerate'"
+
+    local unsigned="$phase_dir/rerate.unsigned.cbor.hex"
+    local report="$phase_dir/rerate.report.json"
+    local build_log="$phase_dir/rerate.log"
+
+    log "rerate: swap-rerate --node-socket"
+    "$AMARU_EXE" --network devnet \
+        --node-socket "$CARDANO_NODE_SOCKET_PATH" \
+        swap-rerate \
+        --metadata "$CLI_SMOKE_RERATE_METADATA" \
+        --scope core_development \
+        --wallet-txin "$CLI_SMOKE_RERATE_WALLET_TXIN" \
+        --collateral-txin "${CLI_SMOKE_RERATE_COLLATERAL_TXIN:-$CLI_SMOKE_RERATE_WALLET_TXIN}" \
+        --all-orders \
+        --new-rate "${CLI_SMOKE_RERATE_NEW_RATE:-0.42}" \
+        --out "$unsigned" \
+        --report "$report" \
+        --log "$build_log" \
+        || die "RERATE_BUILD_FAILED: swap-rerate exited non-zero (see $build_log)"
+
+    if [[ ! -s "$unsigned" ]]; then
+        die "RERATE_BUILD_FAILED: swap-rerate wrote an empty unsigned artifact"
+    fi
+
+    local passphrase_file="$phase_dir/rerate.passphrase"
+    printf 'cli-smoke-rerate' >"$passphrase_file"
+    chmod 0600 "$passphrase_file"
+
+    local funding_vault="$phase_dir/funding.vault.age"
+    log "rerate: create funding vault"
+    create_devnet_vault \
+        "$CLI_SMOKE_FUNDING_SKEY" \
+        "devnet_funding" \
+        "DevNet funding key (rerate)" \
+        "$funding_vault" \
+        "$passphrase_file"
+
+    local voter_vault="$phase_dir/voter.vault.age"
+    log "rerate: create voter vault"
+    create_devnet_vault \
+        "$CLI_SMOKE_VOTER_SKEY" \
+        "devnet_voter" \
+        "DevNet voter key (rerate)" \
+        "$voter_vault" \
+        "$passphrase_file"
+
+    local submitted_tx_id
+    submitted_tx_id=$(sign_submit_unsigned_multi \
+        "rerate" \
+        "$unsigned" \
+        "$passphrase_file" \
+        "$funding_vault" \
+        "devnet_funding" \
+        "$CLI_SMOKE_FUNDING_KEY_HASH" \
+        "$voter_vault" \
+        "devnet_voter" \
+        "$CLI_SMOKE_VOTER_KEY_HASH") \
+        || die "rerate: sign/submit failed"
+
+    local new_order_txin="${submitted_tx_id}#0"
+
+    local summary_json="$phase_dir/summary.json"
+    local chain_dir="$run_dir/chain"
+    mkdir -p "$chain_dir"
+    local assertion_request="$chain_dir/rerate.assertions.request.json"
+    jq -n \
+        --arg oldOrderTxIn "$CLI_SMOKE_RERATE_OLD_ORDER_TXIN" \
+        --arg newOrderTxIn "$new_order_txin" \
+        --arg submittedTxId "$submitted_tx_id" \
+        --arg unsignedPath "$unsigned" \
+        --arg reportPath "$report" \
+        --arg buildLogPath "$build_log" \
+        --arg chainAssertionsRequest "$assertion_request" \
+        '{
+            phase: "rerate",
+            network: "devnet",
+            scope: "core_development",
+            status: "submitted",
+            phase2: "submit-accepted",
+            submittedTxId: $submittedTxId,
+            oldOrderTxIn: $oldOrderTxIn,
+            newOrderTxIn: $newOrderTxIn,
+            unsignedPath: $unsignedPath,
+            reportPath: $reportPath,
+            buildLogPath: $buildLogPath,
+            chainAssertionsRequest: $chainAssertionsRequest
+        }' >"$summary_json"
+
+    jq -n \
+        --arg summaryPath "$summary_json" \
+        --arg unsignedPath "$unsigned" \
+        --arg oldOrderTxIn "$CLI_SMOKE_RERATE_OLD_ORDER_TXIN" \
+        --arg newOrderTxIn "$new_order_txin" \
+        --arg submittedTxId "$submitted_tx_id" \
+        '{
+            phase: "rerate",
+            summaryPath: $summaryPath,
+            unsignedPath: $unsignedPath,
+            oldOrderTxIn: $oldOrderTxIn,
+            newOrderTxIn: $newOrderTxIn,
+            submittedTxId: $submittedTxId
+        }' >"$assertion_request"
+
+    log "rerate: phase-2 submit accepted; host will assert UTxO flip (summary in $summary_json)"
+    log "rerate: oldOrderTxIn=$CLI_SMOKE_RERATE_OLD_ORDER_TXIN"
+    log "rerate: newOrderTxIn=$new_order_txin"
+    log "rerate: complete (summary in $summary_json)"
+}
+
 write_full_summary() {
     local run_dir=$1
     local summary_path="$run_dir/summary.json"
@@ -2194,6 +2450,11 @@ main() {
             require_inside_devnet "$inside_devnet" "$phase" \
                 "$run_dir" "$timeout_seconds" "$force"
             reorganize_phase "$run_dir" "$timeout_seconds"
+            ;;
+        rerate)
+            require_inside_devnet "$inside_devnet" "$phase" \
+                "$run_dir" "$timeout_seconds" "$force"
+            rerate_phase "$run_dir" "$timeout_seconds"
             ;;
     esac
 }

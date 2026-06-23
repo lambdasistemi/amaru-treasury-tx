@@ -43,15 +43,20 @@ import Data.Foldable
     )
 import Data.List qualified as List
 import Data.Map.Strict qualified as Map
+import Data.Maybe
+    ( fromMaybe
+    , mapMaybe
+    )
 import Data.Ratio
     ( approxRational
     , denominator
     , numerator
     )
+import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
-import Data.Word (Word16)
+import Data.Word (Word16, Word64)
 import Lens.Micro ((&), (.~), (^.))
 import Options.Applicative
     ( Parser
@@ -74,12 +79,20 @@ import System.FilePath
     , (</>)
     )
 
+import Amaru.Treasury.Backend
+    ( Provider (..)
+    )
+import Amaru.Treasury.Backend.N2C
+    ( withLocalNodeBackend
+    )
 import Amaru.Treasury.Build.Result
     ( BuildResult (..)
     )
 import Amaru.Treasury.Build.SwapRerate qualified as Build
 import Amaru.Treasury.ChainContext
     ( ChainContext (..)
+    , networkFromMagic
+    , withLiveContext
     )
 import Amaru.Treasury.ChainContext.Fixture
     ( readSwapFixture
@@ -87,6 +100,18 @@ import Amaru.Treasury.ChainContext.Fixture
     )
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
+    , nowTip
+    )
+import Amaru.Treasury.Constants
+    ( sundaeOrderScriptRefMainnet
+    , sundaeProtocolFeeLovelace
+    , sundaeUsdmPoolHex
+    , usdmAssetHex
+    , usdmPolicyHex
+    )
+import Amaru.Treasury.Inspect.SwapOrderDatum qualified as InspectDatum
+import Amaru.Treasury.Inspect.Types
+    ( ParsedSwapOrder (..)
     )
 import Amaru.Treasury.IntentJSON
     ( SAction (..)
@@ -95,15 +120,26 @@ import Amaru.Treasury.IntentJSON
     , translateIntent
     )
 import Amaru.Treasury.IntentJSON.Common
-    ( parseGuardKeyHash
+    ( decodeHexBytes
+    , decodeHexBytesAny
+    , parseGuardKeyHash
+    , parseRewardAccountForNetwork
     , parseTxIn
     )
 import Amaru.Treasury.LedgerParse
-    ( scriptHashFromHex
+    ( addrFromText
+    , scriptHashFromHex
     , txInToText
+    )
+import Amaru.Treasury.Metadata
+    ( ScopeMetadata (..)
+    , ScriptRef (..)
+    , TreasuryMetadata (..)
+    , readMetadataFile
     )
 import Amaru.Treasury.Scope
     ( ScopeId (..)
+    , allScopes
     , scopeFromText
     , scopeText
     )
@@ -165,8 +201,8 @@ import Cardano.Ledger.Credential
     , StakeReference (..)
     )
 import Cardano.Ledger.Hashes
-    ( KeyHash
-    , ScriptHash
+    ( KeyHash (..)
+    , ScriptHash (..)
     )
 import Cardano.Ledger.Keys (KeyRole (..))
 import Cardano.Ledger.Mary.Value
@@ -179,11 +215,12 @@ import Cardano.Ledger.Plutus.Data
     , getPlutusData
     )
 import Cardano.Ledger.Plutus.Language
-    ( Language (PlutusV3)
+    ( Language (PlutusV2)
     , Plutus (..)
     , PlutusBinary (..)
     )
 import Cardano.Ledger.TxIn (TxIn)
+import Cardano.Slotting.Slot (SlotNo (..))
 import Cardano.Tx.Ledger (ConwayTx)
 
 -- | Flags for the @swap-rerate@ subcommand.
@@ -447,13 +484,397 @@ decisionFromPlan = \case
 
 -- | Run @swap-rerate@.
 runSwapRerate :: GlobalOpts -> SwapRerateOpts -> IO ()
-runSwapRerate GlobalOpts{..} opts
-    | Just{} <- goSocketPath =
-        Exit.die $
-            "swap-rerate: live --node-socket discovery is owned by "
-                <> "slice 3; omit --node-socket to use offline fixtures"
+runSwapRerate g@GlobalOpts{..} opts =
+    case goSocketPath of
+        Just socket ->
+            runSwapRerateLive g socket opts
+        Nothing ->
+            runSwapRerateOffline opts
+
+data LiveRerate = LiveRerate
+    { lrOrderScriptRef :: !TxIn
+    , lrOrderAddress :: !Addr
+    , lrCollateralTxIn :: !TxIn
+    , lrInputs :: !RerateProgramInputs
+    , lrIntent :: !RerateIntent
+    , lrSelectedTxIns :: ![TxIn]
+    }
+
+data LiveOrderCandidate = LiveOrderCandidate
+    { locTxIn :: !TxIn
+    , locScope :: !ScopeId
+    , locValue :: !MaryValue
+    , locDatum :: !Data
+    }
+
+runSwapRerateLive :: GlobalOpts -> FilePath -> SwapRerateOpts -> IO ()
+runSwapRerateLive g socket opts@SwapRerateOpts{..} = do
+    metadata <- readMetadataFile sroMetadataPath
+    withLocalNodeBackend (goNetworkMagic g) socket $ \provider -> do
+        resolveLiveRerate g provider metadata opts >>= \case
+            LivePassthrough reason ->
+                writeRerateReport sroReportPath (passthroughReport opts reason)
+            LiveRejected code message -> do
+                writeRerateReport
+                    sroReportPath
+                    (rejectedReport opts code message)
+                Exit.exitFailure
+            LiveBuild resolved -> do
+                let needed =
+                        Set.fromList $
+                            lrCollateralTxIn resolved
+                                : rpiWalletTxIn (lrInputs resolved)
+                                : rpiOrderScriptRef (lrInputs resolved)
+                                : rpiScopesDeployedAt (lrInputs resolved)
+                                : rpiPermissionsDeployedAt (lrInputs resolved)
+                                : rpiTreasuryDeployedAt (lrInputs resolved)
+                                : rpiRegistryDeployedAt (lrInputs resolved)
+                                : lrSelectedTxIns resolved
+                withLiveContext
+                    (networkFromMagic (goNetworkMagic g))
+                    provider
+                    needed
+                    $ \ctx -> do
+                        planned <- case Plan.planRerate (lrIntent resolved) of
+                            Left err -> do
+                                writeRerateReport
+                                    sroReportPath
+                                    ( rejectedReport
+                                        opts
+                                        "invalid_order"
+                                        (T.pack (show err))
+                                    )
+                                Exit.exitFailure
+                            Right ok -> pure ok
+                        case Budget.planRerate
+                            (prOrders planned)
+                            (ccPParams ctx) of
+                            SingleTx reason estimate _ -> do
+                                result <-
+                                    Build.runSwapRerate
+                                        ctx
+                                        (lrInputs resolved)
+                                        (lrIntent resolved)
+                                writeBuildCbor sroOutPath result
+                                writeRerateReport
+                                    sroReportPath
+                                    ( singleTxReport
+                                        opts
+                                        reason
+                                        estimate
+                                        (prOrders planned)
+                                        result
+                                    )
+                            Split reason estimate groups ->
+                                writeRerateReport
+                                    sroReportPath
+                                    ( splitReport
+                                        opts
+                                        reason
+                                        estimate
+                                        groups
+                                        (prOrders planned)
+                                    )
+
+data LiveResolution
+    = LivePassthrough !SwapReratePassthroughReason
+    | LiveRejected !Text !Text
+    | LiveBuild !LiveRerate
+
+resolveLiveRerate
+    :: GlobalOpts
+    -> Provider IO
+    -> TreasuryMetadata
+    -> SwapRerateOpts
+    -> IO LiveResolution
+resolveLiveRerate g provider metadata SwapRerateOpts{..} = do
+    orderScript <- orderScriptFromBlob sundaeOrderValidatorBlob
+    let network = networkFromMagic (goNetworkMagic g)
+        orderAddress =
+            scriptAddr network (Core.hashScript @ConwayEra orderScript)
+    orders <- queryLiveOrderCandidates provider metadata orderAddress
+    selected <- selectLiveOrders sroScope sroSelectionMode orders
+    case selected of
+        Left reason -> pure (LivePassthrough reason)
+        Right (Left message) -> pure (LiveRejected "wrong_scope" message)
+        Right (Right []) ->
+            pure (LivePassthrough SwapRerateNoOrdersSelected)
+        Right (Right chosen) -> do
+            scopeMeta <- case Map.lookup sroScope (tmTreasuries metadata) of
+                Nothing ->
+                    Exit.die $
+                        "swap-rerate: scope not in metadata: "
+                            <> T.unpack (scopeText sroScope)
+                Just sm -> pure sm
+            let networkName =
+                    fromMaybe
+                        (case network of Mainnet -> "mainnet"; Testnet -> "devnet")
+                        (goNetworkName g)
+            ownerKeys <- ownerKeysFromMetadata metadata
+            treasuryHash <-
+                expectRightIO $
+                    scriptHashFromHex (srHash (smTreasury scopeMeta))
+            treasuryAddress <-
+                expectRightIO $
+                    addrFromText (smAddress scopeMeta)
+            datumParams <- datumParamsFromMetadata metadata sroScope
+            permissionsReward <-
+                expectRightIO $
+                    parseRewardAccountForNetwork
+                        networkName
+                        (srHash (smPermissions scopeMeta))
+            scopesRef <- parseTxInOrDie (tmScopeOwners metadata)
+            permissionsRef <-
+                parseTxInOrDie (srDeployedAt (smPermissions scopeMeta))
+            treasuryRef <-
+                parseTxInOrDie (srDeployedAt (smTreasury scopeMeta))
+            registryRef <-
+                parseTxInOrDie (srDeployedAt (smRegistry scopeMeta))
+            walletTxIn <- parseTxInOrDie sroWalletTxIn
+            collateralTxIn <-
+                parseTxInOrDie (fromMaybe sroWalletTxIn sroCollateralTxIn)
+            orderScriptRef <-
+                resolveOrderScriptRef
+                    provider
+                    network
+                    orderAddress
+                    orderScript
+            tip <- nowTip provider
+            let (rateNumerator, rateDenominator) = rateParts sroNewRate
+                upperBound =
+                    addValiditySlots
+                        (defaultValiditySlots network)
+                        sroValidityHours
+                        (SlotNo tip)
+                intent =
+                    RerateIntent
+                        { riScopeContext =
+                            RerateScopeContext
+                                { rscScope = sroScope
+                                , rscExpectedOwners = ownerKeys
+                                , rscTreasuryScriptHash = treasuryHash
+                                , rscOrderExtraLovelace =
+                                    Coin
+                                        ( fromInteger $
+                                            sundaeProtocolFeeLovelace
+                                                + 2_000_000
+                                        )
+                                , rscDatumParams = datumParams
+                                }
+                        , riOrders =
+                            [ RerateOrder
+                                { rroTxIn = locTxIn order
+                                , rroScope = locScope order
+                                , rroValue = locValue order
+                                , rroDatum = locDatum order
+                                }
+                            | order <- chosen
+                            ]
+                        , riRateNumerator = rateNumerator
+                        , riRateDenominator = rateDenominator
+                        }
+                inputs =
+                    RerateProgramInputs
+                        { rpiWalletTxIn = walletTxIn
+                        , rpiOrderScriptRef = orderScriptRef
+                        , rpiSwapOrderAddress = orderAddress
+                        , rpiTreasuryAddress = treasuryAddress
+                        , rpiPermissionsRewardAccount = permissionsReward
+                        , rpiScopesDeployedAt = scopesRef
+                        , rpiPermissionsDeployedAt = permissionsRef
+                        , rpiTreasuryDeployedAt = treasuryRef
+                        , rpiRegistryDeployedAt = registryRef
+                        , rpiUpperBound = upperBound
+                        }
+            pure $
+                LiveBuild
+                    LiveRerate
+                        { lrOrderScriptRef = orderScriptRef
+                        , lrOrderAddress = orderAddress
+                        , lrCollateralTxIn = collateralTxIn
+                        , lrInputs = inputs
+                        , lrIntent = intent
+                        , lrSelectedTxIns = locTxIn <$> chosen
+                        }
+
+queryLiveOrderCandidates
+    :: Provider IO
+    -> TreasuryMetadata
+    -> Addr
+    -> IO [LiveOrderCandidate]
+queryLiveOrderCandidates provider metadata orderAddress = do
+    utxos <- queryUTxOs provider orderAddress
+    pure $
+        mapMaybe
+            ( \(txIn, txOut) -> do
+                datum <- inlineDatumMaybe txOut
+                parsed <- InspectDatum.parseSwapOrderDatum datum
+                scope <-
+                    scopeForTreasuryHash
+                        metadata
+                        (posDestinationTreasuryHash parsed)
+                pure
+                    LiveOrderCandidate
+                        { locTxIn = txIn
+                        , locScope = scope
+                        , locValue = txOut ^. valueTxOutL
+                        , locDatum = datum
+                        }
+            )
+            utxos
+
+selectLiveOrders
+    :: ScopeId
+    -> SwapRerateSelectionMode
+    -> [LiveOrderCandidate]
+    -> IO
+        ( Either SwapReratePassthroughReason (Either Text [LiveOrderCandidate])
+        )
+selectLiveOrders scope mode candidates =
+    pure $ case mode of
+        SwapRerateDeclineRetract ->
+            Left SwapRerateRetractDeclined
+        SwapRerateSelectAll ->
+            let selected =
+                    filter ((== scope) . locScope) candidates
+            in  if null selected
+                    then Left SwapRerateNoPendingOrders
+                    else Right (Right selected)
+        SwapRerateSelectExplicit [] ->
+            Left SwapRerateNoOrdersSelected
+        SwapRerateSelectExplicit selected ->
+            Right $ do
+                resolved <- traverse (resolveLiveSelected candidates) selected
+                traverse_ (ensureLiveCandidateScope scope) resolved
+                Right resolved
+
+resolveLiveSelected
+    :: [LiveOrderCandidate] -> Text -> Either Text LiveOrderCandidate
+resolveLiveSelected candidates txIn =
+    case List.find ((== txIn) . txInToText . locTxIn) candidates of
+        Just candidate -> Right candidate
+        Nothing ->
+            Left ("selected order " <> txIn <> " is not pending")
+
+ensureLiveCandidateScope
+    :: ScopeId -> LiveOrderCandidate -> Either Text ()
+ensureLiveCandidateScope expected candidate
+    | locScope candidate == expected = Right ()
     | otherwise =
-        runSwapRerateOffline opts
+        Left $
+            "selected order "
+                <> txInToText (locTxIn candidate)
+                <> " belongs to "
+                <> scopeText (locScope candidate)
+                <> "; expected "
+                <> scopeText expected
+
+resolveOrderScriptRef
+    :: Provider IO
+    -> Network
+    -> Addr
+    -> Script ConwayEra
+    -> IO TxIn
+resolveOrderScriptRef provider network orderAddress orderScript =
+    case network of
+        Mainnet -> parseTxInOrDie sundaeOrderScriptRefMainnet
+        Testnet -> do
+            utxos <- queryUTxOs provider orderAddress
+            case [ txIn
+                 | (txIn, txOut) <- utxos
+                 , referenceMatches orderScript txOut
+                 ] of
+                txIn : _ -> pure txIn
+                [] ->
+                    Exit.die
+                        "swap-rerate: no order script reference UTxO found"
+
+referenceMatches :: Script ConwayEra -> TxOut ConwayEra -> Bool
+referenceMatches expected txOut =
+    case txOut ^. referenceScriptTxOutL of
+        SJust script ->
+            Core.hashScript @ConwayEra script
+                == Core.hashScript @ConwayEra expected
+        SNothing -> False
+
+inlineDatumMaybe :: TxOut ConwayEra -> Maybe Data
+inlineDatumMaybe txOut =
+    case txOut ^. datumTxOutL of
+        Datum datum -> Just (getPlutusData (binaryDataToData datum))
+        _ -> Nothing
+
+scopeForTreasuryHash
+    :: TreasuryMetadata -> BS.ByteString -> Maybe ScopeId
+scopeForTreasuryHash metadata hashBytes =
+    List.find matches allScopes
+  where
+    rendered = TE.decodeUtf8 (B16.encode hashBytes)
+    matches scope =
+        case Map.lookup scope (tmTreasuries metadata) of
+            Just sm -> srHash (smTreasury sm) == rendered
+            Nothing -> False
+
+ownerKeysFromMetadata :: TreasuryMetadata -> IO [KeyHash Guard]
+ownerKeysFromMetadata metadata =
+    traverse
+        parseOwner
+        [ owner
+        | scope <-
+            [CoreDevelopment, OpsAndUseCases, NetworkCompliance, Middleware]
+        , Just scopeMeta <- [Map.lookup scope (tmTreasuries metadata)]
+        , Just owner <- [smOwner scopeMeta]
+        ]
+  where
+    parseOwner =
+        expectRightIO . parseGuardKeyHash
+
+datumParamsFromMetadata
+    :: TreasuryMetadata -> ScopeId -> IO SwapOrderDatumParams
+datumParamsFromMetadata metadata scope = do
+    coreOwner <- ownerBytes CoreDevelopment
+    opsOwner <- ownerBytes OpsAndUseCases
+    networkOwner <- ownerBytes NetworkCompliance
+    middlewareOwner <- ownerBytes Middleware
+    scopeMeta <- case Map.lookup scope (tmTreasuries metadata) of
+        Just sm -> pure sm
+        Nothing ->
+            Exit.die $
+                "swap-rerate: scope not in metadata: "
+                    <> T.unpack (scopeText scope)
+    treasuryBytes <-
+        expectRightIO $ decodeHexBytes 28 (srHash (smTreasury scopeMeta))
+    poolId <- expectRightIO $ decodeHexBytes 28 sundaeUsdmPoolHex
+    usdmPolicy <- expectRightIO $ decodeHexBytesAny usdmPolicyHex
+    usdmToken <- expectRightIO $ decodeHexBytesAny usdmAssetHex
+    pure
+        SwapOrderDatumParams
+            { sodPoolId = poolId
+            , sodCoreOwner = coreOwner
+            , sodOpsOwner = opsOwner
+            , sodNetworkComplianceOwner = networkOwner
+            , sodMiddlewareOwner = middlewareOwner
+            , sodSundaeProtocolFeeLovelace = sundaeProtocolFeeLovelace
+            , sodTreasuryScriptHash = treasuryBytes
+            , sodUsdmPolicy = usdmPolicy
+            , sodUsdmToken = usdmToken
+            }
+  where
+    ownerBytes ownerScope =
+        case Map.lookup ownerScope (tmTreasuries metadata) >>= smOwner of
+            Just owner -> expectRightIO $ decodeHexBytes 28 owner
+            Nothing ->
+                Exit.die $
+                    "swap-rerate: missing owner for "
+                        <> T.unpack (scopeText ownerScope)
+
+defaultValiditySlots :: Network -> Word64
+defaultValiditySlots = \case
+    Mainnet -> 2_000
+    Testnet -> 20
+
+addValiditySlots :: Word64 -> Maybe Word16 -> SlotNo -> SlotNo
+addValiditySlots defaultSlots hours (SlotNo base) =
+    SlotNo (base + maybe defaultSlots (fromIntegral . (* 3_600)) hours)
 
 data OfflineRerate = OfflineRerate
     { orContext :: !ChainContext
@@ -543,7 +964,7 @@ loadOfflineRerate SwapRerateOpts{..} selected = do
     orderOut0 <- firstSwapOrderOutput fixtureDir
     orderDatum <- inlineDatumOrDie orderOut0
     orderScriptRef <- parseTxInOrDie syntheticOrderScriptRef
-    orderScript <- scriptFromBlob sundaeOrderValidatorBlob
+    orderScript <- orderScriptFromBlob sundaeOrderValidatorBlob
     let orderAddress =
             scriptAddr Mainnet (Core.hashScript @ConwayEra orderScript)
         orderOut = orderOut0 & addrTxOutL .~ orderAddress
@@ -591,6 +1012,7 @@ loadOfflineRerate SwapRerateOpts{..} selected = do
                 { rpiWalletTxIn = siWalletUtxo swapIntent
                 , rpiOrderScriptRef = orderScriptRef
                 , rpiSwapOrderAddress = orderAddress
+                , rpiTreasuryAddress = siTreasuryAddress swapIntent
                 , rpiPermissionsRewardAccount =
                     siPermissionsRewardAccount swapIntent
                 , rpiScopesDeployedAt = siScopesDeployedAt swapIntent
@@ -837,14 +1259,14 @@ inlineDatumOrDie out =
         Datum datum -> pure $ getPlutusData (binaryDataToData datum)
         _ -> Exit.die "swap-rerate: fixture swap order has no inline datum"
 
-scriptFromBlob :: BS.ByteString -> IO (Script ConwayEra)
-scriptFromBlob blob =
+orderScriptFromBlob :: BS.ByteString -> IO (Script ConwayEra)
+orderScriptFromBlob blob =
     case mkPlutusScript plutus of
         Just script -> pure (fromPlutusScript script)
         Nothing -> Exit.die "swap-rerate: failed to build order script"
   where
     plutus =
-        Plutus @PlutusV3 (PlutusBinary (SBS.toShort blob))
+        Plutus @PlutusV2 (PlutusBinary (SBS.toShort blob))
 
 refScriptTxOut :: Addr -> Script ConwayEra -> TxOut ConwayEra
 refScriptTxOut addr script =

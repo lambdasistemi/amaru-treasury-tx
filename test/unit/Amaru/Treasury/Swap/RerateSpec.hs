@@ -7,8 +7,9 @@ License     : Apache-2.0
 Drafts the pure re-rate program against synthesized inputs and pins the
 cancel-and-reoffer body shape: wallet fuel, one script spend per
 selected order, the Sundae order reference plus scope references,
-withdraw-zero, required scope signers, and one inline-datum replacement
-order output per cancelled order.
+withdraw-zero, required scope signers, one inline-datum replacement
+order output per cancelled order, and one treasury return output per
+cancelled order.
 -}
 module Amaru.Treasury.Swap.RerateSpec (spec) where
 
@@ -34,7 +35,8 @@ import Cardano.Ledger.Api.Tx.Body
     , withdrawalsTxBodyL
     )
 import Cardano.Ledger.Api.Tx.Out
-    ( datumTxOutL
+    ( addrTxOutL
+    , datumTxOutL
     , valueTxOutL
     )
 import Cardano.Ledger.BaseTypes
@@ -176,6 +178,7 @@ programInputs =
         { rpiWalletTxIn = mkTxIn 0
         , rpiOrderScriptRef = mkTxIn 40
         , rpiSwapOrderAddress = scriptAddr 50
+        , rpiTreasuryAddress = scriptAddr 99
         , rpiPermissionsRewardAccount = permissionsRewardAcct 11
         , rpiScopesDeployedAt = mkTxIn 2
         , rpiPermissionsDeployedAt = mkTxIn 3
@@ -264,12 +267,18 @@ spec = describe "Amaru.Treasury.Swap.Rerate" $ do
             `shouldBe` Set.fromList ownerKeys
         invalidHereafter (body ^. vldtTxBodyL)
             `shouldBe` SJust (SlotNo 12_345)
-        length outs `shouldBe` 1
+        length outs `shouldBe` 2
         case outs of
-            [out] ->
-                inlineDatumData out
+            [replacement, treasuryReturn] -> do
+                inlineDatumData replacement
                     `shouldBe` Just (orderDatum 10_000_000 3_000_000)
-            _ -> expectationFailure "expected exactly one output"
+                treasuryReturn
+                    ^. addrTxOutL
+                    `shouldBe` rpiTreasuryAddress programInputs
+                treasuryReturn
+                    ^. valueTxOutL
+                    `shouldBe` rroValue order1
+            _ -> expectationFailure "expected exactly two outputs"
 
     it "emits one replacement output per cancelled order" $ do
         let tx2 =
@@ -280,14 +289,14 @@ spec = describe "Amaru.Treasury.Swap.Rerate" $ do
         body2
             ^. inputsTxBodyL
             `shouldBe` Set.fromList [mkTxIn 0, mkTxIn 1, mkTxIn 2]
-        length (toList (body2 ^. outputsTxBodyL)) `shouldBe` 2
+        length (toList (body2 ^. outputsTxBodyL)) `shouldBe` 4
         body2
             ^. reqSignerHashesTxBodyL
             `shouldBe` Set.fromList ownerKeys
 
     it "preserves offered ADA plus the order extra lovelace" $ do
         case replacementOutputs [order1] of
-            [out] ->
+            out : _ ->
                 out
                     ^. valueTxOutL
                     `shouldBe` MaryValue
@@ -296,7 +305,7 @@ spec = describe "Amaru.Treasury.Swap.Rerate" $ do
             _ -> expectationFailure "expected exactly one output"
 
     it "uses inline datums built at the new rate" $
-        map inlineDatumData (replacementOutputs [order1, order2])
+        map inlineDatumData (take 2 (replacementOutputs [order1, order2]))
             `shouldBe` [ Just (orderDatum 10_000_000 3_000_000)
                        , Just (orderDatum 20_000_000 6_000_000)
                        ]

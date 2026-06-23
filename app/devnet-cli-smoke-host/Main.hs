@@ -1,19 +1,21 @@
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 
 {- |
 Module      : Main
 Description : Narrow DevNet lifecycle host for the CLI smoke (#161)
 License     : Apache-2.0
 
-This executable is intentionally not a transaction
-runner. It owns DevNet lifecycle, governance-genesis
-patching, deterministic key fixture generation, and
-launching @scripts\/smoke\/smoke.sh --inside-devnet@.
-The shell smoke is the only place where bootstrap
-transactions are built, signed, and submitted, and it
-only uses the shipped @amaru-treasury-tx@ CLI to do
-so.
+This executable owns DevNet lifecycle, governance-genesis
+patching, deterministic key fixture generation, launching
+@scripts\/smoke\/smoke.sh --inside-devnet@, and narrow
+test-only live assertions that need direct chain queries.
+Product CLI commands stay unsigned-only; when a live-boundary
+smoke needs signing or submission, this DevNet harness performs
+that after the shipped CLI has produced the unsigned artifact.
 
 Imports are deliberately restricted so the static
 guard in
@@ -36,7 +38,15 @@ import Cardano.Ledger.Address
     , Addr (..)
     , serialiseAddr
     )
+import Cardano.Ledger.Alonzo.PParams (ppCostModelsL)
+import Cardano.Ledger.Alonzo.Scripts
+    ( AsIx
+    , costModelsValid
+    , fromPlutusScript
+    , mkPlutusScript
+    )
 import Cardano.Ledger.Api.PParams (ppMaxTxExUnitsL)
+import Cardano.Ledger.Api.Tx (txIdTx)
 import Cardano.Ledger.Api.Tx.Body
     ( feeTxBodyL
     , inputsTxBodyL
@@ -45,17 +55,32 @@ import Cardano.Ledger.Api.Tx.Body
 import Cardano.Ledger.Api.Tx.Out
     ( TxOut
     , addrTxOutL
+    , mkBasicTxOut
+    , referenceScriptTxOutL
     , valueTxOutL
     )
-import Cardano.Ledger.BaseTypes (Network (..))
+import Cardano.Ledger.BaseTypes
+    ( Network (..)
+    , StrictMaybe (..)
+    , mkTxIxPartial
+    )
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
-import Cardano.Ledger.Core (bodyTxL)
+import Cardano.Ledger.Conway.Scripts (ConwayPlutusPurpose)
+import Cardano.Ledger.Core
+    ( PParams
+    , Script
+    , bodyTxL
+    )
+import Cardano.Ledger.Core qualified as Core
 import Cardano.Ledger.Credential
     ( Credential (..)
     , StakeReference (..)
     )
-import Cardano.Ledger.Hashes (KeyHash (..), ScriptHash (..))
+import Cardano.Ledger.Hashes
+    ( KeyHash (..)
+    , ScriptHash (..)
+    )
 import Cardano.Ledger.Keys
     ( KeyRole (Payment)
     , VKey (..)
@@ -63,6 +88,7 @@ import Cardano.Ledger.Keys
     )
 import Cardano.Ledger.Mary.Value
     ( MaryValue (..)
+    , MultiAsset (..)
     , PolicyID (..)
     , assetNameToTextAsHex
     , flattenMultiAsset
@@ -72,15 +98,41 @@ import Cardano.Ledger.Plutus.ExUnits
     , exUnitsMem
     , exUnitsSteps
     )
-import Cardano.Ledger.TxIn (TxIn)
+import Cardano.Ledger.Plutus.Language
+    ( Language (PlutusV2)
+    , Plutus (..)
+    , PlutusBinary (..)
+    )
+import Cardano.Ledger.TxIn (TxId, TxIn (..))
 import Cardano.Node.Client.E2E.Devnet (withCardanoNode)
 import Cardano.Node.Client.E2E.Setup
-    ( devnetMagic
+    ( addKeyWitness
+    , devnetMagic
     , genesisDir
     , genesisSignKey
     , mkSignKey
     )
-import Cardano.Node.Client.Provider (queryProtocolParamsH)
+import Cardano.Node.Client.Provider
+    ( LedgerSnapshot (..)
+    , Provider (..)
+    , queryProtocolParamsH
+    )
+import Cardano.Node.Client.Submitter
+    ( SubmitResult (..)
+    , Submitter (..)
+    )
+import Cardano.Tx.Build
+    ( InterpretIO (..)
+    , TxBuild
+    , build
+    , checkMinUtxo
+    , mkPParamsBound
+    , output
+    , payTo'
+    , spend
+    , validTo
+    )
+import Cardano.Tx.Ledger (ConwayTx)
 import Codec.Binary.Bech32 qualified as Bech32
 import Control.Concurrent (threadDelay)
 import Control.Monad (unless, when)
@@ -95,6 +147,7 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Char8 qualified as BS8
 import Data.ByteString.Lazy qualified as BSL
+import Data.ByteString.Short qualified as SBS
 import Data.Foldable (toList, traverse_)
 import Data.List (isPrefixOf)
 import Data.Map.Strict qualified as Map
@@ -103,25 +156,52 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
+import Data.Void (Void)
+import Data.Word (Word64)
 
 import Amaru.Treasury.Backend qualified as Backend
-import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
+import Amaru.Treasury.Backend.N2C
+    ( withLocalNodeBackend
+    , withLocalNodeClient
+    )
+import Amaru.Treasury.Constants
+    ( minUtxoDepositLovelace
+    , sundaeProtocolFeeLovelace
+    , sundaeUsdmPoolHex
+    , usdmAssetHex
+    , usdmPolicyHex
+    )
+import Amaru.Treasury.IntentJSON.Common
+    ( decodeHexBytes
+    , decodeHexBytesAny
+    )
 import Amaru.Treasury.LedgerParse
     ( scriptHashFromHex
     , txInFromText
     , txInToText
     )
+import Amaru.Treasury.Redeemer
+    ( RawPlutusData (..)
+    )
+import Amaru.Treasury.Sundae.Contracts
+    ( sundaeOrderValidatorBlob
+    )
 import Amaru.Treasury.Tx.AttachWitness
     ( decodeUnsignedTxHex
     , renderAttachError
     )
+import Amaru.Treasury.Tx.Swap
+    ( SwapOrderDatumParams (..)
+    , swapOrderDatum
+    )
+import Cardano.Slotting.Slot (SlotNo (..))
 import Data.Aeson qualified as Aeson
 import Data.Aeson.Key qualified as Key
 import Data.Aeson.KeyMap qualified as KeyMap
 import Data.Aeson.Types (Parser, parseEither, withObject, (.:), (.:?))
 import Data.Time.Clock (getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
-import Lens.Micro ((^.))
+import Lens.Micro ((&), (.~), (^.))
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.Directory
     ( createDirectoryIfMissing
@@ -145,6 +225,8 @@ import System.Process
     , proc
     , waitForProcess
     )
+
+data NoCtx a
 
 -- ---------------------------------------------------------------------
 -- Argument parsing
@@ -262,7 +344,7 @@ main = do
     withCardanoNode smokeGenesis $ \socket _startMs -> do
         keys <- writeDevnetKeyFixtures runDir
         let NetworkMagic magicWord = devnetMagic
-            envEntries =
+            baseEnvEntries =
                 [ ("CLI_SMOKE_RUN_DIR", runDir)
                 , ("CARDANO_NODE_SOCKET_PATH", socket)
                 , ("CLI_SMOKE_SOCKET", socket)
@@ -276,7 +358,31 @@ main = do
                 , ("CLI_SMOKE_VOTER_KEY_HASH", devnetVoterKeyHashHex keys)
                 , ("CLI_SMOKE_BENEFICIARY_ADDR", devnetBeneficiaryAddress keys)
                 ]
-        smokeCode <- callSmokeScript opts runDir envEntries
+        rerateEnvEntries <-
+            if hoPhase opts == "rerate"
+                then do
+                    skipRerateIfNoPlutusV2CostModel socket devnetMagic
+                    registryCode <-
+                        callSmokeScriptPhase
+                            opts
+                            "registry-stake"
+                            runDir
+                            baseEnvEntries
+                    case registryCode of
+                        ExitSuccess -> pure ()
+                        code -> exitWith code
+                    prepareRerateSmokeSetup
+                        runDir
+                        socket
+                        devnetMagic
+                        (T.pack (devnetFundingKeyHashHex keys))
+                        (T.pack (devnetVoterKeyHashHex keys))
+                else pure []
+        smokeCode <-
+            callSmokeScript
+                opts
+                runDir
+                (baseEnvEntries <> rerateEnvEntries)
         case hoPhase opts of
             "registry-stake" -> case smokeCode of
                 ExitSuccess -> do
@@ -340,6 +446,15 @@ main = do
                     devnetMagic
                     (smokeCode == ExitSuccess)
                 runReorganizeExecUnitsAssertionIfPresent
+                    runDir
+                    socket
+                    devnetMagic
+                    (smokeCode == ExitSuccess)
+                case smokeCode of
+                    ExitSuccess -> exitSuccess
+                    code -> exitWith code
+            "rerate" -> do
+                runRerateAssertionsIfPresent
                     runDir
                     socket
                     devnetMagic
@@ -591,6 +706,117 @@ paymentKeyHashHex sk =
             BS8.unpack (B16.encode (hashToBytes kh))
                 :: String
 
+genesisPaymentAddr :: Addr
+genesisPaymentAddr =
+    Addr
+        Testnet
+        (KeyHashObj (paymentKeyHash genesisSignKey))
+        StakeRefNull
+
+orderScriptFromBlob :: BS.ByteString -> IO (Script ConwayEra)
+orderScriptFromBlob blob =
+    case mkPlutusScript plutus of
+        Just script -> pure (fromPlutusScript script)
+        Nothing ->
+            die "failed to build Plutus script"
+  where
+    plutus =
+        Plutus @PlutusV2 (PlutusBinary (SBS.toShort blob))
+
+refScriptTxOut :: Addr -> Script ConwayEra -> TxOut ConwayEra
+refScriptTxOut addr script =
+    mkBasicTxOut
+        addr
+        (MaryValue (Coin 100_000_000) (MultiAsset Map.empty))
+        & referenceScriptTxOutL .~ SJust script
+
+scriptAddr :: Network -> ScriptHash -> Addr
+scriptAddr network scriptHash =
+    Addr
+        network
+        (ScriptHashObj scriptHash)
+        (StakeRefBase (ScriptHashObj scriptHash))
+
+txOutRef :: TxId -> Integer -> TxIn
+txOutRef txId ix =
+    TxIn txId (mkTxIxPartial ix)
+
+selectLargestAdaUtxo
+    :: String
+    -> [(TxIn, TxOut ConwayEra)]
+    -> IO (TxIn, TxOut ConwayEra)
+selectLargestAdaUtxo label utxos =
+    case foldr choose Nothing utxos of
+        Just (_, selected) -> pure selected
+        Nothing -> die ("no pure-ADA UTxO for " <> label)
+  where
+    choose utxo@(_, txOut) best =
+        let MaryValue (Coin lovelace) (MultiAsset assets) =
+                txOut ^. valueTxOutL
+        in  if Map.null assets
+                then case best of
+                    Nothing -> Just (lovelace, utxo)
+                    Just (bestLovelace, _)
+                        | lovelace > bestLovelace ->
+                            Just (lovelace, utxo)
+                    _ -> best
+                else best
+
+waitForTxChange :: Provider IO -> TxId -> Addr -> Int -> IO ()
+waitForTxChange _ txId _ attempts
+    | attempts <= 0 =
+        die ("timed out waiting for tx change output: " <> show txId)
+waitForTxChange provider txId addr attempts = do
+    utxos <- queryUTxOs provider addr
+    if any (hasTxId txId . fst) utxos
+        then pure ()
+        else do
+            threadDelay 500_000
+            waitForTxChange provider txId addr (attempts - 1)
+
+waitForTxIns
+    :: Provider IO
+    -> [TxIn]
+    -> Int
+    -> IO [(TxIn, TxOut ConwayEra)]
+waitForTxIns _ refs attempts
+    | attempts <= 0 =
+        die
+            ( "timed out waiting for UTxOs: "
+                <> show (txInToText <$> refs)
+            )
+waitForTxIns provider refs attempts = do
+    found <- queryUTxOByTxIn provider (Set.fromList refs)
+    if all (`Map.member` found) refs
+        then
+            pure
+                [ (ref, found Map.! ref)
+                | ref <- refs
+                ]
+        else do
+            threadDelay 500_000
+            waitForTxIns provider refs (attempts - 1)
+
+waitForChangeTxIn :: Provider IO -> TxId -> Addr -> Int -> IO TxIn
+waitForChangeTxIn _ txId _ attempts
+    | attempts <= 0 =
+        die ("timed out waiting for change from tx: " <> show txId)
+waitForChangeTxIn provider txId addr attempts = do
+    utxos <- queryUTxOs provider addr
+    case [txIn | (txIn, _) <- utxos, hasTxId txId txIn] of
+        txIn : _ -> pure txIn
+        [] -> do
+            threadDelay 500_000
+            waitForChangeTxIn provider txId addr (attempts - 1)
+
+hasTxId :: TxId -> TxIn -> Bool
+hasTxId txId (TxIn observed _) =
+    observed == txId
+
+addSlots :: Word64 -> SlotNo -> SlotNo
+addSlots delta (SlotNo slot) =
+    SlotNo (slot + delta)
+
 -- ---------------------------------------------------------------------
 -- Smoke script handoff
 -- ---------------------------------------------------------------------
@@ -600,7 +826,16 @@ callSmokeScript
     -> FilePath
     -> [(String, String)]
     -> IO ExitCode
-callSmokeScript opts runDir extraEnv = do
+callSmokeScript opts =
+    callSmokeScriptPhase opts (hoPhase opts)
+
+callSmokeScriptPhase
+    :: HostOpts
+    -> String
+    -> FilePath
+    -> [(String, String)]
+    -> IO ExitCode
+callSmokeScriptPhase opts phase runDir extraEnv = do
     let smokeScript = "scripts/smoke/smoke.sh"
     smokeAbs <- makeAbsolute smokeScript
     ok <- doesFileExist smokeAbs
@@ -612,7 +847,7 @@ callSmokeScript opts runDir extraEnv = do
             , "--run-dir"
             , runDir
             , "--phase"
-            , hoPhase opts
+            , phase
             , "--timeout-seconds"
             , show (hoTimeoutSeconds opts)
             , "--force"
@@ -624,6 +859,307 @@ callSmokeScript opts runDir extraEnv = do
                 }
     (_, _, _, ph) <- createProcess cp
     waitForProcess ph
+
+skipRerateIfNoPlutusV2CostModel :: FilePath -> NetworkMagic -> IO ()
+skipRerateIfNoPlutusV2CostModel socket magic =
+    withLocalNodeClient magic socket $ \provider _submitter -> do
+        pp <- queryCurrentPParams provider
+        unless (hasCostModel PlutusV2 pp) $ do
+            putStrLn
+                "SKIPPED: devnet has no PlutusV2 cost model; blocked on #410"
+            exitSuccess
+
+queryCurrentPParams :: Provider IO -> IO (PParams ConwayEra)
+queryCurrentPParams provider =
+    Backend.singleShotWithAcquired provider $ \qh ->
+        queryProtocolParamsH qh
+
+hasCostModel :: Language -> PParams ConwayEra -> Bool
+hasCostModel language pp =
+    Map.member language (costModelsValid (pp ^. ppCostModelsL))
+
+prepareRerateSmokeSetup
+    :: FilePath
+    -> FilePath
+    -> NetworkMagic
+    -> Text
+    -> Text
+    -> IO [(String, String)]
+prepareRerateSmokeSetup runDir socket magic fundingOwner voterOwner = do
+    let phaseDir = runDir </> "phases" </> "rerate"
+        registryPath = runDir </> "registry-init" </> "registry.json"
+        metadataPath = phaseDir </> "metadata.json"
+    createDirectoryIfMissing True phaseDir
+    requireExistingFile registryPath
+    treasuryHash <-
+        readNestedText registryPath ["scripts", "treasuryScriptHash"]
+    treasuryAddress <-
+        readNestedText registryPath ["addresses", "treasuryAddress"]
+    permissionsHash <-
+        readNestedText registryPath ["scripts", "permissionsScriptHash"]
+    registryPolicy <-
+        readNestedText registryPath ["policies", "registryPolicyId"]
+    scopesRef <-
+        readNestedText registryPath ["anchors", "scopesDeployedAt"]
+    permissionsRef <-
+        readNestedText registryPath ["anchors", "permissionsDeployedAt"]
+    treasuryRef <-
+        readNestedText registryPath ["anchors", "treasuryDeployedAt"]
+    registryRef <-
+        readNestedText registryPath ["anchors", "registryDeployedAt"]
+    writeRerateMetadata
+        metadataPath
+        treasuryHash
+        treasuryAddress
+        permissionsHash
+        registryPolicy
+        scopesRef
+        permissionsRef
+        treasuryRef
+        registryRef
+        fundingOwner
+        voterOwner
+
+    (walletTxIn, oldOrderTxIn) <-
+        withLocalNodeClient magic socket $ \provider submitter -> do
+            pp <-
+                Backend.singleShotWithAcquired provider $ \qh ->
+                    queryProtocolParamsH qh
+            utxos <- queryUTxOs provider genesisPaymentAddr
+            seed@(seedIn, _) <-
+                selectLargestAdaUtxo "rerate setup funding" utxos
+            orderScript <- orderScriptFromBlob sundaeOrderValidatorBlob
+            snapshot <- queryLedgerSnapshot provider
+            let orderAddress =
+                    scriptAddr
+                        Testnet
+                        (Core.hashScript @ConwayEra orderScript)
+                orderRefOut =
+                    refScriptTxOut orderAddress orderScript
+                oldOrderLovelace = 15_000_000
+                oldOrderUsdm = 6
+                orderValue =
+                    MaryValue
+                        ( Coin
+                            ( oldOrderLovelace
+                                + sundaeProtocolFeeLovelace
+                                + minUtxoDepositLovelace
+                            )
+                        )
+                        (MultiAsset Map.empty)
+                upperSlot = addSlots 20 (ledgerTipSlot snapshot)
+                interpret :: InterpretIO NoCtx
+                interpret =
+                    InterpretIO $ \case {}
+                eval tx =
+                    fmap
+                        (Map.map (either (Left . show) Right))
+                        (evaluateTx provider tx)
+            datumParams <-
+                rerateDatumParams fundingOwner voterOwner treasuryHash
+            let orderDatum =
+                    swapOrderDatum
+                        datumParams
+                        oldOrderLovelace
+                        oldOrderUsdm
+                prog :: TxBuild NoCtx Void ()
+                prog = do
+                    _ <- spend seedIn
+                    refIx <- output orderRefOut
+                    checkMinUtxo pp refIx
+                    _ <-
+                        payTo'
+                            orderAddress
+                            orderValue
+                            (RawPlutusData orderDatum)
+                    validTo upperSlot
+            txId <-
+                buildSubmitAndWait
+                    "rerate setup"
+                    provider
+                    submitter
+                    pp
+                    interpret
+                    eval
+                    [seed]
+                    []
+                    genesisPaymentAddr
+                    prog
+            let orderRef = txOutRef txId 0
+                oldOrder = txOutRef txId 1
+            _ <- waitForTxIns provider [orderRef, oldOrder] 60
+            wallet <- waitForChangeTxIn provider txId genesisPaymentAddr 60
+            pure (wallet, oldOrder)
+
+    pure
+        [ ("CLI_SMOKE_RERATE_METADATA", metadataPath)
+        , ("CLI_SMOKE_RERATE_WALLET_TXIN", T.unpack (txInToText walletTxIn))
+        , ("CLI_SMOKE_RERATE_COLLATERAL_TXIN", T.unpack (txInToText walletTxIn))
+        ,
+            ( "CLI_SMOKE_RERATE_OLD_ORDER_TXIN"
+            , T.unpack (txInToText oldOrderTxIn)
+            )
+        ]
+
+writeRerateMetadata
+    :: FilePath
+    -> Text
+    -> Text
+    -> Text
+    -> Text
+    -> Text
+    -> Text
+    -> Text
+    -> Text
+    -> Text
+    -> Text
+    -> IO ()
+writeRerateMetadata
+    path
+    treasuryHash
+    treasuryAddress
+    permissionsHash
+    registryPolicy
+    scopesRef
+    permissionsRef
+    treasuryRef
+    registryRef
+    fundingOwner
+    voterOwner = do
+        let scopeMetaWithOwner owner =
+                object
+                    [ "owner" .= owner
+                    , "budget" .= (1_000_000_000 :: Integer)
+                    , "address" .= treasuryAddress
+                    , "treasury_script"
+                        .= object
+                            [ "hash" .= treasuryHash
+                            , "deployed_at" .= treasuryRef
+                            ]
+                    , "permissions_script"
+                        .= object
+                            [ "hash" .= permissionsHash
+                            , "deployed_at" .= permissionsRef
+                            ]
+                    , "registry_script"
+                        .= object
+                            [ "hash" .= registryPolicy
+                            , "deployed_at" .= registryRef
+                            ]
+                    ]
+        BSL.writeFile path $
+            encode $
+                object
+                    [ "scope_owners" .= scopesRef
+                    , "treasuries"
+                        .= object
+                            [ "core_development" .= scopeMetaWithOwner fundingOwner
+                            , "ops_and_use_cases" .= scopeMetaWithOwner voterOwner
+                            , "network_compliance" .= scopeMetaWithOwner fundingOwner
+                            , "middleware" .= scopeMetaWithOwner voterOwner
+                            ]
+                    ]
+
+rerateDatumParams :: Text -> Text -> Text -> IO SwapOrderDatumParams
+rerateDatumParams fundingOwner voterOwner treasuryHash = do
+    fundingBytes <- expectRightIO $ decodeHexBytes 28 fundingOwner
+    voterBytes <- expectRightIO $ decodeHexBytes 28 voterOwner
+    treasuryBytes <- expectRightIO $ decodeHexBytes 28 treasuryHash
+    poolId <- expectRightIO $ decodeHexBytes 28 sundaeUsdmPoolHex
+    usdmPolicy <- expectRightIO $ decodeHexBytesAny usdmPolicyHex
+    usdmToken <- expectRightIO $ decodeHexBytesAny usdmAssetHex
+    pure
+        SwapOrderDatumParams
+            { sodPoolId = poolId
+            , sodCoreOwner = fundingBytes
+            , sodOpsOwner = voterBytes
+            , sodNetworkComplianceOwner = fundingBytes
+            , sodMiddlewareOwner = voterBytes
+            , sodSundaeProtocolFeeLovelace = sundaeProtocolFeeLovelace
+            , sodTreasuryScriptHash = treasuryBytes
+            , sodUsdmPolicy = usdmPolicy
+            , sodUsdmToken = usdmToken
+            }
+
+expectRightIO :: Either String a -> IO a
+expectRightIO =
+    either die pure
+
+readNestedText :: FilePath -> [Text] -> IO Text
+readNestedText path segments = do
+    value <-
+        (eitherDecodeFileStrict' path :: IO (Either String Value))
+            >>= either
+                (die . (("cannot parse " <> path <> ": ") <>))
+                pure
+    either
+        (die . (("missing field in " <> path <> ": ") <>))
+        pure
+        (parseEither (go segments) value)
+  where
+    go :: [Text] -> Value -> Parser Text
+    go [] (Aeson.String t) = pure t
+    go [] _ = fail "expected text"
+    go (segment : rest) value =
+        withObject
+            "object"
+            ( \root ->
+                root .: Key.fromText segment >>= go rest
+            )
+            value
+
+buildSubmitAndWait
+    :: String
+    -> Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> InterpretIO NoCtx
+    -> ( ConwayTx
+         -> IO
+                ( Map.Map
+                    (ConwayPlutusPurpose AsIx ConwayEra)
+                    (Either String ExUnits)
+                )
+       )
+    -> [(TxIn, TxOut ConwayEra)]
+    -> [(TxIn, TxOut ConwayEra)]
+    -> Addr
+    -> TxBuild NoCtx Void ()
+    -> IO TxId
+buildSubmitAndWait
+    label
+    provider
+    submitter
+    pp
+    interpret
+    eval
+    inputs
+    refs
+    changeAddr
+    prog =
+        build
+            (mkPParamsBound pp)
+            interpret
+            eval
+            inputs
+            refs
+            changeAddr
+            prog
+            >>= \case
+                Left err ->
+                    die (label <> ": " <> show err)
+                Right tx -> do
+                    let signed = addKeyWitness genesisSignKey tx
+                        txId = txIdTx signed
+                    submitTx submitter signed >>= \case
+                        Submitted _ -> pure ()
+                        Rejected reason ->
+                            die $
+                                label
+                                    <> " rejected: "
+                                    <> BS8.unpack reason
+                    waitForTxChange provider txId changeAddr 60
+                    pure txId
 
 mergeEnvironment
     :: [(String, String)]
@@ -2040,6 +2576,192 @@ data ReorganizeAssertionRequest = ReorganizeAssertionRequest
     , rarSummaryPath :: !FilePath
     , rarScope :: !Text
     }
+
+runRerateAssertionsIfPresent
+    :: FilePath -> FilePath -> NetworkMagic -> Bool -> IO ()
+runRerateAssertionsIfPresent runDir socket magic required = do
+    let requestPath =
+            runDir
+                </> "chain"
+                </> "rerate.assertions.request.json"
+    exists <- doesFileExist requestPath
+    if exists
+        then runRerateAssertions runDir socket magic
+        else
+            when required $
+                die $
+                    "rerate-assertion: missing request " <> requestPath
+
+runRerateAssertions :: FilePath -> FilePath -> NetworkMagic -> IO ()
+runRerateAssertions runDir socket magic = do
+    let requestPath =
+            runDir
+                </> "chain"
+                </> "rerate.assertions.request.json"
+        reportPath =
+            runDir </> "chain" </> "rerate.assertions.json"
+        logPath =
+            runDir </> "chain" </> "rerate.assertions.log"
+    createDirectoryIfMissing True (runDir </> "chain")
+    raw <-
+        eitherDecodeFileStrict' requestPath
+            >>= either (die . badRequest) pure
+    request <-
+        either (die . badRequest) pure $
+            parseEither parseRerateAssertionRequest raw
+    summaryExists <- doesFileExist (raaSummaryPath request)
+    unless summaryExists $
+        die $
+            "rerate-assertion: missing summary "
+                <> raaSummaryPath request
+    unsignedExists <- doesFileExist (raaUnsignedPath request)
+    unless unsignedExists $
+        die $
+            "rerate-assertion: missing unsigned artifact "
+                <> raaUnsignedPath request
+    (oldPresent, newPresent) <-
+        withLocalNodeBackend magic socket $ \backend ->
+            Backend.singleShotWithAcquired backend $ \qh ->
+                waitForRerateFlip
+                    qh
+                    (raaOldOrderTxIn request)
+                    (raaNewOrderTxIn request)
+                    60
+    let passed = not oldPresent && newPresent
+        report =
+            object
+                [ "phase" .= ("rerate" :: Text)
+                , "status" .= if passed then ("passed" :: Text) else "failed"
+                , "phase2" .= ("accepted" :: Text)
+                , "submittedTxId" .= raaSubmittedTxId request
+                , "oldOrderTxIn" .= txInToText (raaOldOrderTxIn request)
+                , "newOrderTxIn" .= txInToText (raaNewOrderTxIn request)
+                , "oldOrderPresent" .= oldPresent
+                , "newOrderPresent" .= newPresent
+                ]
+    BSL.writeFile reportPath (encode report)
+    writeFile logPath (unlines (renderChainAssertionLog report))
+    updateRerateSummaryVerdict
+        (raaSummaryPath request)
+        passed
+        oldPresent
+        newPresent
+        reportPath
+    if passed
+        then
+            hPutStrLn
+                stderr
+                ( "devnet-cli-smoke-host: rerate phase-2 accepted "
+                    <> "and UTxO flip verified ("
+                    <> reportPath
+                    <> ")"
+                )
+        else
+            die
+                ( "RERATE_UTXO_FLIP_FAILED: submitted rerate tx did "
+                    <> "not consume old order and create replacement; see "
+                    <> reportPath
+                )
+  where
+    badRequest err =
+        "rerate-assertion: cannot parse request: " <> err
+
+waitForRerateFlip
+    :: Backend.QueryHandle IO
+    -> TxIn
+    -> TxIn
+    -> Int
+    -> IO (Bool, Bool)
+waitForRerateFlip _ oldOrder newOrder attempts
+    | attempts <= 0 =
+        die
+            ( "rerate-assertion: timed out waiting for old/new "
+                <> "order UTxO flip (old="
+                <> T.unpack (txInToText oldOrder)
+                <> ", new="
+                <> T.unpack (txInToText newOrder)
+                <> ")"
+            )
+waitForRerateFlip qh oldOrder newOrder attempts = do
+    found <-
+        Backend.queryUTxOByTxInH qh (Set.fromList [oldOrder, newOrder])
+    let oldPresent = Map.member oldOrder found
+        newPresent = Map.member newOrder found
+    if not oldPresent && newPresent
+        then pure (oldPresent, newPresent)
+        else do
+            threadDelay 500_000
+            waitForRerateFlip qh oldOrder newOrder (attempts - 1)
+
+updateRerateSummaryVerdict
+    :: FilePath -> Bool -> Bool -> Bool -> FilePath -> IO ()
+updateRerateSummaryVerdict
+    summaryPath
+    passed
+    oldPresent
+    newPresent
+    reportPath = do
+        raw <-
+            eitherDecodeFileStrict' summaryPath
+                >>= either (die . badSummary) pure
+        let baseObj = case raw of
+                Aeson.Object o -> o
+                _ -> KeyMap.empty
+            statusText :: Text
+            statusText =
+                if passed then "passed" else "failed"
+            updated =
+                KeyMap.union
+                    ( KeyMap.fromList
+                        [
+                            ( Key.fromString "status"
+                            , Aeson.String statusText
+                            )
+                        ,
+                            ( Key.fromString "phase2"
+                            , Aeson.String "accepted"
+                            )
+                        ,
+                            ( Key.fromString "oldOrderPresent"
+                            , Aeson.toJSON oldPresent
+                            )
+                        ,
+                            ( Key.fromString "newOrderPresent"
+                            , Aeson.toJSON newPresent
+                            )
+                        ,
+                            ( Key.fromString "chainAssertions"
+                            , Aeson.toJSON reportPath
+                            )
+                        ]
+                    )
+                    baseObj
+        BSL.writeFile summaryPath (encode (Aeson.Object updated))
+      where
+        badSummary err =
+            "rerate-assertion: cannot parse summary: " <> err
+
+data RerateAssertionRequest = RerateAssertionRequest
+    { raaSummaryPath :: !FilePath
+    , raaUnsignedPath :: !FilePath
+    , raaOldOrderTxIn :: !TxIn
+    , raaNewOrderTxIn :: !TxIn
+    , raaSubmittedTxId :: !Text
+    }
+
+parseRerateAssertionRequest :: Value -> Parser RerateAssertionRequest
+parseRerateAssertionRequest =
+    withObject "RerateAssertionRequest" $ \root -> do
+        oldText <- root .: "oldOrderTxIn"
+        newText <- root .: "newOrderTxIn"
+        oldOrder <- either fail pure (txInFromText oldText)
+        newOrder <- either fail pure (txInFromText newText)
+        RerateAssertionRequest
+            <$> root .: "summaryPath"
+            <*> root .: "unsignedPath"
+            <*> pure oldOrder
+            <*> pure newOrder
+            <*> root .: "submittedTxId"
 
 parseReorganizeAssertionRequest
     :: Value -> Parser ReorganizeAssertionRequest

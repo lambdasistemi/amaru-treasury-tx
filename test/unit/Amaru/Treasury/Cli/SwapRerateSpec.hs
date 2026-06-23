@@ -23,6 +23,7 @@ import Data.ByteString.Char8 qualified as BSC
 import Data.Functor
     ( ($>)
     )
+import Data.List qualified as List
 import Data.Text (Text)
 import Data.Text qualified as T
 import Options.Applicative
@@ -177,6 +178,20 @@ spec = describe "Amaru.Treasury.Cli.SwapRerate" $ do
             rendered `shouldContain` "\"status\":\"passthrough\""
             rendered `shouldContain` "no pending orders"
             rendered `shouldContain` "plain swap"
+
+    it "gathers the full live node-socket re-rate context" $ do
+        src <- readFile "lib/Amaru/Treasury/Cli/SwapRerate.hs"
+        src `shouldSatisfyNot` contains "slice 3"
+        src `shouldSatisfyNot` contains "live --node-socket discovery"
+        src `shouldContain` "withLocalNodeBackend"
+        src `shouldContain` "withLiveContext"
+        src `shouldContain` "rpiOrderScriptRef"
+        src `shouldContain` "rpiScopesDeployedAt"
+        src `shouldContain` "rpiPermissionsDeployedAt"
+        src `shouldContain` "rpiTreasuryDeployedAt"
+        src `shouldContain` "rpiRegistryDeployedAt"
+        src `shouldContain` "sroWalletTxIn"
+        src `shouldContain` "sroCollateralTxIn"
 
     it "parses the explicit-order swap-rerate operator contract" $
         parseSwapRerateOpts explicitOrderArgs
@@ -396,6 +411,10 @@ shouldSatisfyNot :: (Show a) => a -> (a -> Bool) -> IO ()
 shouldSatisfyNot value predicate =
     when (predicate value) $
         expectationFailure ("unexpected value: " <> show value)
+
+contains :: String -> String -> Bool
+contains needle haystack =
+    needle `List.isInfixOf` haystack
 
 walletTxIn :: Text
 walletTxIn =

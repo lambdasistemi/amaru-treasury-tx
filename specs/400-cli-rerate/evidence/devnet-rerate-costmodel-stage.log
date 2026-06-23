@@ -1,0 +1,95 @@
+warning: Git tree '/code/amaru-treasury-tx-issue-400' is dirty
+scripts/smoke/smoke.sh --phase rerate --timeout-seconds 900
+cli-devnet-smoke: phase=rerate run-dir=runs/devnet-cli/20260623T125829Z timeout=900s
+cli-devnet-smoke: phase 'rerate' requires a live DevNet; routing through devnet-cli-smoke-host
+cli-devnet-smoke: inside-devnet mode (host-provided DevNet)
+cli-devnet-smoke: phase=registry-stake run-dir=/code/amaru-treasury-tx-issue-400/runs/devnet-cli/20260623T125829Z timeout=900s
+cli-devnet-smoke: registry-stake: using /code/amaru-treasury-tx-issue-400/dist-newstyle/build/x86_64-linux/ghc-9.12.3/amaru-treasury-tx-0.2.19.0/x/amaru-treasury-tx/noopt/build/amaru-treasury-tx/amaru-treasury-tx
+cli-devnet-smoke: registry-stake: funding wallet addr = addr_test1vrujxvwcstf4upvh332cx54xd3slga5r3c0zl5wy4elup4s36t0ct
+cli-devnet-smoke: registry-stake: create funding vault
+cli-devnet-smoke: registry-stake: registry-init-wizard seed-split --bootstrap
+cli-devnet-smoke: seed-split: tx-build
+cli-devnet-smoke: seed-split: witness (identity=devnet_funding)
+cli-devnet-smoke: seed-split: attach-witness
+cli-devnet-smoke: seed-split: submit
+cli-devnet-smoke: seed-split: tx-id 47fd794d34f5be5800d379c7c0ebef25b387ccd2c0caf5d90ebbe72b64dc6d1c
+cli-devnet-smoke: registry-stake: registry-init-wizard mint --bootstrap
+cli-devnet-smoke: mint: tx-build
+cli-devnet-smoke: mint: witness (identity=devnet_funding)
+cli-devnet-smoke: mint: attach-witness
+cli-devnet-smoke: mint: submit
+cli-devnet-smoke: mint: tx-id df6900982a133d47b53ac88e33a1bf4c5509cb23442880bd06511fd3b07ff773
+cli-devnet-smoke: registry-stake: registry-init-wizard reference-scripts --bootstrap
+cli-devnet-smoke: reference-scripts: tx-build
+cli-devnet-smoke: reference-scripts: witness (identity=devnet_funding)
+cli-devnet-smoke: reference-scripts: attach-witness
+cli-devnet-smoke: reference-scripts: submit
+cli-devnet-smoke: reference-scripts: tx-id 76d8750ac92cb2acc4560092dfe5a6deb04c5df47e0f94322d79db4c171834b5
+cli-devnet-smoke: registry-stake: registry-init-wizard write-artifacts
+cli-devnet-smoke: registry-stake: stake-reward-init-wizard script-account
+cli-devnet-smoke: stake-reward-script-account: tx-build
+cli-devnet-smoke: stake-reward-script-account: witness (identity=devnet_funding)
+cli-devnet-smoke: stake-reward-script-account: attach-witness
+cli-devnet-smoke: stake-reward-script-account: submit
+cli-devnet-smoke: stake-reward-script-account: tx-id 82724e9a87e33c1cf5f33e1678dbc3450e70c5ba74a8bc2627f6ab858ac69662
+cli-devnet-smoke: registry-stake: stake-reward-init-wizard plain-account
+cli-devnet-smoke: stake-reward-plain-account: tx-build
+cli-devnet-smoke: stake-reward-plain-account: witness (identity=devnet_funding)
+cli-devnet-smoke: stake-reward-plain-account: attach-witness
+cli-devnet-smoke: stake-reward-plain-account: submit
+cli-devnet-smoke: stake-reward-plain-account: tx-id c649b8e3859c593aa8016a5a70cda08d5523cd9743bfd6ff5b504b3973323b39
+cli-devnet-smoke: registry-stake: complete (summary in /code/amaru-treasury-tx-issue-400/runs/devnet-cli/20260623T125829Z/phases/registry-stake/summary.json)
+devnet-cli-smoke-host: rerate cost-model proposal rejected: HardForkApplyTxErrFromEra S (S (S (S (S (S (Z (WrapApplyTxErr {unwrapApplyTxErr = ConwayApplyTxError (ConwayGovFailure (ProposalReturnAccountDoesNotExist (AccountAddress {aaNetworkId = Testnet, aaId = AccountId {unAccountId = KeyHashObj (KeyHash {unKeyHash = "f92331d882d35e05978c558352a66c61f476838e1e2fd1c4ae7fc0d6"})}})) :| [])})))))))
+=== Node log (last 50) ===
+[2026-06-23 12:58:50.3005Z][development:Forge.Loop.NodeIsLeader](Info,41) Leading slot 143
+[2026-06-23 12:58:50.3006Z][development:Forge.Loop.ForgedBlock](Info,41) Forged block in slot 143
+[2026-06-23 12:58:50.3012Z][development:ChainDB.AddBlockEvent.AddBlockValidation.ValidCandidate](Info,19) Valid candidate 67f3a7db8643da4822955671ce680d333ff99acadccdeb4fd09966a67c6e9374 at slot 143
+[2026-06-23 12:58:50.3014Z][development:Forge.Loop.AdoptedBlock](Info,41) Adopted block forged in slot 143: 67f3a7db8643da4822955671ce680d333ff99acadccdeb4fd09966a67c6e9374
+[2026-06-23 12:58:50.3785Z][development:LedgerMetrics](Info,13) Ledger metrics  utxoSize 7 delegMapSize 1 chainDensity 1.0
+[2026-06-23 12:58:50.4004Z][development:Forge.Loop.StartLeadershipCheck](Info,41) Checking for leadership in slot 144
+[2026-06-23 12:58:50.4005Z][development:Forge.Stats.ForgingStats](Info,41) Node cannot forge 0 node is leader 144 blocks forged 144 slots missed 0
+[2026-06-23 12:58:50.4006Z][development:Forge.StateInfo.StateInfo](Info,41) With label "Cardano", KES info startPeriod  0 currPeriod 0 endPeriod 60, 60 KES periods until expiry.
+[2026-06-23 12:58:50.4008Z][development:Forge.Loop.NodeIsLeader](Info,41) Leading slot 144
+[2026-06-23 12:58:50.4009Z][development:Forge.Loop.ForgedBlock](Info,41) Forged block in slot 144
+[2026-06-23 12:58:50.4015Z][development:ChainDB.AddBlockEvent.AddBlockValidation.ValidCandidate](Info,19) Valid candidate 9d1fe122f3f60a555b5b9210d4c6dc6145d63cfde5a709024f0bc70c09401a74 at slot 144
+[2026-06-23 12:58:50.4018Z][development:Forge.Loop.AdoptedBlock](Info,41) Adopted block forged in slot 144: 9d1fe122f3f60a555b5b9210d4c6dc6145d63cfde5a709024f0bc70c09401a74
+[2026-06-23 12:58:50.4723Z][development:Net.ConnectionManager.Local.ConnectionManagerCounters](Info,181) TrConnectionManagerCounters (ConnectionManagerCounters {fullDuplexConns = 0, duplexConns = 0, unidirectionalConns = 0, inboundConns = 1, outboundConns = 0, terminatingConns = 0})
+[2026-06-23 12:58:50.4724Z][development:Net.ConnectionManager.Local.ConnectionHandler.HandshakeSuccess](Info,182) TrConnectionHandler (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock@21"}) (TrHandshakeSuccess NodeToClientV_23 (NodeToClientVersionData {networkMagic = NetworkMagic {unNetworkMagic = 42}, query = False}))
+[2026-06-23 12:58:50.4724Z][development:Net.Mux.Local.State](Info,182) With mux bearer ConnectionId LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock" LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock@21". State: Mature
+[2026-06-23 12:58:50.4725Z][development:Net.ConnectionManager.Local.ConnectionManagerCounters](Info,181) TrConnectionManagerCounters (ConnectionManagerCounters {fullDuplexConns = 0, duplexConns = 0, unidirectionalConns = 1, inboundConns = 1, outboundConns = 0, terminatingConns = 0})
+[2026-06-23 12:58:50.4725Z][development:Net.InboundGovernor.Local.InboundGovernorCounters](Info,45) TrInboundGovernorCounters (Counters {coldPeersRemote = 0, idlePeersRemote = 1, warmPeersRemote = 0, hotPeersRemote = 0})
+[2026-06-23 12:58:50.4726Z][development:Net.ConnectionManager.Local.ConnectionManagerCounters](Info,45) TrConnectionManagerCounters (ConnectionManagerCounters {fullDuplexConns = 0, duplexConns = 0, unidirectionalConns = 1, inboundConns = 1, outboundConns = 0, terminatingConns = 0})
+[2026-06-23 12:58:50.4726Z][development:Net.InboundGovernor.Local.PromotedToWarmRemote](Info,45) TrPromotedToWarmRemote (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock@21"}) (OperationSuccess (InboundIdleSt Unidirectional))
+[2026-06-23 12:58:50.4726Z][development:Net.InboundGovernor.Local.InboundGovernorCounters](Info,45) TrInboundGovernorCounters (Counters {coldPeersRemote = 0, idlePeersRemote = 0, warmPeersRemote = 1, hotPeersRemote = 0})
+[2026-06-23 12:58:50.4726Z][development:StateQueryServer.Receive.Acquire](Info,185) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock@21"}). Receive: 
+[2026-06-23 12:58:50.4726Z][development:Net.InboundGovernor.Local.PromotedToHotRemote](Info,45) TrPromotedToHotRemote (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock@21"})
+[2026-06-23 12:58:50.4726Z][development:Net.InboundGovernor.Local.InboundGovernorCounters](Info,45) TrInboundGovernorCounters (Counters {coldPeersRemote = 0, idlePeersRemote = 0, warmPeersRemote = 0, hotPeersRemote = 1})
+[2026-06-23 12:58:50.4730Z][development:StateQueryServer.Receive.Query](Info,185) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock@21"}). Receive: 
+[2026-06-23 12:58:50.5007Z][development:Forge.Loop.StartLeadershipCheck](Info,41) Checking for leadership in slot 145
+[2026-06-23 12:58:50.5007Z][development:Forge.Stats.ForgingStats](Info,41) Node cannot forge 0 node is leader 145 blocks forged 145 slots missed 0
+[2026-06-23 12:58:50.5009Z][development:Forge.StateInfo.StateInfo](Info,41) With label "Cardano", KES info startPeriod  0 currPeriod 0 endPeriod 60, 60 KES periods until expiry.
+[2026-06-23 12:58:50.5011Z][development:Forge.Loop.NodeIsLeader](Info,41) Leading slot 145
+[2026-06-23 12:58:50.5013Z][development:Forge.Loop.ForgedBlock](Info,41) Forged block in slot 145
+[2026-06-23 12:58:50.5021Z][development:ChainDB.AddBlockEvent.AddBlockValidation.ValidCandidate](Info,19) Valid candidate 27f0cb0130a30c9c1386a3a4d06ec777d1260395868bc52c6e470402175de0a2 at slot 145
+[2026-06-23 12:58:50.5021Z][development:ChainDB.AddBlockEvent.AddedToCurrentChain](Notice,19) Chain extended, new tip: 27f0cb0130a30c9c1386a3a4d06ec777d1260395868bc52c6e470402175de0a2 at slot 145
+[2026-06-23 12:58:50.5024Z][development:Forge.Loop.AdoptedBlock](Info,41) Adopted block forged in slot 145: 27f0cb0130a30c9c1386a3a4d06ec777d1260395868bc52c6e470402175de0a2
+[2026-06-23 12:58:50.5260Z][development:StateQueryServer.Receive.Release](Info,185) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock@21"}). Receive: 
+[2026-06-23 12:58:50.5850Z][development:StateQueryServer.Receive.Acquire](Info,185) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock@21"}). Receive: 
+[2026-06-23 12:58:50.5853Z][development:StateQueryServer.Receive.Query](Info,185) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock@21"}). Receive: 
+[2026-06-23 12:58:50.5856Z][development:StateQueryServer.Receive.Release](Info,185) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock@21"}). Receive: 
+[2026-06-23 12:58:50.5856Z][development:StateQueryServer.Receive.Acquire](Info,185) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock@21"}). Receive: 
+[2026-06-23 12:58:50.5858Z][development:StateQueryServer.Receive.Query](Info,185) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock@21"}). Receive: 
+[2026-06-23 12:58:50.5860Z][development:StateQueryServer.Receive.Query](Info,185) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock@21"}). Receive: 
+[2026-06-23 12:58:50.5862Z][development:StateQueryServer.Receive.Query](Info,185) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock@21"}). Receive: 
+[2026-06-23 12:58:50.5863Z][development:StateQueryServer.Receive.Release](Info,185) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.HaAfF4/cardano-e2e/node.sock@21"}). Receive: 
+[2026-06-23 12:58:50.6013Z][development:Forge.Loop.StartLeadershipCheck](Info,41) Checking for leadership in slot 146
+[2026-06-23 12:58:50.6014Z][development:Forge.Stats.ForgingStats](Info,41) Node cannot forge 0 node is leader 146 blocks forged 146 slots missed 0
+[2026-06-23 12:58:50.6015Z][development:Forge.StateInfo.StateInfo](Info,41) With label "Cardano", KES info startPeriod  0 currPeriod 0 endPeriod 60, 60 KES periods until expiry.
+[2026-06-23 12:58:50.6017Z][development:Forge.Loop.NodeIsLeader](Info,41) Leading slot 146
+[2026-06-23 12:58:50.6018Z][development:Forge.Loop.ForgedBlock](Info,41) Forged block in slot 146
+[2026-06-23 12:58:50.6030Z][development:ChainDB.AddBlockEvent.AddBlockValidation.ValidCandidate](Info,19) Valid candidate a6a5a83997a3ce0956d0fbbd279884b3fc9d59dcff87bc49a811a87b99e36567 at slot 146
+[2026-06-23 12:58:50.6043Z][development:Forge.Loop.AdoptedBlock](Info,41) Adopted block forged in slot 146: a6a5a83997a3ce0956d0fbbd279884b3fc9d59dcff87bc49a811a87b99e36567
+[2026-06-23 12:58:50.6540Z][development:TxSubmission.LocalServer.ReceivedTx](Info,186) {"data":{"kind":"ReceivedTx"}}
+[2026-06-23 12:58:50.6546Z][development:Mempool.RejectedTx](Info,186) {"data":{"kind":"TraceMempoolRejectedTx","mempoolSize":{"bytes":0,"numTxs":0},"tx":{"txid":"f9e333df"}}}
+
+error: Recipe `devnet-cli-smoke` failed on line 130 with exit code 1

@@ -1,0 +1,57 @@
+warning: Git tree '/code/amaru-treasury-tx-issue-400' is dirty
+scripts/smoke/smoke.sh --phase rerate --timeout-seconds 900
+cli-devnet-smoke: phase=rerate run-dir=runs/devnet-cli/20260623T130855Z timeout=900s
+cli-devnet-smoke: phase 'rerate' requires a live DevNet; routing through devnet-cli-smoke-host
+SKIPPED: devnet has no PlutusV2 cost model; blocked on #410
+=== Node log (last 50) ===
+[2026-06-23 13:09:02.0051Z][development:Forge.Stats.ForgingStats](Info,41) Node cannot forge 0 node is leader 0 blocks forged 0 slots missed 0
+[2026-06-23 13:09:02.0052Z][development:Net.Server.Local.Started](Notice,43) TrServerStarted [LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock"]
+[2026-06-23 13:09:02.0053Z][development:Net.Peers.LocalRoot.LocalRootDomains](Info,49) TraceLocalRootDomains [(HotValency {getHotValency = 1},WarmValency {getWarmValency = 1},fromList [])]
+[2026-06-23 13:09:02.0053Z][development:Net.Peers.LocalRoot.LocalRootDNSMap](Info,49) TraceLocalRootDNSMap (fromList [])
+[2026-06-23 13:09:02.0055Z][development:Net.Server.Remote.Started](Notice,42) TrServerStarted [0.0.0.0:34871,[::]:32897]
+[2026-06-23 13:09:02.0056Z][development:Net.PeerSelection.Selection.TargetsChanged](Notice,50) TraceTargetsChanged (PeerSelectionTargets {targetNumberOfRootPeers = 0, targetNumberOfKnownPeers = 100, targetNumberOfEstablishedPeers = 30, targetNumberOfActivePeers = 20, targetNumberOfKnownBigLedgerPeers = 15, targetNumberOfEstablishedBigLedgerPeers = 10, targetNumberOfActiveBigLedgerPeers = 5})
+[2026-06-23 13:09:02.0058Z][development:Net.PeerSelection.Selection.BigLedgerPeersRequest](Info,50) TraceBigLedgerPeersRequest 15 0
+[2026-06-23 13:09:02.0059Z][development:Forge.StateInfo.StateInfo](Info,41) With label "Cardano", KES info startPeriod  0 currPeriod 0 endPeriod 60, 60 KES periods until expiry.
+[2026-06-23 13:09:02.0060Z][development:Consensus.GSM.PreSyncingToSyncing](Notice,31) GsmEventPreSyncingToSyncing
+[2026-06-23 13:09:02.0061Z][development:Net.Peers.Ledger.TraceUseLedgerPeers](Info,48) {"data":{"kind":"UseLedgerPeers","useLedgerPeers":-1}}
+[2026-06-23 13:09:02.0061Z][development:Net.Peers.Ledger.DisabledLedgerPeers](Info,48) {"data":{"kind":"DisabledLedgerPeers"}}
+[2026-06-23 13:09:02.0064Z][development:Net.Peers.PublicRoot.PublicRootRelayAccessPoint](Info,56) TracePublicRootRelayAccessPoint (fromList [])
+[2026-06-23 13:09:02.0070Z][development:Net.Peers.PublicRoot.PublicRootRelayAccessPoint](Info,56) TracePublicRootRelayAccessPoint (fromList [])
+[2026-06-23 13:09:02.0077Z][development:Net.PeerSelection.Selection.BigLedgerPeersResults](Info,50) TraceBigLedgerPeersResults (fromList []) 1 2s
+[2026-06-23 13:09:02.0107Z][development:Forge.Loop.NodeIsLeader](Info,41) Leading slot 0
+[2026-06-23 13:09:02.0119Z][development:Forge.Loop.ForgedBlock](Info,41) Forged block in slot 0
+[2026-06-23 13:09:02.0150Z][development:ChainDB.AddBlockEvent.AddBlockValidation.ValidCandidate](Info,19) Valid candidate eece883f3f16cb92a4f04532519fe38419282d21cf673fb3c99155714d64aa05 at slot 0
+[2026-06-23 13:09:02.0152Z][development:ChainDB.AddBlockEvent.AddedToCurrentChain](Notice,19) Chain extended, new tip: eece883f3f16cb92a4f04532519fe38419282d21cf673fb3c99155714d64aa05 at slot 0
+[2026-06-23 13:09:02.0165Z][development:Forge.Loop.AdoptedBlock](Info,41) Adopted block forged in slot 0: eece883f3f16cb92a4f04532519fe38419282d21cf673fb3c99155714d64aa05
+[2026-06-23 13:09:02.0173Z][development:Net.ConnectionManager.Local.ConnectionManagerCounters](Info,61) TrConnectionManagerCounters (ConnectionManagerCounters {fullDuplexConns = 0, duplexConns = 0, unidirectionalConns = 0, inboundConns = 1, outboundConns = 0, terminatingConns = 0})
+[2026-06-23 13:09:02.0177Z][development:Net.ConnectionManager.Local.ConnectionHandler.HandshakeSuccess](Info,62) TrConnectionHandler (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock@0"}) (TrHandshakeSuccess NodeToClientV_23 (NodeToClientVersionData {networkMagic = NetworkMagic {unNetworkMagic = 42}, query = False}))
+[2026-06-23 13:09:02.0179Z][development:Net.Mux.Local.State](Info,62) With mux bearer ConnectionId LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock" LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock@0". State: Mature
+[2026-06-23 13:09:02.0182Z][development:Net.ConnectionManager.Local.ConnectionManagerCounters](Info,61) TrConnectionManagerCounters (ConnectionManagerCounters {fullDuplexConns = 0, duplexConns = 0, unidirectionalConns = 1, inboundConns = 1, outboundConns = 0, terminatingConns = 0})
+[2026-06-23 13:09:02.0183Z][development:Net.InboundGovernor.Local.InboundGovernorCounters](Info,46) TrInboundGovernorCounters (Counters {coldPeersRemote = 0, idlePeersRemote = 1, warmPeersRemote = 0, hotPeersRemote = 0})
+[2026-06-23 13:09:02.0194Z][development:Net.ConnectionManager.Local.ConnectionManagerCounters](Info,46) TrConnectionManagerCounters (ConnectionManagerCounters {fullDuplexConns = 0, duplexConns = 0, unidirectionalConns = 1, inboundConns = 1, outboundConns = 0, terminatingConns = 0})
+[2026-06-23 13:09:02.0194Z][development:StateQueryServer.Receive.Acquire](Info,65) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock@0"}). Receive: 
+[2026-06-23 13:09:02.0194Z][development:Net.InboundGovernor.Local.PromotedToWarmRemote](Info,46) TrPromotedToWarmRemote (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock@0"}) (OperationSuccess (InboundIdleSt Unidirectional))
+[2026-06-23 13:09:02.0195Z][development:Net.InboundGovernor.Local.InboundGovernorCounters](Info,46) TrInboundGovernorCounters (Counters {coldPeersRemote = 0, idlePeersRemote = 0, warmPeersRemote = 1, hotPeersRemote = 0})
+[2026-06-23 13:09:02.0195Z][development:Net.InboundGovernor.Local.PromotedToHotRemote](Info,46) TrPromotedToHotRemote (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock@0"})
+[2026-06-23 13:09:02.0195Z][development:Net.InboundGovernor.Local.InboundGovernorCounters](Info,46) TrInboundGovernorCounters (Counters {coldPeersRemote = 0, idlePeersRemote = 0, warmPeersRemote = 0, hotPeersRemote = 1})
+[2026-06-23 13:09:02.0205Z][development:StateQueryServer.Receive.Query](Info,65) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock@0"}). Receive: 
+[2026-06-23 13:09:02.0211Z][development:StateQueryServer.Receive.Release](Info,65) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock@0"}). Receive: 
+[2026-06-23 13:09:02.0232Z][development:Net.ConnectionManager.Local.ConnectionManagerCounters](Info,66) TrConnectionManagerCounters (ConnectionManagerCounters {fullDuplexConns = 0, duplexConns = 0, unidirectionalConns = 1, inboundConns = 2, outboundConns = 0, terminatingConns = 0})
+[2026-06-23 13:09:02.0233Z][development:Net.ConnectionManager.Local.ConnectionHandler.HandshakeSuccess](Info,67) TrConnectionHandler (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock@1"}) (TrHandshakeSuccess NodeToClientV_23 (NodeToClientVersionData {networkMagic = NetworkMagic {unNetworkMagic = 42}, query = False}))
+[2026-06-23 13:09:02.0235Z][development:Net.ConnectionManager.Local.ConnectionManagerCounters](Info,66) TrConnectionManagerCounters (ConnectionManagerCounters {fullDuplexConns = 0, duplexConns = 0, unidirectionalConns = 2, inboundConns = 2, outboundConns = 0, terminatingConns = 0})
+[2026-06-23 13:09:02.0235Z][development:Net.Mux.Local.State](Info,67) With mux bearer ConnectionId LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock" LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock@1". State: Mature
+[2026-06-23 13:09:02.0237Z][development:Net.InboundGovernor.Local.InboundGovernorCounters](Info,46) TrInboundGovernorCounters (Counters {coldPeersRemote = 0, idlePeersRemote = 1, warmPeersRemote = 0, hotPeersRemote = 1})
+[2026-06-23 13:09:02.0241Z][development:StateQueryServer.Receive.Acquire](Info,70) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock@1"}). Receive: 
+[2026-06-23 13:09:02.0241Z][development:Net.ConnectionManager.Local.ConnectionManagerCounters](Info,46) TrConnectionManagerCounters (ConnectionManagerCounters {fullDuplexConns = 0, duplexConns = 0, unidirectionalConns = 2, inboundConns = 2, outboundConns = 0, terminatingConns = 0})
+[2026-06-23 13:09:02.0241Z][development:Net.InboundGovernor.Local.PromotedToWarmRemote](Info,46) TrPromotedToWarmRemote (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock@1"}) (OperationSuccess (InboundIdleSt Unidirectional))
+[2026-06-23 13:09:02.0242Z][development:Net.InboundGovernor.Local.InboundGovernorCounters](Info,46) TrInboundGovernorCounters (Counters {coldPeersRemote = 0, idlePeersRemote = 0, warmPeersRemote = 1, hotPeersRemote = 1})
+[2026-06-23 13:09:02.0242Z][development:Net.InboundGovernor.Local.PromotedToHotRemote](Info,46) TrPromotedToHotRemote (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock@1"})
+[2026-06-23 13:09:02.0242Z][development:Net.InboundGovernor.Local.InboundGovernorCounters](Info,46) TrInboundGovernorCounters (Counters {coldPeersRemote = 0, idlePeersRemote = 0, warmPeersRemote = 0, hotPeersRemote = 2})
+[2026-06-23 13:09:02.0254Z][development:StateQueryServer.Receive.Query](Info,70) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock@1"}). Receive: 
+[2026-06-23 13:09:02.1008Z][development:Forge.Loop.StartLeadershipCheck](Info,41) Checking for leadership in slot 1
+[2026-06-23 13:09:02.1008Z][development:Forge.Stats.ForgingStats](Info,41) Node cannot forge 0 node is leader 1 blocks forged 1 slots missed 0
+[2026-06-23 13:09:02.1010Z][development:Forge.StateInfo.StateInfo](Info,41) With label "Cardano", KES info startPeriod  0 currPeriod 0 endPeriod 60, 60 KES periods until expiry.
+[2026-06-23 13:09:02.1011Z][development:Forge.Loop.NodeIsLeader](Info,41) Leading slot 1
+[2026-06-23 13:09:02.1013Z][development:Forge.Loop.ForgedBlock](Info,41) Forged block in slot 1
+[2026-06-23 13:09:02.1014Z][development:StateQueryServer.Receive.Release](Info,70) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.41YShL/cardano-e2e/node.sock@1"}). Receive: 
+

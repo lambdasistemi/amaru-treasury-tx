@@ -61,12 +61,12 @@ complete required UTxO set, and has conclusive phase-2 proof.
 **Independent Test**: `nix develop --quiet -c just devnet-smoke node`
 plus the new rerate devnet smoke command or named transcript.
 
-- [ ] T400-S3 Add live pending-order discovery and operator selection in `lib/Amaru/Treasury/Cli/SwapRerate.hs`
-- [ ] T400-S3 Ensure live gathering includes selected orders, wallet fuel/collateral, order script ref, scopes ref, permissions ref, treasury ref, and registry ref in `lib/Amaru/Treasury/Cli/SwapRerate.hs`
-- [ ] T400-S3 Add `test/devnet/Amaru/Treasury/Devnet/RerateSmoke.hs`
-- [ ] T400-S3 Wire `Amaru.Treasury.Devnet.RerateSmoke` into `test/devnet/Spec.hs` and `amaru-treasury-tx.cabal`
-- [ ] T400-S3 Run the devnet smoke or create the named operator transcript artifact and link it in PR #408
-- [ ] T400-S3 Commit as `test(devnet): prove swap rerate live boundary`
+- [X] T400-S3 Add live pending-order discovery and operator selection in `lib/Amaru/Treasury/Cli/SwapRerate.hs`
+- [X] T400-S3 Ensure live gathering includes selected orders, wallet fuel/collateral, order script ref, scopes ref, permissions ref, treasury ref, and registry ref in `lib/Amaru/Treasury/Cli/SwapRerate.hs`
+- [X] T400-S3 Use the accepted host-route devnet proof path; do not add `test/devnet/Amaru/Treasury/Devnet/RerateSmoke.hs` per A-001
+- [X] T400-S3 Keep devnet-tests/RerateSmoke wiring out of `test/devnet/Spec.hs` and `amaru-treasury-tx.cabal` per A-001
+- [X] T400-S3 Run the rerate devnet smoke; record the A-007 loud #410 skip plus cost-model-stage partial proof under `specs/400-cli-rerate/evidence/`
+- [X] T400-S3 Commit as `test(devnet): prove swap rerate live boundary`
 
 ## Phase 4: Finalization
 

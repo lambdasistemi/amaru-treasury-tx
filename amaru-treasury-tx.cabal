@@ -434,12 +434,15 @@ executable devnet-cli-smoke-host
     , bech32
     , bytestring
     , cardano-crypto-class
+    , cardano-ledger-alonzo
     , cardano-ledger-api
     , cardano-ledger-conway
     , cardano-ledger-core
     , cardano-ledger-mary
     , cardano-node-clients
     , cardano-node-clients:devnet
+    , cardano-slotting
+    , cardano-tx-tools
     , containers
     , directory
     , filepath

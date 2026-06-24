@@ -13,10 +13,10 @@
 
 ## Slice 2: HTTP Request Parity
 
-- [ ] T419-S2 Change `SwapRerateBuildRequest` and API adapter to accept
+- [X] T419-S2 Change `SwapRerateBuildRequest` and API adapter to accept
   wallet address instead of wallet/collateral tx-ins.
-- [ ] T419-S2 Update server/API unit tests for the new JSON shape.
-- [ ] T419-S2 Run focused API proof and commit.
+- [X] T419-S2 Update server/API unit tests for the new JSON shape.
+- [X] T419-S2 Run focused API proof and commit.
 
 ## Slice 3: Operate UI Parity
 

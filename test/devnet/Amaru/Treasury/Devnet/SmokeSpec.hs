@@ -254,6 +254,14 @@ import Amaru.Treasury.Devnet.Runner
     , runDevnetStakeRewardInit
     )
 import Amaru.Treasury.Devnet.StakeRewardInit qualified as StakeRewardInit
+import Amaru.Treasury.Devnet.SwapSubmit
+    ( FullSwapInputs (..)
+    , TreasuryFullSwapEvidence (..)
+    , mkFullSwapIntent
+    , permissionsRewardAccount
+    , treasuryFullSwapLines
+    , treasuryFullSwapValue
+    )
 import Amaru.Treasury.Redeemer
     ( RawPlutusData (..)
     , emptyListRedeemer
@@ -281,7 +289,9 @@ import Amaru.Treasury.Tx.Submit
     )
 import Amaru.Treasury.Tx.Swap
     ( SwapOrderDatumParams (..)
+    , SwapOrderOut (..)
     , swapOrderDatum
+    , swapProgram
     )
 import Amaru.Treasury.Tx.SwapWizard
     ( txInToText
@@ -1238,6 +1248,12 @@ spec =
             "treasury-swap-e2e: scoops a treasury-destination Sundae order"
             (runForPhases ["treasury-swap-e2e"] treasurySwapE2ESmoke)
         it
+            "treasury-swap-full-e2e: deployed treasury funds a swapProgram order, scooped"
+            ( runForPhases
+                ["treasury-swap-full-e2e"]
+                treasurySwapFullE2ESmoke
+            )
+        it
             "mixed-utxo: validates mixed treasury swap and reorganize through phase-2"
             (runForPhases ["mixed-utxo"] mixedUtxoSmoke)
         it
@@ -1795,6 +1811,371 @@ treasurySwapE2ESmoke = do
             putTreasurySwapLines runDir evidence
             statusMilestone "M4 DONE treasury-swap-e2e passed"
 
+{- | Design-B full e2e: deploy + fund a re-rooted treasury
+(cloning the disburse-submit scaffold), then debit it through
+the shipped 'swapProgram' to emit one Sundae order, and scoop
+that order back to the treasury (#409). Proof is the emitted
+'TreasuryFullSwapEvidence' / @summary.json@.
+-}
+treasurySwapFullE2ESmoke :: IO ()
+treasurySwapFullE2ESmoke = do
+    runDir <- resolveRunDir
+    prepareRunDir runDir
+    createDirectoryIfMissing
+        True
+        (runDir </> "treasury-swap-full-e2e")
+    statusNote
+        "S2 treasury-swap-full-e2e deploy+fund re-rooted treasury"
+
+    sourceGenesis <- genesisDir
+    assertGenesisDir sourceGenesis
+    let smokeGenesis = runDir </> "genesis"
+    copyGovernanceGenesis sourceGenesis smokeGenesis
+    patchGovernanceGenesis smokeGenesis
+    timing <- readShelleyTiming smokeGenesis
+    sgtNetworkMagic timing `shouldBe` 42
+
+    rewardTimeoutSeconds <- resolveRewardTimeoutSeconds
+
+    withCardanoNode smokeGenesis $ \socket startMs -> do
+        accepted <- probeNetworkMagic devnetMagic socket
+        accepted `shouldBe` True
+        copyNodeLog socket runDir
+        writeTiming runDir startMs socket timing
+        signingKeyFile <- writeGenesisPaymentSigningKey runDir
+        let globals =
+                GlobalOpts
+                    { goSocketPath = Just socket
+                    , goNetworkMagic = devnetMagic
+                    , goNetworkName = Just "devnet"
+                    }
+            fundingAddress =
+                T.unpack (renderAddr genesisAddr)
+            registryPath =
+                RegistryInit.registryInitRegistryPath runDir
+            stakeRewardPath =
+                StakeRewardInit.stakeRewardInitAccountsPath runDir
+            materializedPath =
+                GovernanceWithdrawalInit.governanceWithdrawalInitMaterializationPath
+                    runDir
+
+        -- 1) clone the disburse-submit deploy+fund scaffold
+        --    (registry-init -> stake-reward-init ->
+        --    governance-withdrawal-init), stopping BEFORE the
+        --    disburse so the funded treasury UTxO is left
+        --    unspent for our swapProgram debit.
+        runDevnetRegistryInit
+            globals
+            DevnetRegistryInitOpts
+                { drioFundingAddress = fundingAddress
+                , drioSigningKeyFile = signingKeyFile
+                , drioRunDir = runDir
+                }
+        runDevnetStakeRewardInit
+            globals
+            DevnetStakeRewardInitOpts
+                { dsrioRegistryFile = registryPath
+                , dsrioFundingAddress = fundingAddress
+                , dsrioSigningKeyFile = signingKeyFile
+                , dsrioRunDir = runDir
+                }
+        assertStakeRewardInitArtifacts runDir registryPath timing
+        runDevnetGovernanceWithdrawalInit
+            globals
+            DevnetGovernanceWithdrawalInitOpts
+                { dgwioRegistryFile = registryPath
+                , dgwioStakeRewardFile = stakeRewardPath
+                , dgwioFundingAddress = fundingAddress
+                , dgwioSigningKeyFile = signingKeyFile
+                , dgwioRunDir = runDir
+                , dgwioAmountLovelace =
+                    coinLovelace withdrawalAmount
+                , dgwioRewardTimeoutSeconds = rewardTimeoutSeconds
+                }
+        assertGovernanceWithdrawalInitArtifacts
+            runDir
+            registryPath
+            stakeRewardPath
+            timing
+
+        -- 2) recover the deployed anchors + funded treasury UTxO
+        registry <-
+            expectEither "read deployed registry anchors"
+                =<< DisburseSubmit.readDevnetDisburseSubmitRegistry
+                    registryPath
+        materialized <-
+            expectEither "read materialized treasury UTxO"
+                =<< DisburseSubmit.readDevnetDisburseSubmitMaterialized
+                    materializedPath
+        let treasuryHash =
+                GovernanceWithdrawalInit.dgwrTreasuryScriptHash
+                    registry
+            treasuryAddress =
+                GovernanceWithdrawalInit.dgwrTreasuryAddress registry
+            treasuryBefore =
+                DisburseSubmit.ddsmMaterializedAdaLovelace
+                    materialized
+
+        -- 3) bootstrap a fresh Sundae pool (#409) on the same node
+        withGovernanceNode socket $ \provider submitter -> do
+            pp <- queryProtocolParams provider
+            walletUtxos <- queryUTxOs provider genesisAddr
+            boot <-
+                selectLargestAdaUtxo
+                    "full-swap settings protocol boot"
+                    walletUtxos
+            scripts <- deriveFreshSundaeScripts runDir (fst boot)
+            settings <-
+                bootstrapSundaeSettings provider submitter pp boot scripts
+            freshUtxos <- queryUTxOs provider genesisAddr
+            token <- mintScoopTestToken provider submitter pp freshUtxos
+            pool <-
+                createSundaePool provider submitter pp settings token scripts
+            scriptRefs <-
+                publishSundaeReferenceScripts provider submitter pp scripts
+            settingsForScoop <-
+                refreshSettingsBeforeReferenceScripts
+                    provider
+                    submitter
+                    pp
+                    settings
+                    scripts
+                    scriptRefs
+            registerFreshPoolStakeRewardAccount
+                provider
+                submitter
+                pp
+                settingsForScoop
+                scripts
+
+            -- 4) assemble the SwapIntent (S1) and place the order
+            --    via the shipped swapProgram, debiting the treasury.
+            statusNote "S2 swapProgram debits the deployed treasury"
+            deployRefs <-
+                waitForTxIns
+                    provider
+                    [ GovernanceWithdrawalInit.dgwrScopesRef registry
+                    , GovernanceWithdrawalInit.dgwrPermissionsRef
+                        registry
+                    , GovernanceWithdrawalInit.dgwrTreasuryRef registry
+                    , GovernanceWithdrawalInit.dgwrRegistryRef registry
+                    ]
+                    60
+            treasuryFound <-
+                waitForTxIns
+                    provider
+                    [DisburseSubmit.ddsmTreasuryInput materialized]
+                    60
+            treasuryUtxo@(treasuryIn, _) <-
+                case treasuryFound of
+                    [u] -> pure u
+                    _ ->
+                        expectationFailure
+                            "deployed treasury UTxO was not found"
+                            *> error "unreachable"
+            swapFuelUtxos <- queryUTxOs provider genesisAddr
+            fuel@(fuelIn, _) <-
+                selectLargestAdaUtxo
+                    "swapProgram order fuel"
+                    swapFuelUtxos
+            snapshot <- queryLedgerSnapshot provider
+            let ownerBytes =
+                    keyHashBytes genesisPaymentKeyHash
+                offerLovelace :: Integer
+                offerLovelace = 1_000_000
+                datumParams =
+                    SwapOrderDatumParams
+                        { sodPoolId = spuIdent pool
+                        , sodCoreOwner = ownerBytes
+                        , sodOpsOwner = ownerBytes
+                        , sodNetworkComplianceOwner = ownerBytes
+                        , sodMiddlewareOwner = ownerBytes
+                        , sodSundaeProtocolFeeLovelace = 2_500_000
+                        , sodTreasuryScriptHash =
+                            scriptHashBytes treasuryHash
+                        , sodUsdmPolicy = policyIdBytes (sttPolicy token)
+                        , sodUsdmToken =
+                            assetNameRawBytes (sttAssetName token)
+                        }
+                orderOut =
+                    SwapOrderOut
+                        { soLovelace = Coin offerLovelace
+                        , soDatum =
+                            swapOrderDatum datumParams offerLovelace 1
+                        }
+                swapInputs =
+                    FullSwapInputs
+                        { fsiScopesRef =
+                            GovernanceWithdrawalInit.dgwrScopesRef
+                                registry
+                        , fsiPermissionsRef =
+                            GovernanceWithdrawalInit.dgwrPermissionsRef
+                                registry
+                        , fsiTreasuryRef =
+                            GovernanceWithdrawalInit.dgwrTreasuryRef
+                                registry
+                        , fsiRegistryRef =
+                            GovernanceWithdrawalInit.dgwrRegistryRef
+                                registry
+                        , fsiPermissionsRewardAccount =
+                            permissionsRewardAccount
+                                Testnet
+                                ( GovernanceWithdrawalInit.dgwrPermissionsScriptHash
+                                    registry
+                                )
+                        , fsiTreasuryAddress = treasuryAddress
+                        , fsiSigners = [genesisGuardKeyHash]
+                        , fsiWalletUtxo = fuelIn
+                        , fsiExtraWalletInputs = []
+                        , fsiSwapOrderAddress =
+                            scriptAddr Testnet (ssbOrderHash scripts)
+                        , fsiSwapOrders = [orderOut]
+                        , fsiSwapOrderExtraLovelace = Coin 4_500_000
+                        , fsiTreasuryUtxos = [treasuryIn]
+                        , fsiTreasuryLeftoverLovelace =
+                            Coin (treasuryBefore - offerLovelace)
+                        , fsiTreasuryLeftoverAssets = mempty
+                        , fsiUpperBound =
+                            addSlots 20 (ledgerTipSlot snapshot)
+                        }
+            swapTxId <-
+                buildSubmitAndWait
+                    "swapProgram deployed-treasury order"
+                    provider
+                    submitter
+                    pp
+                    emptyInterpret
+                    (evalWith provider)
+                    [fuel, treasuryUtxo]
+                    deployRefs
+                    genesisAddr
+                    (swapProgram (mkFullSwapIntent swapInputs))
+
+            -- 5) locate the emitted order output and scoop it (#409)
+            let orderRef = txOutRef swapTxId 0
+            foundOrder <- waitForTxIns provider [orderRef] 60
+            order <-
+                case foundOrder of
+                    [(ref, txOut)] ->
+                        pure
+                            SundaeOrderUtxo
+                                { souTxIn = ref
+                                , souTxOut = txOut
+                                }
+                    _ ->
+                        expectationFailure
+                            "swapProgram order output was not found"
+                            *> error "unreachable"
+            statusNote "S2 scoop the swapProgram order to the treasury"
+            scoopFuel <- queryUTxOs provider genesisAddr
+            swapEvidence <-
+                scoopTreasurySwapOrder
+                    provider
+                    submitter
+                    pp
+                    scoopFuel
+                    settingsForScoop
+                    treasuryHash
+                    treasuryAddress
+                    token
+                    pool
+                    order
+                    scripts
+                    scriptRefs
+
+            -- 6) full evidence: scoop proof (#409) + the debit,
+            --    the swapProgram tx id, and the deploy anchors.
+            let fullEvidence =
+                    TreasuryFullSwapEvidence
+                        { tfseScoopTxId = tseScoopTxId swapEvidence
+                        , tfseOrderConsumed =
+                            tseOrderConsumed swapEvidence
+                        , tfseTreasuryTokenQuantity =
+                            tseTreasuryTokenQuantity swapEvidence
+                        , tfseTreasuryAddress =
+                            tseTreasuryAddress swapEvidence
+                        , tfseTreasuryScriptHash =
+                            tseTreasuryScriptHash swapEvidence
+                        , tfseSettingsHash =
+                            tseSettingsHash swapEvidence
+                        , tfsePoolHash = tsePoolHash swapEvidence
+                        , tfsePoolStakeHash =
+                            tsePoolStakeHash swapEvidence
+                        , tfseOrderHash = tseOrderHash swapEvidence
+                        , tfsePoolIdent = tsePoolIdent swapEvidence
+                        , tfseTestTokenPolicy =
+                            tseTestTokenPolicy swapEvidence
+                        , tfseTestTokenName =
+                            tseTestTokenName swapEvidence
+                        , tfseTreasuryAdaBefore = treasuryBefore
+                        , tfseTreasuryAdaAfter =
+                            treasuryBefore - offerLovelace
+                        , tfseSwapOrderTxId = renderTxId swapTxId
+                        , tfseScopesRef =
+                            txInToText
+                                ( GovernanceWithdrawalInit.dgwrScopesRef
+                                    registry
+                                )
+                        , tfsePermissionsRef =
+                            txInToText
+                                ( GovernanceWithdrawalInit.dgwrPermissionsRef
+                                    registry
+                                )
+                        , tfseTreasuryRef =
+                            txInToText
+                                ( GovernanceWithdrawalInit.dgwrTreasuryRef
+                                    registry
+                                )
+                        , tfseRegistryRef =
+                            txInToText
+                                ( GovernanceWithdrawalInit.dgwrRegistryRef
+                                    registry
+                                )
+                        , tfsePermissionsHash =
+                            GovernanceWithdrawalInit.dgwrPermissionsScriptHashText
+                                registry
+                        }
+            writeTreasuryFullSwapArtifacts
+                runDir
+                socket
+                timing
+                fullEvidence
+            statusMilestone "S2 DONE treasury-swap-full-e2e passed"
+
+writeTreasuryFullSwapArtifacts
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> TreasuryFullSwapEvidence
+    -> IO ()
+writeTreasuryFullSwapArtifacts runDir socket timing evidence = do
+    let phaseDir =
+            runDir </> "treasury-swap-full-e2e"
+        summaryPath =
+            phaseDir </> "summary.json"
+        summary =
+            object
+                [ "schemaVersion" .= (1 :: Int)
+                , "phase"
+                    .= ("treasury-swap-full-e2e" :: String)
+                , "status" .= ("passed" :: String)
+                , "runDirectory" .= runDir
+                , "socket" .= socket
+                , "network" .= ("devnet" :: String)
+                , "networkMagic" .= sgtNetworkMagic timing
+                , "epochDurationSeconds"
+                    .= epochDurationSeconds timing
+                , "evidence" .= treasuryFullSwapValue evidence
+                , "summaryPath" .= summaryPath
+                ]
+    createDirectoryIfMissing True phaseDir
+    BSL.writeFile summaryPath (encode summary)
+    BSL.writeFile (runDir </> "summary.json") (encode summary)
+    writeFile
+        (runDir </> "summary.log")
+        (unlines (treasuryFullSwapLines evidence))
+    mapM_ putStrLn (treasuryFullSwapLines evidence)
+
 withFundedGovernanceReward
     :: FilePath
     -> ( Provider IO
@@ -1954,7 +2335,7 @@ data SundaeReferenceScripts = SundaeReferenceScripts
     }
 
 newtype Blueprint = Blueprint
-    { bpValidators :: ![BlueprintValidator]
+    { bpValidators :: [BlueprintValidator]
     }
 
 instance FromJSON Blueprint where

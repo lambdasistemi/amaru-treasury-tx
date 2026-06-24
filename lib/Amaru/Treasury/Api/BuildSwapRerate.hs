@@ -82,8 +82,7 @@ data SwapRerateBuildRequest = SwapRerateBuildRequest
     { srrScope :: ScopeId
     , srrSelectedOrders :: [Text]
     , srrNewRate :: Double
-    , srrWalletTxIn :: Text
-    , srrCollateralTxIn :: Maybe Text
+    , srrWalletAddress :: Text
     }
     deriving (Eq, Show, Generic)
     deriving anyclass (FromJSON, ToJSON)
@@ -180,6 +179,11 @@ validateRequest SwapRerateBuildRequest{..}
             failureResponse
                 "InputOutOfRange"
                 ("newRate: rate must be positive, got " <> T.pack (show srrNewRate))
+    | T.null (T.strip srrWalletAddress) =
+        Just $
+            failureResponse
+                "InputInvalid"
+                "walletAddress: wallet address is required"
     | otherwise = Nothing
 
 toSwapRerateOpts
@@ -192,8 +196,8 @@ toSwapRerateOpts metadataPath cborPath reportPath SwapRerateBuildRequest{..} =
     SwapRerateOpts
         { sroMetadataPath = metadataPath
         , sroScope = srrScope
-        , sroWalletTxIn = srrWalletTxIn
-        , sroCollateralTxIn = srrCollateralTxIn
+        , sroWalletTxIn = srrWalletAddress
+        , sroCollateralTxIn = Nothing
         , sroSelectionMode = SwapRerateSelectExplicit srrSelectedOrders
         , sroNewRate = srrNewRate
         , sroValidityHours = Nothing

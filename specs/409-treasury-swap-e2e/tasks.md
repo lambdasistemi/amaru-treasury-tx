@@ -33,6 +33,6 @@ amends in the same commit as the slice).
 
 ## Finalization (orchestrator-owned)
 
-- [ ] T409-FIN-a  Review diff; push; amend tasks checkboxes; update PR #412 body
+- [X] T409-FIN-a  Review diff; push; amend tasks checkboxes; update PR #412 body
       with the live-boundary artifact (summary.json + scoop tx id).
-- [ ] T409-FIN-b  Drop `gate.sh` (`chore: drop gate.sh`); `gh pr ready 412`.
+- [X] T409-FIN-b  Drop `gate.sh` (`chore: drop gate.sh`); `gh pr ready 412`.

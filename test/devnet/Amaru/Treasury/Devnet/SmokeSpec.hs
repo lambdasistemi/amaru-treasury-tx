@@ -1235,6 +1235,9 @@ spec =
             "scoop-e2e: bootstraps a fresh Sundae pool and scoops one order"
             (runForPhases ["scoop-e2e"] scoopE2ESmoke)
         it
+            "treasury-swap-e2e: scoops a treasury-destination Sundae order"
+            (runForPhases ["treasury-swap-e2e"] treasurySwapE2ESmoke)
+        it
             "mixed-utxo: validates mixed treasury swap and reorganize through phase-2"
             (runForPhases ["mixed-utxo"] mixedUtxoSmoke)
         it
@@ -1681,6 +1684,117 @@ scoopE2ESmoke = do
             putScoopE2ELines runDir evidence
             statusMilestone "M4 DONE scoop-e2e passed"
 
+treasurySwapE2ESmoke :: IO ()
+treasurySwapE2ESmoke = do
+    runDir <- resolveRunDir
+    prepareRunDir runDir
+    createDirectoryIfMissing True (runDir </> "scoop-e2e")
+    createDirectoryIfMissing True (runDir </> "treasury-swap-e2e")
+    statusNote "M3 treasury-swap-e2e starting one persistent devnet run"
+
+    treasuryTarget <-
+        RegistryInit.treasuryTargetFromBlob Testnet
+            =<< expectEither
+                "derive #409 treasury script"
+                (derivedTreasuryScriptBlob CoreDevelopment)
+    let treasuryHash =
+            ttScriptHash treasuryTarget
+        treasuryAddress =
+            stakedScriptAddr treasuryHash
+
+    gDir <- genesisDir
+    assertGenesisDir gDir
+    timing <- readShelleyTiming gDir
+    sgtNetworkMagic timing `shouldBe` 42
+
+    withCardanoNode gDir $ \socket startMs -> do
+        accepted <- probeNetworkMagic devnetMagic socket
+        accepted `shouldBe` True
+
+        copyNodeLog socket runDir
+        writeTiming runDir startMs socket timing
+        withGovernanceNode socket $ \provider submitter -> do
+            pp <- queryProtocolParams provider
+            walletUtxos <- queryUTxOs provider genesisAddr
+            boot <-
+                selectLargestAdaUtxo
+                    "fresh treasury swap settings protocol boot"
+                    walletUtxos
+            scripts <- deriveFreshSundaeScripts runDir (fst boot)
+
+            statusNote "M3 bootstrap settings NFT and settings datum UTxO"
+            settings <- bootstrapSundaeSettings provider submitter pp boot scripts
+
+            statusNote "M3 mint fresh test token for minimal ADA/token pool"
+            freshUtxos <- queryUTxOs provider genesisAddr
+            token <- mintScoopTestToken provider submitter pp freshUtxos
+
+            statusNote "M3 create minimal Sundae ADA/test-token pool"
+            pool <- createSundaePool provider submitter pp settings token scripts
+            statusMilestone $
+                "M3 DONE treasury pool live settings="
+                    <> T.unpack (txInToText (ssuTxIn settings))
+                    <> " pool="
+                    <> T.unpack (txInToText (spuTxIn pool))
+                    <> " poolIdent="
+                    <> T.unpack (hexText (spuIdent pool))
+
+            statusNote "M3 publish fresh Sundae reference scripts for scoop"
+            scriptRefs <-
+                publishSundaeReferenceScripts
+                    provider
+                    submitter
+                    pp
+                    scripts
+            settingsForScoop <-
+                refreshSettingsBeforeReferenceScripts
+                    provider
+                    submitter
+                    pp
+                    settings
+                    scripts
+                    scriptRefs
+            statusNote "M3 register fresh pool_stake reward account"
+            registerFreshPoolStakeRewardAccount
+                provider
+                submitter
+                pp
+                settingsForScoop
+                scripts
+
+            statusNote "M3 place treasury-destination Fixed order"
+            orderFuel <- queryUTxOs provider genesisAddr
+            order <-
+                placeTreasurySwapOrder
+                    provider
+                    submitter
+                    pp
+                    orderFuel
+                    treasuryHash
+                    token
+                    pool
+                    scripts
+
+            statusNote "M4 scoop treasury order with pool_stake withdraw-zero"
+            scoopFuel <- queryUTxOs provider genesisAddr
+            evidence <-
+                scoopTreasurySwapOrder
+                    provider
+                    submitter
+                    pp
+                    scoopFuel
+                    settingsForScoop
+                    treasuryHash
+                    treasuryAddress
+                    token
+                    pool
+                    order
+                    scripts
+                    scriptRefs
+            writeTreasurySwapArtifacts runDir socket timing evidence
+            putTreasurySwapLines runDir evidence
+            statusMilestone "M4 DONE treasury-swap-e2e passed"
+
 withFundedGovernanceReward
     :: FilePath
     -> ( Provider IO
@@ -1800,6 +1914,25 @@ data ScoopE2EEvidence = ScoopE2EEvidence
     , seePoolIdent :: !T.Text
     , seeTestTokenPolicy :: !T.Text
     , seeTestTokenName :: !T.Text
+    }
+    deriving stock (Eq, Show)
+
+data TreasurySwapEvidence = TreasurySwapEvidence
+    { tseSettingsTxIn :: !T.Text
+    , tsePoolTxIn :: !T.Text
+    , tseOrderTxIn :: !T.Text
+    , tseScoopTxId :: !T.Text
+    , tseOrderConsumed :: !Bool
+    , tseTreasuryTokenQuantity :: !Integer
+    , tseTreasuryAddress :: !T.Text
+    , tseTreasuryScriptHash :: !T.Text
+    , tseSettingsHash :: !T.Text
+    , tsePoolHash :: !T.Text
+    , tsePoolStakeHash :: !T.Text
+    , tseOrderHash :: !T.Text
+    , tsePoolIdent :: !T.Text
+    , tseTestTokenPolicy :: !T.Text
+    , tseTestTokenName :: !T.Text
     }
     deriving stock (Eq, Show)
 
@@ -3070,6 +3203,87 @@ placeGenericSundaeOrder provider submitter pp utxos token scripts = do
             expectationFailure "fresh generic order UTxO was not found"
                 *> error "unreachable"
 
+placeTreasurySwapOrder
+    :: Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> [(TxIn, TxOut ConwayEra)]
+    -> ScriptHash
+    -> ScoopTestToken
+    -> SundaePoolUtxo
+    -> SundaeScriptBundle
+    -> IO SundaeOrderUtxo
+placeTreasurySwapOrder
+    provider
+    submitter
+    pp
+    utxos
+    treasuryHash
+    token
+    pool
+    scripts = do
+        seed@(seedIn, _) <-
+            selectLargestAdaUtxo "fresh treasury swap order funding" utxos
+        snapshot <- queryLedgerSnapshot provider
+        let orderAddress =
+                scriptAddr Testnet (ssbOrderHash scripts)
+            ownerBytes =
+                keyHashBytes genesisPaymentKeyHash
+            offerLovelace =
+                10_000_000
+            minReceived =
+                1
+            scooperFee =
+                2_500_000
+            lockedLovelace =
+                14_500_000
+            datumParams =
+                SwapOrderDatumParams
+                    { sodPoolId = spuIdent pool
+                    , sodCoreOwner = ownerBytes
+                    , sodOpsOwner = ownerBytes
+                    , sodNetworkComplianceOwner = ownerBytes
+                    , sodMiddlewareOwner = ownerBytes
+                    , sodSundaeProtocolFeeLovelace = scooperFee
+                    , sodTreasuryScriptHash = scriptHashBytes treasuryHash
+                    , sodUsdmPolicy = policyIdBytes (sttPolicy token)
+                    , sodUsdmToken = assetNameRawBytes (sttAssetName token)
+                    }
+            orderOut =
+                inlineDatumTxOut
+                    orderAddress
+                    (MaryValue (Coin lockedLovelace) (MultiAsset Map.empty))
+                    (swapOrderDatum datumParams offerLovelace minReceived)
+            upperSlot =
+                addSlots 20 (ledgerTipSlot snapshot)
+            prog :: TxBuild NoCtx Void ()
+            prog = do
+                _ <- spend seedIn
+                ix <- output orderOut
+                checkMinUtxo pp ix
+                validTo upperSlot
+        txId <-
+            buildSubmitAndWait
+                "place treasury Sundae order"
+                provider
+                submitter
+                pp
+                emptyInterpret
+                (evalWith provider)
+                [seed]
+                []
+                genesisAddr
+                prog
+        let orderRef =
+                txOutRef txId 0
+        found <- waitForTxIns provider [orderRef] 60
+        case found of
+            [(ref, txOut)] ->
+                pure SundaeOrderUtxo{souTxIn = ref, souTxOut = txOut}
+            _ ->
+                expectationFailure "fresh treasury order UTxO was not found"
+                    *> error "unreachable"
+
 scoopSundaeOrder
     :: Provider IO
     -> Submitter IO
@@ -3222,6 +3436,166 @@ scoopSundaeOrder
                 , seePoolIdent = hexText (spuIdent pool)
                 , seeTestTokenPolicy = policyIdHex (sttPolicy token)
                 , seeTestTokenName = assetNameHex (sttAssetName token)
+                }
+
+scoopTreasurySwapOrder
+    :: Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> [(TxIn, TxOut ConwayEra)]
+    -> SundaeSettingsUtxo
+    -> ScriptHash
+    -> Addr
+    -> ScoopTestToken
+    -> SundaePoolUtxo
+    -> SundaeOrderUtxo
+    -> SundaeScriptBundle
+    -> SundaeReferenceScripts
+    -> IO TreasurySwapEvidence
+scoopTreasurySwapOrder
+    provider
+    submitter
+    pp
+    utxos
+    settings
+    treasuryHash
+    treasuryAddress
+    token
+    pool
+    order
+    scripts
+    scriptRefs = do
+        fuel@(fuelIn, _) <-
+            selectLargestAdaUtxo "fresh treasury scoop fee fuel" utxos
+        snapshot <- queryLedgerSnapshot provider
+        let poolPolicy =
+                PolicyID (ssbPoolHash scripts)
+            ownerGuard =
+                genesisGuardKeyHash
+            poolAddress =
+                poolAddr (ssbPoolHash scripts) genesisStakingKeyHash
+            swapRecipientAddress =
+                treasuryAddress
+            protocolTreasuryAddress =
+                stakedWalletAddr genesisPaymentKeyHash genesisStakingKeyHash
+            finalPoolValue =
+                MaryValue
+                    (Coin 1_014_500_000)
+                    ( multiAsset
+                        [ (sttPolicy token, sttAssetName token, 990_103_912)
+                        , (poolPolicy, spuNftName pool, 1)
+                        ]
+                    )
+            swapValue =
+                MaryValue
+                    (Coin 2_000_000)
+                    (singleAsset (sttPolicy token) (sttAssetName token) 9_896_088)
+            finalPoolOut =
+                inlineDatumTxOut
+                    poolAddress
+                    finalPoolValue
+                    ( poolDatum
+                        (spuIdent pool)
+                        (policyIdBytes (sttPolicy token))
+                        (assetNameRawBytes (sttAssetName token))
+                        1_000_000_000
+                        4_500_000
+                    )
+            swapOut =
+                mkBasicTxOut swapRecipientAddress swapValue
+            protocolTreasuryOut =
+                inlineDatumTxOut
+                    protocolTreasuryAddress
+                    (MaryValue (Coin 2_000_000) mempty)
+                    voidData
+            rewardAccount =
+                AccountAddress
+                    Testnet
+                    (AccountId (ScriptHashObj (ssbPoolStakeHash scripts)))
+            lowerSlot =
+                ledgerTipSlot snapshot
+            upperSlot =
+                addSlots 20 (ledgerTipSlot snapshot)
+            prog :: TxBuild NoCtx Void ()
+            prog = do
+                _ <- spend fuelIn
+                collateral fuelIn
+                reference (ssuTxIn settings)
+                reference (fst (srsPool scriptRefs))
+                reference (fst (srsOrder scriptRefs))
+                reference (fst (srsPoolStake scriptRefs))
+                requiredSignature ownerGuard
+                orderIx <-
+                    spendScript
+                        (souTxIn order)
+                        (RawPlutusData orderScoopRedeemer)
+                _ <-
+                    spendScript
+                        (spuTxIn pool)
+                        ( RawPlutusData $
+                            poolScoopRedeemer (toInteger orderIx)
+                        )
+                withdrawScript
+                    rewardAccount
+                    (Coin 0)
+                    (RawPlutusData voidData)
+                poolIx <- output finalPoolOut
+                _ <- output swapOut
+                _ <- output protocolTreasuryOut
+                checkMinUtxo pp poolIx
+                validFrom lowerSlot
+                validTo upperSlot
+        txId <-
+            buildSubmitAndWait
+                "scoop treasury Sundae order"
+                provider
+                submitter
+                pp
+                emptyInterpret
+                (evalWith provider)
+                [ fuel
+                , (souTxIn order, souTxOut order)
+                , (spuTxIn pool, spuTxOut pool)
+                ]
+                ( (ssuTxIn settings, ssuTxOut settings)
+                    : [ srsPool scriptRefs
+                      , srsOrder scriptRefs
+                      , srsPoolStake scriptRefs
+                      ]
+                )
+                genesisAddr
+                prog
+        orderStillThere <-
+            any ((== souTxIn order) . fst)
+                <$> queryUTxOs provider (scriptAddr Testnet (ssbOrderHash scripts))
+        treasuryUtxos <- queryUTxOs provider treasuryAddress
+        let treasuryTokenQuantity =
+                sum
+                    [ assetQuantity
+                        (sttPolicy token)
+                        (sttAssetName token)
+                        (txOutValue txOut)
+                    | (_, txOut) <- treasuryUtxos
+                    ]
+        orderStillThere `shouldBe` False
+        treasuryTokenQuantity `shouldSatisfy` (>= 9_896_088)
+        pure
+            TreasurySwapEvidence
+                { tseSettingsTxIn = txInToText (ssuTxIn settings)
+                , tsePoolTxIn = txInToText (spuTxIn pool)
+                , tseOrderTxIn = txInToText (souTxIn order)
+                , tseScoopTxId = renderTxId txId
+                , tseOrderConsumed = not orderStillThere
+                , tseTreasuryTokenQuantity = treasuryTokenQuantity
+                , tseTreasuryAddress = renderAddr treasuryAddress
+                , tseTreasuryScriptHash = scriptHashToHex treasuryHash
+                , tseSettingsHash = scriptHashToHex (ssbSettingsHash scripts)
+                , tsePoolHash = scriptHashToHex (ssbPoolHash scripts)
+                , tsePoolStakeHash = scriptHashToHex (ssbPoolStakeHash scripts)
+                , tseOrderHash = scriptHashToHex (ssbOrderHash scripts)
+                , tsePoolIdent = hexText (spuIdent pool)
+                , tseTestTokenPolicy = policyIdHex (sttPolicy token)
+                , tseTestTokenName = assetNameHex (sttAssetName token)
                 }
 
 emptyInterpret :: InterpretIO NoCtx
@@ -3451,6 +3825,13 @@ stakedWalletAddr payment stake =
         Testnet
         (KeyHashObj payment)
         (StakeRefBase (KeyHashObj stake))
+
+stakedScriptAddr :: ScriptHash -> Addr
+stakedScriptAddr scriptHash =
+    Addr
+        Testnet
+        (ScriptHashObj scriptHash)
+        (StakeRefBase (ScriptHashObj scriptHash))
 
 poolAddr :: ScriptHash -> KeyHash Staking -> Addr
 poolAddr poolHash stakeKey =
@@ -4590,6 +4971,80 @@ scoopE2ELines runDir evidence =
         <> show (seeWalletTokenQuantity evidence)
     , "devnet-smoke: scoop-e2e-summary "
         <> (runDir </> "scoop-e2e" </> "summary.json")
+    ]
+
+writeTreasurySwapArtifacts
+    :: FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> TreasurySwapEvidence
+    -> IO ()
+writeTreasurySwapArtifacts runDir socket timing evidence = do
+    let phaseDir =
+            runDir </> "treasury-swap-e2e"
+        summaryPath =
+            phaseDir </> "summary.json"
+        summary =
+            object
+                [ "schemaVersion" .= (1 :: Int)
+                , "phase" .= ("treasury-swap-e2e" :: String)
+                , "status" .= ("passed" :: String)
+                , "runDirectory" .= runDir
+                , "socket" .= socket
+                , "network" .= ("devnet" :: String)
+                , "networkMagic" .= sgtNetworkMagic timing
+                , "epochDurationSeconds" .= epochDurationSeconds timing
+                , "settingsTxIn" .= tseSettingsTxIn evidence
+                , "poolTxIn" .= tsePoolTxIn evidence
+                , "orderTxIn" .= tseOrderTxIn evidence
+                , "scoopTxId" .= tseScoopTxId evidence
+                , "orderConsumed" .= tseOrderConsumed evidence
+                , "treasuryTokenQuantity"
+                    .= tseTreasuryTokenQuantity evidence
+                , "treasuryAddress" .= tseTreasuryAddress evidence
+                , "treasuryScriptHash" .= tseTreasuryScriptHash evidence
+                , "settingsScriptHash" .= tseSettingsHash evidence
+                , "poolScriptHash" .= tsePoolHash evidence
+                , "poolStakeScriptHash" .= tsePoolStakeHash evidence
+                , "orderScriptHash" .= tseOrderHash evidence
+                , "poolIdent" .= tsePoolIdent evidence
+                , "testTokenPolicy" .= tseTestTokenPolicy evidence
+                , "testTokenName" .= tseTestTokenName evidence
+                , "summaryPath" .= summaryPath
+                ]
+    createDirectoryIfMissing True phaseDir
+    BSL.writeFile summaryPath (encode summary)
+    BSL.writeFile (runDir </> "summary.json") (encode summary)
+    writeFile
+        (runDir </> "summary.log")
+        (unlines (treasurySwapLines runDir evidence))
+
+putTreasurySwapLines :: FilePath -> TreasurySwapEvidence -> IO ()
+putTreasurySwapLines runDir evidence =
+    mapM_ putStrLn (treasurySwapLines runDir evidence)
+
+treasurySwapLines :: FilePath -> TreasurySwapEvidence -> [String]
+treasurySwapLines runDir evidence =
+    [ "devnet-smoke: run-dir " <> runDir
+    , "devnet-smoke: phase treasury-swap-e2e passed"
+    , "devnet-smoke: treasury-swap-e2e-settings-tx-in "
+        <> T.unpack (tseSettingsTxIn evidence)
+    , "devnet-smoke: treasury-swap-e2e-pool-tx-in "
+        <> T.unpack (tsePoolTxIn evidence)
+    , "devnet-smoke: treasury-swap-e2e-order-tx-in "
+        <> T.unpack (tseOrderTxIn evidence)
+    , "devnet-smoke: treasury-swap-e2e-scoop-tx-id "
+        <> T.unpack (tseScoopTxId evidence)
+    , "devnet-smoke: treasury-swap-e2e-order-consumed "
+        <> show (tseOrderConsumed evidence)
+    , "devnet-smoke: treasury-swap-e2e-token-quantity "
+        <> show (tseTreasuryTokenQuantity evidence)
+    , "devnet-smoke: treasury-swap-e2e-treasury-address "
+        <> T.unpack (tseTreasuryAddress evidence)
+    , "devnet-smoke: treasury-swap-e2e-treasury-script-hash "
+        <> T.unpack (tseTreasuryScriptHash evidence)
+    , "devnet-smoke: treasury-swap-e2e-summary "
+        <> (runDir </> "treasury-swap-e2e" </> "summary.json")
     ]
 
 withdrawalResolverFailure

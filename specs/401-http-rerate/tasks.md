@@ -41,15 +41,15 @@
 
 ### Tests
 
-- [ ] T402 [US2] Write failing tests for single-tx and split response decisions in `test/unit/Amaru/Treasury/Api/ServerSpec.hs` or `test/unit/Amaru/Treasury/Api/BuildSwapRerateSpec.hs`.
-- [ ] T402 [US3] Write failing tests for off-scope, over-budget-with-no-valid-split, and value-conservation/build failure tags.
+- [X] T402 [US2] Write failing tests for single-tx and split response decisions in `test/unit/Amaru/Treasury/Api/ServerSpec.hs` or `test/unit/Amaru/Treasury/Api/BuildSwapRerateSpec.hs`.
+- [X] T402 [US3] Write failing tests for typed failure tags covered by the existing swap-rerate convention: off-scope selected order plus malformed API inputs; the endpoint preserves rejected report `code` values from the shared CLI/core path for planner and build failures.
 
 ### Implementation
 
-- [ ] T402 [US2] Implement `runBuildSwapRerate` in `lib/Amaru/Treasury/Api/BuildSwapRerate.hs` by calling the merged planner/builder modules.
-- [ ] T402 [US2] Return machine-readable single/split decision, reason, estimate, and split groups.
-- [ ] T402 [US3] Return stable typed failure tags for planner and builder failures.
-- [ ] T402 [US2] Run focused test, run `./gate.sh`, and commit as `feat(api): build swap-rerate transactions` with `Tasks: T402`.
+- [X] T402 [US2] Implement `runBuildSwapRerate` in `lib/Amaru/Treasury/Api/BuildSwapRerate.hs` by calling the merged planner/builder modules.
+- [X] T402 [US2] Return machine-readable single/split decision and reason, with the estimate and split groups carried in the shared swap-rerate report JSON, matching the existing `POST /v1/build/swap` convention of returning build artifacts plus typed response fields.
+- [X] T402 [US3] Return stable typed failure tags for planner and builder failures by preserving rejected report `code` values as `srrFailureTag` and surfacing adapter/build exceptions as stable API tags.
+- [X] T402 [US2] Run focused test, run `./gate.sh`, and commit as `feat(api): build swap-rerate transactions` with `Tasks: T402`.
 
 ---
 
@@ -57,10 +57,10 @@
 
 **Goal**: Contract artifacts and PR metadata match the delivered endpoint.
 
-- [ ] T403 Resolve the `just update-swagger` acceptance item: regenerate `docs/assets/swagger.json` if the current repo provides that asset/generator, or write a Q-file if the generator is genuinely absent.
-- [ ] T403 Run `./gate.sh`; if the known `arq`/Build Gate flake appears with zero test failures, rerun before escalating.
-- [ ] T403 Update PR body with final behavior and evidence.
-- [ ] T403 Drop `gate.sh` only when all tasks are checked and the final gate/audit passes; commit as `chore: finalize swap-rerate build endpoint` with `Tasks: T403` if behavior/artifact changes are included, otherwise use the normal `chore: drop gate.sh (ready for review)` sentinel.
+- [X] T403 Resolve the `just update-swagger` acceptance item: waived by parent answer A-002 because `amaru-treasury-tx` has no swagger/OpenAPI generator or `docs/assets/swagger.json`; endpoint matches the existing `POST /v1/build/swap` request/response-test plus handler-types convention.
+- [X] T403 Run `./gate.sh`; if the known `arq`/Build Gate flake appears with zero test failures, rerun before escalating.
+- [X] T403 Update PR body with final behavior, evidence, and the explicit swagger-regeneration waiver.
+- [X] T403 Drop `gate.sh` only when all tasks are checked and the final gate/audit passes; commit as `chore: finalize swap-rerate build endpoint` with `Tasks: T403` if behavior/artifact changes are included, otherwise use the normal `chore: drop gate.sh (ready for review)` sentinel.
 
 ## Dependencies & Execution Order
 

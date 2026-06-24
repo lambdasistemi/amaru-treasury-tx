@@ -188,14 +188,38 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
             src `shouldSatisfyContain` "CLI_SMOKE_FUNDING_ADDR"
             src `shouldSatisfyContain` "devnetFundingAddress"
 
-        it "host loudly skips rerate without a PlutusV2 cost model" $ do
+        it "host initializes rerate cost models before node startup" $ do
             src <- mustRead hostMainPath
-            src `shouldSatisfyContain` "skipRerateIfNoPlutusV2CostModel"
-            src
-                `shouldSatisfyContain` "SKIPPED: devnet has no \
-                                       \PlutusV2 cost model; blocked on #410"
+            let initializer = "ensureRerateCostModels smokeGenesis"
+                nodeStart = "withCardanoNode smokeGenesis"
+            src `shouldSatisfyContain` initializer
+            src `shouldSatisfyContain` "readAlonzoCostModels"
+            src `shouldSatisfyContain` "alonzo-genesis.json"
+            src `shouldSatisfyContain` "conway-genesis.json"
+            src `shouldSatisfyContain` "PlutusV1"
+            src `shouldSatisfyContain` "PlutusV2"
+            src `shouldSatisfyContain` "PlutusV3"
+            src `shouldSatisfyContain` "protocolVersion"
             src `shouldSatisfyContain` "hasCostModel PlutusV2"
-            src `shouldSatisfyNotContain` "ensureRerateCostModels"
+            case ( substringOffset initializer src
+                 , substringOffset nodeStart src
+                 ) of
+                (Just initOffset, Just startOffset) ->
+                    unless (initOffset < startOffset) $
+                        expectationFailure $
+                            "expected rerate cost-model initializer "
+                                <> "before withCardanoNode"
+                (Nothing, _) ->
+                    expectationFailure
+                        "missing rerate cost-model initializer"
+                (_, Nothing) ->
+                    expectationFailure
+                        "missing withCardanoNode startup"
+            src
+                `shouldSatisfyContain` "RERATE_COST_MODEL_MISSING"
+            src
+                `shouldSatisfyNotContain` "SKIPPED: devnet has no \
+                                          \PlutusV2 cost model; blocked on #410"
             src `shouldSatisfyNotContain` "ppuCostModelsL"
             src `shouldSatisfyNotContain` "ParameterChange"
             src `shouldSatisfyNotContain` "ppTechnicalGroup"
@@ -676,6 +700,23 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
             src <- mustRead hostMainPath
             src `shouldSatisfyContain` "\"rerate\""
             src `shouldSatisfyContain` "runRerateAssertionsIfPresent"
+
+        it
+            "host exports the rerate wallet address for \
+            \swap-rerate"
+            $ do
+                src <- mustRead hostMainPath
+                let envBlock =
+                        sectionBetween
+                            "CLI_SMOKE_RERATE_METADATA"
+                            "writeRerateMetadata"
+                            src
+                envBlock
+                    `shouldSatisfyContain` "CLI_SMOKE_RERATE_WALLET_TXIN"
+                envBlock
+                    `shouldSatisfyContain` "CLI_SMOKE_RERATE_OLD_ORDER_TXIN"
+                envBlock
+                    `shouldSatisfyContain` "CLI_SMOKE_RERATE_WALLET_ADDRESS"
 
     describe "reorganize exec-units assertion (#87 S3)" $ do
         it

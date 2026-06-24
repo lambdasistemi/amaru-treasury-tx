@@ -1,0 +1,108 @@
+scripts/smoke/smoke.sh --phase rerate
+cli-devnet-smoke: phase=rerate run-dir=runs/devnet-cli/20260624T191658Z timeout=900s
+cli-devnet-smoke: phase 'rerate' requires a live DevNet; routing through devnet-cli-smoke-host
+cli-devnet-smoke: inside-devnet mode (host-provided DevNet)
+cli-devnet-smoke: phase=registry-stake run-dir=/code/amaru-treasury-tx-issue-410/runs/devnet-cli/20260624T191658Z timeout=900s
+cli-devnet-smoke: registry-stake: using /code/amaru-treasury-tx-issue-410/dist-newstyle/build/x86_64-linux/ghc-9.12.3/amaru-treasury-tx-0.2.19.0/x/amaru-treasury-tx/noopt/build/amaru-treasury-tx/amaru-treasury-tx
+cli-devnet-smoke: registry-stake: funding wallet addr = addr_test1vrujxvwcstf4upvh332cx54xd3slga5r3c0zl5wy4elup4s36t0ct
+cli-devnet-smoke: registry-stake: create funding vault
+cli-devnet-smoke: registry-stake: registry-init-wizard seed-split --bootstrap
+cli-devnet-smoke: seed-split: tx-build
+cli-devnet-smoke: seed-split: witness (identity=devnet_funding)
+cli-devnet-smoke: seed-split: attach-witness
+cli-devnet-smoke: seed-split: submit
+cli-devnet-smoke: seed-split: tx-id a1097dac8e21a657ee44e339e8dda2aa741454d28f831e8a01a6e23f57dd0fd3
+cli-devnet-smoke: registry-stake: registry-init-wizard mint --bootstrap
+cli-devnet-smoke: mint: tx-build
+cli-devnet-smoke: mint: witness (identity=devnet_funding)
+cli-devnet-smoke: mint: attach-witness
+cli-devnet-smoke: mint: submit
+cli-devnet-smoke: mint: tx-id 691cca97a925463b58855e3c90f69fa987832d54e7baaa61ea201671cf775c95
+cli-devnet-smoke: registry-stake: registry-init-wizard reference-scripts --bootstrap
+cli-devnet-smoke: reference-scripts: tx-build
+cli-devnet-smoke: reference-scripts: witness (identity=devnet_funding)
+cli-devnet-smoke: reference-scripts: attach-witness
+cli-devnet-smoke: reference-scripts: submit
+cli-devnet-smoke: reference-scripts: tx-id 5fd0cdc822e956bb4382566b8dadc9b973ea61111a232c26191ef72e52f34924
+cli-devnet-smoke: registry-stake: registry-init-wizard write-artifacts
+cli-devnet-smoke: registry-stake: stake-reward-init-wizard script-account
+cli-devnet-smoke: stake-reward-script-account: tx-build
+cli-devnet-smoke: stake-reward-script-account: witness (identity=devnet_funding)
+cli-devnet-smoke: stake-reward-script-account: attach-witness
+cli-devnet-smoke: stake-reward-script-account: submit
+cli-devnet-smoke: stake-reward-script-account: tx-id a620d9d97875a012c5a9f6e402df6fa526d8675054e9b0ddd3bde0336907450e
+cli-devnet-smoke: registry-stake: stake-reward-init-wizard plain-account
+cli-devnet-smoke: stake-reward-plain-account: tx-build
+cli-devnet-smoke: stake-reward-plain-account: witness (identity=devnet_funding)
+cli-devnet-smoke: stake-reward-plain-account: attach-witness
+cli-devnet-smoke: stake-reward-plain-account: submit
+cli-devnet-smoke: stake-reward-plain-account: tx-id b26c65dd0732a49563f197487f1409008418da3f99ef4d4dd69084c53d6c788d
+cli-devnet-smoke: registry-stake: complete (summary in /code/amaru-treasury-tx-issue-410/runs/devnet-cli/20260624T191658Z/phases/registry-stake/summary.json)
+cli-devnet-smoke: inside-devnet mode (host-provided DevNet)
+cli-devnet-smoke: phase=rerate run-dir=/code/amaru-treasury-tx-issue-410/runs/devnet-cli/20260624T191658Z timeout=900s
+cli-devnet-smoke: rerate: using /code/amaru-treasury-tx-issue-410/dist-newstyle/build/x86_64-linux/ghc-9.12.3/amaru-treasury-tx-0.2.19.0/x/amaru-treasury-tx/noopt/build/amaru-treasury-tx/amaru-treasury-tx
+cli-devnet-smoke: rerate: swap-rerate --node-socket
+cli-devnet-smoke: rerate: create funding vault
+cli-devnet-smoke: rerate: create voter vault
+cli-devnet-smoke: rerate: witness (identity=devnet_funding)
+cli-devnet-smoke: rerate: witness (identity=devnet_voter)
+cli-devnet-smoke: rerate: attach-witness
+cli-devnet-smoke: rerate: submit
+cli-devnet-smoke: rerate: tx-id fac7189292fbd88650d37024bfd323ce8386c0ad6e3a8ab79ae14eb719e8ad7e
+cli-devnet-smoke: rerate: phase-2 submit accepted; host will assert UTxO flip (summary in /code/amaru-treasury-tx-issue-410/runs/devnet-cli/20260624T191658Z/phases/rerate/summary.json)
+cli-devnet-smoke: rerate: oldOrderTxIn=5a5da445e69fbcd3de15cbff2291155513e438e4a70289d03c16b91739e9df80#1
+cli-devnet-smoke: rerate: newOrderTxIn=fac7189292fbd88650d37024bfd323ce8386c0ad6e3a8ab79ae14eb719e8ad7e#0
+cli-devnet-smoke: rerate: complete (summary in /code/amaru-treasury-tx-issue-410/runs/devnet-cli/20260624T191658Z/phases/rerate/summary.json)
+devnet-cli-smoke-host: rerate phase-2 accepted and UTxO flip verified (/code/amaru-treasury-tx-issue-410/runs/devnet-cli/20260624T191658Z/chain/rerate.assertions.json)
+=== Node log (last 50) ===
+[2026-06-24 19:17:54.6033Z][development:Forge.Loop.AdoptedBlock](Info,40) Adopted block forged in slot 266: 3692d2900649062727ed0002172b8ef0e9815ef713781a9eb77c5d6e2ea0422b
+[2026-06-24 19:17:54.7005Z][development:Forge.Loop.StartLeadershipCheck](Info,40) Checking for leadership in slot 267
+[2026-06-24 19:17:54.7006Z][development:Forge.Stats.ForgingStats](Info,40) Node cannot forge 0 node is leader 264 blocks forged 264 slots missed 0
+[2026-06-24 19:17:54.7007Z][development:Forge.StateInfo.StateInfo](Info,40) With label "Cardano", KES info startPeriod  0 currPeriod 0 endPeriod 60, 60 KES periods until expiry.
+[2026-06-24 19:17:54.7008Z][development:Forge.Loop.NodeIsLeader](Info,40) Leading slot 267
+[2026-06-24 19:17:54.7010Z][development:Forge.Loop.ForgedBlock](Info,40) Forged block in slot 267
+[2026-06-24 19:17:54.7015Z][development:ChainDB.AddBlockEvent.AddBlockValidation.ValidCandidate](Info,18) Valid candidate 5727d4d890597142b8068fa2ae8301893071d45dce3f97b2a06ea562770431a4 at slot 267
+[2026-06-24 19:17:54.7021Z][development:Forge.Loop.AdoptedBlock](Info,40) Adopted block forged in slot 267: 5727d4d890597142b8068fa2ae8301893071d45dce3f97b2a06ea562770431a4
+[2026-06-24 19:17:54.8007Z][development:Forge.Loop.StartLeadershipCheck](Info,40) Checking for leadership in slot 268
+[2026-06-24 19:17:54.8007Z][development:Forge.Stats.ForgingStats](Info,40) Node cannot forge 0 node is leader 265 blocks forged 265 slots missed 0
+[2026-06-24 19:17:54.8008Z][development:Forge.StateInfo.StateInfo](Info,40) With label "Cardano", KES info startPeriod  0 currPeriod 0 endPeriod 60, 60 KES periods until expiry.
+[2026-06-24 19:17:54.8010Z][development:Forge.Loop.NodeIsLeader](Info,40) Leading slot 268
+[2026-06-24 19:17:54.8012Z][development:Forge.Loop.ForgedBlock](Info,40) Forged block in slot 268
+[2026-06-24 19:17:54.8017Z][development:ChainDB.AddBlockEvent.AddBlockValidation.ValidCandidate](Info,18) Valid candidate 3602e8cea43e9e927f68b5625cdfb177b52bcfedccc67c4588c1e3f3636663e3 at slot 268
+[2026-06-24 19:17:54.8020Z][development:Forge.Loop.AdoptedBlock](Info,40) Adopted block forged in slot 268: 3602e8cea43e9e927f68b5625cdfb177b52bcfedccc67c4588c1e3f3636663e3
+[2026-06-24 19:17:54.8048Z][development:LedgerMetrics](Info,12) Ledger metrics  utxoSize 10 delegMapSize 1 chainDensity 1.0
+[2026-06-24 19:17:54.9010Z][development:Forge.Loop.StartLeadershipCheck](Info,40) Checking for leadership in slot 269
+[2026-06-24 19:17:54.9010Z][development:Forge.Stats.ForgingStats](Info,40) Node cannot forge 0 node is leader 266 blocks forged 266 slots missed 0
+[2026-06-24 19:17:54.9011Z][development:Forge.StateInfo.StateInfo](Info,40) With label "Cardano", KES info startPeriod  0 currPeriod 0 endPeriod 60, 60 KES periods until expiry.
+[2026-06-24 19:17:54.9013Z][development:Forge.Loop.NodeIsLeader](Info,40) Leading slot 269
+[2026-06-24 19:17:54.9014Z][development:Forge.Loop.ForgedBlock](Info,40) Forged block in slot 269
+[2026-06-24 19:17:54.9019Z][development:ChainDB.AddBlockEvent.AddBlockValidation.ValidCandidate](Info,18) Valid candidate eb5f9b2b13906a87d9220cc119c8786d15b743101829958de8ecf8302fb7a51b at slot 269
+[2026-06-24 19:17:54.9022Z][development:Forge.Loop.AdoptedBlock](Info,40) Adopted block forged in slot 269: eb5f9b2b13906a87d9220cc119c8786d15b743101829958de8ecf8302fb7a51b
+[2026-06-24 19:17:55.0011Z][development:Forge.Loop.StartLeadershipCheck](Info,40) Checking for leadership in slot 270
+[2026-06-24 19:17:55.0011Z][development:Forge.Stats.ForgingStats](Info,40) Node cannot forge 0 node is leader 267 blocks forged 267 slots missed 0
+[2026-06-24 19:17:55.0013Z][development:Forge.StateInfo.StateInfo](Info,40) With label "Cardano", KES info startPeriod  0 currPeriod 0 endPeriod 60, 60 KES periods until expiry.
+[2026-06-24 19:17:55.0015Z][development:Forge.Loop.NodeIsLeader](Info,40) Leading slot 270
+[2026-06-24 19:17:55.0016Z][development:Forge.Loop.ForgedBlock](Info,40) Forged block in slot 270
+[2026-06-24 19:17:55.0023Z][development:ChainDB.AddBlockEvent.AddBlockValidation.ValidCandidate](Info,18) Valid candidate 60608b214990a479294a814c588368310c548f60f99265d7da78178589204382 at slot 270
+[2026-06-24 19:17:55.0026Z][development:Forge.Loop.AdoptedBlock](Info,40) Adopted block forged in slot 270: 60608b214990a479294a814c588368310c548f60f99265d7da78178589204382
+[2026-06-24 19:17:55.1003Z][development:Forge.Loop.StartLeadershipCheck](Info,40) Checking for leadership in slot 271
+[2026-06-24 19:17:55.1003Z][development:Forge.Stats.ForgingStats](Info,40) Node cannot forge 0 node is leader 268 blocks forged 268 slots missed 0
+[2026-06-24 19:17:55.1005Z][development:Forge.StateInfo.StateInfo](Info,40) With label "Cardano", KES info startPeriod  0 currPeriod 0 endPeriod 60, 60 KES periods until expiry.
+[2026-06-24 19:17:55.1006Z][development:Forge.Loop.NodeIsLeader](Info,40) Leading slot 271
+[2026-06-24 19:17:55.1008Z][development:Forge.Loop.ForgedBlock](Info,40) Forged block in slot 271
+[2026-06-24 19:17:55.1013Z][development:ChainDB.AddBlockEvent.AddBlockValidation.ValidCandidate](Info,18) Valid candidate ad54167ab4ba3329f6740daddca0dbfb237d7fd7ebec4ca3fdf6d2dad20bcd61 at slot 271
+[2026-06-24 19:17:55.1016Z][development:Forge.Loop.AdoptedBlock](Info,40) Adopted block forged in slot 271: ad54167ab4ba3329f6740daddca0dbfb237d7fd7ebec4ca3fdf6d2dad20bcd61
+[2026-06-24 19:17:55.1537Z][development:Net.ConnectionManager.Local.ConnectionManagerCounters](Info,211) TrConnectionManagerCounters (ConnectionManagerCounters {fullDuplexConns = 0, duplexConns = 0, unidirectionalConns = 0, inboundConns = 1, outboundConns = 0, terminatingConns = 0})
+[2026-06-24 19:17:55.1539Z][development:Net.ConnectionManager.Local.ConnectionHandler.HandshakeSuccess](Info,212) TrConnectionHandler (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.IHK7YS/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.IHK7YS/cardano-e2e/node.sock@25"}) (TrHandshakeSuccess NodeToClientV_23 (NodeToClientVersionData {networkMagic = NetworkMagic {unNetworkMagic = 42}, query = False}))
+[2026-06-24 19:17:55.1539Z][development:Net.ConnectionManager.Local.ConnectionManagerCounters](Info,211) TrConnectionManagerCounters (ConnectionManagerCounters {fullDuplexConns = 0, duplexConns = 0, unidirectionalConns = 1, inboundConns = 1, outboundConns = 0, terminatingConns = 0})
+[2026-06-24 19:17:55.1539Z][development:Net.Mux.Local.State](Info,212) With mux bearer ConnectionId LocalAddress "/tmp/nix-shell.IHK7YS/cardano-e2e/node.sock" LocalAddress "/tmp/nix-shell.IHK7YS/cardano-e2e/node.sock@25". State: Mature
+[2026-06-24 19:17:55.1540Z][development:Net.InboundGovernor.Local.InboundGovernorCounters](Info,46) TrInboundGovernorCounters (Counters {coldPeersRemote = 0, idlePeersRemote = 1, warmPeersRemote = 0, hotPeersRemote = 0})
+[2026-06-24 19:17:55.1541Z][development:Net.ConnectionManager.Local.ConnectionManagerCounters](Info,46) TrConnectionManagerCounters (ConnectionManagerCounters {fullDuplexConns = 0, duplexConns = 0, unidirectionalConns = 1, inboundConns = 1, outboundConns = 0, terminatingConns = 0})
+[2026-06-24 19:17:55.1541Z][development:Net.InboundGovernor.Local.PromotedToWarmRemote](Info,46) TrPromotedToWarmRemote (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.IHK7YS/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.IHK7YS/cardano-e2e/node.sock@25"}) (OperationSuccess (InboundIdleSt Unidirectional))
+[2026-06-24 19:17:55.1541Z][development:Net.InboundGovernor.Local.InboundGovernorCounters](Info,46) TrInboundGovernorCounters (Counters {coldPeersRemote = 0, idlePeersRemote = 0, warmPeersRemote = 1, hotPeersRemote = 0})
+[2026-06-24 19:17:55.1541Z][development:Net.InboundGovernor.Local.PromotedToHotRemote](Info,46) TrPromotedToHotRemote (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.IHK7YS/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.IHK7YS/cardano-e2e/node.sock@25"})
+[2026-06-24 19:17:55.1541Z][development:Net.InboundGovernor.Local.InboundGovernorCounters](Info,46) TrInboundGovernorCounters (Counters {coldPeersRemote = 0, idlePeersRemote = 0, warmPeersRemote = 0, hotPeersRemote = 1})
+[2026-06-24 19:17:55.1541Z][development:StateQueryServer.Receive.Acquire](Info,215) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.IHK7YS/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.IHK7YS/cardano-e2e/node.sock@25"}). Receive: 
+[2026-06-24 19:17:55.1545Z][development:StateQueryServer.Receive.Query](Info,215) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.IHK7YS/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.IHK7YS/cardano-e2e/node.sock@25"}). Receive: 
+[2026-06-24 19:17:55.1547Z][development:StateQueryServer.Receive.Release](Info,215) Peer is: (ConnectionId {localAddress = LocalAddress "/tmp/nix-shell.IHK7YS/cardano-e2e/node.sock", remoteAddress = LocalAddress "/tmp/nix-shell.IHK7YS/cardano-e2e/node.sock@25"}). Receive: 
+

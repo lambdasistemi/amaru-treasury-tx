@@ -340,6 +340,7 @@ main = do
     let smokeGenesis = runDir </> "genesis"
     copyGovernanceGenesis sourceGenesis smokeGenesis
     patchGovernanceGenesis smokeGenesis
+    ensureRerateCostModels smokeGenesis
 
     withCardanoNode smokeGenesis $ \socket _startMs -> do
         keys <- writeDevnetKeyFixtures runDir
@@ -361,7 +362,7 @@ main = do
         rerateEnvEntries <-
             if hoPhase opts == "rerate"
                 then do
-                    skipRerateIfNoPlutusV2CostModel socket devnetMagic
+                    assertRerateCostModels socket devnetMagic
                     registryCode <-
                         callSmokeScriptPhase
                             opts
@@ -375,6 +376,7 @@ main = do
                         runDir
                         socket
                         devnetMagic
+                        (devnetFundingAddress keys)
                         (T.pack (devnetFundingKeyHashHex keys))
                         (T.pack (devnetVoterKeyHashHex keys))
                 else pure []
@@ -562,6 +564,103 @@ patchGovernanceGenesis dir = do
             , "\"govActionDeposit\": 1000000"
             )
         ]
+
+ensureRerateCostModels :: FilePath -> IO ()
+ensureRerateCostModels dir = do
+    (plutusV1, plutusV2) <- readAlonzoCostModels dir
+    requireConwayPlutusV3CostModel dir
+    requireShelleyProtocolVersion dir
+    patchAlonzoExtraCostModels dir plutusV1 plutusV2
+
+readAlonzoCostModels :: FilePath -> IO (Value, Value)
+readAlonzoCostModels dir = do
+    let path = dir </> "alonzo-genesis.json"
+    root <- readJsonObject path
+    costModels <- expectObjectField path "costModels" root
+    plutusV1 <- expectField path "costModels.PlutusV1" costModels
+    plutusV2 <- expectField path "costModels.PlutusV2" costModels
+    pure (plutusV1, plutusV2)
+
+requireConwayPlutusV3CostModel :: FilePath -> IO ()
+requireConwayPlutusV3CostModel dir = do
+    let path = dir </> "conway-genesis.json"
+    root <- readJsonObject path
+    _ <- expectField path "plutusV3CostModel" root
+    pure ()
+
+requireShelleyProtocolVersion :: FilePath -> IO ()
+requireShelleyProtocolVersion dir = do
+    let path = dir </> "shelley-genesis.json"
+    root <- readJsonObject path
+    protocolParams <- expectObjectField path "protocolParams" root
+    _ <- expectObjectField path "protocolVersion" protocolParams
+    pure ()
+
+patchAlonzoExtraCostModels :: FilePath -> Value -> Value -> IO ()
+patchAlonzoExtraCostModels dir plutusV1 plutusV2 = do
+    let path = dir </> "alonzo-genesis.json"
+    root <- readJsonObject path
+    existingExtraConfig <-
+        case KeyMap.lookup (Key.fromString "extraConfig") root of
+            Nothing -> pure KeyMap.empty
+            Just (Aeson.Object obj) -> pure obj
+            Just _ ->
+                die (path <> ": extraConfig must be an object")
+    let letCostModels =
+            Aeson.Object $
+                KeyMap.fromList
+                    [ (Key.fromString "PlutusV1", plutusV1)
+                    , (Key.fromString "PlutusV2", plutusV2)
+                    ]
+        rootCostModels =
+            Aeson.Object $
+                KeyMap.singleton (Key.fromString "PlutusV1") plutusV1
+        extraConfig =
+            KeyMap.insert
+                (Key.fromString "costModels")
+                letCostModels
+                existingExtraConfig
+        updated =
+            KeyMap.insert
+                (Key.fromString "extraConfig")
+                (Aeson.Object extraConfig)
+                ( KeyMap.insert
+                    (Key.fromString "costModels")
+                    rootCostModels
+                    root
+                )
+    BSL.writeFile path (encode (Aeson.Object updated))
+
+readJsonObject :: FilePath -> IO (KeyMap.KeyMap Value)
+readJsonObject path = do
+    value <-
+        eitherDecodeFileStrict' path
+            >>= either
+                (die . (("cannot parse " <> path <> ": ") <>))
+                pure
+    case value of
+        Aeson.Object obj -> pure obj
+        _ -> die (path <> ": expected JSON object")
+
+expectObjectField
+    :: FilePath
+    -> String
+    -> KeyMap.KeyMap Value
+    -> IO (KeyMap.KeyMap Value)
+expectObjectField path field root =
+    case KeyMap.lookup (Key.fromString field) root of
+        Just (Aeson.Object obj) -> pure obj
+        Just _ -> die (path <> ": " <> field <> " must be an object")
+        Nothing -> die (path <> ": missing " <> field)
+
+expectField :: FilePath -> String -> KeyMap.KeyMap Value -> IO Value
+expectField path field root =
+    case KeyMap.lookup (Key.fromString (lastPathSegment field)) root of
+        Just value -> pure value
+        Nothing -> die (path <> ": missing " <> field)
+  where
+    lastPathSegment =
+        reverse . takeWhile (/= '.') . reverse
 
 patchFile :: FilePath -> [(BS.ByteString, BS.ByteString)] -> IO ()
 patchFile path replacements = do
@@ -860,14 +959,14 @@ callSmokeScriptPhase opts phase runDir extraEnv = do
     (_, _, _, ph) <- createProcess cp
     waitForProcess ph
 
-skipRerateIfNoPlutusV2CostModel :: FilePath -> NetworkMagic -> IO ()
-skipRerateIfNoPlutusV2CostModel socket magic =
+assertRerateCostModels :: FilePath -> NetworkMagic -> IO ()
+assertRerateCostModels socket magic =
     withLocalNodeClient magic socket $ \provider _submitter -> do
         pp <- queryCurrentPParams provider
-        unless (hasCostModel PlutusV2 pp) $ do
-            putStrLn
-                "SKIPPED: devnet has no PlutusV2 cost model; blocked on #410"
-            exitSuccess
+        unless (hasCostModel PlutusV2 pp) $
+            die
+                "RERATE_COST_MODEL_MISSING: patched devnet genesis \
+                \did not carry PlutusV2 into Conway initial PParams"
 
 queryCurrentPParams :: Provider IO -> IO (PParams ConwayEra)
 queryCurrentPParams provider =
@@ -882,124 +981,132 @@ prepareRerateSmokeSetup
     :: FilePath
     -> FilePath
     -> NetworkMagic
+    -> String
     -> Text
     -> Text
     -> IO [(String, String)]
-prepareRerateSmokeSetup runDir socket magic fundingOwner voterOwner = do
-    let phaseDir = runDir </> "phases" </> "rerate"
-        registryPath = runDir </> "registry-init" </> "registry.json"
-        metadataPath = phaseDir </> "metadata.json"
-    createDirectoryIfMissing True phaseDir
-    requireExistingFile registryPath
-    treasuryHash <-
-        readNestedText registryPath ["scripts", "treasuryScriptHash"]
-    treasuryAddress <-
-        readNestedText registryPath ["addresses", "treasuryAddress"]
-    permissionsHash <-
-        readNestedText registryPath ["scripts", "permissionsScriptHash"]
-    registryPolicy <-
-        readNestedText registryPath ["policies", "registryPolicyId"]
-    scopesRef <-
-        readNestedText registryPath ["anchors", "scopesDeployedAt"]
-    permissionsRef <-
-        readNestedText registryPath ["anchors", "permissionsDeployedAt"]
-    treasuryRef <-
-        readNestedText registryPath ["anchors", "treasuryDeployedAt"]
-    registryRef <-
-        readNestedText registryPath ["anchors", "registryDeployedAt"]
-    writeRerateMetadata
-        metadataPath
-        treasuryHash
-        treasuryAddress
-        permissionsHash
-        registryPolicy
-        scopesRef
-        permissionsRef
-        treasuryRef
-        registryRef
-        fundingOwner
-        voterOwner
+prepareRerateSmokeSetup
+    runDir
+    socket
+    magic
+    walletAddress
+    fundingOwner
+    voterOwner = do
+        let phaseDir = runDir </> "phases" </> "rerate"
+            registryPath = runDir </> "registry-init" </> "registry.json"
+            metadataPath = phaseDir </> "metadata.json"
+        createDirectoryIfMissing True phaseDir
+        requireExistingFile registryPath
+        treasuryHash <-
+            readNestedText registryPath ["scripts", "treasuryScriptHash"]
+        treasuryAddress <-
+            readNestedText registryPath ["addresses", "treasuryAddress"]
+        permissionsHash <-
+            readNestedText registryPath ["scripts", "permissionsScriptHash"]
+        registryPolicy <-
+            readNestedText registryPath ["policies", "registryPolicyId"]
+        scopesRef <-
+            readNestedText registryPath ["anchors", "scopesDeployedAt"]
+        permissionsRef <-
+            readNestedText registryPath ["anchors", "permissionsDeployedAt"]
+        treasuryRef <-
+            readNestedText registryPath ["anchors", "treasuryDeployedAt"]
+        registryRef <-
+            readNestedText registryPath ["anchors", "registryDeployedAt"]
+        writeRerateMetadata
+            metadataPath
+            treasuryHash
+            treasuryAddress
+            permissionsHash
+            registryPolicy
+            scopesRef
+            permissionsRef
+            treasuryRef
+            registryRef
+            fundingOwner
+            voterOwner
 
-    (walletTxIn, oldOrderTxIn) <-
-        withLocalNodeClient magic socket $ \provider submitter -> do
-            pp <-
-                Backend.singleShotWithAcquired provider $ \qh ->
-                    queryProtocolParamsH qh
-            utxos <- queryUTxOs provider genesisPaymentAddr
-            seed@(seedIn, _) <-
-                selectLargestAdaUtxo "rerate setup funding" utxos
-            orderScript <- orderScriptFromBlob sundaeOrderValidatorBlob
-            snapshot <- queryLedgerSnapshot provider
-            let orderAddress =
-                    scriptAddr
-                        Testnet
-                        (Core.hashScript @ConwayEra orderScript)
-                orderRefOut =
-                    refScriptTxOut orderAddress orderScript
-                oldOrderLovelace = 15_000_000
-                oldOrderUsdm = 6
-                orderValue =
-                    MaryValue
-                        ( Coin
-                            ( oldOrderLovelace
-                                + sundaeProtocolFeeLovelace
-                                + minUtxoDepositLovelace
+        (walletTxIn, oldOrderTxIn) <-
+            withLocalNodeClient magic socket $ \provider submitter -> do
+                pp <-
+                    Backend.singleShotWithAcquired provider $ \qh ->
+                        queryProtocolParamsH qh
+                utxos <- queryUTxOs provider genesisPaymentAddr
+                seed@(seedIn, _) <-
+                    selectLargestAdaUtxo "rerate setup funding" utxos
+                orderScript <- orderScriptFromBlob sundaeOrderValidatorBlob
+                snapshot <- queryLedgerSnapshot provider
+                let orderAddress =
+                        scriptAddr
+                            Testnet
+                            (Core.hashScript @ConwayEra orderScript)
+                    orderRefOut =
+                        refScriptTxOut orderAddress orderScript
+                    oldOrderLovelace = 15_000_000
+                    oldOrderUsdm = 6
+                    orderValue =
+                        MaryValue
+                            ( Coin
+                                ( oldOrderLovelace
+                                    + sundaeProtocolFeeLovelace
+                                    + minUtxoDepositLovelace
+                                )
                             )
-                        )
-                        (MultiAsset Map.empty)
-                upperSlot = addSlots 20 (ledgerTipSlot snapshot)
-                interpret :: InterpretIO NoCtx
-                interpret =
-                    InterpretIO $ \case {}
-                eval tx =
-                    fmap
-                        (Map.map (either (Left . show) Right))
-                        (evaluateTx provider tx)
-            datumParams <-
-                rerateDatumParams fundingOwner voterOwner treasuryHash
-            let orderDatum =
-                    swapOrderDatum
-                        datumParams
-                        oldOrderLovelace
-                        oldOrderUsdm
-                prog :: TxBuild NoCtx Void ()
-                prog = do
-                    _ <- spend seedIn
-                    refIx <- output orderRefOut
-                    checkMinUtxo pp refIx
-                    _ <-
-                        payTo'
-                            orderAddress
-                            orderValue
-                            (RawPlutusData orderDatum)
-                    validTo upperSlot
-            txId <-
-                buildSubmitAndWait
-                    "rerate setup"
-                    provider
-                    submitter
-                    pp
-                    interpret
-                    eval
-                    [seed]
-                    []
-                    genesisPaymentAddr
-                    prog
-            let orderRef = txOutRef txId 0
-                oldOrder = txOutRef txId 1
-            _ <- waitForTxIns provider [orderRef, oldOrder] 60
-            wallet <- waitForChangeTxIn provider txId genesisPaymentAddr 60
-            pure (wallet, oldOrder)
+                            (MultiAsset Map.empty)
+                    upperSlot = addSlots 20 (ledgerTipSlot snapshot)
+                    interpret :: InterpretIO NoCtx
+                    interpret =
+                        InterpretIO $ \case {}
+                    eval tx =
+                        fmap
+                            (Map.map (either (Left . show) Right))
+                            (evaluateTx provider tx)
+                datumParams <-
+                    rerateDatumParams fundingOwner voterOwner treasuryHash
+                let orderDatum =
+                        swapOrderDatum
+                            datumParams
+                            oldOrderLovelace
+                            oldOrderUsdm
+                    prog :: TxBuild NoCtx Void ()
+                    prog = do
+                        _ <- spend seedIn
+                        refIx <- output orderRefOut
+                        checkMinUtxo pp refIx
+                        _ <-
+                            payTo'
+                                orderAddress
+                                orderValue
+                                (RawPlutusData orderDatum)
+                        validTo upperSlot
+                txId <-
+                    buildSubmitAndWait
+                        "rerate setup"
+                        provider
+                        submitter
+                        pp
+                        interpret
+                        eval
+                        [seed]
+                        []
+                        genesisPaymentAddr
+                        prog
+                let orderRef = txOutRef txId 0
+                    oldOrder = txOutRef txId 1
+                _ <- waitForTxIns provider [orderRef, oldOrder] 60
+                wallet <- waitForChangeTxIn provider txId genesisPaymentAddr 60
+                pure (wallet, oldOrder)
 
-    pure
-        [ ("CLI_SMOKE_RERATE_METADATA", metadataPath)
-        , ("CLI_SMOKE_RERATE_WALLET_TXIN", T.unpack (txInToText walletTxIn))
-        , ("CLI_SMOKE_RERATE_COLLATERAL_TXIN", T.unpack (txInToText walletTxIn))
-        ,
-            ( "CLI_SMOKE_RERATE_OLD_ORDER_TXIN"
-            , T.unpack (txInToText oldOrderTxIn)
-            )
-        ]
+        pure
+            [ ("CLI_SMOKE_RERATE_METADATA", metadataPath)
+            , ("CLI_SMOKE_RERATE_WALLET_ADDRESS", walletAddress)
+            , ("CLI_SMOKE_RERATE_WALLET_TXIN", T.unpack (txInToText walletTxIn))
+            , ("CLI_SMOKE_RERATE_COLLATERAL_TXIN", T.unpack (txInToText walletTxIn))
+            ,
+                ( "CLI_SMOKE_RERATE_OLD_ORDER_TXIN"
+                , T.unpack (txInToText oldOrderTxIn)
+                )
+            ]
 
 writeRerateMetadata
     :: FilePath

@@ -48,6 +48,7 @@ module Amaru.Treasury.Api.Server
     , withIndexerProvider
     , mkBuildProvider
     , mkBuildHandlers
+    , mkBuildHandlersWithSwapRerate
     ) where
 
 import Cardano.Ledger.Address (Addr)
@@ -112,8 +113,7 @@ import Amaru.Treasury.Api.BuildSwap
     )
 import Amaru.Treasury.Api.BuildSwapRerate
     ( SwapRerateBuildRequest
-    , SwapRerateBuildResponse
-    , runBuildSwapRerate
+    , SwapRerateBuildResponse (..)
     )
 import Amaru.Treasury.Api.GraphEffect
     ( graphEffectFromCborHex
@@ -434,7 +434,43 @@ mkBuildHandlers
     apiIdx
     metadata
     realProvider
+    buildSwap =
+        mkBuildHandlersWithSwapRerate
+            apiIdx
+            metadata
+            realProvider
+            buildSwap
+            (\_provider _req -> pure unavailableSwapRerateResponse)
+
+{- | Construct build handlers with an explicitly supplied
+swap-rerate runner.
+
+This keeps the existing 'mkBuildHandlers' helper source-compatible for
+older tests while letting the API executable pass the server's
+'GlobalOpts' and metadata path into the real re-rate runner.
+-}
+mkBuildHandlersWithSwapRerate
+    :: ApiIndexer cf op
+    -> Maybe TreasuryMetadata
+    -> Provider IO
+    -> (Provider IO -> SwapBuildRequest -> IO SwapBuildResponse)
+    -> ( Provider IO
+         -> SwapRerateBuildRequest
+         -> IO SwapRerateBuildResponse
+       )
+    -> (Provider IO -> DisburseBuildRequest -> IO DisburseBuildResponse)
+    -> ( Provider IO
+         -> ContingencyDisburseBuildRequest
+         -> IO DisburseBuildResponse
+       )
+    -> (Provider IO -> ReorganizeBuildRequest -> IO ReorganizeBuildResponse)
+    -> BuildHandlers
+mkBuildHandlersWithSwapRerate
+    apiIdx
+    metadata
+    realProvider
     buildSwap
+    buildSwapRerate
     buildDisburse
     buildContingencyDisburse
     buildReorganize =
@@ -445,9 +481,9 @@ mkBuildHandlers
                     >=> attachSwapTtl
                     >=> attachSwapProofs
             , bhBuildSwapRerate =
-                -- The first rerate slice has no graph-effect,
-                -- TTL, or proof fields to attach additively.
-                runBuildSwapRerate buildProvider
+                -- Swap rerate has no graph-effect, TTL, or
+                -- proof fields to attach additively yet.
+                buildSwapRerate buildProvider
             , bhBuildDisburse =
                 buildDisburse buildProvider
                     >=> attachDisburseGraphEffect
@@ -527,6 +563,19 @@ mkBuildHandlers
                         runBuildProofs metadata resolveUtxos hex
                     pure resp{rbrProofs = proofs}
                 Nothing -> pure resp
+
+-- | Placeholder response for legacy 'mkBuildHandlers' callers.
+unavailableSwapRerateResponse :: SwapRerateBuildResponse
+unavailableSwapRerateResponse =
+    SwapRerateBuildResponse
+        { srrCborHex = Nothing
+        , srrCborEnvelope = Nothing
+        , srrReport = Nothing
+        , srrDecision = Nothing
+        , srrReason = Nothing
+        , srrFailureTag = Just "BuildSwapRerateUnavailable"
+        , srrFailureReason = Just "swap-rerate build runner is not wired yet"
+        }
 
 -- | Build the servant 'Server' from the 'Handlers' record.
 mkServer :: Handlers -> Server DashboardAPI

@@ -524,6 +524,7 @@ test-suite unit-tests
   other-modules:
     Amaru.Treasury.Api.AttachSpec
     Amaru.Treasury.Api.BuildMetadataSpec
+    Amaru.Treasury.Api.BuildSwapRerateSpec
     Amaru.Treasury.Api.ConfigSpec
     Amaru.Treasury.Api.HandlersIndexerSpec
     Amaru.Treasury.Api.HistorySpec

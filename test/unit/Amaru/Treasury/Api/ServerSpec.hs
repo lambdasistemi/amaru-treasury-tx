@@ -778,6 +778,7 @@ stubSwapRerateBuildResponse =
         , srrCborEnvelope = Nothing
         , srrReport = Nothing
         , srrDecision = Nothing
+        , srrReason = Nothing
         , srrFailureTag = Just "BuildSwapRerateUnavailable"
         , srrFailureReason = Just "swap-rerate build is not wired yet"
         }

@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StrictData #-}
+{-# LANGUAGE TypeApplications #-}
 
 {- |
 Module      : Amaru.Treasury.Api.BuildSwapRerate
@@ -13,10 +14,12 @@ Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
 Shallow HTTP request and response types for the swap re-rate
-build endpoint.  This first API slice wires the route and
-returns a structured placeholder from the production runner;
-the next slice replaces that placeholder with the merged
-re-rate planner and builder.
+build endpoint.  The runner is an API adapter around the
+existing @swap-rerate@ CLI path: it validates wire-shape
+inputs, delegates planning/building to
+'Amaru.Treasury.Cli.SwapRerate.runSwapRerate', then translates
+the generated CBOR/report artifacts back into a structured
+HTTP response.
 -}
 module Amaru.Treasury.Api.BuildSwapRerate
     ( -- * Request
@@ -29,15 +32,41 @@ module Amaru.Treasury.Api.BuildSwapRerate
     , runBuildSwapRerate
     ) where
 
-import Data.Aeson (FromJSON, ToJSON)
+import Control.Exception (SomeException, try)
+import Data.Aeson
+    ( FromJSON
+    , ToJSON
+    , eitherDecodeStrict'
+    , withObject
+    , (.:)
+    , (.:?)
+    )
+import Data.Aeson.Types (parseEither)
+import Data.ByteString qualified as BS
+import Data.Maybe (fromMaybe)
 import Data.Text (Text)
 import Data.Text qualified as T
+import Data.Text.Encoding qualified as Text
 import Data.Text.IO qualified as TIO
 import GHC.Generics (Generic)
+import System.Directory (doesFileExist)
+import System.Exit (ExitCode (..))
+import System.FilePath ((</>))
 import System.IO (stderr)
+import System.IO.Temp (withSystemTempDirectory)
 
 import Amaru.Treasury.Backend (Backend)
+import Amaru.Treasury.Cli.Common (GlobalOpts)
+import Amaru.Treasury.Cli.SwapRerate
+    ( SwapRerateOpts (..)
+    , SwapRerateSelectionMode (..)
+    , runSwapRerate
+    )
 import Amaru.Treasury.Scope (ScopeId)
+import Amaru.Treasury.Tx.Envelope
+    ( EnvelopeKind (..)
+    , encodeEnvelope
+    )
 
 -- ---------------------------------------------------------------------------
 -- Request
@@ -79,6 +108,8 @@ data SwapRerateBuildResponse = SwapRerateBuildResponse
     -- ^ Pretty-printed build report on success.
     , srrDecision :: Maybe Text
     -- ^ Machine-readable decision, e.g. @single_tx@ or @split@.
+    , srrReason :: Maybe Text
+    -- ^ Planner/report reason for non-failure decisions.
     , srrFailureTag :: Maybe Text
     -- ^ Stable typed failure tag.
     , srrFailureReason :: Maybe Text
@@ -90,32 +121,230 @@ data SwapRerateBuildResponse = SwapRerateBuildResponse
 -- ---------------------------------------------------------------------------
 -- Handler runner
 
-{- | Service-side runner used by the @amaru-treasury-tx-api@
-binary.
-
-The endpoint surface is real in this slice, but the actual
-planner/builder integration is intentionally deferred to the
-next bisect-safe slice.  Returning a typed placeholder keeps
-the HTTP contract structured and makes accidental success
-impossible before the build logic is wired.
--}
+-- | Service-side runner used by the @amaru-treasury-tx-api@ binary.
 runBuildSwapRerate
-    :: Backend
+    :: GlobalOpts
+    -> FilePath
+    -- ^ Server-configured metadata path.
+    -> Backend
     -> SwapRerateBuildRequest
     -> IO SwapRerateBuildResponse
-runBuildSwapRerate _ SwapRerateBuildRequest{..} = do
+runBuildSwapRerate g serverMetadataPath _backend req@SwapRerateBuildRequest{..} = do
     TIO.hPutStrLn
         stderr
         ( "amaru-treasury-tx-api: POST /v1/build/swap-rerate scope="
             <> T.pack (show srrScope)
         )
-    pure
-        SwapRerateBuildResponse
-            { srrCborHex = Nothing
-            , srrCborEnvelope = Nothing
-            , srrReport = Nothing
-            , srrDecision = Nothing
-            , srrFailureTag = Just "BuildSwapRerateUnavailable"
-            , srrFailureReason =
-                Just "swap-rerate build runner is not wired yet"
-            }
+    case validateRequest req of
+        Just failure -> pure failure
+        Nothing ->
+            withSystemTempDirectory "amaru-build-swap-rerate" $
+                \dir -> do
+                    let cborPath = dir </> "swap-rerate.cbor.hex"
+                        reportPath = dir </> "swap-rerate.report.json"
+                        opts =
+                            toSwapRerateOpts
+                                serverMetadataPath
+                                cborPath
+                                reportPath
+                                req
+                    result <-
+                        try @SomeException $
+                            try @ExitCode (runSwapRerate g opts)
+                    case result of
+                        Left e ->
+                            pure $
+                                failureResponse
+                                    "BuildSwapRerateException"
+                                    ( "uncaught exception: "
+                                        <> T.pack (show e)
+                                    )
+                        Right (Left exitCode) ->
+                            responseFromReport
+                                cborPath
+                                reportPath
+                                (Just exitCode)
+                        Right (Right ()) ->
+                            responseFromReport cborPath reportPath Nothing
+
+validateRequest
+    :: SwapRerateBuildRequest -> Maybe SwapRerateBuildResponse
+validateRequest SwapRerateBuildRequest{..}
+    | null srrSelectedOrders =
+        Just $
+            failureResponse
+                "InputInvalid"
+                "selectedOrders: at least one selected order is required"
+    | isNaN srrNewRate || srrNewRate <= 0 =
+        Just $
+            failureResponse
+                "InputOutOfRange"
+                ("newRate: rate must be positive, got " <> T.pack (show srrNewRate))
+    | otherwise = Nothing
+
+toSwapRerateOpts
+    :: FilePath
+    -> FilePath
+    -> FilePath
+    -> SwapRerateBuildRequest
+    -> SwapRerateOpts
+toSwapRerateOpts metadataPath cborPath reportPath SwapRerateBuildRequest{..} =
+    SwapRerateOpts
+        { sroMetadataPath = metadataPath
+        , sroScope = srrScope
+        , sroWalletTxIn = srrWalletTxIn
+        , sroCollateralTxIn = srrCollateralTxIn
+        , sroSelectionMode = SwapRerateSelectExplicit srrSelectedOrders
+        , sroNewRate = srrNewRate
+        , sroValidityHours = Nothing
+        , sroOutPath = Just cborPath
+        , sroReportPath = Just reportPath
+        , sroLog = Nothing
+        }
+
+data ReportSummary = ReportSummary
+    { rsStatus :: !Text
+    , rsReason :: !(Maybe Text)
+    , rsCode :: !(Maybe Text)
+    , rsMessage :: !(Maybe Text)
+    }
+
+responseFromReport
+    :: FilePath
+    -> FilePath
+    -> Maybe ExitCode
+    -> IO SwapRerateBuildResponse
+responseFromReport cborPath reportPath exitCode = do
+    reportExists <- doesFileExist reportPath
+    if reportExists
+        then do
+            rawReport <- BS.readFile reportPath
+            case parseReportSummary rawReport of
+                Left err ->
+                    pure $
+                        failureResponse
+                            "BuildSwapRerateReportInvalid"
+                            err
+                Right summary ->
+                    responseFromSummary
+                        cborPath
+                        (Text.decodeUtf8 rawReport)
+                        exitCode
+                        summary
+        else
+            pure $
+                failureResponse
+                    "BuildSwapRerateNoReport"
+                    ( case exitCode of
+                        Just code ->
+                            "swap-rerate exited without a report: "
+                                <> T.pack (show code)
+                        Nothing ->
+                            "swap-rerate completed without a report"
+                    )
+
+parseReportSummary :: BS.ByteString -> Either Text ReportSummary
+parseReportSummary raw = do
+    value <-
+        case eitherDecodeStrict' raw of
+            Left err -> Left ("invalid report JSON: " <> T.pack err)
+            Right ok -> Right ok
+    case parseEither parseSummary value of
+        Left err -> Left ("invalid report shape: " <> T.pack err)
+        Right ok -> Right ok
+  where
+    parseSummary =
+        withObject "swap-rerate report" $ \o ->
+            ReportSummary
+                <$> o .: "status"
+                <*> o .:? "reason"
+                <*> o .:? "code"
+                <*> o .:? "message"
+
+responseFromSummary
+    :: FilePath
+    -> Text
+    -> Maybe ExitCode
+    -> ReportSummary
+    -> IO SwapRerateBuildResponse
+responseFromSummary cborPath reportText exitCode ReportSummary{..} =
+    case rsStatus of
+        "single_tx" -> singleTxResponse cborPath reportText rsReason
+        "split" ->
+            pure $
+                successResponse
+                    { srrReport = Just reportText
+                    , srrDecision = Just "split"
+                    , srrReason = rsReason
+                    }
+        "rejected" ->
+            pure $
+                failureResponse
+                    (fromMaybe "BuildSwapRerateRejected" rsCode)
+                    (fromMaybe (exitReason exitCode) rsMessage)
+        "passthrough" ->
+            pure $
+                successResponse
+                    { srrReport = Just reportText
+                    , srrDecision = Just "passthrough"
+                    , srrReason = rsReason
+                    }
+        other ->
+            pure $
+                failureResponse
+                    "BuildSwapRerateUnknownStatus"
+                    ("unexpected report status: " <> other)
+
+singleTxResponse
+    :: FilePath -> Text -> Maybe Text -> IO SwapRerateBuildResponse
+singleTxResponse cborPath reportText reason = do
+    cborExists <- doesFileExist cborPath
+    if cborExists
+        then do
+            cborBytes <- BS.readFile cborPath
+            let cborText = Text.decodeUtf8 cborBytes
+                envelope =
+                    Text.decodeUtf8 $
+                        encodeEnvelope Tx cborBytes
+            pure
+                successResponse
+                    { srrCborHex = Just cborText
+                    , srrCborEnvelope = Just envelope
+                    , srrReport = Just reportText
+                    , srrDecision = Just "single_tx"
+                    , srrReason = reason
+                    }
+        else
+            pure $
+                failureResponse
+                    "BuildSwapRerateNoCbor"
+                    "single_tx report was produced without CBOR"
+
+exitReason :: Maybe ExitCode -> Text
+exitReason = \case
+    Just code -> "swap-rerate exited: " <> T.pack (show code)
+    Nothing -> "swap-rerate rejected the request"
+
+successResponse :: SwapRerateBuildResponse
+successResponse =
+    SwapRerateBuildResponse
+        { srrCborHex = Nothing
+        , srrCborEnvelope = Nothing
+        , srrReport = Nothing
+        , srrDecision = Nothing
+        , srrReason = Nothing
+        , srrFailureTag = Nothing
+        , srrFailureReason = Nothing
+        }
+
+failureResponse :: Text -> Text -> SwapRerateBuildResponse
+failureResponse tag reason =
+    SwapRerateBuildResponse
+        { srrCborHex = Nothing
+        , srrCborEnvelope = Nothing
+        , srrReport = Nothing
+        , srrDecision = Nothing
+        , srrReason = Nothing
+        , srrFailureTag = Just tag
+        , srrFailureReason = Just reason
+        }

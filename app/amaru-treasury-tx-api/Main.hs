@@ -84,6 +84,7 @@ import Amaru.Treasury.Api.BuildContingencyDisburse
 import Amaru.Treasury.Api.BuildDisburse (runBuildDisburse)
 import Amaru.Treasury.Api.BuildReorganize (runBuildReorganize)
 import Amaru.Treasury.Api.BuildSwap (runBuildSwap)
+import Amaru.Treasury.Api.BuildSwapRerate (runBuildSwapRerate)
 import Amaru.Treasury.Api.Config
     ( ApiIndexerRuntimeConfig (..)
     , ApiRuntimeConfig (..)
@@ -118,7 +119,7 @@ import Amaru.Treasury.Api.Server
     ( BuildHandlers (..)
     , Handlers (..)
     , mkApplication
-    , mkBuildHandlers
+    , mkBuildHandlersWithSwapRerate
     , mkBuildProvider
     , mkInspectHandler
     )
@@ -232,11 +233,12 @@ main = do
                             limiter <- newApiLimiter
                             let metadataPath = arcMetadata opts
                                 buildHandlers =
-                                    mkBuildHandlers
+                                    mkBuildHandlersWithSwapRerate
                                         apiIdx
                                         (Just metadata)
                                         backend
                                         (runBuildSwap g metadataPath)
+                                        (runBuildSwapRerate g metadataPath)
                                         (runBuildDisburse g metadataPath)
                                         ( runBuildContingencyDisburse
                                             g

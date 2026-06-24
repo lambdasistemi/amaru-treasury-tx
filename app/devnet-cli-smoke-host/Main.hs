@@ -376,6 +376,7 @@ main = do
                         runDir
                         socket
                         devnetMagic
+                        (devnetFundingAddress keys)
                         (T.pack (devnetFundingKeyHashHex keys))
                         (T.pack (devnetVoterKeyHashHex keys))
                 else pure []
@@ -980,124 +981,132 @@ prepareRerateSmokeSetup
     :: FilePath
     -> FilePath
     -> NetworkMagic
+    -> String
     -> Text
     -> Text
     -> IO [(String, String)]
-prepareRerateSmokeSetup runDir socket magic fundingOwner voterOwner = do
-    let phaseDir = runDir </> "phases" </> "rerate"
-        registryPath = runDir </> "registry-init" </> "registry.json"
-        metadataPath = phaseDir </> "metadata.json"
-    createDirectoryIfMissing True phaseDir
-    requireExistingFile registryPath
-    treasuryHash <-
-        readNestedText registryPath ["scripts", "treasuryScriptHash"]
-    treasuryAddress <-
-        readNestedText registryPath ["addresses", "treasuryAddress"]
-    permissionsHash <-
-        readNestedText registryPath ["scripts", "permissionsScriptHash"]
-    registryPolicy <-
-        readNestedText registryPath ["policies", "registryPolicyId"]
-    scopesRef <-
-        readNestedText registryPath ["anchors", "scopesDeployedAt"]
-    permissionsRef <-
-        readNestedText registryPath ["anchors", "permissionsDeployedAt"]
-    treasuryRef <-
-        readNestedText registryPath ["anchors", "treasuryDeployedAt"]
-    registryRef <-
-        readNestedText registryPath ["anchors", "registryDeployedAt"]
-    writeRerateMetadata
-        metadataPath
-        treasuryHash
-        treasuryAddress
-        permissionsHash
-        registryPolicy
-        scopesRef
-        permissionsRef
-        treasuryRef
-        registryRef
-        fundingOwner
-        voterOwner
+prepareRerateSmokeSetup
+    runDir
+    socket
+    magic
+    walletAddress
+    fundingOwner
+    voterOwner = do
+        let phaseDir = runDir </> "phases" </> "rerate"
+            registryPath = runDir </> "registry-init" </> "registry.json"
+            metadataPath = phaseDir </> "metadata.json"
+        createDirectoryIfMissing True phaseDir
+        requireExistingFile registryPath
+        treasuryHash <-
+            readNestedText registryPath ["scripts", "treasuryScriptHash"]
+        treasuryAddress <-
+            readNestedText registryPath ["addresses", "treasuryAddress"]
+        permissionsHash <-
+            readNestedText registryPath ["scripts", "permissionsScriptHash"]
+        registryPolicy <-
+            readNestedText registryPath ["policies", "registryPolicyId"]
+        scopesRef <-
+            readNestedText registryPath ["anchors", "scopesDeployedAt"]
+        permissionsRef <-
+            readNestedText registryPath ["anchors", "permissionsDeployedAt"]
+        treasuryRef <-
+            readNestedText registryPath ["anchors", "treasuryDeployedAt"]
+        registryRef <-
+            readNestedText registryPath ["anchors", "registryDeployedAt"]
+        writeRerateMetadata
+            metadataPath
+            treasuryHash
+            treasuryAddress
+            permissionsHash
+            registryPolicy
+            scopesRef
+            permissionsRef
+            treasuryRef
+            registryRef
+            fundingOwner
+            voterOwner
 
-    (walletTxIn, oldOrderTxIn) <-
-        withLocalNodeClient magic socket $ \provider submitter -> do
-            pp <-
-                Backend.singleShotWithAcquired provider $ \qh ->
-                    queryProtocolParamsH qh
-            utxos <- queryUTxOs provider genesisPaymentAddr
-            seed@(seedIn, _) <-
-                selectLargestAdaUtxo "rerate setup funding" utxos
-            orderScript <- orderScriptFromBlob sundaeOrderValidatorBlob
-            snapshot <- queryLedgerSnapshot provider
-            let orderAddress =
-                    scriptAddr
-                        Testnet
-                        (Core.hashScript @ConwayEra orderScript)
-                orderRefOut =
-                    refScriptTxOut orderAddress orderScript
-                oldOrderLovelace = 15_000_000
-                oldOrderUsdm = 6
-                orderValue =
-                    MaryValue
-                        ( Coin
-                            ( oldOrderLovelace
-                                + sundaeProtocolFeeLovelace
-                                + minUtxoDepositLovelace
+        (walletTxIn, oldOrderTxIn) <-
+            withLocalNodeClient magic socket $ \provider submitter -> do
+                pp <-
+                    Backend.singleShotWithAcquired provider $ \qh ->
+                        queryProtocolParamsH qh
+                utxos <- queryUTxOs provider genesisPaymentAddr
+                seed@(seedIn, _) <-
+                    selectLargestAdaUtxo "rerate setup funding" utxos
+                orderScript <- orderScriptFromBlob sundaeOrderValidatorBlob
+                snapshot <- queryLedgerSnapshot provider
+                let orderAddress =
+                        scriptAddr
+                            Testnet
+                            (Core.hashScript @ConwayEra orderScript)
+                    orderRefOut =
+                        refScriptTxOut orderAddress orderScript
+                    oldOrderLovelace = 15_000_000
+                    oldOrderUsdm = 6
+                    orderValue =
+                        MaryValue
+                            ( Coin
+                                ( oldOrderLovelace
+                                    + sundaeProtocolFeeLovelace
+                                    + minUtxoDepositLovelace
+                                )
                             )
-                        )
-                        (MultiAsset Map.empty)
-                upperSlot = addSlots 20 (ledgerTipSlot snapshot)
-                interpret :: InterpretIO NoCtx
-                interpret =
-                    InterpretIO $ \case {}
-                eval tx =
-                    fmap
-                        (Map.map (either (Left . show) Right))
-                        (evaluateTx provider tx)
-            datumParams <-
-                rerateDatumParams fundingOwner voterOwner treasuryHash
-            let orderDatum =
-                    swapOrderDatum
-                        datumParams
-                        oldOrderLovelace
-                        oldOrderUsdm
-                prog :: TxBuild NoCtx Void ()
-                prog = do
-                    _ <- spend seedIn
-                    refIx <- output orderRefOut
-                    checkMinUtxo pp refIx
-                    _ <-
-                        payTo'
-                            orderAddress
-                            orderValue
-                            (RawPlutusData orderDatum)
-                    validTo upperSlot
-            txId <-
-                buildSubmitAndWait
-                    "rerate setup"
-                    provider
-                    submitter
-                    pp
-                    interpret
-                    eval
-                    [seed]
-                    []
-                    genesisPaymentAddr
-                    prog
-            let orderRef = txOutRef txId 0
-                oldOrder = txOutRef txId 1
-            _ <- waitForTxIns provider [orderRef, oldOrder] 60
-            wallet <- waitForChangeTxIn provider txId genesisPaymentAddr 60
-            pure (wallet, oldOrder)
+                            (MultiAsset Map.empty)
+                    upperSlot = addSlots 20 (ledgerTipSlot snapshot)
+                    interpret :: InterpretIO NoCtx
+                    interpret =
+                        InterpretIO $ \case {}
+                    eval tx =
+                        fmap
+                            (Map.map (either (Left . show) Right))
+                            (evaluateTx provider tx)
+                datumParams <-
+                    rerateDatumParams fundingOwner voterOwner treasuryHash
+                let orderDatum =
+                        swapOrderDatum
+                            datumParams
+                            oldOrderLovelace
+                            oldOrderUsdm
+                    prog :: TxBuild NoCtx Void ()
+                    prog = do
+                        _ <- spend seedIn
+                        refIx <- output orderRefOut
+                        checkMinUtxo pp refIx
+                        _ <-
+                            payTo'
+                                orderAddress
+                                orderValue
+                                (RawPlutusData orderDatum)
+                        validTo upperSlot
+                txId <-
+                    buildSubmitAndWait
+                        "rerate setup"
+                        provider
+                        submitter
+                        pp
+                        interpret
+                        eval
+                        [seed]
+                        []
+                        genesisPaymentAddr
+                        prog
+                let orderRef = txOutRef txId 0
+                    oldOrder = txOutRef txId 1
+                _ <- waitForTxIns provider [orderRef, oldOrder] 60
+                wallet <- waitForChangeTxIn provider txId genesisPaymentAddr 60
+                pure (wallet, oldOrder)
 
-    pure
-        [ ("CLI_SMOKE_RERATE_METADATA", metadataPath)
-        , ("CLI_SMOKE_RERATE_WALLET_TXIN", T.unpack (txInToText walletTxIn))
-        , ("CLI_SMOKE_RERATE_COLLATERAL_TXIN", T.unpack (txInToText walletTxIn))
-        ,
-            ( "CLI_SMOKE_RERATE_OLD_ORDER_TXIN"
-            , T.unpack (txInToText oldOrderTxIn)
-            )
-        ]
+        pure
+            [ ("CLI_SMOKE_RERATE_METADATA", metadataPath)
+            , ("CLI_SMOKE_RERATE_WALLET_ADDRESS", walletAddress)
+            , ("CLI_SMOKE_RERATE_WALLET_TXIN", T.unpack (txInToText walletTxIn))
+            , ("CLI_SMOKE_RERATE_COLLATERAL_TXIN", T.unpack (txInToText walletTxIn))
+            ,
+                ( "CLI_SMOKE_RERATE_OLD_ORDER_TXIN"
+                , T.unpack (txInToText oldOrderTxIn)
+                )
+            ]
 
 writeRerateMetadata
     :: FilePath

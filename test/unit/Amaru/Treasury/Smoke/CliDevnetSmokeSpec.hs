@@ -701,6 +701,23 @@ spec = describe "CLI DevNet smoke static guard (#161)" $ do
             src `shouldSatisfyContain` "\"rerate\""
             src `shouldSatisfyContain` "runRerateAssertionsIfPresent"
 
+        it
+            "host exports the rerate wallet address for \
+            \swap-rerate"
+            $ do
+                src <- mustRead hostMainPath
+                let envBlock =
+                        sectionBetween
+                            "CLI_SMOKE_RERATE_METADATA"
+                            "writeRerateMetadata"
+                            src
+                envBlock
+                    `shouldSatisfyContain` "CLI_SMOKE_RERATE_WALLET_TXIN"
+                envBlock
+                    `shouldSatisfyContain` "CLI_SMOKE_RERATE_OLD_ORDER_TXIN"
+                envBlock
+                    `shouldSatisfyContain` "CLI_SMOKE_RERATE_WALLET_ADDRESS"
+
     describe "reorganize exec-units assertion (#87 S3)" $ do
         it
             "reorganize_phase invokes tx-validate with --input \

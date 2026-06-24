@@ -12,12 +12,12 @@
 
 ## Slice 2 - Rerate wallet-address handoff
 
-- [ ] T410-S2 Add a failing unit guard that expects the DevNet host to
+- [X] T410-S2 Add a failing unit guard that expects the DevNet host to
   export `CLI_SMOKE_RERATE_WALLET_ADDRESS` for the rerate phase.
-- [ ] T410-S2 Update the host rerate setup environment to pass the
+- [X] T410-S2 Update the host rerate setup environment to pass the
   deterministic DevNet funding wallet address used by current
   `swap-rerate`.
-- [ ] T410-S2 Run `./gate.sh`, commit one bisect-safe slice, and leave
+- [X] T410-S2 Run `./gate.sh`, commit one bisect-safe slice, and leave
   the branch unpushed for orchestrator review.
 
 ## Slice 3 - Executed rerate transcript

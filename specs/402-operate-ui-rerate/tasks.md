@@ -36,12 +36,12 @@
 
 ## Slice 3: Browser Proof and Screenshot
 
-- [ ] T402-S3 Add Playwright Re-rate mode spec with mocked pending,
+- [X] T402-S3 Add Playwright Re-rate mode spec with mocked pending,
   build single/split, and empty-state responses.
-- [ ] T402-S3 Capture and commit a working Re-rate screenshot under
+- [X] T402-S3 Capture and commit a working Re-rate screenshot under
   `frontend/test/ui-review/402/`.
-- [ ] T402-S3 Run `./gate.sh` and record the proof.
-- [ ] T402-S3 Commit as `test(frontend): cover rerate operate mode`.
+- [X] T402-S3 Run `./gate.sh` and record the proof.
+- [X] T402-S3 Commit as `test(frontend): cover rerate operate mode`.
 
 ## Finalization
 

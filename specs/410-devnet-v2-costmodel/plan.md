@@ -27,7 +27,11 @@ the expected behavior.
 1. **Genesis cost-model patch**: add RED unit coverage for the new
    source-level contract, then implement genesis-initial cost-model
    preservation without governance.
-2. **Executed re-rate proof**: run the real `rerate` DevNet smoke,
+2. **Rerate wallet-address handoff**: update the DevNet host rerate
+   setup to export the wallet address expected by the current
+   `swap-rerate` CLI surface, preserving the genesis-only cost-model
+   path from Slice 1.
+3. **Executed re-rate proof**: run the real `rerate` DevNet smoke,
    capture the transcript, and commit the evidence.
 
 ## Verification

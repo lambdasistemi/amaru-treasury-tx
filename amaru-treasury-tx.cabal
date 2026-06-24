@@ -198,6 +198,7 @@ library
     Amaru.Treasury.Devnet.RegistryInit
     Amaru.Treasury.Devnet.Runner
     Amaru.Treasury.Devnet.StakeRewardInit
+    Amaru.Treasury.Devnet.SwapSubmit
     Amaru.Treasury.History.Sparql
     Amaru.Treasury.Indexer.Decoder
     Amaru.Treasury.Inspect
@@ -579,6 +580,7 @@ test-suite unit-tests
     Amaru.Treasury.Devnet.GovernanceWithdrawalInitSpec
     Amaru.Treasury.Devnet.RegistryInitSpec
     Amaru.Treasury.Devnet.StakeRewardInitSpec
+    Amaru.Treasury.Devnet.SwapSubmitSpec
     Amaru.Treasury.History.SparqlSpec
     Amaru.Treasury.Indexer.DecoderFixtures
     Amaru.Treasury.Indexer.DecoderSpec

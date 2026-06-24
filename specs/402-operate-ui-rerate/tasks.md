@@ -45,6 +45,6 @@
 
 ## Finalization
 
-- [ ] T402-F1 Update PR body with delivered behavior and verification.
-- [ ] T402-F2 Run final `./gate.sh`.
-- [ ] T402-F3 Drop `gate.sh` before marking the PR ready.
+- [X] T402-F1 Update PR body with delivered behavior and verification.
+- [X] T402-F2 Run final `./gate.sh`.
+- [X] T402-F3 Drop `gate.sh` before marking the PR ready.

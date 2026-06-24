@@ -86,8 +86,8 @@ import Cardano.Ledger.Mary.Value
     , MultiAsset (..)
     , PolicyID (..)
     )
-import Cardano.Ledger.Plutus.ExUnits (ExUnits)
 import Cardano.Ledger.Plutus.Data (mkInlineDatum)
+import Cardano.Ledger.Plutus.ExUnits (ExUnits)
 import Cardano.Ledger.Plutus.Language
     ( Language (PlutusV3)
     , Plutus (..)
@@ -193,6 +193,7 @@ import Lens.Micro
     ( (.~)
     , (^.)
     )
+import PlutusCore.Data (Data (..))
 import System.Directory
     ( copyFile
     , createDirectoryIfMissing
@@ -212,11 +213,11 @@ import System.FilePath
     ( takeDirectory
     , (</>)
     )
-import System.Process (readProcessWithExitCode)
 import System.Posix.Files
     ( ownerReadMode
     , setFileMode
     )
+import System.Process (readProcessWithExitCode)
 import Test.Hspec
     ( Spec
     , describe
@@ -226,7 +227,6 @@ import Test.Hspec
     , shouldSatisfy
     )
 import Text.Read (readMaybe)
-import PlutusCore.Data (Data (..))
 
 import Amaru.Treasury.Backend.N2C
     ( probeNetworkMagic
@@ -1820,7 +1820,7 @@ data SundaeReferenceScripts = SundaeReferenceScripts
     , srsPoolStake :: !(TxIn, TxOut ConwayEra)
     }
 
-data Blueprint = Blueprint
+newtype Blueprint = Blueprint
     { bpValidators :: ![BlueprintValidator]
     }
 
@@ -2441,15 +2441,13 @@ deriveFreshSundaeScripts runDir bootIn = do
     blueprint <-
         decodeJsonFile "fresh Sundae blueprint" blueprintPath
     let raw title =
-            case
-                [ bytes
-                | validator <- bpValidators blueprint
-                , bvTitle validator == title
-                , let decoded =
+            case [ bytes
+                 | validator <- bpValidators blueprint
+                 , bvTitle validator == title
+                 , let decoded =
                         B16.decode (TE.encodeUtf8 (bvCompiledCode validator))
-                , Right bytes <- [decoded]
-                ]
-            of
+                 , Right bytes <- [decoded]
+                 ] of
                 bytes : _ -> pure bytes
                 [] ->
                     expectationFailure
@@ -2519,15 +2517,21 @@ deriveFreshSundaeScripts runDir bootIn = do
             <> T.unpack (scriptHashToHex poolStakeHash)
             <> " order="
             <> T.unpack (scriptHashToHex orderHash)
-    SundaeScriptBundle
-        <$> pure settingsHash
-        <*> scriptFromBlob settingsBlob
-        <*> pure poolHash
-        <*> scriptFromBlob poolBlob
-        <*> pure poolStakeHash
-        <*> scriptFromBlob poolStakeBlob
-        <*> pure orderHash
-        <*> scriptFromBlob orderBlob
+    settingsScript <- scriptFromBlob settingsBlob
+    poolScript <- scriptFromBlob poolBlob
+    poolStakeScript <- scriptFromBlob poolStakeBlob
+    orderScript <- scriptFromBlob orderBlob
+    pure
+        SundaeScriptBundle
+            { ssbSettingsHash = settingsHash
+            , ssbSettingsScript = settingsScript
+            , ssbPoolHash = poolHash
+            , ssbPoolScript = poolScript
+            , ssbPoolStakeHash = poolStakeHash
+            , ssbPoolStakeScript = poolStakeScript
+            , ssbOrderHash = orderHash
+            , ssbOrderScript = orderScript
+            }
 
 publishSundaeReferenceScripts
     :: Provider IO
@@ -2645,7 +2649,8 @@ refreshSettingsBeforeReferenceScripts
         go (10 :: Int) settings
       where
         refTxIns =
-            fst <$> [srsPool scriptRefs, srsOrder scriptRefs, srsPoolStake scriptRefs]
+            fst
+                <$> [srsPool scriptRefs, srsOrder scriptRefs, srsPoolStake scriptRefs]
         firstRef =
             minimum refTxIns
         go attempts current
@@ -3088,136 +3093,136 @@ scoopSundaeOrder
     order
     scripts
     scriptRefs = do
-    fuel@(fuelIn, _) <-
-        selectLargestAdaUtxo "fresh scoop fee fuel" utxos
-    snapshot <- queryLedgerSnapshot provider
-    let poolPolicy =
-            PolicyID (ssbPoolHash scripts)
-        ownerGuard =
-            genesisGuardKeyHash
-        poolAddress =
-            poolAddr (ssbPoolHash scripts) genesisStakingKeyHash
-        walletAddress =
-            walletAddr genesisPaymentKeyHash
-        treasuryAddress =
-            stakedWalletAddr genesisPaymentKeyHash genesisStakingKeyHash
-        finalPoolValue =
-            MaryValue
-                (Coin 1_014_500_000)
-                ( multiAsset
-                    [ (sttPolicy token, sttAssetName token, 990_103_912)
-                    , (poolPolicy, spuNftName pool, 1)
-                    ]
-                )
-        walletValue =
-            MaryValue
-                (Coin 2_000_000)
-                (singleAsset (sttPolicy token) (sttAssetName token) 9_896_088)
-        finalPoolOut =
-            inlineDatumTxOut
-                poolAddress
-                finalPoolValue
-                ( poolDatum
-                    (spuIdent pool)
-                    (policyIdBytes (sttPolicy token))
-                    (assetNameRawBytes (sttAssetName token))
-                    1_000_000_000
-                    4_500_000
-                )
-        walletOut =
-            mkBasicTxOut walletAddress walletValue
-        treasuryOut =
-            inlineDatumTxOut
-                treasuryAddress
-                (MaryValue (Coin 2_000_000) mempty)
-                voidData
-        rewardAccount =
-            AccountAddress
-                Testnet
-                (AccountId (ScriptHashObj (ssbPoolStakeHash scripts)))
-        lowerSlot =
-            ledgerTipSlot snapshot
-        upperSlot =
-            addSlots 20 (ledgerTipSlot snapshot)
-        prog :: TxBuild NoCtx Void ()
-        prog = do
-            _ <- spend fuelIn
-            collateral fuelIn
-            reference (ssuTxIn settings)
-            reference (fst (srsPool scriptRefs))
-            reference (fst (srsOrder scriptRefs))
-            reference (fst (srsPoolStake scriptRefs))
-            requiredSignature ownerGuard
-            orderIx <-
-                spendScript
-                    (souTxIn order)
-                    (RawPlutusData orderScoopRedeemer)
-            _ <-
-                spendScript
-                    (spuTxIn pool)
-                    ( RawPlutusData $
-                        poolScoopRedeemer (toInteger orderIx)
+        fuel@(fuelIn, _) <-
+            selectLargestAdaUtxo "fresh scoop fee fuel" utxos
+        snapshot <- queryLedgerSnapshot provider
+        let poolPolicy =
+                PolicyID (ssbPoolHash scripts)
+            ownerGuard =
+                genesisGuardKeyHash
+            poolAddress =
+                poolAddr (ssbPoolHash scripts) genesisStakingKeyHash
+            walletAddress =
+                walletAddr genesisPaymentKeyHash
+            treasuryAddress =
+                stakedWalletAddr genesisPaymentKeyHash genesisStakingKeyHash
+            finalPoolValue =
+                MaryValue
+                    (Coin 1_014_500_000)
+                    ( multiAsset
+                        [ (sttPolicy token, sttAssetName token, 990_103_912)
+                        , (poolPolicy, spuNftName pool, 1)
+                        ]
                     )
-            withdrawScript
-                rewardAccount
-                (Coin 0)
-                (RawPlutusData voidData)
-            poolIx <- output finalPoolOut
-            _ <- output walletOut
-            _ <- output treasuryOut
-            checkMinUtxo pp poolIx
-            validFrom lowerSlot
-            validTo upperSlot
-    txId <-
-        buildSubmitAndWait
-            "scoop fresh Sundae order"
-            provider
-            submitter
-            pp
-            emptyInterpret
-            (evalWith provider)
-            [ fuel
-            , (souTxIn order, souTxOut order)
-            , (spuTxIn pool, spuTxOut pool)
-            ]
-            ( (ssuTxIn settings, ssuTxOut settings)
-                : [ srsPool scriptRefs
-                  , srsOrder scriptRefs
-                  , srsPoolStake scriptRefs
-                  ]
-            )
-            genesisAddr
-            prog
-    orderStillThere <-
-        any ((== souTxIn order) . fst)
-            <$> queryUTxOs provider (scriptAddr Testnet (ssbOrderHash scripts))
-    walletUtxos <- queryUTxOs provider (walletAddr genesisPaymentKeyHash)
-    let walletTokenQuantity =
-            sum
-                [ assetQuantity
-                    (sttPolicy token)
-                    (sttAssetName token)
-                    (txOutValue txOut)
-                | (_, txOut) <- walletUtxos
+            walletValue =
+                MaryValue
+                    (Coin 2_000_000)
+                    (singleAsset (sttPolicy token) (sttAssetName token) 9_896_088)
+            finalPoolOut =
+                inlineDatumTxOut
+                    poolAddress
+                    finalPoolValue
+                    ( poolDatum
+                        (spuIdent pool)
+                        (policyIdBytes (sttPolicy token))
+                        (assetNameRawBytes (sttAssetName token))
+                        1_000_000_000
+                        4_500_000
+                    )
+            walletOut =
+                mkBasicTxOut walletAddress walletValue
+            treasuryOut =
+                inlineDatumTxOut
+                    treasuryAddress
+                    (MaryValue (Coin 2_000_000) mempty)
+                    voidData
+            rewardAccount =
+                AccountAddress
+                    Testnet
+                    (AccountId (ScriptHashObj (ssbPoolStakeHash scripts)))
+            lowerSlot =
+                ledgerTipSlot snapshot
+            upperSlot =
+                addSlots 20 (ledgerTipSlot snapshot)
+            prog :: TxBuild NoCtx Void ()
+            prog = do
+                _ <- spend fuelIn
+                collateral fuelIn
+                reference (ssuTxIn settings)
+                reference (fst (srsPool scriptRefs))
+                reference (fst (srsOrder scriptRefs))
+                reference (fst (srsPoolStake scriptRefs))
+                requiredSignature ownerGuard
+                orderIx <-
+                    spendScript
+                        (souTxIn order)
+                        (RawPlutusData orderScoopRedeemer)
+                _ <-
+                    spendScript
+                        (spuTxIn pool)
+                        ( RawPlutusData $
+                            poolScoopRedeemer (toInteger orderIx)
+                        )
+                withdrawScript
+                    rewardAccount
+                    (Coin 0)
+                    (RawPlutusData voidData)
+                poolIx <- output finalPoolOut
+                _ <- output walletOut
+                _ <- output treasuryOut
+                checkMinUtxo pp poolIx
+                validFrom lowerSlot
+                validTo upperSlot
+        txId <-
+            buildSubmitAndWait
+                "scoop fresh Sundae order"
+                provider
+                submitter
+                pp
+                emptyInterpret
+                (evalWith provider)
+                [ fuel
+                , (souTxIn order, souTxOut order)
+                , (spuTxIn pool, spuTxOut pool)
                 ]
-    orderStillThere `shouldBe` False
-    walletTokenQuantity `shouldSatisfy` (>= 9_896_088)
-    pure
-        ScoopE2EEvidence
-            { seeSettingsTxIn = txInToText (ssuTxIn settings)
-            , seePoolTxIn = txInToText (spuTxIn pool)
-            , seeOrderTxIn = txInToText (souTxIn order)
-            , seeScoopTxId = renderTxId txId
-            , seeOrderConsumed = not orderStillThere
-            , seeWalletTokenQuantity = walletTokenQuantity
-            , seeSettingsHash = scriptHashToHex (ssbSettingsHash scripts)
-            , seePoolHash = scriptHashToHex (ssbPoolHash scripts)
-            , seePoolStakeHash = scriptHashToHex (ssbPoolStakeHash scripts)
-            , seeOrderHash = scriptHashToHex (ssbOrderHash scripts)
-            , seePoolIdent = hexText (spuIdent pool)
-            , seeTestTokenPolicy = policyIdHex (sttPolicy token)
-            , seeTestTokenName = assetNameHex (sttAssetName token)
-            }
+                ( (ssuTxIn settings, ssuTxOut settings)
+                    : [ srsPool scriptRefs
+                      , srsOrder scriptRefs
+                      , srsPoolStake scriptRefs
+                      ]
+                )
+                genesisAddr
+                prog
+        orderStillThere <-
+            any ((== souTxIn order) . fst)
+                <$> queryUTxOs provider (scriptAddr Testnet (ssbOrderHash scripts))
+        walletUtxos <- queryUTxOs provider (walletAddr genesisPaymentKeyHash)
+        let walletTokenQuantity =
+                sum
+                    [ assetQuantity
+                        (sttPolicy token)
+                        (sttAssetName token)
+                        (txOutValue txOut)
+                    | (_, txOut) <- walletUtxos
+                    ]
+        orderStillThere `shouldBe` False
+        walletTokenQuantity `shouldSatisfy` (>= 9_896_088)
+        pure
+            ScoopE2EEvidence
+                { seeSettingsTxIn = txInToText (ssuTxIn settings)
+                , seePoolTxIn = txInToText (spuTxIn pool)
+                , seeOrderTxIn = txInToText (souTxIn order)
+                , seeScoopTxId = renderTxId txId
+                , seeOrderConsumed = not orderStillThere
+                , seeWalletTokenQuantity = walletTokenQuantity
+                , seeSettingsHash = scriptHashToHex (ssbSettingsHash scripts)
+                , seePoolHash = scriptHashToHex (ssbPoolHash scripts)
+                , seePoolStakeHash = scriptHashToHex (ssbPoolStakeHash scripts)
+                , seeOrderHash = scriptHashToHex (ssbOrderHash scripts)
+                , seePoolIdent = hexText (spuIdent pool)
+                , seeTestTokenPolicy = policyIdHex (sttPolicy token)
+                , seeTestTokenName = assetNameHex (sttAssetName token)
+                }
 
 emptyInterpret :: InterpretIO NoCtx
 emptyInterpret =
@@ -3389,7 +3394,8 @@ assetClassData :: BS.ByteString -> BS.ByteString -> Data
 assetClassData policy name =
     List [B policy, B name]
 
-singletonValueData :: BS.ByteString -> BS.ByteString -> Integer -> Data
+singletonValueData
+    :: BS.ByteString -> BS.ByteString -> Integer -> Data
 singletonValueData policy name quantity =
     List [B policy, B name, I quantity]
 

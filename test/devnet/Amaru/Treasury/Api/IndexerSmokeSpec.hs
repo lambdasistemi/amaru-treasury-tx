@@ -214,13 +214,13 @@ import Test.Hspec
     , shouldBe
     )
 
+import Amaru.Treasury.Api.BuildContingencyDisburse
+    ( runBuildContingencyDisburse
+    )
 import Amaru.Treasury.Api.BuildDisburse
     ( DisburseBuildRequest (..)
     , DisburseBuildResponse (..)
     , runBuildDisburse
-    )
-import Amaru.Treasury.Api.BuildContingencyDisburse
-    ( runBuildContingencyDisburse
     )
 import Amaru.Treasury.Api.BuildReorganize
     ( ReorganizeBuildRequest (..)
@@ -236,7 +236,6 @@ import Amaru.Treasury.Api.History
     , queryScopeHistoryShaclResponse
     , queryTxDetailResponse
     )
-import Amaru.Treasury.Api.Introspect (introspectTx)
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer (..)
     , IndexerConfig (..)
@@ -244,8 +243,13 @@ import Amaru.Treasury.Api.Indexer
     , snapshotUtxosByTxIn
     , withApiIndexer
     )
+import Amaru.Treasury.Api.Introspect (introspectTx)
 import Amaru.Treasury.Api.LagGuard
     ( withLagGuard
+    )
+import Amaru.Treasury.Api.RateLimit
+    ( ApiLimiter
+    , newApiLimiter
     )
 import Amaru.Treasury.Api.Readiness
     ( Readiness (..)
@@ -255,10 +259,6 @@ import Amaru.Treasury.Api.Readiness
     )
 import Amaru.Treasury.Api.Readiness.Internal
     ( setReadinessForTest
-    )
-import Amaru.Treasury.Api.RateLimit
-    ( ApiLimiter
-    , newApiLimiter
     )
 import Amaru.Treasury.Api.Server
     ( BuildHandlers (..)

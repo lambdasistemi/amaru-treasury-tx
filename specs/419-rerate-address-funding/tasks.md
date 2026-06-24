@@ -31,6 +31,6 @@
 
 ## Slice 4: Final Gate and PR Readiness
 
-- [ ] T419-S4 Run `./gate.sh` at HEAD and record the evidence.
-- [ ] T419-S4 Audit PR body and task accounting.
-- [ ] T419-S4 Drop `gate.sh`, push, and mark PR ready for review.
+- [X] T419-S4 Run `./gate.sh` at HEAD and record the evidence.
+- [X] T419-S4 Audit PR body and task accounting.
+- [X] T419-S4 Drop `gate.sh`, push, and mark PR ready for review.

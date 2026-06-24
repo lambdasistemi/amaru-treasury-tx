@@ -25,14 +25,14 @@
 
 ## Slice 2: Re-rate Operate Mode
 
-- [ ] T402-S2 Add `ModeRerate` and the `Re-rate` mode selector segment.
-- [ ] T402-S2 Add Re-rate state, actions, validation, draft
+- [X] T402-S2 Add `ModeRerate` and the `Re-rate` mode selector segment.
+- [X] T402-S2 Add Re-rate state, actions, validation, draft
   serialization, request JSON, endpoint, and response prefix handling.
-- [ ] T402-S2 Fetch pending orders for the selected scope and render
+- [X] T402-S2 Fetch pending orders for the selected scope and render
   per-order retract selection plus empty state.
-- [ ] T402-S2 Render single-tx vs split decision/reason in the existing
+- [X] T402-S2 Render single-tx vs split decision/reason in the existing
   preview/status surface.
-- [ ] T402-S2 Commit as `feat(frontend): add rerate operate mode`.
+- [X] T402-S2 Commit as `feat(frontend): add rerate operate mode`.
 
 ## Slice 3: Browser Proof and Screenshot
 

@@ -19,6 +19,7 @@ import Effect (Effect)
 import Effect.Aff (Aff, launchAff_, throwError)
 import Effect.Exception (error)
 import Foreign.Object as FO
+import OperatePage as OperatePage
 import Store.PendingTx as PendingTx
 
 main :: Effect Unit
@@ -28,6 +29,7 @@ main =
     testWitnesses
     testSupersede
     testRerateApiSurface
+    testOperateRerateContract
 
 testCrud :: Aff Unit
 testCrud = do
@@ -176,6 +178,21 @@ testRerateNoOrdersEmptyState = do
     ( Array.length
         (Api.pendingOrdersForScope "core_development" pending)
     )
+
+testOperateRerateContract :: Aff Unit
+testOperateRerateContract = do
+  let contract = OperatePage.rerateModeContract
+  assertEq "rerate label" "Re-rate" contract.label
+  assertEq "rerate wire" "rerate" contract.wire
+  assertEq
+    "rerate build endpoint"
+    "/v1/build/swap-rerate"
+    contract.buildEndpoint
+  assertEq "rerate response prefix" "srr" contract.responsePrefix
+  assertEq
+    "rerate empty orders error"
+    "select at least one pending order to retract"
+    contract.emptyOrdersError
 
 decodePending :: String -> Aff Api.PendingResponse
 decodePending = decodeFixture "pending response"

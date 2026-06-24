@@ -8,7 +8,7 @@
 -- | card on the right.  Class names match `style-build.css`
 -- | one-to-one — no invented styling here.
 
-module OperatePage (component) where
+module OperatePage (component, rerateModeContract) where
 
 import Prelude
 
@@ -121,8 +121,36 @@ data TxMode
   = ModeSwap
   | ModeDisburse
   | ModeReorganize
+  | ModeRerate
 
 derive instance eqTxMode :: Eq TxMode
+
+modeLabel :: TxMode -> String
+modeLabel = case _ of
+  ModeSwap -> "Swap"
+  ModeDisburse -> "Disburse"
+  ModeReorganize -> "Reorganize"
+  ModeRerate -> "Re-rate"
+
+rerateNoOrdersError :: String
+rerateNoOrdersError = "select at least one pending order to retract"
+
+type RerateModeContract =
+  { label :: String
+  , wire :: String
+  , buildEndpoint :: String
+  , responsePrefix :: String
+  , emptyOrdersError :: String
+  }
+
+rerateModeContract :: RerateModeContract
+rerateModeContract =
+  { label: modeLabel ModeRerate
+  , wire: modeWire ModeRerate
+  , buildEndpoint: buildEndpoint (initialState { mode = ModeRerate })
+  , responsePrefix: responsePrefix ModeRerate
+  , emptyOrdersError: rerateNoOrdersError
+  }
 
 -- | Currency selector for the disburse mode's @--unit@
 -- | flag.  Mirrors the CLI's @ada@ / @usdm@ values and the
@@ -292,6 +320,7 @@ recordSubmittedBooks st = do
           recordNamed WalletsBook st.beneficiaryAddr
           for_ st.references recordSubmittedReference
     ModeReorganize -> pure unit
+    ModeRerate -> pure unit
 
 -- | Record one reference triple submitted via the
 -- | reference row on '/operate'.  Dedup-on-URI: if a
@@ -356,6 +385,13 @@ type State =
   , adaUsdm :: String
   , slippageBps :: String
   , minRate :: String
+  , rerateNewRate :: String
+  , rerateWalletTxIn :: String
+  , rerateCollateralTxIn :: String
+  , reratePending :: Maybe Api.PendingResponse
+  , reratePendingLoading :: Boolean
+  , reratePendingError :: Maybe String
+  , rerateSelectedOrders :: Array Api.PendingOutRef
   , beneficiaryAddr :: String
   , disburseUnit :: DisburseUnit
   , disburseAmount :: String
@@ -416,6 +452,13 @@ initialState =
   , adaUsdm: "0.43"
   , slippageBps: "75"
   , minRate: "0.5"
+  , rerateNewRate: "0.43"
+  , rerateWalletTxIn: ""
+  , rerateCollateralTxIn: ""
+  , reratePending: Nothing
+  , reratePendingLoading: false
+  , reratePendingError: Nothing
+  , rerateSelectedOrders: []
   , beneficiaryAddr: ""
   , disburseUnit: UnitUsdm
   , disburseAmount: "1500"
@@ -456,6 +499,10 @@ data Action
   | SetAdaUsdm String
   | SetSlippageBps String
   | SetMinRate String
+  | SetRerateNewRate String
+  | SetRerateWalletTxIn String
+  | SetRerateCollateralTxIn String
+  | SetRerateOrderSelected Api.PendingOutRef Boolean
   | SetBeneficiaryAddr String
   | SetDisburseUnit DisburseUnit
   | SetDisburseAmount String
@@ -565,6 +612,7 @@ siteHeader mode scope =
           "Build contingency disburse transaction"
       | otherwise -> "Build disburse transaction"
     ModeReorganize -> "Build reorganize transaction"
+    ModeRerate -> "Build re-rate transaction"
 
 -- ---------------------------------------------------------------------------
 -- Form column
@@ -589,89 +637,154 @@ formColumn st =
                   ]
               _ -> HH.text ""
           ]
-      , formSection "02" "Wallet"
-          "Operator bech32 address — fuel + collateral + change."
-          [ namedFieldV
-              WalletSlot
-              st.openNamedDropdown
-              st.books.wallets
-              "wallet"
-              st.walletAddr
-              SetWalletAddr
-              "addr1q…"
-              true
-              ( validateWalletAddr st.walletAddr
-                  <|> serverFieldError st "wallet_addr"
-              )
-          ]
+      , identitySection st
       ]
         <> modeSpecificSections st
-        <>
-          [ formSection "05" "Validity"
-              "Validity-hours window. Leave blank for the chain horizon."
-              [ freeTextField
-                  "validity_hours"
-                  st.books.validityHours
-                  "validity-hours"
-                  st.validityHours
-                  SetValidityHours
-                  "<chain horizon>"
-                  false
-              ]
-          , formSection "06" "Rationale"
-              "Description, justification, and destination label baked \
-              \into the on-chain CIP-1694 rationale tree."
-              [ freeTextField
-                  "descriptions"
-                  st.books.descriptions
-                  "description"
-                  st.description
-                  SetDescription
-                  "weekly USDM build"
-                  false
-              , freeTextField
-                  "justifications"
-                  st.books.justifications
-                  "justification"
-                  st.justification
-                  SetJustification
-                  "operator decision"
-                  false
-              , freeTextField
-                  "destination_labels"
-                  st.books.destinationLabels
-                  "destination-label"
-                  st.destinationLabel
-                  SetDestinationLabel
-                  "core_development"
-                  true
-              ]
-          , formSection "07" "Extra signers"
-              ( case st.mode of
-                  ModeReorganize ->
-                    "Reorganize is authorised by the scope owner \
-                    \alone; extra signers are accepted but not \
-                    \required by the permissions script."
-                  ModeDisburse | st.scope == Contingency ->
-                    "Contingency disburse derives its required \
-                    \signers on-chain; extra signers are accepted \
-                    \but not required here."
-                  _ ->
-                    "Other scope owners that must co-sign."
-              )
-              [ case st.mode of
-                  ModeDisburse | st.scope == Contingency ->
-                    contingencySignersReadOnly
-                  _ -> signersPicker st.scope st.extraSigners
-              , case st.mode of
-                  ModeReorganize -> HH.text ""
-                  ModeDisburse | st.scope == Contingency -> HH.text ""
-                  _ -> case validateSigners st.extraSigners of
-                    Just msg -> fieldError msg
-                    Nothing -> HH.text ""
-              ]
-          ]
+        <> sharedOperateSections st
     )
+
+identitySection :: forall m. State -> H.ComponentHTML Action () m
+identitySection st = case st.mode of
+  ModeRerate ->
+    formSection "02" "Funding"
+      "Wallet fuel input and optional collateral input for the \
+      \re-rate build."
+      [ fieldV "wallet tx-in"
+          st.rerateWalletTxIn
+          SetRerateWalletTxIn
+          "<txid>#0"
+          true
+          ( validateTxIn "wallet tx-in" st.rerateWalletTxIn
+              <|> serverFieldError st "wallet_txin"
+          )
+      , fieldV "collateral tx-in"
+          st.rerateCollateralTxIn
+          SetRerateCollateralTxIn
+          "<txid>#1"
+          true
+          ( validateOptionalTxIn
+              "collateral tx-in"
+              st.rerateCollateralTxIn
+              <|> serverFieldError st "collateral_txin"
+          )
+      ]
+  ModeSwap ->
+    walletAddressSection st
+  ModeDisburse ->
+    walletAddressSection st
+  ModeReorganize ->
+    walletAddressSection st
+
+walletAddressSection :: forall m. State -> H.ComponentHTML Action () m
+walletAddressSection st =
+  formSection "02" "Wallet"
+    "Operator bech32 address — fuel + collateral + change."
+    [ namedFieldV
+        WalletSlot
+        st.openNamedDropdown
+        st.books.wallets
+        "wallet"
+        st.walletAddr
+        SetWalletAddr
+        "addr1q…"
+        true
+        ( validateWalletAddr st.walletAddr
+            <|> serverFieldError st "wallet_addr"
+        )
+    ]
+
+sharedOperateSections
+  :: forall m. State -> Array (H.ComponentHTML Action () m)
+sharedOperateSections st = case st.mode of
+  ModeRerate -> []
+  ModeSwap -> sharedWizardSections st
+  ModeDisburse -> sharedWizardSections st
+  ModeReorganize -> sharedWizardSections st
+
+sharedWizardSections
+  :: forall m. State -> Array (H.ComponentHTML Action () m)
+sharedWizardSections st =
+  [ formSection "05" "Validity"
+      "Validity-hours window. Leave blank for the chain horizon."
+      [ freeTextField
+          "validity_hours"
+          st.books.validityHours
+          "validity-hours"
+          st.validityHours
+          SetValidityHours
+          "<chain horizon>"
+          false
+      ]
+  , formSection "06" "Rationale"
+      "Description, justification, and destination label baked \
+      \into the on-chain CIP-1694 rationale tree."
+      [ freeTextField
+          "descriptions"
+          st.books.descriptions
+          "description"
+          st.description
+          SetDescription
+          "weekly USDM build"
+          false
+      , freeTextField
+          "justifications"
+          st.books.justifications
+          "justification"
+          st.justification
+          SetJustification
+          "operator decision"
+          false
+      , freeTextField
+          "destination_labels"
+          st.books.destinationLabels
+          "destination-label"
+          st.destinationLabel
+          SetDestinationLabel
+          "core_development"
+          true
+      ]
+  , formSection "07" "Extra signers"
+      ( case st.mode of
+          ModeReorganize ->
+            "Reorganize is authorised by the scope owner \
+            \alone; extra signers are accepted but not \
+            \required by the permissions script."
+          ModeDisburse | st.scope == Contingency ->
+            "Contingency disburse derives its required \
+            \signers on-chain; extra signers are accepted \
+            \but not required here."
+          ModeSwap ->
+            "Other scope owners that must co-sign."
+          ModeRerate ->
+            "Re-rate derives required inputs from the \
+            \selected orders."
+          ModeDisburse ->
+            "Other scope owners that must co-sign."
+      )
+      [ case st.mode of
+          ModeDisburse | st.scope == Contingency ->
+            contingencySignersReadOnly
+          ModeRerate ->
+            HH.div [ HP.classes [ cn "field__hint" ] ]
+              [ HH.text
+                  "No extra signer field is sent to the \
+                  \swap-rerate endpoint."
+              ]
+          ModeSwap -> signersPicker st.scope st.extraSigners
+          ModeDisburse -> signersPicker st.scope st.extraSigners
+          ModeReorganize -> signersPicker st.scope st.extraSigners
+      , case st.mode of
+          ModeReorganize -> HH.text ""
+          ModeDisburse | st.scope == Contingency -> HH.text ""
+          ModeRerate -> HH.text ""
+          ModeSwap -> case validateSigners st.extraSigners of
+            Just msg -> fieldError msg
+            Nothing -> HH.text ""
+          ModeDisburse -> case validateSigners st.extraSigners of
+            Just msg -> fieldError msg
+            Nothing -> HH.text ""
+      ]
+  ]
 
 -- | Sections 03 + 04 — swap-specific (Amount + Rate) vs
 -- | disburse-specific (Beneficiary + Amount-with-unit).
@@ -836,6 +949,85 @@ modeSpecificSections st = case st.mode of
             SetSplitNativeAssets
         ]
     ]
+  ModeRerate ->
+    [ formSection "03" "Pending orders"
+        "Select the pending SundaeSwap orders in this scope \
+        \that the re-rate build should retract."
+        [ reratePendingOrdersView st ]
+    , formSection "04" "New rate"
+        "Replacement ADA/USDM rate for the selected pending \
+        \orders."
+        [ fieldNumV "New rate (ADA/USDM)"
+            st.rerateNewRate
+            SetRerateNewRate
+            "ADA/USDM"
+            (validatePositiveRate st.rerateNewRate)
+        ]
+    ]
+
+reratePendingOrdersView
+  :: forall m. State -> H.ComponentHTML Action () m
+reratePendingOrdersView st = case st.reratePendingLoading, st.reratePendingError of
+  true, _ ->
+    HH.div [ HP.classes [ cn "field__hint" ] ]
+      [ HH.text "Loading pending orders for the selected scope..." ]
+  _, Just err ->
+    fieldError ("Pending orders unavailable: " <> err)
+  _, Nothing -> case st.reratePending of
+    Nothing ->
+      HH.div [ HP.classes [ cn "field__hint" ] ]
+        [ HH.text "Pending orders have not loaded yet." ]
+    Just pending ->
+      let
+        orders = rerateOrdersForState st pending
+      in
+        if Array.null orders then
+          HH.div [ HP.classes [ cn "field__error" ] ]
+            [ HH.text
+                ( "No pending swap orders for "
+                    <> scopeLong st.scope
+                    <> "; re-rate build is blocked."
+                )
+            ]
+        else
+          HH.div
+            [ HP.classes [ cn "repeated-row-list" ] ]
+            (map (rerateOrderRow st.rerateSelectedOrders) orders)
+
+rerateOrderRow
+  :: forall m
+   . Array Api.PendingOutRef
+  -> Api.PendingSwapOrder
+  -> H.ComponentHTML Action () m
+rerateOrderRow selected order =
+  let
+    outref = Api.pendingOutRefText order.outref
+    checked_ = Array.elem order.outref selected
+  in
+    HH.label
+      [ HP.classes [ cn "repeated-row-card" ]
+      , HP.style
+          "display:flex;flex-direction:row;gap:.75rem;\
+          \align-items:flex-start"
+      ]
+      [ HH.input
+          [ HP.type_ HP.InputCheckbox
+          , HP.checked checked_
+          , HE.onChecked (SetRerateOrderSelected order.outref)
+          ]
+      , HH.div [ HP.classes [ cn "repeated-row-card__fields" ] ]
+          [ graphKvMono "order" shortHex outref
+          , graphKv "lovelace in" (showAda order.lovelaceIn)
+          , graphKv "min USDM out"
+              (formatThousandsN order.minUsdmOut <> " base units")
+          , graphKv "scooper fee" (showAda order.sundaeFeeLovelace)
+          ]
+      ]
+
+rerateOrdersForState
+  :: State -> Api.PendingResponse -> Array Api.PendingSwapOrder
+rerateOrdersForState st =
+  Api.pendingOrdersForScope (scopeSlug st.scope)
 
 -- | Render every reference row with the slice-G compound
 -- | named widget for the URI (picking fills label + type
@@ -1098,12 +1290,14 @@ contingencyAdaField i value_ =
 modeSelector :: forall m. TxMode -> H.ComponentHTML Action () m
 modeSelector active =
   segmented
-    [ Tuple "Swap"
+    [ Tuple (modeLabel ModeSwap)
         (Tuple (active == ModeSwap) (SetMode ModeSwap))
-    , Tuple "Disburse"
+    , Tuple (modeLabel ModeDisburse)
         (Tuple (active == ModeDisburse) (SetMode ModeDisburse))
-    , Tuple "Reorganize"
+    , Tuple (modeLabel ModeReorganize)
         (Tuple (active == ModeReorganize) (SetMode ModeReorganize))
+    , Tuple (modeLabel ModeRerate)
+        (Tuple (active == ModeRerate) (SetMode ModeRerate))
     ]
 
 -- | All form-level validation errors keyed by section.
@@ -1112,7 +1306,11 @@ modeSelector active =
 formErrors :: State -> Array String
 formErrors st =
   let
-    addrErr = validateWalletAddr st.walletAddr
+    addrErr = case st.mode of
+      ModeRerate -> validateTxIn "wallet tx-in" st.rerateWalletTxIn
+      ModeSwap -> validateWalletAddr st.walletAddr
+      ModeDisburse -> validateWalletAddr st.walletAddr
+      ModeReorganize -> validateWalletAddr st.walletAddr
     -- The reorganize wizard derives the only required
     -- signer from the on-chain scope-owner; extra signers
     -- are not part of the wire shape, so the shared
@@ -1123,6 +1321,7 @@ formErrors st =
       -- wire (the builder derives required signers on-chain),
       -- so the shared "pick a co-signer" gate doesn't apply.
       ModeDisburse | st.scope == Contingency -> Nothing
+      ModeRerate -> Nothing
       _ -> validateSigners st.extraSigners
     modeErrs = case st.mode of
       ModeSwap -> []
@@ -1134,6 +1333,7 @@ formErrors st =
               , validateDisburseAmount st.disburseAmount
               ]
       ModeReorganize -> []
+      ModeRerate -> rerateErrors st
   in
     Array.catMaybes [ addrErr, signersErr ] <> modeErrs
 
@@ -1170,6 +1370,7 @@ responsePrefix = case _ of
   ModeSwap -> "sbr"
   ModeDisburse -> "dbr"
   ModeReorganize -> "rbr"
+  ModeRerate -> "srr"
 
 -- | Bech32 sanity for the operator wallet input.  Doesn't
 -- | re-implement the full bech32 decoder (the api will
@@ -1224,6 +1425,52 @@ validateDisburseAmount s
       Just n
         | n > 0.0 -> Nothing
         | otherwise -> Just "amount must be positive"
+
+validatePositiveRate :: String -> Maybe String
+validatePositiveRate s
+  | s == "" = Just "new rate is required"
+  | otherwise = case Number.fromString s of
+      Nothing -> Just "new rate must be a number"
+      Just n
+        | n > 0.0 -> Nothing
+        | otherwise -> Just "new rate must be positive"
+
+validateTxIn :: String -> String -> Maybe String
+validateTxIn label_ s
+  | String.trim s == "" = Just (label_ <> " is required")
+  | not (String.contains (String.Pattern "#") s) =
+      Just (label_ <> " must be a txid#index")
+  | otherwise = Nothing
+
+validateOptionalTxIn :: String -> String -> Maybe String
+validateOptionalTxIn label_ s
+  | String.trim s == "" = Nothing
+  | otherwise = validateTxIn label_ s
+
+rerateErrors :: State -> Array String
+rerateErrors st =
+  Array.catMaybes
+    [ validatePositiveRate st.rerateNewRate
+    , validateOptionalTxIn
+        "collateral tx-in"
+        st.rerateCollateralTxIn
+    , reratePendingErrorForBuild st
+    ]
+
+reratePendingErrorForBuild :: State -> Maybe String
+reratePendingErrorForBuild st = case st.reratePendingLoading, st.reratePendingError of
+  true, _ -> Just "pending orders are still loading"
+  _, Just err -> Just ("pending orders unavailable: " <> err)
+  _, Nothing -> case st.reratePending of
+    Nothing -> Just "pending orders not loaded yet"
+    Just pending ->
+      let
+        orders = rerateOrdersForState st pending
+      in
+        if Array.null orders || Array.null st.rerateSelectedOrders then
+          Just rerateNoOrdersError
+        else
+          Nothing
 
 -- | Client-side guard for the contingency-disburse mode: the
 -- | destination list must be non-empty, every amount must be a
@@ -1313,6 +1560,11 @@ fieldState value err
       Just _ -> FInvalid
       Nothing -> FComplete
 
+optionalFieldState :: String -> Maybe String -> FieldState
+optionalFieldState value err
+  | String.trim value == "" = FComplete
+  | otherwise = fieldState value err
+
 -- | Reduce a list of field states into a section state.
 -- | 'Invalid' wins over 'Pending' wins over 'Complete' —
 -- | an operator should see the most-actionable issue
@@ -1326,21 +1578,39 @@ combineFields xs
 sectionState :: Section -> State -> SectionState
 sectionState sec st = case sec of
   SecIdentity ->
-    -- Wallet is always required.  Beneficiary is required
-    -- only on disburse.  Scope is a picker with a default;
-    -- always complete.
-    combineFields
-      ( [ fieldState st.walletAddr
-            (validateWalletAddr st.walletAddr)
-        ]
-          <> case st.mode of
-            -- Contingency disburse has no beneficiary field.
-            ModeDisburse | st.scope /= Contingency ->
-              [ fieldState st.beneficiaryAddr
-                  (validateBeneficiaryAddr st.beneficiaryAddr)
-              ]
-            _ -> []
-      )
+    case st.mode of
+      ModeRerate ->
+        combineFields
+          [ fieldState st.rerateWalletTxIn
+              (validateTxIn "wallet tx-in" st.rerateWalletTxIn)
+          , optionalFieldState st.rerateCollateralTxIn
+              ( validateOptionalTxIn
+                  "collateral tx-in"
+                  st.rerateCollateralTxIn
+              )
+          ]
+      ModeSwap ->
+        combineFields
+          [ fieldState st.walletAddr
+              (validateWalletAddr st.walletAddr)
+          ]
+      ModeReorganize ->
+        combineFields
+          [ fieldState st.walletAddr
+              (validateWalletAddr st.walletAddr)
+          ]
+      ModeDisburse ->
+        combineFields
+          ( [ fieldState st.walletAddr
+                (validateWalletAddr st.walletAddr)
+            ]
+              <>
+                if st.scope /= Contingency then
+                  [ fieldState st.beneficiaryAddr
+                      (validateBeneficiaryAddr st.beneficiaryAddr)
+                  ]
+                else []
+          )
 
   SecAmount -> case st.mode of
     ModeSwap ->
@@ -1381,6 +1651,12 @@ sectionState sec st = case sec of
                 (validateDisburseAmount st.disburseAmount)
             ]
     ModeReorganize -> SectionComplete
+    ModeRerate ->
+      combineFields
+        [ fieldState st.rerateNewRate
+            (validatePositiveRate st.rerateNewRate)
+        , rerateSelectionFieldState st
+        ]
 
   SecRationale ->
     -- Description / justification / destination-label
@@ -1391,7 +1667,14 @@ sectionState sec st = case sec of
     -- skip the check on reorganize where they're optional.
     case st.mode of
       ModeReorganize -> SectionComplete
-      _ ->
+      ModeRerate -> SectionComplete
+      ModeSwap ->
+        combineFields
+          [ fieldState st.description Nothing
+          , fieldState st.justification Nothing
+          , fieldState st.destinationLabel Nothing
+          ]
+      ModeDisburse ->
         combineFields
           [ fieldState st.description Nothing
           , fieldState st.justification Nothing
@@ -1409,16 +1692,38 @@ sectionState sec st = case sec of
       combineFields
         ( map (\r -> fieldState r.uri Nothing) st.references
         )
-    _ -> SectionComplete
+    ModeSwap -> SectionComplete
+    ModeReorganize -> SectionComplete
+    ModeRerate -> SectionComplete
 
   SecSigners -> case st.mode of
     ModeReorganize -> SectionComplete
+    ModeRerate -> SectionComplete
     -- Contingency drops signers from the wire, so the chip is
     -- never blocking.
     ModeDisburse | st.scope == Contingency -> SectionComplete
-    _ -> case st.extraSigners of
-      [] -> SectionPending
-      _ -> SectionComplete
+    ModeDisburse -> signersSectionState st
+    ModeSwap -> signersSectionState st
+
+signersSectionState :: State -> SectionState
+signersSectionState st = case st.extraSigners of
+  [] -> SectionPending
+  _ -> SectionComplete
+
+rerateSelectionFieldState :: State -> FieldState
+rerateSelectionFieldState st =
+  case st.reratePendingLoading, st.reratePendingError of
+    true, _ -> FPending
+    _, Just _ -> FInvalid
+    _, Nothing -> case st.reratePending of
+      Nothing -> FPending
+      Just pending ->
+        let
+          orders = rerateOrdersForState st pending
+        in
+          if Array.null orders then FInvalid
+          else if Array.null st.rerateSelectedOrders then FPending
+          else FComplete
 
 -- | Resolve the input id the section's chip should
 -- | scroll-and-focus on click.  Picks the first invalid
@@ -1428,14 +1733,24 @@ sectionState sec st = case sec of
 sectionFocusId :: Section -> State -> String
 sectionFocusId sec st = case sec of
   SecIdentity ->
-    if isJust (validateWalletAddr st.walletAddr)
-      then "operate-wallet"
-    else case st.mode of
-      ModeDisburse
-        | st.scope /= Contingency
-        , isJust (validateBeneficiaryAddr st.beneficiaryAddr) ->
-            "operate-beneficiary"
-      _ -> "operate-wallet"
+    case st.mode of
+      ModeRerate ->
+        if isJust (validateTxIn "wallet tx-in" st.rerateWalletTxIn)
+          then "operate-wallet-tx-in"
+        else "operate-collateral-tx-in"
+      ModeSwap ->
+        "operate-wallet"
+      ModeReorganize ->
+        "operate-wallet"
+      ModeDisburse ->
+        if isJust (validateWalletAddr st.walletAddr)
+          then "operate-wallet"
+        else if
+          st.scope /= Contingency
+            && isJust (validateBeneficiaryAddr st.beneficiaryAddr)
+        then
+          "operate-beneficiary"
+        else "operate-wallet"
   SecAmount -> case st.mode of
     ModeSwap -> case st.amountMode of
       ModeUsdm -> "operate-usdm-target"
@@ -1447,6 +1762,7 @@ sectionFocusId sec st = case sec of
             Nothing -> "operate-wallet"
       | otherwise -> "operate-amount"
     ModeReorganize -> "operate-validity_hours"
+    ModeRerate -> "operate-new-rate-ada-usdm"
   SecRationale -> "operate-descriptions"
   SecReferences -> case st.mode of
     ModeDisburse ->
@@ -2159,7 +2475,9 @@ scopePicker mode active =
 scopePickerScopes :: TxMode -> Array Scope
 scopePickerScopes = case _ of
   ModeDisburse -> allScopes
-  _ -> ownedScopes
+  ModeSwap -> ownedScopes
+  ModeReorganize -> ownedScopes
+  ModeRerate -> ownedScopes
 
 pill :: forall m. Scope -> Scope -> H.ComponentHTML Action () m
 pill active s =
@@ -2268,6 +2586,7 @@ previewColumn st =
         , HP.id "operate-result-panel"
         ]
         [ buildStatus st
+        , responseDecisionPanel st
         , saveToPendingPanel st
         , previewTabs st.activeTab
         , HH.div [ HP.classes [ cn "preview-body" ] ]
@@ -2314,6 +2633,25 @@ pendingSaveStatusText = case _ of
 -- | way).
 buildStatus :: forall m. State -> H.ComponentHTML Action () m
 buildStatus = buildStatusPill Nothing
+
+responseDecisionPanel :: forall m. State -> H.ComponentHTML Action () m
+responseDecisionPanel st = case responseDecisionText st of
+  Nothing -> HH.text ""
+  Just txt ->
+    HH.div
+      [ HP.classes [ cn "field__hint" ]
+      , HP.style "margin:.4rem 0 .75rem"
+      ]
+      [ HH.text txt ]
+
+responseDecisionText :: State -> Maybe String
+responseDecisionText st = case st.result of
+  Result j -> do
+    decision <- lookupString (responsePrefix st.mode <> "Decision") j
+    let
+      reason = lookupString (responsePrefix st.mode <> "Reason") j
+    pure ("Decision: " <> decisionSummary decision reason)
+  _ -> Nothing
 
 buildStatusPill
   :: forall m
@@ -2388,6 +2726,8 @@ resultStatusSummary mode j =
     iTag = lookupString (p <> "FailureTag") j
     bTag = lookupString (p <> "BuildFailureTag") j
     reason = lookupString (p <> "FailureReason") j
+    decision = lookupString (p <> "Decision") j
+    decisionReason = lookupString (p <> "Reason") j
     hasCbor = case lookupString (p <> "CborHex") j of
       Just _ -> true
       Nothing -> false
@@ -2403,12 +2743,22 @@ resultStatusSummary mode j =
       Nothing, Just t, Just r -> "build: " <> t <> " — " <> r
       Nothing, Just t, Nothing -> "build: " <> t
       Nothing, Nothing, _
-        | hasCbor -> "built"
-        | hasIntent -> "intent ready, tx-build pending"
-        | otherwise -> "response received"
+        -> case decision of
+          Just d ->
+            (if hasCbor then "built: " else "")
+              <> decisionSummary d decisionReason
+          Nothing
+            | hasCbor -> "built"
+            | hasIntent -> "intent ready, tx-build pending"
+            | otherwise -> "response received"
     ok = hasCbor
   in
     { ok, label }
+
+decisionSummary :: String -> Maybe String -> String
+decisionSummary decision = case _ of
+  Just reason -> decision <> " — " <> reason
+  Nothing -> decision
 
 lookupString :: String -> Json -> Maybe String
 lookupString k j = do
@@ -2943,6 +3293,17 @@ requestJson st = case st.mode of
     | st.scope == Contingency -> contingencyDisburseRequestJson st
     | otherwise -> disburseRequestJson st
   ModeReorganize -> reorganizeRequestJson st
+  ModeRerate -> rerateRequestJson st
+
+rerateRequestJson :: State -> Json
+rerateRequestJson st =
+  Api.swapRerateRequestJson
+    { scope: scopeSlug st.scope
+    , selectedOrders: st.rerateSelectedOrders
+    , newRate: numberOr 0.0 st.rerateNewRate
+    , walletTxIn: st.rerateWalletTxIn
+    , collateralTxIn: nonEmptyString st.rerateCollateralTxIn
+    }
 
 swapRequestJson :: State -> Json
 swapRequestJson st =
@@ -3120,6 +3481,11 @@ maybeStringJson s
   | s == "" = Argonaut.jsonNull
   | otherwise = Argonaut.fromString s
 
+nonEmptyString :: String -> Maybe String
+nonEmptyString s
+  | String.trim s == "" = Nothing
+  | otherwise = Just s
+
 taggedContents :: String -> Json -> Json
 taggedContents tag c =
   Argonaut.fromObject $ FO.fromFoldable
@@ -3150,6 +3516,8 @@ cliCommand st =
       reorganizeCliCommand st
         <> " |\n"
         <> txBuildSegment
+    ModeRerate ->
+      rerateCliCommand st
 
 txBuildSegment :: String
 txBuildSegment =
@@ -3271,6 +3639,43 @@ contingencyDisburseCliCommand st =
 contingencyDestFlag :: ContingencyDestination -> String
 contingencyDestFlag d =
   "  --to " <> d.scope <> ":" <> d.ada
+
+rerateCliCommand :: State -> String
+rerateCliCommand st =
+  Array.intercalate " \\\n"
+    ( Array.filter ((/=) "")
+        ( [ "amaru-treasury-tx swap-rerate"
+          , "  --scope " <> scopeSlug st.scope
+          , "  --wallet-txin " <> txInForCli st.rerateWalletTxIn
+          , collateralFlag st.rerateCollateralTxIn
+          , "  --metadata <metadata.json>"
+          ]
+            <> rerateOrderFlags st.rerateSelectedOrders
+            <>
+              [ "  --new-rate " <> st.rerateNewRate
+              , "  --report report.json"
+              , "  --out tx.cbor"
+              ]
+        )
+    )
+
+rerateOrderFlags :: Array Api.PendingOutRef -> Array String
+rerateOrderFlags orders = case orders of
+  [] -> [ "  --order-txin <pending-order-txin>" ]
+  _ ->
+    map
+      (\outref -> "  --order-txin " <> Api.pendingOutRefText outref)
+      orders
+
+collateralFlag :: String -> String
+collateralFlag s =
+  case nonEmptyString s of
+    Nothing -> ""
+    Just txIn -> "  --collateral-txin " <> txIn
+
+txInForCli :: String -> String
+txInForCli s =
+  if String.trim s == "" then "<txid>#0" else s
 
 -- | Variant of 'validityFlag' without the trailing
 -- | backslash; used by 'reorganizeCliCommand' which adds
@@ -3632,12 +4037,14 @@ modeWire = case _ of
   ModeSwap -> "swap"
   ModeDisburse -> "disburse"
   ModeReorganize -> "reorganize"
+  ModeRerate -> "rerate"
 
 modeFromWire :: String -> Maybe TxMode
 modeFromWire = case _ of
   "swap" -> Just ModeSwap
   "disburse" -> Just ModeDisburse
   "reorganize" -> Just ModeReorganize
+  "rerate" -> Just ModeRerate
   -- #334 — the retired contingency-disburse mode folded into
   -- Disburse + scope==contingency; restore legacy drafts there
   -- (their saved @scope: contingency@ re-selects the form).
@@ -3696,6 +4103,18 @@ snapshotState s =
     , Tuple "adaUsdm" (Argonaut.fromString s.adaUsdm)
     , Tuple "slippageBps" (Argonaut.fromString s.slippageBps)
     , Tuple "minRate" (Argonaut.fromString s.minRate)
+    , Tuple "rerateNewRate" (Argonaut.fromString s.rerateNewRate)
+    , Tuple "rerateWalletTxIn"
+        (Argonaut.fromString s.rerateWalletTxIn)
+    , Tuple "rerateCollateralTxIn"
+        (Argonaut.fromString s.rerateCollateralTxIn)
+    , Tuple "rerateSelectedOrders"
+        ( Argonaut.fromArray
+            ( map
+                (Argonaut.fromString <<< Api.pendingOutRefText)
+                s.rerateSelectedOrders
+            )
+        )
     , Tuple "beneficiaryAddr"
         (Argonaut.fromString s.beneficiaryAddr)
     , Tuple "disburseUnit"
@@ -3762,6 +4181,15 @@ restoreSnapshot j st = case Argonaut.toObject j of
       amountP = getS "amountMode" >>= amountModeFromWire
       rateP = getS "rateMode" >>= rateModeFromWire
       unitP = getS "disburseUnit" >>= disburseUnitFromWire
+      rerateSelectedOrdersP = do
+        arr <- FO.lookup "rerateSelectedOrders" o >>= Argonaut.toArray
+        pure
+          ( Array.mapMaybe
+              ( \v ->
+                  Argonaut.toString v >>= pendingOutRefFromText
+              )
+              arr
+          )
       refsP = do
         arr <- FO.lookup "references" o >>= Argonaut.toArray
         pure (Array.mapMaybe restoreReference arr)
@@ -3792,6 +4220,13 @@ restoreSnapshot j st = case Argonaut.toObject j of
         , adaUsdm = ovr "adaUsdm" st.adaUsdm
         , slippageBps = ovr "slippageBps" st.slippageBps
         , minRate = ovr "minRate" st.minRate
+        , rerateNewRate = ovr "rerateNewRate" st.rerateNewRate
+        , rerateWalletTxIn =
+            ovr "rerateWalletTxIn" st.rerateWalletTxIn
+        , rerateCollateralTxIn =
+            ovr "rerateCollateralTxIn" st.rerateCollateralTxIn
+        , rerateSelectedOrders =
+            fromMaybe st.rerateSelectedOrders rerateSelectedOrdersP
         , beneficiaryAddr = ovr "beneficiaryAddr" st.beneficiaryAddr
         , disburseUnit = fromMaybe st.disburseUnit unitP
         , disburseAmount = ovr "disburseAmount" st.disburseAmount
@@ -3823,6 +4258,13 @@ restoreDestination j = do
   scope <- getS "scope"
   ada <- getS "ada"
   pure { scope, ada }
+
+pendingOutRefFromText :: String -> Maybe Api.PendingOutRef
+pendingOutRefFromText raw = case String.split (String.Pattern "#") raw of
+  [ txId, ixText ] -> do
+    ix <- Int.fromString ixText
+    pure { txId, ix }
+  _ -> Nothing
 
 -- | UTC ISO timestamp with second precision, formatted as
 -- | `YYYY-MM-DD HH:MM:SS Z` — the wire name for entries in
@@ -3908,6 +4350,46 @@ scheduleAutoBuild = do
   else
     H.modify_ _ { result = NotStarted, autoBuildFiber = Nothing }
 
+refreshReratePending
+  :: forall output m
+   . MonadAff m
+  => H.HalogenM State Action () output m Unit
+refreshReratePending = do
+  st <- H.get
+  when (st.mode == ModeRerate) do
+    let
+      requestedScope = st.scope
+      requestedSlug = scopeSlug requestedScope
+    H.modify_ _ { reratePendingLoading = true, reratePendingError = Nothing }
+    fetched <- H.liftAff (Api.fetchPending requestedSlug)
+    H.modify_ \s ->
+      if s.mode == ModeRerate && s.scope == requestedScope then
+        case fetched of
+          Left err ->
+            s
+              { reratePending = Nothing
+              , reratePendingLoading = false
+              , reratePendingError = Just err
+              , rerateSelectedOrders = []
+              }
+          Right pending ->
+            let
+              available =
+                map _.outref
+                  (Api.pendingOrdersForScope requestedSlug pending)
+              selected =
+                Array.filter
+                  (\outref -> Array.elem outref available)
+                  s.rerateSelectedOrders
+            in
+              s
+                { reratePending = Just pending
+                , reratePendingLoading = false
+                , reratePendingError = Nothing
+                , rerateSelectedOrders = selected
+                }
+      else s
+
 recordFormEdit
   :: forall output m
    . MonadAff m
@@ -3951,14 +4433,26 @@ handleAction = case _ of
       Just (OperateSnapshotE e) ->
         H.modify_ (restoreSnapshot e.snapshot)
       _ -> pure unit
+    refreshReratePending
     scheduleAutoBuild
   ToggleTheme -> do
     st <- H.get
     t' <- H.liftEffect (toggleThemeEff st.theme)
     H.modify_ \s -> s { theme = t' }
-  SetScope s ->
+  SetScope s -> do
     recordFormEdit \st -> st
-      { scope = s, destinationLabel = scopeSlug s }
+      { scope = s
+      , destinationLabel = scopeSlug s
+      , reratePending =
+          if st.mode == ModeRerate then Nothing else st.reratePending
+      , reratePendingError =
+          if st.mode == ModeRerate then Nothing else st.reratePendingError
+      , reratePendingLoading =
+          if st.mode == ModeRerate then true else st.reratePendingLoading
+      , rerateSelectedOrders =
+          if st.mode == ModeRerate then [] else st.rerateSelectedOrders
+      }
+    refreshReratePending
   SetMode m -> do
     -- Reset the response on mode switch so a stale
     -- swap-shaped body doesn't drive the disburse-shaped
@@ -3974,7 +4468,20 @@ handleAction = case _ of
             CoreDevelopment
           else st.scope
       in
-        st { mode = m, scope = scope', result = NotStarted }
+        st
+          { mode = m
+          , scope = scope'
+          , result = NotStarted
+          , reratePending =
+              if m == ModeRerate then Nothing else st.reratePending
+          , reratePendingError =
+              if m == ModeRerate then Nothing else st.reratePendingError
+          , reratePendingLoading =
+              if m == ModeRerate then true else st.reratePendingLoading
+          , rerateSelectedOrders =
+              if m == ModeRerate then [] else st.rerateSelectedOrders
+          }
+    when (m == ModeRerate) refreshReratePending
   SetWalletAddr s -> recordFormEdit \st -> st { walletAddr = s }
   SetAmountMode m -> recordFormEdit \st -> st { amountMode = m }
   SetUsdm s -> recordFormEdit \st -> st { usdm = s }
@@ -3984,6 +4491,17 @@ handleAction = case _ of
   SetSlippageBps s ->
     recordFormEdit \st -> st { slippageBps = s }
   SetMinRate s -> recordFormEdit \st -> st { minRate = s }
+  SetRerateNewRate s ->
+    recordFormEdit \st -> st { rerateNewRate = s }
+  SetRerateWalletTxIn s ->
+    recordFormEdit \st -> st { rerateWalletTxIn = s }
+  SetRerateCollateralTxIn s ->
+    recordFormEdit \st -> st { rerateCollateralTxIn = s }
+  SetRerateOrderSelected outref checked_ ->
+    recordFormEdit \st -> st
+      { rerateSelectedOrders =
+          setRerateOrderSelected outref checked_ st.rerateSelectedOrders
+      }
   SetBeneficiaryAddr s ->
     recordFormEdit \st -> st { beneficiaryAddr = s }
   SetDisburseUnit u ->
@@ -4201,6 +4719,7 @@ handleAction = case _ of
           , draftsDropdownOpen = false
           , pendingSaveStatus = SaveIdle
           }
+        refreshReratePending
         -- The restored state IS the operator's current
         -- working set; mirror it to __autosave__ so a
         -- subsequent route swap restores from this draft
@@ -4218,6 +4737,7 @@ handleAction = case _ of
           , historyDropdownOpen = false
           , pendingSaveStatus = SaveIdle
           }
+        refreshReratePending
         scheduleAutoSave
         scheduleAutoBuild
       _ -> H.modify_ _ { historyDropdownOpen = false }
@@ -4262,6 +4782,7 @@ buildEndpoint st = case st.mode of
     | st.scope == Contingency -> "/v1/build/contingency-disburse"
     | otherwise -> "/v1/build/disburse"
   ModeReorganize -> "/v1/build/reorganize"
+  ModeRerate -> "/v1/build/swap-rerate"
 
 pendingIntent :: State -> Json
 pendingIntent st =
@@ -4330,6 +4851,17 @@ updateAt i f xs =
   Array.mapWithIndex
     (\j x -> if j == i then f x else x)
     xs
+
+setRerateOrderSelected
+  :: Api.PendingOutRef
+  -> Boolean
+  -> Array Api.PendingOutRef
+  -> Array Api.PendingOutRef
+setRerateOrderSelected outref checked_ selected
+  | checked_ =
+      if Array.elem outref selected then selected
+      else selected <> [ outref ]
+  | otherwise = Array.filter ((/=) outref) selected
 
 -- | Delete the element at index @i@.  Out-of-bounds is a
 -- | no-op.

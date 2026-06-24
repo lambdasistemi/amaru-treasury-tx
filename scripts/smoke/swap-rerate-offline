@@ -17,7 +17,7 @@ order="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0"
 "$exe" swap-rerate \
   --metadata test/fixtures/metadata.json \
   --scope network_compliance \
-  --wallet-txin 42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0 \
+  --fixture-wallet-txin 42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0 \
   --order-txin "$order" \
   --new-rate 0.3 \
   --out "$tx" \

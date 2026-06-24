@@ -13,11 +13,13 @@ and build unsigned transaction artifacts.
 -}
 module Amaru.Treasury.Cli.SwapRerate
     ( SwapRerateOpts (..)
+    , SwapRerateFunding (..)
     , SwapRerateSelectionMode (..)
     , SwapRerateOrderCandidate (..)
     , SwapReratePassthroughReason (..)
     , SwapRerateDecision (..)
     , swapRerateOptsP
+    , swapRerateFunding
     , decideSwapRerateBranch
     , runSwapRerate
     ) where
@@ -65,6 +67,7 @@ import Options.Applicative
     , eitherReader
     , flag'
     , help
+    , internal
     , long
     , metavar
     , option
@@ -166,6 +169,7 @@ import Amaru.Treasury.Tx.Swap
     ( SwapIntent (..)
     , SwapOrderDatumParams (..)
     )
+import Amaru.Treasury.Tx.SwapWizard qualified as SwapWizard
 import Cardano.Ledger.Address (Addr (..))
 import Cardano.Ledger.Alonzo.Scripts
     ( fromPlutusScript
@@ -230,10 +234,10 @@ data SwapRerateOpts = SwapRerateOpts
     , sroScope :: !ScopeId
     -- ^ Treasury scope whose pending orders may be re-rated.
     , sroWalletTxIn :: !Text
-    -- ^ Wallet fuel input.
+    -- ^ Internal funding payload: wallet address for live operation
+    -- or fixture wallet input for offline explicit funding.
     , sroCollateralTxIn :: !(Maybe Text)
-    -- ^ Optional collateral input; later slices may default to the
-    -- wallet input.
+    -- ^ Hidden fixture collateral input.
     , sroSelectionMode :: !SwapRerateSelectionMode
     -- ^ Operator selection mode for pending order retraction.
     , sroNewRate :: !Double
@@ -248,6 +252,21 @@ data SwapRerateOpts = SwapRerateOpts
     -- ^ Where to write step logs; 'Nothing' means stderr.
     }
     deriving stock (Eq, Show)
+
+-- | Funding mode for @swap-rerate@.
+data SwapRerateFunding
+    = -- | Live wallet address used to auto-select pure-ADA fuel.
+      SwapRerateWalletAddress !Text
+    | -- | Hidden fixture-only explicit funding.
+      SwapRerateExplicitFunding !Text !(Maybe Text)
+    deriving stock (Eq, Show)
+
+-- | Interpret the internal funding fields as a typed funding mode.
+swapRerateFunding :: SwapRerateOpts -> SwapRerateFunding
+swapRerateFunding SwapRerateOpts{..} =
+    case addrFromText sroWalletTxIn of
+        Right{} -> SwapRerateWalletAddress sroWalletTxIn
+        Left{} -> SwapRerateExplicitFunding sroWalletTxIn sroCollateralTxIn
 
 -- | Operator choice for pending-order retraction.
 data SwapRerateSelectionMode
@@ -297,7 +316,7 @@ data SwapRerateDecision
 -- | Parse @swap-rerate@ options.
 swapRerateOptsP :: Parser SwapRerateOpts
 swapRerateOptsP =
-    SwapRerateOpts
+    mkSwapRerateOpts
         <$> strOption
             ( long "metadata"
                 <> metavar "PATH"
@@ -310,18 +329,7 @@ swapRerateOptsP =
                 <> help
                     "core_development|ops_and_use_cases|network_compliance|middleware"
             )
-        <*> strOption
-            ( long "wallet-txin"
-                <> metavar "TXHASH#IX"
-                <> help "Wallet fuel input"
-            )
-        <*> optional
-            ( strOption
-                ( long "collateral-txin"
-                    <> metavar "TXHASH#IX"
-                    <> help "Optional collateral input"
-                )
-            )
+        <*> fundingP
         <*> selectionModeP
         <*> option
             auto
@@ -360,6 +368,75 @@ swapRerateOptsP =
                     <> help "Where to write step lines (defaults to stderr)"
                 )
             )
+
+mkSwapRerateOpts
+    :: FilePath
+    -> ScopeId
+    -> SwapRerateFunding
+    -> SwapRerateSelectionMode
+    -> Double
+    -> Maybe Word16
+    -> Maybe FilePath
+    -> Maybe FilePath
+    -> Maybe FilePath
+    -> SwapRerateOpts
+mkSwapRerateOpts
+    metadataPath
+    scope
+    funding
+    selection
+    rate
+    validityHours
+    outPath
+    reportPath
+    logPath =
+        SwapRerateOpts
+            { sroMetadataPath = metadataPath
+            , sroScope = scope
+            , sroWalletTxIn = walletPayload
+            , sroCollateralTxIn = collateralPayload
+            , sroSelectionMode = selection
+            , sroNewRate = rate
+            , sroValidityHours = validityHours
+            , sroOutPath = outPath
+            , sroReportPath = reportPath
+            , sroLog = logPath
+            }
+      where
+        (walletPayload, collateralPayload) =
+            case funding of
+                SwapRerateWalletAddress addr -> (addr, Nothing)
+                SwapRerateExplicitFunding wallet coll ->
+                    (wallet, coll)
+
+fundingP :: Parser SwapRerateFunding
+fundingP =
+    walletAddressP <|> explicitFixtureFundingP
+  where
+    walletAddressP =
+        SwapRerateWalletAddress
+            <$> strOption
+                ( long "wallet-address"
+                    <> metavar "BECH32"
+                    <> help
+                        "Wallet address used to auto-select fuel and collateral"
+                )
+    explicitFixtureFundingP =
+        SwapRerateExplicitFunding
+            <$> strOption
+                ( long "fixture-wallet-txin"
+                    <> metavar "TXHASH#IX"
+                    <> help "Fixture wallet fuel input"
+                    <> internal
+                )
+            <*> optional
+                ( strOption
+                    ( long "fixture-collateral-txin"
+                        <> metavar "TXHASH#IX"
+                        <> help "Fixture collateral input"
+                        <> internal
+                    )
+                )
 
 selectionModeP :: Parser SwapRerateSelectionMode
 selectionModeP =
@@ -522,14 +599,17 @@ runSwapRerateLive g socket opts@SwapRerateOpts{..} = do
             LiveBuild resolved -> do
                 let needed =
                         Set.fromList $
-                            lrCollateralTxIn resolved
-                                : rpiWalletTxIn (lrInputs resolved)
-                                : rpiOrderScriptRef (lrInputs resolved)
-                                : rpiScopesDeployedAt (lrInputs resolved)
-                                : rpiPermissionsDeployedAt (lrInputs resolved)
-                                : rpiTreasuryDeployedAt (lrInputs resolved)
-                                : rpiRegistryDeployedAt (lrInputs resolved)
-                                : lrSelectedTxIns resolved
+                            [ lrCollateralTxIn resolved
+                            , rpiWalletTxIn (lrInputs resolved)
+                            , rpiOrderScriptRef (lrInputs resolved)
+                            , rpiScopesDeployedAt (lrInputs resolved)
+                            , rpiPermissionsDeployedAt (lrInputs resolved)
+                            , rpiTreasuryDeployedAt (lrInputs resolved)
+                            , rpiRegistryDeployedAt (lrInputs resolved)
+                            ]
+                                <> rpiExtraWalletTxIns
+                                    (lrInputs resolved)
+                                <> lrSelectedTxIns resolved
                 withLiveContext
                     (networkFromMagic (goNetworkMagic g))
                     provider
@@ -587,7 +667,7 @@ resolveLiveRerate
     -> TreasuryMetadata
     -> SwapRerateOpts
     -> IO LiveResolution
-resolveLiveRerate g provider metadata SwapRerateOpts{..} = do
+resolveLiveRerate g provider metadata opts@SwapRerateOpts{..} = do
     orderScript <- orderScriptFromBlob sundaeOrderValidatorBlob
     let network = networkFromMagic (goNetworkMagic g)
         orderAddress =
@@ -630,72 +710,168 @@ resolveLiveRerate g provider metadata SwapRerateOpts{..} = do
                 parseTxInOrDie (srDeployedAt (smTreasury scopeMeta))
             registryRef <-
                 parseTxInOrDie (srDeployedAt (smRegistry scopeMeta))
-            walletTxIn <- parseTxInOrDie sroWalletTxIn
-            collateralTxIn <-
-                parseTxInOrDie (fromMaybe sroWalletTxIn sroCollateralTxIn)
-            orderScriptRef <-
-                resolveOrderScriptRef
-                    provider
-                    network
-                    orderAddress
-                    orderScript
-            tip <- nowTip provider
-            let (rateNumerator, rateDenominator) = rateParts sroNewRate
-                upperBound =
-                    addValiditySlots
-                        (defaultValiditySlots network)
-                        sroValidityHours
-                        (SlotNo tip)
-                intent =
-                    RerateIntent
-                        { riScopeContext =
-                            RerateScopeContext
-                                { rscScope = sroScope
-                                , rscExpectedOwners = ownerKeys
-                                , rscTreasuryScriptHash = treasuryHash
-                                , rscOrderExtraLovelace =
-                                    Coin
-                                        ( fromInteger $
-                                            sundaeProtocolFeeLovelace
-                                                + 2_000_000
+            funding <- resolveLiveFunding provider (swapRerateFunding opts)
+            case funding of
+                Left (code, message) -> pure (LiveRejected code message)
+                Right (walletTxIn, extraWalletTxIns) -> do
+                    orderScriptRef <-
+                        resolveOrderScriptRef
+                            provider
+                            network
+                            orderAddress
+                            orderScript
+                    tip <- nowTip provider
+                    let (rateNumerator, rateDenominator) =
+                            rateParts sroNewRate
+                        upperBound =
+                            addValiditySlots
+                                (defaultValiditySlots network)
+                                sroValidityHours
+                                (SlotNo tip)
+                        intent =
+                            RerateIntent
+                                { riScopeContext =
+                                    RerateScopeContext
+                                        { rscScope = sroScope
+                                        , rscExpectedOwners = ownerKeys
+                                        , rscTreasuryScriptHash =
+                                            treasuryHash
+                                        , rscOrderExtraLovelace =
+                                            Coin
+                                                ( fromInteger $
+                                                    sundaeProtocolFeeLovelace
+                                                        + 2_000_000
+                                                )
+                                        , rscDatumParams = datumParams
+                                        }
+                                , riOrders =
+                                    [ RerateOrder
+                                        { rroTxIn = locTxIn order
+                                        , rroScope = locScope order
+                                        , rroValue = locValue order
+                                        , rroDatum = locDatum order
+                                        }
+                                    | order <- chosen
+                                    ]
+                                , riRateNumerator = rateNumerator
+                                , riRateDenominator = rateDenominator
+                                }
+                        inputs =
+                            RerateProgramInputs
+                                { rpiWalletTxIn = walletTxIn
+                                , rpiExtraWalletTxIns =
+                                    extraWalletTxIns
+                                , rpiOrderScriptRef = orderScriptRef
+                                , rpiSwapOrderAddress = orderAddress
+                                , rpiTreasuryAddress = treasuryAddress
+                                , rpiPermissionsRewardAccount =
+                                    permissionsReward
+                                , rpiScopesDeployedAt = scopesRef
+                                , rpiPermissionsDeployedAt =
+                                    permissionsRef
+                                , rpiTreasuryDeployedAt = treasuryRef
+                                , rpiRegistryDeployedAt = registryRef
+                                , rpiUpperBound = upperBound
+                                }
+                    pure $
+                        LiveBuild
+                            LiveRerate
+                                { lrOrderScriptRef = orderScriptRef
+                                , lrOrderAddress = orderAddress
+                                , lrCollateralTxIn = walletTxIn
+                                , lrInputs = inputs
+                                , lrIntent = intent
+                                , lrSelectedTxIns = locTxIn <$> chosen
+                                }
+
+resolveLiveFunding
+    :: Provider IO
+    -> SwapRerateFunding
+    -> IO (Either (Text, Text) (TxIn, [TxIn]))
+resolveLiveFunding provider = \case
+    SwapRerateExplicitFunding{} ->
+        pure $
+            Left
+                ( "fixture_funding_live"
+                , "explicit fixture funding is only supported without \
+                  \--node-socket; use --wallet-address for live swap-rerate"
+                )
+    SwapRerateWalletAddress walletAddress ->
+        case addrFromText walletAddress of
+            Left err ->
+                pure $
+                    Left
+                        ( "invalid_wallet_address"
+                        , T.pack err
+                        )
+            Right addr -> do
+                utxos <- queryUTxOs provider addr
+                pure $
+                    case SwapWizard.selectWallet
+                        SwapWizard.walletFeeSlackLovelace
+                        (walletCandidates utxos) of
+                        Left SwapWizard.WalletNoPureAda ->
+                            Left
+                                ( "wallet_no_pure_ada"
+                                , "wallet at "
+                                    <> walletAddress
+                                    <> " has no pure ADA UTxOs"
+                                )
+                        Left
+                            ( SwapWizard.WalletShortfall
+                                    available
+                                    target
+                                ) ->
+                                Left
+                                    ( "wallet_shortfall"
+                                    , "wallet shortfall at "
+                                        <> walletAddress
+                                        <> ": available="
+                                        <> tshow available
+                                        <> " target="
+                                        <> tshow target
+                                    )
+                        Right ([], _) ->
+                            Left
+                                ( "wallet_shortfall"
+                                , "wallet shortfall at "
+                                    <> walletAddress
+                                    <> ": available=0 target="
+                                    <> tshow
+                                        SwapWizard.walletFeeSlackLovelace
+                                )
+                        Right (walletHead : walletTail, _) ->
+                            case traverse
+                                parseTxIn
+                                (walletHead : walletTail) of
+                                Left err ->
+                                    Left
+                                        ( "invalid_wallet_selection"
+                                        , T.pack err
                                         )
-                                , rscDatumParams = datumParams
-                                }
-                        , riOrders =
-                            [ RerateOrder
-                                { rroTxIn = locTxIn order
-                                , rroScope = locScope order
-                                , rroValue = locValue order
-                                , rroDatum = locDatum order
-                                }
-                            | order <- chosen
-                            ]
-                        , riRateNumerator = rateNumerator
-                        , riRateDenominator = rateDenominator
-                        }
-                inputs =
-                    RerateProgramInputs
-                        { rpiWalletTxIn = walletTxIn
-                        , rpiOrderScriptRef = orderScriptRef
-                        , rpiSwapOrderAddress = orderAddress
-                        , rpiTreasuryAddress = treasuryAddress
-                        , rpiPermissionsRewardAccount = permissionsReward
-                        , rpiScopesDeployedAt = scopesRef
-                        , rpiPermissionsDeployedAt = permissionsRef
-                        , rpiTreasuryDeployedAt = treasuryRef
-                        , rpiRegistryDeployedAt = registryRef
-                        , rpiUpperBound = upperBound
-                        }
-            pure $
-                LiveBuild
-                    LiveRerate
-                        { lrOrderScriptRef = orderScriptRef
-                        , lrOrderAddress = orderAddress
-                        , lrCollateralTxIn = collateralTxIn
-                        , lrInputs = inputs
-                        , lrIntent = intent
-                        , lrSelectedTxIns = locTxIn <$> chosen
-                        }
+                                Right (headTxIn : extraTxIns) ->
+                                    Right (headTxIn, extraTxIns)
+                                Right [] ->
+                                    Left
+                                        ( "wallet_shortfall"
+                                        , "wallet shortfall at "
+                                            <> walletAddress
+                                            <> ": available=0 target="
+                                            <> tshow
+                                                SwapWizard.walletFeeSlackLovelace
+                                        )
+
+walletCandidates
+    :: [(TxIn, TxOut ConwayEra)] -> [(Text, Integer, Bool)]
+walletCandidates =
+    fmap $ \(txIn, txOut) ->
+        let MaryValue (Coin lovelace) (MultiAsset assets) =
+                txOut ^. valueTxOutL
+        in  (txInToText txIn, lovelace, not (Map.null assets))
+
+tshow :: (Show a) => a -> Text
+tshow =
+    T.pack . show
 
 queryLiveOrderCandidates
     :: Provider IO
@@ -1010,6 +1186,7 @@ loadOfflineRerate SwapRerateOpts{..} selected = do
         inputs =
             RerateProgramInputs
                 { rpiWalletTxIn = siWalletUtxo swapIntent
+                , rpiExtraWalletTxIns = []
                 , rpiOrderScriptRef = orderScriptRef
                 , rpiSwapOrderAddress = orderAddress
                 , rpiTreasuryAddress = siTreasuryAddress swapIntent

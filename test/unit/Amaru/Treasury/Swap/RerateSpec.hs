@@ -176,6 +176,7 @@ programInputs :: RerateProgramInputs
 programInputs =
     RerateProgramInputs
         { rpiWalletTxIn = mkTxIn 0
+        , rpiExtraWalletTxIns = []
         , rpiOrderScriptRef = mkTxIn 40
         , rpiSwapOrderAddress = scriptAddr 50
         , rpiTreasuryAddress = scriptAddr 99
@@ -293,6 +294,24 @@ spec = describe "Amaru.Treasury.Swap.Rerate" $ do
         body2
             ^. reqSignerHashesTxBodyL
             `shouldBe` Set.fromList ownerKeys
+
+    it "spends extra wallet fuel without making it collateral" $ do
+        let extraWalletTxIn = mkTxIn 9
+            inputs =
+                programInputs
+                    { rpiExtraWalletTxIns = [extraWalletTxIn]
+                    }
+            txExtra =
+                draft
+                    emptyPParams
+                    (rerateProgram inputs (planned [order1]))
+            bodyExtra = txExtra ^. bodyTxL
+        bodyExtra
+            ^. inputsTxBodyL
+            `shouldBe` Set.fromList [mkTxIn 0, extraWalletTxIn, mkTxIn 1]
+        bodyExtra
+            ^. collateralInputsTxBodyL
+            `shouldBe` Set.singleton (mkTxIn 0)
 
     it "preserves offered ADA plus the order extra lovelace" $ do
         case replacementOutputs [order1] of

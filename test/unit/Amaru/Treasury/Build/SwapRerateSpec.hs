@@ -188,6 +188,35 @@ spec = describe "Amaru.Treasury.Build.SwapRerate" $ do
         validateFinalPhase1 (rfContext fixture) tx `shouldBe` Right ()
         assertRerateBody fixture result
 
+    it "accounts for extra wallet fuel as wallet inputs" $ do
+        fixture <- rerateFixture
+        extraWalletTxIn <- expectRightIO $ parseTxIn syntheticExtraWalletTxIn
+        let walletHead = rpiWalletTxIn (rfInputs fixture)
+            walletHeadOut = ccUtxos (rfContext fixture) Map.! walletHead
+            ctx =
+                (rfContext fixture)
+                    { ccUtxos =
+                        Map.insert
+                            extraWalletTxIn
+                            walletHeadOut
+                            (ccUtxos (rfContext fixture))
+                    }
+            inputs =
+                (rfInputs fixture)
+                    { rpiExtraWalletTxIns = [extraWalletTxIn]
+                    }
+        result <- runSwapRerate ctx inputs (rfIntent fixture)
+        fmap fst (brWalletInputs result)
+            `shouldBe` [walletHead, extraWalletTxIn]
+        brFinalTxBody result
+            ^. inputsTxBodyL
+            `shouldBe` Set.fromList
+                [ walletHead
+                , extraWalletTxIn
+                , rfOrderTxIn fixture
+                ]
+        fmap fst (brCollateralInput result) `shouldBe` Just walletHead
+
 decodeFinalTx :: BuildResult -> Either String ConwayTx
 decodeFinalTx result =
     case decodeFullAnnotator
@@ -295,6 +324,7 @@ rerateFixture = do
         inputs =
             RerateProgramInputs
                 { rpiWalletTxIn = siWalletUtxo swapIntent
+                , rpiExtraWalletTxIns = []
                 , rpiOrderScriptRef = orderScriptRef
                 , rpiSwapOrderAddress = orderAddress
                 , rpiTreasuryAddress = siTreasuryAddress swapIntent
@@ -486,3 +516,7 @@ syntheticOrderTxIn =
 syntheticOrderScriptRef :: Text
 syntheticOrderScriptRef =
     "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb#0"
+
+syntheticExtraWalletTxIn :: Text
+syntheticExtraWalletTxIn =
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc#1"

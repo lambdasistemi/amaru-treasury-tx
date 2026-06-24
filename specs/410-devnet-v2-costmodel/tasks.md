@@ -2,12 +2,12 @@
 
 ## Slice 1 - Genesis cost-model patch
 
-- [ ] T410-S1 Add a failing unit guard that expects the DevNet host to
+- [X] T410-S1 Add a failing unit guard that expects the DevNet host to
   ensure Conway genesis carries PlutusV1, PlutusV2, and PlutusV3 cost
   models from genesis.
-- [ ] T410-S1 Implement the genesis initialization path without adding
+- [X] T410-S1 Implement the genesis initialization path without adding
   governance `ParameterChange` machinery or era-schedule changes.
-- [ ] T410-S1 Run `./gate.sh`, commit one bisect-safe slice, and leave
+- [X] T410-S1 Run `./gate.sh`, commit one bisect-safe slice, and leave
   the branch unpushed for orchestrator review.
 
 ## Slice 2 - Executed rerate transcript

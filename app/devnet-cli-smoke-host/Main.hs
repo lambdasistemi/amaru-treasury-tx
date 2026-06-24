@@ -340,6 +340,7 @@ main = do
     let smokeGenesis = runDir </> "genesis"
     copyGovernanceGenesis sourceGenesis smokeGenesis
     patchGovernanceGenesis smokeGenesis
+    ensureRerateCostModels smokeGenesis
 
     withCardanoNode smokeGenesis $ \socket _startMs -> do
         keys <- writeDevnetKeyFixtures runDir
@@ -361,7 +362,7 @@ main = do
         rerateEnvEntries <-
             if hoPhase opts == "rerate"
                 then do
-                    skipRerateIfNoPlutusV2CostModel socket devnetMagic
+                    assertRerateCostModels socket devnetMagic
                     registryCode <-
                         callSmokeScriptPhase
                             opts
@@ -562,6 +563,103 @@ patchGovernanceGenesis dir = do
             , "\"govActionDeposit\": 1000000"
             )
         ]
+
+ensureRerateCostModels :: FilePath -> IO ()
+ensureRerateCostModels dir = do
+    (plutusV1, plutusV2) <- readAlonzoCostModels dir
+    requireConwayPlutusV3CostModel dir
+    requireShelleyProtocolVersion dir
+    patchAlonzoExtraCostModels dir plutusV1 plutusV2
+
+readAlonzoCostModels :: FilePath -> IO (Value, Value)
+readAlonzoCostModels dir = do
+    let path = dir </> "alonzo-genesis.json"
+    root <- readJsonObject path
+    costModels <- expectObjectField path "costModels" root
+    plutusV1 <- expectField path "costModels.PlutusV1" costModels
+    plutusV2 <- expectField path "costModels.PlutusV2" costModels
+    pure (plutusV1, plutusV2)
+
+requireConwayPlutusV3CostModel :: FilePath -> IO ()
+requireConwayPlutusV3CostModel dir = do
+    let path = dir </> "conway-genesis.json"
+    root <- readJsonObject path
+    _ <- expectField path "plutusV3CostModel" root
+    pure ()
+
+requireShelleyProtocolVersion :: FilePath -> IO ()
+requireShelleyProtocolVersion dir = do
+    let path = dir </> "shelley-genesis.json"
+    root <- readJsonObject path
+    protocolParams <- expectObjectField path "protocolParams" root
+    _ <- expectObjectField path "protocolVersion" protocolParams
+    pure ()
+
+patchAlonzoExtraCostModels :: FilePath -> Value -> Value -> IO ()
+patchAlonzoExtraCostModels dir plutusV1 plutusV2 = do
+    let path = dir </> "alonzo-genesis.json"
+    root <- readJsonObject path
+    existingExtraConfig <-
+        case KeyMap.lookup (Key.fromString "extraConfig") root of
+            Nothing -> pure KeyMap.empty
+            Just (Aeson.Object obj) -> pure obj
+            Just _ ->
+                die (path <> ": extraConfig must be an object")
+    let letCostModels =
+            Aeson.Object $
+                KeyMap.fromList
+                    [ (Key.fromString "PlutusV1", plutusV1)
+                    , (Key.fromString "PlutusV2", plutusV2)
+                    ]
+        rootCostModels =
+            Aeson.Object $
+                KeyMap.singleton (Key.fromString "PlutusV1") plutusV1
+        extraConfig =
+            KeyMap.insert
+                (Key.fromString "costModels")
+                letCostModels
+                existingExtraConfig
+        updated =
+            KeyMap.insert
+                (Key.fromString "extraConfig")
+                (Aeson.Object extraConfig)
+                ( KeyMap.insert
+                    (Key.fromString "costModels")
+                    rootCostModels
+                    root
+                )
+    BSL.writeFile path (encode (Aeson.Object updated))
+
+readJsonObject :: FilePath -> IO (KeyMap.KeyMap Value)
+readJsonObject path = do
+    value <-
+        eitherDecodeFileStrict' path
+            >>= either
+                (die . (("cannot parse " <> path <> ": ") <>))
+                pure
+    case value of
+        Aeson.Object obj -> pure obj
+        _ -> die (path <> ": expected JSON object")
+
+expectObjectField
+    :: FilePath
+    -> String
+    -> KeyMap.KeyMap Value
+    -> IO (KeyMap.KeyMap Value)
+expectObjectField path field root =
+    case KeyMap.lookup (Key.fromString field) root of
+        Just (Aeson.Object obj) -> pure obj
+        Just _ -> die (path <> ": " <> field <> " must be an object")
+        Nothing -> die (path <> ": missing " <> field)
+
+expectField :: FilePath -> String -> KeyMap.KeyMap Value -> IO Value
+expectField path field root =
+    case KeyMap.lookup (Key.fromString (lastPathSegment field)) root of
+        Just value -> pure value
+        Nothing -> die (path <> ": missing " <> field)
+  where
+    lastPathSegment =
+        reverse . takeWhile (/= '.') . reverse
 
 patchFile :: FilePath -> [(BS.ByteString, BS.ByteString)] -> IO ()
 patchFile path replacements = do
@@ -860,14 +958,14 @@ callSmokeScriptPhase opts phase runDir extraEnv = do
     (_, _, _, ph) <- createProcess cp
     waitForProcess ph
 
-skipRerateIfNoPlutusV2CostModel :: FilePath -> NetworkMagic -> IO ()
-skipRerateIfNoPlutusV2CostModel socket magic =
+assertRerateCostModels :: FilePath -> NetworkMagic -> IO ()
+assertRerateCostModels socket magic =
     withLocalNodeClient magic socket $ \provider _submitter -> do
         pp <- queryCurrentPParams provider
-        unless (hasCostModel PlutusV2 pp) $ do
-            putStrLn
-                "SKIPPED: devnet has no PlutusV2 cost model; blocked on #410"
-            exitSuccess
+        unless (hasCostModel PlutusV2 pp) $
+            die
+                "RERATE_COST_MODEL_MISSING: patched devnet genesis \
+                \did not carry PlutusV2 into Conway initial PParams"
 
 queryCurrentPParams :: Provider IO -> IO (PParams ConwayEra)
 queryCurrentPParams provider =

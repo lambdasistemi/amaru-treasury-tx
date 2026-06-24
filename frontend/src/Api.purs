@@ -115,8 +115,7 @@ type SwapRerateBuildRequestDraft =
   { scope :: String
   , selectedOrders :: Array PendingOutRef
   , newRate :: Number
-  , walletTxIn :: String
-  , collateralTxIn :: Maybe String
+  , walletAddress :: String
   }
 
 type SwapRerateBuildResponse =
@@ -344,9 +343,8 @@ swapRerateRequestJson draft =
             )
         )
     , Tuple "srrNewRate" (Argonaut.fromNumber draft.newRate)
-    , Tuple "srrWalletTxIn" (Argonaut.fromString draft.walletTxIn)
-    , Tuple "srrCollateralTxIn"
-        (nullableStringJson draft.collateralTxIn)
+    , Tuple "srrWalletAddress"
+        (Argonaut.fromString draft.walletAddress)
     ]
 
 swapRerateSplitSummary :: SwapRerateBuildResponse -> Maybe String
@@ -355,11 +353,6 @@ swapRerateSplitSummary response
   | otherwise = case response.srrReason of
       Just reason -> Just ("split: " <> reason)
       Nothing -> Just "split"
-
-nullableStringJson :: Maybe String -> Json
-nullableStringJson = case _ of
-  Nothing -> Argonaut.jsonNull
-  Just value -> Argonaut.fromString value
 
 verifyWitness
   :: String

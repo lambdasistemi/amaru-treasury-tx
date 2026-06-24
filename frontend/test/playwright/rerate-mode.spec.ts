@@ -14,10 +14,8 @@ const SINGLE_REQUIRED_SIGNERS = [
 ];
 const SINGLE_INVALID_HEREAFTER = 1_950;
 const SPLIT_REASON = 'selected orders exceed the single transaction budget';
-const WALLET_TX_IN =
-  'walletfuel000000000000000000000000000000000000000000000000000001#0';
-const COLLATERAL_TX_IN =
-  'collateral000000000000000000000000000000000000000000000000000001#1';
+const WALLET_ADDRESS =
+  'addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu';
 
 const FRONTEND_ROOT =
   path.basename(process.cwd()) === 'frontend'
@@ -26,7 +24,7 @@ const FRONTEND_ROOT =
 const DIST_ROOT = path.resolve(
   process.env.AMARU_TREASURY_DIST ?? path.join(FRONTEND_ROOT, 'dist'),
 );
-const UI_REVIEW_ROOT = path.join(FRONTEND_ROOT, 'test', 'ui-review', '402');
+const UI_REVIEW_ROOT = path.join(FRONTEND_ROOT, 'test', 'ui-review', '419');
 
 type PendingOutRef = {
   txId: string;
@@ -122,8 +120,7 @@ test('re-rate builds one transaction from selected pending orders', async ({
     await page.getByLabel('New rate (ADA/USDM)').fill('0.47');
     await selectOrder(page, 'rerate-order-a#0');
     await selectOrder(page, 'rerate-order-b#1');
-    await page.getByLabel('collateral tx-in').fill(COLLATERAL_TX_IN);
-    await page.getByLabel('wallet tx-in').fill(WALLET_TX_IN);
+    await page.getByRole('textbox', { name: 'wallet' }).fill(WALLET_ADDRESS);
 
     const resultPanel = page.locator('#operate-result-panel');
     await expect(resultPanel).toContainText('built: single');
@@ -135,10 +132,11 @@ test('re-rate builds one transaction from selected pending orders', async ({
         srrScope: 'middleware',
         srrSelectedOrders: ['rerate-order-a#0', 'rerate-order-b#1'],
         srrNewRate: 0.47,
-        srrWalletTxIn: WALLET_TX_IN,
-        srrCollateralTxIn: COLLATERAL_TX_IN,
+        srrWalletAddress: WALLET_ADDRESS,
       },
     ]);
+    expect(buildRequests[0]).not.toHaveProperty('srrWalletTxIn');
+    expect(buildRequests[0]).not.toHaveProperty('srrCollateralTxIn');
 
     await page.getByRole('button', { name: 'Save to pending' }).click();
     await expect(resultPanel).toContainText(SINGLE_TXID);
@@ -177,7 +175,7 @@ test('re-rate shows split decisions and reports', async ({ page }) => {
     await openRerate(page, server.url, 'middleware');
     await page.getByLabel('New rate (ADA/USDM)').fill('0.51');
     await selectOrder(page, 'rerate-order-a#0');
-    await page.getByLabel('wallet tx-in').fill(WALLET_TX_IN);
+    await page.getByRole('textbox', { name: 'wallet' }).fill(WALLET_ADDRESS);
 
     const resultPanel = page.locator('#operate-result-panel');
     await expect(resultPanel).toContainText(`Decision: split`);
@@ -194,10 +192,11 @@ test('re-rate shows split decisions and reports', async ({ page }) => {
         srrScope: 'middleware',
         srrSelectedOrders: ['rerate-order-a#0'],
         srrNewRate: 0.51,
-        srrWalletTxIn: WALLET_TX_IN,
-        srrCollateralTxIn: null,
+        srrWalletAddress: WALLET_ADDRESS,
       },
     ]);
+    expect(buildRequests[0]).not.toHaveProperty('srrWalletTxIn');
+    expect(buildRequests[0]).not.toHaveProperty('srrCollateralTxIn');
   } finally {
     await server.close();
   }
@@ -224,7 +223,7 @@ test('re-rate blocks empty pending-order scopes', async ({ page }) => {
     ).toBeVisible();
 
     await page.getByLabel('New rate (ADA/USDM)').fill('0.49');
-    await page.getByLabel('wallet tx-in').fill(WALLET_TX_IN);
+    await page.getByRole('textbox', { name: 'wallet' }).fill(WALLET_ADDRESS);
     await expect(page.locator('#operate-result-panel')).toContainText('fix');
     await page.waitForTimeout(750);
     expect(buildRequests).toEqual([]);
@@ -286,7 +285,7 @@ function pendingResponse(scope: string): PendingResponse {
 async function captureRerateScreenshot(page: Page): Promise<void> {
   await mkdir(UI_REVIEW_ROOT, { recursive: true });
   await page.screenshot({
-    path: path.join(UI_REVIEW_ROOT, '402-rerate-operate-desktop-1280.png'),
+    path: path.join(UI_REVIEW_ROOT, '419-rerate-operate-desktop-1280.png'),
     fullPage: true,
   });
 }

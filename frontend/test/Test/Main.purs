@@ -137,11 +137,8 @@ testRerateOrdersPresent = do
         { scope: "core_development"
         , selectedOrders: [ order.outref ]
         , newRate: 0.42
-        , walletTxIn:
-            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb#1"
-        , collateralTxIn:
-            Just
-              "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc#0"
+        , walletAddress:
+            "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
         }
 
   assertJsonString "srrScope" "core_development" request
@@ -151,13 +148,11 @@ testRerateOrdersPresent = do
     request
   assertJsonNumber "srrNewRate" 0.42 request
   assertJsonString
-    "srrWalletTxIn"
-    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb#1"
+    "srrWalletAddress"
+    "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
     request
-  assertJsonString
-    "srrCollateralTxIn"
-    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc#0"
-    request
+  assertNoJsonField "srrWalletTxIn" request
+  assertNoJsonField "srrCollateralTxIn" request
 
 testRerateSplitSummary :: Aff Unit
 testRerateSplitSummary = do
@@ -250,6 +245,11 @@ jsonField :: String -> Argonaut.Json -> Aff Argonaut.Json
 jsonField key json = case Argonaut.toObject json >>= FO.lookup key of
   Nothing -> failTest ("missing JSON field " <> key)
   Just value -> pure value
+
+assertNoJsonField :: String -> Argonaut.Json -> Aff Unit
+assertNoJsonField key json = case Argonaut.toObject json >>= FO.lookup key of
+  Nothing -> pure unit
+  Just _ -> failTest ("unexpected JSON field " <> key)
 
 withEntry
   :: String

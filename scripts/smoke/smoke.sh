@@ -2136,7 +2136,7 @@ rerate_phase() {
 
     require_env CARDANO_NODE_SOCKET_PATH
     require_env CLI_SMOKE_RERATE_METADATA
-    require_env CLI_SMOKE_RERATE_WALLET_TXIN
+    require_env CLI_SMOKE_RERATE_WALLET_ADDRESS
     require_env CLI_SMOKE_RERATE_OLD_ORDER_TXIN
     require_env CLI_SMOKE_FUNDING_SKEY
     require_env CLI_SMOKE_FUNDING_KEY_HASH
@@ -2158,8 +2158,7 @@ rerate_phase() {
         swap-rerate \
         --metadata "$CLI_SMOKE_RERATE_METADATA" \
         --scope core_development \
-        --wallet-txin "$CLI_SMOKE_RERATE_WALLET_TXIN" \
-        --collateral-txin "${CLI_SMOKE_RERATE_COLLATERAL_TXIN:-$CLI_SMOKE_RERATE_WALLET_TXIN}" \
+        --wallet-address "$CLI_SMOKE_RERATE_WALLET_ADDRESS" \
         --all-orders \
         --new-rate "${CLI_SMOKE_RERATE_NEW_RATE:-0.42}" \
         --out "$unsigned" \

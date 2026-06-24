@@ -63,12 +63,14 @@ import Amaru.Treasury.Cli.Common
     )
 import Amaru.Treasury.Cli.SwapRerate
     ( SwapRerateDecision (..)
+    , SwapRerateFunding (..)
     , SwapRerateOpts (..)
     , SwapRerateOrderCandidate (..)
     , SwapReratePassthroughReason (..)
     , SwapRerateSelectionMode (..)
     , decideSwapRerateBranch
     , runSwapRerate
+    , swapRerateFunding
     )
 import Amaru.Treasury.Scope
     ( ScopeId (..)
@@ -186,33 +188,68 @@ spec = describe "Amaru.Treasury.Cli.SwapRerate" $ do
         src `shouldContain` "withLocalNodeBackend"
         src `shouldContain` "withLiveContext"
         src `shouldContain` "rpiOrderScriptRef"
+        src `shouldContain` "rpiExtraWalletTxIns"
         src `shouldContain` "rpiScopesDeployedAt"
         src `shouldContain` "rpiPermissionsDeployedAt"
         src `shouldContain` "rpiTreasuryDeployedAt"
         src `shouldContain` "rpiRegistryDeployedAt"
-        src `shouldContain` "sroWalletTxIn"
-        src `shouldContain` "sroCollateralTxIn"
+        src `shouldContain` "selectWallet"
+        src `shouldContain` "walletFeeSlackLovelace"
+        src `shouldContain` "--wallet-address"
 
-    it "parses the explicit-order swap-rerate operator contract" $
-        parseSwapRerateOpts explicitOrderArgs
-            `shouldBe` Right
-                SwapRerateOpts
-                    { sroMetadataPath = "metadata-mainnet.json"
-                    , sroScope = NetworkCompliance
-                    , sroWalletTxIn = walletTxIn
-                    , sroCollateralTxIn = Just collateralTxIn
-                    , sroSelectionMode =
-                        SwapRerateSelectExplicit [orderTxIn1, orderTxIn2]
-                    , sroNewRate = 0.245
-                    , sroValidityHours = Just 28
-                    , sroOutPath = Just "rerate.cbor.hex"
-                    , sroReportPath = Just "rerate.report.json"
-                    , sroLog = Just "rerate.log"
-                    }
+    it "parses the wallet-address swap-rerate operator contract" $
+        case parseSwapRerateOpts walletAddressArgs of
+            Right opts -> do
+                opts
+                    `shouldBe` SwapRerateOpts
+                        { sroMetadataPath = "metadata-mainnet.json"
+                        , sroScope = NetworkCompliance
+                        , sroWalletTxIn = walletAddress
+                        , sroCollateralTxIn = Nothing
+                        , sroSelectionMode =
+                            SwapRerateSelectExplicit
+                                [orderTxIn1, orderTxIn2]
+                        , sroNewRate = 0.245
+                        , sroValidityHours = Just 28
+                        , sroOutPath = Just "rerate.cbor.hex"
+                        , sroReportPath = Just "rerate.report.json"
+                        , sroLog = Just "rerate.log"
+                        }
+                swapRerateFunding opts
+                    `shouldBe` SwapRerateWalletAddress walletAddress
+            Left err -> expectationFailure err
+
+    it "rejects legacy visible manual funding flags" $
+        parseSwapRerateOpts legacyManualFundingArgs
+            `shouldBe` Left "parse failure"
+
+    it "keeps hidden fixture explicit funding parseable" $
+        case parseSwapRerateOpts fixtureFundingArgs of
+            Right opts -> do
+                opts
+                    `shouldBe` SwapRerateOpts
+                        { sroMetadataPath = "metadata-mainnet.json"
+                        , sroScope = NetworkCompliance
+                        , sroWalletTxIn = walletTxIn
+                        , sroCollateralTxIn = Just collateralTxIn
+                        , sroSelectionMode =
+                            SwapRerateSelectExplicit
+                                [orderTxIn1, orderTxIn2]
+                        , sroNewRate = 0.245
+                        , sroValidityHours = Nothing
+                        , sroOutPath = Nothing
+                        , sroReportPath = Nothing
+                        , sroLog = Nothing
+                        }
+                swapRerateFunding opts
+                    `shouldBe` SwapRerateExplicitFunding
+                        walletTxIn
+                        (Just collateralTxIn)
+            Left err -> expectationFailure err
 
     it "parses a single explicit selected order" $
         parseSwapRerateSelection
-            (replaceOrderArgs [orderTxIn1] explicitOrderArgs)
+            (replaceOrderArgs [orderTxIn1] walletAddressArgs)
             `shouldBe` Right (SwapRerateSelectExplicit [orderTxIn1])
 
     it "parses explicit decline/no-retract mode" $
@@ -333,17 +370,15 @@ estimate =
         , rbeSize = 30
         }
 
-explicitOrderArgs :: [String]
-explicitOrderArgs =
+walletAddressArgs :: [String]
+walletAddressArgs =
     [ "swap-rerate"
     , "--metadata"
     , "metadata-mainnet.json"
     , "--scope"
     , "network_compliance"
-    , "--wallet-txin"
-    , T.unpack walletTxIn
-    , "--collateral-txin"
-    , T.unpack collateralTxIn
+    , "--wallet-address"
+    , T.unpack walletAddress
     , "--order-txin"
     , T.unpack orderTxIn1
     , "--order-txin"
@@ -360,8 +395,8 @@ explicitOrderArgs =
     , "rerate.log"
     ]
 
-declineArgs :: [String]
-declineArgs =
+legacyManualFundingArgs :: [String]
+legacyManualFundingArgs =
     [ "swap-rerate"
     , "--metadata"
     , "metadata-mainnet.json"
@@ -369,6 +404,42 @@ declineArgs =
     , "network_compliance"
     , "--wallet-txin"
     , T.unpack walletTxIn
+    , "--collateral-txin"
+    , T.unpack collateralTxIn
+    , "--order-txin"
+    , T.unpack orderTxIn1
+    , "--new-rate"
+    , "0.245"
+    ]
+
+fixtureFundingArgs :: [String]
+fixtureFundingArgs =
+    [ "swap-rerate"
+    , "--metadata"
+    , "metadata-mainnet.json"
+    , "--scope"
+    , "network_compliance"
+    , "--fixture-wallet-txin"
+    , T.unpack walletTxIn
+    , "--fixture-collateral-txin"
+    , T.unpack collateralTxIn
+    , "--order-txin"
+    , T.unpack orderTxIn1
+    , "--order-txin"
+    , T.unpack orderTxIn2
+    , "--new-rate"
+    , "0.245"
+    ]
+
+declineArgs :: [String]
+declineArgs =
+    [ "swap-rerate"
+    , "--metadata"
+    , "metadata-mainnet.json"
+    , "--scope"
+    , "network_compliance"
+    , "--wallet-address"
+    , T.unpack walletAddress
     , "--no-retract"
     , "--new-rate"
     , "0.245"
@@ -423,6 +494,10 @@ walletTxIn =
 collateralTxIn :: Text
 collateralTxIn =
     "0000000000000000000000000000000000000000000000000000000000000002#1"
+
+walletAddress :: Text
+walletAddress =
+    "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu"
 
 orderTxIn1 :: Text
 orderTxIn1 =

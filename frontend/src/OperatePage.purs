@@ -386,8 +386,6 @@ type State =
   , slippageBps :: String
   , minRate :: String
   , rerateNewRate :: String
-  , rerateWalletTxIn :: String
-  , rerateCollateralTxIn :: String
   , reratePending :: Maybe Api.PendingResponse
   , reratePendingLoading :: Boolean
   , reratePendingError :: Maybe String
@@ -453,8 +451,6 @@ initialState =
   , slippageBps: "75"
   , minRate: "0.5"
   , rerateNewRate: "0.43"
-  , rerateWalletTxIn: ""
-  , rerateCollateralTxIn: ""
   , reratePending: Nothing
   , reratePendingLoading: false
   , reratePendingError: Nothing
@@ -500,8 +496,6 @@ data Action
   | SetSlippageBps String
   | SetMinRate String
   | SetRerateNewRate String
-  | SetRerateWalletTxIn String
-  | SetRerateCollateralTxIn String
   | SetRerateOrderSelected Api.PendingOutRef Boolean
   | SetBeneficiaryAddr String
   | SetDisburseUnit DisburseUnit
@@ -646,28 +640,7 @@ formColumn st =
 identitySection :: forall m. State -> H.ComponentHTML Action () m
 identitySection st = case st.mode of
   ModeRerate ->
-    formSection "02" "Funding"
-      "Wallet fuel input and optional collateral input for the \
-      \re-rate build."
-      [ fieldV "wallet tx-in"
-          st.rerateWalletTxIn
-          SetRerateWalletTxIn
-          "<txid>#0"
-          true
-          ( validateTxIn "wallet tx-in" st.rerateWalletTxIn
-              <|> serverFieldError st "wallet_txin"
-          )
-      , fieldV "collateral tx-in"
-          st.rerateCollateralTxIn
-          SetRerateCollateralTxIn
-          "<txid>#1"
-          true
-          ( validateOptionalTxIn
-              "collateral tx-in"
-              st.rerateCollateralTxIn
-              <|> serverFieldError st "collateral_txin"
-          )
-      ]
+    walletAddressSection st
   ModeSwap ->
     walletAddressSection st
   ModeDisburse ->
@@ -1307,7 +1280,7 @@ formErrors :: State -> Array String
 formErrors st =
   let
     addrErr = case st.mode of
-      ModeRerate -> validateTxIn "wallet tx-in" st.rerateWalletTxIn
+      ModeRerate -> validateWalletAddr st.walletAddr
       ModeSwap -> validateWalletAddr st.walletAddr
       ModeDisburse -> validateWalletAddr st.walletAddr
       ModeReorganize -> validateWalletAddr st.walletAddr
@@ -1435,25 +1408,10 @@ validatePositiveRate s
         | n > 0.0 -> Nothing
         | otherwise -> Just "new rate must be positive"
 
-validateTxIn :: String -> String -> Maybe String
-validateTxIn label_ s
-  | String.trim s == "" = Just (label_ <> " is required")
-  | not (String.contains (String.Pattern "#") s) =
-      Just (label_ <> " must be a txid#index")
-  | otherwise = Nothing
-
-validateOptionalTxIn :: String -> String -> Maybe String
-validateOptionalTxIn label_ s
-  | String.trim s == "" = Nothing
-  | otherwise = validateTxIn label_ s
-
 rerateErrors :: State -> Array String
 rerateErrors st =
   Array.catMaybes
     [ validatePositiveRate st.rerateNewRate
-    , validateOptionalTxIn
-        "collateral tx-in"
-        st.rerateCollateralTxIn
     , reratePendingErrorForBuild st
     ]
 
@@ -1560,11 +1518,6 @@ fieldState value err
       Just _ -> FInvalid
       Nothing -> FComplete
 
-optionalFieldState :: String -> Maybe String -> FieldState
-optionalFieldState value err
-  | String.trim value == "" = FComplete
-  | otherwise = fieldState value err
-
 -- | Reduce a list of field states into a section state.
 -- | 'Invalid' wins over 'Pending' wins over 'Complete' —
 -- | an operator should see the most-actionable issue
@@ -1581,13 +1534,8 @@ sectionState sec st = case sec of
     case st.mode of
       ModeRerate ->
         combineFields
-          [ fieldState st.rerateWalletTxIn
-              (validateTxIn "wallet tx-in" st.rerateWalletTxIn)
-          , optionalFieldState st.rerateCollateralTxIn
-              ( validateOptionalTxIn
-                  "collateral tx-in"
-                  st.rerateCollateralTxIn
-              )
+          [ fieldState st.walletAddr
+              (validateWalletAddr st.walletAddr)
           ]
       ModeSwap ->
         combineFields
@@ -1735,9 +1683,7 @@ sectionFocusId sec st = case sec of
   SecIdentity ->
     case st.mode of
       ModeRerate ->
-        if isJust (validateTxIn "wallet tx-in" st.rerateWalletTxIn)
-          then "operate-wallet-tx-in"
-        else "operate-collateral-tx-in"
+        "operate-wallet"
       ModeSwap ->
         "operate-wallet"
       ModeReorganize ->
@@ -3301,8 +3247,7 @@ rerateRequestJson st =
     { scope: scopeSlug st.scope
     , selectedOrders: st.rerateSelectedOrders
     , newRate: numberOr 0.0 st.rerateNewRate
-    , walletTxIn: st.rerateWalletTxIn
-    , collateralTxIn: nonEmptyString st.rerateCollateralTxIn
+    , walletAddress: st.walletAddr
     }
 
 swapRequestJson :: State -> Json
@@ -3481,11 +3426,6 @@ maybeStringJson s
   | s == "" = Argonaut.jsonNull
   | otherwise = Argonaut.fromString s
 
-nonEmptyString :: String -> Maybe String
-nonEmptyString s
-  | String.trim s == "" = Nothing
-  | otherwise = Just s
-
 taggedContents :: String -> Json -> Json
 taggedContents tag c =
   Argonaut.fromObject $ FO.fromFoldable
@@ -3646,8 +3586,7 @@ rerateCliCommand st =
     ( Array.filter ((/=) "")
         ( [ "amaru-treasury-tx swap-rerate"
           , "  --scope " <> scopeSlug st.scope
-          , "  --wallet-txin " <> txInForCli st.rerateWalletTxIn
-          , collateralFlag st.rerateCollateralTxIn
+          , "  --wallet-address " <> walletForCli st.walletAddr
           , "  --metadata <metadata.json>"
           ]
             <> rerateOrderFlags st.rerateSelectedOrders
@@ -3666,16 +3605,6 @@ rerateOrderFlags orders = case orders of
     map
       (\outref -> "  --order-txin " <> Api.pendingOutRefText outref)
       orders
-
-collateralFlag :: String -> String
-collateralFlag s =
-  case nonEmptyString s of
-    Nothing -> ""
-    Just txIn -> "  --collateral-txin " <> txIn
-
-txInForCli :: String -> String
-txInForCli s =
-  if String.trim s == "" then "<txid>#0" else s
 
 -- | Variant of 'validityFlag' without the trailing
 -- | backslash; used by 'reorganizeCliCommand' which adds
@@ -4104,10 +4033,6 @@ snapshotState s =
     , Tuple "slippageBps" (Argonaut.fromString s.slippageBps)
     , Tuple "minRate" (Argonaut.fromString s.minRate)
     , Tuple "rerateNewRate" (Argonaut.fromString s.rerateNewRate)
-    , Tuple "rerateWalletTxIn"
-        (Argonaut.fromString s.rerateWalletTxIn)
-    , Tuple "rerateCollateralTxIn"
-        (Argonaut.fromString s.rerateCollateralTxIn)
     , Tuple "rerateSelectedOrders"
         ( Argonaut.fromArray
             ( map
@@ -4221,10 +4146,6 @@ restoreSnapshot j st = case Argonaut.toObject j of
         , slippageBps = ovr "slippageBps" st.slippageBps
         , minRate = ovr "minRate" st.minRate
         , rerateNewRate = ovr "rerateNewRate" st.rerateNewRate
-        , rerateWalletTxIn =
-            ovr "rerateWalletTxIn" st.rerateWalletTxIn
-        , rerateCollateralTxIn =
-            ovr "rerateCollateralTxIn" st.rerateCollateralTxIn
         , rerateSelectedOrders =
             fromMaybe st.rerateSelectedOrders rerateSelectedOrdersP
         , beneficiaryAddr = ovr "beneficiaryAddr" st.beneficiaryAddr
@@ -4493,10 +4414,6 @@ handleAction = case _ of
   SetMinRate s -> recordFormEdit \st -> st { minRate = s }
   SetRerateNewRate s ->
     recordFormEdit \st -> st { rerateNewRate = s }
-  SetRerateWalletTxIn s ->
-    recordFormEdit \st -> st { rerateWalletTxIn = s }
-  SetRerateCollateralTxIn s ->
-    recordFormEdit \st -> st { rerateCollateralTxIn = s }
   SetRerateOrderSelected outref checked_ ->
     recordFormEdit \st -> st
       { rerateSelectedOrders =

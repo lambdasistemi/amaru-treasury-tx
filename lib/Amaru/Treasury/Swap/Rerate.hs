@@ -48,6 +48,9 @@ import Amaru.Treasury.Swap.Rerate.Types
 data RerateProgramInputs = RerateProgramInputs
     { rpiWalletTxIn :: !TxIn
     -- ^ Wallet fuel input. Also used as collateral.
+    , rpiExtraWalletTxIns :: ![TxIn]
+    -- ^ Additional wallet fuel inputs. These are spent but are not
+    -- collateral.
     , rpiOrderScriptRef :: !TxIn
     -- ^ Reference input containing the SundaeSwap order script.
     , rpiSwapOrderAddress :: !Addr
@@ -83,6 +86,7 @@ rerateProgram
 rerateProgram inputs planned = do
     _ <- spend (rpiWalletTxIn inputs)
     collateral (rpiWalletTxIn inputs)
+    forM_ (rpiExtraWalletTxIns inputs) spend
     forM_ (prOrders planned) $ \order ->
         void $
             spendScript

@@ -111,13 +111,15 @@ runSwapRerateAction ctx inputs intent = do
     let utxoMap = ccUtxos ctx
         orders = prOrders planned
         required =
-            rpiWalletTxIn inputs
-                : rpiOrderScriptRef inputs
-                : rpiScopesDeployedAt inputs
-                : rpiPermissionsDeployedAt inputs
-                : rpiTreasuryDeployedAt inputs
-                : rpiRegistryDeployedAt inputs
-                : fmap proTxIn orders
+            [ rpiWalletTxIn inputs
+            , rpiOrderScriptRef inputs
+            , rpiScopesDeployedAt inputs
+            , rpiPermissionsDeployedAt inputs
+            , rpiTreasuryDeployedAt inputs
+            , rpiRegistryDeployedAt inputs
+            ]
+                ++ rpiExtraWalletTxIns inputs
+                ++ fmap proTxIn orders
         missing =
             [ i
             | i <- required
@@ -129,11 +131,16 @@ runSwapRerateAction ctx inputs intent = do
             ( rpiWalletTxIn inputs
             , utxoMap Map.! rpiWalletTxIn inputs
             )
+        extraWalletUtxos =
+            [ (i, utxoMap Map.! i)
+            | i <- rpiExtraWalletTxIns inputs
+            ]
         orderUtxos =
             [ (proTxIn order, utxoMap Map.! proTxIn order)
             | order <- orders
             ]
-        inputUtxos = walletUtxo : orderUtxos
+        walletUtxos = walletUtxo : extraWalletUtxos
+        inputUtxos = walletUtxos ++ orderUtxos
         refUtxos =
             [
                 ( rpiOrderScriptRef inputs
@@ -228,7 +235,7 @@ runSwapRerateAction ctx inputs intent = do
                     , brScriptResults = scriptResults
                     , brFinalTxBody = body
                     , brTxId = txIdText tx
-                    , brWalletInputs = [walletUtxo]
+                    , brWalletInputs = walletUtxos
                     , brTreasuryInputs = []
                     , brSundaeOrderOutputs =
                         indexedOutputs 0 (length orders) body
@@ -239,7 +246,7 @@ runSwapRerateAction ctx inputs intent = do
                     , brWalletChangeOutput =
                         indexedOutputAt (2 * length orders) body
                     , brCollateralInput =
-                        collateralInputFrom body [walletUtxo]
+                        collateralInputFrom body walletUtxos
                     , brCollateralReturn =
                         strictMaybe (body ^. collateralReturnTxBodyL)
                     , brResidualTreasuryInputs = []

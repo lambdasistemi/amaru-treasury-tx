@@ -23,6 +23,7 @@ import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy qualified as LBS
+import Data.ByteString.Lazy.Char8 qualified as BSL8
 import Data.Either (isLeft)
 import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.List.NonEmpty qualified as NE
@@ -49,6 +50,8 @@ import Test.Hspec
     , expectationFailure
     , it
     , shouldBe
+    , shouldContain
+    , shouldNotContain
     , shouldSatisfy
     )
 
@@ -414,6 +417,12 @@ spec = do
     describe "POST /v1/build/swap-rerate" $
         it "decodes the request and returns the handler response" $ do
             calls <- newIORef (0 :: Int)
+            let requestBody =
+                    Aeson.encode sampleSwapRerateBuildRequestJson
+                requestBodyText = BSL8.unpack requestBody
+            requestBodyText `shouldContain` "\"srrWalletAddress\""
+            requestBodyText `shouldNotContain` "\"srrWalletTxIn\""
+            requestBodyText `shouldNotContain` "\"srrCollateralTxIn\""
             let handlers =
                     stubHandlers
                         { hBuildSwapRerate = \req -> do
@@ -426,9 +435,7 @@ spec = do
                     ( WaiTest.srequest
                         ( waiPostJson
                             "/v1/build/swap-rerate"
-                            ( Aeson.encode
-                                sampleSwapRerateBuildRequest
-                            )
+                            requestBody
                         )
                     )
                     (mkApplication handlers)
@@ -764,12 +771,24 @@ sampleSwapRerateBuildRequest =
             [ "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0"
             ]
         , srrNewRate = 0.42
-        , srrWalletTxIn =
+        , srrWalletAddress =
             "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb#1"
-        , srrCollateralTxIn =
-            Just
-                "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc#2"
         }
+
+sampleSwapRerateBuildRequestJson :: Aeson.Value
+sampleSwapRerateBuildRequestJson =
+    Aeson.object
+        [ "srrScope" .= CoreDevelopment
+        , "srrSelectedOrders"
+            .= [ "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0"
+                    :: Text
+               ]
+        , "srrNewRate" .= (0.42 :: Double)
+        , "srrWalletAddress"
+            .= ( "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb#1"
+                    :: Text
+               )
+        ]
 
 stubSwapRerateBuildResponse :: SwapRerateBuildResponse
 stubSwapRerateBuildResponse =

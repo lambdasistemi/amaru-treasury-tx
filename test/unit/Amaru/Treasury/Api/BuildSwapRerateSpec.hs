@@ -7,6 +7,9 @@ License     : Apache-2.0
 -}
 module Amaru.Treasury.Api.BuildSwapRerateSpec (spec) where
 
+import Data.Aeson ((.=))
+import Data.Aeson qualified as Aeson
+import Data.ByteString.Lazy.Char8 qualified as BSL8
 import Data.Text (Text)
 import Data.Text qualified as T
 import Ouroboros.Network.Magic (NetworkMagic (..))
@@ -15,6 +18,8 @@ import Test.Hspec
     , describe
     , it
     , shouldBe
+    , shouldContain
+    , shouldNotContain
     , shouldSatisfy
     )
 
@@ -68,6 +73,14 @@ spec = describe "Amaru.Treasury.Api.BuildSwapRerate" $ do
         srrFailureReason resp
             `shouldSatisfy` maybe False ("newRate" `T.isInfixOf`)
 
+    it "returns a typed failure for an empty wallet address" $ do
+        resp <- runFixture singleRequest{srrWalletAddress = ""}
+        srrDecision resp `shouldBe` Nothing
+        srrCborHex resp `shouldBe` Nothing
+        srrFailureTag resp `shouldBe` Just "InputInvalid"
+        srrFailureReason resp
+            `shouldSatisfy` maybe False ("walletAddress" `T.isInfixOf`)
+
     it "returns a typed failure for a wrong-scope selected order" $ do
         resp <- runFixture singleRequest{srrScope = Middleware}
         srrDecision resp `shouldBe` Nothing
@@ -77,6 +90,14 @@ spec = describe "Amaru.Treasury.Api.BuildSwapRerate" $ do
             `shouldSatisfy` maybe False ("network_compliance" `T.isInfixOf`)
         srrFailureReason resp
             `shouldSatisfy` maybe False ("middleware" `T.isInfixOf`)
+
+    it "uses walletAddress in the request JSON shape" $ do
+        Aeson.eitherDecode (Aeson.encode singleRequestJson)
+            `shouldBe` Right singleRequest
+        let encoded = BSL8.unpack (Aeson.encode singleRequest)
+        encoded `shouldContain` "\"srrWalletAddress\""
+        encoded `shouldNotContain` "\"srrWalletTxIn\""
+        encoded `shouldNotContain` "\"srrCollateralTxIn\""
 
 runFixture :: SwapRerateBuildRequest -> IO SwapRerateBuildResponse
 runFixture =
@@ -103,14 +124,26 @@ singleRequest =
         { srrScope = NetworkCompliance
         , srrSelectedOrders = [syntheticOrderTxIn]
         , srrNewRate = 0.3
-        , srrWalletTxIn =
+        , srrWalletAddress =
             "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0"
-        , srrCollateralTxIn = Nothing
         }
+
+singleRequestJson :: Aeson.Value
+singleRequestJson =
+    Aeson.object
+        [ "srrScope" .= NetworkCompliance
+        , "srrSelectedOrders" .= [syntheticOrderTxIn]
+        , "srrNewRate" .= (0.3 :: Double)
+        , "srrWalletAddress" .= fixtureWalletAddress
+        ]
 
 splitRequest :: SwapRerateBuildRequest
 splitRequest =
     singleRequest{srrSelectedOrders = manyOrderTxIns}
+
+fixtureWalletAddress :: Text
+fixtureWalletAddress =
+    "42e4c279036e3ab6070bc969392b823917d8b998204d5dcbdfe69fec4b442da0#0"
 
 syntheticOrderTxIn :: Text
 syntheticOrderTxIn =

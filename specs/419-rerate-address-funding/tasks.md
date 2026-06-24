@@ -20,13 +20,13 @@
 
 ## Slice 3: Operate UI Parity
 
-- [ ] T419-S3 Change PureScript request type/JSON to send wallet
+- [X] T419-S3 Change PureScript request type/JSON to send wallet
   address.
-- [ ] T419-S3 Replace Re-rate Funding with the shared wallet-address
+- [X] T419-S3 Replace Re-rate Funding with the shared wallet-address
   field and remove tx-in validation/state/CLI rendering.
-- [ ] T419-S3 Update Playwright coverage and commit
+- [X] T419-S3 Update Playwright coverage and commit
   `frontend/test/ui-review/419/419-rerate-operate-desktop-1280.png`.
-- [ ] T419-S3 Run frontend build plus re-rate Playwright proof and
+- [X] T419-S3 Run frontend build plus re-rate Playwright proof and
   commit.
 
 ## Slice 4: Final Gate and PR Readiness

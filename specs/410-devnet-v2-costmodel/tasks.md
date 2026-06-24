@@ -22,10 +22,10 @@
 
 ## Slice 3 - Executed rerate transcript
 
-- [ ] T410-S3 Run `nix develop --quiet -c just devnet-cli-smoke --phase
+- [X] T410-S3 Run `nix develop --quiet -c just devnet-cli-smoke --phase
   rerate` against the patched DevNet.
-- [ ] T410-S3 Capture the full transcript at
+- [X] T410-S3 Capture the full transcript at
   `specs/410-devnet-v2-costmodel/evidence/devnet-rerate.log`, including
   phase-2 acceptance and order UTxO transition evidence.
-- [ ] T410-S3 Run `./gate.sh`, commit one bisect-safe evidence slice,
+- [X] T410-S3 Run `./gate.sh`, commit one bisect-safe evidence slice,
   and leave the branch unpushed for orchestrator review.

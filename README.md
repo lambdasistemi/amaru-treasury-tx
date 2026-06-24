@@ -136,6 +136,7 @@ report review, and creating the vault — is on the
 | `withdraw-wizard` | Resolve a treasury reward withdrawal, or exit cleanly when rewards are zero. |
 | `reorganize-wizard` | Consolidate or split treasury UTxOs, with automatic batching when one transaction cannot hold the whole scope. |
 | `swap-cancel` | Build unsigned CBOR that cancels one pending SundaeSwap V3 order back to the treasury. |
+| `swap-rerate` | Re-rate selected pending SundaeSwap orders with a wallet address, preferring one atomic cancel-and-reoffer transaction and reporting a split fallback when over budget. |
 | `tx-build` | Turn a unified `intent.json` into unsigned Conway CBOR; re-evaluate every redeemer against a live `ChainContext`; optionally write a deterministic report with `--report`. |
 | `report-render` | Render a `tx-build` build-output envelope as reviewable Markdown. |
 | `vault` / `witness` / `attach-witness` / `submit` | Create an age vault, produce a detached vkey witness, merge witnesses, submit signed CBOR via the node socket. |
@@ -156,7 +157,8 @@ The full operator and developer documentation lives at
 - [Quickstart][quickstart] — wizard-to-`tx-build` pipelines end to end.
 - [Architecture][arch] and [Trust model][trust] — module layout, data
   flow, and what the wizard verifies vs. what the operator must assert.
-- [Swap][swap] · [Disburse][disburse] · [Withdraw][withdraw] ·
+- [Swap][swap] · [Swap re-rate][swap-rerate] ·
+  [Disburse][disburse] · [Withdraw][withdraw] ·
   [Reorganize][reorganize] · [Inspect][inspect] — per-action recipes.
 - [DevNet bootstrap][devnet] — the registry / stake-reward / governance
   bootstrap flow through the shipped CLI.
@@ -208,6 +210,7 @@ Apache-2.0 — see [LICENSE](LICENSE).
 [arch]: https://lambdasistemi.github.io/amaru-treasury-tx/architecture/
 [trust]: https://lambdasistemi.github.io/amaru-treasury-tx/trust-model/
 [swap]: https://lambdasistemi.github.io/amaru-treasury-tx/swap/
+[swap-rerate]: https://lambdasistemi.github.io/amaru-treasury-tx/swap-rerate/
 [disburse]: https://lambdasistemi.github.io/amaru-treasury-tx/disburse/
 [withdraw]: https://lambdasistemi.github.io/amaru-treasury-tx/withdraw/
 [reorganize]: https://lambdasistemi.github.io/amaru-treasury-tx/reorganize/

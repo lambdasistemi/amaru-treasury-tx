@@ -21,15 +21,15 @@
 
 ### Tests
 
-- [ ] T401 [US1] Write failing WAI request/response test for `/v1/build/swap-rerate` in `test/unit/Amaru/Treasury/Api/ServerSpec.hs`.
+- [X] T401 [US1] Write failing WAI request/response test for `/v1/build/swap-rerate` in `test/unit/Amaru/Treasury/Api/ServerSpec.hs`.
 
 ### Implementation
 
-- [ ] T401 [US1] Add `Amaru.Treasury.Api.BuildSwapRerate` request/response types in `lib/Amaru/Treasury/Api/BuildSwapRerate.hs`.
-- [ ] T401 [US1] Wire `BuildSwapRerate` through `JsonAPI`, `Handlers`, `BuildHandlers`, `mkBuildHandlers`, and `mkServer` in `lib/Amaru/Treasury/Api/Server.hs`.
-- [ ] T401 [US1] Inject the runner in `app/amaru-treasury-tx-api/Main.hs`.
-- [ ] T401 [US1] Expose the new module in `amaru-treasury-tx.cabal`.
-- [ ] T401 [US1] Run focused test, run `./gate.sh`, and commit as `feat(api): route swap-rerate build endpoint` with `Tasks: T401`.
+- [X] T401 [US1] Add `Amaru.Treasury.Api.BuildSwapRerate` request/response types in `lib/Amaru/Treasury/Api/BuildSwapRerate.hs`.
+- [X] T401 [US1] Wire `BuildSwapRerate` through `JsonAPI`, `Handlers`, `BuildHandlers`, `mkBuildHandlers`, and `mkServer` in `lib/Amaru/Treasury/Api/Server.hs`.
+- [X] T401 [US1] Inject the runner in `app/amaru-treasury-tx-api/Main.hs`.
+- [X] T401 [US1] Expose the new module in `amaru-treasury-tx.cabal`.
+- [X] T401 [US1] Run focused test, run `./gate.sh`, and commit as `feat(api): route swap-rerate build endpoint` with `Tasks: T401`.
 
 ---
 

@@ -321,6 +321,9 @@ main = do
                                                 (Just metadata)
                                         , hBuildSwap =
                                             bhBuildSwap buildHandlers
+                                        , hBuildSwapRerate =
+                                            bhBuildSwapRerate
+                                                buildHandlers
                                         , hBuildDisburse =
                                             bhBuildDisburse buildHandlers
                                         , hBuildContingencyDisburse =

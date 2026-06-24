@@ -114,6 +114,7 @@ library
     Amaru.Treasury.Api.BuildDisburse
     Amaru.Treasury.Api.BuildReorganize
     Amaru.Treasury.Api.BuildSwap
+    Amaru.Treasury.Api.BuildSwapRerate
     Amaru.Treasury.Api.Config
     Amaru.Treasury.Api.GraphEffect
     Amaru.Treasury.Api.History

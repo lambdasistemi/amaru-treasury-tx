@@ -110,6 +110,11 @@ import Amaru.Treasury.Api.BuildSwap
     ( SwapBuildRequest
     , SwapBuildResponse (..)
     )
+import Amaru.Treasury.Api.BuildSwapRerate
+    ( SwapRerateBuildRequest
+    , SwapRerateBuildResponse
+    , runBuildSwapRerate
+    )
 import Amaru.Treasury.Api.GraphEffect
     ( graphEffectFromCborHex
     )
@@ -261,6 +266,10 @@ type JsonAPI =
                     :> ReqBody '[JSON] SwapBuildRequest
                     :> Post '[JSON] SwapBuildResponse
                 :<|> "build"
+                    :> "swap-rerate"
+                    :> ReqBody '[JSON] SwapRerateBuildRequest
+                    :> Post '[JSON] SwapRerateBuildResponse
+                :<|> "build"
                     :> "disburse"
                     :> ReqBody '[JSON] DisburseBuildRequest
                     :> Post '[JSON] DisburseBuildResponse
@@ -335,6 +344,13 @@ data Handlers = Handlers
     --   'Amaru.Treasury.Wizard.Swap.buildSwapIntent' against
     --   the server's long-lived 'Backend'; tests pass a fixed
     --   value or a stub.
+    , hBuildSwapRerate
+        :: SwapRerateBuildRequest
+        -> IO SwapRerateBuildResponse
+    -- ^ Build a swap re-rate response from a wire-shape
+    --   request (#401).  This first slice wires the route and
+    --   production stub; the real runner lands in the next
+    --   slice.
     , hBuildDisburse
         :: DisburseBuildRequest
         -> IO DisburseBuildResponse
@@ -371,6 +387,9 @@ data Handlers = Handlers
 -- | The API build endpoints after provider wiring.
 data BuildHandlers = BuildHandlers
     { bhBuildSwap :: SwapBuildRequest -> IO SwapBuildResponse
+    , bhBuildSwapRerate
+        :: SwapRerateBuildRequest
+        -> IO SwapRerateBuildResponse
     , bhBuildDisburse
         :: DisburseBuildRequest
         -> IO DisburseBuildResponse
@@ -425,6 +444,10 @@ mkBuildHandlers
                     >=> attachSwapGraphEffect
                     >=> attachSwapTtl
                     >=> attachSwapProofs
+            , bhBuildSwapRerate =
+                -- The first rerate slice has no graph-effect,
+                -- TTL, or proof fields to attach additively.
+                runBuildSwapRerate buildProvider
             , bhBuildDisburse =
                 buildDisburse buildProvider
                     >=> attachDisburseGraphEffect
@@ -528,6 +551,7 @@ mkServer Handlers{..} =
         :<|> scopeHistoryQueryH
         :<|> scopeHistoryShaclH
         :<|> buildSwapH
+        :<|> buildSwapRerateH
         :<|> buildDisburseH
         :<|> buildContingencyDisburseH
         :<|> buildReorganizeH
@@ -649,6 +673,10 @@ mkServer Handlers{..} =
 
     buildSwapH :: SwapBuildRequest -> Handler SwapBuildResponse
     buildSwapH req = rateLimited (hBuildSwap req)
+
+    buildSwapRerateH
+        :: SwapRerateBuildRequest -> Handler SwapRerateBuildResponse
+    buildSwapRerateH req = rateLimited (hBuildSwapRerate req)
 
     buildDisburseH
         :: DisburseBuildRequest -> Handler DisburseBuildResponse

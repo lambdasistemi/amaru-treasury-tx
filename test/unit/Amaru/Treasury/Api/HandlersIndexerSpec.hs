@@ -67,6 +67,9 @@ import Amaru.Treasury.Api.BuildReorganize
 import Amaru.Treasury.Api.BuildSwap
     ( SwapBuildResponse (..)
     )
+import Amaru.Treasury.Api.BuildSwapRerate
+    ( SwapRerateBuildResponse (..)
+    )
 import Amaru.Treasury.Api.Indexer
     ( ApiIndexer
     , IndexerConfig (..)
@@ -74,7 +77,7 @@ import Amaru.Treasury.Api.Indexer
     )
 import Amaru.Treasury.Api.Server
     ( BuildHandlers (..)
-    , mkBuildHandlers
+    , mkBuildHandlersWithSwapRerate
     , mkBuildProvider
     , mkInspectHandler
     )
@@ -163,6 +166,18 @@ spec = describe "Amaru.Treasury.Api handlers + indexer" $ do
                 addr <- mainnetSwapAddr
                 let buildHandlers = trappedBuildHandlers apiIdx addr
                 _ <- bhBuildSwap buildHandlers (error "unused swap request")
+                pure ()
+
+        it
+            "wires the swap-rerate build handler to the indexer-backed provider"
+            $ withTestIndexer
+            $ \apiIdx -> do
+                addr <- mainnetSwapAddr
+                let buildHandlers = trappedBuildHandlers apiIdx addr
+                _ <-
+                    bhBuildSwapRerate
+                        buildHandlers
+                        (error "unused swap-rerate request")
                 pure ()
 
         it
@@ -352,11 +367,13 @@ runHandlerOrFail h = do
 
 trappedBuildHandlers :: ApiIndexer cf op -> Addr -> BuildHandlers
 trappedBuildHandlers apiIdx addr =
-    mkBuildHandlers
+    mkBuildHandlersWithSwapRerate
         apiIdx
         Nothing
         trappedProvider
         (\provider _req -> buildQuery provider >> pure emptySwapResponse)
+        ( \provider _req -> buildQuery provider >> pure emptySwapRerateResponse
+        )
         (\provider _req -> buildQuery provider >> pure emptyDisburseResponse)
         (\provider _req -> buildQuery provider >> pure emptyDisburseResponse)
         ( \provider _req -> buildQuery provider >> pure emptyReorganizeResponse
@@ -391,6 +408,19 @@ emptySwapResponse =
         , sbrGraphEffect = Nothing
         , sbrTtl = Nothing
         , sbrProofs = Nothing
+        }
+
+-- | An all-'Nothing' swap-rerate build response.
+emptySwapRerateResponse :: SwapRerateBuildResponse
+emptySwapRerateResponse =
+    SwapRerateBuildResponse
+        { srrCborHex = Nothing
+        , srrCborEnvelope = Nothing
+        , srrReport = Nothing
+        , srrDecision = Nothing
+        , srrReason = Nothing
+        , srrFailureTag = Nothing
+        , srrFailureReason = Nothing
         }
 
 {- | An all-'Nothing' disburse build response (used for both the

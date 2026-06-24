@@ -114,6 +114,7 @@ library
     Amaru.Treasury.Api.BuildDisburse
     Amaru.Treasury.Api.BuildReorganize
     Amaru.Treasury.Api.BuildSwap
+    Amaru.Treasury.Api.BuildSwapRerate
     Amaru.Treasury.Api.Config
     Amaru.Treasury.Api.GraphEffect
     Amaru.Treasury.Api.History
@@ -523,6 +524,7 @@ test-suite unit-tests
   other-modules:
     Amaru.Treasury.Api.AttachSpec
     Amaru.Treasury.Api.BuildMetadataSpec
+    Amaru.Treasury.Api.BuildSwapRerateSpec
     Amaru.Treasury.Api.ConfigSpec
     Amaru.Treasury.Api.HandlersIndexerSpec
     Amaru.Treasury.Api.HistorySpec

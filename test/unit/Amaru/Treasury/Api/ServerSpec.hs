@@ -69,6 +69,10 @@ import Amaru.Treasury.Api.BuildSwap
     , SwapBuildResponse (..)
     , SwapRate (..)
     )
+import Amaru.Treasury.Api.BuildSwapRerate
+    ( SwapRerateBuildRequest (..)
+    , SwapRerateBuildResponse (..)
+    )
 import Amaru.Treasury.Api.Introspect (introspectTx)
 import Amaru.Treasury.Api.RateLimit
     ( ApiLimiter
@@ -407,6 +411,33 @@ spec = do
             WaiTest.simpleStatus res `shouldBe` status200
             Aeson.decode (WaiTest.simpleBody res) `shouldBe` Just stubHealth
 
+    describe "POST /v1/build/swap-rerate" $
+        it "decodes the request and returns the handler response" $ do
+            calls <- newIORef (0 :: Int)
+            let handlers =
+                    stubHandlers
+                        { hBuildSwapRerate = \req -> do
+                            req `shouldBe` sampleSwapRerateBuildRequest
+                            modifyIORef' calls (+ 1)
+                            pure stubSwapRerateBuildResponse
+                        }
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        ( waiPostJson
+                            "/v1/build/swap-rerate"
+                            ( Aeson.encode
+                                sampleSwapRerateBuildRequest
+                            )
+                        )
+                    )
+                    (mkApplication handlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res)
+                `shouldBe` Just stubSwapRerateBuildResponse
+            count <- readIORef calls
+            count `shouldBe` 1
+
     describe "GET /v1/scope/{scope}/txs" $ do
         it "returns indexed tx-history rows for the captured scope" $ do
             res <-
@@ -680,6 +711,7 @@ stubHandlers =
                     , shsrReport = ""
                     }
         , hBuildSwap = \_ -> pure stubSwapBuildResponse
+        , hBuildSwapRerate = \_ -> pure stubSwapRerateBuildResponse
         , hBuildDisburse = \_ -> pure disburseIntentFailureResp
         , hBuildContingencyDisburse = \_ ->
             pure disburseIntentFailureResp
@@ -722,6 +754,33 @@ stubSwapBuildResponse =
         , sbrGraphEffect = Nothing
         , sbrTtl = Nothing
         , sbrProofs = Nothing
+        }
+
+sampleSwapRerateBuildRequest :: SwapRerateBuildRequest
+sampleSwapRerateBuildRequest =
+    SwapRerateBuildRequest
+        { srrScope = CoreDevelopment
+        , srrSelectedOrders =
+            [ "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#0"
+            ]
+        , srrNewRate = 0.42
+        , srrWalletTxIn =
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb#1"
+        , srrCollateralTxIn =
+            Just
+                "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc#2"
+        }
+
+stubSwapRerateBuildResponse :: SwapRerateBuildResponse
+stubSwapRerateBuildResponse =
+    SwapRerateBuildResponse
+        { srrCborHex = Nothing
+        , srrCborEnvelope = Nothing
+        , srrReport = Nothing
+        , srrDecision = Nothing
+        , srrReason = Nothing
+        , srrFailureTag = Just "BuildSwapRerateUnavailable"
+        , srrFailureReason = Just "swap-rerate build is not wired yet"
         }
 
 stubRegistry :: RegistryResponse

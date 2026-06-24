@@ -7,10 +7,10 @@
 
 ## Slice 0: Extend Gate
 
-- [ ] T402-S0 Extend `gate.sh` to build `.#frontend`.
-- [ ] T402-S0 Add the ticket-specific Re-rate Playwright command to
+- [X] T402-S0 Extend `gate.sh` to build `.#frontend`.
+- [X] T402-S0 Add the ticket-specific Re-rate Playwright command to
   `gate.sh` once the spec path exists.
-- [ ] T402-S0 Commit as `chore: extend gate.sh for rerate UI`.
+- [X] T402-S0 Commit as `chore: extend gate.sh for rerate UI`.
 
 ## Slice 1: API and Pure Tests
 

@@ -14,14 +14,14 @@
 
 ## Slice 1: API and Pure Tests
 
-- [ ] T402-S1 Add `/v1/build/swap-rerate` to `Api.buildCborField`.
-- [ ] T402-S1 Add PureScript types and client call for
+- [X] T402-S1 Add `/v1/build/swap-rerate` to `Api.buildCborField`.
+- [X] T402-S1 Add PureScript types and client call for
   `/v1/pending?scope=<scope>`.
-- [ ] T402-S1 Add/adjust exported pure helpers for Re-rate outrefs,
+- [X] T402-S1 Add/adjust exported pure helpers for Re-rate outrefs,
   request JSON, split summary, and empty state.
-- [ ] T402-S1 Cover orders-present, over-budget split, and no-orders
+- [X] T402-S1 Cover orders-present, over-budget split, and no-orders
   classification in `frontend/test/Test/Main.purs`.
-- [ ] T402-S1 Commit as `feat(frontend): add rerate API model`.
+- [X] T402-S1 Commit as `feat(frontend): add rerate API model`.
 
 ## Slice 2: Re-rate Operate Mode
 

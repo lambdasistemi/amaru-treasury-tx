@@ -2,8 +2,16 @@ module Test.Main (main) where
 
 import Prelude
 
+import Api as Api
 import Data.Argonaut.Core as Argonaut
+import Data.Argonaut.Decode
+  ( class DecodeJson
+  , decodeJson
+  , printJsonDecodeError
+  )
+import Data.Argonaut.Parser (jsonParser)
 import Data.Array as Array
+import Data.Either (Either(..))
 import Data.Maybe (Maybe(..))
 import Data.Nullable as Nullable
 import Data.Tuple (Tuple(..))
@@ -19,6 +27,7 @@ main =
     testCrud
     testWitnesses
     testSupersede
+    testRerateApiSurface
 
 testCrud :: Aff Unit
 testCrud = do
@@ -93,6 +102,138 @@ testSupersede = do
   entries <- PendingTx.list
   assertEq "list retains old and new entries" 2 (Array.length entries)
 
+testRerateApiSurface :: Aff Unit
+testRerateApiSurface = do
+  testRerateOrdersPresent
+  testRerateSplitSummary
+  testRerateNoOrdersEmptyState
+
+testRerateOrdersPresent :: Aff Unit
+testRerateOrdersPresent = do
+  assertEq
+    "rerate build cbor field"
+    (Just "srrCborHex")
+    (Api.buildCborField "/v1/build/swap-rerate")
+  assertEq
+    "pending endpoint"
+    "/v1/pending?scope=core_development"
+    (Api.pendingEndpoint "core_development")
+
+  pending <- decodePending samplePendingOrdersJson
+  assertEq "pending has orders" false (Api.pendingOrdersEmpty pending)
+  entry <- headOrFail "pending entry" pending.entries
+  assertEq "pending entry scope" "core_development" entry.scope
+  order <- headOrFail "pending order" entry.orders
+  assertEq
+    "pending outref text"
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#2"
+    (Api.pendingOutRefText order.outref)
+
+  let
+    request =
+      Api.swapRerateRequestJson
+        { scope: "core_development"
+        , selectedOrders: [ order.outref ]
+        , newRate: 0.42
+        , walletTxIn:
+            "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb#1"
+        , collateralTxIn:
+            Just
+              "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc#0"
+        }
+
+  assertJsonString "srrScope" "core_development" request
+  assertJsonStrings
+    "srrSelectedOrders"
+    [ "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa#2" ]
+    request
+  assertJsonNumber "srrNewRate" 0.42 request
+  assertJsonString
+    "srrWalletTxIn"
+    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb#1"
+    request
+  assertJsonString
+    "srrCollateralTxIn"
+    "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc#0"
+    request
+
+testRerateSplitSummary :: Aff Unit
+testRerateSplitSummary = do
+  response <- decodeRerateResponse sampleSplitResponseJson
+  assertEq "split has no cbor" Nothing response.srrCborHex
+  assertEq
+    "split summary"
+    (Just "split: RerateOverBudget")
+    (Api.swapRerateSplitSummary response)
+
+testRerateNoOrdersEmptyState :: Aff Unit
+testRerateNoOrdersEmptyState = do
+  pending <- decodePending sampleNoOrdersJson
+  assertEq "no orders empty state" true (Api.pendingOrdersEmpty pending)
+  assertEq
+    "no orders for selected scope"
+    0
+    ( Array.length
+        (Api.pendingOrdersForScope "core_development" pending)
+    )
+
+decodePending :: String -> Aff Api.PendingResponse
+decodePending = decodeFixture "pending response"
+
+decodeRerateResponse :: String -> Aff Api.SwapRerateBuildResponse
+decodeRerateResponse = decodeFixture "swap-rerate build response"
+
+decodeFixture
+  :: forall a
+   . DecodeJson a
+  => String
+  -> String
+  -> Aff a
+decodeFixture label raw = case jsonParser raw of
+  Left err -> failTest (label <> " parse failed: " <> show err)
+  Right json -> case decodeJson json of
+    Left err ->
+      failTest (label <> " decode failed: " <> printJsonDecodeError err)
+    Right value -> pure value
+
+headOrFail :: forall a. String -> Array a -> Aff a
+headOrFail label xs = case Array.head xs of
+  Nothing -> failTest (label <> " was missing")
+  Just value -> pure value
+
+assertJsonString :: String -> String -> Argonaut.Json -> Aff Unit
+assertJsonString key expected json = do
+  value <- jsonField key json
+  case Argonaut.toString value of
+    Just actual -> assertEq key expected actual
+    Nothing -> failTest (key <> " was not a string")
+
+assertJsonNumber :: String -> Number -> Argonaut.Json -> Aff Unit
+assertJsonNumber key expected json = do
+  value <- jsonField key json
+  case Argonaut.toNumber value of
+    Just actual -> assertEq key expected actual
+    Nothing -> failTest (key <> " was not a number")
+
+assertJsonStrings :: String -> Array String -> Argonaut.Json -> Aff Unit
+assertJsonStrings key expected json = do
+  value <- jsonField key json
+  case Argonaut.toArray value of
+    Nothing -> failTest (key <> " was not an array")
+    Just values ->
+      let
+        strings = Array.mapMaybe Argonaut.toString values
+      in
+        if Array.length strings == Array.length values then
+          assertEq key expected strings
+        else
+          failTest (key <> " contained a non-string")
+
+jsonField :: String -> Argonaut.Json -> Aff Argonaut.Json
+jsonField key json = case Argonaut.toObject json >>= FO.lookup key of
+  Nothing -> failTest ("missing JSON field " <> key)
+  Just value -> pure value
+
 withEntry
   :: String
   -> (PendingTx.PendingTxEntry -> Aff Unit)
@@ -122,6 +263,52 @@ sampleEntry txid supersedes =
   , supersedes
   }
 
+samplePendingOrdersJson :: String
+samplePendingOrdersJson =
+  "{"
+    <> "\"scope\":\"core_development\","
+    <> "\"entries\":["
+    <> "{"
+    <> "\"scope\":\"core_development\","
+    <> "\"orders\":["
+    <> "{"
+    <> "\"outref\":{"
+    <> "\"txId\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\","
+    <> "\"ix\":2"
+    <> "},"
+    <> "\"lovelaceIn\":123000000,"
+    <> "\"minUsdmOut\":456000000,"
+    <> "\"sundaeFeeLovelace\":2500000"
+    <> "}"
+    <> "]"
+    <> "}"
+    <> "]"
+    <> "}"
+
+sampleNoOrdersJson :: String
+sampleNoOrdersJson =
+  "{"
+    <> "\"scope\":\"core_development\","
+    <> "\"entries\":["
+    <> "{"
+    <> "\"scope\":\"core_development\","
+    <> "\"orders\":[]"
+    <> "}"
+    <> "]"
+    <> "}"
+
+sampleSplitResponseJson :: String
+sampleSplitResponseJson =
+  "{"
+    <> "\"srrCborHex\":null,"
+    <> "\"srrCborEnvelope\":null,"
+    <> "\"srrReport\":\"{\\\"groups\\\":[[\\\"order-a\\\"]]}\","
+    <> "\"srrDecision\":\"split\","
+    <> "\"srrReason\":\"RerateOverBudget\","
+    <> "\"srrFailureTag\":null,"
+    <> "\"srrFailureReason\":null"
+    <> "}"
+
 assertEq :: forall a. Eq a => Show a => String -> a -> a -> Aff Unit
 assertEq label expected actual =
   when (expected /= actual)
@@ -134,5 +321,5 @@ assertEq label expected actual =
         )
     )
 
-failTest :: String -> Aff Unit
+failTest :: forall a. String -> Aff a
 failTest message = throwError (error message)

@@ -28,6 +28,7 @@ import Data.Either (Either(..))
 import Data.Maybe (Maybe(..), fromMaybe)
 import Data.String as String
 import Data.Time.Duration (Milliseconds(..))
+import Data.Tuple (Tuple(..))
 import Effect.Aff (Aff, delay)
 import Foreign.Object (Object)
 import Foreign.Object as FO
@@ -86,6 +87,46 @@ type SubmitResponse =
 type RebuildBuildResponse =
   { cborHex :: String
   , graphEffect :: Maybe Json
+  }
+
+type PendingOutRef =
+  { txId :: String
+  , ix :: Int
+  }
+
+type PendingSwapOrder =
+  { outref :: PendingOutRef
+  , lovelaceIn :: Number
+  , minUsdmOut :: Number
+  , sundaeFeeLovelace :: Number
+  }
+
+type PendingScope =
+  { scope :: String
+  , orders :: Array PendingSwapOrder
+  }
+
+type PendingResponse =
+  { scope :: Maybe String
+  , entries :: Array PendingScope
+  }
+
+type SwapRerateBuildRequestDraft =
+  { scope :: String
+  , selectedOrders :: Array PendingOutRef
+  , newRate :: Number
+  , walletTxIn :: String
+  , collateralTxIn :: Maybe String
+  }
+
+type SwapRerateBuildResponse =
+  { srrCborHex :: Maybe String
+  , srrCborEnvelope :: Maybe String
+  , srrReport :: Maybe String
+  , srrDecision :: Maybe String
+  , srrReason :: Maybe String
+  , srrFailureTag :: Maybe String
+  , srrFailureReason :: Maybe String
   }
 
 type IntrospectResponse =
@@ -268,6 +309,58 @@ fetchVersion = withTimeout (getJson "/v1/version")
 fetchTip :: Aff (Either String TipResponse)
 fetchTip = withTimeout (getJson "/v1/tip")
 
+fetchPending :: String -> Aff (Either String PendingResponse)
+fetchPending scope = withTimeout (getJson (pendingEndpoint scope))
+
+pendingEndpoint :: String -> String
+pendingEndpoint scope =
+  "/v1/pending"
+    <> queryString [ { key: "scope", value: Just scope } ]
+
+pendingOutRefText :: PendingOutRef -> String
+pendingOutRefText outref = outref.txId <> "#" <> show outref.ix
+
+pendingOrdersForScope
+  :: String
+  -> PendingResponse
+  -> Array PendingSwapOrder
+pendingOrdersForScope scope pending =
+  Array.concatMap _.orders
+    (Array.filter (\entry -> entry.scope == scope) pending.entries)
+
+pendingOrdersEmpty :: PendingResponse -> Boolean
+pendingOrdersEmpty pending =
+  Array.null (Array.concatMap _.orders pending.entries)
+
+swapRerateRequestJson :: SwapRerateBuildRequestDraft -> Json
+swapRerateRequestJson draft =
+  Argonaut.fromObject $ FO.fromFoldable
+    [ Tuple "srrScope" (Argonaut.fromString draft.scope)
+    , Tuple "srrSelectedOrders"
+        ( Argonaut.fromArray
+            ( map
+                (Argonaut.fromString <<< pendingOutRefText)
+                draft.selectedOrders
+            )
+        )
+    , Tuple "srrNewRate" (Argonaut.fromNumber draft.newRate)
+    , Tuple "srrWalletTxIn" (Argonaut.fromString draft.walletTxIn)
+    , Tuple "srrCollateralTxIn"
+        (nullableStringJson draft.collateralTxIn)
+    ]
+
+swapRerateSplitSummary :: SwapRerateBuildResponse -> Maybe String
+swapRerateSplitSummary response
+  | response.srrDecision /= Just "split" = Nothing
+  | otherwise = case response.srrReason of
+      Just reason -> Just ("split: " <> reason)
+      Nothing -> Just "split"
+
+nullableStringJson :: Maybe String -> Json
+nullableStringJson = case _ of
+  Nothing -> Argonaut.jsonNull
+  Just value -> Argonaut.fromString value
+
 verifyWitness
   :: String
   -> String
@@ -328,6 +421,7 @@ introspectTx cborHex =
 buildCborField :: String -> Maybe String
 buildCborField = case _ of
   "/v1/build/swap" -> Just "sbrCborHex"
+  "/v1/build/swap-rerate" -> Just "srrCborHex"
   "/v1/build/disburse" -> Just "dbrCborHex"
   "/v1/build/contingency-disburse" -> Just "dbrCborHex"
   "/v1/build/reorganize" -> Just "rbrCborHex"

@@ -11,6 +11,6 @@
 
 ## Slice 2: Final Gate And PR Readiness
 
-- [ ] T403-S2 Run `./gate.sh` at HEAD and record the evidence.
-- [ ] T403-S2 Audit PR body and task accounting.
-- [ ] T403-S2 Drop `gate.sh`, push, and mark PR ready for review.
+- [X] T403-S2 Run `./gate.sh` at HEAD and record the evidence.
+- [X] T403-S2 Audit PR body and task accounting.
+- [X] T403-S2 Drop `gate.sh`, push, and mark PR ready for review.

@@ -76,6 +76,8 @@ data ScriptParam
       ParamData !Data
     | -- | Parameter passed as Plutus builtin bytes.
       ParamBytes !ByteString
+    | -- | Parameter passed as a Plutus builtin integer.
+      ParamInteger !Integer
     deriving (Eq, Show)
 
 -- | Apply Plutus @Data@ parameters to a compiled validator blob.
@@ -228,6 +230,7 @@ paramTerm
 paramTerm = \case
     ParamData datum -> UPLC.Constant () (someValue datum)
     ParamBytes bytes -> UPLC.Constant () (someValue bytes)
+    ParamInteger integer -> UPLC.Constant () (someValue integer)
 
 outputReferenceData
     :: Text

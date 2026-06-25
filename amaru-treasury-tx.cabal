@@ -829,8 +829,10 @@ test-suite devnet-tests
     , http-types
     , microlens
     , network
+    , operational
     , ouroboros-network:api
     , plutus-core
+    , process
     , servant-server
     , tagged
     , temporary

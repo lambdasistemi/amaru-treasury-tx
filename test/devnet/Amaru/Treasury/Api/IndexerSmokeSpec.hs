@@ -1719,6 +1719,7 @@ smokeHandlers
             , hScopeHistoryShacl =
                 queryScopeHistoryShaclResponse (aiHistory apiIdx) (Just metadata)
             , hBuildSwap = bhBuildSwap buildHandlers
+            , hBuildSwapRerate = bhBuildSwapRerate buildHandlers
             , hBuildDisburse = bhBuildDisburse buildHandlers
             , hBuildContingencyDisburse =
                 bhBuildContingencyDisburse buildHandlers

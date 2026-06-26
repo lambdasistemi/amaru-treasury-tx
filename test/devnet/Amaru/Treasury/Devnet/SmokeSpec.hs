@@ -1824,6 +1824,11 @@ treasurySwapFullE2ESmoke = do
     createDirectoryIfMissing
         True
         (runDir </> "treasury-swap-full-e2e")
+    -- This phase reuses the fresh-cascade scoop harness, whose artifacts
+    -- land under <runDir>/scoop-e2e; create it up front so reused writes
+    -- (e.g. deriveFreshSundaeScripts' blueprint copy) don't fail on a
+    -- missing directory.
+    createDirectoryIfMissing True (runDir </> "scoop-e2e")
     statusNote
         "S2 treasury-swap-full-e2e deploy+fund re-rooted treasury"
 
@@ -1982,7 +1987,12 @@ treasurySwapFullE2ESmoke = do
             let ownerBytes =
                     keyHashBytes genesisPaymentKeyHash
                 offerLovelace :: Integer
-                offerLovelace = 1_000_000
+                -- 10 ADA so the order is value-identical to the proven
+                -- #409 order (14.5 ADA = 10 offer + 2.5 fee + 2 returned),
+                -- which the shared scoopTreasurySwapOrder is hardcoded to
+                -- (a 10-ADA offer yields exactly 9_896_088 tokens). The
+                -- deployed treasury is funded by withdrawalAmount to cover it.
+                offerLovelace = 10_000_000
                 datumParams =
                     SwapOrderDatumParams
                         { sodPoolId = spuIdent pool
@@ -2402,8 +2412,13 @@ data WithdrawalFailure
     | WithdrawalTxBuildFailed !ExitCode !(Maybe Report.BuildFailure)
     deriving stock (Eq, Show)
 
+{- | Governance treasury-withdrawal amount that funds each deployed
+treasury UTxO. Sized to cover the treasury-swap-full-e2e order's
+10-ADA offer plus a min-UTxO leftover; all materialization asserts are
+relative to this constant, so bumping it stays self-consistent.
+-}
 withdrawalAmount :: Coin
-withdrawalAmount = Coin 2_000_000
+withdrawalAmount = Coin 13_000_000
 
 stakeDeposit :: Coin
 stakeDeposit = Coin 400_000
@@ -2926,8 +2941,12 @@ publishScoopM2Order provider submitter pp utxos _readiness = do
 deriveFreshSundaeScripts :: FilePath -> TxIn -> IO SundaeScriptBundle
 deriveFreshSundaeScripts runDir bootIn = do
     contractsDir <-
-        fromMaybe "/tmp/devnet-scoop/codex-scoop/sundae-contracts"
-            <$> lookupEnv "SUNDAE_CONTRACTS_DIR"
+        maybe
+            ( fail
+                "SUNDAE_CONTRACTS_DIR must point at a writable sundae-contracts@be33466b checkout"
+            )
+            pure
+            =<< lookupEnv "SUNDAE_CONTRACTS_DIR"
     statusNote "M3 running aiken build for unapplied Sundae blueprint"
     (code, out, err) <-
         withCurrentDirectory contractsDir $
@@ -3160,8 +3179,15 @@ refreshSettingsBeforeReferenceScripts
     settings
     scripts
     scriptRefs =
-        go (10 :: Int) settings
+        go maxSettingsRefreshAttempts settings
       where
+        -- The Sundae scoop requires the settings reference UTxO to sort
+        -- before the pool/order/pool_stake script reference inputs. A
+        -- refreshed settings UTxO gets a fresh random TxId, so each attempt
+        -- has only a ~1-in-4 chance of sorting below the minimum script ref
+        -- (10 attempts left a ~6% flake). 64 drives the miss probability
+        -- below 1e-8 while still usually succeeding within a few refreshes.
+        maxSettingsRefreshAttempts = 64 :: Int
         refTxIns =
             fst
                 <$> [srsPool scriptRefs, srsOrder scriptRefs, srsPoolStake scriptRefs]
@@ -3180,7 +3206,7 @@ refreshSettingsBeforeReferenceScripts
             | otherwise = do
                 statusNote $
                     "M4 refresh settings UTxO for reference-input ordering attempt="
-                        <> show (11 - attempts)
+                        <> show (maxSettingsRefreshAttempts + 1 - attempts)
                 refreshed <-
                     refreshSundaeSettings provider submitter pp current scripts
                 go (attempts - 1) refreshed
@@ -4306,15 +4332,26 @@ statusMilestone =
 statusLine :: String -> String -> IO ()
 statusLine label message = do
     now <- getCurrentTime
-    appendFile
-        "/tmp/devnet-scoop/codex-scoop/STATUS.md"
-        ( label
-            <> " "
-            <> formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" now
-            <> " "
-            <> message
-            <> "\n"
-        )
+    let line =
+            label
+                <> " "
+                <> formatTime defaultTimeLocale "%Y-%m-%dT%H:%M:%SZ" now
+                <> " "
+                <> message
+                <> "\n"
+    -- Append progress to <DEVNET_SMOKE_RUN_DIR>/STATUS.md (the run dir the
+    -- smoke driver exports). Logging must never crash the suite, and falls
+    -- back to stdout when no run dir is set.
+    mRunDir <- lookupEnv "DEVNET_SMOKE_RUN_DIR"
+    case mRunDir of
+        Just dir -> do
+            _ <-
+                try @SomeException
+                    ( createDirectoryIfMissing True dir
+                        >> appendFile (dir </> "STATUS.md") line
+                    )
+            pure ()
+        Nothing -> putStr line
 
 writeGenesisPaymentSigningKey :: FilePath -> IO FilePath
 writeGenesisPaymentSigningKey runDir = do

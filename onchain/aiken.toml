@@ -1,0 +1,15 @@
+name = "lambdasistemi/swap-vault"
+version = "0.0.0"
+plutus = "v3"
+license = "Apache-2.0"
+description = "Non-custodial bounded swap-vault: the on-chain safety envelope that gates owner/treasury funds into SundaeSwap V3 swaps within a datum bound. amaru-treasury-tx #396 Part A. Treasury-agnostic; the compiled blueprint is the only interface to the off-chain consumer."
+
+[repository]
+user = "lambdasistemi"
+project = "amaru-treasury-tx"
+platform = "github"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "v2"
+source = "github"

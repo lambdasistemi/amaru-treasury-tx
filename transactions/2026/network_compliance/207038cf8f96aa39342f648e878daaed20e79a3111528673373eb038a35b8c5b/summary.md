@@ -44,3 +44,5 @@ The unsigned transaction was built off this host and provided to the operator se
 
 - Parent input bundles in `inputs/` (5): `a8c5852b…` (treasury + wallet spend; the Jun-12 predecessor swap in this same directory tree), plus reference scripts `11ace24a…` (scope owners), `25ba96f5…` (permissions), `810bfcbd…` (treasury script), `e7b395a9…` (registry). Each `inputs/<txid>.cbor` satisfies `blake2b-256(canonical(body)) == <txid>`.
 - Companion follow-on swap in the same session: `transactions/2026/ops_and_use_cases/4fdd9cd0…` — spends this tx's output `#5` as its wallet/collateral input.
+
+Note on byte provenance: `blake2b-256(body) == txid` holds for the archived `signed-tx.hex` (the binding check). A full-byte diff against Blockfrost's `/txs/{hash}/cbor` shows witness-set encoding differences — expected, since blocks store transaction components segregated and Blockfrost reconstructs the full tx; the reconstruction is not the submitted byte stream.

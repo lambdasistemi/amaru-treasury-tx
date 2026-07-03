@@ -49,3 +49,5 @@ The unsigned transaction was built off this host and provided to the operator se
 
 - Parent input bundles in `inputs/` (6): `68ec097b…` (ops treasury funding), `207038cf…` (companion swap providing the wallet input — archived at `transactions/2026/network_compliance/207038cf…`), plus reference scripts `11ace24a…` (scope owners), `25ba96f5…` (permissions), `660c0729…` (treasury script), `e7b395a9…` (registry). Each `inputs/<txid>.cbor` satisfies `blake2b-256(canonical(body)) == <txid>`.
 - The stale abandoned candidate (`c638d21d…`) was never submitted and is intentionally not archived as an entry; its story is recorded here.
+
+Note on byte provenance: `blake2b-256(body) == txid` holds for the archived `signed-tx.hex` (the binding check). A full-byte diff against Blockfrost's `/txs/{hash}/cbor` shows witness-set encoding differences — expected, since blocks store transaction components segregated and Blockfrost reconstructs the full tx; the reconstruction is not the submitted byte stream.

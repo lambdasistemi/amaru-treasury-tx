@@ -1,0 +1,13 @@
+{
+  "txid": "207038cf8f96aa39342f648e878daaed20e79a3111528673373eb038a35b8c5b",
+  "block": 13630569,
+  "block_height": 13630569,
+  "slot": 191527861,
+  "block_time": "2026-07-03T15:55:52Z",
+  "timestamp": "2026-07-03T15:55:52Z",
+  "submitter": "external co-signing session (not this operator host); receipt backfilled from Blockfrost",
+  "fee_lovelace": 472930,
+  "valid_contract": true,
+  "epoch": 640,
+  "source": "blockfrost /txs (block_height/slot/block_time/fees); inclusion cross-checked via treasury-inspect showing 207038cf8f96aa39342f648e878daaed20e79a3111528673373eb038a35b8c5b#0-3 as pending SundaeSwap orders and #4 live at the network_compliance treasury"
+}

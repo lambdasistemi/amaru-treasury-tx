@@ -1,0 +1,13 @@
+{
+  "txid": "4fdd9cd08ce3a1b8ccea8f2e56825bc02591285e57b1db60b6b0360b913e6fdb",
+  "block": 13630628,
+  "block_height": 13630628,
+  "slot": 191528956,
+  "block_time": "2026-07-03T16:14:07Z",
+  "timestamp": "2026-07-03T16:13:53Z",
+  "submitter": "paolino@cardano-mainnet (n2c socket)",
+  "fee_lovelace": 550026,
+  "valid_contract": true,
+  "epoch": 640,
+  "source": "blockfrost /txs (block_height/slot/block_time/fees); submitted this session via amaru-treasury-tx submit (see submit.log)"
+}

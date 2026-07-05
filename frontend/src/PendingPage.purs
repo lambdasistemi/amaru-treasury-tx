@@ -11,6 +11,7 @@ import Api as Api
 import Data.Argonaut.Core (Json)
 import Data.Argonaut.Core as Argonaut
 import Data.Argonaut.Decode (decodeJson)
+import Data.Argonaut.Parser (jsonParser)
 import Data.Array as Array
 import Data.DateTime (date, day, hour, minute, month, second, time, year)
 import Data.DateTime.Instant (toDateTime)
@@ -44,15 +45,27 @@ type State =
   , selectedTxid :: Maybe String
   , loadError :: Maybe String
   , tipSlot :: Maybe Int
+  , registerText :: String
+  , registerStatus :: Maybe RegisterStatus
+  , registering :: Boolean
+  , unregisteringTxid :: Maybe String
+  , confirmingUnregister :: Maybe String
   , witnessText :: String
   , witnessStatus :: Maybe WitnessStatus
   , verifyingWitness :: Boolean
   , submitStatus :: Maybe SubmitStatus
   , submittingTxid :: Maybe String
+  , signedStatus :: Maybe SignedStatus
+  , signingTxid :: Maybe String
   , rebuildStatus :: Maybe RebuildStatus
   , rebuildingTxid :: Maybe String
   , theme :: Theme.Theme
   }
+
+data RegisterStatus
+  = RegisterSuccess String
+  | RegisterDuplicate String
+  | RegisterFailure String
 
 data WitnessStatus
   = WitnessSuccess String
@@ -65,6 +78,14 @@ data SubmitStatus
 data RebuildStatus
   = RebuildSuccess String
   | RebuildFailure String
+
+data SignedStatus
+  = SignedSuccess String
+  | SignedFailure String
+
+data SignedCopyFormat
+  = SignedHex
+  | SignedEnvelope
 
 type RebuildRecipe =
   { buildEndpoint :: String
@@ -81,10 +102,19 @@ data Action
   = Initialize
   | ToggleTheme
   | SelectEntry String
+  | SetRegisterText String
+  | RegisterFilePicked
+  | RegisterUnsigned
+  | UnregisterEntry String
+  | CancelUnregister
+  | ConfirmUnregister String
   | SetWitnessText String
   | WitnessFilePicked
   | VerifyWitness
+  | RemoveWitness String
+  | CopyWitness String
   | SubmitSelected
+  | CopySigned SignedCopyFormat
   | RebuildSelected
   | CopyText String
 
@@ -94,11 +124,18 @@ initialState =
   , selectedTxid: Nothing
   , loadError: Nothing
   , tipSlot: Nothing
+  , registerText: ""
+  , registerStatus: Nothing
+  , registering: false
+  , unregisteringTxid: Nothing
+  , confirmingUnregister: Nothing
   , witnessText: ""
   , witnessStatus: Nothing
   , verifyingWitness: false
   , submitStatus: Nothing
   , submittingTxid: Nothing
+  , signedStatus: Nothing
+  , signingTxid: Nothing
   , rebuildStatus: Nothing
   , rebuildingTxid: Nothing
   , theme: Theme.Dark
@@ -145,11 +182,18 @@ handleAction = case _ of
       , selectedTxid
       , loadError
       , tipSlot
+      , registerText: ""
+      , registerStatus: Nothing
+      , registering: false
+      , unregisteringTxid: Nothing
+      , confirmingUnregister: Nothing
       , witnessText: ""
       , witnessStatus: Nothing
       , verifyingWitness: false
       , submitStatus: Nothing
       , submittingTxid: Nothing
+      , signedStatus: Nothing
+      , signingTxid: Nothing
       , rebuildStatus: Nothing
       , rebuildingTxid: Nothing
       , theme
@@ -166,9 +210,159 @@ handleAction = case _ of
           , witnessText = ""
           , witnessStatus = Nothing
           , submitStatus = Nothing
+          , signedStatus = Nothing
           , rebuildStatus = Nothing
+          , confirmingUnregister = Nothing
           }
       )
+  SetRegisterText txt ->
+    H.modify_
+      ( _
+          { registerText = txt
+          , registerStatus = Nothing
+          }
+      )
+  RegisterFilePicked -> do
+    picked <- H.liftAff (Aff.try (readFileAff "#pending-register-file"))
+    H.modify_ \s -> case picked of
+      Right txt ->
+        s
+          { registerText = String.trim txt
+          , registerStatus = Nothing
+          }
+      Left err ->
+        s
+          { registerStatus =
+              Just (RegisterFailure (Error.message err))
+          }
+  RegisterUnsigned -> do
+    st <- H.get
+    case extractCborHex st.registerText of
+      Left err ->
+        H.modify_
+          ( _
+              { registerStatus = Just (RegisterFailure err)
+              , registering = false
+              }
+          )
+      Right cborHex -> do
+        H.modify_
+          ( _
+              { registering = true
+              , registerStatus = Nothing
+              }
+          )
+        introspected <- H.liftAff (Api.introspectTx cborHex)
+        case introspected of
+          Left err ->
+            H.modify_
+              ( _
+                  { registering = false
+                  , registerStatus =
+                      Just (RegisterFailure ("Introspect failed: " <> err))
+                  }
+              )
+          Right meta -> do
+            existing <- H.liftAff (Aff.try (PendingTx.get meta.txid))
+            case existing of
+              Left err ->
+                H.modify_
+                  ( _
+                      { registering = false
+                      , registerStatus =
+                          Just (RegisterFailure (Error.message err))
+                      }
+                  )
+              Right (Just _entry) -> do
+                entries <- H.liftAff (Aff.try PendingTx.list)
+                H.modify_ \s -> case entries of
+                  Right xs ->
+                    s
+                      { entries = xs
+                      , selectedTxid = Just meta.txid
+                      , registerText = ""
+                      , registering = false
+                      , registerStatus =
+                          Just (RegisterDuplicate meta.txid)
+                      }
+                  Left err ->
+                    s
+                      { registering = false
+                      , registerStatus =
+                          Just (RegisterFailure (Error.message err))
+                      }
+              Right Nothing -> do
+                savedAt <- H.liftEffect utcTimestamp
+                stored <-
+                  H.liftAff
+                    ( Aff.try do
+                        PendingTx.put
+                          (registeredEntry cborHex meta savedAt)
+                        PendingTx.list
+                    )
+                H.modify_ \s -> case stored of
+                  Right entries ->
+                    s
+                      { entries = entries
+                      , selectedTxid = Just meta.txid
+                      , registerText = ""
+                      , registering = false
+                      , registerStatus =
+                          Just (RegisterSuccess meta.txid)
+                      }
+                  Left err ->
+                    s
+                      { registering = false
+                      , registerStatus =
+                          Just (RegisterFailure (Error.message err))
+                      }
+  UnregisterEntry txid ->
+    H.modify_
+      ( _
+          { confirmingUnregister = Just txid
+          , registerStatus = Nothing
+          }
+      )
+  CancelUnregister ->
+    H.modify_ (_ { confirmingUnregister = Nothing })
+  ConfirmUnregister txid -> do
+    st <- H.get
+    H.modify_
+      ( _
+          { unregisteringTxid = Just txid
+          , confirmingUnregister = Nothing
+          }
+      )
+    deleted <-
+      H.liftAff
+        ( Aff.try do
+            PendingTx.deleteEntry txid
+            PendingTx.list
+        )
+    H.modify_ \s -> case deleted of
+      Right entries ->
+        s
+          { entries = entries
+          , selectedTxid =
+              if s.selectedTxid == Just txid then
+                _.txid <$> Array.head entries
+              else
+                s.selectedTxid
+          , unregisteringTxid = Nothing
+          , witnessStatus = Nothing
+          , submitStatus = Nothing
+          , signedStatus = Nothing
+          , rebuildStatus = Nothing
+          }
+      Left err ->
+        s
+          { unregisteringTxid = Nothing
+          , registerStatus =
+              Just
+                ( RegisterFailure
+                    ( "Unregister failed: " <> Error.message err )
+                )
+          }
   SetWitnessText txt ->
     H.modify_
       ( _
@@ -284,6 +478,42 @@ handleAction = case _ of
                             )
                       }
                   )
+  RemoveWitness signerKeyHash -> do
+    st <- H.get
+    case selectedEntry st of
+      Nothing -> pure unit
+      Just entry -> do
+        removed <-
+          H.liftAff
+            ( Aff.try do
+                PendingTx.removeWitness entry.txid signerKeyHash
+                PendingTx.list
+            )
+        H.modify_ \s -> case removed of
+          Right entries ->
+            s
+              { entries = entries
+              , selectedTxid = Just entry.txid
+              , witnessStatus =
+                  Just
+                    ( WitnessSuccess
+                        ( "Removed witness for "
+                            <> shortHex signerKeyHash
+                        )
+                    )
+              , submitStatus = Nothing
+              , signedStatus = Nothing
+              }
+          Left err ->
+            s
+              { witnessStatus =
+                  Just (WitnessFailure (Error.message err))
+              }
+  CopyWitness signerKeyHash -> do
+    st <- H.get
+    case selectedEntry st >>= \entry -> FO.lookup signerKeyHash entry.witnesses of
+      Nothing -> pure unit
+      Just witnessHex -> H.liftEffect (Clipboard.writeText witnessHex)
   SubmitSelected -> do
     st <- H.get
     case selectedEntry st of
@@ -319,11 +549,63 @@ handleAction = case _ of
                         (SubmitFailure ("Submit failed: " <> err))
                     )
                 Right response ->
-                  H.modify_
-                    ( finishSubmit
-                        entry.txid
-                        (SubmitSuccess response.txid)
-                    )
+                  do
+                    deleted <-
+                      H.liftAff
+                        ( Aff.try do
+                            PendingTx.deleteEntry entry.txid
+                            PendingTx.list
+                        )
+                    H.modify_ \s -> case deleted of
+                      Right entries ->
+                        (finishSubmit entry.txid (SubmitSuccess response.txid) s)
+                          { entries = entries
+                          , selectedTxid = Nothing
+                          }
+                      Left err ->
+                        finishSubmit
+                          entry.txid
+                          ( SubmitFailure
+                              ( "Submit succeeded, but local cleanup \
+                                \failed: "
+                                  <> Error.message err
+                              )
+                          )
+                          s
+  CopySigned format -> do
+    st <- H.get
+    case selectedEntry st of
+      Nothing -> pure unit
+      Just entry ->
+        if not (Array.null (missingRequiredSigners entry)) || signedBusy st then
+          pure unit
+        else do
+          H.modify_
+            ( _
+                { signingTxid = Just entry.txid
+                , signedStatus = Nothing
+                }
+            )
+          attached <-
+            H.liftAff (Api.attach entry.unsignedTxHex (collectedWitnesses entry))
+          case attached of
+            Left err ->
+              H.modify_
+                ( finishSigned
+                    entry.txid
+                    (SignedFailure ("Attach failed: " <> err))
+                )
+            Right attachedTx -> do
+              let
+                value = case format of
+                  SignedHex -> attachedTx.cborHex
+                  SignedEnvelope -> txEnvelopeJson attachedTx.cborHex
+                label = case format of
+                  SignedHex -> "signed transaction hex"
+                  SignedEnvelope -> "signed transaction envelope"
+              H.liftEffect (Clipboard.writeText value)
+              H.modify_
+                ( finishSigned entry.txid (SignedSuccess label) )
   RebuildSelected -> do
     st <- H.get
     case selectedEntry st of
@@ -396,6 +678,7 @@ handleAction = case _ of
                           , witnessText = ""
                           , witnessStatus = Nothing
                           , submitStatus = Nothing
+                          , signedStatus = Nothing
                           , rebuildStatus =
                               Just (RebuildSuccess meta.txid)
                           , rebuildingTxid = Nothing
@@ -436,7 +719,8 @@ render st =
           [ HP.classes [ cn "pending-layout" ] ]
           [ HH.div
               [ HP.classes [ cn "pending-lanes" ] ]
-              [ laneView st "Active" "Active pending transactions"
+              [ registerPanel st
+              , laneView st "Active" "Active pending transactions"
                   lanes.active
               , laneView st "Expired" "Expired pending transactions"
                   lanes.expired
@@ -485,6 +769,105 @@ summaryChip label count =
     [ HH.span_ [ HH.text label ]
     , HH.code_ [ HH.text (show count) ]
     ]
+
+registerPanel :: forall w. State -> HH.HTML w Action
+registerPanel st =
+  HH.section
+    [ HP.classes [ cn "pending-lane", cn "pending-register" ]
+    , HP.attr (HH.AttrName "role") "region"
+    , HP.attr (HH.AttrName "aria-label") "Register unsigned transaction"
+    ]
+    [ HH.div
+        [ HP.classes [ cn "pending-lane__head" ] ]
+        [ HH.h2_ [ HH.text "Register" ]
+        , HH.code_ [ HH.text "local" ]
+        ]
+    , HH.label
+        [ HP.classes [ cn "field" ] ]
+        [ HH.span
+            [ HP.classes [ cn "field__label" ] ]
+            [ HH.text "Unsigned tx" ]
+        , HH.textarea
+            [ HP.value st.registerText
+            , HE.onValueInput SetRegisterText
+            , HP.classes
+                [ cn "field__input"
+                , cn "field__input--mono"
+                , cn "field__textarea"
+                ]
+            , HP.attr (HH.AttrName "rows") "6"
+            , HP.attr
+                (HH.AttrName "autocomplete")
+                "off"
+            ]
+        ]
+    , HH.div
+        [ HP.classes [ cn "pending-witness__row" ] ]
+        [ HH.label
+            [ HP.classes [ cn "field", cn "pending-witness__file" ] ]
+            [ HH.span
+                [ HP.classes [ cn "field__label" ] ]
+                [ HH.text "Unsigned tx file" ]
+            , HH.input
+                [ HP.type_ HP.InputFile
+                , HP.id "pending-register-file"
+                , HP.classes [ cn "field__input" ]
+                , HP.attr
+                    (HH.AttrName "accept")
+                    ".json,.hex,.txt,application/json,text/plain"
+                , HE.onChange (\_ -> RegisterFilePicked)
+                ]
+            ]
+        , HH.button
+            [ HP.type_ HP.ButtonButton
+            , HP.classes [ cn "btn", cn "btn--filled" ]
+            , HP.disabled
+                ( st.registering
+                    || String.trim st.registerText == ""
+                )
+            , HE.onClick (\_ -> RegisterUnsigned)
+            ]
+            [ HH.text
+                ( if st.registering then "Registering"
+                  else "Register"
+                )
+            ]
+        ]
+    , case st.registerStatus of
+        Nothing -> HH.text ""
+        Just status -> registerStatusView status
+    ]
+
+registerStatusView
+  :: forall w i
+   . RegisterStatus
+  -> HH.HTML w i
+registerStatusView = case _ of
+  RegisterSuccess txid ->
+    statusP true
+      [ HH.text "Registered txid "
+      , HH.code [ HP.title txid ] [ HH.text (shortHex txid) ]
+      ]
+  RegisterDuplicate txid ->
+    statusP true
+      [ HH.text "Already registered txid "
+      , HH.code [ HP.title txid ] [ HH.text (shortHex txid) ]
+      ]
+  RegisterFailure msg ->
+    statusP false [ HH.text msg ]
+
+statusP :: forall w i. Boolean -> Array (HH.HTML w i) -> HH.HTML w i
+statusP ok children =
+  HH.p
+    [ HP.classes
+        [ cn "pending-submit__status"
+        , cn
+            ( if ok then "pending-submit__status--ok"
+              else "pending-submit__status--error"
+            )
+        ]
+    ]
+    children
 
 laneView
   :: forall w
@@ -567,6 +950,48 @@ entryCard st entry =
               , HP.title successor
               ]
               [ HH.text ("superseded by " <> shortHex successor) ]
+      , unregisterControls st entry
+      ]
+
+unregisterControls
+  :: forall w
+   . State
+  -> PendingTx.PendingTxEntry
+  -> HH.HTML w Action
+unregisterControls st entry =
+  if st.confirmingUnregister == Just entry.txid then
+    HH.div
+      [ HP.classes [ cn "pending-entry-card__actions" ] ]
+      [ HH.button
+          [ HP.type_ HP.ButtonButton
+          , HP.classes [ cn "btn", cn "btn--danger" ]
+          , HP.disabled (st.unregisteringTxid == Just entry.txid)
+          , HE.onClick (\_ -> ConfirmUnregister entry.txid)
+          ]
+          [ HH.text "Confirm" ]
+      , HH.button
+          [ HP.type_ HP.ButtonButton
+          , HP.classes [ cn "btn", cn "btn--ghost" ]
+          , HE.onClick (\_ -> CancelUnregister)
+          ]
+          [ HH.text "Cancel" ]
+      ]
+  else
+    HH.div
+      [ HP.classes [ cn "pending-entry-card__actions" ] ]
+      [ HH.button
+          [ HP.type_ HP.ButtonButton
+          , HP.classes [ cn "btn", cn "btn--ghost" ]
+          , HP.disabled (st.unregisteringTxid == Just entry.txid)
+          , HE.onClick (\_ -> UnregisterEntry entry.txid)
+          ]
+          [ HH.text
+              ( if st.unregisteringTxid == Just entry.txid then
+                  "Removing"
+                else
+                  "Unregister"
+              )
+          ]
       ]
 
 signerChips
@@ -610,6 +1035,9 @@ detailView st =
         , HH.p
             [ HP.classes [ cn "pending-empty" ] ]
             [ HH.text "Select an entry to inspect its signer roster." ]
+        , case st.submitStatus of
+            Nothing -> HH.text ""
+            Just status -> submitStatusView status
         ]
       Just entry ->
         [ HH.div
@@ -620,6 +1048,7 @@ detailView st =
         , distributePanel entry
         , witnessRoster entry
         , witnessVerifier st entry
+        , signedArtifactPanel st entry
         , submitPanel st entry
         , rebuildPanel st entry
         , graphProjection entry
@@ -674,9 +1103,9 @@ txEnvelopeJson hex =
     <> "}\n"
 
 witnessRoster
-  :: forall w i
+  :: forall w
    . PendingTx.PendingTxEntry
-  -> HH.HTML w i
+  -> HH.HTML w Action
 witnessRoster entry =
   HH.section
     [ HP.classes [ cn "pending-detail__section" ] ]
@@ -687,10 +1116,10 @@ witnessRoster entry =
     ]
 
 rosterRow
-  :: forall w i
+  :: forall w
    . PendingTx.PendingTxEntry
   -> String
-  -> HH.HTML w i
+  -> HH.HTML w Action
 rosterRow entry signer =
   let
     collected = signerCollected entry signer
@@ -700,8 +1129,24 @@ rosterRow entry signer =
       , HP.attr (HH.AttrName "data-active") (boolAttr collected)
       ]
       [ HH.code [ HP.title signer ] [ HH.text (shortHex signer) ]
-      , HH.span_
-          [ HH.text (if collected then "Collected" else "Missing") ]
+      , if collected then
+          HH.div
+            [ HP.classes [ cn "pending-roster__actions" ] ]
+            [ HH.button
+                [ HP.type_ HP.ButtonButton
+                , HP.classes [ cn "btn", cn "btn--ghost" ]
+                , HE.onClick (\_ -> CopyWitness signer)
+                ]
+                [ HH.text "Copy" ]
+            , HH.button
+                [ HP.type_ HP.ButtonButton
+                , HP.classes [ cn "btn", cn "btn--ghost" ]
+                , HE.onClick (\_ -> RemoveWitness signer)
+                ]
+                [ HH.text "Remove" ]
+            ]
+        else
+          HH.span_ [ HH.text "Missing" ]
       ]
 
 witnessVerifier
@@ -794,6 +1239,61 @@ witnessStatusView = case _ of
           ]
       ]
       [ HH.text msg ]
+
+signedArtifactPanel
+  :: forall w
+   . State
+  -> PendingTx.PendingTxEntry
+  -> HH.HTML w Action
+signedArtifactPanel st entry =
+  let
+    complete = Array.null (missingRequiredSigners entry)
+    busy = signedBusy st
+  in
+    HH.section
+      [ HP.classes
+          [ cn "pending-detail__section"
+          , cn "pending-submit"
+          ]
+      ]
+      [ HH.h3_ [ HH.text "Retrieve signed" ]
+      , HH.div
+          [ HP.classes [ cn "pending-submit__row" ] ]
+          [ HH.button
+              [ HP.type_ HP.ButtonButton
+              , HP.classes [ cn "btn", cn "btn--ghost" ]
+              , HP.disabled (busy || not complete)
+              , HE.onClick (\_ -> CopySigned SignedHex)
+              ]
+              [ HH.text "Copy signed CBOR" ]
+          , HH.button
+              [ HP.type_ HP.ButtonButton
+              , HP.classes [ cn "btn", cn "btn--ghost" ]
+              , HP.disabled (busy || not complete)
+              , HE.onClick (\_ -> CopySigned SignedEnvelope)
+              ]
+              [ HH.text "Copy signed envelope" ]
+          ]
+      , if complete then
+          HH.text ""
+        else
+          HH.p
+            [ HP.classes [ cn "pending-submit__hint" ] ]
+            [ HH.text "Complete the signer roster to assemble." ]
+      , case st.signedStatus of
+          Nothing -> HH.text ""
+          Just status -> signedStatusView status
+      ]
+
+signedStatusView
+  :: forall w i
+   . SignedStatus
+  -> HH.HTML w i
+signedStatusView = case _ of
+  SignedSuccess label ->
+    statusP true [ HH.text ("Copied " <> label) ]
+  SignedFailure msg ->
+    statusP false [ HH.text msg ]
 
 submitPanel
   :: forall w
@@ -1118,6 +1618,11 @@ submitBusy st = case st.submittingTxid of
   Nothing -> false
   Just _ -> true
 
+signedBusy :: State -> Boolean
+signedBusy st = case st.signingTxid of
+  Nothing -> false
+  Just _ -> true
+
 rebuildBusy :: State -> Boolean
 rebuildBusy st = case st.rebuildingTxid of
   Nothing -> false
@@ -1129,9 +1634,20 @@ finishSubmit txid status st =
     st
       { submittingTxid = Nothing
       , submitStatus = Just status
+      , signedStatus = Nothing
       }
   else
     st { submittingTxid = Nothing }
+
+finishSigned :: String -> SignedStatus -> State -> State
+finishSigned txid status st =
+  if st.selectedTxid == Just txid then
+    st
+      { signingTxid = Nothing
+      , signedStatus = Just status
+      }
+  else
+    st { signingTxid = Nothing }
 
 finishRebuild :: String -> RebuildStatus -> State -> State
 finishRebuild txid status st =
@@ -1150,6 +1666,28 @@ rebuildRecipeFromIntent intent = do
   _ <- Api.buildCborField buildEndpoint
   buildRequest <- FO.lookup "buildRequest" object
   pure { buildEndpoint, buildRequest }
+
+registeredEntry
+  :: String
+  -> Api.IntrospectResponse
+  -> String
+  -> PendingTx.PendingTxEntry
+registeredEntry cborHex meta savedAt =
+  { txid: meta.txid
+  , intent:
+      Argonaut.fromObject $ FO.fromFoldable
+        [ Tuple "kind" (Argonaut.fromString "registered") ]
+  , unsignedTxHex: cborHex
+  , scope: fromMaybe "unknown" meta.scope
+  , requiredSigners: meta.requiredSigners
+  , invalidHereafter:
+      case meta.invalidHereafter of
+        Nothing -> Nullable.null
+        Just slot -> Nullable.notNull (show slot)
+  , witnesses: emptyWitnesses
+  , savedAt
+  , supersedes: Nullable.null
+  }
 
 rebuiltEntry
   :: PendingTx.PendingTxEntry
@@ -1202,6 +1740,21 @@ graphEffectFromIntent intent = do
           Right effect -> Just effect
           Left _ -> Nothing
     | otherwise = Nothing
+
+extractCborHex :: String -> Either String String
+extractCborHex raw =
+  let
+    trimmed = String.trim raw
+  in
+    if trimmed == "" then
+      Left "paste or upload an unsigned transaction first"
+    else case jsonParser trimmed of
+      Right json ->
+        case Argonaut.toObject json >>= FO.lookup "cborHex" >>= Argonaut.toString of
+          Just cborHex
+            | String.trim cborHex /= "" -> Right (String.trim cborHex)
+          _ -> Left "cardano-cli envelope is missing cborHex"
+      Left _ -> Right trimmed
 
 maybeValueText :: Maybe Api.ValueSummary -> String
 maybeValueText = case _ of

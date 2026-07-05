@@ -584,6 +584,15 @@ input[type="number"].field__input { -moz-appearance: textfield; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .btn--ghost { background: transparent; color: var(--md-sys-color-on-surface-variant); border-color: var(--md-sys-color-outline-variant); }
 .btn--ghost:hover:not(:disabled) { color: var(--md-sys-color-on-surface); border-color: var(--md-sys-color-outline); }
+.btn--danger {
+  color: var(--md-sys-color-error);
+  border-color: var(--md-sys-color-error);
+  background: transparent;
+}
+.btn--danger:hover:not(:disabled) {
+  color: var(--md-sys-color-on-error);
+  background: var(--md-sys-color-error);
+}
 .btn--primary,
 .btn--filled { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); border-color: var(--md-sys-color-primary); }
 .btn--primary:hover:not(:disabled),
@@ -1019,6 +1028,15 @@ input[type="number"].field__input { -moz-appearance: textfield; }
 .pending-entry-card__history {
   overflow-wrap: anywhere;
 }
+.pending-entry-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.pending-entry-card__actions .btn {
+  min-height: 34px;
+  padding: 7px 10px;
+}
 .pending-entry-card__signers {
   align-items: stretch;
 }
@@ -1075,6 +1093,16 @@ input[type="number"].field__input { -moz-appearance: textfield; }
   border-color: var(--md-sys-color-primary);
   background: var(--md-sys-color-primary-container);
   color: var(--md-sys-color-on-primary-container);
+}
+.pending-roster__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.pending-roster__actions .btn {
+  min-height: 32px;
+  padding: 6px 9px;
 }
 .pending-roster__row code,
 .pending-kv code {
@@ -1178,6 +1206,13 @@ input[type="number"].field__input { -moz-appearance: textfield; }
   .pending-witness__row,
   .pending-kv {
     grid-template-columns: 1fr;
+  }
+  .pending-roster__actions {
+    justify-content: stretch;
+  }
+  .pending-roster__actions .btn,
+  .pending-entry-card__actions .btn {
+    flex: 1 1 8rem;
   }
   .pending-detail .btn {
     width: 100%;

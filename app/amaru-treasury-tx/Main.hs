@@ -24,6 +24,9 @@ import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , withSocket
     )
+import Amaru.Treasury.Cli.Coordinate
+    ( runCoordinate
+    )
 import Amaru.Treasury.Cli.DisburseWizard
     ( runDisburseWizard
     )
@@ -138,6 +141,9 @@ main = withUtf8 . withUpdateCheckMain $ do
         CmdSubmit so ->
             withSocket g $ \socket ->
                 runSubmit (goNetworkMagic g) socket so
+        CmdCoordinate co ->
+            withSocket g $ \socket ->
+                runCoordinate (goNetworkMagic g) socket co
         CmdServe so ->
             runServe so
         CmdEnvelopeTx ->

@@ -1,0 +1,438 @@
+body
++- collateralInputs
+|  `- 0
+|     `- {"index":3,"txId":"efff271aa02e9032aba0e5e9020c5840b2aa1b219c59f9f16e1d6e51071bea1e"}
++- fee
+|  `- 0.472854 ADA (472854 lovelace)
++- inputs
+|  +- 0
+|  |  `- {"index":8,"txId":"4fdd9cd08ce3a1b8ccea8f2e56825bc02591285e57b1db60b6b0360b913e6fdb"}
+|  `- 1
+|     `- {"index":3,"txId":"efff271aa02e9032aba0e5e9020c5840b2aa1b219c59f9f16e1d6e51071bea1e"}
++- outputs
+|  +- SwapOrder
+|  |  +- coin
+|  |  |  `- 0..3
+|  |  |     `- 25644.305641 ADA (25644305641 lovelace)
+|  |  `- datum
+|  |     `- constructor
+|  |        `- 0..3
+|  |           `- 0
+|  +- 0
+|  |  +- address
+|  |  |  `- "amaru.swap-order"
+|  |  `- datum
+|  |     `- fields
+|  |        +- 0
+|  |        |  +- constructor
+|  |        |  |  `- 0
+|  |        |  `- fields
+|  |        |     `- 0
+|  |        |        `- {"bytes":"64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef"}
+|  |        +- 1
+|  |        |  +- constructor
+|  |        |  |  `- 3
+|  |        |  `- fields
+|  |        |     +- 0
+|  |        |     |  `- 2
+|  |        |     `- 1
+|  |        |        +- 0
+|  |        |        |  +- constructor
+|  |        |        |  |  `- 0
+|  |        |        |  `- fields
+|  |        |        |     `- 0
+|  |        |        |        `- {"bytes":"7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"}
+|  |        |        +- 1
+|  |        |        |  +- constructor
+|  |        |        |  |  `- 0
+|  |        |        |  `- fields
+|  |        |        |     `- 0
+|  |        |        |        `- {"bytes":"f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"}
+|  |        |        +- 2
+|  |        |        |  +- constructor
+|  |        |        |  |  `- 0
+|  |        |        |  `- fields
+|  |        |        |     `- 0
+|  |        |        |        `- {"bytes":"8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"}
+|  |        |        `- 3
+|  |        |           +- constructor
+|  |        |           |  `- 0
+|  |        |           `- fields
+|  |        |              `- 0
+|  |        |                 `- {"bytes":"97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2"}
+|  |        +- 2
+|  |        |  `- 1280000
+|  |        +- 3
+|  |        |  +- constructor
+|  |        |  |  `- 0
+|  |        |  `- fields
+|  |        |     +- 0
+|  |        |     |  +- constructor
+|  |        |     |  |  `- 0
+|  |        |     |  `- fields
+|  |        |     |     +- 0
+|  |        |     |     |  +- constructor
+|  |        |     |     |  |  `- 1
+|  |        |     |     |  `- fields
+|  |        |     |     |     `- 0
+|  |        |     |     |        `- {"bytes":"46746c64151c3733e6de91585785841a2d53422d2ee94ec51a3bbcb4"}
+|  |        |     |     `- 1
+|  |        |     |        +- constructor
+|  |        |     |        |  `- 0
+|  |        |     |        `- fields
+|  |        |     |           `- 0
+|  |        |     |              +- constructor
+|  |        |     |              |  `- 0
+|  |        |     |              `- fields
+|  |        |     |                 `- 0
+|  |        |     |                    +- constructor
+|  |        |     |                    |  `- 1
+|  |        |     |                    `- fields
+|  |        |     |                       `- 0
+|  |        |     |                          `- {"bytes":"46746c64151c3733e6de91585785841a2d53422d2ee94ec51a3bbcb4"}
+|  |        |     `- 1
+|  |        |        `- constructor
+|  |        |           `- 0
+|  |        +- 4
+|  |        |  +- constructor
+|  |        |  |  `- 1
+|  |        |  `- fields
+|  |        |     +- 0
+|  |        |     |  +- 0
+|  |        |     |  |  `- {"bytes":""}
+|  |        |     |  +- 1
+|  |        |     |  |  `- {"bytes":""}
+|  |        |     |  `- 2
+|  |        |     |     `- 25641025641
+|  |        |     `- 1
+|  |        |        +- 0
+|  |        |        |  `- {"bytes":"c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad"}
+|  |        |        +- 1
+|  |        |        |  `- {"bytes":"0014df105553444d"}
+|  |        |        `- 2
+|  |        |           `- 5000000000
+|  |        `- 5
+|  |           `- constructor
+|  |              `- 0
+|  +- 1
+|  |  +- address
+|  |  |  `- "amaru.swap-order"
+|  |  `- datum
+|  |     `- fields
+|  |        +- 0
+|  |        |  +- constructor
+|  |        |  |  `- 0
+|  |        |  `- fields
+|  |        |     `- 0
+|  |        |        `- {"bytes":"64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef"}
+|  |        +- 1
+|  |        |  +- constructor
+|  |        |  |  `- 3
+|  |        |  `- fields
+|  |        |     +- 0
+|  |        |     |  `- 2
+|  |        |     `- 1
+|  |        |        +- 0
+|  |        |        |  +- constructor
+|  |        |        |  |  `- 0
+|  |        |        |  `- fields
+|  |        |        |     `- 0
+|  |        |        |        `- {"bytes":"7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"}
+|  |        |        +- 1
+|  |        |        |  +- constructor
+|  |        |        |  |  `- 0
+|  |        |        |  `- fields
+|  |        |        |     `- 0
+|  |        |        |        `- {"bytes":"f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"}
+|  |        |        +- 2
+|  |        |        |  +- constructor
+|  |        |        |  |  `- 0
+|  |        |        |  `- fields
+|  |        |        |     `- 0
+|  |        |        |        `- {"bytes":"8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"}
+|  |        |        `- 3
+|  |        |           +- constructor
+|  |        |           |  `- 0
+|  |        |           `- fields
+|  |        |              `- 0
+|  |        |                 `- {"bytes":"97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2"}
+|  |        +- 2
+|  |        |  `- 1280000
+|  |        +- 3
+|  |        |  +- constructor
+|  |        |  |  `- 0
+|  |        |  `- fields
+|  |        |     +- 0
+|  |        |     |  +- constructor
+|  |        |     |  |  `- 0
+|  |        |     |  `- fields
+|  |        |     |     +- 0
+|  |        |     |     |  +- constructor
+|  |        |     |     |  |  `- 1
+|  |        |     |     |  `- fields
+|  |        |     |     |     `- 0
+|  |        |     |     |        `- {"bytes":"46746c64151c3733e6de91585785841a2d53422d2ee94ec51a3bbcb4"}
+|  |        |     |     `- 1
+|  |        |     |        +- constructor
+|  |        |     |        |  `- 0
+|  |        |     |        `- fields
+|  |        |     |           `- 0
+|  |        |     |              +- constructor
+|  |        |     |              |  `- 0
+|  |        |     |              `- fields
+|  |        |     |                 `- 0
+|  |        |     |                    +- constructor
+|  |        |     |                    |  `- 1
+|  |        |     |                    `- fields
+|  |        |     |                       `- 0
+|  |        |     |                          `- {"bytes":"46746c64151c3733e6de91585785841a2d53422d2ee94ec51a3bbcb4"}
+|  |        |     `- 1
+|  |        |        `- constructor
+|  |        |           `- 0
+|  |        +- 4
+|  |        |  +- constructor
+|  |        |  |  `- 1
+|  |        |  `- fields
+|  |        |     +- 0
+|  |        |     |  +- 0
+|  |        |     |  |  `- {"bytes":""}
+|  |        |     |  +- 1
+|  |        |     |  |  `- {"bytes":""}
+|  |        |     |  `- 2
+|  |        |     |     `- 25641025641
+|  |        |     `- 1
+|  |        |        +- 0
+|  |        |        |  `- {"bytes":"c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad"}
+|  |        |        +- 1
+|  |        |        |  `- {"bytes":"0014df105553444d"}
+|  |        |        `- 2
+|  |        |           `- 5000000000
+|  |        `- 5
+|  |           `- constructor
+|  |              `- 0
+|  +- 2
+|  |  +- address
+|  |  |  `- "amaru.swap-order"
+|  |  `- datum
+|  |     `- fields
+|  |        +- 0
+|  |        |  +- constructor
+|  |        |  |  `- 0
+|  |        |  `- fields
+|  |        |     `- 0
+|  |        |        `- {"bytes":"64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef"}
+|  |        +- 1
+|  |        |  +- constructor
+|  |        |  |  `- 3
+|  |        |  `- fields
+|  |        |     +- 0
+|  |        |     |  `- 2
+|  |        |     `- 1
+|  |        |        +- 0
+|  |        |        |  +- constructor
+|  |        |        |  |  `- 0
+|  |        |        |  `- fields
+|  |        |        |     `- 0
+|  |        |        |        `- {"bytes":"7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"}
+|  |        |        +- 1
+|  |        |        |  +- constructor
+|  |        |        |  |  `- 0
+|  |        |        |  `- fields
+|  |        |        |     `- 0
+|  |        |        |        `- {"bytes":"f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"}
+|  |        |        +- 2
+|  |        |        |  +- constructor
+|  |        |        |  |  `- 0
+|  |        |        |  `- fields
+|  |        |        |     `- 0
+|  |        |        |        `- {"bytes":"8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"}
+|  |        |        `- 3
+|  |        |           +- constructor
+|  |        |           |  `- 0
+|  |        |           `- fields
+|  |        |              `- 0
+|  |        |                 `- {"bytes":"97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2"}
+|  |        +- 2
+|  |        |  `- 1280000
+|  |        +- 3
+|  |        |  +- constructor
+|  |        |  |  `- 0
+|  |        |  `- fields
+|  |        |     +- 0
+|  |        |     |  +- constructor
+|  |        |     |  |  `- 0
+|  |        |     |  `- fields
+|  |        |     |     +- 0
+|  |        |     |     |  +- constructor
+|  |        |     |     |  |  `- 1
+|  |        |     |     |  `- fields
+|  |        |     |     |     `- 0
+|  |        |     |     |        `- {"bytes":"46746c64151c3733e6de91585785841a2d53422d2ee94ec51a3bbcb4"}
+|  |        |     |     `- 1
+|  |        |     |        +- constructor
+|  |        |     |        |  `- 0
+|  |        |     |        `- fields
+|  |        |     |           `- 0
+|  |        |     |              +- constructor
+|  |        |     |              |  `- 0
+|  |        |     |              `- fields
+|  |        |     |                 `- 0
+|  |        |     |                    +- constructor
+|  |        |     |                    |  `- 1
+|  |        |     |                    `- fields
+|  |        |     |                       `- 0
+|  |        |     |                          `- {"bytes":"46746c64151c3733e6de91585785841a2d53422d2ee94ec51a3bbcb4"}
+|  |        |     `- 1
+|  |        |        `- constructor
+|  |        |           `- 0
+|  |        +- 4
+|  |        |  +- constructor
+|  |        |  |  `- 1
+|  |        |  `- fields
+|  |        |     +- 0
+|  |        |     |  +- 0
+|  |        |     |  |  `- {"bytes":""}
+|  |        |     |  +- 1
+|  |        |     |  |  `- {"bytes":""}
+|  |        |     |  `- 2
+|  |        |     |     `- 25641025641
+|  |        |     `- 1
+|  |        |        +- 0
+|  |        |        |  `- {"bytes":"c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad"}
+|  |        |        +- 1
+|  |        |        |  `- {"bytes":"0014df105553444d"}
+|  |        |        `- 2
+|  |        |           `- 5000000000
+|  |        `- 5
+|  |           `- constructor
+|  |              `- 0
+|  +- 3
+|  |  +- address
+|  |  |  `- "amaru.swap-order"
+|  |  `- datum
+|  |     `- fields
+|  |        +- 0
+|  |        |  +- constructor
+|  |        |  |  `- 0
+|  |        |  `- fields
+|  |        |     `- 0
+|  |        |        `- {"bytes":"64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef"}
+|  |        +- 1
+|  |        |  +- constructor
+|  |        |  |  `- 3
+|  |        |  `- fields
+|  |        |     +- 0
+|  |        |     |  `- 2
+|  |        |     `- 1
+|  |        |        +- 0
+|  |        |        |  +- constructor
+|  |        |        |  |  `- 0
+|  |        |        |  `- fields
+|  |        |        |     `- 0
+|  |        |        |        `- {"bytes":"7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"}
+|  |        |        +- 1
+|  |        |        |  +- constructor
+|  |        |        |  |  `- 0
+|  |        |        |  `- fields
+|  |        |        |     `- 0
+|  |        |        |        `- {"bytes":"f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"}
+|  |        |        +- 2
+|  |        |        |  +- constructor
+|  |        |        |  |  `- 0
+|  |        |        |  `- fields
+|  |        |        |     `- 0
+|  |        |        |        `- {"bytes":"8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"}
+|  |        |        `- 3
+|  |        |           +- constructor
+|  |        |           |  `- 0
+|  |        |           `- fields
+|  |        |              `- 0
+|  |        |                 `- {"bytes":"97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2"}
+|  |        +- 2
+|  |        |  `- 1280000
+|  |        +- 3
+|  |        |  +- constructor
+|  |        |  |  `- 0
+|  |        |  `- fields
+|  |        |     +- 0
+|  |        |     |  +- constructor
+|  |        |     |  |  `- 0
+|  |        |     |  `- fields
+|  |        |     |     +- 0
+|  |        |     |     |  +- constructor
+|  |        |     |     |  |  `- 1
+|  |        |     |     |  `- fields
+|  |        |     |     |     `- 0
+|  |        |     |     |        `- {"bytes":"46746c64151c3733e6de91585785841a2d53422d2ee94ec51a3bbcb4"}
+|  |        |     |     `- 1
+|  |        |     |        +- constructor
+|  |        |     |        |  `- 0
+|  |        |     |        `- fields
+|  |        |     |           `- 0
+|  |        |     |              +- constructor
+|  |        |     |              |  `- 0
+|  |        |     |              `- fields
+|  |        |     |                 `- 0
+|  |        |     |                    +- constructor
+|  |        |     |                    |  `- 1
+|  |        |     |                    `- fields
+|  |        |     |                       `- 0
+|  |        |     |                          `- {"bytes":"46746c64151c3733e6de91585785841a2d53422d2ee94ec51a3bbcb4"}
+|  |        |     `- 1
+|  |        |        `- constructor
+|  |        |           `- 0
+|  |        +- 4
+|  |        |  +- constructor
+|  |        |  |  `- 1
+|  |        |  `- fields
+|  |        |     +- 0
+|  |        |     |  +- 0
+|  |        |     |  |  `- {"bytes":""}
+|  |        |     |  +- 1
+|  |        |     |  |  `- {"bytes":""}
+|  |        |     |  `- 2
+|  |        |     |     `- 25641025641
+|  |        |     `- 1
+|  |        |        +- 0
+|  |        |        |  `- {"bytes":"c48cbb3d5e57ed56e276bc45f99ab39abe94tx-inspect 0.2.0.0 e6cd7ac39fb402da47ad"}
+|  |        |        +- 1
+|  |        |        |  `- {"bytes":"0014df105553444d"}
+|  |        |        `- 2
+|  |        |           `- 5000000000
+|  |        `- 5
+|  |           `- constructor
+|  |              `- 0
+|  +- 4
+|  |  +- address
+|  |  |  `- {"bytes":"3146746c64151c3733e6de91585785841a2d53422d2ee94ec51a3bbcb446746c64151c3733e6de91585785841a2d53422d2ee94ec51a3bbcb4"}
+|  |  `- coin
+|  |     `- 1060489.608781 ADA (1060489608781 lovelace)
+|  `- 5
+|     +- address
+|     |  `- "user.recipient"
+|     `- coin
+|        `- 77.928320 ADA (77928320 lovelace)
++- referenceInputs
+|  +- 0
+|  |  `- {"index":0,"txId":"11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54"}
+|  +- 1
+|  |  `- {"index":1,"txId":"25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095"}
+|  +- 2
+|  |  `- {"index":0,"txId":"660c0729b68bce67f62d4f1f3ae38082217e55915bb3e0d9222a67b2f9fd821c"}
+|  `- 3
+|     `- {"index":1,"txId":"e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c"}
++- requiredSigners
+|  +- 0
+|  |  `- "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
+|  `- 1
+|     `- "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
++- totalCollateral
+|  `- 0.709281 ADA (709281 lovelace)
++- validityInterval
+|  +- invalidBefore
+|  |  `- null
+|  `- invalidHereafter
+|     `- 191792946
+`- withdrawals
+   `- 581df1cf9a4136d781e65d6885ee574480d29f1d1a342fe15f215ee6bf0cbb
+      `- 0.000000 ADA (0 lovelace)

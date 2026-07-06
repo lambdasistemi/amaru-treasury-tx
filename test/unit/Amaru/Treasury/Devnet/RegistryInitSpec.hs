@@ -145,7 +145,14 @@ spec =
                             ]
                     , "owners"
                         .= object
-                            [ "scopeOwnerKeyHash" .= sampleOwnerKeyHash
+                            [ "scopeOwnerKeyHash"
+                                .= sampleCoreOwnerKeyHash
+                            , "core" .= sampleCoreOwnerKeyHash
+                            , "ops" .= sampleOpsOwnerKeyHash
+                            , "networkCompliance"
+                                .= sampleNetworkComplianceOwnerKeyHash
+                            , "middleware"
+                                .= sampleMiddlewareOwnerKeyHash
                             ]
                     , "submittedTxIds"
                         .= object
@@ -319,10 +326,11 @@ spec =
                         }
                 owners =
                     ScopeOwners
-                        { soCore = sampleOwnerKeyHash
-                        , soOps = sampleOwnerKeyHash
-                        , soNetworkCompliance = sampleOwnerKeyHash
-                        , soMiddleware = sampleOwnerKeyHash
+                        { soCore = sampleCoreOwnerKeyHash
+                        , soOps = sampleOpsOwnerKeyHash
+                        , soNetworkCompliance =
+                            sampleNetworkComplianceOwnerKeyHash
+                        , soMiddleware = sampleMiddlewareOwnerKeyHash
                         }
             devnetRegistryView registry
                 `shouldBe` Withdraw.RegistryView
@@ -388,6 +396,22 @@ sampleOwnerKeyHash :: T.Text
 sampleOwnerKeyHash =
     "33333333333333333333333333333333333333333333333333333333"
 
+sampleCoreOwnerKeyHash :: T.Text
+sampleCoreOwnerKeyHash =
+    sampleOwnerKeyHash
+
+sampleOpsOwnerKeyHash :: T.Text
+sampleOpsOwnerKeyHash =
+    "66666666666666666666666666666666666666666666666666666666"
+
+sampleNetworkComplianceOwnerKeyHash :: T.Text
+sampleNetworkComplianceOwnerKeyHash =
+    "77777777777777777777777777777777777777777777777777777777"
+
+sampleMiddlewareOwnerKeyHash :: T.Text
+sampleMiddlewareOwnerKeyHash =
+    "88888888888888888888888888888888888888888888888888888888"
+
 sampleRegistryPublication :: IO DevnetRegistryPublication
 sampleRegistryPublication = do
     registry <- sampleRegistryAnchors
@@ -421,7 +445,15 @@ sampleRegistryAnchors = do
             , draScopesPolicyId = sampleScopesPolicyId
             , draRegistryPolicyId = sampleRegistryPolicyId
             , draPermissionsHash = permissionsHash
-            , draOwnerKeyHash = sampleOwnerKeyHash
+            , draOwnerKeyHash = sampleCoreOwnerKeyHash
+            , draScopeOwners =
+                ScopeOwners
+                    { soCore = sampleCoreOwnerKeyHash
+                    , soOps = sampleOpsOwnerKeyHash
+                    , soNetworkCompliance =
+                        sampleNetworkComplianceOwnerKeyHash
+                    , soMiddleware = sampleMiddlewareOwnerKeyHash
+                    }
             , draTreasuryTarget = target
             }
 

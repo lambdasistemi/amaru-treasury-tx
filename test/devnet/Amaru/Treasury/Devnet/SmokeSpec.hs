@@ -294,7 +294,8 @@ import Amaru.Treasury.Tx.Swap
     , swapProgram
     )
 import Amaru.Treasury.Tx.SwapWizard
-    ( txInToText
+    ( ScopeOwners (..)
+    , txInToText
     )
 import Amaru.Treasury.Tx.WithdrawWizard qualified as Withdraw
 
@@ -823,6 +824,16 @@ spec =
                             .= object
                                 [ "scopeOwnerKeyHash"
                                     .= draOwnerKeyHash registry
+                                , "core"
+                                    .= soCore (draScopeOwners registry)
+                                , "ops"
+                                    .= soOps (draScopeOwners registry)
+                                , "networkCompliance"
+                                    .= soNetworkCompliance
+                                        (draScopeOwners registry)
+                                , "middleware"
+                                    .= soMiddleware
+                                        (draScopeOwners registry)
                                 ]
                         , "submittedTxIds"
                             .= object
@@ -2725,6 +2736,17 @@ sampleRegistryPublication = do
                     , draPermissionsHash = ttScriptHash target
                     , draOwnerKeyHash =
                         "33333333333333333333333333333333333333333333333333333333"
+                    , draScopeOwners =
+                        ScopeOwners
+                            { soCore =
+                                "33333333333333333333333333333333333333333333333333333333"
+                            , soOps =
+                                "33333333333333333333333333333333333333333333333333333333"
+                            , soNetworkCompliance =
+                                "33333333333333333333333333333333333333333333333333333333"
+                            , soMiddleware =
+                                "33333333333333333333333333333333333333333333333333333333"
+                            }
                     , draTreasuryTarget = target
                     }
             }

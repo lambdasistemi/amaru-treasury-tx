@@ -22,6 +22,7 @@ module Amaru.Treasury.Devnet.RegistryInit
       -- * Published anchors
     , TreasuryTarget (..)
     , DevnetScriptSet (..)
+    , DevnetScopeOwnerRoster (..)
     , DevnetRegistryAnchors (..)
     , DevnetRegistryPublication (..)
 
@@ -29,6 +30,7 @@ module Amaru.Treasury.Devnet.RegistryInit
     , prepareDevnetWithdrawalRegistry
     , deployDevnetWithdrawalRegistry
     , publishDevnetRegistryInit
+    , publishDevnetRegistryInitWithOwners
     , deriveDevnetScripts
     , treasuryTargetFromBlob
 
@@ -53,6 +55,7 @@ module Amaru.Treasury.Devnet.RegistryInit
     , CoreEvaluator
     , buildSeedSplitCore
     , buildRegistryNftsCore
+    , buildRegistryNftsCoreWithOwners
     , buildReferenceScriptsCore
 
       -- * Artifacts
@@ -251,6 +254,14 @@ data DevnetScriptSet = DevnetScriptSet
     , dssTreasuryTarget :: !TreasuryTarget
     }
 
+-- | Per-scope owner key hashes for the DevNet scopes datum.
+data DevnetScopeOwnerRoster = DevnetScopeOwnerRoster
+    { dsorCore :: !(KeyHash Payment)
+    , dsorOps :: !(KeyHash Payment)
+    , dsorNetworkCompliance :: !(KeyHash Payment)
+    , dsorMiddleware :: !(KeyHash Payment)
+    }
+
 -- | On-chain anchors consumed by withdraw and later DevNet phases.
 data DevnetRegistryAnchors = DevnetRegistryAnchors
     { draScopesRef :: !TxIn
@@ -261,6 +272,7 @@ data DevnetRegistryAnchors = DevnetRegistryAnchors
     , draRegistryPolicyId :: !T.Text
     , draPermissionsHash :: !ScriptHash
     , draOwnerKeyHash :: !T.Text
+    , draScopeOwners :: !ScopeOwners
     , draTreasuryTarget :: !TreasuryTarget
     }
 
@@ -369,6 +381,8 @@ bootstrapDevnetPublication inputs = do
                     dssPermissionsHash scripts
                 , draOwnerKeyHash =
                     dbaiOwnerKeyHash inputs
+                , draScopeOwners =
+                    singletonScopeOwnersText (dbaiOwnerKeyHash inputs)
                 , draTreasuryTarget =
                     dssTreasuryTarget scripts
                 }
@@ -446,7 +460,21 @@ publishDevnetRegistryInit
     -> PParams ConwayEra
     -> [(TxIn, TxOut ConwayEra)]
     -> IO DevnetRegistryPublication
-publishDevnetRegistryInit config provider submitter pp utxos = do
+publishDevnetRegistryInit config =
+    publishDevnetRegistryInitWithOwners
+        config
+        (singletonDevnetScopeOwnerRoster (dricOwnerKeyHash config))
+
+-- | Publish DevNet registry state with an explicit per-scope roster.
+publishDevnetRegistryInitWithOwners
+    :: DevnetRegistryInitConfig
+    -> DevnetScopeOwnerRoster
+    -> Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> [(TxIn, TxOut ConwayEra)]
+    -> IO DevnetRegistryPublication
+publishDevnetRegistryInitWithOwners config roster provider submitter pp utxos = do
     seed <- selectLargestAdaUtxo "registry deployment" utxos
     (seedSplitTxId, scopesSeedRef, registrySeedRef) <-
         submitSeedSplit config provider submitter pp seed
@@ -463,6 +491,7 @@ publishDevnetRegistryInit config provider submitter pp utxos = do
             provider
             submitter
             pp
+            roster
             scripts
             seedOuts
     publishUtxos <-
@@ -492,7 +521,9 @@ publishDevnetRegistryInit config provider submitter pp utxos = do
                 , draPermissionsHash =
                     dssPermissionsHash scripts
                 , draOwnerKeyHash =
-                    keyHashToText (dricOwnerKeyHash config)
+                    keyHashToText (dsorCore roster)
+                , draScopeOwners =
+                    scopeOwnersFromRoster roster
                 , draTreasuryTarget = treasuryTarget
                 }
     pure
@@ -570,10 +601,11 @@ submitRegistryNfts
     -> Provider IO
     -> Submitter IO
     -> PParams ConwayEra
+    -> DevnetScopeOwnerRoster
     -> DevnetScriptSet
     -> [(TxIn, TxOut ConwayEra)]
     -> IO (TxId, TxIn, TxIn)
-submitRegistryNfts config provider submitter pp scripts seedOuts = do
+submitRegistryNfts config provider submitter pp roster scripts seedOuts = do
     snapshot <- queryLedgerSnapshot provider
     let upperSlot = addSlots 20 (ledgerTipSlot snapshot)
         eval = providerCoreEvaluator provider
@@ -583,11 +615,11 @@ submitRegistryNfts config provider submitter pp scripts seedOuts = do
             "mint registry NFTs"
             provider
             submitter
-            ( buildRegistryNftsCore
+            ( buildRegistryNftsCoreWithOwners
                 pp
                 (dricFundingAddress config)
                 (dricNetwork config)
-                (dricOwnerKeyHash config)
+                roster
                 scripts
                 upperSlot
                 seedOuts
@@ -627,7 +659,40 @@ buildRegistryNftsCore
     pp
     fundingAddress
     network
-    ownerKeyHash
+    ownerKeyHash =
+        buildRegistryNftsCoreWithOwners
+            pp
+            fundingAddress
+            network
+            (singletonDevnetScopeOwnerRoster ownerKeyHash)
+
+{- | Roster-aware registry-NFT construction core.
+
+This is the opt-in DevNet path for minting a scopes datum whose
+per-scope owners are not all the same key hash.
+-}
+buildRegistryNftsCoreWithOwners
+    :: PParams ConwayEra
+    -> Addr
+    -- ^ funding/change address
+    -> Network
+    -- ^ ledger network used to derive the script address
+    --     for each NFT anchor
+    -> DevnetScopeOwnerRoster
+    -- ^ per-scope owner key hashes baked into the scopes datum
+    -> DevnetScriptSet
+    -- ^ scripts derived from the two seed TxIns
+    -> SlotNo
+    -- ^ validity upper bound
+    -> [(TxIn, TxOut ConwayEra)]
+    -- ^ exactly two seed UTxOs: scopes seed then registry seed
+    -> CoreEvaluator
+    -> IO (Either (TxBuild.BuildError Void) ConwayTx)
+buildRegistryNftsCoreWithOwners
+    pp
+    fundingAddress
+    network
+    roster
     scripts
     upperSlot
     seedOuts
@@ -643,7 +708,7 @@ buildRegistryNftsCore
                     (scriptAddr network (dssScopesHash scripts))
                     (dssScopesHash scripts)
                     scopesTokenName
-                    (ownersDatum ownerKeyHash)
+                    (ownersDatum roster)
             registryOut =
                 nftTxOut
                     (scriptAddr network (dssRegistryHash scripts))
@@ -948,17 +1013,17 @@ multisigScriptPermission :: BS.ByteString -> Data
 multisigScriptPermission scriptHash =
     Constr 6 [B scriptHash]
 
-ownersDatum :: KeyHash Payment -> Data
-ownersDatum owner =
+ownersDatum :: DevnetScopeOwnerRoster -> Data
+ownersDatum owners =
     Constr
         0
-        [ ownerSignature
-        , ownerSignature
-        , ownerSignature
-        , ownerSignature
+        [ ownerSignature (dsorCore owners)
+        , ownerSignature (dsorOps owners)
+        , ownerSignature (dsorNetworkCompliance owners)
+        , ownerSignature (dsorMiddleware owners)
         ]
   where
-    ownerSignature =
+    ownerSignature owner =
         Constr 0 [B (keyHashBytes owner)]
 
 registryDatum :: ScriptHash -> Data
@@ -1024,6 +1089,35 @@ keyHashBytes (KeyHash h) =
 keyHashToText :: KeyHash kr -> T.Text
 keyHashToText =
     TE.decodeUtf8Lenient . B16.encode . keyHashBytes
+
+singletonDevnetScopeOwnerRoster
+    :: KeyHash Payment -> DevnetScopeOwnerRoster
+singletonDevnetScopeOwnerRoster owner =
+    DevnetScopeOwnerRoster
+        { dsorCore = owner
+        , dsorOps = owner
+        , dsorNetworkCompliance = owner
+        , dsorMiddleware = owner
+        }
+
+scopeOwnersFromRoster :: DevnetScopeOwnerRoster -> ScopeOwners
+scopeOwnersFromRoster roster =
+    ScopeOwners
+        { soCore = keyHashToText (dsorCore roster)
+        , soOps = keyHashToText (dsorOps roster)
+        , soNetworkCompliance =
+            keyHashToText (dsorNetworkCompliance roster)
+        , soMiddleware = keyHashToText (dsorMiddleware roster)
+        }
+
+singletonScopeOwnersText :: T.Text -> ScopeOwners
+singletonScopeOwnersText owner =
+    ScopeOwners
+        { soCore = owner
+        , soOps = owner
+        , soNetworkCompliance = owner
+        , soMiddleware = owner
+        }
 
 txOutRef :: TxId -> Integer -> TxIn
 txOutRef txId ix =
@@ -1177,6 +1271,11 @@ registryInitRegistryValue publication =
         , "owners"
             .= object
                 [ "scopeOwnerKeyHash" .= draOwnerKeyHash registry
+                , "core" .= soCore (draScopeOwners registry)
+                , "ops" .= soOps (draScopeOwners registry)
+                , "networkCompliance"
+                    .= soNetworkCompliance (draScopeOwners registry)
+                , "middleware" .= soMiddleware (draScopeOwners registry)
                 ]
         , "submittedTxIds"
             .= object
@@ -1413,12 +1512,7 @@ devnetRegistryView registry =
                     scriptHashToHex (draPermissionsHash registry)
                 }
         owners =
-            ScopeOwners
-                { soCore = draOwnerKeyHash registry
-                , soOps = draOwnerKeyHash registry
-                , soNetworkCompliance = draOwnerKeyHash registry
-                , soMiddleware = draOwnerKeyHash registry
-                }
+            draScopeOwners registry
     in  Withdraw.RegistryView
             { Withdraw.rvScopesDeployedAt =
                 txInToText (draScopesRef registry)

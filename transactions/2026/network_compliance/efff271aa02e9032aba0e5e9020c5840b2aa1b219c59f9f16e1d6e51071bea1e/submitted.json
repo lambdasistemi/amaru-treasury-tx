@@ -1,0 +1,11 @@
+{
+  "txid": "efff271aa02e9032aba0e5e9020c5840b2aa1b219c59f9f16e1d6e51071bea1e",
+  "block": "3e71420f83470edc4130cde246143f21689bb052b809072e2ed73063d418432c",
+  "block_height": 13635136,
+  "slot": 191619804,
+  "block_time": 1783186095,
+  "timestamp": "2026-07-04T17:28:15Z",
+  "submitter": "network_compliance",
+  "fee_lovelace": 434780,
+  "valid_contract": true
+}

@@ -192,6 +192,7 @@ library
     Amaru.Treasury.Config.Resolve
     Amaru.Treasury.Config.Types
     Amaru.Treasury.Constants
+    Amaru.Treasury.Coordinator.Client
     Amaru.Treasury.Devnet.DisburseSubmit
     Amaru.Treasury.Devnet.GovernanceWithdrawalInit
     Amaru.Treasury.Devnet.GovernanceWithdrawalInit.Core
@@ -576,6 +577,7 @@ test-suite unit-tests
     Amaru.Treasury.Config.FileSpec
     Amaru.Treasury.Config.ResolveSpec
     Amaru.Treasury.ConstantsSpec
+    Amaru.Treasury.Coordinator.ClientSpec
     Amaru.Treasury.Devnet.DisburseSubmitSpec
     Amaru.Treasury.Devnet.GovernanceWithdrawalInitSpec
     Amaru.Treasury.Devnet.RegistryInitSpec

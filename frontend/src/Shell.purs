@@ -28,7 +28,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 
-import Routing (Route(..))
+import Routing (Route(..), routeHref)
 import Theme as Theme
 
 -- ---------------------------------------------------------------------------
@@ -99,15 +99,15 @@ topbar active opts =
         ]
         [ HH.text "Amaru Treasury" ]
     , HH.nav [ HP.classes [ cn "topbar__nav" ] ]
-        [ navLink RouteView active "/"
+        [ navLink RouteView active (routeHref RouteView)
             "View" "View transactions"
-        , navLink RouteAudit active "/audit"
+        , navLink RouteAudit active (routeHref RouteAudit)
             "Audit" "Audit transaction history"
-        , navLink RouteOperate active "/operate"
+        , navLink RouteOperate active (routeHref RouteOperate)
             "Operate" "Operate — prepare a transaction"
-        , navLink RoutePending active "/pending"
+        , navLink RoutePending active (routeHref RoutePending)
             "Pending" "Pending co-signing"
-        , navLink RouteBooks active "/books"
+        , navLink RouteBooks active (routeHref RouteBooks)
             "Books" "Manage saved values (Books)"
         ]
     , HH.button

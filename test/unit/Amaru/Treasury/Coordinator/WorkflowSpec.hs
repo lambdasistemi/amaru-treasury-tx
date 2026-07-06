@@ -278,19 +278,27 @@ quoteWithBodyHash bodyHash =
 paidStatus :: FeeStatus
 paidStatus =
     FeeStatus
-        { fsBodyHash = sampleBodyHash
-        , fsPaid = True
+        { fsObserved = True
+        , fsConfirmed = True
+        , fsSufficient = True
+        , fsReadyToPublish = True
+        , fsPaidLovelace = 1_500
+        , fsRequiredLovelace = 1_500
+        , fsConfirmations = 5
         , fsReason = Nothing
-        , fsFeePayment = Just sampleFeePayment
         }
 
 unpaidStatus :: FeeStatus
 unpaidStatus =
     FeeStatus
-        { fsBodyHash = sampleBodyHash
-        , fsPaid = False
+        { fsObserved = False
+        , fsConfirmed = False
+        , fsSufficient = False
+        , fsReadyToPublish = False
+        , fsPaidLovelace = 0
+        , fsRequiredLovelace = 1_500
+        , fsConfirmations = 5
         , fsReason = Just FeeNotSeen
-        , fsFeePayment = Nothing
         }
 
 sampleEntry :: Entry

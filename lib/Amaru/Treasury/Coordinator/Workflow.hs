@@ -29,7 +29,6 @@ module Amaru.Treasury.Coordinator.Workflow
     , runCoordinationWorkflow
     ) where
 
-import Control.Applicative ((<|>))
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Maybe (fromMaybe)
@@ -193,15 +192,13 @@ continueWithQuote config effects CoordinationRequest{..} tx localBodyHash quote 
                             localBodyHash
                     case statusResult of
                         Left err -> pure (Left err)
-                        Right status -> do
+                        Right _status -> do
                             publishResult <-
                                 cwePublishEntry
                                     effects
                                     PublishRequest
                                         { prTransaction = partialTxHex
-                                        , prFeePayment =
-                                            fsFeePayment status
-                                                <|> feePayment
+                                        , prFeePayment = feePayment
                                         }
                             case publishResult of
                                 Left err ->
@@ -213,7 +210,7 @@ continueWithQuote config effects CoordinationRequest{..} tx localBodyHash quote 
                                         crOwners
                                         tx
                                         entry
-                                        (fsFeePayment status <|> feePayment)
+                                        feePayment
 
 requesterPublishHex
     :: VaultIdentity -> ConwayTx -> Either CoordinationError Text
@@ -249,15 +246,19 @@ pollFeeStatus WorkflowConfig{wcFeeStatusMaxPolls} effects bodyHash =
                 Left err ->
                     pure (Left (CoordinationClientFailure err))
                 Right status
-                    | fsPaid status -> pure (Right status)
+                    | fsReadyToPublish status -> pure (Right status)
                     | otherwise -> go (attempt + 1) (Just status)
     fallbackStatus =
         fromMaybe
             FeeStatus
-                { fsBodyHash = bodyHash
-                , fsPaid = False
+                { fsObserved = False
+                , fsConfirmed = False
+                , fsSufficient = False
+                , fsReadyToPublish = False
+                , fsPaidLovelace = 0
+                , fsRequiredLovelace = 0
+                , fsConfirmations = 0
                 , fsReason = Nothing
-                , fsFeePayment = Nothing
                 }
 
 uploadOwnersAndSubmit

@@ -2,14 +2,14 @@
 
 ## Slice 1 - Wire Client
 
-- [ ] T442-S1 Define `/v1` request/response types and typed client
+- [X] T442-S1 Define `/v1` request/response types and typed client
   errors in `lib/Amaru/Treasury/Coordinator/Client.hs`.
-- [ ] T442-S1 Add JSON round-trip and URL/path/method tests in
+- [X] T442-S1 Add JSON round-trip and URL/path/method tests in
   `test/unit/Amaru/Treasury/Coordinator/ClientSpec.hs`.
-- [ ] T442-S1 Register new modules/tests in `amaru-treasury-tx.cabal`.
-- [ ] T442-S1 Run focused proof:
+- [X] T442-S1 Register new modules/tests in `amaru-treasury-tx.cabal`.
+- [X] T442-S1 Run focused proof:
   `nix develop --accept-flake-config -c just unit "Coordinator.Client"`.
-- [ ] T442-S1 Commit as
+- [X] T442-S1 Commit as
   `feat: add coordinator v1 client types`
   with trailer `Tasks: T442-S1`.
 

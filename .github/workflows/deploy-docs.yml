@@ -66,12 +66,68 @@ jobs:
         with:
           path: checkout/site
 
+      - name: Build app preview
+        if: github.event_name == 'pull_request'
+        working-directory: checkout
+        run: |
+          nix build .#frontend --out-link frontend-result
+          mkdir -p site/app
+          cp -R frontend-result/. site/app/
+
       - name: Publish PR preview
         if: github.event_name == 'pull_request'
         uses: paolino/dev-assets/static-preview@main
         with:
           path: checkout/site
           comment-marker: "<!-- docs-preview-url -->"
+
+      - name: Comment app preview URL on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v9
+        env:
+          APP_PREVIEW_URL: https://preview.dev.plutimus.com/${{ github.repository }}/pr-${{ github.event.pull_request.number }}/app/
+          APP_PREVIEW_COMMENT_MARKER: "<!-- app-preview-url -->"
+        with:
+          script: |
+            const url = process.env.APP_PREVIEW_URL;
+            const marker = process.env.APP_PREVIEW_COMMENT_MARKER;
+            const issue_number = Number(context.issue.number);
+
+            if (!Number.isInteger(issue_number) || issue_number <= 0) {
+              core.setFailed(`Invalid pull request number: ${context.issue.number}`);
+              return;
+            }
+
+            const body = [
+              marker,
+              `Dashboard app preview: ${url}`,
+              "",
+              "The app preview has no `/v1` backend yet (Layer 2 follow-up), so API-dependent features will not work. Browser-local and pending features are available.",
+            ].join("\n");
+            const { data: comments } =
+              await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+              });
+            const existing = comments.find(
+              comment => comment.body && comment.body.includes(marker),
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number,
+                body,
+              });
+            }
 
   deploy:
     if: github.ref == 'refs/heads/main'

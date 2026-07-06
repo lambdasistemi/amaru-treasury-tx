@@ -239,7 +239,9 @@ import Amaru.Treasury.Devnet.GovernanceWithdrawalInit qualified as GovernanceWit
 import Amaru.Treasury.Devnet.MixedUtxoSmoke (mixedUtxoSmoke)
 import Amaru.Treasury.Devnet.RegistryInit
     ( DevnetRegistryAnchors (..)
+    , DevnetRegistryInitConfig (..)
     , DevnetRegistryPublication (..)
+    , DevnetScopeOwnerRoster (..)
     , TreasuryTarget (..)
     )
 import Amaru.Treasury.Devnet.RegistryInit qualified as RegistryInit
@@ -681,6 +683,10 @@ instance FromJSON DisburseSubmitProvenance where
 spec :: Spec
 spec =
     describe "local devnet smoke" $ do
+        describe "treasury-swap-full-e2e roster" $ do
+            it "uses two distinct owners and a separate requester" $
+                fullSwapRosterUsesDistinctRequester fullSwapRosterModel
+                    `shouldBe` True
         describe "swap-ready readiness" $ do
             it "records order-validator reference handoff metadata" $
                 swapReadinessRegistryValue
@@ -1875,18 +1881,40 @@ treasurySwapFullE2ESmoke = do
                 GovernanceWithdrawalInit.governanceWithdrawalInitMaterializationPath
                     runDir
 
+        let rosterModel = fullSwapRosterModel
+
         -- 1) clone the disburse-submit deploy+fund scaffold
         --    (registry-init -> stake-reward-init ->
         --    governance-withdrawal-init), stopping BEFORE the
         --    disburse so the funded treasury UTxO is left
         --    unspent for our swapProgram debit.
-        runDevnetRegistryInit
-            globals
-            DevnetRegistryInitOpts
-                { drioFundingAddress = fundingAddress
-                , drioSigningKeyFile = signingKeyFile
-                , drioRunDir = runDir
-                }
+        withGovernanceNode socket $ \provider submitter -> do
+            pp <- queryProtocolParams provider
+            registryUtxos <- queryUTxOs provider genesisAddr
+            let registryConfig =
+                    DevnetRegistryInitConfig
+                        { dricNetwork = Testnet
+                        , dricFundingAddress = genesisAddr
+                        , dricOwnerKeyHash =
+                            fsrmOwner1KeyHash rosterModel
+                        , dricSignTx =
+                            addKeyWitness genesisSignKey
+                        }
+            publication <-
+                RegistryInit.publishDevnetRegistryInitWithOwners
+                    registryConfig
+                    (fsrmRoster rosterModel)
+                    provider
+                    submitter
+                    pp
+                    registryUtxos
+            RegistryInit.verifyRegistryInitPublication
+                provider
+                publication
+            RegistryInit.writeRegistryInitArtifacts
+                (sgtNetworkMagic timing)
+                runDir
+                publication
         runDevnetStakeRewardInit
             globals
             DevnetStakeRewardInitOpts
@@ -1964,6 +1992,13 @@ treasurySwapFullE2ESmoke = do
                 settingsForScoop
                 scripts
 
+            rosterFunding <-
+                fundFullSwapRoster
+                    provider
+                    submitter
+                    pp
+                    rosterModel
+
             -- 4) assemble the SwapIntent (S1) and place the order
             --    via the shipped swapProgram, debiting the treasury.
             statusNote "S2 swapProgram debits the deployed treasury"
@@ -1989,14 +2024,17 @@ treasurySwapFullE2ESmoke = do
                         expectationFailure
                             "deployed treasury UTxO was not found"
                             *> error "unreachable"
-            swapFuelUtxos <- queryUTxOs provider genesisAddr
+            swapFuelUtxos <-
+                queryUTxOs provider (fsrmRequesterAddress rosterModel)
             fuel@(fuelIn, _) <-
                 selectLargestAdaUtxo
                     "swapProgram order fuel"
                     swapFuelUtxos
             snapshot <- queryLedgerSnapshot provider
             let ownerBytes =
-                    keyHashBytes genesisPaymentKeyHash
+                    keyHashBytes (fsrmOwner1KeyHash rosterModel)
+                opsOwnerBytes =
+                    keyHashBytes (fsrmOwner2KeyHash rosterModel)
                 offerLovelace :: Integer
                 -- 10 ADA so the order is value-identical to the proven
                 -- #409 order (14.5 ADA = 10 offer + 2.5 fee + 2 returned),
@@ -2008,9 +2046,9 @@ treasurySwapFullE2ESmoke = do
                     SwapOrderDatumParams
                         { sodPoolId = spuIdent pool
                         , sodCoreOwner = ownerBytes
-                        , sodOpsOwner = ownerBytes
+                        , sodOpsOwner = opsOwnerBytes
                         , sodNetworkComplianceOwner = ownerBytes
-                        , sodMiddlewareOwner = ownerBytes
+                        , sodMiddlewareOwner = opsOwnerBytes
                         , sodSundaeProtocolFeeLovelace = 2_500_000
                         , sodTreasuryScriptHash =
                             scriptHashBytes treasuryHash
@@ -2045,7 +2083,10 @@ treasurySwapFullE2ESmoke = do
                                     registry
                                 )
                         , fsiTreasuryAddress = treasuryAddress
-                        , fsiSigners = [genesisGuardKeyHash]
+                        , fsiSigners =
+                            [ fsrmOwner1GuardKeyHash rosterModel
+                            , fsrmOwner2GuardKeyHash rosterModel
+                            ]
                         , fsiWalletUtxo = fuelIn
                         , fsiExtraWalletInputs = []
                         , fsiSwapOrderAddress =
@@ -2060,7 +2101,7 @@ treasurySwapFullE2ESmoke = do
                             addSlots 20 (ledgerTipSlot snapshot)
                         }
             swapTxId <-
-                buildSubmitAndWait
+                buildSubmitAndWaitWithSigners
                     "swapProgram deployed-treasury order"
                     provider
                     submitter
@@ -2069,8 +2110,17 @@ treasurySwapFullE2ESmoke = do
                     (evalWith provider)
                     [fuel, treasuryUtxo]
                     deployRefs
-                    genesisAddr
+                    (fsrmRequesterAddress rosterModel)
+                    [ fsrmRequesterSignKey rosterModel
+                    , fsrmOwner1SignKey rosterModel
+                    , fsrmOwner2SignKey rosterModel
+                    ]
                     (swapProgram (mkFullSwapIntent swapInputs))
+            writeFullSwapRosterManifest
+                runDir
+                rosterModel
+                rosterFunding
+                fuelIn
 
             -- 5) locate the emitted order output and scoop it (#409)
             let orderRef = txOutRef swapTxId 0
@@ -2196,6 +2246,128 @@ writeTreasuryFullSwapArtifacts runDir socket timing evidence = do
         (runDir </> "summary.log")
         (unlines (treasuryFullSwapLines evidence))
     mapM_ putStrLn (treasuryFullSwapLines evidence)
+
+fundFullSwapRoster
+    :: Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> FullSwapRosterModel
+    -> IO
+        ( (TxIn, TxOut ConwayEra)
+        , (TxIn, TxOut ConwayEra)
+        , (TxIn, TxOut ConwayEra)
+        )
+fundFullSwapRoster provider submitter pp rosterModel = do
+    genesisUtxos <- queryUTxOs provider genesisAddr
+    seed@(seedIn, _) <-
+        selectLargestAdaUtxo "full-swap roster funding" genesisUtxos
+    snapshot <- queryLedgerSnapshot provider
+    let fundCoin =
+            Coin 30_000_000
+        prog :: TxBuild NoCtx Void ()
+        prog = do
+            _ <- spend seedIn
+            collateral seedIn
+            _ <- payTo (fsrmOwner1Address rosterModel) (inject fundCoin)
+            _ <- payTo (fsrmOwner2Address rosterModel) (inject fundCoin)
+            _ <-
+                payTo
+                    (fsrmRequesterAddress rosterModel)
+                    (inject fundCoin)
+            validTo (addSlots 20 (ledgerTipSlot snapshot))
+    _ <-
+        buildSubmitAndWait
+            "full-swap roster funding"
+            provider
+            submitter
+            pp
+            emptyInterpret
+            (evalWith provider)
+            [seed]
+            []
+            genesisAddr
+            prog
+    owner1 <-
+        selectLargestAdaUtxo "full-swap owner1 funding"
+            =<< queryUTxOs provider (fsrmOwner1Address rosterModel)
+    owner2 <-
+        selectLargestAdaUtxo "full-swap owner2 funding"
+            =<< queryUTxOs provider (fsrmOwner2Address rosterModel)
+    requester <-
+        selectLargestAdaUtxo "full-swap requester funding"
+            =<< queryUTxOs provider (fsrmRequesterAddress rosterModel)
+    pure (owner1, owner2, requester)
+
+writeFullSwapRosterManifest
+    :: FilePath
+    -> FullSwapRosterModel
+    -> ( (TxIn, TxOut ConwayEra)
+       , (TxIn, TxOut ConwayEra)
+       , (TxIn, TxOut ConwayEra)
+       )
+    -> TxIn
+    -> IO ()
+writeFullSwapRosterManifest
+    runDir
+    rosterModel
+    (owner1Funding, owner2Funding, requesterFunding)
+    requesterFuel = do
+        let phaseDir =
+                runDir </> "treasury-swap-full-e2e"
+            manifest =
+                object
+                    [ "schemaVersion" .= (1 :: Int)
+                    , "phase"
+                        .= ("treasury-swap-full-e2e" :: String)
+                    , "owners"
+                        .= object
+                            [ "core"
+                                .= ownerValue
+                                    (fsrmOwner1Address rosterModel)
+                                    (fsrmOwner1KeyHash rosterModel)
+                                    (fst owner1Funding)
+                            , "networkCompliance"
+                                .= ownerValue
+                                    (fsrmOwner1Address rosterModel)
+                                    (fsrmOwner1KeyHash rosterModel)
+                                    (fst owner1Funding)
+                            , "ops"
+                                .= ownerValue
+                                    (fsrmOwner2Address rosterModel)
+                                    (fsrmOwner2KeyHash rosterModel)
+                                    (fst owner2Funding)
+                            , "middleware"
+                                .= ownerValue
+                                    (fsrmOwner2Address rosterModel)
+                                    (fsrmOwner2KeyHash rosterModel)
+                                    (fst owner2Funding)
+                            ]
+                    , "requester"
+                        .= object
+                            [ "address"
+                                .= renderAddr
+                                    (fsrmRequesterAddress rosterModel)
+                            , "keyHash"
+                                .= hexText
+                                    ( keyHashBytes
+                                        (fsrmRequesterKeyHash rosterModel)
+                                    )
+                            , "fundingTxIn"
+                                .= txInToText (fst requesterFunding)
+                            , "fuelTxIn" .= txInToText requesterFuel
+                            ]
+                    ]
+        createDirectoryIfMissing True phaseDir
+        BSL.writeFile
+            (phaseDir </> "roster-manifest.json")
+            (encode manifest)
+      where
+        ownerValue addr keyHash funding =
+            object
+                [ "address" .= renderAddr addr
+                , "keyHash" .= hexText (keyHashBytes keyHash)
+                , "fundingTxIn" .= txInToText funding
+                ]
 
 withFundedGovernanceReward
     :: FilePath
@@ -2446,6 +2618,76 @@ voteOutputCoin = Coin 5_000_000
 voterSignKey :: SignKeyDSIGN Ed25519DSIGN
 voterSignKey =
     mkSignKey "amaru-governance-voter-key-00001"
+
+data FullSwapRosterModel = FullSwapRosterModel
+    { fsrmOwner1SignKey :: !(SignKeyDSIGN Ed25519DSIGN)
+    , fsrmOwner2SignKey :: !(SignKeyDSIGN Ed25519DSIGN)
+    , fsrmRequesterSignKey :: !(SignKeyDSIGN Ed25519DSIGN)
+    , fsrmOwner1KeyHash :: !(KeyHash Payment)
+    , fsrmOwner2KeyHash :: !(KeyHash Payment)
+    , fsrmRequesterKeyHash :: !(KeyHash Payment)
+    , fsrmOwner1GuardKeyHash :: !(KeyHash Guard)
+    , fsrmOwner2GuardKeyHash :: !(KeyHash Guard)
+    , fsrmOwner1Address :: !Addr
+    , fsrmOwner2Address :: !Addr
+    , fsrmRequesterAddress :: !Addr
+    , fsrmRoster :: !DevnetScopeOwnerRoster
+    }
+
+fullSwapRosterModel :: FullSwapRosterModel
+fullSwapRosterModel =
+    FullSwapRosterModel
+        { fsrmOwner1SignKey = owner1
+        , fsrmOwner2SignKey = owner2
+        , fsrmRequesterSignKey = requester
+        , fsrmOwner1KeyHash = owner1Hash
+        , fsrmOwner2KeyHash = owner2Hash
+        , fsrmRequesterKeyHash = requesterHash
+        , fsrmOwner1GuardKeyHash = guardKeyHashFromSignKey owner1
+        , fsrmOwner2GuardKeyHash = guardKeyHashFromSignKey owner2
+        , fsrmOwner1Address = enterpriseAddrFromSignKey owner1
+        , fsrmOwner2Address = enterpriseAddrFromSignKey owner2
+        , fsrmRequesterAddress = enterpriseAddrFromSignKey requester
+        , fsrmRoster =
+            DevnetScopeOwnerRoster
+                { dsorCore = owner1Hash
+                , dsorOps = owner2Hash
+                , dsorNetworkCompliance = owner1Hash
+                , dsorMiddleware = owner2Hash
+                }
+        }
+  where
+    owner1 =
+        mkSignKey "e2e-full-swap-owner-key-seed-001"
+    owner2 =
+        mkSignKey "e2e-full-swap-owner-key-seed-002"
+    requester =
+        mkSignKey "e2e-full-swap-requester-seed-001"
+    owner1Hash =
+        paymentKeyHashFromSignKey owner1
+    owner2Hash =
+        paymentKeyHashFromSignKey owner2
+    requesterHash =
+        paymentKeyHashFromSignKey requester
+
+fullSwapRosterUsesDistinctRequester :: FullSwapRosterModel -> Bool
+fullSwapRosterUsesDistinctRequester model =
+    Set.size ownerHashes == 2
+        && requesterHash `Set.notMember` ownerHashes
+        && dsorCore roster == fsrmOwner1KeyHash model
+        && dsorNetworkCompliance roster == fsrmOwner1KeyHash model
+        && dsorOps roster == fsrmOwner2KeyHash model
+        && dsorMiddleware roster == fsrmOwner2KeyHash model
+  where
+    roster =
+        fsrmRoster model
+    ownerHashes =
+        Set.fromList
+            [ keyHashBytes (fsrmOwner1KeyHash model)
+            , keyHashBytes (fsrmOwner2KeyHash model)
+            ]
+    requesterHash =
+        keyHashBytes (fsrmRequesterKeyHash model)
 
 devnetReferenceScriptCoin :: Coin
 devnetReferenceScriptCoin = Coin 100_000_000
@@ -4428,7 +4670,49 @@ buildSubmitAndWait
     eval
     inputs
     refs
+    changeAddr =
+        buildSubmitAndWaitWithSigners
+            label
+            provider
+            submitter
+            pp
+            interpret
+            eval
+            inputs
+            refs
+            changeAddr
+            [genesisSignKey]
+
+buildSubmitAndWaitWithSigners
+    :: String
+    -> Provider IO
+    -> Submitter IO
+    -> PParams ConwayEra
+    -> InterpretIO NoCtx
+    -> ( ConwayTx
+         -> IO
+                ( Map.Map
+                    (ConwayPlutusPurpose AsIx ConwayEra)
+                    (Either String ExUnits)
+                )
+       )
+    -> [(TxIn, TxOut ConwayEra)]
+    -> [(TxIn, TxOut ConwayEra)]
+    -> Addr
+    -> [SignKeyDSIGN Ed25519DSIGN]
+    -> TxBuild NoCtx Void ()
+    -> IO TxId
+buildSubmitAndWaitWithSigners
+    label
+    provider
+    submitter
+    pp
+    interpret
+    eval
+    inputs
+    refs
     changeAddr
+    signers
     prog =
         build
             (mkPParamsBound pp)
@@ -4443,14 +4727,14 @@ buildSubmitAndWait
                     expectationFailure (label <> ": " <> show err)
                         *> error "unreachable"
                 Right tx -> do
-                    let signed = addKeyWitness genesisSignKey tx
+                    let signed = foldr addKeyWitness tx signers
                         txId = txIdTx signed
                     submitTx submitter signed >>= \case
                         Submitted _ -> pure ()
                         Rejected reason ->
                             expectationFailure $
                                 label <> " rejected: " <> show reason
-                    waitForTxChange provider txId genesisAddr 60
+                    waitForTxChange provider txId changeAddr 60
                     pure txId
 
 submitTreasuryWithdrawal
@@ -4762,6 +5046,21 @@ paymentKeyHashFromSignKey =
     hashKey
         . VKey
         . deriveVerKeyDSIGN
+
+guardKeyHashFromSignKey
+    :: SignKeyDSIGN Ed25519DSIGN
+    -> KeyHash Guard
+guardKeyHashFromSignKey =
+    hashKey
+        . VKey
+        . deriveVerKeyDSIGN
+
+enterpriseAddrFromSignKey :: SignKeyDSIGN Ed25519DSIGN -> Addr
+enterpriseAddrFromSignKey sk =
+    Addr
+        Testnet
+        (KeyHashObj (paymentKeyHashFromSignKey sk))
+        StakeRefNull
 
 baseAddrFromSignKey
     :: SignKeyDSIGN Ed25519DSIGN

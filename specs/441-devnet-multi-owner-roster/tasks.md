@@ -2,13 +2,13 @@
 
 ## Slice S1 - Registry Roster Support
 
-- [ ] T441-S1 Add an opt-in devnet registry publication path that can
+- [X] T441-S1 Add an opt-in devnet registry publication path that can
   publish distinct per-scope owner key hashes while preserving the
   existing singleton-owner default.
-- [ ] T441-S1 Add RED/GREEN proof at the lowest practical layer that
+- [X] T441-S1 Add RED/GREEN proof at the lowest practical layer that
   the devnet registry path can carry at least two distinct owners.
-- [ ] T441-S1 Run the focused proof and `./gate.sh`.
-- [ ] T441-S1 Commit with subject
+- [X] T441-S1 Run the focused proof and `./gate.sh`.
+- [X] T441-S1 Commit with subject
   `feat(devnet): support multi-owner registry rosters` and trailer
   `Tasks: T441-S1`.
 

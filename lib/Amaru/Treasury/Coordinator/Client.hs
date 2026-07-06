@@ -153,10 +153,14 @@ data FeeQuote = FeeQuote
     deriving stock (Eq, Show)
 
 data FeeStatus = FeeStatus
-    { fsBodyHash :: Text
-    , fsPaid :: Bool
+    { fsObserved :: Bool
+    , fsConfirmed :: Bool
+    , fsSufficient :: Bool
+    , fsReadyToPublish :: Bool
+    , fsPaidLovelace :: Integer
+    , fsRequiredLovelace :: Integer
+    , fsConfirmations :: Int
     , fsReason :: Maybe FeeReason
-    , fsFeePayment :: Maybe Text
     }
     deriving stock (Eq, Show)
 
@@ -452,20 +456,28 @@ instance FromJSON FeeQuote where
 instance ToJSON FeeStatus where
     toJSON status =
         object
-            [ "body_hash" .= fsBodyHash status
-            , "paid" .= fsPaid status
+            [ "observed" .= fsObserved status
+            , "confirmed" .= fsConfirmed status
+            , "sufficient" .= fsSufficient status
+            , "ready_to_publish" .= fsReadyToPublish status
+            , "paid_lovelace" .= fsPaidLovelace status
+            , "required_lovelace" .= fsRequiredLovelace status
+            , "confirmations" .= fsConfirmations status
             , "reason" .= fsReason status
-            , "fee_payment" .= fsFeePayment status
             ]
 
 instance FromJSON FeeStatus where
     parseJSON =
         withObject "FeeStatus" $ \o ->
             FeeStatus
-                <$> o .: "body_hash"
-                <*> o .: "paid"
+                <$> o .: "observed"
+                <*> o .: "confirmed"
+                <*> o .: "sufficient"
+                <*> o .: "ready_to_publish"
+                <*> o .: "paid_lovelace"
+                <*> o .: "required_lovelace"
+                <*> o .: "confirmations"
                 <*> o .:? "reason"
-                <*> o .:? "fee_payment"
 
 instance ToJSON FeeReason where
     toJSON =

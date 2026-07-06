@@ -14,6 +14,7 @@ import Data.Aeson
     , decode
     , encode
     , object
+    , toJSON
     , (.=)
     )
 import Data.ByteString (ByteString)
@@ -91,21 +92,16 @@ spec = describe "Amaru.Treasury.Coordinator.Client" $ do
             encode (WitnessRequest sampleWitness)
                 `shouldBe` "{\"witness\":\"" <> textJson sampleWitness <> "\"}"
 
-        it "decodes status, entry, witness result, and receipt responses" $ do
-            decode
-                "{\
-                \\"body_hash\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\
-                \\"paid\":false,\
-                \\"reason\":\"fee_not_seen\",\
-                \\"fee_payment\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb#0\"\
-                \}"
-                `shouldBe` Just
-                    FeeStatus
-                        { fsBodyHash = sampleBodyHash
-                        , fsPaid = False
-                        , fsReason = Just FeeNotSeen
-                        , fsFeePayment = Just sampleTxIn
-                        }
+        it "decodes real coordinator fee-status responses" $ do
+            fmap
+                toJSON
+                (decode sampleFeeNotSeenStatusJson :: Maybe FeeStatus)
+                `shouldBe` Just sampleFeeNotSeenStatusValue
+
+            fmap
+                toJSON
+                (decode sampleFeeReadyStatusJson :: Maybe FeeStatus)
+                `shouldBe` Just sampleFeeReadyStatusValue
 
             decode sampleEntryJson `shouldBe` Just sampleEntry
             decode sampleWitnessResultJson
@@ -316,10 +312,14 @@ stubResponse req =
                 "/v1/fee-status/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" ->
                     encode
                         FeeStatus
-                            { fsBodyHash = sampleBodyHash
-                            , fsPaid = True
+                            { fsObserved = True
+                            , fsConfirmed = True
+                            , fsSufficient = True
+                            , fsReadyToPublish = True
+                            , fsPaidLovelace = 1_500
+                            , fsRequiredLovelace = 1_500
+                            , fsConfirmations = 5
                             , fsReason = Nothing
-                            , fsFeePayment = Just sampleTxIn
                             }
                 "/v1/entries" -> encode sampleEntry
                 "/v1/entries/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/witnesses" ->
@@ -383,6 +383,58 @@ sampleFeeQuote =
         , fqTag = sampleBodyHash
         , fqInvalidHereafter = 123_456
         }
+
+sampleFeeNotSeenStatusJson :: BSL.ByteString
+sampleFeeNotSeenStatusJson =
+    "{\
+    \\"observed\":false,\
+    \\"confirmed\":false,\
+    \\"sufficient\":false,\
+    \\"ready_to_publish\":false,\
+    \\"paid_lovelace\":0,\
+    \\"required_lovelace\":1500,\
+    \\"confirmations\":5,\
+    \\"reason\":\"fee_not_seen\"\
+    \}"
+
+sampleFeeNotSeenStatusValue :: Value
+sampleFeeNotSeenStatusValue =
+    object
+        [ "observed" .= False
+        , "confirmed" .= False
+        , "sufficient" .= False
+        , "ready_to_publish" .= False
+        , "paid_lovelace" .= (0 :: Integer)
+        , "required_lovelace" .= (1_500 :: Integer)
+        , "confirmations" .= (5 :: Int)
+        , "reason" .= Just FeeNotSeen
+        ]
+
+sampleFeeReadyStatusJson :: BSL.ByteString
+sampleFeeReadyStatusJson =
+    "{\
+    \\"observed\":true,\
+    \\"confirmed\":true,\
+    \\"sufficient\":true,\
+    \\"ready_to_publish\":true,\
+    \\"paid_lovelace\":1500,\
+    \\"required_lovelace\":1500,\
+    \\"confirmations\":5,\
+    \\"reason\":null\
+    \}"
+
+sampleFeeReadyStatusValue :: Value
+sampleFeeReadyStatusValue =
+    object
+        [ "observed" .= True
+        , "confirmed" .= True
+        , "sufficient" .= True
+        , "ready_to_publish" .= True
+        , "paid_lovelace" .= (1_500 :: Integer)
+        , "required_lovelace" .= (1_500 :: Integer)
+        , "confirmations" .= (5 :: Int)
+        , "reason" .= (Nothing :: Maybe FeeReason)
+        ]
 
 sampleEntry :: Entry
 sampleEntry =

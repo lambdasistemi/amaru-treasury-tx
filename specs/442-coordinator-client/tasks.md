@@ -45,21 +45,21 @@ Owned files:
 
 ## Slice 3 - CLI And Fee Payment
 
-- [ ] T442-S3 Add the fee-payment boundary in
+- [X] T442-S3 Add the fee-payment boundary in
   `lib/Amaru/Treasury/Coordinator/FeePayment.hs`, paying the
   coordinator fee with metadata label `9721 = body_hash`.
-- [ ] T442-S3 Add `coordinate` parser/runner in
+- [X] T442-S3 Add `coordinate` parser/runner in
   `lib/Amaru/Treasury/Cli/Coordinate.hs`.
-- [ ] T442-S3 Wire `CmdCoordinate` into
+- [X] T442-S3 Wire `CmdCoordinate` into
   `lib/Amaru/Treasury/Cli.hs` and `app/amaru-treasury-tx/Main.hs`.
-- [ ] T442-S3 Add parser/runner tests in
+- [X] T442-S3 Add parser/runner tests in
   `test/unit/Amaru/Treasury/Cli/CoordinateSpec.hs` and focused
   fee-payment tests in
   `test/unit/Amaru/Treasury/Coordinator/FeePaymentSpec.hs`.
-- [ ] T442-S3 Register new modules/tests in `amaru-treasury-tx.cabal`.
-- [ ] T442-S3 Run focused proof:
+- [X] T442-S3 Register new modules/tests in `amaru-treasury-tx.cabal`.
+- [X] T442-S3 Run focused proof:
   `nix develop --accept-flake-config -c just unit "Coordinate"`.
-- [ ] T442-S3 Commit as
+- [X] T442-S3 Commit as
   `feat: expose coordinator client cli`
   with trailer `Tasks: T442-S3`.
 

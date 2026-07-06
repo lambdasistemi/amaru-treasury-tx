@@ -66,6 +66,10 @@ import Amaru.Treasury.Cli.Config
     , resolveGlobalConfig
     , resolveTreasuryInspectConfig
     )
+import Amaru.Treasury.Cli.Coordinate
+    ( CoordinateOpts
+    , coordinateOptsP
+    )
 import Amaru.Treasury.Cli.DisburseWizard
     ( DisburseWizardInput
     , disburseWizardInputP
@@ -161,6 +165,7 @@ data Cmd
     | CmdVaultCreate VaultCreateOpts
     | CmdWitness WitnessOpts
     | CmdSubmit SubmitOpts
+    | CmdCoordinate CoordinateOpts
     | CmdServe ServeOpts
     | CmdEnvelopeTx
     | CmdEnvelopeWitness
@@ -322,6 +327,14 @@ cmdP =
                     (CmdSubmit <$> submitOptsP)
                     ( progDesc
                         "Submit a signed Conway tx CBOR hex via the local node socket"
+                    )
+                )
+            <> command
+                "coordinate"
+                ( info
+                    (CmdCoordinate <$> coordinateOptsP)
+                    ( progDesc
+                        "Drive coordinator witness collection for an unsigned tx"
                     )
                 )
             <> command

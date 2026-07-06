@@ -163,6 +163,7 @@ library
     Amaru.Treasury.Cli.AttachWitness
     Amaru.Treasury.Cli.Common
     Amaru.Treasury.Cli.Config
+    Amaru.Treasury.Cli.Coordinate
     Amaru.Treasury.Cli.DisburseWizard
     Amaru.Treasury.Cli.Envelope
     Amaru.Treasury.Cli.GovernanceWithdrawalInitWizard
@@ -193,6 +194,7 @@ library
     Amaru.Treasury.Config.Types
     Amaru.Treasury.Constants
     Amaru.Treasury.Coordinator.Client
+    Amaru.Treasury.Coordinator.FeePayment
     Amaru.Treasury.Coordinator.Workflow
     Amaru.Treasury.Devnet.DisburseSubmit
     Amaru.Treasury.Devnet.GovernanceWithdrawalInit
@@ -554,6 +556,7 @@ test-suite unit-tests
     Amaru.Treasury.Cli.CommonSpec
     Amaru.Treasury.Cli.ConfigSpec
     Amaru.Treasury.Cli.ContingencyDisburseWizardParserSpec
+    Amaru.Treasury.Cli.CoordinateSpec
     Amaru.Treasury.Cli.DisburseWizardInputControlSpec
     Amaru.Treasury.Cli.EnvelopeSpec
     Amaru.Treasury.Cli.GovernanceWithdrawalInitWizardInputControlSpec
@@ -579,6 +582,7 @@ test-suite unit-tests
     Amaru.Treasury.Config.ResolveSpec
     Amaru.Treasury.ConstantsSpec
     Amaru.Treasury.Coordinator.ClientSpec
+    Amaru.Treasury.Coordinator.FeePaymentSpec
     Amaru.Treasury.Coordinator.WorkflowSpec
     Amaru.Treasury.Devnet.DisburseSubmitSpec
     Amaru.Treasury.Devnet.GovernanceWithdrawalInitSpec

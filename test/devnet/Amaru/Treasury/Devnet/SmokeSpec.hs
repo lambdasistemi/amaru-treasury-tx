@@ -160,12 +160,13 @@ import Cardano.Tx.Ledger (ConwayTx)
 import Codec.Binary.Bech32 qualified as Bech32
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (poll, withAsync)
-import Control.Exception (SomeException, try)
+import Control.Exception (SomeException, bracket, onException, try)
 import Control.Monad (unless, when)
 import Control.Monad.Operational (singleton)
 import Data.Aeson
     ( FromJSON (..)
     , Value
+    , eitherDecode'
     , eitherDecodeFileStrict
     , encode
     , object
@@ -180,6 +181,14 @@ import Data.ByteString.Lazy qualified as BSL
 import Data.ByteString.Short qualified as SBS
 import Data.Foldable (traverse_)
 import Data.Function ((&))
+import Data.IORef
+    ( IORef
+    , modifyIORef'
+    , newIORef
+    , readIORef
+    , writeIORef
+    )
+import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromJust, fromMaybe)
 import Data.Set qualified as Set
@@ -193,6 +202,8 @@ import Lens.Micro
     ( (.~)
     , (^.)
     )
+import Network.Socket qualified as Socket
+import Ouroboros.Network.Magic (NetworkMagic (..))
 import PlutusCore.Data (Data (..))
 import System.Directory
     ( copyFile
@@ -207,17 +218,32 @@ import System.Directory
     , removePathForcibly
     , withCurrentDirectory
     )
-import System.Environment (lookupEnv)
+import System.Environment (getEnvironment, lookupEnv)
 import System.Exit (ExitCode (..))
 import System.FilePath
     ( takeDirectory
     , (</>)
     )
+import System.IO
+    ( IOMode (WriteMode)
+    , withFile
+    )
 import System.Posix.Files
     ( ownerReadMode
     , setFileMode
     )
-import System.Process (readProcessWithExitCode)
+import System.Process
+    ( CreateProcess (env, std_err, std_out)
+    , ProcessHandle
+    , StdStream (UseHandle)
+    , createProcess
+    , getProcessExitCode
+    , proc
+    , readProcessWithExitCode
+    , shell
+    , terminateProcess
+    , waitForProcess
+    )
 import Test.Hspec
     ( Spec
     , describe
@@ -233,6 +259,40 @@ import Amaru.Treasury.Backend.N2C
     )
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
+    )
+import Amaru.Treasury.Coordinator.Client
+    ( CoordinatorBaseUrl
+    , CoordinatorClientError
+    , CoordinatorHttpRequest (..)
+    , CoordinatorHttpResponse (..)
+    , Entry (..)
+    , FeeQuote (..)
+    , FeeReason (..)
+    , FeeStatus (..)
+    , Receipt (..)
+    , WitnessResult
+    , addWitness
+    , getFeeStatus
+    , httpCoordinatorTransport
+    , normalizeCoordinatorBaseUrl
+    , publishEntry
+    , quoteFee
+    , renderCoordinatorClientError
+    , runCoordinatorRequest
+    , submitEntry
+    )
+import Amaru.Treasury.Coordinator.FeePayment
+    ( FeePaymentInputs (..)
+    , coordinatorFeeMetadataLabel
+    , payCoordinatorFee
+    , planCoordinatorFeePayment
+    )
+import Amaru.Treasury.Coordinator.Workflow
+    ( CoordinationEffects (..)
+    , CoordinationRequest (..)
+    , CoordinationResult (..)
+    , WorkflowConfig (..)
+    , runCoordinationWorkflow
     )
 import Amaru.Treasury.Devnet.DisburseSubmit qualified as DisburseSubmit
 import Amaru.Treasury.Devnet.GovernanceWithdrawalInit qualified as GovernanceWithdrawalInit
@@ -286,6 +346,9 @@ import Amaru.Treasury.Sundae.Contracts
     , sundaeOrderValidatorSourceRepository
     , sundaeOrderValidatorTitle
     )
+import Amaru.Treasury.Tx.AttachWitness
+    ( encodeSignedTxHex
+    )
 import Amaru.Treasury.Tx.Submit
     ( renderTxId
     )
@@ -300,6 +363,16 @@ import Amaru.Treasury.Tx.SwapWizard
     , txInToText
     )
 import Amaru.Treasury.Tx.WithdrawWizard qualified as Withdraw
+import Amaru.Treasury.Vault.Witness
+    ( SigningSource (..)
+    , VaultError
+    , VaultIdentity
+    , VaultIdentitySpec (..)
+    , decodeWitnessVault
+    , encodeWitnessVault
+    , renderVaultError
+    , resolveVaultIdentity
+    )
 
 data ShelleyGenesisTiming = ShelleyGenesisTiming
     { sgtEpochLength :: !Int
@@ -307,6 +380,14 @@ data ShelleyGenesisTiming = ShelleyGenesisTiming
     , sgtSlotLength :: !Double
     }
     deriving stock (Eq, Show)
+
+newtype CoordinatorEntryList = CoordinatorEntryList [Entry]
+    deriving stock (Eq, Show)
+
+instance FromJSON CoordinatorEntryList where
+    parseJSON =
+        withObject "CoordinatorEntryList" $ \o ->
+            CoordinatorEntryList <$> o .: "entries"
 
 instance FromJSON ShelleyGenesisTiming where
     parseJSON =
@@ -1271,6 +1352,12 @@ spec =
                 treasurySwapFullE2ESmoke
             )
         it
+            "treasury-swap-via-coordinator: deployed treasury swaps through cardano-multisig"
+            ( runForPhases
+                ["treasury-swap-via-coordinator"]
+                treasurySwapViaCoordinatorSmoke
+            )
+        it
             "mixed-utxo: validates mixed treasury swap and reorganize through phase-2"
             (runForPhases ["mixed-utxo"] mixedUtxoSmoke)
         it
@@ -2118,6 +2205,7 @@ treasurySwapFullE2ESmoke = do
                     (swapProgram (mkFullSwapIntent swapInputs))
             writeFullSwapRosterManifest
                 runDir
+                "treasury-swap-full-e2e"
                 rosterModel
                 rosterFunding
                 fuelIn
@@ -2213,6 +2301,455 @@ treasurySwapFullE2ESmoke = do
                 fullEvidence
             statusMilestone "S2 DONE treasury-swap-full-e2e passed"
 
+treasurySwapViaCoordinatorSmoke :: IO ()
+treasurySwapViaCoordinatorSmoke = do
+    runDir <- resolveRunDir
+    prepareRunDir runDir
+    let phaseDir = runDir </> "treasury-swap-via-coordinator"
+    createDirectoryIfMissing True phaseDir
+    createDirectoryIfMissing True (runDir </> "scoop-e2e")
+    statusNote
+        "S2 treasury-swap-via-coordinator deploy+fund re-rooted treasury"
+
+    sourceGenesis <- genesisDir
+    assertGenesisDir sourceGenesis
+    let smokeGenesis = runDir </> "genesis"
+    copyGovernanceGenesis sourceGenesis smokeGenesis
+    patchGovernanceGenesis smokeGenesis
+    timing <- readShelleyTiming smokeGenesis
+    sgtNetworkMagic timing `shouldBe` 42
+
+    rewardTimeoutSeconds <- resolveRewardTimeoutSeconds
+
+    withCardanoNode smokeGenesis $ \socket startMs -> do
+        accepted <- probeNetworkMagic devnetMagic socket
+        accepted `shouldBe` True
+        copyNodeLog socket runDir
+        writeTiming runDir startMs socket timing
+        signingKeyFile <- writeGenesisPaymentSigningKey runDir
+        let globals =
+                GlobalOpts
+                    { goSocketPath = Just socket
+                    , goNetworkMagic = devnetMagic
+                    , goNetworkName = Just "devnet"
+                    }
+            fundingAddress =
+                T.unpack (renderAddr genesisAddr)
+            registryPath =
+                RegistryInit.registryInitRegistryPath runDir
+            stakeRewardPath =
+                StakeRewardInit.stakeRewardInitAccountsPath runDir
+            materializedPath =
+                GovernanceWithdrawalInit.governanceWithdrawalInitMaterializationPath
+                    runDir
+            rosterModel = fullSwapRosterModel
+
+        withGovernanceNode socket $ \provider submitter -> do
+            pp <- queryProtocolParams provider
+            registryUtxos <- queryUTxOs provider genesisAddr
+            let registryConfig =
+                    DevnetRegistryInitConfig
+                        { dricNetwork = Testnet
+                        , dricFundingAddress = genesisAddr
+                        , dricOwnerKeyHash =
+                            fsrmOwner1KeyHash rosterModel
+                        , dricSignTx =
+                            addKeyWitness genesisSignKey
+                        }
+            publication <-
+                RegistryInit.publishDevnetRegistryInitWithOwners
+                    registryConfig
+                    (fsrmRoster rosterModel)
+                    provider
+                    submitter
+                    pp
+                    registryUtxos
+            RegistryInit.verifyRegistryInitPublication
+                provider
+                publication
+            RegistryInit.writeRegistryInitArtifacts
+                (sgtNetworkMagic timing)
+                runDir
+                publication
+        runDevnetStakeRewardInit
+            globals
+            DevnetStakeRewardInitOpts
+                { dsrioRegistryFile = registryPath
+                , dsrioFundingAddress = fundingAddress
+                , dsrioSigningKeyFile = signingKeyFile
+                , dsrioRunDir = runDir
+                }
+        assertStakeRewardInitArtifacts runDir registryPath timing
+        runDevnetGovernanceWithdrawalInit
+            globals
+            DevnetGovernanceWithdrawalInitOpts
+                { dgwioRegistryFile = registryPath
+                , dgwioStakeRewardFile = stakeRewardPath
+                , dgwioFundingAddress = fundingAddress
+                , dgwioSigningKeyFile = signingKeyFile
+                , dgwioRunDir = runDir
+                , dgwioAmountLovelace =
+                    coinLovelace withdrawalAmount
+                , dgwioRewardTimeoutSeconds = rewardTimeoutSeconds
+                }
+        assertGovernanceWithdrawalInitArtifacts
+            runDir
+            registryPath
+            stakeRewardPath
+            timing
+
+        registry <-
+            expectEither "read deployed registry anchors"
+                =<< DisburseSubmit.readDevnetDisburseSubmitRegistry
+                    registryPath
+        materialized <-
+            expectEither "read materialized treasury UTxO"
+                =<< DisburseSubmit.readDevnetDisburseSubmitMaterialized
+                    materializedPath
+        let treasuryHash =
+                GovernanceWithdrawalInit.dgwrTreasuryScriptHash
+                    registry
+            treasuryAddress =
+                GovernanceWithdrawalInit.dgwrTreasuryAddress registry
+            treasuryBefore =
+                DisburseSubmit.ddsmMaterializedAdaLovelace
+                    materialized
+
+        withGovernanceNode socket $ \provider submitter -> do
+            pp <- queryProtocolParams provider
+            walletUtxos <- queryUTxOs provider genesisAddr
+            boot <-
+                selectLargestAdaUtxo
+                    "coordinator swap settings protocol boot"
+                    walletUtxos
+            scripts <- deriveFreshSundaeScripts runDir (fst boot)
+            settings <-
+                bootstrapSundaeSettings provider submitter pp boot scripts
+            freshUtxos <- queryUTxOs provider genesisAddr
+            token <- mintScoopTestToken provider submitter pp freshUtxos
+            pool <-
+                createSundaePool provider submitter pp settings token scripts
+            scriptRefs <-
+                publishSundaeReferenceScripts provider submitter pp scripts
+            settingsForScoop <-
+                refreshSettingsBeforeReferenceScripts
+                    provider
+                    submitter
+                    pp
+                    settings
+                    scripts
+                    scriptRefs
+            registerFreshPoolStakeRewardAccount
+                provider
+                submitter
+                pp
+                settingsForScoop
+                scripts
+
+            rosterFunding <-
+                fundFullSwapRoster
+                    provider
+                    submitter
+                    pp
+                    rosterModel
+
+            statusNote
+                "S2 coordinator path builds unsigned swapProgram tx"
+            deployRefs <-
+                waitForTxIns
+                    provider
+                    [ GovernanceWithdrawalInit.dgwrScopesRef registry
+                    , GovernanceWithdrawalInit.dgwrPermissionsRef
+                        registry
+                    , GovernanceWithdrawalInit.dgwrTreasuryRef registry
+                    , GovernanceWithdrawalInit.dgwrRegistryRef registry
+                    ]
+                    60
+            treasuryFound <-
+                waitForTxIns
+                    provider
+                    [DisburseSubmit.ddsmTreasuryInput materialized]
+                    60
+            treasuryUtxo@(treasuryIn, _) <-
+                case treasuryFound of
+                    [u] -> pure u
+                    _ ->
+                        expectationFailure
+                            "deployed treasury UTxO was not found"
+                            *> error "unreachable"
+            swapFuelUtxos <-
+                queryUTxOs provider (fsrmRequesterAddress rosterModel)
+            fuel@(fuelIn, _) <-
+                selectLargestAdaUtxo
+                    "coordinator swapProgram order fuel"
+                    swapFuelUtxos
+            (feeWalletIn, _) <-
+                selectLargestAdaUtxoExcept
+                    "coordinator fee wallet"
+                    [fuelIn]
+                    swapFuelUtxos
+            feeWalletIn `shouldSatisfy` (/= fuelIn)
+            snapshot <- queryLedgerSnapshot provider
+            let ownerBytes =
+                    keyHashBytes (fsrmOwner1KeyHash rosterModel)
+                opsOwnerBytes =
+                    keyHashBytes (fsrmOwner2KeyHash rosterModel)
+                offerLovelace :: Integer
+                offerLovelace = 10_000_000
+                datumParams =
+                    SwapOrderDatumParams
+                        { sodPoolId = spuIdent pool
+                        , sodCoreOwner = ownerBytes
+                        , sodOpsOwner = opsOwnerBytes
+                        , sodNetworkComplianceOwner = ownerBytes
+                        , sodMiddlewareOwner = opsOwnerBytes
+                        , sodSundaeProtocolFeeLovelace = 2_500_000
+                        , sodTreasuryScriptHash =
+                            scriptHashBytes treasuryHash
+                        , sodUsdmPolicy = policyIdBytes (sttPolicy token)
+                        , sodUsdmToken =
+                            assetNameRawBytes (sttAssetName token)
+                        }
+                orderOut =
+                    SwapOrderOut
+                        { soLovelace = Coin offerLovelace
+                        , soDatum =
+                            swapOrderDatum datumParams offerLovelace 1
+                        }
+                swapInputs =
+                    FullSwapInputs
+                        { fsiScopesRef =
+                            GovernanceWithdrawalInit.dgwrScopesRef
+                                registry
+                        , fsiPermissionsRef =
+                            GovernanceWithdrawalInit.dgwrPermissionsRef
+                                registry
+                        , fsiTreasuryRef =
+                            GovernanceWithdrawalInit.dgwrTreasuryRef
+                                registry
+                        , fsiRegistryRef =
+                            GovernanceWithdrawalInit.dgwrRegistryRef
+                                registry
+                        , fsiPermissionsRewardAccount =
+                            permissionsRewardAccount
+                                Testnet
+                                ( GovernanceWithdrawalInit.dgwrPermissionsScriptHash
+                                    registry
+                                )
+                        , fsiTreasuryAddress = treasuryAddress
+                        , fsiSigners =
+                            [ fsrmOwner1GuardKeyHash rosterModel
+                            , fsrmOwner2GuardKeyHash rosterModel
+                            ]
+                        , fsiWalletUtxo = fuelIn
+                        , fsiExtraWalletInputs = []
+                        , fsiSwapOrderAddress =
+                            scriptAddr Testnet (ssbOrderHash scripts)
+                        , fsiSwapOrders = [orderOut]
+                        , fsiSwapOrderExtraLovelace = Coin 4_500_000
+                        , fsiTreasuryUtxos = [treasuryIn]
+                        , fsiTreasuryLeftoverLovelace =
+                            Coin (treasuryBefore - offerLovelace)
+                        , fsiTreasuryLeftoverAssets = mempty
+                        , fsiUpperBound =
+                            addSlots 60 (ledgerTipSlot snapshot)
+                        }
+            let feeRecipient =
+                    enterpriseAddrFromSignKey coordinatorFeeRecipientSignKey
+                ownerSigners =
+                    [ fsrmOwner1GuardKeyHash rosterModel
+                    , fsrmOwner2GuardKeyHash rosterModel
+                    ]
+            requesterIdentity <-
+                vaultIdentityFromSignKey
+                    "requester"
+                    (fsrmRequesterSignKey rosterModel)
+            owner1Identity <-
+                vaultIdentityFromSignKey
+                    "owner-1"
+                    (fsrmOwner1SignKey rosterModel)
+            owner2Identity <-
+                vaultIdentityFromSignKey
+                    "owner-2"
+                    (fsrmOwner2SignKey rosterModel)
+            let feeInputs =
+                    FeePaymentInputs
+                        { fpiNetworkMagic = NetworkMagic 42
+                        , fpiSocketPath = socket
+                        , fpiPayer = requesterIdentity
+                        , fpiWalletTxIn = txInToText feeWalletIn
+                        , fpiWalletAddress =
+                            renderAddr
+                                (fsrmRequesterAddress rosterModel)
+                        }
+            quoteRef <- newIORef (Nothing :: Maybe FeeQuote)
+            statusesRef <- newIORef ([] :: [FeeStatus])
+            discoveryRef <- newIORef ([] :: [Value])
+            witnessRef <- newIORef ([] :: [WitnessResult])
+            withCoordinatorServer phaseDir socket feeRecipient $
+                \baseUrl logPath -> do
+                    unsignedTx <-
+                        buildUnsignedSwapTx
+                            provider
+                            pp
+                            [fuel, treasuryUtxo]
+                            deployRefs
+                            (fsrmRequesterAddress rosterModel)
+                            (swapProgram (mkFullSwapIntent swapInputs))
+                    let swapTxId = txIdTx unsignedTx
+                        unsignedTxHex =
+                            TE.decodeUtf8 (encodeSignedTxHex unsignedTx)
+                    base <-
+                        expectCoordinatorClient "coordinator base URL" $
+                            normalizeCoordinatorBaseUrl baseUrl
+                    let effects =
+                            coordinatorSmokeEffects
+                                baseUrl
+                                base
+                                feeInputs
+                                ownerSigners
+                                quoteRef
+                                statusesRef
+                                discoveryRef
+                                witnessRef
+                    result <-
+                        runCoordinationWorkflow
+                            WorkflowConfig{wcFeeStatusMaxPolls = 180}
+                            effects
+                            CoordinationRequest
+                                { crUnsignedTx = unsignedTxHex
+                                , crRequester = requesterIdentity
+                                , crOwners =
+                                    owner1Identity
+                                        NE.:| [owner2Identity]
+                                }
+                    coordinated <-
+                        case result of
+                            Left err ->
+                                expectationFailure
+                                    ( "coordinator workflow failed: "
+                                        <> show err
+                                    )
+                                    *> error "unreachable"
+                            Right ok -> pure ok
+                    rTxId (cwrReceipt coordinated)
+                        `shouldBe` renderTxId swapTxId
+                    statuses <- readIORef statusesRef
+                    assertFeeStatusTransition statuses
+                    uploaded <- readIORef witnessRef
+                    uploaded `shouldSatisfy` ((== 2) . length)
+
+                    let orderRef = txOutRef swapTxId 0
+                    foundOrder <- waitForTxIns provider [orderRef] 120
+                    order <-
+                        case foundOrder of
+                            [(ref, txOut)] ->
+                                pure
+                                    SundaeOrderUtxo
+                                        { souTxIn = ref
+                                        , souTxOut = txOut
+                                        }
+                            _ ->
+                                expectationFailure
+                                    "coordinator swap order output was not found"
+                                    *> error "unreachable"
+                    statusNote
+                        "S2 scoop the coordinator swap order to treasury"
+                    scoopFuel <- queryUTxOs provider genesisAddr
+                    swapEvidence <-
+                        scoopTreasurySwapOrder
+                            provider
+                            submitter
+                            pp
+                            scoopFuel
+                            settingsForScoop
+                            treasuryHash
+                            treasuryAddress
+                            token
+                            pool
+                            order
+                            scripts
+                            scriptRefs
+
+                    let fullEvidence =
+                            TreasuryFullSwapEvidence
+                                { tfseScoopTxId =
+                                    tseScoopTxId swapEvidence
+                                , tfseOrderConsumed =
+                                    tseOrderConsumed swapEvidence
+                                , tfseTreasuryTokenQuantity =
+                                    tseTreasuryTokenQuantity swapEvidence
+                                , tfseTreasuryAddress =
+                                    tseTreasuryAddress swapEvidence
+                                , tfseTreasuryScriptHash =
+                                    tseTreasuryScriptHash swapEvidence
+                                , tfseSettingsHash =
+                                    tseSettingsHash swapEvidence
+                                , tfsePoolHash = tsePoolHash swapEvidence
+                                , tfsePoolStakeHash =
+                                    tsePoolStakeHash swapEvidence
+                                , tfseOrderHash =
+                                    tseOrderHash swapEvidence
+                                , tfsePoolIdent =
+                                    tsePoolIdent swapEvidence
+                                , tfseTestTokenPolicy =
+                                    tseTestTokenPolicy swapEvidence
+                                , tfseTestTokenName =
+                                    tseTestTokenName swapEvidence
+                                , tfseTreasuryAdaBefore = treasuryBefore
+                                , tfseTreasuryAdaAfter =
+                                    treasuryBefore - offerLovelace
+                                , tfseSwapOrderTxId =
+                                    renderTxId swapTxId
+                                , tfseScopesRef =
+                                    txInToText
+                                        ( GovernanceWithdrawalInit.dgwrScopesRef
+                                            registry
+                                        )
+                                , tfsePermissionsRef =
+                                    txInToText
+                                        ( GovernanceWithdrawalInit.dgwrPermissionsRef
+                                            registry
+                                        )
+                                , tfseTreasuryRef =
+                                    txInToText
+                                        ( GovernanceWithdrawalInit.dgwrTreasuryRef
+                                            registry
+                                        )
+                                , tfseRegistryRef =
+                                    txInToText
+                                        ( GovernanceWithdrawalInit.dgwrRegistryRef
+                                            registry
+                                        )
+                                , tfsePermissionsHash =
+                                    GovernanceWithdrawalInit.dgwrPermissionsScriptHashText
+                                        registry
+                                }
+                    quote <- expectJust "coordinator quote" =<< readIORef quoteRef
+                    discoveries <- readIORef discoveryRef
+                    writeTreasurySwapCoordinatorArtifacts
+                        runDir
+                        phaseDir
+                        socket
+                        timing
+                        baseUrl
+                        logPath
+                        quote
+                        statuses
+                        (txInToText feeWalletIn)
+                        (txInToText fuelIn)
+                        discoveries
+                        coordinated
+                        fullEvidence
+                    writeFullSwapRosterManifest
+                        runDir
+                        "treasury-swap-via-coordinator"
+                        rosterModel
+                        rosterFunding
+                        fuelIn
+                    statusMilestone
+                        "S2 DONE treasury-swap-via-coordinator passed"
+
 writeTreasuryFullSwapArtifacts
     :: FilePath
     -> FilePath
@@ -2247,6 +2784,462 @@ writeTreasuryFullSwapArtifacts runDir socket timing evidence = do
         (unlines (treasuryFullSwapLines evidence))
     mapM_ putStrLn (treasuryFullSwapLines evidence)
 
+buildUnsignedSwapTx
+    :: Provider IO
+    -> PParams ConwayEra
+    -> [(TxIn, TxOut ConwayEra)]
+    -> [(TxIn, TxOut ConwayEra)]
+    -> Addr
+    -> TxBuild NoCtx Void ()
+    -> IO ConwayTx
+buildUnsignedSwapTx provider pp inputs refs changeAddr prog =
+    build
+        (mkPParamsBound pp)
+        emptyInterpret
+        (evalWith provider)
+        inputs
+        refs
+        changeAddr
+        prog
+        >>= \case
+            Left err ->
+                expectationFailure
+                    ("coordinator swapProgram build failed: " <> show err)
+                    *> error "unreachable"
+            Right tx -> pure tx
+
+coordinatorSmokeEffects
+    :: T.Text
+    -> CoordinatorBaseUrl
+    -> FeePaymentInputs
+    -> [KeyHash Guard]
+    -> IORef (Maybe FeeQuote)
+    -> IORef [FeeStatus]
+    -> IORef [Value]
+    -> IORef [WitnessResult]
+    -> CoordinationEffects IO
+coordinatorSmokeEffects
+    baseUrl
+    base
+    feeInputs
+    ownerSigners
+    quoteRef
+    statusesRef
+    discoveryRef
+    witnessRef =
+        CoordinationEffects
+            { cweQuoteFee = \request -> do
+                result <- quoteFee httpCoordinatorTransport base request
+                case result of
+                    Left{} -> pure ()
+                    Right quote -> do
+                        writeIORef quoteRef (Just quote)
+                        initial <-
+                            getFeeStatus
+                                httpCoordinatorTransport
+                                base
+                                (fqBodyHash quote)
+                        case initial of
+                            Left{} -> pure ()
+                            Right status -> do
+                                fsReason status `shouldBe` Just FeeNotSeen
+                                fsReadyToPublish status `shouldBe` False
+                                modifyIORef' statusesRef (<> [status])
+                pure result
+            , cwePayFee = \quote -> do
+                let plan = planCoordinatorFeePayment quote
+                coordinatorFeeMetadataLabel `shouldBe` 9721
+                payCoordinatorFee feeInputs plan
+            , cweGetFeeStatus = \bodyHash -> do
+                result <-
+                    getFeeStatus httpCoordinatorTransport base bodyHash
+                case result of
+                    Left{} -> pure ()
+                    Right status -> do
+                        modifyIORef' statusesRef (<> [status])
+                        unless (fsReadyToPublish status) $
+                            threadDelay 1_000_000
+                pure result
+            , cwePublishEntry = \request -> do
+                result <- publishEntry httpCoordinatorTransport base request
+                case result of
+                    Left{} -> pure ()
+                    Right entry -> do
+                        discoveries <-
+                            traverse
+                                (discoverOwnerEntry baseUrl (eEntryId entry))
+                                ownerSigners
+                        modifyIORef' discoveryRef (<> discoveries)
+                pure result
+            , cweAddWitness = \entryId request -> do
+                result <-
+                    addWitness
+                        httpCoordinatorTransport
+                        base
+                        entryId
+                        request
+                case result of
+                    Left{} -> pure ()
+                    Right ok -> modifyIORef' witnessRef (<> [ok])
+                pure result
+            , cweSubmitEntry =
+                submitEntry httpCoordinatorTransport base
+            }
+
+discoverOwnerEntry :: T.Text -> T.Text -> KeyHash Guard -> IO Value
+discoverOwnerEntry baseUrl entryId ownerHash = do
+    let signer = hexText (keyHashBytes ownerHash)
+        path =
+            "/v1/entries?signer="
+                <> signer
+                <> "&predicate=roster-open"
+        request =
+            CoordinatorHttpRequest
+                { chrMethod = "GET"
+                , chrUrl = baseUrl <> path
+                , chrPath = path
+                , chrBody = Nothing
+                }
+    response <- runCoordinatorRequest httpCoordinatorTransport request
+    case response of
+        Left err ->
+            expectationFailure
+                ( "owner discovery failed for "
+                    <> T.unpack signer
+                    <> ": "
+                    <> T.unpack (renderCoordinatorClientError err)
+                )
+                *> error "unreachable"
+        Right CoordinatorHttpResponse{chrStatus, chrBody}
+            | chrStatus == 200 ->
+                case eitherDecode' chrBody of
+                    Left err ->
+                        expectationFailure
+                            ("owner discovery decode failed: " <> err)
+                            *> error "unreachable"
+                    Right (CoordinatorEntryList entries) -> do
+                        let matches = filter ((== entryId) . eEntryId) entries
+                        matches `shouldSatisfy` (not . null)
+                        pure $
+                            object
+                                [ "signer" .= signer
+                                , "predicate" .= ("roster-open" :: T.Text)
+                                , "entryId" .= entryId
+                                , "entries" .= entries
+                                ]
+            | otherwise ->
+                expectationFailure
+                    ( "owner discovery returned HTTP "
+                        <> show chrStatus
+                    )
+                    *> error "unreachable"
+
+assertFeeStatusTransition :: [FeeStatus] -> IO ()
+assertFeeStatusTransition statuses = do
+    statuses `shouldSatisfy` any ((== Just FeeNotSeen) . fsReason)
+    statuses `shouldSatisfy` any fsReadyToPublish
+
+writeTreasurySwapCoordinatorArtifacts
+    :: FilePath
+    -> FilePath
+    -> FilePath
+    -> ShelleyGenesisTiming
+    -> T.Text
+    -> FilePath
+    -> FeeQuote
+    -> [FeeStatus]
+    -> T.Text
+    -> T.Text
+    -> [Value]
+    -> CoordinationResult
+    -> TreasuryFullSwapEvidence
+    -> IO ()
+writeTreasurySwapCoordinatorArtifacts
+    runDir
+    phaseDir
+    socket
+    timing
+    baseUrl
+    logPath
+    quote
+    statuses
+    feeWalletTxIn
+    swapFuelTxIn
+    discoveries
+    coordinated
+    evidence = do
+        feeWalletTxIn `shouldSatisfy` (/= swapFuelTxIn)
+        let summaryPath = phaseDir </> "summary.json"
+            summary =
+                object
+                    [ "schemaVersion" .= (1 :: Int)
+                    , "phase"
+                        .= ("treasury-swap-via-coordinator" :: T.Text)
+                    , "status" .= ("passed" :: T.Text)
+                    , "runDirectory" .= runDir
+                    , "socket" .= socket
+                    , "network" .= ("devnet" :: T.Text)
+                    , "networkMagic" .= sgtNetworkMagic timing
+                    , "epochDurationSeconds"
+                        .= epochDurationSeconds timing
+                    , "coordinator"
+                        .= object
+                            [ "baseUrl" .= baseUrl
+                            , "logPath" .= logPath
+                            ]
+                    , "fee"
+                        .= object
+                            [ "metadataLabel"
+                                .= coordinatorFeeMetadataLabel
+                            , "quotedBodyHash" .= fqBodyHash quote
+                            , "requiredLovelace"
+                                .= fqRequiredFeeLovelace quote
+                            , "feeAddress" .= fqFeeAddress quote
+                            , "statuses" .= statuses
+                            ]
+                    , "inputs"
+                        .= object
+                            [ "feeWalletTxIn" .= feeWalletTxIn
+                            , "swapFuelTxIn" .= swapFuelTxIn
+                            , "distinct"
+                                .= (feeWalletTxIn /= swapFuelTxIn)
+                            ]
+                    , "ownerDiscovery" .= discoveries
+                    , "uploadedOwnerWitnessCount"
+                        .= length (cwrUploadedWitnesses coordinated)
+                    , "uploadedOwnerWitnesses"
+                        .= cwrUploadedWitnesses coordinated
+                    , "coordinatorSubmitReceipt"
+                        .= cwrReceipt coordinated
+                    , "scoopEvidence" .= treasuryFullSwapValue evidence
+                    , "finalTreasuryValue"
+                        .= treasuryFullSwapValue evidence
+                    , "summaryPath" .= summaryPath
+                    ]
+        createDirectoryIfMissing True phaseDir
+        BSL.writeFile summaryPath (encode summary)
+        BSL.writeFile (runDir </> "summary.json") (encode summary)
+        writeFile
+            (runDir </> "summary.log")
+            (unlines (treasuryFullSwapLines evidence))
+        mapM_ putStrLn (treasuryFullSwapLines evidence)
+
+withCoordinatorServer
+    :: FilePath
+    -> FilePath
+    -> Addr
+    -> (T.Text -> FilePath -> IO a)
+    -> IO a
+withCoordinatorServer phaseDir socketPath feeAddress action = do
+    port <- openFreePort
+    let portText = show port
+        baseUrl = "http://127.0.0.1:" <> portText
+        baseUrlText = T.pack baseUrl
+        logPath = phaseDir </> "cardano-multisig-server.log"
+        overrides =
+            [ ("PORT", portText)
+            , ("NETWORK", "devnet")
+            , ("CARDANO_NODE_SOCKET", socketPath)
+            , ("CARDANO_NODE_MAGIC", "42")
+            , ("CARDANO_MULTISIG_STORE", phaseDir </> "store")
+            , ("FEE_ADDRESS", T.unpack (renderAddr feeAddress))
+            , ("BASE_LOVELACE", "1000000")
+            , ("RATE_LOVELACE_PER_SLOT", "0")
+            , ("TTL_HORIZON_SLOTS", "100000")
+            ,
+                ( "FEE_INDEXER_CHECKPOINT_DIR"
+                , phaseDir </> "fee-indexer"
+                )
+            , ("FEE_INDEXER_RETRY_DELAY_MICROS", "1000000")
+            , ("FEE_INDEXER_BYRON_EPOCH_SLOTS", "42")
+            ]
+    createDirectoryIfMissing True phaseDir
+    withFile logPath WriteMode $ \logHandle -> do
+        baseEnv <- getEnvironment
+        command <- coordinatorServerCommand
+        let process =
+                command
+                    { env =
+                        Just (overrideEnvironment baseEnv overrides)
+                    , std_out = UseHandle logHandle
+                    , std_err = UseHandle logHandle
+                    }
+        bracket
+            (spawnCoordinator process)
+            cleanupCoordinator
+            ( \ph ->
+                ( do
+                    waitForCoordinatorHealth ph baseUrlText 180 Nothing
+                    action baseUrlText logPath
+                )
+                    `onException` do
+                        dumpCoordinatorLog logPath
+            )
+
+coordinatorServerCommand :: IO CreateProcess
+coordinatorServerCommand = do
+    override <- lookupEnv "CARDANO_MULTISIG_SERVER"
+    case override of
+        Just path | not (null path) -> pure (proc path [])
+        _ -> do
+            flake <-
+                fromMaybe "/code/cardano-multisig"
+                    <$> lookupEnv "CARDANO_MULTISIG_FLAKE"
+            pure $
+                shell $
+                    "nix run --quiet "
+                        <> flake
+                        <> "#cardano-multisig-server"
+
+spawnCoordinator :: CreateProcess -> IO ProcessHandle
+spawnCoordinator process = do
+    (_, _, _, ph) <- createProcess process
+    pure ph
+
+cleanupCoordinator :: ProcessHandle -> IO ()
+cleanupCoordinator ph =
+    getProcessExitCode ph >>= \case
+        Just{} -> pure ()
+        Nothing -> do
+            terminateProcess ph
+            _ <- waitForProcess ph
+            pure ()
+
+waitForCoordinatorHealth
+    :: ProcessHandle -> T.Text -> Int -> Maybe String -> IO ()
+waitForCoordinatorHealth _ _ attempts seen
+    | attempts <= 0 =
+        expectationFailure
+            ( "coordinator did not become healthy; last response: "
+                <> fromMaybe "<none>" seen
+            )
+            *> error "unreachable"
+waitForCoordinatorHealth ph baseUrl attempts _seen =
+    getProcessExitCode ph >>= \case
+        Just code ->
+            expectationFailure
+                ("coordinator exited before health: " <> show code)
+                *> error "unreachable"
+        Nothing -> do
+            let request =
+                    CoordinatorHttpRequest
+                        { chrMethod = "GET"
+                        , chrUrl = baseUrl <> "/health"
+                        , chrPath = "/health"
+                        , chrBody = Nothing
+                        }
+            runCoordinatorRequest httpCoordinatorTransport request >>= \case
+                Right CoordinatorHttpResponse{chrStatus}
+                    | chrStatus == 200 -> pure ()
+                    | otherwise -> retry ("HTTP " <> show chrStatus)
+                Left err ->
+                    retry
+                        ( T.unpack
+                            (renderCoordinatorClientError err)
+                        )
+  where
+    retry seen = do
+        threadDelay 1_000_000
+        waitForCoordinatorHealth ph baseUrl (attempts - 1) (Just seen)
+
+openFreePort :: IO Int
+openFreePort =
+    bracket
+        (Socket.socket Socket.AF_INET Socket.Stream Socket.defaultProtocol)
+        Socket.close
+        ( \sock -> do
+            Socket.bind
+                sock
+                ( Socket.SockAddrInet
+                    0
+                    (Socket.tupleToHostAddress (127, 0, 0, 1))
+                )
+            fromIntegral <$> Socket.socketPort sock
+        )
+
+overrideEnvironment
+    :: [(String, String)] -> [(String, String)] -> [(String, String)]
+overrideEnvironment base overrides =
+    overrides
+        <> filter
+            (\(key, _) -> key `notElem` fmap fst overrides)
+            base
+
+dumpCoordinatorLog :: FilePath -> IO ()
+dumpCoordinatorLog logPath =
+    doesFileExist logPath >>= \case
+        False -> pure ()
+        True -> do
+            putStrLn ("coordinator log: " <> logPath)
+            readFile logPath >>= putStrLn
+
+vaultIdentityFromSignKey
+    :: T.Text -> SignKeyDSIGN Ed25519DSIGN -> IO VaultIdentity
+vaultIdentityFromSignKey label signKey =
+    let identitySpec =
+            VaultIdentitySpec
+                { visLabel = label
+                , visNetwork = "devnet"
+                , visKeyHash = guardKeyHashFromSignKey signKey
+                , visDescription = Nothing
+                , visSource =
+                    CardanoCliSKey (signingKeyEnvelope signKey)
+                }
+    in  do
+            vault <-
+                expectVault
+                    "decode smoke witness vault"
+                    ( decodeWitnessVault
+                        (encodeWitnessVault (identitySpec NE.:| []))
+                    )
+            expectVault
+                ("resolve smoke witness identity " <> T.unpack label)
+                (resolveVaultIdentity label vault)
+
+signingKeyEnvelope :: SignKeyDSIGN Ed25519DSIGN -> Value
+signingKeyEnvelope signKey =
+    object
+        [ "type"
+            .= ("PaymentSigningKeyShelley_ed25519" :: T.Text)
+        , "description" .= ("Payment Signing Key" :: T.Text)
+        , "cborHex"
+            .= TE.decodeUtf8
+                ( "5820"
+                    <> B16.encode
+                        (rawSerialiseSignKeyDSIGN signKey)
+                )
+        ]
+
+expectCoordinatorClient
+    :: String -> Either CoordinatorClientError a -> IO a
+expectCoordinatorClient label =
+    either
+        ( \err ->
+            expectationFailure
+                ( label
+                    <> ": "
+                    <> T.unpack (renderCoordinatorClientError err)
+                )
+                *> error "unreachable"
+        )
+        pure
+
+expectJust :: String -> Maybe a -> IO a
+expectJust label =
+    maybe
+        (expectationFailure (label <> " missing") *> error "unreachable")
+        pure
+
+expectVault :: String -> Either VaultError a -> IO a
+expectVault label =
+    either
+        ( \err ->
+            expectationFailure
+                (label <> ": " <> T.unpack (renderVaultError err))
+                *> error "unreachable"
+        )
+        pure
+
 fundFullSwapRoster
     :: Provider IO
     -> Submitter IO
@@ -2254,6 +3247,7 @@ fundFullSwapRoster
     -> FullSwapRosterModel
     -> IO
         ( (TxIn, TxOut ConwayEra)
+        , (TxIn, TxOut ConwayEra)
         , (TxIn, TxOut ConwayEra)
         , (TxIn, TxOut ConwayEra)
         )
@@ -2270,6 +3264,10 @@ fundFullSwapRoster provider submitter pp rosterModel = do
             collateral seedIn
             _ <- payTo (fsrmOwner1Address rosterModel) (inject fundCoin)
             _ <- payTo (fsrmOwner2Address rosterModel) (inject fundCoin)
+            _ <-
+                payTo
+                    (fsrmRequesterAddress rosterModel)
+                    (inject fundCoin)
             _ <-
                 payTo
                     (fsrmRequesterAddress rosterModel)
@@ -2293,15 +3291,22 @@ fundFullSwapRoster provider submitter pp rosterModel = do
     owner2 <-
         selectLargestAdaUtxo "full-swap owner2 funding"
             =<< queryUTxOs provider (fsrmOwner2Address rosterModel)
-    requester <-
+    requesterFuel <-
         selectLargestAdaUtxo "full-swap requester funding"
             =<< queryUTxOs provider (fsrmRequesterAddress rosterModel)
-    pure (owner1, owner2, requester)
+    requesterFee <-
+        selectLargestAdaUtxoExcept
+            "full-swap requester fee funding"
+            [fst requesterFuel]
+            =<< queryUTxOs provider (fsrmRequesterAddress rosterModel)
+    pure (owner1, owner2, requesterFuel, requesterFee)
 
 writeFullSwapRosterManifest
     :: FilePath
+    -> T.Text
     -> FullSwapRosterModel
     -> ( (TxIn, TxOut ConwayEra)
+       , (TxIn, TxOut ConwayEra)
        , (TxIn, TxOut ConwayEra)
        , (TxIn, TxOut ConwayEra)
        )
@@ -2309,16 +3314,16 @@ writeFullSwapRosterManifest
     -> IO ()
 writeFullSwapRosterManifest
     runDir
+    phase
     rosterModel
-    (owner1Funding, owner2Funding, requesterFunding)
+    (owner1Funding, owner2Funding, requesterFunding, requesterFeeFunding)
     requesterFuel = do
         let phaseDir =
-                runDir </> "treasury-swap-full-e2e"
+                runDir </> T.unpack phase
             manifest =
                 object
                     [ "schemaVersion" .= (1 :: Int)
-                    , "phase"
-                        .= ("treasury-swap-full-e2e" :: String)
+                    , "phase" .= phase
                     , "owners"
                         .= object
                             [ "core"
@@ -2355,6 +3360,8 @@ writeFullSwapRosterManifest
                             , "fundingTxIn"
                                 .= txInToText (fst requesterFunding)
                             , "fuelTxIn" .= txInToText requesterFuel
+                            , "feeFundingTxIn"
+                                .= txInToText (fst requesterFeeFunding)
                             ]
                     ]
         createDirectoryIfMissing True phaseDir
@@ -2669,6 +3676,10 @@ fullSwapRosterModel =
         paymentKeyHashFromSignKey owner2
     requesterHash =
         paymentKeyHashFromSignKey requester
+
+coordinatorFeeRecipientSignKey :: SignKeyDSIGN Ed25519DSIGN
+coordinatorFeeRecipientSignKey =
+    mkSignKey "e2e-coordinator-fee-recipient-001"
 
 fullSwapRosterUsesDistinctRequester :: FullSwapRosterModel -> Bool
 fullSwapRosterUsesDistinctRequester model =
@@ -5097,6 +6108,15 @@ selectLargestAdaUtxo label utxos =
                             Just (lovelace, utxo)
                     _ -> best
                 else best
+
+selectLargestAdaUtxoExcept
+    :: String
+    -> [TxIn]
+    -> [(TxIn, TxOut ConwayEra)]
+    -> IO (TxIn, TxOut ConwayEra)
+selectLargestAdaUtxoExcept label excluded =
+    selectLargestAdaUtxo label
+        . filter (\(txIn, _) -> txIn `notElem` excluded)
 
 waitForTreasury :: Provider IO -> Coin -> Int -> IO Coin
 waitForTreasury _ minimumCoin attempts

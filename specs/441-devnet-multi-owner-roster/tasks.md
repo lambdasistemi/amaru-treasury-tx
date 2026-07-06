@@ -31,10 +31,10 @@
 
 ## Finalization
 
-- [ ] T441-F1 Verify every implementation task is checked.
-- [ ] T441-F1 Run `./gate.sh` at HEAD.
-- [ ] T441-F1 Run the focused `treasury-swap-full-e2e` devnet smoke
+- [X] T441-F1 Verify every implementation task is checked.
+- [X] T441-F1 Run `./gate.sh` at HEAD.
+- [X] T441-F1 Run the focused `treasury-swap-full-e2e` devnet smoke
   at HEAD or record why an already-fresh successful run still applies.
-- [ ] T441-F1 Update the PR body so it contains `Closes #441`.
-- [ ] T441-F1 Drop `gate.sh` in the final ready-for-review commit.
-- [ ] T441-F1 Mark the PR ready only after GitHub CI is green.
+- [X] T441-F1 Update the PR body so it contains `Closes #441`.
+- [X] T441-F1 Drop `gate.sh` in the final ready-for-review commit.
+- [X] T441-F1 Mark the PR ready only after GitHub CI is green.

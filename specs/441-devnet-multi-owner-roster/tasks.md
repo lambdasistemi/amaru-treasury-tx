@@ -14,18 +14,18 @@
 
 ## Slice S2 - Full Swap Requester/Fuel Wiring
 
-- [ ] T441-S2 Derive deterministic owner keys and a distinct requester
+- [X] T441-S2 Derive deterministic owner keys and a distinct requester
   key in `treasury-swap-full-e2e`, using the existing genesis-style
   seed derivation.
-- [ ] T441-S2 Fund owner and requester addresses using the existing
+- [X] T441-S2 Fund owner and requester addresses using the existing
   genesis-funded transaction helper pattern.
-- [ ] T441-S2 Select swap fuel/collateral from the requester wallet,
+- [X] T441-S2 Select swap fuel/collateral from the requester wallet,
   set at least two owner `fsiSigners`, and sign the built swap with
   requester plus owner keys.
-- [ ] T441-S2 Write owner/requester key artifacts or a manifest under
+- [X] T441-S2 Write owner/requester key artifacts or a manifest under
   the run directory for #443.
-- [ ] T441-S2 Run the focused devnet smoke and `./gate.sh`.
-- [ ] T441-S2 Commit with subject
+- [X] T441-S2 Run the focused devnet smoke and `./gate.sh`.
+- [X] T441-S2 Commit with subject
   `feat(devnet): use multi-owner swap roster` and trailer
   `Tasks: T441-S2`.
 

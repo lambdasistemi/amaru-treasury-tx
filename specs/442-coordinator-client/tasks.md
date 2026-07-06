@@ -21,18 +21,18 @@ Owned files:
 
 ## Slice 2 - Coordination Workflow
 
-- [ ] T442-S2 Define the ordered coordination workflow in
+- [X] T442-S2 Define the ordered coordination workflow in
   `lib/Amaru/Treasury/Coordinator/Workflow.hs`.
-- [ ] T442-S2 Reuse `createWitness` and `attachWitnesses` for
+- [X] T442-S2 Reuse `createWitness` and `attachWitnesses` for
   requester pre-witness and owner witnesses.
-- [ ] T442-S2 Add stub coordinator tests in
+- [X] T442-S2 Add stub coordinator tests in
   `test/unit/Amaru/Treasury/Coordinator/WorkflowSpec.hs` proving body
   hash validation, pre-witness preservation, call ordering, owner
   uploads, and submit receipt handling.
-- [ ] T442-S2 Register new modules/tests in `amaru-treasury-tx.cabal`.
-- [ ] T442-S2 Run focused proof:
+- [X] T442-S2 Register new modules/tests in `amaru-treasury-tx.cabal`.
+- [X] T442-S2 Run focused proof:
   `nix develop --accept-flake-config -c just unit "Coordinator.Workflow"`.
-- [ ] T442-S2 Commit as
+- [X] T442-S2 Commit as
   `feat: coordinate witness collection workflow`
   with trailer `Tasks: T442-S2`.
 

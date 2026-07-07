@@ -4213,6 +4213,24 @@ publishScoopM2Order provider submitter pp utxos _readiness = do
             , smeDestinationScriptHash = destinationHex
             }
 
+{- | Resolve the @aiken build@ command used to regenerate the
+unapplied Sundae blueprint. CI sets @AIKEN@ to a pinned
+@aiken@ binary (from the flake's nixpkgs, exercised by the
+@treasury-swap-via-coordinator@ nix app) so the build is
+hermetic and needs no unpinned @nix run github:aiken-lang/aiken@;
+local dev without @AIKEN@ falls back to that flake reference.
+-}
+resolveAikenBuild :: IO (FilePath, [String])
+resolveAikenBuild = do
+    override <- lookupEnv "AIKEN"
+    pure $ case override of
+        Just path
+            | not (null path) -> (path, ["build"])
+        _ ->
+            ( "nix"
+            , ["run", "github:aiken-lang/aiken", "--", "build"]
+            )
+
 deriveFreshSundaeScripts :: FilePath -> TxIn -> IO SundaeScriptBundle
 deriveFreshSundaeScripts runDir bootIn = do
     contractsDir <-
@@ -4222,13 +4240,11 @@ deriveFreshSundaeScripts runDir bootIn = do
             )
             pure
             =<< lookupEnv "SUNDAE_CONTRACTS_DIR"
+    (aikenCmd, aikenArgs) <- resolveAikenBuild
     statusNote "M3 running aiken build for unapplied Sundae blueprint"
     (code, out, err) <-
         withCurrentDirectory contractsDir $
-            readProcessWithExitCode
-                "nix"
-                ["run", "github:aiken-lang/aiken", "--", "build"]
-                ""
+            readProcessWithExitCode aikenCmd aikenArgs ""
     case code of
         ExitSuccess -> pure ()
         ExitFailure n ->

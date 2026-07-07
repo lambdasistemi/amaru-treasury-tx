@@ -129,6 +129,30 @@ jobs:
             --artifacts-dir "${{ steps.build.outputs.out }}" \
             --artifact-version "${{ steps.build.outputs.version }}"
 
+  treasury-swap-via-coordinator:
+    name: Treasury swap via coordinator (devnet)
+    needs: build-gate
+    runs-on: nixos
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+          path: checkout
+      - uses: cachix/cachix-action@v17
+        with:
+          name: paolino
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+      # #440 hardening — the merged coordinator e2e (#443) now runs
+      # in CI. Boots the pinned devnet, the `cardano-multisig`
+      # coordinator (flake input, not `/code/cardano-multisig`), and
+      # an aiken-built fresh Sundae pool, then drives the full
+      # witness-collection swap. Run as `nix run` (not a sandboxed
+      # check) because `aiken build` fetches Sundae stdlib deps over
+      # the network.
+      - name: Run treasury-swap-via-coordinator devnet smoke
+        working-directory: checkout
+        run: nix run --quiet .#treasury-swap-via-coordinator-smoke
+
   dep-graph-drift:
     name: Dependency graph up to date
     if: github.event_name == 'pull_request'

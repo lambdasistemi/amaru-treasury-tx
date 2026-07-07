@@ -39,6 +39,28 @@
     cardano-node = {
       url = "github:IntersectMBO/cardano-node/10.7.0";
     };
+    # Witness-collection coordinator. Pinned by commit so CI
+    # runs `#cardano-multisig-server` from this input — never
+    # the `/code/cardano-multisig` local dev path baked into the
+    # `treasury-swap-via-coordinator` smoke's fallback. Bumping
+    # it is a deliberate flake.lock update.
+    cardano-multisig = {
+      url =
+        "github:lambdasistemi/cardano-multisig/ecac19717cd1af9bdd8f17a4134915be68ee3ba0";
+    };
+    # SundaeSwap V3 contracts, pinned at the same commit the
+    # embedded `order.spend` blob and `Amaru.Treasury.Sundae`
+    # constants track. The `treasury-swap-via-coordinator` smoke
+    # copies this source to a writable dir and runs `aiken build`
+    # (via the flake's pinned `pkgs.aiken`) to regenerate the
+    # unapplied blueprint for a fresh devnet pool — so the DEX is
+    # never a stale vendored copy. `flake = false`: consumed as a
+    # source tree only.
+    sundae-contracts = {
+      url =
+        "github:SundaeSwap-finance/sundae-contracts/be33466b7dbe0f8e6c0e0f46ff23737897f45835";
+      flake = false;
+    };
     # PureScript toolchain for the Halogen dashboard frontend
     # (slice T012+). Lambdasistemi house pattern — same overlays
     # /code/graph-browser-view-export-import and
@@ -251,6 +273,58 @@
             src = ./.;
           };
           checkApps = import ./nix/apps.nix { inherit pkgs checks; };
+          # #440 hardening — run the `treasury-swap-via-coordinator`
+          # devnet e2e in CI, mirroring cardano-multisig's
+          # `devnet-publish-smoke`. Boots the pinned devnet
+          # (`devnetGenesis`), the pinned `cardano-multisig`
+          # coordinator (from the flake input, not the
+          # `/code/cardano-multisig` dev path), and an aiken-built
+          # fresh Sundae pool, then drives the full coordinator
+          # swap through the devnet-tests binary.
+          #
+          # Exposed as an app only — NOT a `nix flake check`:
+          # `aiken build` fetches the Sundae stdlib dependencies
+          # over the network, which the sandboxed check derivation
+          # forbids. `nix run` (like cardano-multisig's job) has
+          # network. `AIKEN` pins the compiler to the flake's
+          # `pkgs.aiken` so no unpinned `nix run github:…/aiken`.
+          treasuryCoordinatorSmoke = pkgs.writeShellApplication {
+            name = "treasury-swap-via-coordinator-smoke";
+            runtimeInputs = [
+              components.tests.devnet-tests
+              cardano-node.packages.${system}.cardano-node
+              cardano-node.packages.${system}.cardano-cli
+              pkgs.aiken
+              pkgs.curl
+              pkgs.cacert
+              pkgs.git
+              pkgs.coreutils
+            ];
+            text = ''
+              export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+              export E2E_GENESIS_DIR=${devnetGenesis}
+              export CARDANO_MULTISIG_SERVER=${
+                inputs.cardano-multisig.apps.${system}.cardano-multisig-server.program
+              }
+              export AIKEN=${pkgs.aiken}/bin/aiken
+              export DEVNET_SMOKE_PHASE=treasury-swap-via-coordinator
+
+              work="$(mktemp -d)"
+              export HOME="$work/home"
+              mkdir -p "$HOME"
+
+              # aiken build writes plutus.json into the checkout, so
+              # copy the read-only flake-input source to a writable dir.
+              export SUNDAE_CONTRACTS_DIR="$work/sundae-contracts"
+              cp -r ${inputs.sundae-contracts} "$SUNDAE_CONTRACTS_DIR"
+              chmod -R u+w "$SUNDAE_CONTRACTS_DIR"
+
+              export DEVNET_SMOKE_RUN_DIR="$work/run"
+
+              cd "$work"
+              devnet-tests --match "treasury-swap-via-coordinator"
+            '';
+          };
           mkExeWithRuntime = name: runtimeInputs:
             let runtimePath = pkgs.lib.makeBinPath runtimeInputs;
             in
@@ -377,6 +451,10 @@
               type = "app";
               program =
                 "${linuxReleasePackages.linux-artifact-smoke}/bin/linux-artifact-smoke";
+            };
+            treasury-swap-via-coordinator-smoke = {
+              type = "app";
+              program = pkgs.lib.getExe treasuryCoordinatorSmoke;
             };
           };
           devShells.default = project.shell.overrideAttrs (old: {

@@ -99,7 +99,7 @@ jobs:
           repositories: homebrew-tap
 
       - name: Build, smoke-test, and optionally publish Darwin Homebrew artifacts
-        uses: paolino/dev-assets/darwin-homebrew-release@6864b20eb75c3578796e7f667562b5aea8780643
+        uses: paolino/dev-assets/darwin-homebrew-release@9ac7c6280196ca7cea154ec78f091e2b6481abec
         with:
           mode: ${{ env.MODE }}
           tag: ${{ env.TAG }}

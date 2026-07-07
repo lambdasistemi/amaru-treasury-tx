@@ -132,9 +132,23 @@
             rev = "38fc1917ba475b90edd974576e1c71790d165532";
             sha256 = "09i3ysv7650imhd4b26cwybjckfs8qfv75kh1r6511zyjvmxykrh";
           };
+          # The devnet genesis, with a widened `maxTxSize`. The Sundae
+          # scoop's `find_settings_datum` reads the FIRST reference
+          # input, so the settings UTxO must sort below the pool, order
+          # and pool_stake script reference inputs. The smoke guarantees
+          # that deterministically by co-locating the settings output and
+          # all three reference scripts in one transaction (settings at
+          # index 0), whose body carries the ~15.7 KiB pool reference
+          # script and so exceeds the 16 KiB mainnet limit. 40 KiB leaves
+          # comfortable headroom and stays well below `maxBlockBodySize`
+          # (64 KiB). Only permits larger transactions; every other
+          # devnet transaction is unaffected.
           devnetGenesis =
             pkgs.runCommand "cardano-node-clients-devnet-genesis" { } ''
               cp -r ${cardanoNodeClientsSrc}/e2e-test/genesis $out
+              chmod -R u+w $out
+              substituteInPlace $out/shelley-genesis.json \
+                --replace '"maxTxSize": 16384' '"maxTxSize": 40960'
             '';
           cabalLines =
             pkgs.lib.splitString "\n"

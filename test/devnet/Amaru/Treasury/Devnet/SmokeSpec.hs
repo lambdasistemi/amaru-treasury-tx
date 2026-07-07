@@ -194,7 +194,7 @@ import Data.Maybe (fromJust, fromMaybe)
 import Data.Set qualified as Set
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
-import Data.Time.Clock (getCurrentTime)
+import Data.Time.Clock (diffUTCTime, getCurrentTime)
 import Data.Time.Format (defaultTimeLocale, formatTime)
 import Data.Void (Void)
 import Data.Word (Word64, Word8)
@@ -1753,20 +1753,13 @@ scoopE2ESmoke = do
                     <> T.unpack (hexText (spuIdent pool))
 
             statusNote "M3 publish fresh Sundae reference scripts for scoop"
-            scriptRefs <-
-                publishSundaeReferenceScripts
-                    provider
-                    submitter
-                    pp
-                    scripts
-            settingsForScoop <-
-                refreshSettingsBeforeReferenceScripts
+            (settingsForScoop, scriptRefs) <-
+                publishSundaeReferenceScriptsWithSettings
                     provider
                     submitter
                     pp
                     settings
                     scripts
-                    scriptRefs
             statusNote "M3 register fresh pool_stake reward account"
             registerFreshPoolStakeRewardAccount
                 provider
@@ -1860,20 +1853,13 @@ treasurySwapE2ESmoke = do
                     <> T.unpack (hexText (spuIdent pool))
 
             statusNote "M3 publish fresh Sundae reference scripts for scoop"
-            scriptRefs <-
-                publishSundaeReferenceScripts
-                    provider
-                    submitter
-                    pp
-                    scripts
-            settingsForScoop <-
-                refreshSettingsBeforeReferenceScripts
+            (settingsForScoop, scriptRefs) <-
+                publishSundaeReferenceScriptsWithSettings
                     provider
                     submitter
                     pp
                     settings
                     scripts
-                    scriptRefs
             statusNote "M3 register fresh pool_stake reward account"
             registerFreshPoolStakeRewardAccount
                 provider
@@ -2062,16 +2048,13 @@ treasurySwapFullE2ESmoke = do
             token <- mintScoopTestToken provider submitter pp freshUtxos
             pool <-
                 createSundaePool provider submitter pp settings token scripts
-            scriptRefs <-
-                publishSundaeReferenceScripts provider submitter pp scripts
-            settingsForScoop <-
-                refreshSettingsBeforeReferenceScripts
+            (settingsForScoop, scriptRefs) <-
+                publishSundaeReferenceScriptsWithSettings
                     provider
                     submitter
                     pp
                     settings
                     scripts
-                    scriptRefs
             registerFreshPoolStakeRewardAccount
                 provider
                 submitter
@@ -2429,16 +2412,13 @@ treasurySwapViaCoordinatorSmoke = do
             token <- mintScoopTestToken provider submitter pp freshUtxos
             pool <-
                 createSundaePool provider submitter pp settings token scripts
-            scriptRefs <-
-                publishSundaeReferenceScripts provider submitter pp scripts
-            settingsForScoop <-
-                refreshSettingsBeforeReferenceScripts
+            (settingsForScoop, scriptRefs) <-
+                publishSundaeReferenceScriptsWithSettings
                     provider
                     submitter
                     pp
                     settings
                     scripts
-                    scriptRefs
             registerFreshPoolStakeRewardAccount
                 provider
                 submitter
@@ -2552,7 +2532,10 @@ treasurySwapViaCoordinatorSmoke = do
                             Coin (treasuryBefore - offerLovelace)
                         , fsiTreasuryLeftoverAssets = mempty
                         , fsiUpperBound =
-                            addSlots 60 (ledgerTipSlot snapshot)
+                            clampToForecastHorizon
+                                (sgtEpochLength timing)
+                                60
+                                (ledgerTipSlot snapshot)
                         }
             let feeRecipient =
                     enterpriseAddrFromSignKey coordinatorFeeRecipientSignKey
@@ -2588,6 +2571,29 @@ treasurySwapViaCoordinatorSmoke = do
             witnessRef <- newIORef ([] :: [WitnessResult])
             withCoordinatorServer phaseDir socket feeRecipient $
                 \baseUrl logPath -> do
+                    -- Build against a FRESH tip: the settings/vault/server
+                    -- setup above can advance the chain many slots past the
+                    -- snapshot taken earlier, so re-query here to keep the
+                    -- validity window's real-time budget (and its
+                    -- forecast-horizon clamp) anchored to the actual
+                    -- build-time tip.
+                    buildSnapshot <- queryLedgerSnapshot provider
+                    let freshUpperBound =
+                            clampToForecastHorizon
+                                (sgtEpochLength timing)
+                                60
+                                (ledgerTipSlot buildSnapshot)
+                        freshSwapInputs =
+                            swapInputs
+                                { fsiUpperBound = freshUpperBound
+                                }
+                    statusNote $
+                        "S2 build swap tip="
+                            <> show
+                                (unSlotNo (ledgerTipSlot buildSnapshot))
+                            <> " invalidHereafter="
+                            <> show (unSlotNo freshUpperBound)
+                    buildStart <- getCurrentTime
                     unsignedTx <-
                         buildUnsignedSwapTx
                             provider
@@ -2595,7 +2601,7 @@ treasurySwapViaCoordinatorSmoke = do
                             [fuel, treasuryUtxo]
                             deployRefs
                             (fsrmRequesterAddress rosterModel)
-                            (swapProgram (mkFullSwapIntent swapInputs))
+                            (swapProgram (mkFullSwapIntent freshSwapInputs))
                     let swapTxId = txIdTx unsignedTx
                         unsignedTxHex =
                             TE.decodeUtf8 (encodeSignedTxHex unsignedTx)
@@ -2632,6 +2638,17 @@ treasurySwapViaCoordinatorSmoke = do
                                     )
                                     *> error "unreachable"
                             Right ok -> pure ok
+                    coordinateEnd <- getCurrentTime
+                    statusNote $
+                        "S2 coordinator flow build-to-submit seconds="
+                            <> show
+                                ( realToFrac
+                                    ( diffUTCTime
+                                        coordinateEnd
+                                        buildStart
+                                    )
+                                    :: Double
+                                )
                     rTxId (cwrReceipt coordinated)
                         `shouldBe` renderTxId swapTxId
                     statuses <- readIORef statusesRef
@@ -4357,203 +4374,131 @@ deriveFreshSundaeScripts runDir bootIn = do
             , ssbOrderScript = orderScript
             }
 
-publishSundaeReferenceScripts
-    :: Provider IO
-    -> Submitter IO
-    -> PParams ConwayEra
-    -> SundaeScriptBundle
-    -> IO SundaeReferenceScripts
-publishSundaeReferenceScripts provider submitter pp scripts = do
-    poolRef <-
-        publishSundaeReferenceScript
-            provider
-            submitter
-            pp
-            "pool"
-            (ssbPoolHash scripts)
-            (ssbPoolScript scripts)
-    orderRef <-
-        publishSundaeReferenceScript
-            provider
-            submitter
-            pp
-            "order"
-            (ssbOrderHash scripts)
-            (ssbOrderScript scripts)
-    poolStakeRef <-
-        publishSundaeReferenceScript
-            provider
-            submitter
-            pp
-            "pool_stake"
-            (ssbPoolStakeHash scripts)
-            (ssbPoolStakeScript scripts)
-    pure
-        SundaeReferenceScripts
-            { srsPool = poolRef
-            , srsOrder = orderRef
-            , srsPoolStake = poolStakeRef
-            }
+{- | Publish the pool, order and pool_stake reference scripts AND
+refresh the Sundae settings UTxO in ONE transaction, pinning the
+settings output to index 0 and the reference scripts to indices
+1, 2 and 3.
 
-publishSundaeReferenceScript
-    :: Provider IO
-    -> Submitter IO
-    -> PParams ConwayEra
-    -> String
-    -> ScriptHash
-    -> Script ConwayEra
-    -> IO (TxIn, TxOut ConwayEra)
-publishSundaeReferenceScript provider submitter pp label scriptHash script = do
-    statusNote ("M3 publish " <> label <> " reference script")
-    walletUtxos <- queryUTxOs provider genesisAddr
-    seed@(seedIn, _) <-
-        selectLargestAdaUtxo
-            ("fresh Sundae " <> label <> " reference script publishing")
-            walletUtxos
-    snapshot <- queryLedgerSnapshot provider
-    let refAddress =
-            scriptAddr Testnet scriptHash
-        refOut =
-            refScriptTxOut refAddress script
-        upperSlot =
-            addSlots 20 (ledgerTipSlot snapshot)
-        prog :: TxBuild NoCtx Void ()
-        prog = do
-            _ <- spend seedIn
-            refIx <- output refOut
-            checkMinUtxo pp refIx
-            validTo upperSlot
-    txId <-
-        buildSubmitAndWait
-            ("publish fresh Sundae " <> label <> " reference script")
-            provider
-            submitter
-            pp
-            emptyInterpret
-            (evalWith provider)
-            [seed]
-            []
-            genesisAddr
-            prog
-    let refTxIn =
-            txOutRef txId 0
-    found <-
-        waitForTxIns provider [refTxIn] 60
-    case found of
-        [(txIn, txOut)] -> do
-            txOut ^. addrTxOutL `shouldBe` refAddress
-            case txOut ^. referenceScriptTxOutL of
-                SJust actualScript ->
-                    Core.hashScript @ConwayEra actualScript
-                        `shouldBe` scriptHash
-                SNothing ->
-                    expectationFailure $
-                        "published " <> label <> " reference UTxO has no script"
-            pure (txIn, txOut)
-        _ ->
-            expectationFailure
-                ("published " <> label <> " reference UTxO was not found")
-                *> error "unreachable"
+Sundae's @find_settings_datum@ reads @builtin.head_list@ of the
+reference inputs, i.e. it assumes the settings UTxO sorts below
+every script reference input. Reference inputs are ordered by the
+ledger on @(TxId, TxIx)@. Because all four outputs share a single
+transaction id, their order is decided purely by output index —
+@(txid, 0)@ for the settings sorts below @(txid, 1)@..@(txid, 3)@
+for the reference scripts — so the ordering holds deterministically,
+with no probabilistic "farming" of a low random settings TxId.
 
-refreshSettingsBeforeReferenceScripts
+The settings validator itself requires the refreshed settings to be
+the first output (@list.head(outputs)@), which is exactly index 0,
+so a single admin-signed transaction both refreshes the settings and
+stores the reference scripts. Its body carries the ~15.7 KiB pool
+reference script (plus the order and pool_stake refs and the
+settings spend witness), so it relies on the devnet's widened
+@maxTxSize@ (see the genesis in @flake.nix@).
+-}
+publishSundaeReferenceScriptsWithSettings
     :: Provider IO
     -> Submitter IO
     -> PParams ConwayEra
     -> SundaeSettingsUtxo
     -> SundaeScriptBundle
-    -> SundaeReferenceScripts
-    -> IO SundaeSettingsUtxo
-refreshSettingsBeforeReferenceScripts
+    -> IO (SundaeSettingsUtxo, SundaeReferenceScripts)
+publishSundaeReferenceScriptsWithSettings
     provider
     submitter
     pp
     settings
-    scripts
-    scriptRefs =
-        go maxSettingsRefreshAttempts settings
-      where
-        -- The Sundae scoop requires the settings reference UTxO to sort
-        -- before the pool/order/pool_stake script reference inputs. A
-        -- refreshed settings UTxO gets a fresh random TxId, so each attempt
-        -- has only a ~1-in-4 chance of sorting below the minimum script ref
-        -- (10 attempts left a ~6% flake). 64 drives the miss probability
-        -- below 1e-8 while still usually succeeding within a few refreshes.
-        maxSettingsRefreshAttempts = 64 :: Int
-        refTxIns =
-            fst
-                <$> [srsPool scriptRefs, srsOrder scriptRefs, srsPoolStake scriptRefs]
-        firstRef =
-            minimum refTxIns
-        go attempts current
-            | ssuTxIn current < firstRef = do
+    scripts = do
+        statusNote
+            "M4 co-locate reference scripts with refreshed settings"
+        walletUtxos <- queryUTxOs provider genesisAddr
+        fuel@(fuelIn, _) <-
+            selectLargestAdaUtxo
+                "co-located Sundae reference-script publish"
+                walletUtxos
+        snapshot <- queryLedgerSnapshot provider
+        let poolRefOut =
+                refScriptTxOut
+                    (scriptAddr Testnet (ssbPoolHash scripts))
+                    (ssbPoolScript scripts)
+            orderRefOut =
+                refScriptTxOut
+                    (scriptAddr Testnet (ssbOrderHash scripts))
+                    (ssbOrderScript scripts)
+            poolStakeRefOut =
+                refScriptTxOut
+                    (scriptAddr Testnet (ssbPoolStakeHash scripts))
+                    (ssbPoolStakeScript scripts)
+            lowerSlot =
+                ledgerTipSlot snapshot
+            upperSlot =
+                addSlots 20 (ledgerTipSlot snapshot)
+            prog :: TxBuild NoCtx Void ()
+            prog = do
+                _ <- spend fuelIn
+                collateral fuelIn
+                attachScript (ssbSettingsScript scripts)
+                requiredSignature genesisGuardKeyHash
+                _ <-
+                    spendScript
+                        (ssuTxIn settings)
+                        (RawPlutusData settingsAdminUpdateRedeemer)
+                -- Output 0 MUST stay the settings UTxO: the settings
+                -- validator enforces `list.head(outputs)` is the
+                -- settings, and the scoop needs `(txid, 0)` to sort
+                -- below the reference scripts.
+                settingsIx <- output (ssuTxOut settings)
+                poolIx <- output poolRefOut
+                orderIx <- output orderRefOut
+                poolStakeIx <- output poolStakeRefOut
+                checkMinUtxo pp settingsIx
+                checkMinUtxo pp poolIx
+                checkMinUtxo pp orderIx
+                checkMinUtxo pp poolStakeIx
+                validFrom lowerSlot
+                validTo upperSlot
+        txId <-
+            buildSubmitAndWait
+                "publish Sundae reference scripts + settings"
+                provider
+                submitter
+                pp
+                emptyInterpret
+                (evalWith provider)
+                [fuel, (ssuTxIn settings, ssuTxOut settings)]
+                []
+                genesisAddr
+                prog
+        found <-
+            waitForTxIns
+                provider
+                [ txOutRef txId 0
+                , txOutRef txId 1
+                , txOutRef txId 2
+                , txOutRef txId 3
+                ]
+                60
+        case found of
+            [settingsUtxo, poolRef, orderRef, poolStakeRef] -> do
                 statusNote $
-                    "M4 settings reference sorts before script refs settings="
-                        <> T.unpack (txInToText (ssuTxIn current))
-                pure current
-            | attempts <= 0 =
+                    "M4 co-located settings="
+                        <> T.unpack
+                            (txInToText (fst settingsUtxo))
+                pure
+                    ( SundaeSettingsUtxo
+                        { ssuTxIn = fst settingsUtxo
+                        , ssuTxOut = snd settingsUtxo
+                        }
+                    , SundaeReferenceScripts
+                        { srsPool = poolRef
+                        , srsOrder = orderRef
+                        , srsPoolStake = poolStakeRef
+                        }
+                    )
+            _ ->
                 expectationFailure
-                    "could not refresh settings UTxO before script reference inputs"
+                    "co-located reference scripts were not found"
                     *> error "unreachable"
-            | otherwise = do
-                statusNote $
-                    "M4 refresh settings UTxO for reference-input ordering attempt="
-                        <> show (maxSettingsRefreshAttempts + 1 - attempts)
-                refreshed <-
-                    refreshSundaeSettings provider submitter pp current scripts
-                go (attempts - 1) refreshed
-
-refreshSundaeSettings
-    :: Provider IO
-    -> Submitter IO
-    -> PParams ConwayEra
-    -> SundaeSettingsUtxo
-    -> SundaeScriptBundle
-    -> IO SundaeSettingsUtxo
-refreshSundaeSettings provider submitter pp settings scripts = do
-    walletUtxos <- queryUTxOs provider genesisAddr
-    fuel@(fuelIn, _) <-
-        selectLargestAdaUtxo "fresh Sundae settings refresh fuel" walletUtxos
-    snapshot <- queryLedgerSnapshot provider
-    let upperSlot =
-            addSlots 20 (ledgerTipSlot snapshot)
-        lowerSlot =
-            ledgerTipSlot snapshot
-        prog :: TxBuild NoCtx Void ()
-        prog = do
-            _ <- spend fuelIn
-            collateral fuelIn
-            attachScript (ssbSettingsScript scripts)
-            requiredSignature genesisGuardKeyHash
-            _ <-
-                spendScript
-                    (ssuTxIn settings)
-                    (RawPlutusData settingsAdminUpdateRedeemer)
-            settingsIx <- output (ssuTxOut settings)
-            checkMinUtxo pp settingsIx
-            validFrom lowerSlot
-            validTo upperSlot
-    txId <-
-        buildSubmitAndWait
-            "refresh fresh Sundae settings"
-            provider
-            submitter
-            pp
-            emptyInterpret
-            (evalWith provider)
-            [fuel, (ssuTxIn settings, ssuTxOut settings)]
-            []
-            genesisAddr
-            prog
-    let refreshedTxIn =
-            txOutRef txId 0
-    found <-
-        waitForTxIns provider [refreshedTxIn] 60
-    case found of
-        [(txIn, txOut)] ->
-            pure SundaeSettingsUtxo{ssuTxIn = txIn, ssuTxOut = txOut}
-        _ ->
-            expectationFailure "refreshed settings UTxO was not found"
-                *> error "unreachable"
 
 registerFreshPoolStakeRewardAccount
     :: Provider IO
@@ -7130,6 +7075,52 @@ addCoin (Coin a) (Coin b) =
 addSlots :: Word64 -> SlotNo -> SlotNo
 addSlots delta (SlotNo slot) =
     SlotNo (slot + delta)
+
+{- | The devnet's security parameter @k@ (Shelley @securityParam@ in the
+genesis). The Shelley stability window — and therefore the ledger's
+slot-to-time forecast horizon — is @3k@ slots.
+-}
+devnetSecurityParam :: Word64
+devnetSecurityParam = 10
+
+{- | Clamp a transaction validity upper bound to the devnet's slot-to-time
+forecast horizon.
+
+Phase-2 evaluation translates a transaction's validity range into POSIX
+time. On this short-epoch devnet (0.1 s slots, 50-slot epochs, @k=10@)
+the ledger can only forecast to the epoch boundary at or after
+@tip + 3k@ slots — the Shelley stability window. A validity bound past
+that boundary fails to build with @TimeTranslationPastHorizon@ (the
+observed flake: a bound at slot 462 against a horizon of 450).
+
+Given the current tip, this returns the largest bound that is
+(a) no further ahead than @requested@ slots, (b) strictly below the
+forecast horizon (with a small margin), and (c) never below the
+guaranteed-safe @tip + 3k@ safe zone. The result is deterministic:
+it can never exceed the horizon, so the swap build cannot hit
+@PastHorizon@.
+-}
+clampToForecastHorizon
+    :: Int
+    -- ^ epoch length in slots
+    -> Word64
+    -- ^ requested slots ahead of the tip
+    -> SlotNo
+    -- ^ current ledger tip
+    -> SlotNo
+clampToForecastHorizon epochLen requested (SlotNo tip) =
+    let epochLength = fromIntegral (max 1 epochLen)
+        safeZone = 3 * devnetSecurityParam
+        -- The forecast never reaches past the epoch boundary at or after
+        -- `tip + safeZone`.
+        horizon =
+            (((tip + safeZone) `div` epochLength) + 1) * epochLength
+        -- Stay a few slots below the boundary for off-by-one safety, but
+        -- never below the always-translatable `tip + safeZone`.
+        margin = 5
+        safeUpper =
+            max (tip + safeZone) (horizon - margin)
+    in  SlotNo (min (tip + requested) safeUpper)
 
 coinLovelace :: Coin -> Integer
 coinLovelace (Coin lovelace) =

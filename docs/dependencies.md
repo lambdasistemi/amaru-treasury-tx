@@ -10,12 +10,17 @@ Computed from the Nix flake closure + `cabal.project` `source-repository-package
 | [**cardano-ledger-read**](https://github.com/cardano-foundation/cardano-ledger-read/tree/34d0767bd5c3) | cardano-foundation | Read Cardano block data, parametrized by era |
 | [**browser-json-tree**](https://github.com/lambdasistemi/browser-json-tree/tree/970657fd5152) | lambdasistemi | Typed Halogen renderer + click behaviour for collapsible JSON trees |
 | [**cardano-ledger-rdf**](https://github.com/lambdasistemi/cardano-ledger-rdf/tree/27b68fc0f8ed) | lambdasistemi | Cardano transaction graph and RDF tools |
+| [**cardano-multisig**](https://github.com/lambdasistemi/cardano-multisig/tree/ecac19717cd1) | lambdasistemi | Permissionless, stateful backend that coordinates witness collection over Conway transactions — signature-authorized, accountless, self-cleaning. Milestone 1: required_signers multisig. |
 | [**cardano-node-clients**](https://github.com/lambdasistemi/cardano-node-clients/tree/bebf9b22fd3a) | lambdasistemi | Haskell clients for Cardano node mini-protocols (N2C + N2N) |
 | [**cardano-tx-tools**](https://github.com/lambdasistemi/cardano-tx-tools/tree/2bd36e28ce3f) | lambdasistemi | Cardano transaction tooling: builder, structural diff, blueprint decoding. Uses cardano-node-clients but is not a node client. |
+| [**cardano-utxo-csmt**](https://github.com/lambdasistemi/cardano-utxo-csmt/tree/f4772f73dde0) | lambdasistemi | HTTP service maintaining a Compact Sparse Merkle Tree over Cardano's UTxO set for efficient inclusion proofs |
 | [**chain-follower**](https://github.com/lambdasistemi/chain-follower/tree/d592a5015f8d) | lambdasistemi | Abstract chain follower types — Follower, Intersector, ProgressOrRewind |
+| [**contra-tracer-contrib**](https://github.com/lambdasistemi/contra-tracer-contrib/tree/f0518e871391) | lambdasistemi | Utility modules for contra-tracer: file logging, thread-safe wrappers, timestamps, throttling, and more |
 | [**github-release-check**](https://github.com/lambdasistemi/github-release-check/tree/d90131112a4d) | lambdasistemi | Haskell library: check GitHub Releases API for newer versions of a CLI and print an update banner. Cache-aware, opt-out via env var, silent on failure. |
+| [**haskell-mts**](https://github.com/lambdasistemi/haskell-mts/tree/ab15f7b2dea7) | lambdasistemi | Merkle Trees implementation in Haskell with persistent storage and Merkle proofs |
 | [**rocksdb-haskell**](https://github.com/lambdasistemi/rocksdb-haskell/tree/a3e86b39f951) | lambdasistemi | RocksDB Haskell Bindings |
 | [**rocksdb-kv-transactions**](https://github.com/lambdasistemi/rocksdb-kv-transactions/tree/e2e77579888e) | lambdasistemi | RocksDB backend for key-value transactions |
+| [**aiken-codegen**](https://github.com/paolino/aiken-codegen/tree/74f364c10e93) | paolino | Haskell DSL for generating Aiken source code |
 | [**dev-assets**](https://github.com/paolino/dev-assets/tree/b9718cb996f6) | paolino | Actions for haskell, nix and mkdocs workflows |
 | [**purescript-overlay**](https://github.com/paolino/purescript-overlay/tree/e1f4cc532a84) | paolino | PureScript core tools in Nix |
 | [**amaru-treasury**](https://github.com/pragma-org/amaru-treasury/tree/fb1937964196) | pragma-org | A smart contract for managing Amaru's treasury  |
@@ -27,9 +32,16 @@ Computed from the Nix flake closure + `cabal.project` `source-repository-package
 | Input | Target | Type | Source |
 |-------|--------|------|--------|
 | `browser-json-tree` | lambdasistemi/browser-json-tree `970657fd5152` | flake | [flake.nix](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/flake.nix) |
+| `cardano-multisig` | lambdasistemi/cardano-multisig `ecac19717cd1` | flake | [flake.nix](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/flake.nix) |
 | `dev-assets` | paolino/dev-assets `b9718cb996f6` | flake | [flake.nix](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/flake.nix) |
 | `purescript-overlay` | paolino/purescript-overlay `e1f4cc532a84` | flake | [flake.nix](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/flake.nix) |
 | `amaru-treasury` | pragma-org/amaru-treasury `fb1937964196` | flake | [flake.nix](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/flake.nix) |
+
+### lambdasistemi/cardano-multisig @ `ecac19717cd1`
+
+| Input | Target | Type | Source |
+|-------|--------|------|--------|
+| `mkdocs` | paolino/dev-assets `60fcec8ed6ec` | flake | [flake.nix](https://github.com/lambdasistemi/cardano-multisig/blob/ecac19717cd1/flake.nix) |
 
 ## Cabal source-repository-package
 
@@ -45,6 +57,31 @@ Computed from the Nix flake closure + `cabal.project` `source-repository-package
 | lambdasistemi/github-release-check | `d90131112a4d` | [cabal.project:101](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/cabal.project#L101) |
 | lambdasistemi/rocksdb-haskell | `a3e86b39f951` | [cabal.project:68](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/cabal.project#L68) |
 | lambdasistemi/rocksdb-kv-transactions | `e2e77579888e` | [cabal.project:62](https://github.com/lambdasistemi/amaru-treasury-tx/blob/main/cabal.project#L62) |
+
+### lambdasistemi/cardano-multisig @ `ecac19717cd1`
+
+| Dependency | Locked tag | Source |
+|------------|-----------|--------|
+| cardano-foundation/cardano-ledger-read | `34d0767bd5c3` | [cabal.project:59](https://github.com/lambdasistemi/cardano-multisig/blob/ecac19717cd1/cabal.project#L59) |
+| lambdasistemi/cardano-node-clients | `e4b01cb9efdf` | [cabal.project:71](https://github.com/lambdasistemi/cardano-multisig/blob/ecac19717cd1/cabal.project#L71) |
+| lambdasistemi/cardano-tx-tools | `631f1341fde6` | [cabal.project:77](https://github.com/lambdasistemi/cardano-multisig/blob/ecac19717cd1/cabal.project#L77) |
+| lambdasistemi/cardano-utxo-csmt | `f4772f73dde0` | [cabal.project:35](https://github.com/lambdasistemi/cardano-multisig/blob/ecac19717cd1/cabal.project#L35) |
+| lambdasistemi/chain-follower | `d592a5015f8d` | [cabal.project:41](https://github.com/lambdasistemi/cardano-multisig/blob/ecac19717cd1/cabal.project#L41) |
+| lambdasistemi/contra-tracer-contrib | `f0518e871391` | [cabal.project:65](https://github.com/lambdasistemi/cardano-multisig/blob/ecac19717cd1/cabal.project#L65) |
+| lambdasistemi/github-release-check | `d90131112a4d` | [cabal.project:83](https://github.com/lambdasistemi/cardano-multisig/blob/ecac19717cd1/cabal.project#L83) |
+| lambdasistemi/haskell-mts | `ab15f7b2dea7` | [cabal.project:47](https://github.com/lambdasistemi/cardano-multisig/blob/ecac19717cd1/cabal.project#L47) |
+| lambdasistemi/rocksdb-haskell | `a3e86b39f951` | [cabal.project:23](https://github.com/lambdasistemi/cardano-multisig/blob/ecac19717cd1/cabal.project#L23) |
+| lambdasistemi/rocksdb-kv-transactions | `e2e77579888e` | [cabal.project:29](https://github.com/lambdasistemi/cardano-multisig/blob/ecac19717cd1/cabal.project#L29) |
+| paolino/aiken-codegen | `74f364c10e93` | [cabal.project:53](https://github.com/lambdasistemi/cardano-multisig/blob/ecac19717cd1/cabal.project#L53) |
+
+### lambdasistemi/cardano-node-clients @ `0f44f49c6d7e`
+
+| Dependency | Locked tag | Source |
+|------------|-----------|--------|
+| cardano-foundation/cardano-ledger-read | `34d0767bd5c3` | [cabal.project:41](https://github.com/lambdasistemi/cardano-node-clients/blob/0f44f49c6d7e/cabal.project#L41) |
+| lambdasistemi/chain-follower | `d592a5015f8d` | [cabal.project:23](https://github.com/lambdasistemi/cardano-node-clients/blob/0f44f49c6d7e/cabal.project#L23) |
+| lambdasistemi/rocksdb-haskell | `a3e86b39f951` | [cabal.project:35](https://github.com/lambdasistemi/cardano-node-clients/blob/0f44f49c6d7e/cabal.project#L35) |
+| lambdasistemi/rocksdb-kv-transactions | `e2e77579888e` | [cabal.project:29](https://github.com/lambdasistemi/cardano-node-clients/blob/0f44f49c6d7e/cabal.project#L29) |
 
 ### lambdasistemi/cardano-node-clients @ `bebf9b22fd3a`
 
@@ -64,6 +101,15 @@ Computed from the Nix flake closure + `cabal.project` `source-repository-package
 | lambdasistemi/rocksdb-haskell | `a3e86b39f951` | [cabal.project:35](https://github.com/lambdasistemi/cardano-node-clients/blob/ca86f11d27b3/cabal.project#L35) |
 | lambdasistemi/rocksdb-kv-transactions | `e2e77579888e` | [cabal.project:29](https://github.com/lambdasistemi/cardano-node-clients/blob/ca86f11d27b3/cabal.project#L29) |
 
+### lambdasistemi/cardano-node-clients @ `e4b01cb9efdf`
+
+| Dependency | Locked tag | Source |
+|------------|-----------|--------|
+| cardano-foundation/cardano-ledger-read | `34d0767bd5c3` | [cabal.project:41](https://github.com/lambdasistemi/cardano-node-clients/blob/e4b01cb9efdf/cabal.project#L41) |
+| lambdasistemi/chain-follower | `d592a5015f8d` | [cabal.project:23](https://github.com/lambdasistemi/cardano-node-clients/blob/e4b01cb9efdf/cabal.project#L23) |
+| lambdasistemi/rocksdb-haskell | `a3e86b39f951` | [cabal.project:35](https://github.com/lambdasistemi/cardano-node-clients/blob/e4b01cb9efdf/cabal.project#L35) |
+| lambdasistemi/rocksdb-kv-transactions | `e2e77579888e` | [cabal.project:29](https://github.com/lambdasistemi/cardano-node-clients/blob/e4b01cb9efdf/cabal.project#L29) |
+
 ### lambdasistemi/cardano-tx-tools @ `2bd36e28ce3f`
 
 | Dependency | Locked tag | Source |
@@ -74,6 +120,41 @@ Computed from the Nix flake closure + `cabal.project` `source-repository-package
 | lambdasistemi/github-release-check | `d90131112a4d` | [cabal.project:41](https://github.com/lambdasistemi/cardano-tx-tools/blob/2bd36e28ce3f/cabal.project#L41) |
 | lambdasistemi/rocksdb-haskell | `a3e86b39f951` | [cabal.project:63](https://github.com/lambdasistemi/cardano-tx-tools/blob/2bd36e28ce3f/cabal.project#L63) |
 | lambdasistemi/rocksdb-kv-transactions | `e2e77579888e` | [cabal.project:57](https://github.com/lambdasistemi/cardano-tx-tools/blob/2bd36e28ce3f/cabal.project#L57) |
+
+### lambdasistemi/cardano-tx-tools @ `56918f33ba74`
+
+| Dependency | Locked tag | Source |
+|------------|-----------|--------|
+| cardano-foundation/cardano-ledger-read | `34d0767bd5c3` | [cabal.project:58](https://github.com/lambdasistemi/cardano-tx-tools/blob/56918f33ba74/cabal.project#L58) |
+| lambdasistemi/cardano-node-clients | `ca86f11d27b3` | [cabal.project:30](https://github.com/lambdasistemi/cardano-tx-tools/blob/56918f33ba74/cabal.project#L30) |
+| lambdasistemi/chain-follower | `371b5930976a` | [cabal.project:40](https://github.com/lambdasistemi/cardano-tx-tools/blob/56918f33ba74/cabal.project#L40) |
+| lambdasistemi/rocksdb-haskell | `a3e86b39f951` | [cabal.project:52](https://github.com/lambdasistemi/cardano-tx-tools/blob/56918f33ba74/cabal.project#L52) |
+| lambdasistemi/rocksdb-kv-transactions | `e2e77579888e` | [cabal.project:46](https://github.com/lambdasistemi/cardano-tx-tools/blob/56918f33ba74/cabal.project#L46) |
+
+### lambdasistemi/cardano-tx-tools @ `631f1341fde6`
+
+| Dependency | Locked tag | Source |
+|------------|-----------|--------|
+| cardano-foundation/cardano-ledger-read | `34d0767bd5c3` | [cabal.project:69](https://github.com/lambdasistemi/cardano-tx-tools/blob/631f1341fde6/cabal.project#L69) |
+| lambdasistemi/cardano-node-clients | `ca86f11d27b3` | [cabal.project:30](https://github.com/lambdasistemi/cardano-tx-tools/blob/631f1341fde6/cabal.project#L30) |
+| lambdasistemi/chain-follower | `371b5930976a` | [cabal.project:51](https://github.com/lambdasistemi/cardano-tx-tools/blob/631f1341fde6/cabal.project#L51) |
+| lambdasistemi/github-release-check | `d90131112a4d` | [cabal.project:41](https://github.com/lambdasistemi/cardano-tx-tools/blob/631f1341fde6/cabal.project#L41) |
+| lambdasistemi/rocksdb-haskell | `a3e86b39f951` | [cabal.project:63](https://github.com/lambdasistemi/cardano-tx-tools/blob/631f1341fde6/cabal.project#L63) |
+| lambdasistemi/rocksdb-kv-transactions | `e2e77579888e` | [cabal.project:57](https://github.com/lambdasistemi/cardano-tx-tools/blob/631f1341fde6/cabal.project#L57) |
+
+### lambdasistemi/cardano-utxo-csmt @ `f4772f73dde0`
+
+| Dependency | Locked tag | Source |
+|------------|-----------|--------|
+| cardano-foundation/cardano-ledger-read | `34d0767bd5c3` | [cabal.project:49](https://github.com/lambdasistemi/cardano-utxo-csmt/blob/f4772f73dde0/cabal.project#L49) |
+| lambdasistemi/cardano-node-clients | `0f44f49c6d7e` | [cabal.project:61](https://github.com/lambdasistemi/cardano-utxo-csmt/blob/f4772f73dde0/cabal.project#L61) |
+| lambdasistemi/cardano-tx-tools | `56918f33ba74` | [cabal.project:67](https://github.com/lambdasistemi/cardano-utxo-csmt/blob/f4772f73dde0/cabal.project#L67) |
+| lambdasistemi/chain-follower | `d592a5015f8d` | [cabal.project:73](https://github.com/lambdasistemi/cardano-utxo-csmt/blob/f4772f73dde0/cabal.project#L73) |
+| lambdasistemi/contra-tracer-contrib | `f0518e871391` | [cabal.project:55](https://github.com/lambdasistemi/cardano-utxo-csmt/blob/f4772f73dde0/cabal.project#L55) |
+| lambdasistemi/haskell-mts | `9a5106790759` | [cabal.project:31](https://github.com/lambdasistemi/cardano-utxo-csmt/blob/f4772f73dde0/cabal.project#L31) |
+| lambdasistemi/rocksdb-haskell | `85977e8673f1` | [cabal.project:25](https://github.com/lambdasistemi/cardano-utxo-csmt/blob/f4772f73dde0/cabal.project#L25) |
+| lambdasistemi/rocksdb-kv-transactions | `e2e77579888e` | [cabal.project:43](https://github.com/lambdasistemi/cardano-utxo-csmt/blob/f4772f73dde0/cabal.project#L43) |
+| paolino/aiken-codegen | `74f364c10e93` | [cabal.project:37](https://github.com/lambdasistemi/cardano-utxo-csmt/blob/f4772f73dde0/cabal.project#L37) |
 
 ### lambdasistemi/chain-follower @ `371b5930976a`
 
@@ -89,11 +170,33 @@ Computed from the Nix flake closure + `cabal.project` `source-repository-package
 | lambdasistemi/rocksdb-haskell | `a3e86b39f951` | [cabal.project:17](https://github.com/lambdasistemi/chain-follower/blob/d592a5015f8d/cabal.project#L17) |
 | lambdasistemi/rocksdb-kv-transactions | `e2e77579888e` | [cabal.project:11](https://github.com/lambdasistemi/chain-follower/blob/d592a5015f8d/cabal.project#L11) |
 
+### lambdasistemi/haskell-mts @ `9a5106790759`
+
+| Dependency | Locked tag | Source |
+|------------|-----------|--------|
+| paolino/aiken-codegen | `74f364c10e93` | [cabal.project:24](https://github.com/lambdasistemi/haskell-mts/blob/9a5106790759/cabal.project#L24) |
+| paolino/rocksdb-haskell | `a3e86b39f951` | [cabal.project:12](https://github.com/lambdasistemi/haskell-mts/blob/9a5106790759/cabal.project#L12) |
+| paolino/rocksdb-kv-transactions | `0888387a5de8` | [cabal.project:18](https://github.com/lambdasistemi/haskell-mts/blob/9a5106790759/cabal.project#L18) |
+
+### lambdasistemi/haskell-mts @ `ab15f7b2dea7`
+
+| Dependency | Locked tag | Source |
+|------------|-----------|--------|
+| paolino/aiken-codegen | `74f364c10e93` | [cabal.project:24](https://github.com/lambdasistemi/haskell-mts/blob/ab15f7b2dea7/cabal.project#L24) |
+| paolino/rocksdb-haskell | `a3e86b39f951` | [cabal.project:12](https://github.com/lambdasistemi/haskell-mts/blob/ab15f7b2dea7/cabal.project#L12) |
+| paolino/rocksdb-kv-transactions | `0888387a5de8` | [cabal.project:18](https://github.com/lambdasistemi/haskell-mts/blob/ab15f7b2dea7/cabal.project#L18) |
+
 ### lambdasistemi/rocksdb-kv-transactions @ `e2e77579888e`
 
 | Dependency | Locked tag | Source |
 |------------|-----------|--------|
 | lambdasistemi/rocksdb-haskell | `a3e86b39f951` | [cabal.project:5](https://github.com/lambdasistemi/rocksdb-kv-transactions/blob/e2e77579888e/cabal.project#L5) |
+
+### paolino/rocksdb-kv-transactions @ `0888387a5de8`
+
+| Dependency | Locked tag | Source |
+|------------|-----------|--------|
+| paolino/rocksdb-haskell | `a3e86b39f951` | [cabal.project:5](https://github.com/paolino/rocksdb-kv-transactions/blob/0888387a5de8/cabal.project#L5) |
 
 ## ⚠️ Pin skew
 
@@ -106,7 +209,21 @@ Effective (root pin): [`bebf9b22fd3a`](https://github.com/lambdasistemi/cardano-
 | Declared by | at its own rev | Pins this dep to |
 |-------------|----------------|------------------|
 | lambdasistemi/amaru-treasury-tx | `main` | [`bebf9b22fd3a`](https://github.com/lambdasistemi/cardano-node-clients/commit/bebf9b22fd3a137e406020e09b98849ea69231f3) |
+| lambdasistemi/cardano-multisig | `ecac19717cd1` | [`e4b01cb9efdf`](https://github.com/lambdasistemi/cardano-node-clients/commit/e4b01cb9efdf88e99934cf7a09fed0e25bad1019) |
 | lambdasistemi/cardano-tx-tools | `2bd36e28ce3f` | [`ca86f11d27b3`](https://github.com/lambdasistemi/cardano-node-clients/commit/ca86f11d27b34e37d3814e4d3c3d66e256400403) |
+| lambdasistemi/cardano-tx-tools | `56918f33ba74` | [`ca86f11d27b3`](https://github.com/lambdasistemi/cardano-node-clients/commit/ca86f11d27b34e37d3814e4d3c3d66e256400403) |
+| lambdasistemi/cardano-tx-tools | `631f1341fde6` | [`ca86f11d27b3`](https://github.com/lambdasistemi/cardano-node-clients/commit/ca86f11d27b34e37d3814e4d3c3d66e256400403) |
+| lambdasistemi/cardano-utxo-csmt | `f4772f73dde0` | [`0f44f49c6d7e`](https://github.com/lambdasistemi/cardano-node-clients/commit/0f44f49c6d7ecf84e8e93750a3bcd9987310690e) |
+
+### lambdasistemi/cardano-tx-tools
+
+Effective (root pin): [`2bd36e28ce3f`](https://github.com/lambdasistemi/cardano-tx-tools/commit/2bd36e28ce3f)
+
+| Declared by | at its own rev | Pins this dep to |
+|-------------|----------------|------------------|
+| lambdasistemi/amaru-treasury-tx | `main` | [`2bd36e28ce3f`](https://github.com/lambdasistemi/cardano-tx-tools/commit/2bd36e28ce3fd8a33ef7f6f78834d45d513ac73f) |
+| lambdasistemi/cardano-multisig | `ecac19717cd1` | [`631f1341fde6`](https://github.com/lambdasistemi/cardano-tx-tools/commit/631f1341fde6e4a11e94b058cf5f2925ffeb9eac) |
+| lambdasistemi/cardano-utxo-csmt | `f4772f73dde0` | [`56918f33ba74`](https://github.com/lambdasistemi/cardano-tx-tools/commit/56918f33ba74714fb0bd5fb21e03d24013c54774) |
 
 ### lambdasistemi/chain-follower
 
@@ -115,9 +232,42 @@ Effective (root pin): [`d592a5015f8d`](https://github.com/lambdasistemi/chain-fo
 | Declared by | at its own rev | Pins this dep to |
 |-------------|----------------|------------------|
 | lambdasistemi/amaru-treasury-tx | `main` | [`d592a5015f8d`](https://github.com/lambdasistemi/chain-follower/commit/d592a5015f8d7edb2d6022936a67a054dfe5329f) |
+| lambdasistemi/cardano-multisig | `ecac19717cd1` | [`d592a5015f8d`](https://github.com/lambdasistemi/chain-follower/commit/d592a5015f8d7edb2d6022936a67a054dfe5329f) |
+| lambdasistemi/cardano-node-clients | `0f44f49c6d7e` | [`d592a5015f8d`](https://github.com/lambdasistemi/chain-follower/commit/d592a5015f8d7edb2d6022936a67a054dfe5329f) |
 | lambdasistemi/cardano-node-clients | `bebf9b22fd3a` | [`d592a5015f8d`](https://github.com/lambdasistemi/chain-follower/commit/d592a5015f8d7edb2d6022936a67a054dfe5329f) |
 | lambdasistemi/cardano-node-clients | `ca86f11d27b3` | [`371b5930976a`](https://github.com/lambdasistemi/chain-follower/commit/371b5930976ac3bb4e8a4ef576d5098d706984ee) |
+| lambdasistemi/cardano-node-clients | `e4b01cb9efdf` | [`d592a5015f8d`](https://github.com/lambdasistemi/chain-follower/commit/d592a5015f8d7edb2d6022936a67a054dfe5329f) |
 | lambdasistemi/cardano-tx-tools | `2bd36e28ce3f` | [`371b5930976a`](https://github.com/lambdasistemi/chain-follower/commit/371b5930976ac3bb4e8a4ef576d5098d706984ee) |
+| lambdasistemi/cardano-tx-tools | `56918f33ba74` | [`371b5930976a`](https://github.com/lambdasistemi/chain-follower/commit/371b5930976ac3bb4e8a4ef576d5098d706984ee) |
+| lambdasistemi/cardano-tx-tools | `631f1341fde6` | [`371b5930976a`](https://github.com/lambdasistemi/chain-follower/commit/371b5930976ac3bb4e8a4ef576d5098d706984ee) |
+| lambdasistemi/cardano-utxo-csmt | `f4772f73dde0` | [`d592a5015f8d`](https://github.com/lambdasistemi/chain-follower/commit/d592a5015f8d7edb2d6022936a67a054dfe5329f) |
+
+### lambdasistemi/haskell-mts
+
+| Declared by | at its own rev | Pins this dep to |
+|-------------|----------------|------------------|
+| lambdasistemi/cardano-multisig | `ecac19717cd1` | [`ab15f7b2dea7`](https://github.com/lambdasistemi/haskell-mts/commit/ab15f7b2dea73165b785c90333bbd09a36528a07) |
+| lambdasistemi/cardano-utxo-csmt | `f4772f73dde0` | [`9a5106790759`](https://github.com/lambdasistemi/haskell-mts/commit/9a510679075930bae812fea5f56b47789ce497ca) |
+
+### lambdasistemi/rocksdb-haskell
+
+Effective (root pin): [`a3e86b39f951`](https://github.com/lambdasistemi/rocksdb-haskell/commit/a3e86b39f951)
+
+| Declared by | at its own rev | Pins this dep to |
+|-------------|----------------|------------------|
+| lambdasistemi/amaru-treasury-tx | `main` | [`a3e86b39f951`](https://github.com/lambdasistemi/rocksdb-haskell/commit/a3e86b39f9510fea54abf734ee84aec33d0d683f) |
+| lambdasistemi/cardano-multisig | `ecac19717cd1` | [`a3e86b39f951`](https://github.com/lambdasistemi/rocksdb-haskell/commit/a3e86b39f9510fea54abf734ee84aec33d0d683f) |
+| lambdasistemi/cardano-node-clients | `0f44f49c6d7e` | [`a3e86b39f951`](https://github.com/lambdasistemi/rocksdb-haskell/commit/a3e86b39f9510fea54abf734ee84aec33d0d683f) |
+| lambdasistemi/cardano-node-clients | `bebf9b22fd3a` | [`a3e86b39f951`](https://github.com/lambdasistemi/rocksdb-haskell/commit/a3e86b39f9510fea54abf734ee84aec33d0d683f) |
+| lambdasistemi/cardano-node-clients | `ca86f11d27b3` | [`a3e86b39f951`](https://github.com/lambdasistemi/rocksdb-haskell/commit/a3e86b39f9510fea54abf734ee84aec33d0d683f) |
+| lambdasistemi/cardano-node-clients | `e4b01cb9efdf` | [`a3e86b39f951`](https://github.com/lambdasistemi/rocksdb-haskell/commit/a3e86b39f9510fea54abf734ee84aec33d0d683f) |
+| lambdasistemi/cardano-tx-tools | `2bd36e28ce3f` | [`a3e86b39f951`](https://github.com/lambdasistemi/rocksdb-haskell/commit/a3e86b39f9510fea54abf734ee84aec33d0d683f) |
+| lambdasistemi/cardano-tx-tools | `56918f33ba74` | [`a3e86b39f951`](https://github.com/lambdasistemi/rocksdb-haskell/commit/a3e86b39f9510fea54abf734ee84aec33d0d683f) |
+| lambdasistemi/cardano-tx-tools | `631f1341fde6` | [`a3e86b39f951`](https://github.com/lambdasistemi/rocksdb-haskell/commit/a3e86b39f9510fea54abf734ee84aec33d0d683f) |
+| lambdasistemi/cardano-utxo-csmt | `f4772f73dde0` | [`85977e8673f1`](https://github.com/lambdasistemi/rocksdb-haskell/commit/85977e8673f171684bf52ccde437db38bb06c478) |
+| lambdasistemi/chain-follower | `371b5930976a` | [`a3e86b39f951`](https://github.com/lambdasistemi/rocksdb-haskell/commit/a3e86b39f9510fea54abf734ee84aec33d0d683f) |
+| lambdasistemi/chain-follower | `d592a5015f8d` | [`a3e86b39f951`](https://github.com/lambdasistemi/rocksdb-haskell/commit/a3e86b39f9510fea54abf734ee84aec33d0d683f) |
+| lambdasistemi/rocksdb-kv-transactions | `e2e77579888e` | [`a3e86b39f951`](https://github.com/lambdasistemi/rocksdb-haskell/commit/a3e86b39f9510fea54abf734ee84aec33d0d683f) |
 
 ## Diagram
 
@@ -132,17 +282,24 @@ graph TD
     cardano_ledger_read["<a href='https://github.com/cardano-foundation/cardano-ledger-read/tree/34d0767bd5c3'>cardano-ledger-read</a><br/>Read Cardano block data, parametrized by<br/>era<br/><a href='https://github.com/cardano-foundation/cardano-ledger-read/commit/34d0767bd5c3'><code>34d0767bd5c3</code></a>"]:::haskell
     browser_json_tree["<a href='https://github.com/lambdasistemi/browser-json-tree/tree/970657fd5152'>browser-json-tree</a><br/>Typed Halogen renderer + click behaviour<br/>for collapsible JSON trees<br/><a href='https://github.com/lambdasistemi/browser-json-tree/commit/970657fd5152'><code>970657fd5152</code></a>"]:::haskell
     cardano_ledger_rdf["<a href='https://github.com/lambdasistemi/cardano-ledger-rdf/tree/27b68fc0f8ed'>cardano-ledger-rdf</a><br/>Cardano transaction graph and RDF tools<br/><a href='https://github.com/lambdasistemi/cardano-ledger-rdf/commit/27b68fc0f8ed'><code>27b68fc0f8ed</code></a>"]:::haskell
+    cardano_multisig["<a href='https://github.com/lambdasistemi/cardano-multisig/tree/ecac19717cd1'>cardano-multisig</a><br/>Permissionless, stateful backend that<br/>coordinates witness collection over<br/>Conway transactions —<br/>signature-authorized, accountless,<br/>self-cleaning. Milestone 1:<br/>required_signers multisig.<br/><a href='https://github.com/lambdasistemi/cardano-multisig/commit/ecac19717cd1'><code>ecac19717cd1</code></a>"]:::haskell
     cardano_node_clients["<a href='https://github.com/lambdasistemi/cardano-node-clients/tree/bebf9b22fd3a'>cardano-node-clients</a><br/>Haskell clients for Cardano node<br/>mini-protocols (N2C + N2N)<br/><a href='https://github.com/lambdasistemi/cardano-node-clients/commit/bebf9b22fd3a'><code>bebf9b22fd3a</code></a>"]:::haskell
     cardano_tx_tools["<a href='https://github.com/lambdasistemi/cardano-tx-tools/tree/2bd36e28ce3f'>cardano-tx-tools</a><br/>Cardano transaction tooling: builder,<br/>structural diff, blueprint decoding.<br/>Uses cardano-node-clients but is not a<br/>node client.<br/><a href='https://github.com/lambdasistemi/cardano-tx-tools/commit/2bd36e28ce3f'><code>2bd36e28ce3f</code></a>"]:::haskell
+    cardano_utxo_csmt["<a href='https://github.com/lambdasistemi/cardano-utxo-csmt/tree/f4772f73dde0'>cardano-utxo-csmt</a><br/>HTTP service maintaining a Compact<br/>Sparse Merkle Tree over Cardano's UTxO<br/>set for efficient inclusion proofs<br/><a href='https://github.com/lambdasistemi/cardano-utxo-csmt/commit/f4772f73dde0'><code>f4772f73dde0</code></a>"]:::haskell
     chain_follower["<a href='https://github.com/lambdasistemi/chain-follower/tree/d592a5015f8d'>chain-follower</a><br/>Abstract chain follower types —<br/>Follower, Intersector, ProgressOrRewind<br/><a href='https://github.com/lambdasistemi/chain-follower/commit/d592a5015f8d'><code>d592a5015f8d</code></a>"]:::haskell
+    contra_tracer_contrib["<a href='https://github.com/lambdasistemi/contra-tracer-contrib/tree/f0518e871391'>contra-tracer-contrib</a><br/>Utility modules for contra-tracer: file<br/>logging, thread-safe wrappers,<br/>timestamps, throttling, and more<br/><a href='https://github.com/lambdasistemi/contra-tracer-contrib/commit/f0518e871391'><code>f0518e871391</code></a>"]:::haskell
     github_release_check["<a href='https://github.com/lambdasistemi/github-release-check/tree/d90131112a4d'>github-release-check</a><br/>Haskell library: check GitHub Releases<br/>API for newer versions of a CLI and<br/>print an update banner. Cache-aware,<br/>opt-out via env var, silent on failure.<br/><a href='https://github.com/lambdasistemi/github-release-check/commit/d90131112a4d'><code>d90131112a4d</code></a>"]:::haskell
+    haskell_mts["<a href='https://github.com/lambdasistemi/haskell-mts/tree/ab15f7b2dea7'>haskell-mts</a><br/>Merkle Trees implementation in Haskell<br/>with persistent storage and Merkle<br/>proofs<br/><a href='https://github.com/lambdasistemi/haskell-mts/commit/ab15f7b2dea7'><code>ab15f7b2dea7</code></a>"]:::haskell
     rocksdb_haskell["<a href='https://github.com/lambdasistemi/rocksdb-haskell/tree/a3e86b39f951'>rocksdb-haskell</a><br/>RocksDB Haskell Bindings<br/><a href='https://github.com/lambdasistemi/rocksdb-haskell/commit/a3e86b39f951'><code>a3e86b39f951</code></a>"]:::haskell
     rocksdb_kv_transactions["<a href='https://github.com/lambdasistemi/rocksdb-kv-transactions/tree/e2e77579888e'>rocksdb-kv-transactions</a><br/>RocksDB backend for key-value<br/>transactions<br/><a href='https://github.com/lambdasistemi/rocksdb-kv-transactions/commit/e2e77579888e'><code>e2e77579888e</code></a>"]:::haskell
+    aiken_codegen["<a href='https://github.com/paolino/aiken-codegen/tree/74f364c10e93'>aiken-codegen</a><br/>Haskell DSL for generating Aiken source<br/>code<br/><a href='https://github.com/paolino/aiken-codegen/commit/74f364c10e93'><code>74f364c10e93</code></a>"]:::haskell
     dev_assets["<a href='https://github.com/paolino/dev-assets/tree/b9718cb996f6'>dev-assets</a><br/>Actions for haskell, nix and mkdocs<br/>workflows<br/><a href='https://github.com/paolino/dev-assets/commit/b9718cb996f6'><code>b9718cb996f6</code></a>"]:::nix
     purescript_overlay["<a href='https://github.com/paolino/purescript-overlay/tree/e1f4cc532a84'>purescript-overlay</a><br/>PureScript core tools in Nix<br/><a href='https://github.com/paolino/purescript-overlay/commit/e1f4cc532a84'><code>e1f4cc532a84</code></a>"]:::haskell
     amaru_treasury["<a href='https://github.com/pragma-org/amaru-treasury/tree/fb1937964196'>amaru-treasury</a><br/>A smart contract for managing Amaru's<br/>treasury<br/><a href='https://github.com/pragma-org/amaru-treasury/commit/fb1937964196'><code>fb1937964196</code></a>"]:::aiken
 
+    cardano_multisig -->|"mkdocs"| dev_assets
     amaru_treasury_tx -->|"browser-json-tree"| browser_json_tree
+    amaru_treasury_tx -->|"cardano-multisig"| cardano_multisig
     amaru_treasury_tx -->|"dev-assets"| dev_assets
     amaru_treasury_tx -->|"purescript-overlay"| purescript_overlay
     amaru_treasury_tx -->|"amaru-treasury"| amaru_treasury
@@ -154,6 +311,17 @@ graph TD
     amaru_treasury_tx ==> github_release_check
     amaru_treasury_tx ==> rocksdb_haskell
     amaru_treasury_tx ==> rocksdb_kv_transactions
+    cardano_multisig ==> cardano_ledger_read
+    cardano_multisig ==>|"cardano-node-clients"| cardano_node_clients
+    cardano_multisig ==> cardano_tx_tools
+    cardano_multisig ==> cardano_utxo_csmt
+    cardano_multisig ==> chain_follower
+    cardano_multisig ==> contra_tracer_contrib
+    cardano_multisig ==> github_release_check
+    cardano_multisig ==> haskell_mts
+    cardano_multisig ==>|"rocksdb-haskell-jprupp"| rocksdb_haskell
+    cardano_multisig ==>|"kv-transactions, rocksdb-kv-transactions"| rocksdb_kv_transactions
+    cardano_multisig ==> aiken_codegen
     cardano_node_clients ==> cardano_ledger_read
     cardano_node_clients ==> chain_follower
     cardano_node_clients ==> rocksdb_haskell
@@ -164,16 +332,35 @@ graph TD
     cardano_tx_tools ==> github_release_check
     cardano_tx_tools ==> rocksdb_haskell
     cardano_tx_tools ==> rocksdb_kv_transactions
+    cardano_utxo_csmt ==> cardano_ledger_read
+    cardano_utxo_csmt ==> cardano_node_clients
+    cardano_utxo_csmt ==> cardano_tx_tools
+    cardano_utxo_csmt ==> chain_follower
+    cardano_utxo_csmt ==> contra_tracer_contrib
+    cardano_utxo_csmt ==> haskell_mts
+    cardano_utxo_csmt ==> rocksdb_haskell
+    cardano_utxo_csmt ==> rocksdb_kv_transactions
+    cardano_utxo_csmt ==> aiken_codegen
     chain_follower ==> rocksdb_haskell
     chain_follower ==> rocksdb_kv_transactions
+    haskell_mts ==> aiken_codegen
+    haskell_mts ==> rocksdb_haskell
+    haskell_mts ==> rocksdb_kv_transactions
     rocksdb_kv_transactions ==> rocksdb_haskell
+    cardano_multisig -.->|"skew e4b01cb9efdf"| cardano_node_clients
     cardano_tx_tools -.->|"skew ca86f11d27b3"| cardano_node_clients
+    cardano_utxo_csmt -.->|"skew 0f44f49c6d7e"| cardano_node_clients
+    cardano_multisig -.->|"skew 631f1341fde6"| cardano_tx_tools
+    cardano_utxo_csmt -.->|"skew 56918f33ba74"| cardano_tx_tools
     cardano_node_clients -.->|"skew 371b5930976a"| chain_follower
     cardano_tx_tools -.->|"skew 371b5930976a"| chain_follower
+    cardano_multisig -.->|"skew ab15f7b2dea7"| haskell_mts
+    cardano_utxo_csmt -.->|"skew 9a5106790759"| haskell_mts
+    cardano_utxo_csmt -.->|"skew 85977e8673f1"| rocksdb_haskell
 
-    linkStyle 0,1,2,3 stroke:#2196F3,stroke-width:2px
-    linkStyle 4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24 stroke:#e53935,stroke-width:2px
-    linkStyle 25,26,27 stroke:#ffb300,stroke-width:1px,stroke-dasharray:4 3
+    linkStyle 0,1,2,3,4,5 stroke:#2196F3,stroke-width:2px
+    linkStyle 6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49 stroke:#e53935,stroke-width:2px
+    linkStyle 50,51,52,53,54,55,56,57,58,59 stroke:#ffb300,stroke-width:1px,stroke-dasharray:4 3
 ```
 
 **Legend**

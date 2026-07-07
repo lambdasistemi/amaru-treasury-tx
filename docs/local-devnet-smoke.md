@@ -890,6 +890,53 @@ runs/devnet/YYYYMMDDTHHMMSSZ/
     `-- summary.json
 ```
 
+## Coordinator Swap Boundary (#440 / CI)
+
+```bash
+just devnet-smoke treasury-swap-via-coordinator
+```
+
+This is the end-to-end proof for epic
+[#440](https://github.com/lambdasistemi/amaru-treasury-tx/issues/440):
+a treasury ADA/USDM swap driven through the external
+[`cardano-multisig`](https://github.com/lambdasistemi/cardano-multisig)
+coordinator. It boots the local DevNet (magic 42), deploys the
+multi-owner roster, builds the swap, pays the coordinator fee with
+`cardano-cli` (metadata label `9721`), collects both owner witnesses
+through the coordinator's `/v1` API, submits, and scoops the Sundae
+order into the treasury.
+
+Local runs read three inputs, mirroring the other Sundae phases:
+
+- `E2E_GENESIS_DIR` — the pinned `cardano-node-clients` DevNet genesis
+  (set automatically by the `nix develop` shell hook).
+- `SUNDAE_CONTRACTS_DIR` — a **writable**
+  `SundaeSwap-finance/sundae-contracts@be33466b` checkout; the phase
+  runs `aiken build` there to regenerate the unapplied blueprint for a
+  fresh pool.
+- The coordinator binary — by default `nix run
+  /code/cardano-multisig#cardano-multisig-server`; override with
+  `CARDANO_MULTISIG_SERVER=<path>` or `CARDANO_MULTISIG_FLAKE=<ref>`.
+
+### Hermetic CI entry point
+
+The same phase runs as a required CI job (`Treasury swap via
+coordinator (devnet)`) with no `/code` checkouts. A pinned nix app
+wires every dependency from flake inputs:
+
+```bash
+nix run .#treasury-swap-via-coordinator-smoke
+```
+
+The app sets `CARDANO_MULTISIG_SERVER` from the `cardano-multisig`
+flake input, copies the `sundae-contracts` flake input to a writable
+dir for `SUNDAE_CONTRACTS_DIR`, and sets `AIKEN` to the flake's pinned
+`pkgs.aiken` so `aiken build` needs no unpinned
+`nix run github:aiken-lang/aiken`. It is a `nix run` app rather than a
+`nix flake check` because `aiken build` fetches the Sundae stdlib
+dependencies over the network, which the sandboxed check derivation
+forbids.
+
 ## DevNet Experiment Order
 
 The original DevNet release experiment is now being recovered through

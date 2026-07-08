@@ -15,11 +15,11 @@
 
 ## Slice 2 - Verification And Finalization
 
-- [ ] T460-S2 Run `./gate.sh` from the issue worktree and record the
+- [X] T460-S2 Run `./gate.sh` from the issue worktree and record the
   result.
-- [ ] T460-S2 Attempt live/devnet duplicate-trace verification or record
+- [X] T460-S2 Attempt live/devnet duplicate-trace verification or record
   why it is not practical from this host.
-- [ ] T460-S2 Update PR #463 with delivered behavior and evidence.
-- [ ] T460-S2 Drop `gate.sh` in the final readiness commit.
-- [ ] T460-S2 Wait for GitHub Actions to finish green at the final
+- [X] T460-S2 Update PR #463 with delivered behavior and evidence.
+- [X] T460-S2 Drop `gate.sh` in the final readiness commit.
+- [X] T460-S2 Wait for GitHub Actions to finish green at the final
   pushed head before logging `COMPLETE`.

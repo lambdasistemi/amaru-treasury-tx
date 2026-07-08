@@ -43,6 +43,6 @@
 - [X] T454-LINT Fix the CI hlint hints without adding an
   `Avoid lambda` ignore to `.hlint.yaml`.
 - [X] T454-LINT Run local full-tree lint clean through `./gate.sh`.
-- [ ] T454-F2 Push the lint fix as a new commit without force-pushing.
-- [ ] T454-F2 Mark PR #459 ready only after local lint is clean.
-- [ ] T454-F2 Wait for PR #459 CI to pass before recording COMPLETE.
+- [X] T454-F2 Drop `gate.sh` again after proving the lint-aware
+  local gate. Push, ready-for-review, and CI pass state are tracked in
+  `/tmp/epic-451/amaru-treasury-tx-454/STATUS.md`.

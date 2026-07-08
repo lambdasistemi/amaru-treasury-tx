@@ -5,7 +5,6 @@ git diff --check
 nix develop --quiet -c cabal build \
     lib:amaru-treasury-tx \
     exe:amaru-treasury-tx-api \
-    test:unit-tests \
     -O0
 nix develop --quiet -c just unit "Trace"
 nix develop --quiet -c just format-check

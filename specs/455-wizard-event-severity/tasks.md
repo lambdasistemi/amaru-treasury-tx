@@ -25,12 +25,12 @@
 
 ## Slice 3 - API Build Wiring
 
-- [ ] T455-S3 Route API build endpoint wizard/build event traces through the
+- [X] T455-S3 Route API build endpoint wizard/build event traces through the
   resolved API minimum severity.
-- [ ] T455-S3 Add or update tests proving API build call sites use the
+- [X] T455-S3 Add or update tests proving API build call sites use the
   severity threshold and do not touch provider tracing modules.
-- [ ] T455-S3 Run focused unit tests and `./gate.sh`.
-- [ ] T455-S3 Commit as `feat(trace): filter api wizard events by severity`.
+- [X] T455-S3 Run focused unit tests and `./gate.sh`.
+- [X] T455-S3 Commit as `feat(trace): filter api wizard events by severity`.
 
 ## Slice 4 - Final Verification
 

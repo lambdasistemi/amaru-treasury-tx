@@ -39,35 +39,70 @@ the same result as a recording tracer.
 module Amaru.Treasury.Wizard.Event
     ( -- * Swap intent-construction events
       WizardEvent (..)
+    , wizardEventSeverity
     , renderEvent
     , eventTracer
+    , eventSeverityTracer
 
       -- * Tx-build events (#269)
     , BuildEvent (..)
+    , buildEventSeverity
     , renderBuildEvent
     , buildEventTracer
+    , buildEventSeverityTracer
+
+      -- * Legacy disburse-build events
+    , DisburseEvent (..)
+    , disburseEventSeverity
+    , renderDisburseEvent
+    , disburseEventTracer
+    , disburseEventSeverityTracer
 
       -- * Disburse intent-construction events (#277)
     , DisburseWizardEvent (..)
+    , disburseWizardEventSeverity
     , renderDisburseWizardEvent
     , renderDisburseWizardEventWithPrefix
     , disburseWizardEventTracer
+    , disburseWizardEventSeverityTracer
     , disburseEventTracerWithPrefix
+    , disburseEventSeverityTracerWithPrefix
 
       -- * Reorganize intent-construction events (#280)
     , ReorganizeWizardEvent (..)
+    , reorganizeWizardEventSeverity
     , renderReorganizeWizardEvent
     , reorganizeWizardEventTracer
+    , reorganizeWizardEventSeverityTracer
+
+      -- * Withdraw intent-construction events
+    , WithdrawWizardEvent (..)
+    , withdrawWizardEventSeverity
+    , renderWithdrawWizardEvent
+    , withdrawWizardEventTracer
+    , withdrawWizardEventSeverityTracer
     ) where
 
 import Amaru.Treasury.Build.Trace
     ( BuildEvent (..)
+    , buildEventSeverity
+    , buildEventSeverityTracer
     , buildEventTracer
     , renderBuildEvent
     )
+import Amaru.Treasury.Tx.Disburse.Trace
+    ( DisburseEvent (..)
+    , disburseEventSeverity
+    , disburseEventSeverityTracer
+    , disburseEventTracer
+    , renderDisburseEvent
+    )
 import Amaru.Treasury.Tx.DisburseWizard.Trace
     ( DisburseWizardEvent (..)
+    , disburseEventSeverityTracerWithPrefix
     , disburseEventTracerWithPrefix
+    , disburseWizardEventSeverity
+    , disburseWizardEventSeverityTracer
     , disburseWizardEventTracer
     , renderDisburseWizardEvent
     , renderDisburseWizardEventWithPrefix
@@ -75,10 +110,21 @@ import Amaru.Treasury.Tx.DisburseWizard.Trace
 import Amaru.Treasury.Tx.ReorganizeWizard.Trace
     ( ReorganizeWizardEvent (..)
     , renderReorganizeWizardEvent
+    , reorganizeWizardEventSeverity
+    , reorganizeWizardEventSeverityTracer
     , reorganizeWizardEventTracer
     )
 import Amaru.Treasury.Tx.SwapWizard.Trace
     ( WizardEvent (..)
+    , eventSeverityTracer
     , eventTracer
     , renderEvent
+    , wizardEventSeverity
+    )
+import Amaru.Treasury.Tx.WithdrawWizard.Trace
+    ( WithdrawWizardEvent (..)
+    , renderWithdrawWizardEvent
+    , withdrawWizardEventSeverity
+    , withdrawWizardEventSeverityTracer
+    , withdrawWizardEventTracer
     )

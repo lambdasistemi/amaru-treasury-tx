@@ -28,6 +28,7 @@ module Amaru.Treasury.Api.BuildMetadataSpec
 import Data.Aeson (Value, decode, encode, object, (.=))
 import Data.Maybe (isJust)
 import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
 import Test.Hspec
     ( Expectation
     , Spec
@@ -131,6 +132,39 @@ spec = describe "HTTP build requests carry no metadata path" $ do
         withDecoded decodedContingency $
             previewUsesPlaceholder . Contingency.renderCli
 
+    describe "API build event severity" $ do
+        it "filters swap wizard and build events" $ do
+            src <- TIO.readFile buildSwapSource
+            src `shouldContainText` "filterSeverity (goMinimumSeverity g)"
+            src `shouldContainText` "eventSeverityTracer"
+            src `shouldContainText` "buildEventSeverityTracer"
+            src `shouldNotContainText` "renderEvent"
+            src `shouldNotContainText` "renderBuildEvent"
+
+        it "filters disburse wizard and build events" $ do
+            src <- TIO.readFile buildDisburseSource
+            src `shouldContainText` "filterSeverity (goMinimumSeverity g)"
+            src `shouldContainText` "disburseWizardEventSeverityTracer"
+            src `shouldContainText` "buildEventSeverityTracer"
+            src `shouldNotContainText` "renderDisburseWizardEvent"
+            src `shouldNotContainText` "renderBuildEvent"
+
+        it "filters contingency disburse wizard and build events" $ do
+            src <- TIO.readFile buildContingencySource
+            src `shouldContainText` "filterSeverity (goMinimumSeverity g)"
+            src `shouldContainText` "disburseWizardEventSeverityTracer"
+            src `shouldContainText` "buildEventSeverityTracer"
+            src `shouldNotContainText` "renderDisburseWizardEvent"
+            src `shouldNotContainText` "renderBuildEvent"
+
+        it "filters reorganize wizard and build events" $ do
+            src <- TIO.readFile buildReorganizeSource
+            src `shouldContainText` "filterSeverity (goMinimumSeverity g)"
+            src `shouldContainText` "reorganizeWizardEventSeverityTracer"
+            src `shouldContainText` "buildEventSeverityTracer"
+            src `shouldNotContainText` "renderReorganizeWizardEvent"
+            src `shouldNotContainText` "renderBuildEvent"
+
 -- ---------------------------------------------------------------------------
 -- Assertions
 
@@ -141,6 +175,27 @@ previewUsesPlaceholder :: T.Text -> Expectation
 previewUsesPlaceholder cli = do
     cli `shouldSatisfy` T.isInfixOf "--metadata <metadata.json>"
     cli `shouldSatisfy` (not . T.isInfixOf (T.pack serverPath))
+
+buildSwapSource :: FilePath
+buildSwapSource = "lib/Amaru/Treasury/Api/BuildSwap.hs"
+
+buildDisburseSource :: FilePath
+buildDisburseSource = "lib/Amaru/Treasury/Api/BuildDisburse.hs"
+
+buildContingencySource :: FilePath
+buildContingencySource =
+    "lib/Amaru/Treasury/Api/BuildContingencyDisburse.hs"
+
+buildReorganizeSource :: FilePath
+buildReorganizeSource = "lib/Amaru/Treasury/Api/BuildReorganize.hs"
+
+shouldContainText :: T.Text -> T.Text -> IO ()
+shouldContainText haystack needle =
+    haystack `shouldSatisfy` T.isInfixOf needle
+
+shouldNotContainText :: T.Text -> T.Text -> IO ()
+shouldNotContainText haystack needle =
+    haystack `shouldSatisfy` (not . T.isInfixOf needle)
 
 withDecoded :: Maybe a -> (a -> Expectation) -> Expectation
 withDecoded m k = maybe (fail "request did not decode") k m

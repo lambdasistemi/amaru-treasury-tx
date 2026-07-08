@@ -12,8 +12,10 @@ human-readable line for log output.
 -}
 module Amaru.Treasury.Tx.SwapWizard.Trace
     ( WizardEvent (..)
+    , wizardEventSeverity
     , renderEvent
     , eventTracer
+    , eventSeverityTracer
     ) where
 
 import Control.Tracer (Tracer (..), contramap)
@@ -22,6 +24,7 @@ import Data.Text qualified as T
 import Data.Word (Word64)
 
 import Amaru.Treasury.Scope (ScopeId, scopeText)
+import Amaru.Treasury.Trace (Severity (..))
 
 -- | Steps the wizard takes that affect intent.json content.
 data WizardEvent
@@ -96,6 +99,12 @@ data WizardEvent
     | -- | The wizard refused before producing intent.json.
       WeAborted !Text
     deriving (Eq, Show)
+
+-- | Severity classification for swap-wizard events.
+wizardEventSeverity :: WizardEvent -> Severity
+wizardEventSeverity = \case
+    WeAborted{} -> Error
+    _ -> Info
 
 -- | Single-line, prefix-tagged rendering for log output.
 renderEvent :: WizardEvent -> Text
@@ -217,6 +226,14 @@ renderEvent =
 -- | Lift a 'Text' sink into a 'WizardEvent' tracer via 'renderEvent'.
 eventTracer :: Tracer m Text -> Tracer m WizardEvent
 eventTracer = contramap renderEvent
+
+{- | Lift a severity-aware 'Text' sink into a 'WizardEvent'
+tracer via 'wizardEventSeverity' and 'renderEvent'.
+-}
+eventSeverityTracer
+    :: Tracer m (Severity, Text) -> Tracer m WizardEvent
+eventSeverityTracer =
+    contramap $ \event -> (wizardEventSeverity event, renderEvent event)
 
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show

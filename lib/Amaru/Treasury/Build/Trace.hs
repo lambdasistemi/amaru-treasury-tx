@@ -15,14 +15,18 @@ Constructor prefix @BuildEvent-@ for "BuildEvent".
 -}
 module Amaru.Treasury.Build.Trace
     ( BuildEvent (..)
+    , buildEventSeverity
     , renderBuildEvent
     , buildEventTracer
+    , buildEventSeverityTracer
     ) where
 
 import Control.Tracer (Tracer (..), contramap)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word32)
+
+import Amaru.Treasury.Trace (Severity (..))
 
 {- | Steps the unified @tx-build@ subcommand takes that
 affect the produced tx CBOR or the summary sidecar.
@@ -99,6 +103,19 @@ data BuildEvent
         ![Text]
         -- ^ residue: outrefs (txid#ix) dropped from this batch
     deriving stock (Eq, Show)
+
+-- | Severity classification for tx-build events.
+buildEventSeverity :: BuildEvent -> Severity
+buildEventSeverity = \case
+    BuildEventNetworkMismatch{} -> Warning
+    BuildEventReevaluated _ fails
+        | fails > 0 -> Warning
+        | otherwise -> Info
+    BuildEventScriptFail{} -> Error
+    BuildEventValidationFailed -> Error
+    BuildEventReportWriteFailed{} -> Error
+    BuildEventAborted{} -> Error
+    _ -> Info
 
 -- | Single-line, prefix-tagged rendering for log output.
 renderBuildEvent :: BuildEvent -> Text
@@ -179,6 +196,14 @@ renderBuildEvent =
 -}
 buildEventTracer :: Tracer m Text -> Tracer m BuildEvent
 buildEventTracer = contramap renderBuildEvent
+
+{- | Lift a severity-aware 'Text' sink into a 'BuildEvent'
+tracer via 'buildEventSeverity' and 'renderBuildEvent'.
+-}
+buildEventSeverityTracer
+    :: Tracer m (Severity, Text) -> Tracer m BuildEvent
+buildEventSeverityTracer =
+    contramap $ \event -> (buildEventSeverity event, renderBuildEvent event)
 
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show

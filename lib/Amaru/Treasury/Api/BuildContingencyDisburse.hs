@@ -44,7 +44,7 @@ module Amaru.Treasury.Api.BuildContingencyDisburse
     ) where
 
 import Control.Exception (SomeException, try)
-import Control.Tracer (Tracer (..))
+import Control.Tracer (Tracer (..), traceWith)
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as BSL
@@ -61,8 +61,8 @@ import Amaru.Treasury.Api.BuildDisburse
     ( DisburseBuildResponse (..)
     )
 import Amaru.Treasury.Backend (Backend)
-import Amaru.Treasury.Build.Trace (renderBuildEvent)
-import Amaru.Treasury.Cli.Common (GlobalOpts)
+import Amaru.Treasury.Build.Trace (buildEventSeverityTracer)
+import Amaru.Treasury.Cli.Common (GlobalOpts (..))
 import Amaru.Treasury.Cli.DisburseWizard
     ( ContingencyDisburseOpts (..)
     )
@@ -75,8 +75,12 @@ import Amaru.Treasury.Report
     , TxCborHex (..)
     )
 import Amaru.Treasury.Scope (ScopeId (..), scopeText)
+import Amaru.Treasury.Trace
+    ( Severity
+    , filterSeverity
+    )
 import Amaru.Treasury.Tx.DisburseWizard.Trace
-    ( renderDisburseWizardEvent
+    ( disburseWizardEventSeverityTracer
     )
 import Amaru.Treasury.Tx.Envelope
     ( EnvelopeKind (..)
@@ -257,11 +261,20 @@ runBuildContingencyDisburse g serverMetadataPath backend req = do
             pure (failureResponse wf)
         Right opts -> do
             let tr =
+                    disburseWizardEventSeverityTracer apiTracer
+                apiTracer =
+                    Tracer $ \(severity, message) ->
+                        traceWith
+                            severityTracer
+                            ( severity
+                            , "amaru-treasury-tx-api: " <> message
+                            )
+                severityTracer =
+                    filterSeverity (goMinimumSeverity g) stderrTracer
+                stderrTracer =
                     Tracer
-                        ( TIO.hPutStrLn stderr
-                            . ("amaru-treasury-tx-api: " <>)
-                            . renderDisburseWizardEvent
-                        )
+                        (TIO.hPutStrLn stderr . snd)
+                        :: Tracer IO (Severity, Text)
             r <-
                 try @SomeException
                     ( buildContingencyDisburseIntent
@@ -322,13 +335,7 @@ runBuildContingencyDisburse g serverMetadataPath backend req = do
                                 , dbrProofs = Nothing
                                 }
                     let trB =
-                            Tracer
-                                ( TIO.hPutStrLn stderr
-                                    . ( "amaru-treasury-tx-api: "
-                                            <>
-                                      )
-                                    . renderBuildEvent
-                                )
+                            buildEventSeverityTracer apiTracer
                     rb <-
                         try @SomeException
                             ( buildDisburseTx

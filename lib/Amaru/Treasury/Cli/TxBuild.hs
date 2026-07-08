@@ -53,7 +53,7 @@ import Amaru.Treasury.Build
 import Amaru.Treasury.Build.ReportWriter (writeReportArtifact)
 import Amaru.Treasury.Build.Trace
     ( BuildEvent (..)
-    , buildEventTracer
+    , buildEventSeverityTracer
     )
 import Amaru.Treasury.ChainContext
     ( networkFromMagic
@@ -84,7 +84,10 @@ import Amaru.Treasury.Report
     , encodeBuildOutput
     , txCborHexFromBytes
     )
-import Amaru.Treasury.Trace (Severity)
+import Amaru.Treasury.Trace
+    ( Severity
+    , filterSeverity
+    )
 
 {- | Flags for the unified @tx-build@ subcommand. The
 network is read from the intent's @network@ field, not
@@ -147,8 +150,12 @@ network magic.
 runTxBuild :: FilePath -> Severity -> TxBuildOpts -> IO ()
 runTxBuild socket minimumSeverity TxBuildOpts{..} = do
     withLogHandle tboLog $ \logH -> do
-        let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
-            tr = buildEventTracer textTracer
+        let textTracer =
+                Tracer (TIO.hPutStrLn logH . snd)
+                    :: Tracer IO (Severity, Text)
+            tr =
+                buildEventSeverityTracer $
+                    filterSeverity minimumSeverity textTracer
         traceWith tr (BuildEventIntentSource tboIntentPath)
         parsed <- case tboIntentPath of
             Just p -> decodeTreasuryIntentFile p

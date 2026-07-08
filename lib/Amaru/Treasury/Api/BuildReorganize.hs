@@ -44,7 +44,7 @@ module Amaru.Treasury.Api.BuildReorganize
     ) where
 
 import Control.Exception (SomeException, try)
-import Control.Tracer (Tracer (..))
+import Control.Tracer (Tracer (..), traceWith)
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as BSL
@@ -58,8 +58,8 @@ import System.IO (stderr)
 
 import Amaru.Treasury.Api.Proofs (ProofResult)
 import Amaru.Treasury.Backend (Backend)
-import Amaru.Treasury.Build.Trace (renderBuildEvent)
-import Amaru.Treasury.Cli.Common (GlobalOpts)
+import Amaru.Treasury.Build.Trace (buildEventSeverityTracer)
+import Amaru.Treasury.Cli.Common (GlobalOpts (..))
 import Amaru.Treasury.Cli.ReorganizeWizard
     ( CommonFlags (..)
     , ReorganizeWizardOpts (..)
@@ -72,12 +72,16 @@ import Amaru.Treasury.Report
     , TxCborHex (..)
     )
 import Amaru.Treasury.Scope (ScopeId)
+import Amaru.Treasury.Trace
+    ( Severity
+    , filterSeverity
+    )
 import Amaru.Treasury.Tx.Envelope
     ( EnvelopeKind (..)
     , encodeEnvelope
     )
 import Amaru.Treasury.Tx.ReorganizeWizard.Trace
-    ( renderReorganizeWizardEvent
+    ( reorganizeWizardEventSeverityTracer
     )
 import Amaru.Treasury.Wizard.Failure
     ( BuildFailure (..)
@@ -271,11 +275,20 @@ runBuildReorganize g serverMetadataPath backend req = do
             pure (failureResponse wf)
         Right opts -> do
             let tr =
+                    reorganizeWizardEventSeverityTracer apiTracer
+                apiTracer =
+                    Tracer $ \(severity, message) ->
+                        traceWith
+                            severityTracer
+                            ( severity
+                            , "amaru-treasury-tx-api: " <> message
+                            )
+                severityTracer =
+                    filterSeverity (goMinimumSeverity g) stderrTracer
+                stderrTracer =
                     Tracer
-                        ( TIO.hPutStrLn stderr
-                            . ("amaru-treasury-tx-api: " <>)
-                            . renderReorganizeWizardEvent
-                        )
+                        (TIO.hPutStrLn stderr . snd)
+                        :: Tracer IO (Severity, Text)
             r <-
                 try @SomeException
                     (buildReorganizeIntent g opts backend tr)
@@ -327,13 +340,7 @@ runBuildReorganize g serverMetadataPath backend req = do
                                 , rbrProofs = Nothing
                                 }
                     let trB =
-                            Tracer
-                                ( TIO.hPutStrLn stderr
-                                    . ( "amaru-treasury-tx-api: "
-                                            <>
-                                      )
-                                    . renderBuildEvent
-                                )
+                            buildEventSeverityTracer apiTracer
                     rb <-
                         try @SomeException
                             ( buildReorganizeTx

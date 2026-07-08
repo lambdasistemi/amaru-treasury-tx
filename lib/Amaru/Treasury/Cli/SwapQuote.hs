@@ -86,6 +86,10 @@ import Amaru.Treasury.Scope
     , scopeFromText
     , scopeText
     )
+import Amaru.Treasury.Trace
+    ( Severity
+    , filterSeverity
+    )
 import Amaru.Treasury.Tx.SwapQuote
     ( AffordabilityFailure (..)
     , AffordabilitySummary
@@ -123,7 +127,7 @@ import Amaru.Treasury.Tx.SwapWizard
     )
 import Amaru.Treasury.Tx.SwapWizard.Trace
     ( WizardEvent (..)
-    , eventTracer
+    , eventSeverityTracer
     )
 
 data SwapQuoteOpts = SwapQuoteOpts
@@ -474,8 +478,12 @@ runSwapQuote g quoteOpts@SwapQuoteOpts{..} = do
     createDirectoryIfMissing True sqoOutDir
     observedAt <- currentIso8601
     withLogHandle (Just (sqpWizardLog paths)) $ \logH -> do
-        let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
-            tr = eventTracer textTracer
+        let textTracer =
+                Tracer (TIO.hPutStrLn logH . snd)
+                    :: Tracer IO (Severity, Text)
+            tr =
+                eventSeverityTracer $
+                    filterSeverity (goMinimumSeverity g) textTracer
         networkName <- case resolveNetworkName g of
             Right t -> pure t
             Left e -> abortTr tr (T.pack e)

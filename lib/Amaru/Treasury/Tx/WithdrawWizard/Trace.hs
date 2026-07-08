@@ -12,8 +12,10 @@ value of the produced @intent.json@ is a constructor of
 -}
 module Amaru.Treasury.Tx.WithdrawWizard.Trace
     ( WithdrawWizardEvent (..)
+    , withdrawWizardEventSeverity
     , renderWithdrawWizardEvent
     , withdrawWizardEventTracer
+    , withdrawWizardEventSeverityTracer
     ) where
 
 import Control.Tracer (Tracer (..), contramap)
@@ -22,6 +24,7 @@ import Data.Text qualified as T
 import Data.Word (Word64)
 
 import Amaru.Treasury.Scope (ScopeId, scopeText)
+import Amaru.Treasury.Trace (Severity (..))
 
 data WithdrawWizardEvent
     = WweNetwork !Text !Word64
@@ -44,6 +47,13 @@ data WithdrawWizardEvent
     | WweIntentReady !(Maybe FilePath)
     | WweAborted !Text
     deriving stock (Eq, Show)
+
+-- | Severity classification for withdraw-wizard events.
+withdrawWizardEventSeverity :: WithdrawWizardEvent -> Severity
+withdrawWizardEventSeverity = \case
+    WweNoRewards{} -> Warning
+    WweAborted{} -> Error
+    _ -> Info
 
 renderWithdrawWizardEvent :: WithdrawWizardEvent -> Text
 renderWithdrawWizardEvent =
@@ -97,6 +107,16 @@ withdrawWizardEventTracer
     :: Tracer m Text -> Tracer m WithdrawWizardEvent
 withdrawWizardEventTracer =
     contramap renderWithdrawWizardEvent
+
+{- | Lift a severity-aware 'Text' sink into a
+'WithdrawWizardEvent' tracer via 'withdrawWizardEventSeverity'
+and 'renderWithdrawWizardEvent'.
+-}
+withdrawWizardEventSeverityTracer
+    :: Tracer m (Severity, Text) -> Tracer m WithdrawWizardEvent
+withdrawWizardEventSeverityTracer =
+    contramap $ \event ->
+        (withdrawWizardEventSeverity event, renderWithdrawWizardEvent event)
 
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show

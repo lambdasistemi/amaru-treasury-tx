@@ -71,7 +71,6 @@ import Amaru.Treasury.Build.Error.Types
     )
 import Amaru.Treasury.Build.Trace
     ( BuildEvent (..)
-    , buildEventTracer
     )
 import Amaru.Treasury.ChainContext
     ( liveContext
@@ -119,6 +118,10 @@ import Amaru.Treasury.Report
     , txCborHexFromBytes
     )
 import Amaru.Treasury.Scope (scopeText)
+import Amaru.Treasury.Trace
+    ( Severity
+    , filterSeverity
+    )
 import Amaru.Treasury.Tx.SwapQuote qualified as SQ
 import Amaru.Treasury.Tx.SwapWizard
     ( AllAdaPlan (..)
@@ -137,7 +140,7 @@ import Amaru.Treasury.Tx.SwapWizard
     )
 import Amaru.Treasury.Tx.SwapWizard.Trace
     ( WizardEvent (..)
-    , eventTracer
+    , eventSeverityTracer
     )
 import Amaru.Treasury.Wizard.Failure
     ( BuildFailure (..)
@@ -538,8 +541,12 @@ runWizard :: GlobalOpts -> WizardOpts -> IO ()
 runWizard g opts@WizardOpts{..} = do
     let socket = fromMaybe "(unset)" (goSocketPath g)
     withLogHandle wOptsLog $ \logH -> do
-        let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
-            tr = eventTracer textTracer
+        let textTracer =
+                Tracer (TIO.hPutStrLn logH . snd)
+                    :: Tracer IO (Severity, Text)
+            tr =
+                eventSeverityTracer $
+                    filterSeverity (goMinimumSeverity g) textTracer
         withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $
             \backend -> do
                 result <- buildSwapIntent g opts backend tr

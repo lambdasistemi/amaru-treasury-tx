@@ -80,6 +80,10 @@ import Amaru.Treasury.Scope
     ( ScopeId
     , scopeFromText
     )
+import Amaru.Treasury.Trace
+    ( Severity (Info)
+    , filterSeverity
+    )
 import Amaru.Treasury.Tx.WithdrawWizard qualified as Withdraw
 import Amaru.Treasury.Tx.WithdrawWizard.Trace qualified as WithdrawTrace
 
@@ -218,8 +222,18 @@ runWithdrawWizard :: GlobalOpts -> WithdrawOpts -> IO ()
 runWithdrawWizard g opts@WithdrawOpts{..} = do
     let socket = fromMaybe "(unset)" (goSocketPath g)
     withLogHandle wdOptsLog $ \logH -> do
-        let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
-            tr = WithdrawTrace.withdrawWizardEventTracer textTracer
+        let severityTracer =
+                filterSeverity (goMinimumSeverity g) $
+                    Tracer (TIO.hPutStrLn logH . snd)
+                    :: Tracer IO (Severity, Text)
+            textTracer =
+                ( Tracer $ \msg ->
+                    traceWith severityTracer (Info, msg)
+                )
+                    :: Tracer IO Text
+            tr =
+                WithdrawTrace.withdrawWizardEventSeverityTracer
+                    severityTracer
         case validateWithdrawWizardInputControl opts of
             Right () -> pure ()
             Left ce ->

@@ -15,6 +15,9 @@ a parse 'Failure', and the top-level help body must not list a
 module Amaru.Treasury.Cli.ParserSpec (spec) where
 
 import Data.Char (isSpace)
+import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
 import Options.Applicative
     ( ParserResult (..)
     , defaultPrefs
@@ -65,6 +68,39 @@ spec = describe "Amaru.Treasury.Cli.ParserSpec (post-#157)" $ do
                 `shouldSatisfy` not
                     . any matchesDevnetLine
                     . lines
+    describe "CLI wizard event severity" $ do
+        it "filters tx-build events with the explicit threshold" $ do
+            src <- TIO.readFile txBuildSource
+            src `shouldContainText` "filterSeverity minimumSeverity"
+            src `shouldContainText` "buildEventSeverityTracer"
+            src `shouldNotContainText` "buildEventTracer textTracer"
+
+        it "filters swap wizard events with global verbosity" $ do
+            src <- TIO.readFile swapWizardSource
+            src `shouldContainText` "filterSeverity (goMinimumSeverity g)"
+            src `shouldContainText` "eventSeverityTracer"
+            src `shouldNotContainText` "eventTracer textTracer"
+
+        it "filters swap-quote wizard events with global verbosity" $ do
+            src <- TIO.readFile swapQuoteSource
+            src `shouldContainText` "filterSeverity (goMinimumSeverity g)"
+            src `shouldContainText` "eventSeverityTracer"
+            src `shouldNotContainText` "eventTracer textTracer"
+
+        it "filters disburse wizard events with command-specific prefixes" $ do
+            src <- TIO.readFile disburseWizardSource
+            src `shouldContainText` "filterSeverity (goMinimumSeverity g)"
+            src `shouldContainText` "disburseEventSeverityTracerWithPrefix"
+            src `shouldContainText` "commandName"
+            src
+                `shouldNotContainText` "disburseEventTracerWithPrefix\n                        commandName"
+
+        it "filters withdraw wizard events with global verbosity" $ do
+            src <- TIO.readFile withdrawWizardSource
+            src `shouldContainText` "filterSeverity (goMinimumSeverity g)"
+            src `shouldContainText` "withdrawWizardEventSeverityTracer"
+            src
+                `shouldNotContainText` "withdrawWizardEventTracer textTracer"
 
 {- | Equivalent to the POSIX regex
 @^[[:space:]]+devnet([[:space:]]|$)@ — leading whitespace,
@@ -103,3 +139,26 @@ renderHelpBody =
             in  msg
         Success _ -> ""
         CompletionInvoked _ -> ""
+
+txBuildSource :: FilePath
+txBuildSource = "lib/Amaru/Treasury/Cli/TxBuild.hs"
+
+swapWizardSource :: FilePath
+swapWizardSource = "lib/Amaru/Treasury/Wizard/Swap.hs"
+
+swapQuoteSource :: FilePath
+swapQuoteSource = "lib/Amaru/Treasury/Cli/SwapQuote.hs"
+
+disburseWizardSource :: FilePath
+disburseWizardSource = "lib/Amaru/Treasury/Cli/DisburseWizard.hs"
+
+withdrawWizardSource :: FilePath
+withdrawWizardSource = "lib/Amaru/Treasury/Cli/WithdrawWizard.hs"
+
+shouldContainText :: Text -> Text -> IO ()
+shouldContainText haystack needle =
+    haystack `shouldSatisfy` T.isInfixOf needle
+
+shouldNotContainText :: Text -> Text -> IO ()
+shouldNotContainText haystack needle =
+    haystack `shouldSatisfy` not . T.isInfixOf needle

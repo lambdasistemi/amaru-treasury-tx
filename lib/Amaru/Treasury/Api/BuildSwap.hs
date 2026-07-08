@@ -43,7 +43,7 @@ module Amaru.Treasury.Api.BuildSwap
     ) where
 
 import Control.Exception (SomeException, try)
-import Control.Tracer (Tracer (..))
+import Control.Tracer (Tracer (..), traceWith)
 import Data.Aeson (FromJSON, ToJSON)
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy qualified as BSL
@@ -58,8 +58,8 @@ import System.IO (stderr)
 import Amaru.Treasury.Api.GraphEffect (GraphEffect)
 import Amaru.Treasury.Api.Proofs (ProofResult)
 import Amaru.Treasury.Backend (Backend)
-import Amaru.Treasury.Build.Trace (renderBuildEvent)
-import Amaru.Treasury.Cli.Common (GlobalOpts)
+import Amaru.Treasury.Build.Trace (buildEventSeverityTracer)
+import Amaru.Treasury.Cli.Common (GlobalOpts (..))
 import Amaru.Treasury.Cli.SwapWizard
     ( ChunkSpec (..)
     , WizardOpts (..)
@@ -72,12 +72,16 @@ import Amaru.Treasury.Report
     , TxCborHex (..)
     )
 import Amaru.Treasury.Scope (ScopeId)
+import Amaru.Treasury.Trace
+    ( Severity
+    , filterSeverity
+    )
 import Amaru.Treasury.Tx.Envelope
     ( EnvelopeKind (..)
     , encodeEnvelope
     )
 import Amaru.Treasury.Tx.SwapQuote (SlippageBps (..))
-import Amaru.Treasury.Tx.SwapWizard.Trace (renderEvent)
+import Amaru.Treasury.Tx.SwapWizard.Trace (eventSeverityTracer)
 import Amaru.Treasury.Wizard.Failure
     ( BuildFailure (..)
     , FieldId (..)
@@ -326,12 +330,21 @@ runBuildSwap g serverMetadataPath backend req = do
             -- contract (deep bech32 parses, network drops, etc.)
             -- so the HTTP request always gets a structured body
             -- rather than a 500 + "Something went wrong".
-            let tr =
+            let stderrTracer =
                     Tracer
-                        ( TIO.hPutStrLn stderr
-                            . ("amaru-treasury-tx-api: " <>)
-                            . renderEvent
-                        )
+                        (TIO.hPutStrLn stderr . snd)
+                        :: Tracer IO (Severity, Text)
+                severityTracer =
+                    filterSeverity (goMinimumSeverity g) stderrTracer
+                apiTracer =
+                    Tracer $ \(severity, message) ->
+                        traceWith
+                            severityTracer
+                            ( severity
+                            , "amaru-treasury-tx-api: " <> message
+                            )
+                tr =
+                    eventSeverityTracer apiTracer
             r <- try @SomeException (buildSwapIntent g opts backend tr)
             case r of
                 Left e -> do
@@ -388,13 +401,7 @@ runBuildSwap g serverMetadataPath backend req = do
                     -- (the data fields stay null); successes
                     -- populate cborHex + report.
                     let trB =
-                            Tracer
-                                ( TIO.hPutStrLn stderr
-                                    . ( "amaru-treasury-tx-api: "
-                                            <>
-                                      )
-                                    . renderBuildEvent
-                                )
+                            buildEventSeverityTracer apiTracer
                     rb <-
                         try @SomeException
                             ( buildSwapTx

@@ -35,3 +35,14 @@
 - [X] T454-F1 Audit commits, task accounting, PR body, and gate output.
 - [X] T454-F1 Drop `gate.sh` in the final ready-for-review commit.
 - [X] T454-F1 Mark PR #459 ready for review.
+
+## CI correction - lint failure
+
+- [X] T454-LINT Restore `gate.sh` with the same cabal-fmt,
+  fourmolu, and hlint coverage as the CI lint derivation.
+- [X] T454-LINT Fix the CI hlint hints without adding an
+  `Avoid lambda` ignore to `.hlint.yaml`.
+- [X] T454-LINT Run local full-tree lint clean through `./gate.sh`.
+- [ ] T454-F2 Push the lint fix as a new commit without force-pushing.
+- [ ] T454-F2 Mark PR #459 ready only after local lint is clean.
+- [ ] T454-F2 Wait for PR #459 CI to pass before recording COMPLETE.

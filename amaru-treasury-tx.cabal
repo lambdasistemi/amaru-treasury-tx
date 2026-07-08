@@ -242,6 +242,7 @@ library
     Amaru.Treasury.Swap.Rerate.Budget
     Amaru.Treasury.Swap.Rerate.Plan
     Amaru.Treasury.Swap.Rerate.Types
+    Amaru.Treasury.Trace
     Amaru.Treasury.Tx.AttachWitness
     Amaru.Treasury.Tx.Disburse
     Amaru.Treasury.Tx.Disburse.Trace
@@ -618,6 +619,7 @@ test-suite unit-tests
     Amaru.Treasury.Swap.Rerate.BudgetSpec
     Amaru.Treasury.Swap.Rerate.PlanSpec
     Amaru.Treasury.Swap.RerateSpec
+    Amaru.Treasury.TraceSpec
     Amaru.Treasury.Tx.AttachWitnessSpec
     Amaru.Treasury.Tx.DisburseBuildSpec
     Amaru.Treasury.Tx.DisburseSpec

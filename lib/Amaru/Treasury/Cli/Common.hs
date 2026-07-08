@@ -46,6 +46,7 @@ import Options.Applicative
     , option
     , optional
     , strOption
+    , switch
     )
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.Environment (lookupEnv)
@@ -68,6 +69,10 @@ import Cardano.Slotting.Slot (SlotNo (..))
 
 import Amaru.Treasury.Backend (Provider (..))
 import Amaru.Treasury.IntentJSON.Common (parseAddr)
+import Amaru.Treasury.Trace
+    ( Severity (..)
+    , parseSeverityText
+    )
 import Amaru.Treasury.Tx.SwapWizard (txInToText)
 
 data GlobalOpts = GlobalOpts
@@ -77,6 +82,7 @@ data GlobalOpts = GlobalOpts
     -- ^ canonical name when known
     --   ('Nothing' for magics like @42@ that have no
     --   well-known name).
+    , goMinimumSeverity :: !Severity
     }
     deriving stock (Eq, Show)
 
@@ -92,6 +98,8 @@ data GlobalConfigOpts = GlobalConfigOpts
     , gcoProfile :: !(Maybe Text)
     , gcoSocketPath :: !(Maybe FilePath)
     , gcoNetwork :: !(Maybe GlobalNetworkArg)
+    , gcoLogLevel :: !(Maybe Severity)
+    , gcoVerbose :: !Bool
     }
     deriving stock (Eq, Show)
 
@@ -122,6 +130,18 @@ globalConfigOptsP =
                 )
             )
         <*> optional (byName <|> byMagic)
+        <*> optional
+            ( option
+                (eitherReader (parseSeverityText . T.pack))
+                ( long "log-level"
+                    <> metavar "LEVEL"
+                    <> help "Minimum log level: debug | info | notice | warning | error"
+                )
+            )
+        <*> switch
+            ( long "verbose"
+                <> help "Emit debug-level logs"
+            )
   where
     byName =
         uncurry GlobalNetworkByName
@@ -150,6 +170,7 @@ globalConfigToGlobalOpts config =
             { goSocketPath = gcoSocketPath config
             , goNetworkMagic = magic
             , goNetworkName = name
+            , goMinimumSeverity = resolveMinimumSeverity config
             }
 
 globalOptsP :: Parser GlobalOpts
@@ -170,6 +191,14 @@ networkArgToPair = \case
         ( NetworkMagic 764_824_073
         , Just "mainnet"
         )
+
+resolveMinimumSeverity :: GlobalConfigOpts -> Severity
+resolveMinimumSeverity config =
+    case gcoLogLevel config of
+        Just severity -> severity
+        Nothing
+            | gcoVerbose config -> Debug
+            | otherwise -> Info
 
 networkNameToPair :: String -> Either String (Text, NetworkMagic)
 networkNameToPair s = case s of

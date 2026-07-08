@@ -57,6 +57,7 @@ import System.Exit qualified as Exit
 
 import Amaru.Treasury.Cli.Common (GlobalOpts (..))
 import Amaru.Treasury.Config
+import Amaru.Treasury.Trace (Severity (..))
 
 -- | Fully resolved API startup configuration.
 data ApiRuntimeConfig = ApiRuntimeConfig
@@ -464,6 +465,7 @@ globalOptsFromResolved socket resolved =
         { goSocketPath = Just socket
         , goNetworkMagic = NetworkMagic (rnMagic (rtcNetwork resolved))
         , goNetworkName = rnName (rtcNetwork resolved)
+        , goMinimumSeverity = Info
         }
 
 renderApiConfigError :: ApiConfigError -> String

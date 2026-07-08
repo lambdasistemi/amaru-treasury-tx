@@ -31,6 +31,7 @@ import Amaru.Treasury.Cli.TreasuryInspect
     ( InspectOpts (..)
     )
 import Amaru.Treasury.Scope (ScopeId (..))
+import Amaru.Treasury.Trace (Severity (..))
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Cli.Config" $ do
@@ -54,6 +55,7 @@ spec = describe "Amaru.Treasury.Cli.Config" $ do
                                             { goSocketPath = Just "/profile/node.socket"
                                             , goNetworkMagic = NetworkMagic 1
                                             , goNetworkName = Just "preprod"
+                                            , goMinimumSeverity = Info
                                             }
                                        , InspectOpts
                                             { ioMetadata = Just "metadata-profile.json"
@@ -95,6 +97,7 @@ spec = describe "Amaru.Treasury.Cli.Config" $ do
                                             { goSocketPath = Just "/cli/node.socket"
                                             , goNetworkMagic = NetworkMagic 2
                                             , goNetworkName = Just "preview"
+                                            , goMinimumSeverity = Info
                                             }
                                        , InspectOpts
                                             { ioMetadata = Just "metadata-cli.json"
@@ -122,6 +125,7 @@ spec = describe "Amaru.Treasury.Cli.Config" $ do
                                             { goSocketPath = Just "/profile/node.socket"
                                             , goNetworkMagic = NetworkMagic 1
                                             , goNetworkName = Just "preprod"
+                                            , goMinimumSeverity = Info
                                             }
                                        , InspectOpts
                                             { ioMetadata = Just "metadata-profile.json"
@@ -155,6 +159,7 @@ spec = describe "Amaru.Treasury.Cli.Config" $ do
                                         { goSocketPath = Just "/flag/node.socket"
                                         , goNetworkMagic = NetworkMagic 2
                                         , goNetworkName = Just "preview"
+                                        , goMinimumSeverity = Info
                                         }
                                    , InspectOpts
                                         { ioMetadata = Just "metadata-flag.json"
@@ -187,6 +192,7 @@ spec = describe "Amaru.Treasury.Cli.Config" $ do
                                         { goSocketPath = Just "/magic/node.socket"
                                         , goNetworkMagic = NetworkMagic 42
                                         , goNetworkName = Just "devnet"
+                                        , goMinimumSeverity = Info
                                         }
                                    , InspectOpts
                                         { ioMetadata = Just "metadata-magic.json"
@@ -211,6 +217,7 @@ spec = describe "Amaru.Treasury.Cli.Config" $ do
                                         { goSocketPath = Just "/env/node.socket"
                                         , goNetworkMagic = NetworkMagic 764824073
                                         , goNetworkName = Just "mainnet"
+                                        , goMinimumSeverity = Info
                                         }
                                    , InspectOpts
                                         { ioMetadata = Just "metadata-env.json"
@@ -221,6 +228,64 @@ spec = describe "Amaru.Treasury.Cli.Config" $ do
                                         }
                                    )
 
+    it "defaults the minimum log severity to Info" $ do
+        resolved <-
+            parseCliArgsWithEnv
+                []
+                [ "--node-socket"
+                , "/log/node.socket"
+                , "treasury-inspect"
+                , "--metadata"
+                , "metadata-log.json"
+                ]
+
+        resolved `shouldResolveLogLevel` Info
+
+    it "resolves --verbose to Debug" $ do
+        resolved <-
+            parseCliArgsWithEnv
+                []
+                [ "--verbose"
+                , "--node-socket"
+                , "/log/node.socket"
+                , "treasury-inspect"
+                , "--metadata"
+                , "metadata-log.json"
+                ]
+
+        resolved `shouldResolveLogLevel` Debug
+
+    it "resolves --log-level" $ do
+        resolved <-
+            parseCliArgsWithEnv
+                []
+                [ "--log-level"
+                , "warning"
+                , "--node-socket"
+                , "/log/node.socket"
+                , "treasury-inspect"
+                , "--metadata"
+                , "metadata-log.json"
+                ]
+
+        resolved `shouldResolveLogLevel` Warning
+
+    it "lets --log-level win over --verbose" $ do
+        resolved <-
+            parseCliArgsWithEnv
+                []
+                [ "--verbose"
+                , "--log-level"
+                , "error"
+                , "--node-socket"
+                , "/log/node.socket"
+                , "treasury-inspect"
+                , "--metadata"
+                , "metadata-log.json"
+                ]
+
+        resolved `shouldResolveLogLevel` Error
+
 shouldResolveInspect
     :: Either String (GlobalOpts, Cmd)
     -> (GlobalOpts, InspectOpts)
@@ -229,6 +294,19 @@ shouldResolveInspect resolved expected =
     case resolved of
         Right (globals, CmdTreasuryInspect inspect) ->
             (globals, inspect) `shouldBe` expected
+        Right{} ->
+            expectationFailure "expected treasury-inspect command"
+        Left err ->
+            expectationFailure ("expected parse success: " <> err)
+
+shouldResolveLogLevel
+    :: Either String (GlobalOpts, Cmd)
+    -> Severity
+    -> Expectation
+shouldResolveLogLevel resolved expected =
+    case resolved of
+        Right (globals, CmdTreasuryInspect{}) ->
+            goMinimumSeverity globals `shouldBe` expected
         Right{} ->
             expectationFailure "expected treasury-inspect command"
         Left err ->

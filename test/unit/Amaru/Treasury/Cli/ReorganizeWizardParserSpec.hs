@@ -48,6 +48,7 @@ import Amaru.Treasury.Cli.ReorganizeWizard
     , runReorganizeWizardEither
     , validateOutPath
     )
+import Amaru.Treasury.Trace (Severity (..))
 import Amaru.Treasury.Tx.ReorganizeWizard
     ( ReorganizeError (..)
     , ReorganizeWizardAnswers
@@ -120,6 +121,7 @@ mkGlobal n =
         { goSocketPath = Nothing
         , goNetworkMagic = NetworkMagic 42
         , goNetworkName = n
+        , goMinimumSeverity = Info
         }
 
 devnetGlobal :: GlobalOpts
@@ -136,6 +138,7 @@ unresolvableGlobal =
         { goSocketPath = Nothing
         , goNetworkMagic = NetworkMagic 9999999
         , goNetworkName = Nothing
+        , goMinimumSeverity = Info
         }
 
 -- ----------------------------------------------------

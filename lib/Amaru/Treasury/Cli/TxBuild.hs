@@ -84,6 +84,7 @@ import Amaru.Treasury.Report
     , encodeBuildOutput
     , txCborHexFromBytes
     )
+import Amaru.Treasury.Trace (Severity)
 
 {- | Flags for the unified @tx-build@ subcommand. The
 network is read from the intent's @network@ field, not
@@ -143,8 +144,8 @@ txBuildOptsP =
 @network@ field is the source of truth for the N2C
 network magic.
 -}
-runTxBuild :: FilePath -> TxBuildOpts -> IO ()
-runTxBuild socket TxBuildOpts{..} = do
+runTxBuild :: FilePath -> Severity -> TxBuildOpts -> IO ()
+runTxBuild socket minimumSeverity TxBuildOpts{..} = do
     withLogHandle tboLog $ \logH -> do
         let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
             tr = buildEventTracer textTracer
@@ -174,7 +175,7 @@ runTxBuild socket TxBuildOpts{..} = do
             tr
             (BuildEventRequiredUtxos (Set.size required))
         assertSocketNetwork tr socket netName magic
-        withLocalNodeBackend magic socket $ \backend -> do
+        withLocalNodeBackend magic socket minimumSeverity $ \backend -> do
             withLiveContext
                 (networkFromMagic magic)
                 backend

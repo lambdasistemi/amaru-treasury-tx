@@ -49,6 +49,10 @@ import Ouroboros.Consensus.Ledger.Query
     )
 
 import Amaru.Treasury.Backend (Backend, Provider)
+import Amaru.Treasury.Trace
+    ( Severity
+    , filterSeverity
+    )
 import Amaru.Treasury.Trace.Provider
     ( stderrTracer
     , tracedProvider
@@ -70,13 +74,16 @@ withLocalNodeBackend
     -- ^ network magic (mainnet, preprod, preview)
     -> FilePath
     -- ^ path to the cardano-node socket
+    -> Severity
+    -- ^ minimum severity for provider tracing
     -> (Backend -> IO a)
     -- ^ action that consumes the 'Backend'
     -> IO a
-withLocalNodeBackend magic socketPath action = do
+withLocalNodeBackend magic socketPath minimumSeverity action = do
     lsq <- newLSQChannel 4
     ltxs <- newLTxSChannel 1
-    let backend = tracedProvider stderrTracer (mkN2CProvider lsq)
+    let tracer = filterSeverity minimumSeverity stderrTracer
+        backend = tracedProvider tracer (mkN2CProvider lsq)
         connect = do
             r <- runNodeClient magic socketPath lsq ltxs
             case r of
@@ -94,14 +101,17 @@ withLocalNodeClient
     -- ^ network magic (mainnet, preprod, preview, devnet)
     -> FilePath
     -- ^ path to the cardano-node socket
+    -> Severity
+    -- ^ minimum severity for provider and submitter tracing
     -> (Provider IO -> Submitter IO -> IO a)
     -- ^ action that consumes provider and submitter
     -> IO a
-withLocalNodeClient magic socketPath action = do
+withLocalNodeClient magic socketPath minimumSeverity action = do
     lsq <- newLSQChannel 16
     ltxs <- newLTxSChannel 16
-    let provider = tracedProvider stderrTracer (mkN2CProvider lsq)
-        submitter = tracedSubmitter stderrTracer (mkN2CSubmitter ltxs)
+    let tracer = filterSeverity minimumSeverity stderrTracer
+        provider = tracedProvider tracer (mkN2CProvider lsq)
+        submitter = tracedSubmitter tracer (mkN2CSubmitter ltxs)
         connect = do
             r <- runNodeClient magic socketPath lsq ltxs
             case r of

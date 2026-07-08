@@ -318,19 +318,19 @@ spec = describe "/Trace.Provider/" $ do
     it "wires tracing at provider construction sites" $ do
         sourceSectionMentions
             "lib/Amaru/Treasury/Backend/N2C.hs"
-            "withLocalNodeBackend magic socketPath action = do"
+            "withLocalNodeBackend magic socketPath minimumSeverity action = do"
             "withLocalNodeClient"
-            "backend = tracedProvider stderrTracer (mkN2CProvider lsq)"
+            "backend = tracedProvider tracer (mkN2CProvider lsq)"
         sourceSectionMentions
             "lib/Amaru/Treasury/Backend/N2C.hs"
-            "withLocalNodeClient magic socketPath action = do"
+            "withLocalNodeClient magic socketPath minimumSeverity action = do"
             "probeNetworkMagic"
-            "tracedProvider stderrTracer (mkN2CProvider lsq)"
+            "tracedProvider tracer (mkN2CProvider lsq)"
         sourceSectionMentions
             "lib/Amaru/Treasury/Backend/N2C.hs"
-            "withLocalNodeClient magic socketPath action = do"
+            "withLocalNodeClient magic socketPath minimumSeverity action = do"
             "probeNetworkMagic"
-            "tracedSubmitter stderrTracer (mkN2CSubmitter ltxs)"
+            "tracedSubmitter tracer (mkN2CSubmitter ltxs)"
         sourceSectionMentions
             "lib/Amaru/Treasury/Api/Server.hs"
             "indexerProvider apiIdx realProvider ="

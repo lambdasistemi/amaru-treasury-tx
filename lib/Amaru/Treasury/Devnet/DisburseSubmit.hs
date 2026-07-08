@@ -155,6 +155,7 @@ import Amaru.Treasury.Scope
     ( ScopeId (CoreDevelopment)
     , scopeText
     )
+import Amaru.Treasury.Trace (Severity (..))
 import Amaru.Treasury.Tx.AttachWitness
     ( decodeUnsignedTxHex
     , encodeSignedTxHex
@@ -565,6 +566,7 @@ buildDisburseTransaction
             try @ExitCode $
                 TxBuild.runTxBuild
                     ddsicSocketPath
+                    Info
                     TxBuild.TxBuildOpts
                         { TxBuild.tboIntentPath =
                             Just (disburseSubmitIntentPath ddsicRunDir)

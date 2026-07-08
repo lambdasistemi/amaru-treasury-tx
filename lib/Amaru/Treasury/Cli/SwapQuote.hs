@@ -487,7 +487,7 @@ runSwapQuote g quoteOpts@SwapQuoteOpts{..} = do
         traceWith tr (WeNetwork networkName (fromIntegral magic))
         traceWith tr (WeMetadata sqoMetadataPath)
 
-        withLocalNodeBackend (goNetworkMagic g) socket $
+        withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $
             \backend -> do
                 verified <-
                     verifyRegistry
@@ -588,6 +588,7 @@ runSwapQuote g quoteOpts@SwapQuoteOpts{..} = do
                             )
                         runTxBuild
                             socket
+                            (goMinimumSeverity g)
                             TxBuildOpts
                                 { tboIntentPath =
                                     Just (sqpIntentJson paths)

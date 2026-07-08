@@ -2,12 +2,12 @@
 
 ## Slice 1 - Shared parsing and CLI plumbing
 
-- [ ] T453-S1 Add shared severity parsing/rendering.
-- [ ] T453-S1 Extend CLI global config with log level and verbose
+- [X] T453-S1 Add shared severity parsing/rendering.
+- [X] T453-S1 Extend CLI global config with log level and verbose
   parsing.
-- [ ] T453-S1 Thread the resolved threshold into N2C provider tracing.
-- [ ] T453-S1 Add/update focused unit tests and run slice proof.
-- [ ] T453-S1 Commit `feat: add CLI log verbosity control`.
+- [X] T453-S1 Thread the resolved threshold into N2C provider tracing.
+- [X] T453-S1 Add/update focused unit tests and run slice proof.
+- [X] T453-S1 Commit `feat: add CLI log verbosity control`.
 
 ## Slice 2 - API environment and provider wiring
 

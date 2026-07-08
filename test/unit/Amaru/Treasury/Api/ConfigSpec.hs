@@ -32,6 +32,7 @@ import Amaru.Treasury.Api.Config
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     )
+import Amaru.Treasury.Trace (Severity (..))
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Api.Config" $ do
@@ -70,6 +71,7 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                             , goNetworkMagic =
                                 NetworkMagic 764824073
                             , goNetworkName = Just "mainnet"
+                            , goMinimumSeverity = Info
                             }
                     }
 
@@ -114,6 +116,7 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                         { goSocketPath = Just "/env/node.socket"
                         , goNetworkMagic = NetworkMagic 764824073
                         , goNetworkName = Just "mainnet"
+                        , goMinimumSeverity = Info
                         }
                 }
 
@@ -175,6 +178,7 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                             , goNetworkMagic =
                                 NetworkMagic 764824073
                             , goNetworkName = Just "mainnet"
+                            , goMinimumSeverity = Info
                             }
                     }
 
@@ -233,6 +237,7 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                         { goSocketPath = Just "/flag/node.socket"
                         , goNetworkMagic = NetworkMagic 764824073
                         , goNetworkName = Just "mainnet"
+                        , goMinimumSeverity = Info
                         }
                 }
 

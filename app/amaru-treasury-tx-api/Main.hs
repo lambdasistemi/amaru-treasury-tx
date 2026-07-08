@@ -163,6 +163,7 @@ import Amaru.Treasury.Metadata
     , readMetadataFile
     )
 import Amaru.Treasury.Scope (ScopeId)
+import Amaru.Treasury.Trace (Severity (..))
 
 -- Main
 
@@ -207,7 +208,7 @@ main = do
         "amaru-treasury-tx-api: opening N2C session on "
             <> arcSocket opts
     let g = arcGlobalOpts opts
-    withLocalNodeBackend (goNetworkMagic g) (arcSocket opts) $
+    withLocalNodeBackend (goNetworkMagic g) (arcSocket opts) Info $
         \backend -> do
             putStrLn $
                 "amaru-treasury-tx-api: bringing up \

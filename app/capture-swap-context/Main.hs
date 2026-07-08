@@ -81,6 +81,7 @@ import Amaru.Treasury.IntentJSON
     , decodeTreasuryIntentFile
     )
 import Amaru.Treasury.IntentJSON.Common (parseTxIn)
+import Amaru.Treasury.Trace (Severity (..))
 
 import Options.Applicative qualified as O
 
@@ -150,7 +151,7 @@ main = do
                 "capture: only swap and disburse intents are supported"
     IO.hPutStrLn stderr $
         "capture: connecting to " <> socket
-    withLocalNodeBackend coNetworkMagic socket $ \backend -> do
+    withLocalNodeBackend coNetworkMagic socket Info $ \backend -> do
         allRequired <- case requiredUtxos some of
             Left e ->
                 throwIO . userError $

@@ -76,6 +76,7 @@ import Amaru.Treasury.ChainContext
     ( networkFromMagic
     , withLiveContext
     )
+import Amaru.Treasury.Trace (Severity (..))
 import Amaru.Treasury.Tx.Swap
     ( SwapIntent (..)
     , SwapOrderDatumParams (..)
@@ -318,7 +319,7 @@ main = do
         fromMaybe defaultSocket
             <$> lookupEnv "CARDANO_NODE_SOCKET_PATH"
     IO.hPutStrLn stderr $ "swap-probe: connecting to " <> socket
-    withLocalNodeBackend mainnetMagic socket $ \backend -> do
+    withLocalNodeBackend mainnetMagic socket Info $ \backend -> do
         IO.hPutStrLn stderr "swap-probe: capturing chain context"
         withLiveContext
             (networkFromMagic mainnetMagic)

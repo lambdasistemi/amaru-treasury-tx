@@ -81,6 +81,7 @@ import Amaru.Treasury.Swap.Rerate.Types
     , ReratePlanReason (..)
     , RerateSplit (..)
     )
+import Amaru.Treasury.Trace (Severity (..))
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Cli.SwapRerate" $ do
@@ -451,6 +452,7 @@ mainnetOpts =
         { goSocketPath = Nothing
         , goNetworkMagic = NetworkMagic 764_824_073
         , goNetworkName = Just "mainnet"
+        , goMinimumSeverity = Info
         }
 
 offlineOpts :: SwapRerateSelectionMode -> SwapRerateOpts

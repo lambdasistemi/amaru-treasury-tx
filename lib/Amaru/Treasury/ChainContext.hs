@@ -52,7 +52,10 @@ import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
 import Data.Set (Set)
 import Data.Set qualified as Set
+import Data.Text (Text)
+import Data.Text.IO qualified as TIO
 import Ouroboros.Network.Magic (NetworkMagic (..))
+import System.IO (stderr)
 
 import Cardano.Ledger.Api.Tx.Out (TxOut)
 import Cardano.Ledger.BaseTypes (Network (..))
@@ -133,16 +136,20 @@ liveContext
     -> Set TxIn
     -> IO ChainContext
 liveContext network prov needed = do
+    dbg "liveContext: querying protocol params"
     pp <- queryProtocolParams prov
+    dbg "liveContext: querying utxos"
     utxos <- queryUTxOByTxIn prov needed
+    dbg "liveContext: querying ledger snapshot"
     snapshot <- queryLedgerSnapshot prov
+    dbg "liveContext: sampled OK"
     mkContext
         network
         (ledgerTipSlot snapshot)
         needed
         pp
         utxos
-        (evaluateTx prov)
+        (dbgEvaluateTx (evaluateTx prov))
 
 liveContextFromHandle
     :: Network
@@ -150,16 +157,41 @@ liveContextFromHandle
     -> QueryHandle IO
     -> IO ChainContext
 liveContextFromHandle network needed handle = do
+    dbg "liveContextFromHandle: querying protocol params"
     pp <- queryProtocolParamsH handle
+    dbg "liveContextFromHandle: querying utxos"
     utxos <- queryUTxOByTxInH handle needed
+    dbg "liveContextFromHandle: querying ledger snapshot"
     snapshot <- queryLedgerSnapshotH handle
+    dbg "liveContextFromHandle: sampled OK"
     mkContext
         network
         (ledgerTipSlot snapshot)
         needed
         pp
         utxos
-        (evaluateTxH handle)
+        (dbgEvaluateTx (evaluateTxH handle))
+
+{- | Debugging aid for #449: the shared long-lived
+'Backend'/node connection has been observed both hanging
+indefinitely (no exception, ever) and throwing
+@ConnectionLost@, with neither symptom pinned to a specific
+call. These before/after markers narrow a future occurrence
+to one of the four provider calls below or the evaluator.
+Remove once the root cause is fixed.
+-}
+dbg :: Text -> IO ()
+dbg msg = TIO.hPutStrLn stderr ("amaru-treasury: chain-context: " <> msg)
+
+dbgEvaluateTx
+    :: (ConwayTx -> IO (EvaluateTxResult ConwayEra))
+    -> ConwayTx
+    -> IO (EvaluateTxResult ConwayEra)
+dbgEvaluateTx eval tx = do
+    dbg "evaluateTx: calling provider"
+    r <- eval tx
+    dbg "evaluateTx: provider returned"
+    pure r
 
 mkContext
     :: Network

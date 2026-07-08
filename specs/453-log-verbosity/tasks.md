@@ -23,4 +23,4 @@
 - [X] T453-F1 Run the full `./gate.sh` at branch head.
 - [X] T453-F1 Update the draft PR body with delivered behavior and
   verification.
-- [ ] T453-F1 Drop `gate.sh`, mark the PR ready, and wait for CI.
+- [X] T453-F1 Drop `gate.sh`, mark the PR ready, and wait for CI.

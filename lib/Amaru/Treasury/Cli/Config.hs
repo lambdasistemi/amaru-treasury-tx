@@ -25,6 +25,7 @@ import Amaru.Treasury.Cli.Common
     ( GlobalConfigOpts (..)
     , GlobalNetworkArg (..)
     , GlobalOpts (..)
+    , globalConfigToGlobalOpts
     )
 import Amaru.Treasury.Cli.TreasuryInspect
     ( InspectOpts (..)
@@ -91,7 +92,7 @@ resolveGlobalConfig
     -> GlobalConfigOpts
     -> IO (Either CliConfigError GlobalOpts)
 resolveGlobalConfig envs globals =
-    fmap globalOptsFromResolved
+    fmap (globalOptsFromResolved globals)
         <$> resolveRuntimeConfig envs globals id []
 
 -- | Resolve global and @treasury-inspect@ command config together.
@@ -110,7 +111,7 @@ resolveTreasuryInspectConfig envs globals inspect = do
     pure $ do
         runtime <- resolved
         resolvedInspect <- fillInspectOpts runtime inspect
-        pure (globalOptsFromResolved runtime, resolvedInspect)
+        pure (globalOptsFromResolved globals runtime, resolvedInspect)
 
 resolveRuntimeConfig
     :: [(String, String)]
@@ -175,12 +176,15 @@ addInspectOverrides inspect overrides =
         , tcoSwapOrderAddress = ioSwapOrderAddress inspect
         }
 
-globalOptsFromResolved :: ResolvedTreasuryConfig -> GlobalOpts
-globalOptsFromResolved resolved =
+globalOptsFromResolved
+    :: GlobalConfigOpts -> ResolvedTreasuryConfig -> GlobalOpts
+globalOptsFromResolved globals resolved =
     GlobalOpts
         { goSocketPath = rtcNodeSocket resolved
         , goNetworkMagic = NetworkMagic (rnMagic (rtcNetwork resolved))
         , goNetworkName = rnName (rtcNetwork resolved)
+        , goMinimumSeverity =
+            goMinimumSeverity (globalConfigToGlobalOpts globals)
         }
 
 fillInspectOpts

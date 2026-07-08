@@ -34,6 +34,7 @@ import Cardano.Node.Client.Validity
     )
 
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
+import Amaru.Treasury.Trace (Severity (..))
 
 main :: IO ()
 main = do
@@ -41,7 +42,7 @@ main = do
         fromMaybe "/code/cardano-mainnet/ipc/node.socket"
             <$> lookupEnv "CARDANO_NODE_SOCKET_PATH"
     let magic = NetworkMagic 764824073 -- mainnet
-    withLocalNodeBackend magic socket $ \provider -> do
+    withLocalNodeBackend magic socket Info $ \provider -> do
         let go label choice = do
                 r <- queryUpperBoundSlot provider choice
                 putStrLn $ label <> " = " <> show r

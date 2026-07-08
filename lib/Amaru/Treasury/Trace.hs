@@ -6,6 +6,8 @@ License     : Apache-2.0
 -}
 module Amaru.Treasury.Trace
     ( Severity (..)
+    , parseSeverityText
+    , renderSeverityText
     , severityAtLeast
     , filterSeverity
     , traced
@@ -37,6 +39,31 @@ data Severity
     | Warning
     | Error
     deriving stock (Bounded, Enum, Eq, Ord, Show)
+
+-- | Render a severity as CLI/config text.
+renderSeverityText :: Severity -> Text
+renderSeverityText = \case
+    Debug -> "debug"
+    Info -> "info"
+    Notice -> "notice"
+    Warning -> "warning"
+    Error -> "error"
+
+-- | Parse CLI/config severity text.
+parseSeverityText :: Text -> Either String Severity
+parseSeverityText raw =
+    case T.toLower raw of
+        "debug" -> Right Debug
+        "info" -> Right Info
+        "notice" -> Right Notice
+        "warning" -> Right Warning
+        "error" -> Right Error
+        _ ->
+            Left
+                ( "unknown log level: "
+                    <> T.unpack raw
+                    <> " (expected debug|info|notice|warning|error)"
+                )
 
 -- | Test whether an event severity passes a minimum-severity threshold.
 severityAtLeast :: Severity -> Severity -> Bool

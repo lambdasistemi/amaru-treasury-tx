@@ -219,7 +219,7 @@ runTreasuryInspect g InspectOpts{..} = do
             fromMaybe sundaeOrderAddressMainnet ioSwapOrderAddress
     swapAddrParsed <- parseSwapAddrOrAbort swapAddr
     result <- try @SomeException $
-        withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+        withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
             slot <- nowTip backend
             treasuryUtxos <-
                 queryAllTreasuries backend metadata ioScope

@@ -124,7 +124,7 @@ main = withUtf8 . withUpdateCheckMain $ do
             runReorganizeWizard g rwo
         CmdTxBuild to ->
             withSocket g $ \socket ->
-                runTxBuild socket to
+                runTxBuild socket (goMinimumSeverity g) to
         CmdTreasuryInspect io ->
             withSocket g $ \socket ->
                 runTreasuryInspect g{goSocketPath = Just socket} io

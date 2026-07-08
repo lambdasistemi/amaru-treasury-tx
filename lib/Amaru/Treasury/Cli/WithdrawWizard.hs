@@ -251,7 +251,7 @@ runWithdrawWizard g opts@WithdrawOpts{..} = do
                     , Withdraw.waLabel = wdOptsLabel
                     }
 
-        withLocalNodeBackend (goNetworkMagic g) socket $
+        withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $
             \backend -> do
                 verified <-
                     verifyRegistry

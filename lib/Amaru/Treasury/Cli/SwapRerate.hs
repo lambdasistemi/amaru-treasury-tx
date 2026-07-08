@@ -587,7 +587,7 @@ data LiveOrderCandidate = LiveOrderCandidate
 runSwapRerateLive :: GlobalOpts -> FilePath -> SwapRerateOpts -> IO ()
 runSwapRerateLive g socket opts@SwapRerateOpts{..} = do
     metadata <- readMetadataFile sroMetadataPath
-    withLocalNodeBackend (goNetworkMagic g) socket $ \provider -> do
+    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \provider -> do
         resolveLiveRerate g provider metadata opts >>= \case
             LivePassthrough reason ->
                 writeRerateReport sroReportPath (passthroughReport opts reason)

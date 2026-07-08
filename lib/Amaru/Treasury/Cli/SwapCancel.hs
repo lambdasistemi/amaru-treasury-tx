@@ -282,7 +282,7 @@ runSwapCancel g opts@SwapCancelOpts{..} = do
                 opts
                 "order-script-ref"
                 orderScriptRefText
-        withLocalNodeBackend (goNetworkMagic g) socket $
+        withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $
             \backend -> do
                 verified <-
                     verifyRegistry

@@ -187,8 +187,11 @@ runDevnetRegistryInit globals DevnetRegistryInitOpts{..} = do
                 , dricSignTx =
                     addCardanoCliPaymentKeyWitness signingKey
                 }
-    withLocalNodeClient (goNetworkMagic globals) socket $
-        \provider submitter -> do
+    withLocalNodeClient
+        (goNetworkMagic globals)
+        socket
+        (goMinimumSeverity globals)
+        $ \provider submitter -> do
             pp <- queryProtocolParams provider
             utxos <- queryUTxOs provider fundingAddress
             publication <-
@@ -265,8 +268,11 @@ runDevnetStakeRewardInit globals DevnetStakeRewardInitOpts{..} = do
                 , dsricSignTx =
                     addCardanoCliPaymentKeyWitness signingKey
                 }
-    withLocalNodeClient (goNetworkMagic globals) socket $
-        \provider submitter -> do
+    withLocalNodeClient
+        (goNetworkMagic globals)
+        socket
+        (goMinimumSeverity globals)
+        $ \provider submitter -> do
             pp <- queryProtocolParams provider
             utxos <- queryUTxOs provider fundingAddress
             result <-
@@ -374,8 +380,11 @@ runDevnetGovernanceWithdrawalInit
                     , dgwicRewardTimeoutSeconds =
                         dgwioRewardTimeoutSeconds
                     }
-        withLocalNodeClient (goNetworkMagic globals) socket $
-            \provider submitter -> do
+        withLocalNodeClient
+            (goNetworkMagic globals)
+            socket
+            (goMinimumSeverity globals)
+            $ \provider submitter -> do
                 GovernanceWithdrawalInit.runDevnetGovernanceWithdrawalInit
                     config
                     dgwioRegistryFile
@@ -481,8 +490,11 @@ runDevnetDisburseSubmit globals DevnetDisburseSubmitOpts{..} = do
                 , ddsicRunDir = ddsioRunDir
                 , ddsicAmountLovelace = ddsioAmountLovelace
                 }
-    withLocalNodeClient (goNetworkMagic globals) socket $
-        \provider submitter ->
+    withLocalNodeClient
+        (goNetworkMagic globals)
+        socket
+        (goMinimumSeverity globals)
+        $ \provider submitter ->
             DisburseSubmit.runDevnetDisburseSubmit
                 config
                 ddsioRegistryFile

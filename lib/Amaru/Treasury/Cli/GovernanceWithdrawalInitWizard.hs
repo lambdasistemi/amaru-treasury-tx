@@ -608,7 +608,7 @@ runProposal g po = do
                 , gwipaAnchorUrl = poAnchorUrl po
                 , gwipaAnchorHash = poAnchorHash po
                 }
-    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
         let input =
                 GovernanceWithdrawalInitResolverInput
                     { gwiriNetwork = networkName
@@ -777,7 +777,7 @@ runMaterialization g mo = do
                 , gwimaFundingSeedTxIn = cfFundingSeedTxIn cf
                 , gwimaRewardsLovelace = moRewardsLovelace mo
                 }
-    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
         let input =
                 GovernanceWithdrawalInitResolverInput
                     { gwiriNetwork = networkName

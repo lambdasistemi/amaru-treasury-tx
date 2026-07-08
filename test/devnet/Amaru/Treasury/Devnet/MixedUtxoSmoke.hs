@@ -198,6 +198,7 @@ import Amaru.Treasury.Redeemer
     ( RawPlutusData (..)
     , emptyListRedeemer
     )
+import Amaru.Treasury.Trace (Severity (..))
 import Amaru.Treasury.Tx.Reorganize
     ( ReorganizeIntent (..)
     )
@@ -272,6 +273,7 @@ mixedUtxoSmoke = do
                         { goSocketPath = Just socket
                         , goNetworkMagic = devnetMagic
                         , goNetworkName = Just "devnet"
+                        , goMinimumSeverity = Info
                         }
                 anchors =
                     RegistryInit.drpAnchors publication

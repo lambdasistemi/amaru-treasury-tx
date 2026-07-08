@@ -97,6 +97,7 @@ import Amaru.Treasury.Metadata
     , TreasuryMetadata (..)
     )
 import Amaru.Treasury.Scope (ScopeId (..))
+import Amaru.Treasury.Trace (Severity (..))
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Api handlers + indexer" $ do
@@ -110,6 +111,7 @@ spec = describe "Amaru.Treasury.Api handlers + indexer" $ do
                 report <-
                     runHandlerOrFail $
                         mkInspectHandler
+                            Warning
                             apiIdx
                             trappedProvider
                             testMetadata
@@ -125,6 +127,7 @@ spec = describe "Amaru.Treasury.Api handlers + indexer" $ do
                 report <-
                     runHandlerOrFail $
                         mkInspectHandler
+                            Warning
                             apiIdx
                             trappedProvider
                             testMetadata
@@ -141,7 +144,7 @@ spec = describe "Amaru.Treasury.Api handlers + indexer" $ do
             $ \apiIdx -> do
                 found <-
                     queryUTxOByTxIn
-                        (mkBuildProvider apiIdx trappedProvider)
+                        (mkBuildProvider Warning apiIdx trappedProvider)
                         (Set.singleton sampleTxIn)
                 found `shouldBe` Map.empty
 
@@ -151,7 +154,11 @@ spec = describe "Amaru.Treasury.Api handlers + indexer" $ do
             $ \apiIdx -> do
                 found <-
                     withAcquired
-                        (mkBuildProvider apiIdx acquirableTrappedProvider)
+                        ( mkBuildProvider
+                            Warning
+                            apiIdx
+                            acquirableTrappedProvider
+                        )
                         $ \handle ->
                             queryUTxOByTxInH
                                 handle
@@ -212,7 +219,15 @@ spec = describe "Amaru.Treasury.Api handlers + indexer" $ do
                 src `shouldNotContainText` "runBuildSwap g backend"
                 src `shouldNotContainText` "runBuildDisburse g backend"
                 src `shouldNotContainText` "runBuildReorganize g backend"
+                src `shouldNotContainText` "arcSocket opts) Info"
+                src `shouldContainText` "goMinimumSeverity g"
+                src `shouldContainText` "renderSeverityText"
                 src `shouldContainText` "mkBuildHandlers"
+
+        it "filters provider tracing at the resolved API threshold" $ do
+            src <- TIO.readFile apiServerSource
+            src `shouldContainText` "filterSeverity minimumSeverity"
+            src `shouldContainText` "mkBuildProvider minimumSeverity"
 
 -- ---------------------------------------------------------------------------
 -- Fixtures
@@ -368,6 +383,7 @@ runHandlerOrFail h = do
 trappedBuildHandlers :: ApiIndexer cf op -> Addr -> BuildHandlers
 trappedBuildHandlers apiIdx addr =
     mkBuildHandlersWithSwapRerate
+        Warning
         apiIdx
         Nothing
         trappedProvider
@@ -464,6 +480,9 @@ emptyReorganizeResponse =
 
 apiMainSource :: FilePath
 apiMainSource = "app/amaru-treasury-tx-api/Main.hs"
+
+apiServerSource :: FilePath
+apiServerSource = "lib/Amaru/Treasury/Api/Server.hs"
 
 shouldContainText :: T.Text -> T.Text -> IO ()
 shouldContainText haystack needle =

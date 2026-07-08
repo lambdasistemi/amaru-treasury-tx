@@ -326,6 +326,7 @@ import Amaru.Treasury.Report.Accounting
 import Amaru.Treasury.Scope
     ( ScopeId (CoreDevelopment)
     )
+import Amaru.Treasury.Trace (Severity (..))
 import Amaru.Treasury.Tx.AttachWitness
     ( decodeUnsignedTxHex
     )
@@ -391,13 +392,14 @@ runSmoke = do
     genesis <- readShelleyGenesisConfig gDir
     sgcNetworkMagic genesis `shouldBe` 42
     withCardanoNode gDir $ \nodeSock _startMs ->
-        withLocalNodeClient devnetMagic nodeSock $ \backend submitter ->
+        withLocalNodeClient devnetMagic nodeSock Info $ \backend submitter ->
             withSystemTempDirectory "atx-api-smoke" $ \dir -> do
                 let globalOpts =
                         GlobalOpts
                             { goSocketPath = Just nodeSock
                             , goNetworkMagic = devnetMagic
                             , goNetworkName = Just "devnet"
+                            , goMinimumSeverity = Info
                             }
                 pp <- queryProtocolParams backend
                 seedUtxos <- queryUTxOs backend genesisAddr
@@ -1652,6 +1654,7 @@ smokeHandlers
                 r <-
                     Servant.runHandler $
                         mkInspectHandler
+                            (goMinimumSeverity globalOpts)
                             apiIdx
                             backend
                             metadata
@@ -1742,7 +1745,8 @@ smokeHandlers
                 (runBuildDisburse globalOpts metadataPath)
                 (runBuildContingencyDisburse globalOpts metadataPath)
                 (runBuildReorganize globalOpts metadataPath)
-        readProvider = mkBuildProvider apiIdx backend
+        readProvider =
+            mkBuildProvider (goMinimumSeverity globalOpts) apiIdx backend
 
 smokeLimiter :: ApiLimiter
 {-# NOINLINE smokeLimiter #-}

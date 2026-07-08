@@ -170,6 +170,10 @@ import Amaru.Treasury.Inspect.Types
     )
 import Amaru.Treasury.Metadata (TreasuryMetadata)
 import Amaru.Treasury.Scope (ScopeId)
+import Amaru.Treasury.Trace
+    ( Severity (..)
+    , filterSeverity
+    )
 import Amaru.Treasury.Trace.Provider
     ( stderrTracer
     , tracedProvider
@@ -440,6 +444,7 @@ mkBuildHandlers
     realProvider
     buildSwap =
         mkBuildHandlersWithSwapRerate
+            Info
             apiIdx
             metadata
             realProvider
@@ -454,7 +459,8 @@ older tests while letting the API executable pass the server's
 'GlobalOpts' and metadata path into the real re-rate runner.
 -}
 mkBuildHandlersWithSwapRerate
-    :: ApiIndexer cf op
+    :: Severity
+    -> ApiIndexer cf op
     -> Maybe TreasuryMetadata
     -> Provider IO
     -> (Provider IO -> SwapBuildRequest -> IO SwapBuildResponse)
@@ -470,6 +476,7 @@ mkBuildHandlersWithSwapRerate
     -> (Provider IO -> ReorganizeBuildRequest -> IO ReorganizeBuildResponse)
     -> BuildHandlers
 mkBuildHandlersWithSwapRerate
+    minimumSeverity
     apiIdx
     metadata
     realProvider
@@ -504,7 +511,7 @@ mkBuildHandlersWithSwapRerate
                     >=> attachReorganizeProofs
             }
       where
-        buildProvider = mkBuildProvider apiIdx realProvider
+        buildProvider = mkBuildProvider minimumSeverity apiIdx realProvider
         resolveUtxos = snapshotUtxosByTxIn apiIdx
 
         attachDisburseGraphEffect resp =
@@ -781,7 +788,8 @@ real provider; they aren't touched by
 'runInspectFromBackend''s read path, so this is harmless.
 -}
 mkInspectHandler
-    :: ApiIndexer cf op
+    :: Severity
+    -> ApiIndexer cf op
     -> Provider IO
     -> TreasuryMetadata
     -> DeploymentAnchor
@@ -789,19 +797,27 @@ mkInspectHandler
     -- ^ swap-order address
     -> ScopeId
     -> Handler InspectReport
-mkInspectHandler apiIdx realProvider metadata anchor swapAddr scope =
-    liftIO $
-        runInspectFromBackend
-            metadata
-            anchor
-            swapAddr
-            (Just scope)
-            (indexerProvider apiIdx realProvider)
+mkInspectHandler
+    minimumSeverity
+    apiIdx
+    realProvider
+    metadata
+    anchor
+    swapAddr
+    scope =
+        liftIO $
+            runInspectFromBackend
+                metadata
+                anchor
+                swapAddr
+                (Just scope)
+                (indexerProvider minimumSeverity apiIdx realProvider)
 
 {- | Build the provider used by @POST /v1/build/*@
 handlers.
 -}
-mkBuildProvider :: ApiIndexer cf op -> Provider IO -> Provider IO
+mkBuildProvider
+    :: Severity -> ApiIndexer cf op -> Provider IO -> Provider IO
 mkBuildProvider = indexerProvider
 
 {- | Run an action with a legacy 'Provider IO' whose UTxO
@@ -818,16 +834,17 @@ withIndexerProvider
     -> (Provider IO -> IO a)
     -> IO a
 withIndexerProvider apiIdx realProvider action =
-    action (indexerProvider apiIdx realProvider)
+    action (indexerProvider Info apiIdx realProvider)
 
 {- | Build the synthetic 'Provider' described in
 'mkInspectHandler''s Haddock: real provider for 'nowTip',
 indexer-backed 'queryUTxOs' / 'queryUTxOByTxIn', and live
 provider delegation for non-address ledger data.
 -}
-indexerProvider :: ApiIndexer cf op -> Provider IO -> Provider IO
-indexerProvider apiIdx realProvider =
-    tracedProvider stderrTracer $
+indexerProvider
+    :: Severity -> ApiIndexer cf op -> Provider IO -> Provider IO
+indexerProvider minimumSeverity apiIdx realProvider =
+    tracedProvider (filterSeverity minimumSeverity stderrTracer) $
         realProvider
             { withAcquired = \callback ->
                 Provider.withAcquired realProvider $ \handle ->

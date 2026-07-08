@@ -540,7 +540,7 @@ runWizard g opts@WizardOpts{..} = do
     withLogHandle wOptsLog $ \logH -> do
         let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
             tr = eventTracer textTracer
-        withLocalNodeBackend (goNetworkMagic g) socket $
+        withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $
             \backend -> do
                 result <- buildSwapIntent g opts backend tr
                 case result of

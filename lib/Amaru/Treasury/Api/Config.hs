@@ -57,6 +57,10 @@ import System.Exit qualified as Exit
 
 import Amaru.Treasury.Cli.Common (GlobalOpts (..))
 import Amaru.Treasury.Config
+import Amaru.Treasury.Trace
+    ( Severity (..)
+    , parseSeverityText
+    )
 
 -- | Fully resolved API startup configuration.
 data ApiRuntimeConfig = ApiRuntimeConfig
@@ -102,6 +106,7 @@ data ApiConfigError
     | ApiConfigResolveError !ResolveError
     | ApiConfigMissingRequired !Text
     | ApiConfigInvalidStartPoint !Text
+    | ApiConfigInvalidLogLevel !Text
     | ApiConfigNonMainnet !ResolvedNetwork
     deriving stock (Eq, Show)
 
@@ -325,6 +330,7 @@ resolveApiRuntimeConfig envs opts = do
                     acIndexerStartBlockHash
                     treasuryConfig
                 )
+        minimumSeverity <- resolveApiLogLevel envs
         let indexer =
                 ApiIndexerRuntimeConfig
                     { aircDbPath = indexerDb
@@ -349,7 +355,10 @@ resolveApiRuntimeConfig envs opts = do
                 , arcStatic = static
                 , arcIndexer = indexer
                 , arcGlobalOpts =
-                    globalOptsFromResolved socket resolved
+                    globalOptsFromResolved
+                        minimumSeverity
+                        socket
+                        resolved
                 }
   where
     envOverrides = envTreasuryConfigOverrides envs
@@ -443,6 +452,19 @@ parseIndexerStartBlockHash rawHash = do
                 ApiConfigInvalidStartPoint
                     "api.indexerStartBlockHash must be 64 hex characters (32 bytes)"
 
+resolveApiLogLevel
+    :: [(String, String)] -> Either ApiConfigError Severity
+resolveApiLogLevel envs =
+    case lookup "AMARU_TREASURY_LOG_LEVEL" envs of
+        Nothing -> Right Info
+        Just raw ->
+            first
+                ( ApiConfigInvalidLogLevel
+                    . T.pack
+                    . ("AMARU_TREASURY_LOG_LEVEL: " <>)
+                )
+                (parseSeverityText (T.pack raw))
+
 requireMainnet
     :: ResolvedTreasuryConfig
     -> Either ApiConfigError ()
@@ -456,14 +478,16 @@ mainnetMagic :: Word32
 mainnetMagic = 764_824_073
 
 globalOptsFromResolved
-    :: FilePath
+    :: Severity
+    -> FilePath
     -> ResolvedTreasuryConfig
     -> GlobalOpts
-globalOptsFromResolved socket resolved =
+globalOptsFromResolved minimumSeverity socket resolved =
     GlobalOpts
         { goSocketPath = Just socket
         , goNetworkMagic = NetworkMagic (rnMagic (rtcNetwork resolved))
         , goNetworkName = rnName (rtcNetwork resolved)
+        , goMinimumSeverity = minimumSeverity
         }
 
 renderApiConfigError :: ApiConfigError -> String
@@ -488,6 +512,8 @@ renderApiConfigError = \case
         "config: missing required field " <> T.unpack field
     ApiConfigInvalidStartPoint err ->
         T.unpack err
+    ApiConfigInvalidLogLevel err ->
+        "api: " <> T.unpack err
     ApiConfigNonMainnet network ->
         "api: expected mainnet network, got "
             <> networkDescription network

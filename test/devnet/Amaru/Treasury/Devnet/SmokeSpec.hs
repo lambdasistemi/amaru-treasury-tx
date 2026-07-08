@@ -346,6 +346,7 @@ import Amaru.Treasury.Sundae.Contracts
     , sundaeOrderValidatorSourceRepository
     , sundaeOrderValidatorTitle
     )
+import Amaru.Treasury.Trace (Severity (..))
 import Amaru.Treasury.Tx.AttachWitness
     ( encodeSignedTxHex
     )
@@ -1433,6 +1434,7 @@ governanceWithdrawalInitSmoke = do
                     { goSocketPath = Just socket
                     , goNetworkMagic = devnetMagic
                     , goNetworkName = Just "devnet"
+                    , goMinimumSeverity = Info
                     }
             fundingAddress =
                 T.unpack (renderAddr genesisAddr)
@@ -1502,6 +1504,7 @@ disburseSubmitSmoke = do
                     { goSocketPath = Just socket
                     , goNetworkMagic = devnetMagic
                     , goNetworkName = Just "devnet"
+                    , goMinimumSeverity = Info
                     }
             fundingAddress =
                 T.unpack (renderAddr genesisAddr)
@@ -1588,6 +1591,7 @@ registryInitSmoke = do
                 { goSocketPath = Just socket
                 , goNetworkMagic = devnetMagic
                 , goNetworkName = Just "devnet"
+                , goMinimumSeverity = Info
                 }
             DevnetRegistryInitOpts
                 { drioFundingAddress =
@@ -1618,6 +1622,7 @@ stakeRewardInitSmoke = do
                     { goSocketPath = Just socket
                     , goNetworkMagic = devnetMagic
                     , goNetworkName = Just "devnet"
+                    , goMinimumSeverity = Info
                     }
             fundingAddress =
                 T.unpack (renderAddr genesisAddr)
@@ -1943,6 +1948,7 @@ treasurySwapFullE2ESmoke = do
                     { goSocketPath = Just socket
                     , goNetworkMagic = devnetMagic
                     , goNetworkName = Just "devnet"
+                    , goMinimumSeverity = Info
                     }
             fundingAddress =
                 T.unpack (renderAddr genesisAddr)
@@ -2315,6 +2321,7 @@ treasurySwapViaCoordinatorSmoke = do
                     { goSocketPath = Just socket
                     , goNetworkMagic = devnetMagic
                     , goNetworkName = Just "devnet"
+                    , goMinimumSeverity = Info
                     }
             fundingAddress =
                 T.unpack (renderAddr genesisAddr)

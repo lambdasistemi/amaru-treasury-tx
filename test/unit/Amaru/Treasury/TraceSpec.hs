@@ -30,6 +30,8 @@ import Test.Hspec
 import Amaru.Treasury.Trace
     ( Severity (..)
     , filterSeverity
+    , parseSeverityText
+    , renderSeverityText
     , severityAtLeast
     , traced
     )
@@ -53,6 +55,23 @@ spec = describe "Amaru.Treasury.Trace" $ do
         [Debug, Info, Notice, Warning, Error]
             `shouldBe` [minBound .. maxBound]
 
+    describe "severity text" $ do
+        it "parses supported log levels" $
+            traverse
+                parseSeverityText
+                ["debug", "info", "notice", "warning", "error"]
+                `shouldBe` Right
+                    [Debug, Info, Notice, Warning, Error]
+
+        it "renders supported log levels" $
+            fmap renderSeverityText [Debug, Info, Notice, Warning, Error]
+                `shouldBe` ["debug", "info", "notice", "warning", "error"]
+
+        it "rejects unknown log levels" $
+            parseSeverityText "trace"
+                `shouldBe` Left
+                    "unknown log level: trace (expected debug|info|notice|warning|error)"
+
     describe "severityAtLeast" $ do
         it "keeps severities greater than or equal to the minimum" $ do
             severityAtLeast Notice Debug `shouldBe` False
@@ -67,7 +86,9 @@ spec = describe "Amaru.Treasury.Trace" $ do
             let filtered = filterSeverity Warning tr
             case filtered of
                 Tracer emit -> do
+                    emit (Debug, "debug")
                     emit (Info, "quiet")
+                    emit (Notice, "notice")
                     emit (Warning, "kept")
                     emit (Error, "also kept")
             events <- readEvents

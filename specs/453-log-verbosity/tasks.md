@@ -1,0 +1,26 @@
+# Tasks: #453 Log Verbosity Control
+
+## Slice 1 - Shared parsing and CLI plumbing
+
+- [X] T453-S1 Add shared severity parsing/rendering.
+- [X] T453-S1 Extend CLI global config with log level and verbose
+  parsing.
+- [X] T453-S1 Thread the resolved threshold into N2C provider tracing.
+- [X] T453-S1 Add/update focused unit tests and run slice proof.
+- [X] T453-S1 Commit `feat: add CLI log verbosity control`.
+
+## Slice 2 - API environment and provider wiring
+
+- [X] T453-S2 Resolve `AMARU_TREASURY_LOG_LEVEL` in API startup config.
+- [X] T453-S2 Log the resolved API log level once at startup.
+- [X] T453-S2 Apply the resolved threshold to API/indexer provider
+  tracing.
+- [X] T453-S2 Add/update focused unit tests and run slice proof.
+- [X] T453-S2 Commit `feat: add API log verbosity env control`.
+
+## Finalization
+
+- [X] T453-F1 Run the full `./gate.sh` at branch head.
+- [X] T453-F1 Update the draft PR body with delivered behavior and
+  verification.
+- [X] T453-F1 Drop `gate.sh`, mark the PR ready, and wait for CI.

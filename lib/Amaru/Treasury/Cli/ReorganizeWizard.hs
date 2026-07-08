@@ -438,6 +438,7 @@ runReorganizeWizardEither g opts =
                     withLocalNodeBackend
                         (goNetworkMagic g)
                         socket
+                        (goMinimumSeverity g)
                         $ \backend ->
                             runReorganizeWizardLive
                                 g

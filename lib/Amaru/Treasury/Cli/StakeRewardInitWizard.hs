@@ -422,7 +422,7 @@ runScriptAccount g cf = do
                 { sasaValidityHours = cfValidityHours cf
                 , sasaFundingSeedTxIn = cfFundingSeedTxIn cf
                 }
-    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
         let input =
                 StakeRewardInitResolverInput
                     { sriNetwork = networkName
@@ -521,7 +521,7 @@ runPlainAccount g cf = do
                 { spaaValidityHours = cfValidityHours cf
                 , spaaFundingSeedTxIn = cfFundingSeedTxIn cf
                 }
-    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
         let input =
                 StakeRewardInitResolverInput
                     { sriNetwork = networkName

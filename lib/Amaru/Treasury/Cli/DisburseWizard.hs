@@ -901,7 +901,7 @@ runDisburseCommand
                 )
             traceWith tr (DisburseTrace.DweMetadata metadataPath)
 
-            withLocalNodeBackend (goNetworkMagic g) socket $
+            withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $
                 \backend -> do
                     verified <-
                         verifyDisburseRegistry

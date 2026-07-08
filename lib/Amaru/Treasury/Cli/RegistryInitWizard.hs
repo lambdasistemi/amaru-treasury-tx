@@ -681,7 +681,7 @@ runSeedSplitVerified g cf = do
                 , risEvent = cfEvent cf
                 , risLabel = cfLabel cf
                 }
-    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
         verified <-
             verifyRegistry
                 backend
@@ -788,7 +788,7 @@ runMintVerified g mintOpts = do
                 , rimRegistrySeedTxIn = mRegistrySeedTxIn mintOpts
                 , rimOwnerKeyHash = mOwnerKeyHash mintOpts
                 }
-    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
         verified <-
             verifyRegistry
                 backend
@@ -899,7 +899,7 @@ runReferenceScriptsVerified g rsOpts = do
                 , rirRegistrySeedTxIn = rsRegistrySeedTxIn rsOpts
                 , rirFundingSeedTxIn = rsFundingSeedTxIn rsOpts
                 }
-    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
         verified <-
             verifyRegistry
                 backend
@@ -1021,7 +1021,7 @@ runSeedSplitBootstrap g cf = do
                 , wbiScope = cfScope cf
                 , wbiValidityHours = cfValidityHours cf
                 }
-    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
         let renv =
                 RegistryInitResolverEnv
                     { wreQueryWalletUtxos = queryFlat backend
@@ -1102,7 +1102,7 @@ runMintBootstrap g mintOpts = do
                 , wbiScope = cfScope cf
                 , wbiValidityHours = cfValidityHours cf
                 }
-    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
         let renv =
                 RegistryInitResolverEnv
                     { wreQueryWalletUtxos = queryFlat backend
@@ -1183,7 +1183,7 @@ runReferenceScriptsBootstrap g rsOpts = do
                 , wbiScope = cfScope cf
                 , wbiValidityHours = cfValidityHours cf
                 }
-    withLocalNodeBackend (goNetworkMagic g) socket $ \backend -> do
+    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
         let renv =
                 RegistryInitResolverEnv
                     { wreQueryWalletUtxos = queryFlat backend

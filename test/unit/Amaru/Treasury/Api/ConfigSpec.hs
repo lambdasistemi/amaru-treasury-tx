@@ -32,6 +32,7 @@ import Amaru.Treasury.Api.Config
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     )
+import Amaru.Treasury.Trace (Severity (..))
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Api.Config" $ do
@@ -70,6 +71,7 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                             , goNetworkMagic =
                                 NetworkMagic 764824073
                             , goNetworkName = Just "mainnet"
+                            , goMinimumSeverity = Info
                             }
                     }
 
@@ -114,8 +116,33 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                         { goSocketPath = Just "/env/node.socket"
                         , goNetworkMagic = NetworkMagic 764824073
                         , goNetworkName = Just "mainnet"
+                        , goMinimumSeverity = Info
                         }
                 }
+
+    it "defaults the API log level to Info" $ do
+        resolved <- parseApiArgsWithEnv requiredApiEnv []
+
+        goMinimumSeverity . arcGlobalOpts <$> resolved
+            `shouldBe` Right Info
+
+    it "resolves AMARU_TREASURY_LOG_LEVEL into global opts" $ do
+        resolved <-
+            parseApiArgsWithEnv
+                (("AMARU_TREASURY_LOG_LEVEL", "warning") : requiredApiEnv)
+                []
+
+        goMinimumSeverity . arcGlobalOpts <$> resolved
+            `shouldBe` Right Warning
+
+    it "rejects invalid AMARU_TREASURY_LOG_LEVEL values" $ do
+        resolved <-
+            parseApiArgsWithEnv
+                (("AMARU_TREASURY_LOG_LEVEL", "chatty") : requiredApiEnv)
+                []
+
+        resolved
+            `shouldFailWith` "api: AMARU_TREASURY_LOG_LEVEL: unknown log level: chatty"
 
     it "lets explicit API flags override profile and API YAML values" $
         withSystemTempDirectory "treasury-api-config" $ \tmp -> do
@@ -175,6 +202,7 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                             , goNetworkMagic =
                                 NetworkMagic 764824073
                             , goNetworkName = Just "mainnet"
+                            , goMinimumSeverity = Info
                             }
                     }
 
@@ -233,6 +261,7 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                         { goSocketPath = Just "/flag/node.socket"
                         , goNetworkMagic = NetworkMagic 764824073
                         , goNetworkName = Just "mainnet"
+                        , goMinimumSeverity = Info
                         }
                 }
 
@@ -433,3 +462,13 @@ sampleBlockHashHex =
 
 sampleBlockHash :: BlockHash
 sampleBlockHash = BlockHash (B.replicate 32 0xAA)
+
+requiredApiEnv :: [(String, String)]
+requiredApiEnv =
+    [ ("AMARU_TREASURY_NODE_SOCKET", "/env/node.socket")
+    , ("AMARU_TREASURY_METADATA", "metadata-env.json")
+    , ("AMARU_TREASURY_API_MANIFEST", "manifest-env.json")
+    , ("AMARU_TREASURY_API_BUILD_IDENTITY", "build-env.json")
+    , ("AMARU_TREASURY_API_STATIC", "static-env")
+    , ("AMARU_TREASURY_API_INDEXER_DB", "indexer-env")
+    ]

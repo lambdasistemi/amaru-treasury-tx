@@ -186,6 +186,7 @@ import Amaru.Treasury.Redeemer
 import Amaru.Treasury.Sundae.Contracts
     ( sundaeOrderValidatorBlob
     )
+import Amaru.Treasury.Trace (Severity (..))
 import Amaru.Treasury.Tx.AttachWitness
     ( decodeUnsignedTxHex
     , renderAttachError
@@ -961,7 +962,7 @@ callSmokeScriptPhase opts phase runDir extraEnv = do
 
 assertRerateCostModels :: FilePath -> NetworkMagic -> IO ()
 assertRerateCostModels socket magic =
-    withLocalNodeClient magic socket $ \provider _submitter -> do
+    withLocalNodeClient magic socket Info $ \provider _submitter -> do
         pp <- queryCurrentPParams provider
         unless (hasCostModel PlutusV2 pp) $
             die
@@ -1027,7 +1028,7 @@ prepareRerateSmokeSetup
             voterOwner
 
         (walletTxIn, oldOrderTxIn) <-
-            withLocalNodeClient magic socket $ \provider submitter -> do
+            withLocalNodeClient magic socket Info $ \provider submitter -> do
                 pp <-
                     Backend.singleShotWithAcquired provider $ \qh ->
                         queryProtocolParamsH qh
@@ -1347,7 +1348,7 @@ runChainAssertions runDir socket magic = do
         accountSet = Set.fromList (fmap third3 rewardAccounts)
 
     (foundUtxos, foundRewards) <-
-        withLocalNodeBackend magic socket $ \backend ->
+        withLocalNodeBackend magic socket Info $ \backend ->
             Backend.singleShotWithAcquired backend $ \qh -> do
                 utxos <- Backend.queryUTxOByTxInH qh anchorSet
                 rewards <-
@@ -2126,7 +2127,7 @@ queryGovernanceSnapshot socket magic request = do
                     <> materializationTxIns
                 )
     (foundUtxos, foundRewards) <-
-        withLocalNodeBackend magic socket $ \backend ->
+        withLocalNodeBackend magic socket Info $ \backend ->
             Backend.singleShotWithAcquired backend $ \qh -> do
                 utxos <-
                     Backend.queryUTxOByTxInH qh queriedTxIns
@@ -2391,7 +2392,7 @@ runDisburseAssertions runDir socket magic = do
         either (die . badRequest) pure $
             parseEither parseDisburseAssertionRequest raw
     foundUtxos <-
-        withLocalNodeBackend magic socket $ \backend ->
+        withLocalNodeBackend magic socket Info $ \backend ->
             Backend.singleShotWithAcquired backend $ \qh ->
                 Backend.queryUTxOByTxInH
                     qh
@@ -2614,7 +2615,7 @@ runReorganizeAssertions runDir socket magic = do
         -- across inputs and outputs.
         outputSum = addLovelace outputSumRaw feeLovelace
     inputUtxos <-
-        withLocalNodeBackend magic socket $ \backend ->
+        withLocalNodeBackend magic socket Info $ \backend ->
             Backend.singleShotWithAcquired backend $ \qh ->
                 Backend.queryUTxOByTxInH qh inputTxIns
     let inputValues =
@@ -2727,7 +2728,7 @@ runRerateAssertions runDir socket magic = do
             "rerate-assertion: missing unsigned artifact "
                 <> raaUnsignedPath request
     (oldPresent, newPresent) <-
-        withLocalNodeBackend magic socket $ \backend ->
+        withLocalNodeBackend magic socket Info $ \backend ->
             Backend.singleShotWithAcquired backend $ \qh ->
                 waitForRerateFlip
                     qh
@@ -3118,7 +3119,7 @@ runReorganizeExecUnitsAssertion runDir socket magic = do
         validateJson = phaseDir </> "tx-validate.json"
         summaryPath = phaseDir </> "summary.json"
     pparams <-
-        withLocalNodeBackend magic socket $ \backend ->
+        withLocalNodeBackend magic socket Info $ \backend ->
             Backend.singleShotWithAcquired backend $ \qh ->
                 queryProtocolParamsH qh
     let maxTxExecutionUnits = pparams ^. ppMaxTxExUnitsL

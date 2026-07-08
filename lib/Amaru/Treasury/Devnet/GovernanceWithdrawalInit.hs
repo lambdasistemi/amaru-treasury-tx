@@ -228,6 +228,7 @@ import Amaru.Treasury.Report.Render qualified as ReportRender
 import Amaru.Treasury.Scope
     ( ScopeId (CoreDevelopment)
     )
+import Amaru.Treasury.Trace (Severity (..))
 import Amaru.Treasury.Tx.AttachWitness
     ( decodeUnsignedTxHex
     , encodeSignedTxHex
@@ -1221,6 +1222,7 @@ buildWithdrawalTransaction
             try @ExitCode $
                 TxBuild.runTxBuild
                     dgwicSocketPath
+                    Info
                     TxBuild.TxBuildOpts
                         { TxBuild.tboIntentPath =
                             Just

@@ -31,6 +31,7 @@ import Amaru.Treasury.Api.BuildSwapRerate
 import Amaru.Treasury.Backend (Backend)
 import Amaru.Treasury.Cli.Common (GlobalOpts (..))
 import Amaru.Treasury.Scope (ScopeId (..))
+import Amaru.Treasury.Trace (Severity (..))
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Api.BuildSwapRerate" $ do
@@ -112,6 +113,7 @@ mainnetOpts =
         { goSocketPath = Nothing
         , goNetworkMagic = NetworkMagic 764_824_073
         , goNetworkName = Just "mainnet"
+        , goMinimumSeverity = Info
         }
 
 unusedBackend :: Backend

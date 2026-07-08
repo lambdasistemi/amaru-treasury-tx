@@ -260,7 +260,6 @@ import Amaru.Treasury.Backend.N2C
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     )
-import Amaru.Treasury.Trace (Severity (..))
 import Amaru.Treasury.Coordinator.Client
     ( CoordinatorBaseUrl
     , CoordinatorClientError
@@ -347,6 +346,7 @@ import Amaru.Treasury.Sundae.Contracts
     , sundaeOrderValidatorSourceRepository
     , sundaeOrderValidatorTitle
     )
+import Amaru.Treasury.Trace (Severity (..))
 import Amaru.Treasury.Tx.AttachWitness
     ( encodeSignedTxHex
     )

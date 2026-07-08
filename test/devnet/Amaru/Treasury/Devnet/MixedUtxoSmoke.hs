@@ -198,6 +198,7 @@ import Amaru.Treasury.Redeemer
     ( RawPlutusData (..)
     , emptyListRedeemer
     )
+import Amaru.Treasury.Trace (Severity (..))
 import Amaru.Treasury.Tx.Reorganize
     ( ReorganizeIntent (..)
     )
@@ -208,7 +209,6 @@ import Amaru.Treasury.Tx.Swap
     , swapOrderDatum
     )
 import Amaru.Treasury.Tx.SwapWizard (txInToText)
-import Amaru.Treasury.Trace (Severity (..))
 
 data ShelleyGenesisTiming = ShelleyGenesisTiming
     { sgtEpochLength :: !Int

@@ -116,6 +116,10 @@ import Amaru.Treasury.Scope
     , scopeFromText
     , scopeText
     )
+import Amaru.Treasury.Trace
+    ( Severity (Info)
+    , filterSeverity
+    )
 import Amaru.Treasury.Tx.DisburseWizard qualified as Disburse
 import Amaru.Treasury.Tx.DisburseWizard.Trace qualified as DisburseTrace
 import Amaru.Treasury.Wizard.InputControl
@@ -879,11 +883,19 @@ runDisburseCommand
     inputControlCheck
     buildRun =
         withLogHandle logPath $ \logH -> do
-            let textTracer = Tracer (TIO.hPutStrLn logH) :: Tracer IO Text
+            let severityTracer =
+                    filterSeverity (goMinimumSeverity g) $
+                        Tracer (TIO.hPutStrLn logH . snd)
+                        :: Tracer IO (Severity, Text)
+                textTracer =
+                    ( Tracer $ \msg ->
+                        traceWith severityTracer (Info, msg)
+                    )
+                        :: Tracer IO Text
                 tr =
-                    DisburseTrace.disburseEventTracerWithPrefix
+                    DisburseTrace.disburseEventSeverityTracerWithPrefix
                         commandName
-                        textTracer
+                        severityTracer
             case inputControlCheck of
                 Right () -> pure ()
                 Left ce ->

@@ -13,15 +13,15 @@
 
 ## Slice 2 - CLI Wiring
 
-- [ ] T455-S2 Route CLI wizard and tx-build event tracers through
+- [X] T455-S2 Route CLI wizard and tx-build event tracers through
   `filterSeverity` with the configured minimum severity.
-- [ ] T455-S2 Route auxiliary text-only wizard log lines through the same
+- [X] T455-S2 Route auxiliary text-only wizard log lines through the same
   threshold at `Info` severity unless a stronger failure severity is already
   clear.
-- [ ] T455-S2 Add or update tests proving CLI call sites use the severity
+- [X] T455-S2 Add or update tests proving CLI call sites use the severity
   threshold.
-- [ ] T455-S2 Run focused unit tests and `./gate.sh`.
-- [ ] T455-S2 Commit as `feat(trace): filter cli wizard events by severity`.
+- [X] T455-S2 Run focused unit tests and `./gate.sh`.
+- [X] T455-S2 Commit as `feat(trace): filter cli wizard events by severity`.
 
 ## Slice 3 - API Build Wiring
 

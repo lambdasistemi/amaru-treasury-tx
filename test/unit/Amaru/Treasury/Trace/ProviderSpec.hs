@@ -10,6 +10,9 @@ import Control.Exception
     ( SomeException
     , try
     )
+import Control.Monad
+    ( void
+    )
 import Control.Tracer
     ( Tracer (..)
     )
@@ -260,8 +263,8 @@ queryHandleActions handle =
     ]
 
 voidIO :: IO a -> IO ()
-voidIO action =
-    action >> pure ()
+voidIO =
+    void
 
 sourceSectionMentions :: FilePath -> Text -> Text -> Text -> IO ()
 sourceSectionMentions path start end needle = do

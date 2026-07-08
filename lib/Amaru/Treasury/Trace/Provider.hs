@@ -78,45 +78,42 @@ tracedProvider tr provider =
             traceInfo "provider.withAcquired" $
                 withAcquired provider $
                     \handle -> callback (tracedQueryHandle tr handle)
-        , queryUTxOs = \addr ->
-            traceInfo "provider.queryUTxOs" $
-                queryUTxOs provider addr
-        , queryUTxOByTxIn = \txIns ->
-            traceInfo "provider.queryUTxOByTxIn" $
-                queryUTxOByTxIn provider txIns
+        , queryUTxOs =
+            traceInfo "provider.queryUTxOs" . queryUTxOs provider
+        , queryUTxOByTxIn =
+            traceInfo "provider.queryUTxOByTxIn"
+                . queryUTxOByTxIn provider
         , queryProtocolParams =
             traceInfo "provider.queryProtocolParams" $
                 queryProtocolParams provider
         , queryLedgerSnapshot =
             traceInfo "provider.queryLedgerSnapshot" $
                 queryLedgerSnapshot provider
-        , queryStakeRewards = \credentials ->
-            traceInfo "provider.queryStakeRewards" $
-                queryStakeRewards provider credentials
-        , queryRewardAccounts = \accounts ->
-            traceInfo "provider.queryRewardAccounts" $
-                queryRewardAccounts provider accounts
-        , queryVoteDelegatees = \credentials ->
-            traceInfo "provider.queryVoteDelegatees" $
-                queryVoteDelegatees provider credentials
+        , queryStakeRewards =
+            traceInfo "provider.queryStakeRewards"
+                . queryStakeRewards provider
+        , queryRewardAccounts =
+            traceInfo "provider.queryRewardAccounts"
+                . queryRewardAccounts provider
+        , queryVoteDelegatees =
+            traceInfo "provider.queryVoteDelegatees"
+                . queryVoteDelegatees provider
         , queryTreasury =
             traceInfo "provider.queryTreasury" $
                 queryTreasury provider
         , queryGovernanceState =
             traceInfo "provider.queryGovernanceState" $
                 queryGovernanceState provider
-        , evaluateTx = \tx ->
-            traceInfo "provider.evaluateTx" $
-                evaluateTx provider tx
-        , posixMsToSlot = \posixMs ->
-            traceInfo "provider.posixMsToSlot" $
-                posixMsToSlot provider posixMs
-        , posixMsCeilSlot = \posixMs ->
-            traceInfo "provider.posixMsCeilSlot" $
-                posixMsCeilSlot provider posixMs
-        , queryUpperBoundSlot = \choice ->
-            traceInfo "provider.queryUpperBoundSlot" $
-                queryUpperBoundSlot provider choice
+        , evaluateTx =
+            traceInfo "provider.evaluateTx" . evaluateTx provider
+        , posixMsToSlot =
+            traceInfo "provider.posixMsToSlot" . posixMsToSlot provider
+        , posixMsCeilSlot =
+            traceInfo "provider.posixMsCeilSlot"
+                . posixMsCeilSlot provider
+        , queryUpperBoundSlot =
+            traceInfo "provider.queryUpperBoundSlot"
+                . queryUpperBoundSlot provider
         }
   where
     traceInfo :: Text -> IO a -> IO a
@@ -129,45 +126,44 @@ tracedQueryHandle
 tracedQueryHandle tr handle =
     mkQueryHandle
         QueryHandleBackend
-            { backendQueryUTxOs = \addr ->
-                traceInfo "provider.handle.queryUTxOsH" $
-                    queryUTxOsH handle addr
-            , backendQueryUTxOsAt = \addrs ->
-                traceInfo "provider.handle.queryUTxOsAtH" $
-                    queryUTxOsAtH handle addrs
-            , backendQueryUTxOByTxIn = \txIns ->
-                traceInfo "provider.handle.queryUTxOByTxInH" $
-                    queryUTxOByTxInH handle txIns
+            { backendQueryUTxOs =
+                traceInfo "provider.handle.queryUTxOsH"
+                    . queryUTxOsH handle
+            , backendQueryUTxOsAt =
+                traceInfo "provider.handle.queryUTxOsAtH"
+                    . queryUTxOsAtH handle
+            , backendQueryUTxOByTxIn =
+                traceInfo "provider.handle.queryUTxOByTxInH"
+                    . queryUTxOByTxInH handle
             , backendQueryProtocolParams =
                 traceInfo "provider.handle.queryProtocolParamsH" $
                     queryProtocolParamsH handle
             , backendQueryLedgerSnapshot =
                 traceInfo "provider.handle.queryLedgerSnapshotH" $
                     queryLedgerSnapshotH handle
-            , backendQueryStakeRewards = \credentials ->
-                traceInfo "provider.handle.queryStakeRewardsH" $
-                    queryStakeRewardsH handle credentials
-            , backendQueryRewardAccounts = \accounts ->
-                traceInfo "provider.handle.queryRewardAccountsH" $
-                    queryRewardAccountsH handle accounts
-            , backendQueryVoteDelegatees = \credentials ->
-                traceInfo "provider.handle.queryVoteDelegateesH" $
-                    queryVoteDelegateesH handle credentials
+            , backendQueryStakeRewards =
+                traceInfo "provider.handle.queryStakeRewardsH"
+                    . queryStakeRewardsH handle
+            , backendQueryRewardAccounts =
+                traceInfo "provider.handle.queryRewardAccountsH"
+                    . queryRewardAccountsH handle
+            , backendQueryVoteDelegatees =
+                traceInfo "provider.handle.queryVoteDelegateesH"
+                    . queryVoteDelegateesH handle
             , backendQueryTreasury =
                 traceInfo "provider.handle.queryTreasuryH" $
                     queryTreasuryH handle
             , backendQueryGovernanceState =
                 traceInfo "provider.handle.queryGovernanceStateH" $
                     queryGovernanceStateH handle
-            , backendEvaluateTx = \tx ->
-                traceInfo "provider.handle.evaluateTxH" $
-                    evaluateTxH handle tx
-            , backendPosixMsToSlot = \posixMs ->
-                traceInfo "provider.handle.posixMsToSlotH" $
-                    posixMsToSlotH handle posixMs
-            , backendPosixMsCeilSlot = \posixMs ->
-                traceInfo "provider.handle.posixMsCeilSlotH" $
-                    posixMsCeilSlotH handle posixMs
+            , backendEvaluateTx =
+                traceInfo "provider.handle.evaluateTxH" . evaluateTxH handle
+            , backendPosixMsToSlot =
+                traceInfo "provider.handle.posixMsToSlotH"
+                    . posixMsToSlotH handle
+            , backendPosixMsCeilSlot =
+                traceInfo "provider.handle.posixMsCeilSlotH"
+                    . posixMsCeilSlotH handle
             }
   where
     traceInfo :: Text -> IO a -> IO a
@@ -179,7 +175,6 @@ tracedSubmitter
     :: Tracer IO (Severity, Text) -> Submitter IO -> Submitter IO
 tracedSubmitter tr submitter =
     Submitter
-        { submitTx = \tx ->
-            traced tr Info "submitter.submitTx" $
-                submitTx submitter tx
+        { submitTx =
+            traced tr Info "submitter.submitTx" . submitTx submitter
         }

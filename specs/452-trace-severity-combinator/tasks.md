@@ -6,15 +6,15 @@
 
 ## Slice 1 - trace vocabulary and combinator
 
-- [ ] T452-S1 Add `Amaru.Treasury.Trace` with `Severity`, `traced`, and a
+- [X] T452-S1 Add `Amaru.Treasury.Trace` with `Severity`, `traced`, and a
   min-severity filtering surface.
-- [ ] T452-S1 Add `Amaru.Treasury.TraceSpec` covering ordering, duration,
+- [X] T452-S1 Add `Amaru.Treasury.TraceSpec` covering ordering, duration,
   exception logging plus propagation, and severity filtering.
-- [ ] T452-S1 Register the new module and test module in
+- [X] T452-S1 Register the new module and test module in
   `amaru-treasury-tx.cabal`.
-- [ ] T452-S1 Run `just unit "Trace"` and `./gate.sh`; record any
+- [X] T452-S1 Run `just unit "Trace"` and `./gate.sh`; record any
   environmental dependency failure exactly.
-- [ ] T452-S1 Commit one bisect-safe implementation commit with
+- [X] T452-S1 Commit one bisect-safe implementation commit with
   `Tasks: T452-S1`.
 
 ## Finalization

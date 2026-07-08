@@ -23,6 +23,7 @@ import Data.Text
     ( Text
     )
 import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
 import Test.Hspec
     ( Spec
     , describe
@@ -262,6 +263,14 @@ voidIO :: IO a -> IO ()
 voidIO action =
     action >> pure ()
 
+sourceSectionMentions :: FilePath -> Text -> Text -> Text -> IO ()
+sourceSectionMentions path start end needle = do
+    source <- TIO.readFile path
+    let afterStart = snd (T.breakOn start source)
+        section = fst (T.breakOn end afterStart)
+    afterStart `shouldSatisfy` (not . T.null)
+    section `shouldSatisfy` T.isInfixOf needle
+
 spec :: Spec
 spec = describe "/Trace.Provider/" $ do
     it "renders stderr trace lines with severity and message" $
@@ -302,3 +311,25 @@ spec = describe "/Trace.Provider/" $ do
                     submitTx submitter undefined
         events <- readEvents
         assertLabelFailed "submitter.submitTx" events
+
+    it "wires tracing at provider construction sites" $ do
+        sourceSectionMentions
+            "lib/Amaru/Treasury/Backend/N2C.hs"
+            "withLocalNodeBackend magic socketPath action = do"
+            "withLocalNodeClient"
+            "backend = tracedProvider stderrTracer (mkN2CProvider lsq)"
+        sourceSectionMentions
+            "lib/Amaru/Treasury/Backend/N2C.hs"
+            "withLocalNodeClient magic socketPath action = do"
+            "probeNetworkMagic"
+            "tracedProvider stderrTracer (mkN2CProvider lsq)"
+        sourceSectionMentions
+            "lib/Amaru/Treasury/Backend/N2C.hs"
+            "withLocalNodeClient magic socketPath action = do"
+            "probeNetworkMagic"
+            "tracedSubmitter stderrTracer (mkN2CSubmitter ltxs)"
+        sourceSectionMentions
+            "lib/Amaru/Treasury/Api/Server.hs"
+            "indexerProvider apiIdx realProvider ="
+            "queryIndexedUTxOs ="
+            "tracedProvider stderrTracer"

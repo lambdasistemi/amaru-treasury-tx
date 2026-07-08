@@ -16,17 +16,17 @@
 
 ## Slice 2 - construction-site wiring and final proof
 
-- [ ] T454-S2 Apply `tracedProvider stderrTracer` in
+- [X] T454-S2 Apply `tracedProvider stderrTracer` in
   `withLocalNodeBackend` before the backend is handed to callers.
-- [ ] T454-S2 Apply `tracedProvider stderrTracer` and
+- [X] T454-S2 Apply `tracedProvider stderrTracer` and
   `tracedSubmitter stderrTracer` in `withLocalNodeClient`.
-- [ ] T454-S2 Ensure API indexer provider construction preserves or
+- [X] T454-S2 Ensure API indexer provider construction preserves or
   applies tracing for synthetic direct UTxO and acquired-handle methods.
-- [ ] T454-S2 Leave `ChainContext.hs`, `Registry/Verify.hs`, wizard
+- [X] T454-S2 Leave `ChainContext.hs`, `Registry/Verify.hs`, wizard
   event modules, and verbosity/config files untouched.
-- [ ] T454-S2 Run the focused Trace.Provider test command and
+- [X] T454-S2 Run the focused Trace.Provider test command and
   `./gate.sh`, recording both results in `WIP.md`.
-- [ ] T454-S2 Commit with subject
+- [X] T454-S2 Commit with subject
   `feat(tracing): wire provider tracing at construction sites` and
   trailer `Tasks: T454-S2`.
 

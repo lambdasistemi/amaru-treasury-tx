@@ -12,6 +12,8 @@
 - [X] T456-S1 Run `./gate.sh` and record the result.
 - [X] T456-S1 Commit the removal as one bisect-safe commit with
   `Tasks: T456-S1`.
-- [ ] T456-S1 Run post-removal live verification and record evidence.
-- [ ] T456-S1 Wait for PR #464 GitHub Actions to pass before reporting
+- [X] T456-S1 Record Q-001 disposition: post-removal production
+  verification is delegated to the epic owner after merge/deploy because
+  production cannot run PR head before merge.
+- [X] T456-S1 Wait for PR #464 GitHub Actions to pass before reporting
   completion.

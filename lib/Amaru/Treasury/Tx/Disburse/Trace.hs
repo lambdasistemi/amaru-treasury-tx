@@ -13,13 +13,17 @@ stderr; @--log PATH@ in the CLI redirects to a file.
 -}
 module Amaru.Treasury.Tx.Disburse.Trace
     ( DisburseEvent (..)
+    , disburseEventSeverity
     , renderDisburseEvent
     , disburseEventTracer
+    , disburseEventSeverityTracer
     ) where
 
 import Control.Tracer (Tracer (..), contramap)
 import Data.Text (Text)
 import Data.Text qualified as T
+
+import Amaru.Treasury.Trace (Severity (..))
 
 {- | Steps the @disburse@ subcommand takes that affect tx
 CBOR or the summary sidecar.
@@ -55,6 +59,17 @@ data DisburseEvent
     | -- | The build aborted before producing CBOR.
       DeAborted !Text
     deriving stock (Eq, Show)
+
+-- | Severity classification for disburse-build events.
+disburseEventSeverity :: DisburseEvent -> Severity
+disburseEventSeverity = \case
+    DeReevaluated _ fails
+        | fails > 0 -> Warning
+        | otherwise -> Info
+    DeScriptFail{} -> Error
+    DeValidationFailed -> Error
+    DeAborted{} -> Error
+    _ -> Info
 
 -- | Single-line, prefix-tagged rendering for log output.
 renderDisburseEvent :: DisburseEvent -> Text
@@ -97,6 +112,15 @@ renderDisburseEvent =
 disburseEventTracer
     :: Tracer m Text -> Tracer m DisburseEvent
 disburseEventTracer = contramap renderDisburseEvent
+
+{- | Lift a severity-aware 'Text' sink into a 'DisburseEvent'
+tracer via 'disburseEventSeverity' and 'renderDisburseEvent'.
+-}
+disburseEventSeverityTracer
+    :: Tracer m (Severity, Text) -> Tracer m DisburseEvent
+disburseEventSeverityTracer =
+    contramap $ \event ->
+        (disburseEventSeverity event, renderDisburseEvent event)
 
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show

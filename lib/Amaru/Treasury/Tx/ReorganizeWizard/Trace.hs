@@ -30,8 +30,10 @@ intent-construction sequence.
 -}
 module Amaru.Treasury.Tx.ReorganizeWizard.Trace
     ( ReorganizeWizardEvent (..)
+    , reorganizeWizardEventSeverity
     , renderReorganizeWizardEvent
     , reorganizeWizardEventTracer
+    , reorganizeWizardEventSeverityTracer
     ) where
 
 import Control.Tracer (Tracer (..), contramap)
@@ -40,6 +42,7 @@ import Data.Text qualified as T
 import Data.Word (Word64)
 
 import Amaru.Treasury.Scope (ScopeId, scopeText)
+import Amaru.Treasury.Trace (Severity (..))
 
 {- | Steps the reorganize-wizard takes that affect the
 emitted typed intent.
@@ -67,6 +70,12 @@ data ReorganizeWizardEvent
     | -- | The wizard refused before producing the intent.
       RweAborted !Text
     deriving stock (Eq, Show)
+
+-- | Severity classification for reorganize-wizard events.
+reorganizeWizardEventSeverity :: ReorganizeWizardEvent -> Severity
+reorganizeWizardEventSeverity = \case
+    RweAborted{} -> Error
+    _ -> Info
 
 -- | Single-line, prefix-tagged rendering for log output.
 renderReorganizeWizardEvent
@@ -107,6 +116,18 @@ reorganizeWizardEventTracer
     :: Tracer m Text -> Tracer m ReorganizeWizardEvent
 reorganizeWizardEventTracer =
     contramap renderReorganizeWizardEvent
+
+{- | Lift a severity-aware 'Text' sink into a
+'ReorganizeWizardEvent' tracer via 'reorganizeWizardEventSeverity'
+and 'renderReorganizeWizardEvent'.
+-}
+reorganizeWizardEventSeverityTracer
+    :: Tracer m (Severity, Text) -> Tracer m ReorganizeWizardEvent
+reorganizeWizardEventSeverityTracer =
+    contramap $ \event ->
+        ( reorganizeWizardEventSeverity event
+        , renderReorganizeWizardEvent event
+        )
 
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show

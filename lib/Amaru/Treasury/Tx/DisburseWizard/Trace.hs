@@ -13,10 +13,13 @@ value of the produced @intent.json@ is a constructor of
 -}
 module Amaru.Treasury.Tx.DisburseWizard.Trace
     ( DisburseWizardEvent (..)
+    , disburseWizardEventSeverity
     , renderDisburseWizardEvent
     , renderDisburseWizardEventWithPrefix
     , disburseWizardEventTracer
+    , disburseWizardEventSeverityTracer
     , disburseEventTracerWithPrefix
+    , disburseEventSeverityTracerWithPrefix
     ) where
 
 import Control.Tracer (Tracer (..), contramap)
@@ -25,6 +28,7 @@ import Data.Text qualified as T
 import Data.Word (Word64)
 
 import Amaru.Treasury.Scope (ScopeId, scopeText)
+import Amaru.Treasury.Trace (Severity (..))
 
 {- | Steps the disburse-wizard takes that affect intent.json
 content.
@@ -84,6 +88,12 @@ data DisburseWizardEvent
       --   intent.json.
       DweAborted !Text
     deriving stock (Eq, Show)
+
+-- | Severity classification for disburse-wizard events.
+disburseWizardEventSeverity :: DisburseWizardEvent -> Severity
+disburseWizardEventSeverity = \case
+    DweAborted{} -> Error
+    _ -> Info
 
 -- | Single-line, prefix-tagged rendering for log output.
 renderDisburseWizardEvent :: DisburseWizardEvent -> Text
@@ -170,10 +180,27 @@ disburseWizardEventTracer
 disburseWizardEventTracer =
     contramap renderDisburseWizardEvent
 
+{- | Lift a severity-aware 'Text' sink into a
+'DisburseWizardEvent' tracer via 'disburseWizardEventSeverity'
+and 'renderDisburseWizardEvent'.
+-}
+disburseWizardEventSeverityTracer
+    :: Tracer m (Severity, Text) -> Tracer m DisburseWizardEvent
+disburseWizardEventSeverityTracer =
+    disburseEventSeverityTracerWithPrefix "disburse-wizard"
+
 disburseEventTracerWithPrefix
     :: Text -> Tracer m Text -> Tracer m DisburseWizardEvent
 disburseEventTracerWithPrefix prefix =
     contramap (renderDisburseWizardEventWithPrefix prefix)
+
+disburseEventSeverityTracerWithPrefix
+    :: Text -> Tracer m (Severity, Text) -> Tracer m DisburseWizardEvent
+disburseEventSeverityTracerWithPrefix prefix =
+    contramap $ \event ->
+        ( disburseWizardEventSeverity event
+        , renderDisburseWizardEventWithPrefix prefix event
+        )
 
 tshow :: (Show a) => a -> Text
 tshow = T.pack . show

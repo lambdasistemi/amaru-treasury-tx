@@ -2,14 +2,14 @@
 
 ## Slice 1 - Severity Mapping Foundation
 
-- [ ] T455-S1 Add pure severity classifier functions for all in-scope
+- [X] T455-S1 Add pure severity classifier functions for all in-scope
   wizard/build event ADTs.
-- [ ] T455-S1 Add severity-aware tracer helpers while preserving existing
+- [X] T455-S1 Add severity-aware tracer helpers while preserving existing
   render text.
-- [ ] T455-S1 Add unit coverage for representative routine and failure event
+- [X] T455-S1 Add unit coverage for representative routine and failure event
   severity mappings.
-- [ ] T455-S1 Run focused unit tests and `./gate.sh`.
-- [ ] T455-S1 Commit as `feat(trace): classify wizard events by severity`.
+- [X] T455-S1 Run focused unit tests and `./gate.sh`.
+- [X] T455-S1 Commit as `feat(trace): classify wizard events by severity`.
 
 ## Slice 2 - CLI Wiring
 

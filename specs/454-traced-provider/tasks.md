@@ -32,6 +32,6 @@
 
 ## Finalization
 
-- [ ] T454-F1 Audit commits, task accounting, PR body, and gate output.
-- [ ] T454-F1 Drop `gate.sh` in the final ready-for-review commit.
-- [ ] T454-F1 Mark PR #459 ready for review.
+- [X] T454-F1 Audit commits, task accounting, PR body, and gate output.
+- [X] T454-F1 Drop `gate.sh` in the final ready-for-review commit.
+- [X] T454-F1 Mark PR #459 ready for review.

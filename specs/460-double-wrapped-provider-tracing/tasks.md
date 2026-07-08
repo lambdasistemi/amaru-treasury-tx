@@ -2,14 +2,14 @@
 
 ## Slice 1 - Provider Trace Construction
 
-- [ ] T460-S1 Update `indexerProvider` so only indexer-created UTxO
+- [X] T460-S1 Update `indexerProvider` so only indexer-created UTxO
   closures receive API-side trace wrappers.
-- [ ] T460-S1 Preserve direct `withLocalNodeBackend` and
+- [X] T460-S1 Preserve direct `withLocalNodeBackend` and
   `withLocalNodeClient` `tracedProvider` coverage.
-- [ ] T460-S1 Update focused regression coverage in
+- [X] T460-S1 Update focused regression coverage in
   `test/unit/Amaru/Treasury/Trace/ProviderSpec.hs`.
-- [ ] T460-S1 Run focused provider tests plus format and hlint checks.
-- [ ] T460-S1 Commit as
+- [X] T460-S1 Run focused provider tests plus format and hlint checks.
+- [X] T460-S1 Commit as
   `fix: avoid double provider tracing through indexerProvider` with
   trailer `Tasks: T460-S1`.
 

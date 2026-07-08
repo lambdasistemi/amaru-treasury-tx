@@ -173,10 +173,10 @@ import Amaru.Treasury.Scope (ScopeId)
 import Amaru.Treasury.Trace
     ( Severity (..)
     , filterSeverity
+    , traced
     )
 import Amaru.Treasury.Trace.Provider
     ( stderrTracer
-    , tracedProvider
     )
 
 {- | A servant content type that emits an 'InspectReport' via
@@ -844,53 +844,68 @@ provider delegation for non-address ledger data.
 indexerProvider
     :: Severity -> ApiIndexer cf op -> Provider IO -> Provider IO
 indexerProvider minimumSeverity apiIdx realProvider =
-    tracedProvider (filterSeverity minimumSeverity stderrTracer) $
-        realProvider
-            { withAcquired = \callback ->
-                Provider.withAcquired realProvider $ \handle ->
-                    callback $
-                        mkQueryHandle
-                            QueryHandleBackend
-                                { backendQueryUTxOs = queryIndexedUTxOs
-                                , backendQueryUTxOsAt = queryIndexedUTxOsAt
-                                , backendQueryUTxOByTxIn =
-                                    queryIndexedUTxOByTxIn
-                                , backendQueryProtocolParams =
-                                    Provider.queryProtocolParamsH handle
-                                , backendQueryLedgerSnapshot =
-                                    Provider.queryLedgerSnapshotH handle
-                                , backendQueryStakeRewards =
-                                    Provider.queryStakeRewardsH handle
-                                , backendQueryRewardAccounts =
-                                    Provider.queryRewardAccountsH handle
-                                , backendQueryVoteDelegatees =
-                                    Provider.queryVoteDelegateesH handle
-                                , backendQueryTreasury =
-                                    Provider.queryTreasuryH handle
-                                , backendQueryGovernanceState =
-                                    Provider.queryGovernanceStateH handle
-                                , backendEvaluateTx =
-                                    Provider.evaluateTxH handle
-                                , backendPosixMsToSlot =
-                                    Provider.posixMsToSlotH handle
-                                , backendPosixMsCeilSlot =
-                                    Provider.posixMsCeilSlotH handle
-                                }
-            , queryUTxOs = queryIndexedUTxOs
-            , queryUTxOByTxIn = queryIndexedUTxOByTxIn
-            }
+    realProvider
+        { withAcquired = \callback ->
+            Provider.withAcquired realProvider $ \handle ->
+                callback $
+                    mkQueryHandle
+                        QueryHandleBackend
+                            { backendQueryUTxOs = queryIndexedUTxOsH
+                            , backendQueryUTxOsAt = queryIndexedUTxOsAtH
+                            , backendQueryUTxOByTxIn =
+                                queryIndexedUTxOByTxInH
+                            , backendQueryProtocolParams =
+                                Provider.queryProtocolParamsH handle
+                            , backendQueryLedgerSnapshot =
+                                Provider.queryLedgerSnapshotH handle
+                            , backendQueryStakeRewards =
+                                Provider.queryStakeRewardsH handle
+                            , backendQueryRewardAccounts =
+                                Provider.queryRewardAccountsH handle
+                            , backendQueryVoteDelegatees =
+                                Provider.queryVoteDelegateesH handle
+                            , backendQueryTreasury =
+                                Provider.queryTreasuryH handle
+                            , backendQueryGovernanceState =
+                                Provider.queryGovernanceStateH handle
+                            , backendEvaluateTx =
+                                Provider.evaluateTxH handle
+                            , backendPosixMsToSlot =
+                                Provider.posixMsToSlotH handle
+                            , backendPosixMsCeilSlot =
+                                Provider.posixMsCeilSlotH handle
+                            }
+        , queryUTxOs = queryIndexedUTxOsDirect
+        , queryUTxOByTxIn = queryIndexedUTxOByTxInDirect
+        }
   where
     RunTransaction{runTransaction} = aiRunner apiIdx
     indexer = IndexedProvider.indexerProvider
 
-    queryIndexedUTxOs =
-        runTransaction
+    traceInfo :: Text -> IO a -> IO a
+    traceInfo = traced (filterSeverity minimumSeverity stderrTracer) Info
+
+    queryIndexedUTxOsDirect =
+        traceInfo "provider.queryUTxOs"
+            . runTransaction
             . IndexedProvider.queryIndexedUTxOs indexer
 
-    queryIndexedUTxOsAt =
-        runTransaction
+    queryIndexedUTxOByTxInDirect =
+        traceInfo "provider.queryUTxOByTxIn"
+            . runTransaction
+            . IndexedProvider.queryIndexedUTxOByTxIn indexer
+
+    queryIndexedUTxOsH =
+        traceInfo "provider.handle.queryUTxOsH"
+            . runTransaction
+            . IndexedProvider.queryIndexedUTxOs indexer
+
+    queryIndexedUTxOsAtH =
+        traceInfo "provider.handle.queryUTxOsAtH"
+            . runTransaction
             . IndexedProvider.queryIndexedUTxOsAt indexer
 
-    queryIndexedUTxOByTxIn =
-        runTransaction
+    queryIndexedUTxOByTxInH =
+        traceInfo "provider.handle.queryUTxOByTxInH"
+            . runTransaction
             . IndexedProvider.queryIndexedUTxOByTxIn indexer

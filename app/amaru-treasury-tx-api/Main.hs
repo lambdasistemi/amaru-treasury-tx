@@ -163,7 +163,10 @@ import Amaru.Treasury.Metadata
     , readMetadataFile
     )
 import Amaru.Treasury.Scope (ScopeId)
-import Amaru.Treasury.Trace (Severity (..))
+import Amaru.Treasury.Trace
+    ( Severity
+    , renderSeverityText
+    )
 
 -- Main
 
@@ -172,6 +175,7 @@ main = do
     hSetBuffering stdout LineBuffering
     hSetBuffering stderr LineBuffering
     opts <- execApiConfig
+    let g = arcGlobalOpts opts
 
     metadata <- readMetadataFile (arcMetadata opts)
     anchor <- parseAnchorOrDie (tmScopeOwners metadata)
@@ -198,18 +202,23 @@ main = do
         indexerCfg =
             mkIndexerConfig
                 (arcSocket opts)
-                (arcGlobalOpts opts)
+                g
                 (arcIndexer opts)
                 interestSet
                 (registryScopeMappingsFromMetadata metadata)
                 (scopeAddressMappingsFromMetadata metadata)
 
     putStrLn $
+        "amaru-treasury-tx-api: log level = "
+            <> T.unpack (renderSeverityText (goMinimumSeverity g))
+    putStrLn $
         "amaru-treasury-tx-api: opening N2C session on "
             <> arcSocket opts
-    let g = arcGlobalOpts opts
-    withLocalNodeBackend (goNetworkMagic g) (arcSocket opts) Info $
-        \backend -> do
+    withLocalNodeBackend
+        (goNetworkMagic g)
+        (arcSocket opts)
+        (goMinimumSeverity g)
+        $ \backend -> do
             putStrLn $
                 "amaru-treasury-tx-api: bringing up \
                 \embedded indexer at "
@@ -235,6 +244,7 @@ main = do
                             let metadataPath = arcMetadata opts
                                 buildHandlers =
                                     mkBuildHandlersWithSwapRerate
+                                        (goMinimumSeverity g)
                                         apiIdx
                                         (Just metadata)
                                         backend
@@ -247,11 +257,15 @@ main = do
                                         )
                                         (runBuildReorganize g metadataPath)
                                 readProvider =
-                                    mkBuildProvider apiIdx backend
+                                    mkBuildProvider
+                                        (goMinimumSeverity g)
+                                        apiIdx
+                                        backend
                                 handlers =
                                     Handlers
                                         { hInspectReport =
                                             runInspectScope
+                                                (goMinimumSeverity g)
                                                 apiIdx
                                                 backend
                                                 metadata
@@ -362,35 +376,44 @@ the indexer (via 'snapshotUtxosAt') and 'nowTip' on the
 backend.
 -}
 runInspectScope
-    :: ApiIndexer cf op
+    :: Severity
+    -> ApiIndexer cf op
     -> Provider IO
     -> TreasuryMetadata
     -> DeploymentAnchor
     -> Addr
     -> ScopeId
     -> IO InspectReport
-runInspectScope apiIdx backend metadata anchor swapAddr scope = do
-    r <-
-        runHandler $
-            mkInspectHandler
-                apiIdx
-                backend
-                metadata
-                anchor
-                swapAddr
-                scope
-    case r of
-        Right rep -> pure rep
-        Left e ->
-            -- Should never happen in practice — the inspect
-            -- handler doesn't throwError. Surface loudly if
-            -- it ever does.
-            ioError $
-                userError $
-                    "amaru-treasury-tx-api: mkInspectHandler \
-                    \threw a Servant.ServerError; this is \
-                    \unexpected: "
-                        <> show e
+runInspectScope
+    minimumSeverity
+    apiIdx
+    backend
+    metadata
+    anchor
+    swapAddr
+    scope = do
+        r <-
+            runHandler $
+                mkInspectHandler
+                    minimumSeverity
+                    apiIdx
+                    backend
+                    metadata
+                    anchor
+                    swapAddr
+                    scope
+        case r of
+            Right rep -> pure rep
+            Left e ->
+                -- Should never happen in practice — the inspect
+                -- handler doesn't throwError. Surface loudly if
+                -- it ever does.
+                ioError $
+                    userError $
+                        "amaru-treasury-tx-api: mkInspectHandler \
+                        \threw a Servant.ServerError; this is \
+                        \unexpected: "
+                            <> show e
 
 healthResponse :: ReadinessHandle -> IO HealthResponse
 healthResponse readiness = do

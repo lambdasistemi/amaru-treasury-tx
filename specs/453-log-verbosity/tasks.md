@@ -11,12 +11,12 @@
 
 ## Slice 2 - API environment and provider wiring
 
-- [ ] T453-S2 Resolve `AMARU_TREASURY_LOG_LEVEL` in API startup config.
-- [ ] T453-S2 Log the resolved API log level once at startup.
-- [ ] T453-S2 Apply the resolved threshold to API/indexer provider
+- [X] T453-S2 Resolve `AMARU_TREASURY_LOG_LEVEL` in API startup config.
+- [X] T453-S2 Log the resolved API log level once at startup.
+- [X] T453-S2 Apply the resolved threshold to API/indexer provider
   tracing.
-- [ ] T453-S2 Add/update focused unit tests and run slice proof.
-- [ ] T453-S2 Commit `feat: add API log verbosity env control`.
+- [X] T453-S2 Add/update focused unit tests and run slice proof.
+- [X] T453-S2 Commit `feat: add API log verbosity env control`.
 
 ## Finalization
 

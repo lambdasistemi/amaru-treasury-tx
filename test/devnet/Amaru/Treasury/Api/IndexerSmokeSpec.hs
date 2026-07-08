@@ -1654,6 +1654,7 @@ smokeHandlers
                 r <-
                     Servant.runHandler $
                         mkInspectHandler
+                            (goMinimumSeverity globalOpts)
                             apiIdx
                             backend
                             metadata
@@ -1744,7 +1745,8 @@ smokeHandlers
                 (runBuildDisburse globalOpts metadataPath)
                 (runBuildContingencyDisburse globalOpts metadataPath)
                 (runBuildReorganize globalOpts metadataPath)
-        readProvider = mkBuildProvider apiIdx backend
+        readProvider =
+            mkBuildProvider (goMinimumSeverity globalOpts) apiIdx backend
 
 smokeLimiter :: ApiLimiter
 {-# NOINLINE smokeLimiter #-}

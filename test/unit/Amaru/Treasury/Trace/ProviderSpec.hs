@@ -333,6 +333,6 @@ spec = describe "/Trace.Provider/" $ do
             "tracedSubmitter tracer (mkN2CSubmitter ltxs)"
         sourceSectionMentions
             "lib/Amaru/Treasury/Api/Server.hs"
-            "indexerProvider apiIdx realProvider ="
+            "indexerProvider minimumSeverity apiIdx realProvider ="
             "queryIndexedUTxOs ="
-            "tracedProvider stderrTracer"
+            "tracedProvider (filterSeverity minimumSeverity stderrTracer)"

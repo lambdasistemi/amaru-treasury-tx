@@ -34,8 +34,8 @@
 
 ## Slice 4 - Final Verification
 
-- [ ] T455-S4 Run `./gate.sh` at the final implementation head.
-- [ ] T455-S4 Update PR #462 body to match delivered behavior.
-- [ ] T455-S4 Drop `gate.sh` in the ready-for-review commit.
-- [ ] T455-S4 Mark PR #462 ready for review.
-- [ ] T455-S4 Wait for GitHub Actions checks to pass at the final pushed head.
+- [X] T455-S4 Run `./gate.sh` at the final implementation head.
+- [X] T455-S4 Update PR #462 body to match delivered behavior.
+- [X] T455-S4 Drop `gate.sh` in the ready-for-review commit.
+- [X] T455-S4 Mark PR #462 ready for review.
+- [X] T455-S4 Wait for GitHub Actions checks to pass at the final pushed head.

@@ -49,6 +49,11 @@ import Ouroboros.Consensus.Ledger.Query
     )
 
 import Amaru.Treasury.Backend (Backend, Provider)
+import Amaru.Treasury.Trace.Provider
+    ( stderrTracer
+    , tracedProvider
+    , tracedSubmitter
+    )
 
 {- | Run an 'IO' action with a local-node-backed
 'Backend'. Spawns a background thread that drives the
@@ -71,7 +76,7 @@ withLocalNodeBackend
 withLocalNodeBackend magic socketPath action = do
     lsq <- newLSQChannel 4
     ltxs <- newLTxSChannel 1
-    let backend = mkN2CProvider lsq
+    let backend = tracedProvider stderrTracer (mkN2CProvider lsq)
         connect = do
             r <- runNodeClient magic socketPath lsq ltxs
             case r of
@@ -95,8 +100,8 @@ withLocalNodeClient
 withLocalNodeClient magic socketPath action = do
     lsq <- newLSQChannel 16
     ltxs <- newLTxSChannel 16
-    let provider = mkN2CProvider lsq
-        submitter = mkN2CSubmitter ltxs
+    let provider = tracedProvider stderrTracer (mkN2CProvider lsq)
+        submitter = tracedSubmitter stderrTracer (mkN2CSubmitter ltxs)
         connect = do
             r <- runNodeClient magic socketPath lsq ltxs
             case r of

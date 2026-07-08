@@ -42,6 +42,8 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
+import Data.Text.IO qualified as TIO
+import System.IO (stderr)
 
 import Cardano.Crypto.Hash.Class (hashToBytes)
 import Cardano.Ledger.Address
@@ -390,6 +392,16 @@ verifyRegistry provider metadataPath scopes = do
                 extracted <- anchors
                 verifyWithAnchors parsed extracted scopes
 
+{- | Debugging aid for #449: 'fetchScopes' below is on the
+call path of a request that hung indefinitely against
+production (no exception, ever), and a sibling call path
+has separately thrown @ConnectionLost@. These before/after
+markers narrow a future occurrence to acquire-vs-query.
+Remove once the root cause is fixed.
+-}
+dbg :: Text -> IO ()
+dbg msg = TIO.hPutStrLn stderr ("amaru-treasury: registry-verify: " <> msg)
+
 data ScopeAnchorPlan = ScopeAnchorPlan
     { sapScope :: !ScopeId
     , sapTreasuryHash :: !ScriptHash
@@ -427,13 +439,18 @@ extractRegistryAnchors provider metadata requested =
                                     registryRefs
                                     fetched
   where
-    fetchScopes scopesTxIn =
-        withAcquired provider $ \handle -> do
+    fetchScopes scopesTxIn = do
+        dbg "fetchScopes: acquiring provider handle"
+        r <- withAcquired provider $ \handle -> do
+            dbg "fetchScopes: handle acquired; querying scope-owner utxos"
             utxos <-
                 queryUTxOByTxInH handle $
                     Set.insert scopesTxIn $
                         deploymentRefs metadata requested
+            dbg "fetchScopes: utxo query returned"
             pure (scopesTxIn, utxos)
+        dbg "fetchScopes: withAcquired released"
+        pure r
 
     buildAnchors
         network

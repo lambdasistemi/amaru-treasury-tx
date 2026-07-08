@@ -274,6 +274,15 @@ sourceSectionMentions path start end needle = do
     afterStart `shouldSatisfy` (not . T.null)
     section `shouldSatisfy` T.isInfixOf needle
 
+sourceSectionDoesNotMention
+    :: FilePath -> Text -> Text -> Text -> IO ()
+sourceSectionDoesNotMention path start end needle = do
+    source <- TIO.readFile path
+    let afterStart = snd (T.breakOn start source)
+        section = fst (T.breakOn end afterStart)
+    afterStart `shouldSatisfy` (not . T.null)
+    section `shouldSatisfy` (not . T.isInfixOf needle)
+
 spec :: Spec
 spec = describe "/Trace.Provider/" $ do
     it "renders stderr trace lines with severity and message" $
@@ -334,5 +343,30 @@ spec = describe "/Trace.Provider/" $ do
         sourceSectionMentions
             "lib/Amaru/Treasury/Api/Server.hs"
             "indexerProvider minimumSeverity apiIdx realProvider ="
-            "queryIndexedUTxOs ="
-            "tracedProvider (filterSeverity minimumSeverity stderrTracer)"
+            "queryIndexedUTxOByTxIn ="
+            "provider.queryUTxOs"
+        sourceSectionMentions
+            "lib/Amaru/Treasury/Api/Server.hs"
+            "indexerProvider minimumSeverity apiIdx realProvider ="
+            "queryIndexedUTxOByTxIn ="
+            "provider.queryUTxOByTxIn"
+        sourceSectionMentions
+            "lib/Amaru/Treasury/Api/Server.hs"
+            "indexerProvider minimumSeverity apiIdx realProvider ="
+            "queryIndexedUTxOByTxIn ="
+            "provider.handle.queryUTxOsH"
+        sourceSectionMentions
+            "lib/Amaru/Treasury/Api/Server.hs"
+            "indexerProvider minimumSeverity apiIdx realProvider ="
+            "queryIndexedUTxOByTxIn ="
+            "provider.handle.queryUTxOsAtH"
+        sourceSectionMentions
+            "lib/Amaru/Treasury/Api/Server.hs"
+            "indexerProvider minimumSeverity apiIdx realProvider ="
+            "queryIndexedUTxOByTxIn ="
+            "provider.handle.queryUTxOByTxInH"
+        sourceSectionDoesNotMention
+            "lib/Amaru/Treasury/Api/Server.hs"
+            "indexerProvider minimumSeverity apiIdx realProvider ="
+            "queryIndexedUTxOByTxIn ="
+            "tracedProvider"

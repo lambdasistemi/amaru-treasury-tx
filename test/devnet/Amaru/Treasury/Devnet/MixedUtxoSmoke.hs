@@ -208,6 +208,7 @@ import Amaru.Treasury.Tx.Swap
     , swapOrderDatum
     )
 import Amaru.Treasury.Tx.SwapWizard (txInToText)
+import Amaru.Treasury.Trace (Severity (..))
 
 data ShelleyGenesisTiming = ShelleyGenesisTiming
     { sgtEpochLength :: !Int
@@ -272,6 +273,7 @@ mixedUtxoSmoke = do
                         { goSocketPath = Just socket
                         , goNetworkMagic = devnetMagic
                         , goNetworkName = Just "devnet"
+                        , goMinimumSeverity = Info
                         }
                 anchors =
                     RegistryInit.drpAnchors publication

@@ -19,7 +19,7 @@
 
 ## Finalization
 
-- [ ] T452-F1 Verify PR body, final gate evidence, task accounting, and commit
+- [X] T452-F1 Verify PR body, final gate evidence, task accounting, and commit
   messages.
-- [ ] T452-F1 Drop `gate.sh` in the ready-for-review commit.
-- [ ] T452-F1 Mark PR ready without merging it.
+- [X] T452-F1 Drop `gate.sh` in the ready-for-review commit.
+- [X] T452-F1 Mark PR ready without merging it.

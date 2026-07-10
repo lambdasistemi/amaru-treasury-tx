@@ -25,14 +25,8 @@
 
 ## Slice 2: Stable Merge Pin
 
-- [ ] T449-S2 Confirm upstream PR #184 merged with green CI.
-- [ ] T449-S2 Pin its stable main commit and independently verified
+- [X] T449-S2 Confirm upstream PR #184 merged with green CI.
+- [X] T449-S2 Pin its stable main commit and independently verified
   nix32 hash.
-- [ ] T449-S2 Regenerate `docs/dependencies.md` and run `./gate.sh`.
-- [ ] T449-S2 Commit the stable integration with `Tasks: T449-S2`.
-
-## Finalization
-
-- [ ] T900 Run the finalization audit and remove `gate.sh`.
-- [ ] T901 Push the final head, wait for green Amaru CI, and mark PR
-  #465 ready for external review.
+- [X] T449-S2 Regenerate `docs/dependencies.md` and run `./gate.sh`.
+- [X] T449-S2 Commit the stable integration with `Tasks: T449-S2`.

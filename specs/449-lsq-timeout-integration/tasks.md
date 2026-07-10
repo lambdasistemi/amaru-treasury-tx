@@ -7,11 +7,11 @@
 
 ## Slice 1: Provisional Downstream Integration
 
-- [ ] T449-S1 Pin PR #184 head and its verified nix32 hash in
+- [X] T449-S1 Pin PR #184 head and its verified nix32 hash in
   `cabal.project`.
-- [ ] T449-S1 Regenerate `docs/dependencies.md` in deterministic mode.
-- [ ] T449-S1 Run `./gate.sh` and record the result.
-- [ ] T449-S1 Commit the provisional integration as one bisect-safe
+- [X] T449-S1 Regenerate `docs/dependencies.md` in deterministic mode.
+- [X] T449-S1 Run `./gate.sh` and record the result.
+- [X] T449-S1 Commit the provisional integration as one bisect-safe
   commit with `Tasks: T449-S1`.
 
 ## Slice 2: Stable Merge Pin

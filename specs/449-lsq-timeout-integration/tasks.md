@@ -1,0 +1,29 @@
+# Issue #449 Tasks
+
+## Bootstrap
+
+- [X] T000 Create the isolated issue worktree and baseline `just ci`.
+- [X] T001 Create the PR-local gate and open draft PR #465.
+
+## Slice 1: Provisional Downstream Integration
+
+- [ ] T449-S1 Pin PR #184 head and its verified nix32 hash in
+  `cabal.project`.
+- [ ] T449-S1 Regenerate `docs/dependencies.md` in deterministic mode.
+- [ ] T449-S1 Run `./gate.sh` and record the result.
+- [ ] T449-S1 Commit the provisional integration as one bisect-safe
+  commit with `Tasks: T449-S1`.
+
+## Slice 2: Stable Merge Pin
+
+- [ ] T449-S2 Confirm upstream PR #184 merged with green CI.
+- [ ] T449-S2 Pin its stable main commit and independently verified
+  nix32 hash.
+- [ ] T449-S2 Regenerate `docs/dependencies.md` and run `./gate.sh`.
+- [ ] T449-S2 Commit the stable integration with `Tasks: T449-S2`.
+
+## Finalization
+
+- [ ] T900 Run the finalization audit and remove `gate.sh`.
+- [ ] T901 Push the final head, wait for green Amaru CI, and mark PR
+  #465 ready for external review.

@@ -40,6 +40,22 @@ client requires changes outside the two owned files, stop and report a
 Q-file with the exact compiler or solver evidence before expanding
 scope.
 
+## Slice 1B: Corrected Provisional Head
+
+The first provisional head was superseded while upstream live-boundary
+verification exposed and fixed two further problems: the connection
+monitor had moved the stateful mini-protocol action to a child thread,
+and the upstream E2E executable lacked `-threaded`. Replace that head
+with the corrected PR #184 head
+`b2dfea882c379a3994813fd6ba2eaf374eeb510a`, using the independently
+prefetched nix32 hash
+`0bxj3rzq6bz2kcqllmaq4yqikf7jsrfynhd75dl93c0qpyv0g3vr`.
+
+Regenerate `docs/dependencies.md` in deterministic no-staleness mode
+and run the complete downstream gate. This remains a provisional pin:
+the PR stays draft until upstream is merged and Slice 2 replaces it
+with a stable main-branch commit.
+
 ## Slice 2: Stable Merge Pin
 
 After upstream PR #184 is merged and green, replace the provisional

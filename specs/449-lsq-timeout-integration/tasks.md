@@ -14,6 +14,15 @@
 - [X] T449-S1 Commit the provisional integration as one bisect-safe
   commit with `Tasks: T449-S1`.
 
+## Slice 1B: Corrected Provisional Head
+
+- [X] T449-S1B Replace the superseded PR #184 head with its corrected,
+  fully green head and independently verified nix32 hash.
+- [X] T449-S1B Regenerate `docs/dependencies.md` in deterministic mode.
+- [X] T449-S1B Run `./gate.sh` and record the result.
+- [X] T449-S1B Commit the corrected provisional integration with
+  `Tasks: T449-S1B`.
+
 ## Slice 2: Stable Merge Pin
 
 - [ ] T449-S2 Confirm upstream PR #184 merged with green CI.

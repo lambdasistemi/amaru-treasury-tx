@@ -58,10 +58,13 @@ with a stable main-branch commit.
 
 ## Slice 2: Stable Merge Pin
 
-After upstream PR #184 is merged and green, replace the provisional
-head with the resulting main-branch commit, independently prefetch its
-SRI hash, convert it to nix32, regenerate the dependency graph, and run
-the full gate again.
+Upstream PR #184 was rebase-merged with green CI and released as
+`v0.1.4.0`. Replace the provisional head with its stable release commit
+`b13ce509c0c09f8340ba49d03a3d76505721103d`, using independently
+prefetched SRI
+`sha256-ESb9+OBW5EplrIpjM4RSse3i7AMD7AybuRcg6cYBlqY=` and nix32
+`19ln073fj80pp6dhrv030gnf5vdiaa236qwamijlmr2nw3wgs9hi`. Regenerate
+the dependency graph and run the full gate again.
 
 If the merge commit has the same source tree as the provisional head,
 the second slice still updates the revision and hash: the acceptance
@@ -80,6 +83,6 @@ surface resolves and works with the fixed library.
 
 ## External Blocker
 
-The PR remains draft until `cardano-node-clients#184` is merged. No
-operator or transaction action is required while waiting for that
-repository-level review decision.
+Resolved: `cardano-node-clients#184` is merged, main CI is green, and
+the stable `v0.1.4.0` tag names the release commit above. Slice 2 may
+now finalize this PR for merge and release.

@@ -4,6 +4,12 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.20.1](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.20.0...v0.2.20.1) (2026-07-11)
+
+### Bug Fixes
+
+* **auxdata:** chunk long rationale reference URIs ([0a0eddc](https://github.com/lambdasistemi/amaru-treasury-tx/commit/0a0eddc183a8394fb859846dcfea372d89132be0))
+
 ## [0.2.20.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.19.0...v0.2.20.0) (2026-07-10)
 
 ### Features

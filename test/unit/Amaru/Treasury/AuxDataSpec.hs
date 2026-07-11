@@ -25,6 +25,7 @@ import Amaru.Treasury.AuxData
     ( chunkRationale
     , disburseRationaleMetadatum
     , label1694
+    , splitUri
     , swapRationaleMetadatum
     )
 
@@ -119,6 +120,24 @@ spec = describe "Amaru.Treasury.AuxData" $ do
             -- code point): decode . encode is identity.
             map (TE.decodeUtf8 . TE.encodeUtf8) chunks
                 `shouldBe` chunks
+
+    describe "splitUri (64-byte metadatum cap)" $ do
+        it "leaves a short HTTPS URI as one chunk" $
+            splitUri "https://example.com/invoice"
+                `shouldBe` Right ["https://example.com/invoice"]
+        it "preserves the canonical IPFS prefix and CID chunks" $
+            splitUri "ipfs://bafkreiexample"
+                `shouldBe` Right ["ipfs://", "bafkreiexample"]
+        it "chunks the exact long Pinata HTTPS URI" $ do
+            let uri =
+                    "https://amaru.mypinata.cloud/ipfs/\
+                    \bafkreibi3ime2dechqraygaz6xckqwjy4s3jdszmfnrxoic6jhauugfsxi"
+            case splitUri uri of
+                Left err -> error err
+                Right chunks -> do
+                    all ((<= 64) . utf8Len) chunks
+                        `shouldBe` True
+                    T.concat chunks `shouldBe` uri
 
     describe "rationale metadatum honours the cap" $ do
         it "emits all description chunks within 64 bytes" $

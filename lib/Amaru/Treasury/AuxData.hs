@@ -180,17 +180,20 @@ referenceM r =
 64-byte metadatum-string cap.
 
 * @ipfs://…@ URIs split into @["ipfs://", "<rest>"]@
-  (the d6c14625 mainnet precedent).
-* All other URIs emit a single-element list.
-
-Returns @Left@ when any chunk exceeds 64 UTF-8 bytes.
+  (the d6c14625 mainnet precedent), chunking an overlong
+  remainder.
+* All other URIs split into UTF-8-safe chunks of at most
+  64 bytes.
 -}
 splitUri :: Text -> Either String [Text]
 splitUri uri
     | ipfsPrefix `T.isPrefixOf` uri =
         checkChunks
-            [ipfsPrefix, T.drop (T.length ipfsPrefix) uri]
-    | otherwise = checkChunks [uri]
+            ( ipfsPrefix
+                : chunkRationale
+                    (T.drop (T.length ipfsPrefix) uri)
+            )
+    | otherwise = checkChunks (chunkRationale uri)
   where
     ipfsPrefix :: Text
     ipfsPrefix = "ipfs://"

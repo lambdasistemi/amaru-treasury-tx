@@ -45,6 +45,10 @@ update-schema:
     cabal run -v0 -O0 exe:amaru-treasury-inspect-schema \
         > docs/assets/treasury-inspect-schema.json
 
+# Regenerate the 2026 book (RDF overlay) from transactions/2026/**
+book:
+    book/generate.sh
+
 # Check that the committed JSON Schemas are current
 schema-check:
     #!/usr/bin/env bash

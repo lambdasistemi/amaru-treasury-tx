@@ -1,0 +1,14 @@
+{
+  "txId": "968fd01e074ca33de95087957f59803bb2ee8bacfe922eb81cdf18e8e23ad788",
+  "submittedAt": "2026-07-13T13:18:02Z",
+  "submitter": "local-node-n2c",
+  "socket": "/code/cardano-mainnet/ipc/node.socket",
+  "network": "mainnet",
+  "networkMagic": 764824073,
+  "block": "facf6cf1e02705df4457087384a3d2b6007eb324d2178e2742e998ff8f5e281f",
+  "block_height": 13673050,
+  "slot": 192382426,
+  "block_time": 1783948717,
+  "fee_lovelace": 516698,
+  "valid_contract": true
+}

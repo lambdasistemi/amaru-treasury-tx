@@ -1,0 +1,10 @@
+tx-build: intent <- intent.json
+tx-build: parsed action=Disburse network=mainnet
+tx-build: connecting to /code/cardano-mainnet/ipc/node.socket
+tx-build: required utxos: 7
+tx-build: handshake ok (magic 764824073 matches intent network=mainnet)
+tx-build: built 2223 bytes  fee=516698  total_collateral=775047
+tx-build: re-evaluated 3 redeemers, 0 failed
+tx-build: cbor -> unsigned-tx.hex
+tx-build: VALIDATION OK
+tx-build: report -> report.json

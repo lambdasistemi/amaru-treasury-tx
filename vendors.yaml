@@ -27,7 +27,7 @@ vendors:
     address: "1924 Central Ave, Albany NY 12205, U.S.A."
     roles: [beneficiary]
     engagement_contract_cid: bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da
-    review_cycle: bi-monthly
+    review_cycle: monthly
 
   - id: antithesis_operations_llc
     legal_name: ANTITHESIS OPERATIONS LLC

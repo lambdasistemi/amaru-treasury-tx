@@ -2,10 +2,10 @@
 
 ## Slice 1 — pure overlay emitter + golden
 
-- [ ] T001 Add `Amaru.Treasury.Book.Export` (`renderOverlayBook`) emitting
+- [X] T001 Add `Amaru.Treasury.Book.Export` (`renderOverlayBook`) emitting
   the canonical prefix block and per-scope Owner / Address / CardanoScript
   blocks; expose it in the cabal library.
-- [ ] T002 Add checked-in goldens under `test/fixtures/book-export/`
+- [X] T002 Add checked-in goldens under `test/fixtures/book-export/`
   (full book + `--scope core_development`) and `BookExportGoldenSpec`
   comparing `renderOverlayBook` against them (with `UPDATE_GOLDENS=1`
   regeneration); register the spec in the golden test suite.

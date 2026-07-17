@@ -54,6 +54,7 @@ extra-source-files:
   test/fixtures/118-vault-witness/*.md
   test/fixtures/118-vault-witness/*.skey
   test/fixtures/118-vault-witness/*.vkey
+  test/fixtures/book-export/*.ttl
   test/fixtures/disburse/**/*.cbor
   test/fixtures/disburse/**/*.json
   test/fixtures/disburse/**/*.md
@@ -136,6 +137,7 @@ library
     Amaru.Treasury.AuxData
     Amaru.Treasury.Backend
     Amaru.Treasury.Backend.N2C
+    Amaru.Treasury.Book.Export
     Amaru.Treasury.Build
     Amaru.Treasury.Build.Common
     Amaru.Treasury.Build.Disburse
@@ -729,6 +731,7 @@ test-suite golden-tests
     Amaru.Treasury.Tx.RegistryInitWizardSeedSplitSpec
     Amaru.Treasury.Tx.StakeRewardInitWizardPlainAccountSpec
     Amaru.Treasury.Tx.StakeRewardInitWizardScriptAccountSpec
+    BookExportGoldenSpec
     EnvelopeOracleSpec
     GovernanceWithdrawalInitIntentSpec
     GraphEffectGoldenSpec

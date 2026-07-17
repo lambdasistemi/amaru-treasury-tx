@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# shellcheck shell=bash
+#
+# Smoke for `book-export`. Offline: reads the checked-in metadata
+# fixture and renders the cardano-swiss-knife overlay book.
+#
+# - help-flag      : exit 0, lists --metadata/--out/--scope
+# - full book      : canonical prefixes + Owner/Address/CardanoScript,
+#                    four scope owners
+# - --scope filter : names only the requested scope
+# - --out file     : writes the same Turtle as stdout
+# - bad-metadata   : exit 3, stderr starts with "book-export:"
+set -uo pipefail
+
+cabal build exe:amaru-treasury-tx -O0 >/dev/null 2>&1 \
+    || {
+        echo "smoke: book-export: build failed" >&2
+        exit 1
+    }
+bin=$(cabal list-bin -v0 -O0 exe:amaru-treasury-tx)
+fixture="test/fixtures/metadata.json"
+
+fail() {
+    echo "smoke: book-export: $*" >&2
+    exit 1
+}
+
+tmp=$(mktemp)
+err_log=$(mktemp)
+cleanup() {
+    rm -f "$tmp" "$err_log"
+}
+trap cleanup EXIT
+
+# help
+out=$("$bin" book-export --help)
+for flag in --metadata --out --scope; do
+    grep -q -- "$flag" <<<"$out" \
+        || fail "--help missing $flag"
+done
+
+# full book to stdout
+book=$("$bin" book-export --metadata "$fixture")
+grep -qF \
+    '@prefix overlay: <https://lambdasistemi.github.io/cardano-ledger-inspector/overlay/amaru-treasury#> .' \
+    <<<"$book" \
+    || fail "missing canonical overlay prefix"
+grep -q 'a overlay:Owner ;' <<<"$book" || fail "missing overlay:Owner"
+grep -q 'a overlay:Address ;' <<<"$book" || fail "missing overlay:Address"
+grep -q 'a overlay:CardanoScript ;' <<<"$book" \
+    || fail "missing overlay:CardanoScript"
+grep -q '<urn:cardano:id:key:' <<<"$book" || fail "missing key IRI"
+grep -q '<urn:cardano:id:script:' <<<"$book" || fail "missing script IRI"
+
+owners=$(grep -c 'a overlay:Owner ;' <<<"$book")
+[ "$owners" -eq 4 ] || fail "expected 4 scope owners, got $owners"
+
+# --scope names only the requested scope
+"$bin" book-export --metadata "$fixture" --scope core_development \
+    >"$tmp" 2>/dev/null
+grep -q 'core_development scope owner' "$tmp" \
+    || fail "--scope core_development did not name its owner"
+grep -q 'ops_and_use_cases' "$tmp" \
+    && fail "--scope core_development leaked another scope"
+
+# --out writes the same bytes as stdout
+diff <("$bin" book-export --metadata "$fixture") "$tmp" >/dev/null \
+    && fail "--scope book unexpectedly matched the full book"
+"$bin" book-export --metadata "$fixture" --out "$tmp"
+diff <("$bin" book-export --metadata "$fixture") "$tmp" >/dev/null \
+    || fail "--out bytes differ from stdout"
+
+# bad metadata path
+"$bin" book-export --metadata /nonexistent.json >/dev/null 2>"$err_log"
+rc=$?
+[ "$rc" -eq 3 ] || fail "bad-metadata: expected exit 3, got $rc"
+grep -q '^book-export:' "$err_log" \
+    || fail "bad-metadata: stderr did not start with 'book-export:'"
+
+echo "smoke: book-export: OK (--help, full book, --scope, --out, bad-metadata)"

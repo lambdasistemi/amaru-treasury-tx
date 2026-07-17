@@ -71,6 +71,7 @@ smoke:
     scripts/smoke/tx-build-pipe
     scripts/smoke/swap-rerate-offline
     scripts/smoke/treasury-inspect
+    scripts/smoke/book-export
     scripts/smoke/vault-witness
     scripts/smoke/vault-witness-tty
 

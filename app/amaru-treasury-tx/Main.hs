@@ -20,6 +20,9 @@ import Amaru.Treasury.Cli
 import Amaru.Treasury.Cli.AttachWitness
     ( runAttachWitness
     )
+import Amaru.Treasury.Cli.BookExport
+    ( runBookExport
+    )
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , withSocket
@@ -97,6 +100,8 @@ main = withUtf8 . withUpdateCheckMain $ do
     case c of
         CmdReportRender ro ->
             runReportRender ro
+        CmdBookExport bo ->
+            runBookExport bo
         CmdSwapWizard wo ->
             withSocket g $ \socket ->
                 runWizard g{goSocketPath = Just socket} wo

@@ -12,10 +12,10 @@
 
 ## Slice 2 — book-export CLI verb + smoke
 
-- [ ] T003 Add `Amaru.Treasury.Cli.BookExport` (`BookExportOpts`,
+- [X] T003 Add `Amaru.Treasury.Cli.BookExport` (`BookExportOpts`,
   `bookExportOptsP`, `runBookExport`), wire `CmdBookExport` + the
   `book-export` command into `Amaru.Treasury.Cli`, and dispatch it in
   `Main`; expose the module in the cabal library.
-- [ ] T004 Add `scripts/smoke/book-export` (offline CLI-surface smoke against
+- [X] T004 Add `scripts/smoke/book-export` (offline CLI-surface smoke against
   `test/fixtures/metadata.json`), wire it into the `justfile` `smoke` recipe,
   and register it as an extra-source-file.

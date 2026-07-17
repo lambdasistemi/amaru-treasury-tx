@@ -54,6 +54,10 @@ import Amaru.Treasury.Cli.AttachWitness
     ( AttachWitnessOpts
     , attachWitnessOptsP
     )
+import Amaru.Treasury.Cli.BookExport
+    ( BookExportOpts
+    , bookExportOptsP
+    )
 import Amaru.Treasury.Cli.Common
     ( GlobalConfigOpts
     , GlobalOpts
@@ -158,6 +162,7 @@ data Cmd
     | CmdReorganizeWizard ReorganizeWizardOpts
     | CmdTxBuild TxBuildOpts
     | CmdReportRender ReportRenderOpts
+    | CmdBookExport BookExportOpts
     | CmdTreasuryInspect InspectOpts
     | CmdHistory HistoryOpts
     | CmdTxDetail TxDetailOpts
@@ -189,6 +194,14 @@ cmdP =
                     (CmdReportRender <$> reportRenderOptsP)
                     ( progDesc
                         "Render a tx-build report envelope as Markdown"
+                    )
+                )
+            <> command
+                "book-export"
+                ( info
+                    (CmdBookExport <$> bookExportOptsP)
+                    ( progDesc
+                        "Export treasury identity metadata as a csk-compatible overlay book (Turtle)"
                     )
                 )
             <> command

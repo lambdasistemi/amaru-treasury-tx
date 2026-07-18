@@ -34,6 +34,7 @@ import Halogen as H
 import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
+import Inspector as Inspector
 import Routing (Route(..))
 import Shell as Shell
 import Shell.Clipboard as Clipboard
@@ -1085,6 +1086,8 @@ distributePanel entry =
             ]
             [ HH.text "Copy envelope" ]
         ]
+    -- #475 — co-signers receiving this tx can inspect it independently.
+    , Inspector.inspectCallout
     ]
 
 -- | Wrap raw tx CBOR hex as the cardano-cli Conway text envelope,

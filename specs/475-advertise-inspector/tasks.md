@@ -16,8 +16,8 @@
       new pointer/help text.
 
 ## Slice C — frontend inspector module + web UI surfaces
-- [ ] T006 Add `Inspector.purs` (URLs + reusable snippets) and the Books-page
+- [X] T006 Add `Inspector.purs` (URLs + reusable snippets) and the Books-page
       published-book pointer.
-- [ ] T007 Add the "Inspect with Cardano Swiss Knife" link to the operate and
+- [X] T007 Add the "Inspect with Cardano Swiss Knife" link to the operate and
       pending signing-facing panels.
-- [ ] T008 Assert the Inspector URL constants in `Test.Main`.
+- [X] T008 Assert the Inspector URL constants in `Test.Main`.

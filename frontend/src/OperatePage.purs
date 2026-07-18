@@ -58,6 +58,7 @@ import Halogen.HTML as HH
 import Halogen.HTML.Events as HE
 import Halogen.HTML.Properties as HP
 
+import Inspector as Inspector
 import JsonTree as JsonView
 import Routing (Route(..))
 import Shell as Shell
@@ -2546,22 +2547,29 @@ saveToPendingPanel st = case cborHexPreview st of
   Just _ ->
     HH.div
       [ HP.style
-          "display:flex;gap:.5rem;align-items:center;\
-          \flex-wrap:wrap;margin:.75rem 0"
+          "display:flex;flex-direction:column;gap:.5rem;margin:.75rem 0"
       ]
-      [ HH.button
-          ( [ HP.classes [ cn "btn", cn "btn--primary" ]
-            , HP.type_ HP.ButtonButton
-            , HE.onClick (\_ -> SaveBuiltToPending)
-            ]
-              <> case st.pendingSaveStatus of
-                SaveSaving -> [ HP.disabled true ]
-                _ -> []
-          )
-          [ HH.text "Save to pending" ]
-      , HH.span
-          [ HP.classes [ cn "field__hint" ] ]
-          [ HH.text (pendingSaveStatusText st.pendingSaveStatus) ]
+      [ HH.div
+          [ HP.style
+              "display:flex;gap:.5rem;align-items:center;flex-wrap:wrap"
+          ]
+          [ HH.button
+              ( [ HP.classes [ cn "btn", cn "btn--primary" ]
+                , HP.type_ HP.ButtonButton
+                , HE.onClick (\_ -> SaveBuiltToPending)
+                ]
+                  <> case st.pendingSaveStatus of
+                    SaveSaving -> [ HP.disabled true ]
+                    _ -> []
+              )
+              [ HH.text "Save to pending" ]
+          , HH.span
+              [ HP.classes [ cn "field__hint" ] ]
+              [ HH.text (pendingSaveStatusText st.pendingSaveStatus) ]
+          ]
+      -- #475 — once a tx is built and ready for co-signing, point the
+      -- operator (and the co-signers they share it with) at the inspector.
+      , Inspector.inspectCallout
       ]
 
 pendingSaveStatusText :: PendingSaveStatus -> String

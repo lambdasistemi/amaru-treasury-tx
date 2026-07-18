@@ -19,6 +19,7 @@ import Effect (Effect)
 import Effect.Aff (Aff, launchAff_, throwError)
 import Effect.Exception (error)
 import Foreign.Object as FO
+import Inspector as Inspector
 import OperatePage as OperatePage
 import Store.PendingTx as PendingTx
 
@@ -30,6 +31,7 @@ main =
     testSupersede
     testRerateApiSurface
     testOperateRerateContract
+    testInspectorPointers
 
 testCrud :: Aff Unit
 testCrud = do
@@ -188,6 +190,22 @@ testOperateRerateContract = do
     "rerate empty orders error"
     "select at least one pending order to retract"
     contract.emptyOrdersError
+
+testInspectorPointers :: Aff Unit
+testInspectorPointers = do
+  assertEq
+    "inspector url"
+    "https://lambdasistemi.github.io/cardano-swiss-knife/"
+    Inspector.inspectorUrl
+  assertEq
+    "published book url"
+    "https://lambdasistemi.github.io/amaru-treasury-tx\
+    \/assets/amaru-treasury-book.ttl"
+    Inspector.publishedBookUrl
+  assertEq
+    "csk library url"
+    "https://lambdasistemi.github.io/cardano-swiss-knife/library/"
+    Inspector.cskLibraryUrl
 
 decodePending :: String -> Aff Api.PendingResponse
 decodePending = decodeFixture "pending response"

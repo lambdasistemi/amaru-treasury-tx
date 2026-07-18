@@ -35,6 +35,7 @@ import Data.Set (Set)
 import Data.Set as Set
 import Data.String as String
 import Format (truncateMid)
+import Inspector as Inspector
 import Data.Time.Duration (Milliseconds(..))
 import Effect (Effect)
 import Effect.Aff (Aff, delay, makeAff, nonCanceler)
@@ -335,7 +336,7 @@ render st =
               \margin:0 auto;padding:1rem 1.25rem 2rem;\
               \box-sizing:border-box"
           ]
-          ( [ topOfPageActions ]
+          ( [ topOfPageActions, publishedBookPanel st ]
               <> importSummaryView st
               <> emptyStateNotice st
               <> booksGroupSection st
@@ -387,6 +388,64 @@ topOfPageActions =
         , HE.onClick (\_ -> OpenImport)
         ]
         [ HH.text "Import…" ]
+    ]
+
+-- | #475 — the canonical published treasury book.  Offers a clearly
+-- | visible URL plus a one-click Copy so an operator can hand it to the
+-- | Cardano Swiss Knife Library, where importing it resolves on-chain
+-- | identities to names.  Distinct from the per-browser books above: this
+-- | is the hosted RDF book, not a books-bundle importable here.
+publishedBookPanel :: forall m. State -> H.ComponentHTML Action () m
+publishedBookPanel st =
+  HH.section
+    [ HP.classes [ cn "form-section" ]
+    , HP.style
+        "padding:1rem;display:flex;flex-direction:column;gap:.5rem"
+    ]
+    [ HH.h2
+        [ HP.classes
+            [ cn "form-section__title"
+            , cn "md-typescale-title-medium"
+            ]
+        ]
+        [ HH.text "Published treasury book" ]
+    , HH.p
+        [ HP.classes [ cn "md-typescale-body-small" ]
+        , HP.style "opacity:.8"
+        ]
+        [ HH.text
+            "The canonical, CI-drift-checked treasury book.  Add its \
+            \URL to the "
+        , HH.a
+            [ HP.href Inspector.cskLibraryUrl
+            , HP.target "_blank"
+            , HP.rel "noopener noreferrer"
+            ]
+            [ HH.text "Cardano Swiss Knife Library" ]
+        , HH.text
+            " so the inspector resolves on-chain identities to names."
+        ]
+    , HH.div
+        [ HP.style
+            "display:flex;gap:.5rem;align-items:center;flex-wrap:wrap"
+        ]
+        [ HH.a
+            [ HP.href Inspector.publishedBookUrl
+            , HP.target "_blank"
+            , HP.rel "noopener noreferrer"
+            , HP.title Inspector.publishedBookUrl
+            , HP.style
+                "flex:1 1 auto;min-width:0;overflow:hidden;\
+                \text-overflow:ellipsis;white-space:nowrap;\
+                \font-family:'Roboto Mono',ui-monospace,monospace;\
+                \font-size:13px;text-decoration:underline;color:inherit"
+            ]
+            [ HH.text Inspector.publishedBookUrl ]
+        , copyButton
+            (st.recentlyCopied == Just Inspector.publishedBookUrl)
+            Inspector.publishedBookUrl
+            "Copy book URL"
+        ]
     ]
 
 siteHeader :: forall m. H.ComponentHTML Action () m

@@ -14,6 +14,7 @@ journal metadata, render the cardano-swiss-knife overlay book
 -}
 module Amaru.Treasury.Cli.BookExport
     ( BookExportOpts (..)
+    , bookExportHelpFooter
     , bookExportOptsP
     , runBookExport
     ) where
@@ -40,6 +41,7 @@ import System.Exit (ExitCode (..), exitWith)
 import System.IO (stderr)
 
 import Amaru.Treasury.Book.Export (renderOverlayBook)
+import Amaru.Treasury.Inspector (cskLibraryUrl, publishedBookUrl)
 import Amaru.Treasury.Metadata
     ( TreasuryMetadata
     , readMetadataFile
@@ -59,6 +61,20 @@ data BookExportOpts = BookExportOpts
     -- ^ Restrict the book to a single scope (@--scope@).
     }
     deriving stock (Eq, Show)
+
+{- | @book-export@ @--help@ footer.  Points operators at the canonical,
+CI-drift-checked book already published for co-signers, so they know the
+locally rendered Turtle matches a hosted asset they can import into the
+Cardano Swiss Knife Library.  The URL is single-sourced from
+"Amaru.Treasury.Inspector".
+-}
+bookExportHelpFooter :: String
+bookExportHelpFooter =
+    "The canonical treasury book is published at "
+        <> T.unpack publishedBookUrl
+        <> " and imports into the Cardano Swiss Knife Library ("
+        <> T.unpack cskLibraryUrl
+        <> ") so the inspector resolves on-chain identities to names."
 
 -- | @book-export@ option parser.
 bookExportOptsP :: Parser BookExportOpts

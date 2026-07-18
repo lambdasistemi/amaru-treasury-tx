@@ -57,6 +57,9 @@ import Amaru.Treasury.Cli.Common
 import Amaru.Treasury.Cli.Passphrase
     ( readVaultPassphrase
     )
+import Amaru.Treasury.Inspector
+    ( coSignerPointerLines
+    )
 import Amaru.Treasury.Tx.Witness
     ( createWitness
     , decodeWitnessTransaction
@@ -196,7 +199,15 @@ runWitness g opts@WitnessOpts{..} = do
     witnessHex <-
         either (die . renderTxWitnessError) pure $
             createWitness identity tx
+    emitCoSignerPointer
     writeWitness opts witnessHex
+
+{- | Print the co-signer pointer block to stderr so it never contaminates
+the witness hex on stdout.  Sourced from "Amaru.Treasury.Inspector".
+-}
+emitCoSignerPointer :: IO ()
+emitCoSignerPointer =
+    mapM_ (hPutStrLn stderr . T.unpack) coSignerPointerLines
 
 decryptVault :: FilePath -> VaultPassphrase -> IO BS.ByteString
 decryptVault path passphrase = do

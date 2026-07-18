@@ -9,10 +9,10 @@
       the unit test-suite.
 
 ## Slice B — witness + coordinate stderr + book-export --help
-- [ ] T004 Emit the co-signer pointer to stderr from `runWitness` and
+- [X] T004 Emit the co-signer pointer to stderr from `runWitness` and
       `runCoordinate`, and add a `book-export` help footer naming the
       published book URL.
-- [ ] T005 Extend the `book-export` and `vault-witness` smokes to assert the
+- [X] T005 Extend the `book-export` and `vault-witness` smokes to assert the
       new pointer/help text.
 
 ## Slice C — frontend inspector module + web UI surfaces

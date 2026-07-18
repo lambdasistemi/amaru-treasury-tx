@@ -27,6 +27,7 @@ import Options.Applicative
     , command
     , defaultPrefs
     , execParserPure
+    , footer
     , fullDesc
     , handleParseResult
     , help
@@ -56,6 +57,7 @@ import Amaru.Treasury.Cli.AttachWitness
     )
 import Amaru.Treasury.Cli.BookExport
     ( BookExportOpts
+    , bookExportHelpFooter
     , bookExportOptsP
     )
 import Amaru.Treasury.Cli.Common
@@ -202,6 +204,7 @@ cmdP =
                     (CmdBookExport <$> bookExportOptsP)
                     ( progDesc
                         "Export treasury identity metadata as a csk-compatible overlay book (Turtle)"
+                        <> footer bookExportHelpFooter
                     )
                 )
             <> command

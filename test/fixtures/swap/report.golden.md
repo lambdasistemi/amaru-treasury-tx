@@ -29,3 +29,7 @@
 ## Required Signers
 - network_compliance scope owner (selected scope owner)
 - ops_and_use_cases scope owner (extra signer)
+
+## Independent inspection
+- Inspect this transaction independently in the Cardano Swiss Knife inspector: https://lambdasistemi.github.io/cardano-swiss-knife/
+- Import the treasury book to resolve on-chain identities to names: https://lambdasistemi.github.io/amaru-treasury-tx/assets/amaru-treasury-book.ttl

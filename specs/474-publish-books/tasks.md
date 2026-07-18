@@ -9,7 +9,7 @@
 
 ## Slice 2 — book drift check in CI
 
-- [ ] T002-S2 Add a `book` check to `nix/checks.nix` (regenerate from the
+- [X] T002-S2 Add a `book` check to `nix/checks.nix` (regenerate from the
       vendored metadata, `diff -u` against the committed asset, fail
       closed); wire `.#checks.x86_64-linux.book` into `ci.yml`; extend
       `gate.sh`. Prove it fails closed on a mutated asset.

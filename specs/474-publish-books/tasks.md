@@ -16,5 +16,5 @@
 
 ## Slice 3 — document the book URL
 
-- [ ] T003-S3 README section + `docs/book.md` (MkDocs nav) naming the
+- [X] T003-S3 README section + `docs/book.md` (MkDocs nav) naming the
       published book URL and its purpose.

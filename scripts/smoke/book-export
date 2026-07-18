@@ -4,7 +4,8 @@
 # Smoke for `book-export`. Offline: reads the checked-in metadata
 # fixture and renders the cardano-swiss-knife overlay book.
 #
-# - help-flag      : exit 0, lists --metadata/--out/--scope
+# - help-flag      : exit 0, lists --metadata/--out/--scope, names the
+#                    published book URL
 # - full book      : canonical prefixes + Owner/Address/CardanoScript,
 #                    four scope owners
 # - --scope filter : names only the requested scope
@@ -38,6 +39,11 @@ for flag in --metadata --out --scope; do
     grep -q -- "$flag" <<<"$out" \
         || fail "--help missing $flag"
 done
+# --help points operators at the published (canonical) book asset (#475)
+grep -qF \
+    'https://lambdasistemi.github.io/amaru-treasury-tx/assets/amaru-treasury-book.ttl' \
+    <<<"$out" \
+    || fail "--help does not name the published book URL"
 
 # full book to stdout
 book=$("$bin" book-export --metadata "$fixture")

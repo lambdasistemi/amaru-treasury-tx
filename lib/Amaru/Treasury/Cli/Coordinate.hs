@@ -73,6 +73,9 @@ import Amaru.Treasury.Coordinator.Workflow
     , WorkflowConfig (..)
     , runCoordinationWorkflow
     )
+import Amaru.Treasury.Inspector
+    ( coSignerPointerLines
+    )
 import Amaru.Treasury.Vault.Age
     ( decryptAgeVault
     , defaultVaultWorkFactor
@@ -208,6 +211,8 @@ runCoordinate :: NetworkMagic -> FilePath -> CoordinateOpts -> IO ()
 runCoordinate magic socketPath opts = do
     receipt <-
         runCoordinateWith (productionDeps magic socketPath opts) opts
+    -- Pointer to stderr so the JSON receipt on stdout stays clean.
+    mapM_ (hPutStrLn stderr . T.unpack) coSignerPointerLines
     BSL8.putStrLn (encode receipt)
 
 -- | Run @coordinate@ through injected dependencies.

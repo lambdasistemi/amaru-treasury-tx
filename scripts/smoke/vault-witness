@@ -113,9 +113,18 @@ exec 9<<<"$passphrase"
   --vault-passphrase-fd 9 \
   --identity core_development \
   <"$fixture/unsigned.cbor.hex" \
-  >"$tmp/stdout.witness.hex"
+  >"$tmp/stdout.witness.hex" 2>"$tmp/stdout.witness.err"
 exec 9<&-
+# stdout stays byte-identical to the expected witness hex — the co-signer
+# pointer (#475) rode on stderr, not stdout.
 diff -u "$expected_witness_stdout" "$tmp/stdout.witness.hex"
+grep -qF 'https://lambdasistemi.github.io/cardano-swiss-knife/' \
+  "$tmp/stdout.witness.err" \
+  || fail 'witness stderr did not point at the inspector'
+grep -qF \
+  'https://lambdasistemi.github.io/amaru-treasury-tx/assets/amaru-treasury-book.ttl' \
+  "$tmp/stdout.witness.err" \
+  || fail 'witness stderr did not point at the published book'
 
 with_passphrase "$passphrase" \
   "$exe" --network preprod witness \

@@ -28,6 +28,12 @@ import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
 
+import Amaru.Treasury.Inspector
+    ( bookInvitation
+    , inspectInvitation
+    , inspectorUrl
+    , publishedBookUrl
+    )
 import Amaru.Treasury.IntentJSON
     ( RationaleJSON (..)
     , SAction (..)
@@ -174,6 +180,10 @@ renderSuccessReportWithMetadata metadata intent success =
                , heading2 "Required Signers"
                ]
             <> signerLines identityMap report
+            <> [ blank
+               , heading2 "Independent inspection"
+               ]
+            <> independentInspectionLines
   where
     report = tbsReport success
     resolutionInputs =
@@ -414,6 +424,17 @@ signerLines identityMap report =
                     <> ")"
             | signer <- signers
             ]
+
+{- | Co-signer pointer block closing every rendered report: inspect the
+transaction independently and import the treasury book so the inspector
+resolves on-chain identities to names.  URLs and copy come from
+"Amaru.Treasury.Inspector" so the CLI and web UI never drift.
+-}
+independentInspectionLines :: [Text]
+independentInspectionLines =
+    [ bullet (inspectInvitation <> ": " <> inspectorUrl)
+    , bullet (bookInvitation <> ": " <> publishedBookUrl)
+    ]
 
 signerSourceLabel :: SignerSource -> Text
 signerSourceLabel = \case

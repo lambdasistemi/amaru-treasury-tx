@@ -216,6 +216,7 @@ library
     Amaru.Treasury.Inspect.SwapOrderProjection
     Amaru.Treasury.Inspect.TreasurySpendProjection
     Amaru.Treasury.Inspect.Types
+    Amaru.Treasury.Inspector
     Amaru.Treasury.IntentJSON
     Amaru.Treasury.IntentJSON.Common
     Amaru.Treasury.IntentJSON.Schema
@@ -602,6 +603,7 @@ test-suite unit-tests
     Amaru.Treasury.Inspect.SwapOrderDatumSpec
     Amaru.Treasury.Inspect.SwapOrderProjectionSpec
     Amaru.Treasury.Inspect.TreasurySpendProjectionSpec
+    Amaru.Treasury.InspectorSpec
     Amaru.Treasury.IntentJSONSchemaSpec
     Amaru.Treasury.IntentJSONSpec
     Amaru.Treasury.LedgerParseSpec

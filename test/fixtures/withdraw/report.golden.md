@@ -23,3 +23,7 @@
 
 ## Required Signers
 - none
+
+## Independent inspection
+- Inspect this transaction independently in the Cardano Swiss Knife inspector: https://lambdasistemi.github.io/cardano-swiss-knife/
+- Import the treasury book to resolve on-chain identities to names: https://lambdasistemi.github.io/amaru-treasury-tx/assets/amaru-treasury-book.ttl

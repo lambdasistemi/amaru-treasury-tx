@@ -2,7 +2,7 @@
 
 ## Slice 1 — vendor canonical journal + generated book
 
-- [ ] T001-S1 Vendor `journal/2026/metadata.json` (upstream verbatim,
+- [X] T001-S1 Vendor `journal/2026/metadata.json` (upstream verbatim,
       typo preserved) + `journal/README.md` provenance; generate
       `docs/assets/amaru-treasury-book.ttl` via `book-export`; verify the
       book carries the `...992f988` typo and is byte-deterministic.

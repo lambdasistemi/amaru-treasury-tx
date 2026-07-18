@@ -4,6 +4,21 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.21.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.20.1...v0.2.21.0) (2026-07-18)
+
+### Features
+
+* add book-export overlay emitter ([7b5ef46](https://github.com/lambdasistemi/amaru-treasury-tx/commit/7b5ef461d6de3e7be54392334649408cc9b2fe16))
+* add book-export CLI verb ([086f89e](https://github.com/lambdasistemi/amaru-treasury-tx/commit/086f89e6db51512a8563b257da17e24333f63aef))
+* vendor canonical journal and generated book ([d3d5e9c](https://github.com/lambdasistemi/amaru-treasury-tx/commit/d3d5e9c1e3d0798f10341fb3e197f209ec4727ce))
+* add inspector/book pointer to the rendered report ([a2b2700](https://github.com/lambdasistemi/amaru-treasury-tx/commit/a2b2700ba729474b021f125bffc650efc9cad790))
+* point co-signers at the inspector from witness, coordinate, book-export ([468dc78](https://github.com/lambdasistemi/amaru-treasury-tx/commit/468dc783775b674c91e04bc953d8eb877c8b9c20))
+* **frontend:** link the published book and the inspector in the web UI ([ccd002e](https://github.com/lambdasistemi/amaru-treasury-tx/commit/ccd002e67a032398a847fab28469962c080459c1))
+
+### Bug Fixes
+
+* **vendors:** correct Cyber Castellum review_cycle to monthly ([1dee07d](https://github.com/lambdasistemi/amaru-treasury-tx/commit/1dee07d0b02b4d69bb7f0fe6737ac3830a6237bf))
+
 ## [0.2.20.1](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.20.0...v0.2.20.1) (2026-07-11)
 
 ### Bug Fixes

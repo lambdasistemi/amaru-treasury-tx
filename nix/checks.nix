@@ -183,6 +183,28 @@ let
       '';
     };
 
+    # #474 — Book drift check. Regenerate the published overlay
+    # book from the vendored canonical journal metadata
+    # (`journal/2026/metadata.json` — upstream verbatim, provenance
+    # in `journal/README.md`) and diff it against the committed,
+    # published asset. Fails closed if the two diverge, so a
+    # metadata edit or a `book-export` change can never leave the
+    # published book (`docs/assets/amaru-treasury-book.ttl`) stale.
+    book = {
+      runtimeInputs = [
+        components.exes.amaru-treasury-tx
+        pkgs.diffutils
+        pkgs.coreutils
+      ];
+      text = ''
+        tmp="$(mktemp)"
+        trap 'rm -f "$tmp"' EXIT
+        amaru-treasury-tx book-export \
+          --metadata ${src}/journal/2026/metadata.json > "$tmp"
+        diff -u ${src}/docs/assets/amaru-treasury-book.ttl "$tmp"
+      '';
+    };
+
     unit = {
       # The history RDF tests shell out to Apache Jena (`arq`,
       # `shacl`) and the `cq-rdf` emitter, so the hermetic check
@@ -552,6 +574,7 @@ in
   recent-txs-manifest =
     mkCheck "recent-txs-manifest" scripts.recent-txs-manifest;
   schema = mkCheck "schema" scripts.schema;
+  book = mkCheck "book" scripts.book;
   unit = mkCheck "unit" scripts.unit;
   golden = mkCheck "golden" scripts.golden;
   lint = mkCheck "lint" scripts.lint;

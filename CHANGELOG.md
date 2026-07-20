@@ -4,6 +4,13 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.21.1](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.21.0...v0.2.21.1) (2026-07-20)
+
+### Bug Fixes
+
+* **rerate:** query deployed mainnet order address ([27713ec](https://github.com/lambdasistemi/amaru-treasury-tx/commit/27713ec3c4cb56ac7a003c1532fd0f94345c67b7))
+* **rerate:** conserve cancelled order value ([670dad9](https://github.com/lambdasistemi/amaru-treasury-tx/commit/670dad9a42b5bf319a0a09865df6c7a89d7a111e))
+
 ## [0.2.21.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.20.1...v0.2.21.0) (2026-07-18)
 
 ### Features

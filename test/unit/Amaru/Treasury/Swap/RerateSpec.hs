@@ -35,8 +35,7 @@ import Cardano.Ledger.Api.Tx.Body
     , withdrawalsTxBodyL
     )
 import Cardano.Ledger.Api.Tx.Out
-    ( addrTxOutL
-    , datumTxOutL
+    ( datumTxOutL
     , valueTxOutL
     )
 import Cardano.Ledger.BaseTypes
@@ -268,18 +267,12 @@ spec = describe "Amaru.Treasury.Swap.Rerate" $ do
             `shouldBe` Set.fromList ownerKeys
         invalidHereafter (body ^. vldtTxBodyL)
             `shouldBe` SJust (SlotNo 12_345)
-        length outs `shouldBe` 2
+        length outs `shouldBe` 1
         case outs of
-            [replacement, treasuryReturn] -> do
+            [replacement] -> do
                 inlineDatumData replacement
                     `shouldBe` Just (orderDatum 10_000_000 3_000_000)
-                treasuryReturn
-                    ^. addrTxOutL
-                    `shouldBe` rpiTreasuryAddress programInputs
-                treasuryReturn
-                    ^. valueTxOutL
-                    `shouldBe` rroValue order1
-            _ -> expectationFailure "expected exactly two outputs"
+            _ -> expectationFailure "expected exactly one replacement output"
 
     it "emits one replacement output per cancelled order" $ do
         let tx2 =
@@ -290,10 +283,13 @@ spec = describe "Amaru.Treasury.Swap.Rerate" $ do
         body2
             ^. inputsTxBodyL
             `shouldBe` Set.fromList [mkTxIn 0, mkTxIn 1, mkTxIn 2]
-        length (toList (body2 ^. outputsTxBodyL)) `shouldBe` 4
+        length (toList (body2 ^. outputsTxBodyL)) `shouldBe` 2
         body2
             ^. reqSignerHashesTxBodyL
             `shouldBe` Set.fromList ownerKeys
+
+    it "does not duplicate cancelled order value into a treasury return" $
+        length outs `shouldBe` 1
 
     it "spends extra wallet fuel without making it collateral" $ do
         let extraWalletTxIn = mkTxIn 9

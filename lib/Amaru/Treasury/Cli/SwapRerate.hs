@@ -21,6 +21,7 @@ module Amaru.Treasury.Cli.SwapRerate
     , swapRerateOptsP
     , swapRerateFunding
     , decideSwapRerateBranch
+    , rerateOrderAddress
     , runSwapRerate
     ) where
 
@@ -106,7 +107,8 @@ import Amaru.Treasury.Cli.Common
     , nowTip
     )
 import Amaru.Treasury.Constants
-    ( sundaeOrderScriptRefMainnet
+    ( sundaeOrderAddressMainnet
+    , sundaeOrderScriptRefMainnet
     , sundaeProtocolFeeLovelace
     , sundaeUsdmPoolHex
     , usdmAssetHex
@@ -670,8 +672,11 @@ resolveLiveRerate
 resolveLiveRerate g provider metadata opts@SwapRerateOpts{..} = do
     orderScript <- orderScriptFromBlob sundaeOrderValidatorBlob
     let network = networkFromMagic (goNetworkMagic g)
-        orderAddress =
-            scriptAddr network (Core.hashScript @ConwayEra orderScript)
+    orderAddress <-
+        expectRightIO $
+            rerateOrderAddress
+                network
+                (Core.hashScript @ConwayEra orderScript)
     orders <- queryLiveOrderCandidates provider metadata orderAddress
     selected <- selectLiveOrders sroScope sroSelectionMode orders
     case selected of
@@ -1456,6 +1461,13 @@ scriptAddr network scriptHash =
         network
         (ScriptHashObj scriptHash)
         (StakeRefBase (ScriptHashObj scriptHash))
+
+-- | Resolve the deployed order address for live re-rate discovery.
+rerateOrderAddress :: Network -> ScriptHash -> Either String Addr
+rerateOrderAddress network scriptHash =
+    case network of
+        Mainnet -> addrFromText sundaeOrderAddressMainnet
+        Testnet -> Right (scriptAddr network scriptHash)
 
 parseTxInOrDie :: Text -> IO TxIn
 parseTxInOrDie text =

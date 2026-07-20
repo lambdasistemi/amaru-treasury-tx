@@ -23,7 +23,6 @@ import Control.Monad (forM_, void)
 import Cardano.Tx.Build
     ( TxBuild
     , collateral
-    , payTo
     , payTo'
     , reference
     , requireSignature
@@ -107,11 +106,6 @@ rerateProgram inputs planned = do
                 (rpiSwapOrderAddress inputs)
                 (proReplacementValue order)
                 (RawPlutusData (proReplacementDatum order))
-    forM_ (prOrders planned) $ \order ->
-        void $
-            payTo
-                (rpiTreasuryAddress inputs)
-                (proOriginalValue order)
     forM_
         (rscExpectedOwners (prScopeContext planned))
         requireSignature

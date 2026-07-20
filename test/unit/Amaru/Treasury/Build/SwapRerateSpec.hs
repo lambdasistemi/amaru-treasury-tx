@@ -264,16 +264,10 @@ assertRerateBody fixture result = do
             expectationFailure $
                 "expected one replacement order output, got: " <> show (length other)
     case toList (body ^. outputsTxBodyL) of
-        _replacement : treasuryReturn : _change -> do
-            treasuryReturn
-                ^. addrTxOutL
-                `shouldBe` rpiTreasuryAddress (rfInputs fixture)
-            treasuryReturn
-                ^. valueTxOutL
-                `shouldBe` proOriginalValue (rfExpectedOrder fixture)
+        _replacement : _change -> pure ()
         outputs ->
             expectationFailure $
-                "expected replacement, treasury return, and change outputs, got: "
+                "expected replacement and wallet change outputs, got: "
                     <> show (length outputs)
 
 rerateFixture :: IO RerateFixture

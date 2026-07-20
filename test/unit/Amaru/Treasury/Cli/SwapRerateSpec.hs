@@ -69,8 +69,17 @@ import Amaru.Treasury.Cli.SwapRerate
     , SwapReratePassthroughReason (..)
     , SwapRerateSelectionMode (..)
     , decideSwapRerateBranch
+    , rerateOrderAddress
     , runSwapRerate
     , swapRerateFunding
+    )
+import Amaru.Treasury.Constants
+    ( sundaeOrderAddressMainnet
+    , sundaeOrderScriptHashMainnet
+    )
+import Amaru.Treasury.LedgerParse
+    ( addrFromText
+    , scriptHashFromHex
     )
 import Amaru.Treasury.Scope
     ( ScopeId (..)
@@ -82,9 +91,16 @@ import Amaru.Treasury.Swap.Rerate.Types
     , RerateSplit (..)
     )
 import Amaru.Treasury.Trace (Severity (..))
+import Cardano.Ledger.BaseTypes (Network (..))
 
 spec :: Spec
 spec = describe "Amaru.Treasury.Cli.SwapRerate" $ do
+    it "uses the deployed Sundae mainnet order address" $
+        ( scriptHashFromHex sundaeOrderScriptHashMainnet
+            >>= rerateOrderAddress Mainnet
+        )
+            `shouldBe` addrFromText sundaeOrderAddressMainnet
+
     it "builds offline single-tx CBOR and report artifacts" $
         withSystemTempDirectory "swap-rerate-single" $ \dir -> do
             let out = dir </> "rerate.cbor.hex"

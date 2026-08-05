@@ -1,10 +1,10 @@
-tx-build: intent <- /tmp/attx-swap-40k-usdm-rebuild/intent.json
+tx-build: intent <- /tmp/attx-swap-40k-usdm-core/intent.json
 tx-build: parsed action=Swap network=mainnet
 tx-build: connecting to /code/cardano-mainnet/ipc/node.socket
 tx-build: required utxos: 6
 tx-build: handshake ok (magic 764824073 matches intent network=mainnet)
-tx-build: built 4588 bytes  fee=553139  total_collateral=829709
+tx-build: built 4613 bytes  fee=553146  total_collateral=829719
 tx-build: re-evaluated 2 redeemers, 0 failed
-tx-build: cbor -> /tmp/attx-swap-40k-usdm-rebuild/unsigned-tx.hex
+tx-build: cbor -> /tmp/attx-swap-40k-usdm-core/unsigned-tx.hex
 tx-build: VALIDATION OK
-tx-build: report -> /tmp/attx-swap-40k-usdm-rebuild/report.json
+tx-build: report -> /tmp/attx-swap-40k-usdm-core/report.json

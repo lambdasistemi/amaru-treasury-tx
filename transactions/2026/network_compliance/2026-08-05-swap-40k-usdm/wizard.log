@@ -4,10 +4,10 @@ swap-wizard: VERIFIED scope=network_compliance treasury=addr1xyezq8wpaqnssdjvd3p
 swap-wizard: owners core=7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb ops=f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e network_compliance=8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1 middleware=97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2
 swap-wizard: wallet utxos: 2
 swap-wizard: treasury utxos: 10 (total 611069353175 lovelace)
-swap-wizard: upperBound slot 194526553 (from chain horizon helper)
+swap-wizard: upperBound slot 194528562 (from chain horizon helper)
 swap-wizard: NetworkConstants swapOrder=addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n usdmPolicy=c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad usdmToken=0014df105553444d sundaeFee=1280000
 swap-wizard: wallet utxo selected 968fd01e074ca33de95087957f59803bb2ee8bacfe922eb81cdf18e8e23ad788#2
 swap-wizard: treasury utxos selected efff271aa02e9032aba0e5e9020c5840b2aa1b219c59f9f16e1d6e51071bea1e#2 leftover=401473182250
-swap-wizard: upperBound slot 194526553 (from chain horizon helper)
+swap-wizard: upperBound slot 194528562 (from chain horizon helper)
 swap-wizard: chunks total=209424083770 chunkSize=26178010471 full=8 remainder=2
-swap-wizard: intent.json -> /tmp/attx-swap-40k-usdm-rebuild/intent.json
+swap-wizard: intent.json -> /tmp/attx-swap-40k-usdm-core/intent.json

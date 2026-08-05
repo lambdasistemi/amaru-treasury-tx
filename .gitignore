@@ -24,3 +24,6 @@ STATUS.md
 site/
 .orch/
 image-result
+
+# Per-ticket runtime gate (ephemeral, see gate-script skill)
+/gate.sh

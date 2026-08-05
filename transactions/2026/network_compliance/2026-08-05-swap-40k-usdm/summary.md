@@ -1,15 +1,15 @@
-# August 2026 — Swap 40k USDM (network_compliance with core_development)
+# August 2026 — Swap 40k USDM (network_compliance)
 
-**Status:** Awaiting 2 witnesses (`network_compliance` + `core_development`).
+**Status:** Awaiting 2 witnesses (`network_compliance` + `ops_and_use_cases`).
 
-Network treasury swap of 40,000 USDM split across 8 SundaeSwap order chunks (5,000 USDM per chunk) at a minimum rate of 0.191 USDM per ADA (48-hour validity horizon, co-signed with `core_development`).
+Network treasury swap of 40,000 USDM split across 8 SundaeSwap order chunks (5,000 USDM per chunk) at a minimum rate of 0.191 USDM per ADA (48-hour validity horizon).
 
 ## Tx identity
 
 | Field | Value |
 |---|---|
 | Status | Pre-submission (unsigned) |
-| Validity (invalidHereafter slot) | 194528562 (~48h TTL) |
+| Validity (invalidHereafter slot) | 194526553 (~48h TTL) |
 | Target USDM | 40,000 USDM |
 | Order chunks | 8 (5,000 USDM / 26,178.010471 ADA per chunk) |
 | Min rate | 0.191 USDM per ADA |
@@ -30,14 +30,14 @@ Reference inputs: scopes datum (`11ace24a…#0`), permissions script (`25ba96f5�
 |---|---|---|---|
 | `addr1x8ax5k9…` (8 outputs) | 8x Sundae Swap orders | 209 424 083 768 | 40,000 USDM target |
 | `addr1xyezq8w…thzgk` | Treasury change | 401 473 182 250 | — |
-| `addr1qx9aqvs…sznjcrz` | Wallet change | 76 858 476 | — |
+| `addr1qx9aqvs…sznjcrz` | Wallet change | 76 858 483 | — |
 
 ## Required signers
 
 | Hash | Scope Owner |
 |---|---|
 | `8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1` | `network_compliance` |
-| `7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb` | `core_development` |
+| `f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e` | `ops_and_use_cases` |
 
 ## Verification gates passed
 

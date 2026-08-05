@@ -2,10 +2,10 @@
     "action": "swap",
     "network": "mainnet",
     "rationale": {
-        "description": "Swap ADA for 40,000 USDM in 8 chunks at min rate 0.191 (core co-signer)",
+        "description": "Swap ADA for 40,000 USDM in 8 chunks at min rate 0.191 (48h TTL)",
         "destinationLabel": "network_compliance treasury",
         "event": "disburse",
-        "justification": "Network treasury swap to USDM (8 chunks, core_development co-signer)",
+        "justification": "Network treasury swap to USDM (8 chunks, rate 0.191)",
         "label": "Swap ADA<->USDM",
         "references": []
     },
@@ -29,7 +29,7 @@
     },
     "signers": [
         "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
-        "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
+        "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
     ],
     "swap": {
         "amountLovelace": 209424083770,
@@ -47,7 +47,7 @@
         "usdmPolicy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
         "usdmToken": "0014df105553444d"
     },
-    "validityUpperBoundSlot": 194528562,
+    "validityUpperBoundSlot": 194526553,
     "wallet": {
         "address": "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz",
         "extraTxIns": [],

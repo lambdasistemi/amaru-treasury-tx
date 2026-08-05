@@ -2,17 +2,17 @@
 
 **Status:** Awaiting 2 witnesses (`network_compliance` + `ops_and_use_cases`).
 
-Network treasury swap of 40,000 USDM split across 8 SundaeSwap order chunks (5,000 USDM per chunk) at a minimum rate of 0.192 USDM per ADA.
+Network treasury swap of 40,000 USDM split across 8 SundaeSwap order chunks (5,000 USDM per chunk) at a minimum rate of 0.191 USDM per ADA (48-hour validity horizon).
 
 ## Tx identity
 
 | Field | Value |
 |---|---|
 | Status | Pre-submission (unsigned) |
-| Validity (invalidHereafter slot) | 194439913 |
+| Validity (invalidHereafter slot) | 194526553 (~48h TTL) |
 | Target USDM | 40,000 USDM |
-| Order chunks | 8 (5,000 USDM / 26,041.666666 ADA per chunk) |
-| Min rate | 0.192 USDM per ADA |
+| Order chunks | 8 (5,000 USDM / 26,178.010471 ADA per chunk) |
+| Min rate | 0.191 USDM per ADA |
 | Network | mainnet (magic 764824073) |
 
 ## Inputs
@@ -28,9 +28,9 @@ Reference inputs: scopes datum (`11ace24a…#0`), permissions script (`25ba96f5�
 
 | Address | Role | Lovelace | USDM |
 |---|---|---|---|
-| `addr1x8ax5k9…` (8 outputs) | 8x Sundae Swap orders | 208 333 333 328 | 40,000 USDM target |
-| `addr1xyezq8w…thzgk` | Treasury change | 402 563 932 687 | — |
-| `addr1qx9aqvs…sznjcrz` | Wallet change | 76 859 451 | — |
+| `addr1x8ax5k9…` (8 outputs) | 8x Sundae Swap orders | 209 424 083 768 | 40,000 USDM target |
+| `addr1xyezq8w…thzgk` | Treasury change | 401 473 182 250 | — |
+| `addr1qx9aqvs…sznjcrz` | Wallet change | 76 858 483 | — |
 
 ## Required signers
 

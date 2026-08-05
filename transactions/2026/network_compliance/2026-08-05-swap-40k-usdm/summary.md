@@ -1,0 +1,45 @@
+# August 2026 — Swap 40k USDM (network_compliance)
+
+**Status:** Awaiting 2 witnesses (`network_compliance` + `ops_and_use_cases`).
+
+Network treasury swap of 40,000 USDM split across 8 SundaeSwap order chunks (5,000 USDM per chunk) at a minimum rate of 0.192 USDM per ADA.
+
+## Tx identity
+
+| Field | Value |
+|---|---|
+| Status | Pre-submission (unsigned) |
+| Validity (invalidHereafter slot) | 194439913 |
+| Target USDM | 40,000 USDM |
+| Order chunks | 8 (5,000 USDM / 26,041.666666 ADA per chunk) |
+| Min rate | 0.192 USDM per ADA |
+| Network | mainnet (magic 764824073) |
+
+## Inputs
+
+| Input | Role | Lovelace |
+|---|---|---|
+| `efff271aa02e9032aba0e5e9020c5840b2aa1b219c59f9f16e1d6e51071bea1e#2` | Treasury UTxO | 610 923 506 020 |
+| `968fd01e074ca33de95087957f59803bb2ee8bacfe922eb81cdf18e8e23ad788#2` | Wallet fuel | 77 411 622 |
+
+Reference inputs: scopes datum (`11ace24a…#0`), permissions script (`25ba96f5…#2`), treasury script (`810bfcbd…#0`), registry script (`e7b395a9…#2`).
+
+## Outputs
+
+| Address | Role | Lovelace | USDM |
+|---|---|---|---|
+| `addr1x8ax5k9…` (8 outputs) | 8x Sundae Swap orders | 208 333 333 328 | 40,000 USDM target |
+| `addr1xyezq8w…thzgk` | Treasury change | 402 563 932 687 | — |
+| `addr1qx9aqvs…sznjcrz` | Wallet change | 76 859 451 | — |
+
+## Required signers
+
+| Hash | Scope Owner |
+|---|---|
+| `8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1` | `network_compliance` |
+| `f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e` | `ops_and_use_cases` |
+
+## Verification gates passed
+
+- ✓ `tx-inspect --rules amaru-treasury.yaml` verified (8 order outputs, change split clean)
+- ✓ `tx-validate --n2c-socket-path … --network-magic 764824073` `structurally_clean`, exit 0

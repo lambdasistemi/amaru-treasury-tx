@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# CQ3 against the DEPLOYED PlutusV3 Amaru network_compliance treasury bytes
+# (32201dc1…), pinned from chain by a self-verifying hash check.
+set -uo pipefail
+S=/tmp/ms-amaru-treasury-1/epic-a/ticket-491/commit-owner-1/scratch
+T=efff271aa02e9032aba0e5e9020c5840b2aa1b219c59f9f16e1d6e51071bea1e
+W=$S/replays/$T
+fails=0
+row() {
+  local m=$1 expect=$2 label=$3 out got verdict budget
+  if [ "$m" = none ]; then
+    out=$("$S/build/cq3treasury" "$S/costmodel-v3.txt" "$S/amaru-treasury.hex" "$W/context.json" "$W/treasury-redeemer.hex" "$T" 2>&1)
+  else
+    out=$(WR_MUTATE="$m" "$S/build/cq3treasury" "$S/costmodel-v3.txt" "$S/amaru-treasury.hex" "$W/context.json" "$W/treasury-redeemer.hex" "$T" 2>&1)
+  fi
+  got=$(grep -oE 'CQ3-RESULT=[A-Z]*' <<<"$out" | head -1 | cut -d= -f2)
+  budget=$(grep -oE 'ExCPU [0-9]+, exBudgetMemory = ExMemory [0-9]+' <<<"$out" | head -1)
+  [ "$got" = "$expect" ] && verdict=PASS || { verdict=FAIL; fails=$((fails+1)); }
+  printf 'CASE %-34s expect=%-5s got=%-5s verdict=%s  %s\n' "$label" "$expect" "$got" "$verdict" "${budget:-}"
+}
+row none                          OK    cq3-control-real-treasury-spend
+row cq3-datum-carrying-input      OK    cq3-green-datum-carrying-input
+row cq3-invalid-diverted-change   ERROR cq3-red-diverted-treasury-change
+echo "ON-CHAIN-DECLARED cpu=150362489 mem=444067"
+echo "SUMMARY cases=3 failures=$fails"
+[ "$fails" -eq 0 ] && echo "CQ3-CONTROLS-COMPLETE" || exit 1

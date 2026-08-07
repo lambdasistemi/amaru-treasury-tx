@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Replay one real WingRiders V2 batch transaction against the deployed
+# pool script and compare consumed units to the on-chain declaration.
+#
+# Usage: replay-tx <tx-hash>
+#
+# Purpose: run this over SEVERAL independent transactions. A constant
+# percentage gap across differing input/output shapes is an agent padding
+# signature; a gap that moves with structure is infidelity in the
+# reconstructed context. One transaction cannot tell those apart.
+set -uo pipefail
+
+RT=/tmp/ms-amaru-treasury-1/epic-a/ticket-491/commit-owner-1
+S=$RT/scratch
+TX=$1
+W=$S/replays/$TX
+mkdir -p "$W"
+
+SHELLEY=1596059091
+BYRON=4492800
+POOLHASH=af97793b8702f381976cec83e303e9ce17781458c73c4bb16fe02b83
+
+"$S/bf" "/txs/$TX" > "$W/tx.json" || exit 1
+"$S/bf" "/txs/$TX/utxos" > "$W/utxos.json" || exit 1
+"$S/bf" "/txs/$TX/redeemers" > "$W/redeemers.json" || exit 1
+
+VB=$(jq -r '.invalid_before' "$W/tx.json")
+VH=$(jq -r '.invalid_hereafter' "$W/tx.json")
+FEE=$(jq -r '.fees' "$W/tx.json")
+if [[ $VB == null || $VH == null ]]; then
+    echo "$TX SKIP reason=unbounded-validity-range"
+    exit 0
+fi
+FROM=$(( (SHELLEY + VB - BYRON) * 1000 ))
+TO=$(( (SHELLEY + VH - BYRON) * 1000 ))
+
+# The pool's own redeemer: its declared units are the oracle.
+POOLRD=$(jq -r --arg h "$POOLHASH" '[.[]|select(.script_hash==$h)][0]' "$W/redeemers.json")
+if [[ $POOLRD == null ]]; then
+    echo "$TX SKIP reason=no-pool-redeemer"
+    exit 0
+fi
+DHASH=$(jq -r '.redeemer_data_hash' <<<"$POOLRD")
+ECPU=$(jq -r '.unit_steps' <<<"$POOLRD")
+EMEM=$(jq -r '.unit_mem' <<<"$POOLRD")
+RIDX=$(jq -r '.tx_index' <<<"$POOLRD")
+RHEX=$("$S/bf" "/scripts/datum/$DHASH/cbor" | jq -r '.cbor')
+
+# Decode every address appearing in the transaction.
+: > "$W/addrmap.jsonl"
+for a in $(jq -r '[(.inputs[].address),(.outputs[].address)]|unique|.[]' "$W/utxos.json"); do
+    b16=$(docker exec cardano-mainnet cardano-cli address info --address "$a" 2>/dev/null | jq -r '.base16')
+    jq -n --arg a "$a" --arg b "$b16" '{address:$a, base16:$b}' >> "$W/addrmap.jsonl"
+done
+
+jq -n --slurpfile utxos "$W/utxos.json" --slurpfile amap "$W/addrmap.jsonl" \
+    --argjson validFrom "$FROM" --argjson validTo "$TO" --argjson fee "$FEE" \
+    --arg txid "$TX" -f "$S/gen-context.jq" > "$W/context.json" || exit 1
+
+NIN=$(jq -r '.inputs|length' "$W/context.json")
+NOUT=$(jq -r '.outputs|length' "$W/context.json")
+NREF=$(jq -r '.refInputs|length' "$W/context.json")
+
+OUT=$(WR_EXPECT_CPU="$ECPU" WR_EXPECT_MEM="$EMEM" \
+    "$S/build/poolreplay" "$S/costmodel-v2.txt" "$S/pool-script.hex" \
+    "$W/context.json" "$RHEX" 2>&1)
+echo "$OUT" > "$W/replay.log"
+
+GOT=$(grep -o 'ExCPU [0-9]*' <<<"$OUT" | head -1 | awk '{print $2}')
+GOTM=$(grep -o 'ExMemory [0-9]*' <<<"$OUT" | head -1 | awk '{print $2}')
+RT_OK=$(grep -o 'DATUM-ROUNDTRIP-ALL=[A-Za-z]*' <<<"$OUT" | cut -d= -f2)
+RES=$(grep -o 'REPLAY-RESULT=[A-Z]*' <<<"$OUT" | cut -d= -f2)
+
+if [[ -z ${GOT:-} ]]; then
+    echo "$TX result=$RES in=$NIN out=$NOUT ref=$NREF roundtrip=$RT_OK NO-BUDGET"
+    exit 0
+fi
+awk -v tx="$TX" -v g="$GOT" -v e="$ECPU" -v gm="$GOTM" -v em="$EMEM" \
+    -v ni="$NIN" -v no="$NOUT" -v nr="$NREF" -v rt="$RT_OK" -v r="$RES" 'BEGIN{
+  printf "%s result=%s in=%s out=%s ref=%s roundtrip=%s cpu %d/%d (%.4f%%, d=%d) mem %d/%d (%.4f%%, d=%d)\n",
+    substr(tx,1,12), r, ni, no, nr, rt, g, e, 100*g/e, e-g, gm, em, 100*gm/em, em-gm
+}'

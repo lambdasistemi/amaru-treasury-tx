@@ -1,0 +1,15 @@
+DEPLOYED-SCRIPT bytes=417
+REAL-DATUM owner-field=Constr 0 [Constr 0 [B "\220\196\153D7\131\SO\162\162O\US\SI\140\&5-\DC3\138\DC1\184\241\24
+CASE CQ4-GREEN-pubkey-owner-signed arity=3 expect=ExpectOk got=ExpectOk verdict=PASS budget=cpu=ExCPU 7894252 mem=ExMemory 23663
+CASE CQ4-RED-owner-signature-absent arity=3 expect=ExpectErr got=ExpectErr verdict=PASS budget=n/a
+    error: CekError An error has occurred: The machine terminated because of an error, either from a built-in function or from an explicit use of 'error'. Caused
+CASE CQ4-RED-wrong-signatory arity=3 expect=ExpectErr got=ExpectErr verdict=PASS budget=n/a
+    error: CekError An error has occurred: The machine terminated because of an error, either from a built-in function or from an explicit use of 'error'. Caused
+CASE CQ4-RED-script-owner arity=3 expect=ExpectErr got=ExpectErr verdict=PASS budget=n/a
+    error: CekError An error has occurred: The machine terminated because of an error, either from a built-in function or from an explicit use of 'error'. Caused
+CASE CQ4-CONTROL-apply-pool-input-present arity=3 expect=ExpectOk got=ExpectOk verdict=PASS budget=cpu=ExCPU 6729093 mem=ExMemory 24970
+CASE CQ4-CONTROL-apply-pool-input-absent arity=3 expect=ExpectErr got=ExpectErr verdict=PASS budget=n/a
+    error: CekError An error has occurred: The machine terminated because of an error, either from a built-in function or from an explicit use of 'error'. Caused
+CASE CONTROL-UNDERAPPLY-must-not-be-read-as-accept arity=1 expect=ExpectOk got=ExpectOk verdict=PASS budget=cpu=ExCPU 651283 mem=ExMemory 4132
+SUMMARY cases=7 failures=0
+CQ4-CONTROLS-COMPLETE

@@ -1,0 +1,7 @@
+poolreplay: Uncaught exception ghc-internal:GHC.Internal.Exception.ErrorCall:
+
+context parse: Error in $.refInputs[0].paymentHash: parsing Text failed, expected String, but encountered Null
+
+HasCallStack backtrace:
+  error, called at /tmp/ms-amaru-treasury-1/epic-a/ticket-491/commit-owner-1/scratch/PoolReplay.hs:245:30 in main:Main
+

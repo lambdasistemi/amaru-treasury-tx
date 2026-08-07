@@ -1,0 +1,10 @@
+LOADED deployed script from /tmp/ms-amaru-treasury-1/epic-a/ticket-491/commit-owner-1/scratch/request-script.hex
+CONTROL-A-WRONG-ARGS result=OK
+  CONTROL-A-OK-BY-UNDERAPPLICATION (evaluator-OK != validator-accepted)
+CONTROL-B-NO-ARGS result=OK
+CONTROL-C-CORRECT-ARITY-JUNK result=ERROR
+  logC: "Expected the Constr constructor but got a different one"
+  CONTROL-C-RED-AS-REQUIRED: CekError An error has occurred:
+The machine terminated because of an error, either from a built-in function or from an explicit use of 'error'.
+Caused by: unCon
+EVALUATOR-INSTRUMENT-CAN-REPORT-REJECTION

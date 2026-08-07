@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# DATA-OBSERVATION recorder for issue #491 certification evidence.
+#
+# Wraps gate-script/run-receipt so every observation carries:
+#   CQ/invariant ID, UTC time, observed slot, source kind, pin/outref,
+#   command, real exit code, raw-log path, and SHA-256.
+#
+# Usage:
+#   observe <cq-id> <source-kind> <pin-or-outref> <slug> -- <command> [args...]
+#
+# Writes:
+#   $EV/raw/<slug>.log          immutable raw output (0444)
+#   $EV/observations.jsonl      append-only DATA-OBSERVATION rows
+#
+# Exits with the wrapped command's real status. Never masks it.
+set -uo pipefail
+
+RT=/tmp/ms-amaru-treasury-1/epic-a/ticket-491/commit-owner-1
+EV=${EVIDENCE_ROOT:-$RT/evidence}
+RECEIPT=/code/llm-settings/shared/skills/gate-script/scripts/run-receipt
+
+if [[ $# -lt 5 || $5 != -- ]]; then
+    echo "usage: observe <cq-id> <source-kind> <pin-or-outref> <slug> -- <cmd>..." >&2
+    exit 64
+fi
+
+cq=$1 kind=$2 pin=$3 slug=$4
+shift 5
+
+mkdir -p "$EV/raw"
+log="$EV/raw/$slug.log"
+
+# Observed slot is recorded per-observation so a later reader can tell
+# which chain state each capture was taken against. SLOT_OVERRIDE lets
+# the freshness probe itself record "unknown" before a tip exists.
+slot=${SLOT_OVERRIDE:-}
+if [[ -z $slot ]]; then
+    slot=$(timeout 120 docker exec cardano-mainnet cardano-cli query tip \
+        --mainnet --socket-path /ipc/node.socket 2>/dev/null |
+        jq -r '.slot // "unavailable"' 2>/dev/null) || slot=unavailable
+    [[ -n $slot ]] || slot=unavailable
+fi
+
+utc=$(date -u +%FT%TZ)
+receipt=$("$RECEIPT" "$log" -- "$@")
+status=$?
+
+evidence_sha=$(printf '%s\n' "$receipt" |
+    grep -o 'evidence_sha256=[0-9a-f]*' | cut -d= -f2)
+command_sha=$(printf '%s\n' "$receipt" |
+    grep -o 'command_sha256=[0-9a-f]*' | cut -d= -f2)
+
+jq -n -c \
+    --arg cq "$cq" --arg utc "$utc" --arg slot "$slot" \
+    --arg kind "$kind" --arg pin "$pin" --arg slug "$slug" \
+    --arg cmd "$*" --arg exit "$status" \
+    --arg log "$log" --arg sha "$evidence_sha" --arg csha "$command_sha" \
+    '{cq:$cq, utc:$utc, slot:$slot, source_kind:$kind, pin:$pin,
+      slug:$slug, command:$cmd, exit:($exit|tonumber),
+      raw_log:$log, sha256:$sha, command_sha256:$csha}' \
+    >>"$EV/observations.jsonl"
+
+printf '%s\n' "$receipt"
+exit "$status"

@@ -1,0 +1,7 @@
+CASE cq2-control-unmutated-real-batch expect=OK    got=OK    verdict=PASS
+CASE cq2-green                      expect=OK    got=OK    verdict=PASS
+CASE cq2-red-wrong-beneficiary      expect=ERROR got=ERROR verdict=PASS
+CASE cq2-red-wrong-datum            expect=ERROR got=ERROR verdict=PASS
+CASE cq2-red-no-datum               expect=ERROR got=ERROR verdict=PASS
+SUMMARY cases=5 failures=0
+CQ2-CONTROLS-COMPLETE

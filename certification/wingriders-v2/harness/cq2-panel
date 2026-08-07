@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# CQ2 against the DEPLOYED WingRiders pool bytes, on the replay context
+# already proven to validate for 11/11 real mainnet batches.
+# Each red differs from the green in exactly one field.
+set -uo pipefail
+S=/tmp/ms-amaru-treasury-1/epic-a/ticket-491/commit-owner-1/scratch
+W=$S/replays/db95d31ae9b7df39f0dfe46a2016351e3695b813361f8ae9253c99bde32050f0
+RHEX=$(jq -r '.cbor' <<<"$("$S/bf" "/scripts/datum/bce8ce74b3957c23d3f9077c97928b0e058e43a421069a0f97c9e3c4ec44e962/cbor")")
+fails=0
+row() {
+  local m=$1 expect=$2 out got verdict
+  out=$(WR_MUTATE="$m" "$S/build/poolreplay" "$S/costmodel-v2.txt" \
+        "$S/pool-script.hex" "$W/context.json" "$RHEX" 2>&1)
+  got=$(grep -oE 'REPLAY-RESULT=[A-Z]*' <<<"$out" | head -1 | cut -d= -f2)
+  [ "$got" = "$expect" ] && verdict=PASS || { verdict=FAIL; fails=$((fails+1)); }
+  printf 'CASE %-30s expect=%-5s got=%-5s verdict=%s\n' "$m" "$expect" "$got" "$verdict"
+}
+# Unmutated control: the real batch must still validate in this same runner.
+row-none() {
+  local out got verdict
+  out=$("$S/build/poolreplay" "$S/costmodel-v2.txt" "$S/pool-script.hex" "$W/context.json" "$RHEX" 2>&1)
+  got=$(grep -oE 'REPLAY-RESULT=[A-Z]*' <<<"$out" | head -1 | cut -d= -f2)
+  [ "$got" = OK ] && verdict=PASS || { verdict=FAIL; fails=$((fails+1)); }
+  printf 'CASE %-30s expect=%-5s got=%-5s verdict=%s\n' "cq2-control-unmutated-real-batch" OK "$got" "$verdict"
+}
+row-none
+row cq2-green                     OK
+row cq2-red-wrong-beneficiary     ERROR
+row cq2-red-wrong-datum           ERROR
+row cq2-red-no-datum              ERROR
+echo "SUMMARY cases=5 failures=$fails"
+[ "$fails" -eq 0 ] && echo "CQ2-CONTROLS-COMPLETE" || exit 1

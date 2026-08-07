@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Blockfrost DISCOVERY-only client. The credential is read from a file so
+# it never appears in argv, in a recorded command string, or in evidence.
+# Discovery is a claim about the chain; certified values are re-queried
+# through the local node.
+set -uo pipefail
+RT=/tmp/ms-amaru-treasury-1/epic-a/ticket-491/commit-owner-1
+TOKEN=$(cat "$RT/scratch/.bf-token")
+curl -sS --fail-with-body \
+    -H "project_id: $TOKEN" \
+    "https://cardano-mainnet.blockfrost.io/api/v0$1"

@@ -1,0 +1,6 @@
+CASE cq3-control-real-treasury-spend    expect=OK    got=OK    verdict=PASS  ExCPU 153245301, exBudgetMemory = ExMemory 449257
+CASE cq3-green-datum-carrying-input     expect=OK    got=OK    verdict=PASS  ExCPU 153245301, exBudgetMemory = ExMemory 449257
+CASE cq3-red-diverted-treasury-change   expect=ERROR got=ERROR verdict=PASS  
+ON-CHAIN-DECLARED cpu=150362489 mem=444067
+SUMMARY cases=3 failures=0
+CQ3-CONTROLS-COMPLETE

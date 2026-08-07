@@ -1,0 +1,5 @@
+REPLAY inputs=3 refInputs=2 outputs=3
+REPLAY poolLocation=0 agentLocation=2 requests=[(1,0)]
+REPLAY-RESULT=OK  ExBudget {exBudgetCPU = ExCPU 311705616, exBudgetMemory = ExMemory 971493}
+ON-CHAIN-REDEEMER ExBudget {exBudgetCPU = ExCPU 314582082, exBudgetMemory = ExMemory 982475}
+REPLAY-BUDGET-MISMATCH: context is NOT byte-faithful; downstream reds would be unsound

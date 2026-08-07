@@ -1,0 +1,10 @@
+{
+    "block": 13777720,
+    "epoch": 647,
+    "era": "Conway",
+    "hash": "865e910bd47c51cf70ed7b204a0d8d1b69a8753e42e98e4d7481c45d3512ac55",
+    "slot": 194528528,
+    "slotInEpoch": 387728,
+    "slotsToEpochEnd": 44272,
+    "syncProgress": "100.00"
+}

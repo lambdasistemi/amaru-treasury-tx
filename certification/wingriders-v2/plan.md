@@ -13,6 +13,9 @@
    CQ2 through CQ4. Do not build, sign, stage, or submit a mainnet spend.
 5. Hash every raw capture, write a reproducibility manifest, and produce a
    report with one section per CQ and exactly one verdict.
+6. Render a PASS as contract compatibility, never production readiness;
+   carry the unproven live-agent boundary in the headline and put residual
+   single-key custody exposure in its own operator-acceptance section.
 
 ## Live boundary
 

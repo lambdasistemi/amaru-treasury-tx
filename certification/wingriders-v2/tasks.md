@@ -10,7 +10,8 @@
 - [ ] `T491-5` Freeze reproducible captures, receipts, hashes, verifier,
   safety proof, and dated registry metadata.
 - [ ] `T491-6` Write the final report with exactly one verdict and registry
-  deltas.
+  deltas; render PASS as no-Aiken contract compatibility with live
+  operation still pending a pilot, and separate residual custody exposure.
 
 ## Ceiling
 

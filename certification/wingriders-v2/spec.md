@@ -44,6 +44,33 @@ validators, unchanged. It is evidence work, not product implementation.
   registry enforcement is `NONE`, with deltas named for the milestone
   owner.
 
+## Report rendering
+
+A passing operator-facing headline must include, verbatim:
+
+`NO-AIKEN-CERTIFIED; LIVE OPERATION UNPROVEN PENDING PILOT`
+
+A PASS certifies deployed-contract compatibility only. It does not prove
+that the unconstrained WingRiders off-chain agent will batch an order with
+a script beneficiary. Record the open
+`wingriders-live-agent-acceptance` contract as uncommissioned and waived
+for this research-only closure; its future standalone pilot has operator
+acceptance authority.
+
+Give residual single-key custody exposure its own top-level section and
+require explicit operator acceptance before any pilot. Honest-path
+identity/cap/deadline gates do not constrain a compromised or malicious
+holder of that key.
+
+If either pending-order ADA total is stated, label both independently:
+
+- swap offer in the eight datums: `209,424.083770 ADA`;
+- lovelace locked in the eight outputs: `209,450.323770 ADA`;
+- delta: `26.240000 ADA`, namely `8 × 3.280000 ADA`.
+
+These figures do not waive independent CQ1 re-derivation of minimum USDM
+or any deployment constant.
+
 ## Verdict rules
 
 Return `CERTIFICATION-FAILED` and stop if any hard-stop boundary in the

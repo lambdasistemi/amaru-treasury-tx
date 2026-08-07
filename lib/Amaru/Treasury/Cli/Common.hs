@@ -26,10 +26,12 @@ module Amaru.Treasury.Cli.Common
     , filterFundUtxos
     , queryValues
     , nowTip
+    , NowTipTimeout (..)
+    , nowTipTimeoutSeconds
     ) where
 
 import Control.Applicative ((<|>))
-import Control.Exception (throwIO)
+import Control.Exception (Exception, throwIO)
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -51,6 +53,7 @@ import Options.Applicative
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.Environment (lookupEnv)
 import System.IO qualified as IO
+import System.Timeout (timeout)
 
 import Cardano.Ledger.Api.Tx.Out
     ( TxOut
@@ -361,9 +364,45 @@ queryValues p addrText = case parseAddr addrText of
             | (txin, txout) <- filterFundUtxos utxos
             ]
 
+{- | Thrown by 'nowTip' when the live 'Provider'\'s
+@posixMsToSlot@ has not answered within
+'nowTipTimeoutSeconds'.
+
+A jammed N2C \'LocalStateQuery\' session can strand this call
+forever with no exception of its own (#481): every caller
+that reaches 'nowTip' — the API's @treasury-inspect@ handler
+and the @treasury-inspect@ CLI alike — would otherwise hang
+past any client timeout. 'nowTip' now bounds the wait and
+throws this instead, so both callers fail fast and visibly:
+the API catches it and answers @503@, and the CLI's existing
+@try \@SomeException@ wrapper in @runTreasuryInspect@ catches
+it generically and reports it on stderr.
+-}
+newtype NowTipTimeout = NowTipTimeout Int
+
+instance Show NowTipTimeout where
+    show (NowTipTimeout secs) =
+        "chain-tip query timed out after "
+            <> show secs
+            <> "s (posixMsToSlot did not answer; see #481)"
+
+instance Exception NowTipTimeout
+
+{- | Hard ceiling, in seconds, on how long 'nowTip' waits for
+the live 'Provider'\'s @posixMsToSlot@ to answer before
+throwing 'NowTipTimeout'. See #481.
+-}
+nowTipTimeoutSeconds :: Int
+nowTipTimeoutSeconds = 10
+
 nowTip :: Provider IO -> IO Word64
 nowTip p = do
     nowSec <- getPOSIXTime
     let nowMs = round (realToFrac nowSec * (1000 :: Double))
-    SlotNo s <- posixMsToSlot p nowMs
-    pure s
+    mSlot <-
+        timeout
+            (nowTipTimeoutSeconds * 1_000_000)
+            (posixMsToSlot p nowMs)
+    case mSlot of
+        Nothing -> throwIO (NowTipTimeout nowTipTimeoutSeconds)
+        Just (SlotNo s) -> pure s

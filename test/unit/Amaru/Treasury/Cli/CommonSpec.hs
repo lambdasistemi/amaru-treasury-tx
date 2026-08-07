@@ -8,7 +8,9 @@ Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
 Covers the structural filter that excludes script-deploy
-UTxOs from treasury-fund selection. Two surfaces:
+UTxOs from treasury-fund selection, plus (#481) the bounded
+wait 'nowTip' now places on a live 'Provider'\'s
+'posixMsToSlot'. Surfaces:
 
   * Pure helper 'filterFundUtxos' — drops
     @(TxIn, TxOut ConwayEra)@ pairs whose 'TxOut' has a
@@ -19,21 +21,43 @@ UTxOs from treasury-fund selection. Two surfaces:
     UTxO at the scope's @treasuryDeployedAt@ outref with an
     attached reference script never reaches the wizard
     resolver as a fund row.
+  * 'nowTip' — INV-1/INV-4: throws 'NowTipTimeout' within
+    'nowTipTimeoutSeconds' of a stuck 'posixMsToSlot' rather
+    than hanging forever, and is unaffected when the provider
+    answers promptly. INV-3: 'NowTipTimeout' is caught by the
+    CLI's existing @try \@SomeException@ wrapper and renders a
+    distinguishable message, which is what lets
+    "runTreasuryInspect" surface it as a @node: ...@ stderr
+    line without any CLI-side code change (that entry point
+    itself needs a live node socket via 'withLocalNodeBackend'
+    and is out of this slice's fence, so this is the covering
+    proof for INV-3 instead of a direct CLI test).
 -}
 module Amaru.Treasury.Cli.CommonSpec (spec) where
 
+import Control.Concurrent (threadDelay)
+import Control.Exception
+    ( SomeException
+    , throwIO
+    , try
+    )
+import Control.Monad (forever)
 import Data.ByteString qualified as BS
 import Data.ByteString.Short qualified as SBS
 import Data.Function ((&))
 import Data.Map.Strict qualified as Map
 import Data.Text (Text)
+import Data.Word (Word64)
 import Lens.Micro ((.~))
+import System.Timeout (timeout)
 import Test.Hspec
     ( Spec
     , describe
     , expectationFailure
     , it
     , shouldBe
+    , shouldContain
+    , shouldSatisfy
     )
 
 import Cardano.Ledger.Address (Addr (..))
@@ -68,13 +92,17 @@ import Cardano.Ledger.Plutus.Language
     , PlutusBinary (..)
     )
 import Cardano.Ledger.TxIn (TxIn)
+import Cardano.Slotting.Slot (SlotNo (..))
 
 import Amaru.Treasury.Backend
     ( Provider (..)
     , singleShotWithAcquired
     )
 import Amaru.Treasury.Cli.Common
-    ( filterFundUtxos
+    ( NowTipTimeout (..)
+    , filterFundUtxos
+    , nowTip
+    , nowTipTimeoutSeconds
     , queryFlatFunds
     , queryValues
     )
@@ -133,9 +161,85 @@ spec = describe "Amaru.Treasury.Cli.Common" $ do
             rows <- queryValues provider sampleAddrText
             map fst rows `shouldBe` [fundIn]
 
+    describe "nowTip (#481)" $ do
+        it
+            "throws NowTipTimeout within nowTipTimeoutSeconds \
+            \when posixMsToSlot never returns (INV-1)"
+            $ do
+                -- Bounded outer wait: a regression that removes
+                -- the timeout must fail this test fast instead of
+                -- hanging the suite forever.
+                outcome <-
+                    timeout
+                        ((nowTipTimeoutSeconds + 5) * 1_000_000)
+                        (try @NowTipTimeout (nowTip stuckProvider))
+                case outcome of
+                    Nothing ->
+                        expectationFailure
+                            "nowTip did not return within \
+                            \nowTipTimeoutSeconds + 5s margin"
+                    Just (Left (NowTipTimeout secs)) ->
+                        secs `shouldBe` nowTipTimeoutSeconds
+                    Just (Right slot) ->
+                        expectationFailure $
+                            "nowTip unexpectedly returned "
+                                <> show slot
+                                <> " from a stuck provider"
+
+        it
+            "is unaffected when posixMsToSlot answers promptly \
+            \(INV-4)"
+            $ do
+                slot <- nowTip (respondingProvider 42)
+                slot `shouldBe` 42
+
+        it
+            "is caught by try @SomeException with a \
+            \distinguishable message (INV-3 mechanism: this \
+            \is exactly what runTreasuryInspect's existing \
+            \try @SomeException wrapper relies on to render \
+            \\"node: ...\" on stderr, with no CLI-side \
+            \change needed)"
+            $ do
+                result <-
+                    try @SomeException
+                        (throwIO (NowTipTimeout nowTipTimeoutSeconds))
+                case result of
+                    Left e ->
+                        show e `shouldContain` "chain-tip"
+                    Right () ->
+                        expectationFailure
+                            "throwIO unexpectedly returned"
+
+        it
+            "NowTipTimeout's Show output names the timeout \
+            \bound"
+            $ show (NowTipTimeout nowTipTimeoutSeconds)
+                `shouldContain` show nowTipTimeoutSeconds
+
+        it "nowTipTimeoutSeconds is the documented 10s bound" $
+            nowTipTimeoutSeconds `shouldSatisfy` (== 10)
+
 -- ----------------------------------------------------
 -- Provider mock
 -- ----------------------------------------------------
+
+-- | A 'Provider' whose 'posixMsToSlot' never returns.
+stuckProvider :: Provider IO
+stuckProvider =
+    mockProvider [] & withPosixMsToSlot stuck
+  where
+    stuck :: Integer -> IO SlotNo
+    stuck _ = forever (threadDelay maxBound)
+
+-- | A 'Provider' whose 'posixMsToSlot' answers immediately.
+respondingProvider :: Word64 -> Provider IO
+respondingProvider slot =
+    mockProvider [] & withPosixMsToSlot (\_ -> pure (SlotNo slot))
+
+withPosixMsToSlot
+    :: (Integer -> IO SlotNo) -> Provider IO -> Provider IO
+withPosixMsToSlot f p = p{posixMsToSlot = f}
 
 mockProvider :: [(TxIn, TxOut ConwayEra)] -> Provider IO
 mockProvider utxos = provider

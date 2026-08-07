@@ -16,9 +16,18 @@ SC-002 byte-identity is the strongest invariant tested:
 @\/v1\/treasury-inspect?scope=core_development@ returns
 exactly @encodeReport stubReport@ — no JSON re-encoding or
 whitespace drift can hide.
+
+#481 adds one more @treasury-inspect@ case: when
+'hInspectReport' reaches a hung 'nowTip' (a live 'Provider'
+whose @posixMsToSlot@ never returns), the response must still
+be sent — as @503@ + 'ApiError' — within
+'nowTipTimeoutSeconds' of receipt (INV-1, INV-2), never a bare
+hang or Warp's generic @500@.
 -}
 module Amaru.Treasury.Api.ServerSpec (spec) where
 
+import Control.Concurrent (threadDelay)
+import Control.Monad (forever)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
 import Data.ByteString.Lazy (ByteString)
@@ -29,8 +38,14 @@ import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.List.NonEmpty qualified as NE
 import Data.Tagged (Tagged (..))
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Time (UTCTime (..), fromGregorian, secondsToDiffTime)
-import Network.HTTP.Types (status200, status404, status429)
+import Network.HTTP.Types
+    ( status200
+    , status404
+    , status429
+    , status503
+    )
 import Network.HTTP.Types.Method (methodPost)
 import Network.HTTP.Types.Status (statusCode)
 import Network.Wai
@@ -43,6 +58,7 @@ import Network.Wai.Test (SResponse, runSession)
 import Network.Wai.Test qualified as WaiTest
 import Servant qualified
 import System.IO.Unsafe (unsafePerformIO)
+import System.Timeout (timeout)
 import Test.Hspec
     ( Expectation
     , Spec
@@ -54,6 +70,8 @@ import Test.Hspec
     , shouldNotContain
     , shouldSatisfy
     )
+
+import Cardano.Slotting.Slot (SlotNo (..))
 
 import Amaru.Treasury.Api.BuildContingencyDisburse
     ( ContingencyDestinationRequest (..)
@@ -114,6 +132,11 @@ import Amaru.Treasury.Api.Types
     , TxDetailResponse (..)
     )
 import Amaru.Treasury.Api.VerifyWitness (verifyWitness)
+import Amaru.Treasury.Backend
+    ( Provider (..)
+    , singleShotWithAcquired
+    )
+import Amaru.Treasury.Cli.Common (nowTip, nowTipTimeoutSeconds)
 import Amaru.Treasury.Cli.DisburseWizard
     ( ContingencyDisburseOpts (..)
     )
@@ -171,6 +194,46 @@ spec = do
                     (WaiTest.srequest (waiGet "/v1/treasury-inspect?scope=foo"))
                     (mkApplication stubHandlers)
             statusCodeOf res `shouldSatisfy` is4xx
+
+        it
+            "returns 503 + ApiError within nowTipTimeoutSeconds \
+            \when the backend's nowTip hangs, instead of never \
+            \responding (#481 INV-1, INV-2)"
+            $ do
+                let handlers =
+                        stubHandlers
+                            { hInspectReport = \_scope ->
+                                nowTip stuckProvider >> pure stubReport
+                            }
+                outcome <-
+                    timeout
+                        ((nowTipTimeoutSeconds + 5) * 1_000_000)
+                        ( runSession
+                            ( WaiTest.srequest
+                                ( waiGet
+                                    "/v1/treasury-inspect?scope=core_development"
+                                )
+                            )
+                            (mkApplication handlers)
+                        )
+                case outcome of
+                    Nothing ->
+                        expectationFailure
+                            "the HTTP response was not sent \
+                            \within nowTipTimeoutSeconds + 5s \
+                            \margin"
+                    Just res -> do
+                        WaiTest.simpleStatus res `shouldBe` status503
+                        case Aeson.decode (WaiTest.simpleBody res) of
+                            Just ApiError{aeMessage} ->
+                                T.unpack aeMessage
+                                    `shouldContain` "chain-tip"
+                            Nothing ->
+                                expectationFailure $
+                                    "response body did not decode \
+                                    \as ApiError: "
+                                        <> BSL8.unpack
+                                            (WaiTest.simpleBody res)
 
     describe "GET /v1/recent-txs" $
         it "returns the embedded manifest verbatim" $ do
@@ -672,6 +735,44 @@ assertRateLimited res = do
             expectationFailure $
                 "expected ApiError with aeField = Nothing, got "
                     <> show other
+
+{- | A 'Provider' whose 'posixMsToSlot' never returns —
+the #481 reproduction: a jammed N2C session strands the
+one field 'nowTip' reads. Every other field is unused by
+this test's 'hInspectReport' override, which calls only
+'nowTip'.
+-}
+stuckProvider :: Provider IO
+stuckProvider = provider
+  where
+    provider =
+        Provider
+            { withAcquired = singleShotWithAcquired provider
+            , queryUTxOs = \_ -> fail "unused queryUTxOs"
+            , queryUTxOByTxIn = \_ -> fail "unused queryUTxOByTxIn"
+            , queryProtocolParams =
+                fail "unused queryProtocolParams"
+            , queryLedgerSnapshot =
+                fail "unused queryLedgerSnapshot"
+            , queryStakeRewards = \_ ->
+                fail "unused queryStakeRewards"
+            , queryRewardAccounts = \_ ->
+                fail "unused queryRewardAccounts"
+            , queryVoteDelegatees = \_ ->
+                fail "unused queryVoteDelegatees"
+            , queryTreasury = fail "unused queryTreasury"
+            , queryGovernanceState =
+                fail "unused queryGovernanceState"
+            , evaluateTx = \_ -> fail "unused evaluateTx"
+            , posixMsToSlot = stuckPosixMsToSlot
+            , posixMsCeilSlot = \_ ->
+                fail "unused posixMsCeilSlot"
+            , queryUpperBoundSlot = \_ ->
+                fail "unused queryUpperBoundSlot"
+            }
+
+    stuckPosixMsToSlot :: Integer -> IO SlotNo
+    stuckPosixMsToSlot _ = forever (threadDelay maxBound)
 
 -- ---------------------------------------------------------------------------
 -- Stub Handlers

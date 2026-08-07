@@ -59,6 +59,7 @@ import Cardano.Node.Client.Provider
     )
 import Cardano.Node.Client.Provider qualified as Provider
 import Cardano.Node.Client.UTxOIndexer.Provider qualified as IndexedProvider
+import Control.Exception (try)
 import Control.Monad ((>=>))
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Except (throwE)
@@ -66,6 +67,7 @@ import Data.Aeson qualified as Aeson
 import Data.Proxy (Proxy (..))
 import Data.Tagged (Tagged)
 import Data.Text (Text)
+import Data.Text qualified as T
 import Data.Word (Word64)
 import Database.KV.Transaction (RunTransaction (..))
 import Network.HTTP.Media ((//))
@@ -75,6 +77,7 @@ import Servant
     , err400
     , err404
     , err429
+    , err503
     , errBody
     , serve
     , (:<|>) (..)
@@ -132,7 +135,7 @@ import Amaru.Treasury.Api.State
     )
 import Amaru.Treasury.Api.Ttl (buildTxLattice)
 import Amaru.Treasury.Api.Types
-    ( ApiError
+    ( ApiError (..)
     , AttachRequest
     , AttachResponse
     , BuildIdentity
@@ -156,6 +159,7 @@ import Amaru.Treasury.Api.Types
     , VerifyWitnessRequest
     , VerifyWitnessResponse
     )
+import Amaru.Treasury.Cli.Common (NowTipTimeout (..))
 import Amaru.Treasury.Cli.TreasuryInspect (runInspectFromBackend)
 import Amaru.Treasury.History.Sparql
     ( HistoryFilter (..)
@@ -618,8 +622,26 @@ mkServer Handlers{..} =
     )
         :<|> hRawHandler
   where
+    -- \| #481: 'hInspectReport' reaches 'nowTip' on its
+    -- first step, which can now throw 'NowTipTimeout'
+    -- instead of hanging forever on a jammed node query.
+    -- Convert that into a labelled 503 rather than letting
+    -- it surface as Warp's generic 500 (INV-2).
     inspectH :: ScopeId -> Handler InspectReport
-    inspectH scope = liftIO (hInspectReport scope)
+    inspectH scope = do
+        outcome <- liftIO $ try @NowTipTimeout (hInspectReport scope)
+        case outcome of
+            Right report -> pure report
+            Left (NowTipTimeout secs) ->
+                throwApiError
+                    err503
+                    ApiError
+                        { aeMessage =
+                            "chain-tip query timed out after "
+                                <> T.pack (show secs)
+                                <> "s; try again shortly"
+                        , aeField = Nothing
+                        }
 
     introspectH :: IntrospectRequest -> Handler IntrospectResponse
     introspectH req =

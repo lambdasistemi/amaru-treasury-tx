@@ -20,10 +20,10 @@ Thin binary that:
   * loads the three read-only JSON artefacts the image
     bakes in;
   * opens a single N2C session against the cardano mainnet
-    node and reuses it across every HTTP request for
-    'nowTip' on the @/v1/treasury-inspect@ response only —
-    treasury UTxOs are served from the embedded indexer
-    (#242);
+    node and reuses it for unrelated live ledger queries
+    (protocol parameters, submit). @\/v1\/tip@ and inspect
+    @chain_tip@ read the embedded indexer's readiness tip;
+    treasury UTxOs are served from the indexer (#242);
   * brings up the embedded chain-sync follower against a
     local RocksDB store via 'withApiIndexer', blocks warp
     bind until 'waitReady' returns, and wraps the wai
@@ -112,6 +112,7 @@ import Amaru.Treasury.Api.Readiness
     , ReadinessHandle (..)
     , ReadyState (..)
     , checkReady
+    , readTipSlot
     , waitReady
     , withReadinessBridge
     )
@@ -143,7 +144,6 @@ import Amaru.Treasury.Api.VerifyWitness (verifyWitness)
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
-    , nowTip
     )
 import Amaru.Treasury.Constants
     ( sundaeOrderAddressMainnet
@@ -267,6 +267,7 @@ main = do
                                             runInspectScope
                                                 (goMinimumSeverity g)
                                                 apiIdx
+                                                readiness
                                                 backend
                                                 metadata
                                                 anchor
@@ -296,7 +297,8 @@ main = do
                                                 metadata
                                                 swapAddr
                                         , hTip =
-                                            TipResponse <$> nowTip backend
+                                            TipResponse
+                                                <$> readTipSlot readiness
                                         , hParams = do
                                             params <-
                                                 queryProtocolParams backend
@@ -370,14 +372,13 @@ main = do
 and the live provider, then unwrap the resulting
 'Servant.Handler' back into 'IO InspectReport' — the
 shape the 'Handlers' record's @hInspectReport@ field
-expects. The shim is a one-liner because
-'mkInspectHandler' is built so its only escape route is
-the indexer (via 'snapshotUtxosAt') and 'nowTip' on the
-backend.
+expects. The report tip comes from the shared readiness
+handle; the live provider is not the API tip authority.
 -}
 runInspectScope
     :: Severity
     -> ApiIndexer cf op
+    -> ReadinessHandle
     -> Provider IO
     -> TreasuryMetadata
     -> DeploymentAnchor
@@ -387,17 +388,20 @@ runInspectScope
 runInspectScope
     minimumSeverity
     apiIdx
+    readiness
     backend
     metadata
     anchor
     swapAddr
     scope = do
+        tipSlot <- readTipSlot readiness
         r <-
             runHandler $
                 mkInspectHandler
                     minimumSeverity
                     apiIdx
                     backend
+                    tipSlot
                     metadata
                     anchor
                     swapAddr

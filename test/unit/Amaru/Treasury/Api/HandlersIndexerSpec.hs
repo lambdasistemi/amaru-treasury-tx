@@ -9,23 +9,14 @@ Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
 Exercises the rewired @\/v1\/treasury-inspect@ + lag-503
-guard introduced by #242 (Slice 2).
+guard introduced by #242 (Slice 2) and the indexer-backed
+API tip from #494.
 
-Three scenarios per the slice brief:
-
-1. The handler computes the 'InspectReport' from the
-   embedded 'ApiIndexer' and the supplied @nowTip@ on
-   the provider — and DOES NOT call @queryUTxOs@ on the
-   provider. The test installs a trap on the provider's
-   @queryUTxOs@ that explodes if called; the test passes
-   only because the handler routes through the indexer.
-
-2. The same call uses the provider's @nowTip@ for the
-   response's @chain_tip@ field (the only remaining N2C
-   call on the request hot path per FR-005).
-
-The lag-503 middleware has its own unit coverage in
-"Amaru.Treasury.Api.LagGuardSpec".
+The handler computes the 'InspectReport' from the
+embedded 'ApiIndexer' plus an explicit tip slot — and
+DOES NOT call @queryUTxOs@ or @posixMsToSlot@ on the
+provider. The lag-503 middleware has its own unit coverage
+in "Amaru.Treasury.Api.LagGuardSpec".
 -}
 module Amaru.Treasury.Api.HandlersIndexerSpec (spec) where
 
@@ -114,6 +105,7 @@ spec = describe "Amaru.Treasury.Api handlers + indexer" $ do
                             Warning
                             apiIdx
                             trappedProvider
+                            testReadinessTip
                             testMetadata
                             testAnchor
                             addr
@@ -121,8 +113,11 @@ spec = describe "Amaru.Treasury.Api handlers + indexer" $ do
                 -- empty indexer -> empty scope section
                 length (irScopes report) `shouldBe` 1
 
-        it "uses Provider.nowTip for the chain_tip field" $
-            withTestIndexer $ \apiIdx -> do
+        it
+            "uses the explicit tip for chain_tip, not \
+            \posixMsToSlot"
+            $ withTestIndexer
+            $ \apiIdx -> do
                 addr <- mainnetSwapAddr
                 report <-
                     runHandlerOrFail $
@@ -130,12 +125,89 @@ spec = describe "Amaru.Treasury.Api handlers + indexer" $ do
                             Warning
                             apiIdx
                             trappedProvider
+                            testReadinessTip
                             testMetadata
                             testAnchor
                             addr
                             Middleware
                 ctSlot (irChainTip report)
-                    `shouldBe` testNowTipWord
+                    `shouldBe` testReadinessTip
+
+    describe "indexer-backed API tip" $ do
+        it
+            "succeeds with posixMsToSlot unreachable \
+            \(INV-494-001, INV-494-003)"
+            $ withTestIndexer
+            $ \apiIdx -> do
+                addr <- mainnetSwapAddr
+                report <-
+                    runHandlerOrFail $
+                        mkInspectHandler
+                            Warning
+                            apiIdx
+                            noTipProvider
+                            testReadinessTip
+                            testMetadata
+                            testAnchor
+                            addr
+                            Middleware
+                ctSlot (irChainTip report)
+                    `shouldBe` testReadinessTip
+
+        it
+            "wires API Main tip surfaces through \
+            \readTipSlot, not nowTip backend \
+            \(INV-494-001)"
+            $ do
+                src <- TIO.readFile apiMainSource
+                src `shouldNotContainText` "nowTip backend"
+                src `shouldContainText` "readTipSlot"
+
+        it
+            "keeps the readiness lag guard as the HTTP \
+            \freshness authority (INV-494-002)"
+            $ do
+                src <- TIO.readFile apiMainSource
+                src `shouldContainText` "withLagGuard readiness"
+
+        it
+            "leaves exactly one CLI nowTip acquisition in \
+            \TreasuryInspect (INV-494-003, INV-494-005)"
+            $ do
+                src <- TIO.readFile inspectSource
+                let hits =
+                        length $
+                            filter
+                                ( T.isInfixOf
+                                    "slot <- nowTip backend"
+                                )
+                                (T.lines src)
+                hits `shouldBe` 1
+
+        it
+            "gives runInspectFromBackend an explicit \
+            \Word64 tip (INV-494-003)"
+            $ do
+                src <- TIO.readFile inspectSource
+                src `shouldContainText` "runInspectFromBackend"
+                src `shouldContainText` "-> Word64"
+                src `shouldContainText` "tipSlot"
+
+        it
+            "maps NowTipTimeout at a local tipH \
+            \(INV-494-004)"
+            $ do
+                src <- TIO.readFile apiServerSource
+                src `shouldContainText` "tipH ::"
+                src `shouldContainText` "try @NowTipTimeout"
+
+        it
+            "passes a readiness tip into the devnet smoke \
+            \inspect handler (INV-494-001)"
+            $ do
+                src <- TIO.readFile smokeSource
+                src `shouldContainText` "readTipSlot readiness"
+                src `shouldContainText` "tipSlot"
 
     describe "mkBuildProvider" $ do
         it
@@ -235,8 +307,8 @@ spec = describe "Amaru.Treasury.Api handlers + indexer" $ do
 testNowTipSlot :: SlotNo
 testNowTipSlot = SlotNo 12_345
 
-testNowTipWord :: Word64
-testNowTipWord = unSlotNo testNowTipSlot
+testReadinessTip :: Word64
+testReadinessTip = 99
 
 sampleTxIn :: TxIn
 sampleTxIn =
@@ -292,8 +364,9 @@ mainnetSwapAddr =
                     <> e
 
 {- | A 'Provider' that traps every chain-query method we
-expect the handler to bypass. Only 'nowTip' is allowed
-to be called.
+expect the handler to bypass. 'posixMsToSlot' is stubbed
+only so older provider-field plumbing stays constructible;
+inspect must not use it for @chain_tip@.
 
 If a handler regression accidentally drops a UTxO query
 back to the provider, the relevant trap fires and the
@@ -325,6 +398,16 @@ acquirableTrappedProvider :: Provider IO
 acquirableTrappedProvider =
     trappedProvider
         { withAcquired = singleShotWithAcquired trappedProvider
+        }
+
+{- | Same traps as 'trappedProvider', plus 'posixMsToSlot'.
+Successful API tip paths must not convert a live provider
+tip (#494).
+-}
+noTipProvider :: Provider IO
+noTipProvider =
+    trappedProvider
+        { posixMsToSlot = \_ -> trap "posixMsToSlot"
         }
 
 {- | Defer the trap into the IO action's run-time, not its
@@ -483,6 +566,13 @@ apiMainSource = "app/amaru-treasury-tx-api/Main.hs"
 
 apiServerSource :: FilePath
 apiServerSource = "lib/Amaru/Treasury/Api/Server.hs"
+
+inspectSource :: FilePath
+inspectSource = "lib/Amaru/Treasury/Cli/TreasuryInspect.hs"
+
+smokeSource :: FilePath
+smokeSource =
+    "test/devnet/Amaru/Treasury/Api/IndexerSmokeSpec.hs"
 
 shouldContainText :: T.Text -> T.Text -> IO ()
 shouldContainText haystack needle =

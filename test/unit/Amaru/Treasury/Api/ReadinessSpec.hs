@@ -1,4 +1,5 @@
 {-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {- |
 Module      : Amaru.Treasury.Api.ReadinessSpec
@@ -23,6 +24,8 @@ import Control.Concurrent.STM
     , readTVarIO
     , writeTVar
     )
+import Data.Text qualified as T
+import Data.Text.IO qualified as TIO
 import Data.Time.Clock
     ( UTCTime
     , addUTCTime
@@ -35,6 +38,7 @@ import Test.Hspec
     , expectationFailure
     , it
     , shouldBe
+    , shouldSatisfy
     )
 
 import Amaru.Treasury.Api.Readiness
@@ -42,6 +46,7 @@ import Amaru.Treasury.Api.Readiness
     , ReadinessHandle (..)
     , ReadyState (..)
     , checkReady
+    , readTipSlot
     , waitReady
     , withReadinessBridge
     )
@@ -140,6 +145,29 @@ spec = describe "Amaru.Treasury.Api.Readiness" $ do
                             "waitReady did not finish within\
                             \ 1 s of the readiness flip"
 
+    describe "indexer-backed API tip" $ do
+        it
+            "exports a non-blocking readTipSlot \
+            \(INV-494-001)"
+            $ do
+                src <- TIO.readFile readinessSource
+                src `shouldSatisfy` T.isInfixOf "readTipSlot"
+
+        it
+            "projects rTipSlot from the readiness handle \
+            \(INV-494-001)"
+            $ withFakeFollower
+            $ \source now readiness -> do
+                writeFollower
+                    source
+                    (addUTCTime 1 now)
+                    (Just (SlotNo 50))
+                    (Just (SlotNo 99))
+                    UpstreamConnected
+                eventuallyReadyState readiness Ready
+                tip <- readTipSlot readiness
+                tip `shouldBe` 99
+
 withFakeFollower
     :: (TVar Follower.Readiness -> UTCTime -> ReadinessHandle -> IO a)
     -> IO a
@@ -179,6 +207,9 @@ followerReadiness updatedAt processed tip upstream =
         , Follower.rUpstream = upstream
         , Follower.rUpdatedAt = updatedAt
         }
+
+readinessSource :: FilePath
+readinessSource = "lib/Amaru/Treasury/Api/Readiness.hs"
 
 eventuallyReadyState :: ReadinessHandle -> ReadyState -> IO ()
 eventuallyReadyState readiness expected = go (20 :: Int)

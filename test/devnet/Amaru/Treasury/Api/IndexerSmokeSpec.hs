@@ -254,6 +254,7 @@ import Amaru.Treasury.Api.RateLimit
 import Amaru.Treasury.Api.Readiness
     ( Readiness (..)
     , ReadinessHandle
+    , readTipSlot
     , waitReady
     , withReadinessBridge
     )
@@ -474,6 +475,7 @@ runSmoke = do
                                         let handlers =
                                                 smokeHandlers
                                                     apiIdx
+                                                    readiness
                                                     backend
                                                     globalOpts
                                                     metadataPath
@@ -1633,6 +1635,7 @@ smokeIndexerConfig
 
 smokeHandlers
     :: ApiIndexer cf op
+    -> ReadinessHandle
     -> Provider IO
     -> GlobalOpts
     -> FilePath
@@ -1643,6 +1646,7 @@ smokeHandlers
     -> Handlers
 smokeHandlers
     apiIdx
+    readiness
     backend
     globalOpts
     metadataPath
@@ -1651,12 +1655,14 @@ smokeHandlers
     swapAddr =
         Handlers
             { hInspectReport = \scope -> do
+                tipSlot <- readTipSlot readiness
                 r <-
                     Servant.runHandler $
                         mkInspectHandler
                             (goMinimumSeverity globalOpts)
                             apiIdx
                             backend
+                            tipSlot
                             metadata
                             anchor
                             swapAddr
@@ -1685,7 +1691,7 @@ smokeHandlers
                     readProvider
                     metadata
                     swapAddr
-            , hTip = pure (TipResponse 0)
+            , hTip = TipResponse <$> readTipSlot readiness
             , hParams =
                 pure
                     ParamsResponse

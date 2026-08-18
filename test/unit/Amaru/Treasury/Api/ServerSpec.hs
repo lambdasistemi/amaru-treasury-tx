@@ -27,6 +27,7 @@ hang or Warp's generic @500@.
 module Amaru.Treasury.Api.ServerSpec (spec) where
 
 import Control.Concurrent (threadDelay)
+import Control.Exception (throwIO)
 import Control.Monad (forever)
 import Data.Aeson ((.=))
 import Data.Aeson qualified as Aeson
@@ -136,7 +137,11 @@ import Amaru.Treasury.Backend
     ( Provider (..)
     , singleShotWithAcquired
     )
-import Amaru.Treasury.Cli.Common (nowTip, nowTipTimeoutSeconds)
+import Amaru.Treasury.Cli.Common
+    ( NowTipTimeout (..)
+    , nowTip
+    , nowTipTimeoutSeconds
+    )
 import Amaru.Treasury.Cli.DisburseWizard
     ( ContingencyDisburseOpts (..)
     )
@@ -234,6 +239,67 @@ spec = do
                                     \as ApiError: "
                                         <> BSL8.unpack
                                             (WaiTest.simpleBody res)
+
+    describe "indexer-backed API tip" $ do
+        it
+            "maps NowTipTimeout on /v1/tip to 503 + \
+            \ApiError (INV-494-004)"
+            $ do
+                let handlers =
+                        stubHandlers
+                            { hTip =
+                                throwIO
+                                    ( NowTipTimeout
+                                        nowTipTimeoutSeconds
+                                    )
+                            }
+                res <-
+                    runSession
+                        (WaiTest.srequest (waiGet "/v1/tip"))
+                        (mkApplication handlers)
+                WaiTest.simpleStatus res `shouldBe` status503
+                case Aeson.decode (WaiTest.simpleBody res) of
+                    Just ApiError{aeMessage} ->
+                        T.unpack aeMessage
+                            `shouldContain` "chain-tip"
+                    Nothing ->
+                        expectationFailure $
+                            "response body did not decode \
+                            \as ApiError: "
+                                <> BSL8.unpack
+                                    (WaiTest.simpleBody res)
+
+        it
+            "maps NowTipTimeout on inspect to 503 + \
+            \ApiError (INV-494-004)"
+            $ do
+                let handlers =
+                        stubHandlers
+                            { hInspectReport = \_scope ->
+                                throwIO
+                                    ( NowTipTimeout
+                                        nowTipTimeoutSeconds
+                                    )
+                            }
+                res <-
+                    runSession
+                        ( WaiTest.srequest
+                            ( waiGet
+                                "/v1/treasury-inspect?scope=core_development"
+                            )
+                        )
+                        (mkApplication handlers)
+                WaiTest.simpleStatus res `shouldBe` status503
+                case Aeson.decode (WaiTest.simpleBody res) of
+                    Just ApiError{aeMessage} ->
+                        T.unpack aeMessage
+                            `shouldContain` "chain-tip"
+                    Nothing ->
+                        expectationFailure $
+                            "response body did not decode \
+                            \as ApiError: "
+                                <> BSL8.unpack
+                                    (WaiTest.simpleBody res)
 
     describe "GET /v1/recent-txs" $
         it "returns the embedded manifest verbatim" $ do

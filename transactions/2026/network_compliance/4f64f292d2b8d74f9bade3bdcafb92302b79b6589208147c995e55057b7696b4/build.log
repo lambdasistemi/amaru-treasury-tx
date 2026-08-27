@@ -1,0 +1,10 @@
+tx-build: intent <- /tmp/attx-3528/refresh-20260825T202803Z/build/attempt-a-48h/intent.json
+tx-build: parsed action=Disburse network=mainnet
+tx-build: connecting to /srv/prod-hot/cardano/mainnet/ipc/node.socket
+tx-build: required utxos: 11
+tx-build: handshake ok (magic 764824073 matches intent network=mainnet)
+tx-build: built 2655 bytes  fee=975732  total_collateral=1463598
+tx-build: re-evaluated 7 redeemers, 0 failed
+tx-build: cbor -> /tmp/attx-3528/refresh-20260825T202803Z/build/attempt-a-48h/unsigned-tx.hex
+tx-build: VALIDATION OK
+tx-build: report -> /tmp/attx-3528/refresh-20260825T202803Z/build/attempt-a-48h/report.json

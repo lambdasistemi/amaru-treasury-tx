@@ -1,6 +1,6 @@
 # Cyber Castellum August 2026 disbursement
 
-- **status:** built unsigned; not witnessed, signed, or submitted
+- **status:** expired unsigned build; preserved as historical context
 - **predicted txid:** `c1280e96ad626cb5768674e5cba8be1cacf88ef24514bd1bce104af7b1eb7ee8`
 - **scope:** `network_compliance`
 - **event:** `disburse`
@@ -9,6 +9,10 @@
 - **invoice:** Cyber Castellum invoice #3528, dated 2026-08-07, for the
   2026-07-01 through 2026-07-31 billing period (Milestone 4)
 - **acceptance:** August 2026 cycle review, accepted 2026-08-07
+
+This body's validity window closed before its witness round completed. It was
+not submitted. A refreshed sibling was subsequently signed and submitted as
+`4f64f292d2b8d74f9bade3bdcafb92302b79b6589208147c995e55057b7696b4`.
 
 ## Intent and approval evidence
 
@@ -26,11 +30,10 @@ The invoice and acceptance record are pinned in the transaction metadata:
   - IPFS: `ipfs://QmXGGFgD5vt1awuP3ttGgAwL4Rm2CYEuVgFkycgGwmi2xh`
   - SHA-256: `2f9d3b9cbc2356f0f16f42a699e5bba7e650c2c7fdafaab7743d627eb138a954`
 
-Pinata's pin-list API confirmed one pinned record for each CID. Public byte
-retrieval is still a **pre-signing gate**: `ipfs.io`, `dweb.link`, and
-`w3s.link` each returned HTTP 504 during the build, while the dedicated
-Pinata gateway required gateway authorization. Before witnessing, retrieve
-both documents through a public gateway and confirm the SHA-256 values above.
+Pinata's pin-list API confirmed one pinned record for each CID. During the
+later refresh, both documents were publicly retrieved from IPFS and their
+SHA-256 values matched those recorded above. The three common contract and
+address-proof references were also publicly retrieved.
 
 ## Transaction accounting
 

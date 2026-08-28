@@ -113,13 +113,30 @@ docs, including the USDM-vs-iUSD risk statement (AC-006).
 
 ## Verification
 
-- `just unit`, `just golden`, `just schema-check` per slice; full
-  `just ci` before the PR is marked ready.
-- AC-002 is the load-bearing check: reproducing a
-  validator-accepted body is stronger evidence than any assertion this
-  repository writes about itself.
-- A live-boundary smoke builds a swap against a real node and runs
-  `tx-validate`, kept out of `just ci` and named as an operator step.
+Three tiers, in increasing strength:
+
+1. **Bytes.** `just unit`, `just golden`, `just schema-check` per
+   slice; full `just ci` before the PR is ready.
+2. **Agreement with the chain (AC-002).** Reproducing the body of a
+   transaction the validator already accepted is stronger than any
+   assertion this repository writes about itself.
+3. **Phase 2 on devnet (AC-005a, slice F).** The strongest available
+   evidence, and the only tier that runs the validator. Tiers 1 and 2
+   compare bytes; neither can show that the script *accepts* a negative
+   leg. `scripts/smoke/devnet-local` already boots a node, deploys the
+   contracts via `registry-init`, and submits real transactions in its
+   `disburse-submit` phase; `MixedUtxoSmoke` already mints native
+   assets onto treasury UTxOs. Slice F composes these.
+
+Every tier carries a negative control, shown able to fail before it is
+trusted. For tier 3 the control is decisive: a swap with a **positive**
+incoming leg must be rejected on chain. Without it, a green submit
+proves only that some transaction is valid, not that the sign
+convention is what makes it so.
+
+A live-boundary smoke against mainnet builds and runs `tx-validate`
+only; it never submits, and stays out of `just ci` as a named operator
+step.
 
 ## Risks
 

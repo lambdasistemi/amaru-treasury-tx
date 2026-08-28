@@ -120,6 +120,17 @@ The build fails, with a named error and no partial artifact, when:
 - **AC-004** The rendered report states both legs, the price, the
   counterparty, and the three required signatures.
 - **AC-005** Building the same intent twice produces identical bytes.
+- **AC-005a** On a local devnet with the treasury contracts deployed
+  and a minted test asset, an OTC swap is built, signed and
+  **submitted**, and the resulting on-chain UTxO state shows the
+  treasury holding the incoming asset and the counterparty holding the
+  ADA.
+
+  This is the only check that exercises **phase 2** — the validator
+  actually accepting a `Disburse` redeemer with a negative leg. Golden
+  tests compare bytes; they cannot demonstrate that the script runs.
+  A negative control must show the phase failing when the sign is
+  wrong.
 - **AC-006** Operator documentation covers the flow end to end,
   including obtaining the counterparty signature, and states plainly
   that USDM and iUSD are different assets carrying different risk.

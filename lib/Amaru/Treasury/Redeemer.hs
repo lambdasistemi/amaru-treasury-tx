@@ -16,6 +16,11 @@ recipes byte-for-byte:
   constructor 3, carrying both USDM and the lovelace released
   from the treasury for the beneficiary output's min-UTxO.
 
+* @otcSwapRedeemer@ — Sundae @TreasurySpendRedeemer.Disburse@,
+  constructor 3, carrying a positive lovelace leg leaving the treasury
+  and a __negative__ asset leg entering it. This is the atomic OTC
+  swap (issue #499).
+
 * @reorganizeRedeemer@ — Sundae @TreasurySpendRedeemer.Reorganize@,
   constructor 0, empty fields. Mirrors
   [`make_redeemer_reorganize.sh`](https://github.com/pragma-org/amaru-treasury/blob/main/journal/2026/lib/make_redeemer_reorganize.sh).
@@ -33,6 +38,7 @@ module Amaru.Treasury.Redeemer
       disburseAdaRedeemer
     , disburseRedeemer
     , disburseUsdmRedeemer
+    , otcSwapRedeemer
     , reorganizeRedeemer
 
       -- * SundaeSwap order redeemers
@@ -105,6 +111,40 @@ disburseUsdmRedeemer policy asset qty lovelace =
             , (B policy, Map [(B asset, I qty)])
             ]
         ]
+
+{- | Atomic OTC swap redeemer (issue #499): lovelace leaves the
+treasury while a named asset enters it, authorized by one
+@Disburse@ spend.
+
+The validator checks
+@equal_plus_min_ada (merge input_sum (negate amount)) output_sum@ over
+treasury-addressed UTxOs only. A __negative__ entry in @amount@
+therefore obliges the continuing treasury output to carry that much
+more of the asset — which is exactly how the incoming leg is
+authorized.
+
+@incomingQuantity@ is taken __positive__, matching how an operator
+states the trade and how the intent records it; this function is the
+only place the sign is flipped.
+
+Pinned against mainnet transaction
+@9ed505b48df617716423f58687283ee5e130684d8b3b6c9f2ed03b473c0154f1@,
+whose spend redeemer serializes to
+
+@d87c9fa240a1401a02d69be7581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ada1480014df105553444d3a0098967fff@
+-}
+otcSwapRedeemer
+    :: ByteString
+    -- ^ incoming asset's minting-policy id
+    -> ByteString
+    -- ^ incoming asset name
+    -> Integer
+    -- ^ incoming quantity, supplied positive; negated here
+    -> Integer
+    -- ^ lovelace leaving the treasury for the counterparty
+    -> Data
+otcSwapRedeemer policy asset incomingQuantity =
+    disburseUsdmRedeemer policy asset (negate incomingQuantity)
 
 {- | @Constr 0 []@ — Sundae @Reorganize@.
 

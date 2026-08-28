@@ -14,6 +14,16 @@ checked and the slice gate is green.
       T-A02, demonstrated before the vector is trusted.
 - [ ] **T-A04** Confirm existing `disburseAdaRedeemer` /
       `disburseUsdmRedeemer` vectors are byte-unchanged.
+- [ ] **T-A05** Property: `otcSwapRedeemer p a q l === disburseUsdmRedeemer p a (negate q) l`
+      over generated policies, asset names (incl. empty), and
+      magnitudes. From audit finding F1 (submission 1): the shipped
+      vectors pin one 4-tuple, so a constant encoder passes them.
+- [ ] **T-A06** Structural assertion on generated input: ADA leg `I l`,
+      asset leg `I (negate q)` strictly negative, ADA map-key first
+      (key order is load-bearing for byte identity).
+- [ ] **T-A07** Include `otcSwapRedeemer` in the `roundTrip` CBOR check.
+- [ ] **T-A08** Keep the single-vector chain pin; the property is added
+      beside it, never instead of it.
 
 ## Slice B — payload and builder
 
@@ -57,6 +67,12 @@ checked and the slice gate is green.
 - [ ] **T-D02** `selectFuelUtxo`, pure-ADA only (INV-6).
 - [ ] **T-D03** `selectTreasuryForAdaOut`, preserving all native assets
       (INV-3).
+- [ ] **T-D04a** Enforce RJ-001 for the incoming leg: reject
+      `incomingQuantity <= 0` in the wizard. Ratified from auditor
+      candidate invariant CINV-nonpositive-qty (slice A, submission 1):
+      `negate 0 = 0` is not strictly negative and a negative input
+      double-flips, so INV-1 depends on this guard existing here. The
+      encoder stays total by design.
 - [ ] **T-D04** `checkStatedPrice` with a declared tolerance (INV-9).
 - [ ] **T-D05** `otcSwapToTreasuryIntent`.
 - [ ] **T-D06** `otc-swap-wizard` parser and runner; register the

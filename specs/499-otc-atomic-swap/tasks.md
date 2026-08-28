@@ -5,24 +5,24 @@ checked and the slice gate is green.
 
 ## Slice A — redeemer and vectors
 
-- [ ] **T-A01** Add `otcSwapRedeemer` to `Amaru.Treasury.Redeemer`,
+- [x] **T-A01** Add `otcSwapRedeemer` to `Amaru.Treasury.Redeemer`,
       negating the incoming quantity at encoding (INV-1).
-- [ ] **T-A02** Pin its CBOR in `RedeemerSpec.hs` against the redeemer
+- [x] **T-A02** Pin its CBOR in `RedeemerSpec.hs` against the redeemer
       bytes carried by on-chain `9ed505b4…`, decoded from the archived
       transaction rather than from this repository's own output.
-- [ ] **T-A03** Negative control: a positive incoming entry must fail
+- [x] **T-A03** Negative control: a positive incoming entry must fail
       T-A02, demonstrated before the vector is trusted.
-- [ ] **T-A04** Confirm existing `disburseAdaRedeemer` /
+- [x] **T-A04** Confirm existing `disburseAdaRedeemer` /
       `disburseUsdmRedeemer` vectors are byte-unchanged.
-- [ ] **T-A05** Property: `otcSwapRedeemer p a q l === disburseUsdmRedeemer p a (negate q) l`
+- [x] **T-A05** Property: `otcSwapRedeemer p a q l === disburseUsdmRedeemer p a (negate q) l`
       over generated policies, asset names (incl. empty), and
       magnitudes. From audit finding F1 (submission 1): the shipped
       vectors pin one 4-tuple, so a constant encoder passes them.
-- [ ] **T-A06** Structural assertion on generated input: ADA leg `I l`,
+- [x] **T-A06** Structural assertion on generated input: ADA leg `I l`,
       asset leg `I (negate q)` strictly negative, ADA map-key first
       (key order is load-bearing for byte identity).
-- [ ] **T-A07** Include `otcSwapRedeemer` in the `roundTrip` CBOR check.
-- [ ] **T-A08** Keep the single-vector chain pin; the property is added
+- [x] **T-A07** Include `otcSwapRedeemer` in the `roundTrip` CBOR check.
+- [x] **T-A08** Keep the single-vector chain pin; the property is added
       beside it, never instead of it.
 
 ## Slice B — payload and builder

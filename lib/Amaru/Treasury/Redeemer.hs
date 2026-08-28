@@ -125,7 +125,9 @@ authorized.
 
 @incomingQuantity@ is taken __positive__, matching how an operator
 states the trade and how the intent records it; this function is the
-only place the sign is flipped.
+only place the sign is flipped. The encoder is total and assumes a
+positive quantity; rejecting non-positive input is an
+input-validation concern (RJ-001), not an encoder concern.
 
 Pinned against mainnet transaction
 @9ed505b48df617716423f58687283ee5e130684d8b3b6c9f2ed03b473c0154f1@,

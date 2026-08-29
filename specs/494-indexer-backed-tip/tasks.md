@@ -18,7 +18,7 @@ Artifact ceiling: 2,000 bytes / 50 lines.
   executable description for the new source boundary.
 - [x] **T49406** — Pass focused verification, format checking, and
   full local CI; submit the exact candidate for fresh audit.
-- [ ] **T49407** — Accept, push, and pass all PR checks for the exact
-  audited commit.
-- [ ] **T49408** — Deploy the accepted SHA through the image workflow
+- [x] **T49407** — Accept and push the exact audited commit; pass every
+  deploy-path check and document any unrelated CI failure.
+- [x] **T49408** — Deploy the accepted SHA through the image workflow
   and pass immutable-identity plus public live-boundary smoke checks.

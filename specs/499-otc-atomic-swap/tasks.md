@@ -38,13 +38,35 @@ checked and the slice gate is green.
       exunits, provenance note recording the mainnet txid and its
       block.
 - [ ] **T-B06** Assert INV-2, INV-3, INV-4 on the built body.
-- [ ] **T-B07** Assert INV-5 and INV-6: fee is drawn from the fuel
-      UTxO, collateral input is pure ADA, collateral return has no
-      native assets.
+- [ ] **T-B07** Builder-only properties, on an operator-funded
+      fixture: collateral input is exactly `difWalletUtxo`, and the
+      counterparty output carries their lovelace + adaOut with no fee
+      deducted. INV-6 ownership/purity is slice D (T-D02) - the
+      builder cannot know either, and the reference tx is
+      counterparty-funded.
 - [ ] **T-B08** Assert INV-7: `requiredSigners` excludes the
       counterparty and holds two distinct scope owners.
 - [ ] **T-B09** Negative controls for T-B06..T-B08, each shown able to
       fail.
+
+## Slice B2 — address-targeted counterparty selection
+
+Opened 2026-08-29 by a ticket-owner scope change that landed after
+slice B was dispatched: the wizard targets a counterparty ADDRESS and
+may need several UTxOs when a balance is fragmented (FR-008a/FR-008b).
+Slice B built `ospCounterpartyUtxo :: TxIn`, singular, which was
+correct against its mandate as written. Not a defect; a forward slice.
+
+- [ ] **T-B2-01** `ospCounterpartyUtxos :: NonEmpty TxIn`; spend all of
+      them.
+- [ ] **T-B2-02** Counterparty output carries their COMBINED remainder
+      and COMBINED input lovelace plus `adaOut` (FR-008b).
+- [ ] **T-B2-03** Restate INV-4 in the golden as a sum over all
+      counterparty inputs. The single-input reference cannot exercise
+      this, so a second fixture with a fragmented balance is required —
+      otherwise the assertion is untested for the case it exists for.
+- [ ] **T-B2-04** Negative control: a build that drops one of several
+      counterparty inputs must fail the conservation assertion.
 
 ## Slice C — intent JSON, schema, translation
 
@@ -62,8 +84,12 @@ checked and the slice gate is green.
 
 ## Slice D — wizard and CLI
 
-- [ ] **T-D01** `selectCounterpartyUtxo`, preferring the smallest
-      sufficient holding.
+- [ ] **T-D01** `selectCounterpartyUtxos` — select from the counterparty
+      ADDRESS, returning one or more UTxOs whose combined holding meets
+      the incoming quantity. Prefer fewest inputs, then smallest total.
+      `--counterparty-txin` is an optional repeatable restrict, mirroring
+      `disburse-wizard --treasury-txin`; a shortfall within a restricted
+      set is an error, not a widening (FR-008a).
 - [ ] **T-D02** `selectFuelUtxo`, pure-ADA only (INV-6).
 - [ ] **T-D03** `selectTreasuryForAdaOut`, preserving all native assets
       (INV-3).
@@ -92,6 +118,11 @@ checked and the slice gate is green.
       sees that spending it invalidates the transaction.
 - [ ] **T-E04** Counterparty handoff path for an external signer with
       no vault identity (FR-012).
+- [ ] **T-E04a** A check that reports whether a pending transaction's
+      inputs are still unspent, so the operator learns a swap is dead
+      before chasing signatures. Ruled 2026-08-29: detect, do NOT
+      auto-rebuild - re-selecting a UTxO silently changes what signers
+      already approved, and the terms may need renegotiating.
 - [ ] **T-E05** `docs/otc-swap.md`: end-to-end operator flow.
 - [ ] **T-E06** State plainly that USDM and iUSD are different assets
       with different risk; no default asset (AC-006).

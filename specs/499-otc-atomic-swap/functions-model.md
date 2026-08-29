@@ -100,12 +100,25 @@ data OtcSwapAnswers = OtcSwapAnswers
     , osaExtraSigners         :: ![Text]
     }
 
-selectCounterpartyUtxo
-    :: PolicyID          -- ^ incomingPolicy
-    -> AssetName         -- ^ incomingAsset
-    -> Integer           -- ^ incomingQuantity
-    -> [(TxIn, TxOut ConwayEra)]  -- ^ counterparty candidates
-    -> Either OtcSwapError (TxIn, TxOut ConwayEra)
+{- | Choose the counterparty inputs supplying the incoming asset
+(FR-008a).
+
+Returns a NonEmpty set, because a counterparty balance is often
+fragmented and one UTxO need not cover the trade. Prefers the fewest
+inputs that suffice, then the smallest total holding, so the minimum
+passes through the transaction.
+
+When @restrictTo@ is non-empty the candidate pool is narrowed to
+exactly those outrefs — the repeatable @--counterparty-txin@ — and a
+shortfall within them is an error rather than a widening.
+-}
+selectCounterpartyUtxos
+    :: PolicyID                   -- ^ incomingPolicy
+    -> AssetName                  -- ^ incomingAsset
+    -> Integer                    -- ^ incomingQuantity
+    -> [TxIn]                     -- ^ restrictTo; empty means the whole address
+    -> [(TxIn, TxOut ConwayEra)]  -- ^ candidates at the counterparty address
+    -> Either OtcSwapError (NonEmpty (TxIn, TxOut ConwayEra))
 
 selectFuelUtxo
     :: [(TxIn, TxOut ConwayEra)]  -- ^ operator wallet candidates
@@ -121,6 +134,25 @@ checkStatedPrice
     -> Coin      -- ^ adaOutLovelace
     -> Text      -- ^ statedPriceUsdPerAda
     -> Either OtcSwapError ()
+
+-- | Resolve an operator-facing asset name to its on-chain identity.
+--
+-- Accepts a registry name (@usdm@, @iusd@) or a raw
+-- @\<policyHex\>.\<assetNameHex\>@ pair. There is no default: an
+-- absent asset is a parse failure, not a fallback to USDM.
+resolveIncomingAsset
+    :: Text
+    -> Either OtcSwapError (PolicyID, AssetName, Word8)
+    -- ^ policy, asset name, and decimals for the quantity parser
+
+-- | Parse a decimal operator amount into base units.
+--
+-- @"47.619047"@ at 6 decimals -> @47619047@. Rejects more fractional
+-- digits than the asset supports rather than silently truncating.
+parseDecimalAmount
+    :: Word8     -- ^ decimals
+    -> Text      -- ^ operator input, e.g. "47.619047"
+    -> Either OtcSwapError Integer
 
 otcSwapToTreasuryIntent
     :: OtcSwapEnv
@@ -144,9 +176,13 @@ data OtcSwapWizardOpts = OtcSwapWizardOpts
     , oswCounterpartyAddr :: !Text
     , oswCounterpartyTxIn :: !(Maybe Text)
     , oswAdaOut           :: !Text
-    , oswIncomingPolicy   :: !Text
+      -- ^ decimal ADA, e.g. @47.619047@ — NOT lovelace
     , oswIncomingAsset    :: !Text
+      -- ^ a registry name (@usdm@, @iusd@) or raw
+      --   @\<policyHex\>.\<assetNameHex\>@ for anything unregistered.
+      --   No default: the operator must name the asset.
     , oswIncomingQuantity :: !Text
+      -- ^ decimal units of that asset, e.g. @10@ — NOT 1e-6 units
     , oswPrice            :: !Text
     , oswValidityHours    :: !(Maybe Word16)
     , oswDescription      :: !Text

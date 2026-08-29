@@ -27,27 +27,37 @@ checked and the slice gate is green.
 
 ## Slice B — payload and builder
 
-- [ ] **T-B01** Add `OtcSwapPayload` / `OtcSwapIntent` in
+- [x] **T-B01** Add `OtcSwapPayload` / `OtcSwapIntent` in
       `Amaru.Treasury.Tx.OtcSwap`.
-- [ ] **T-B02** Implement `otcSwapProgram`.
-- [ ] **T-B03** Implement `runOtcSwapAction` in
+- [x] **T-B02** Implement `otcSwapProgram`.
+- [x] **T-B03** Implement `runOtcSwapAction` in
       `Amaru.Treasury.Build.OtcSwap`.
-- [ ] **T-B04** Golden: rebuild the body of on-chain `9ed505b4…` from a
+- [x] **T-B04** Golden: rebuild the body of on-chain `9ed505b4…` from a
       frozen `ChainContext` and assert byte equality (AC-002).
-- [ ] **T-B05** Fixture set for T-B04 — intent, pparams, utxos,
+- [x] **T-B05** Fixture set for T-B04 — intent, pparams, utxos,
       exunits, provenance note recording the mainnet txid and its
       block.
-- [ ] **T-B06** Assert INV-2, INV-3, INV-4 on the built body.
-- [ ] **T-B07** Builder-only properties, on an operator-funded
+- [x] **T-B06** Assert INV-2, INV-3, INV-4 on the built body.
+- [x] **T-B07** Builder-only properties, on an operator-funded
       fixture: collateral input is exactly `difWalletUtxo`, and the
       counterparty output carries their lovelace + adaOut with no fee
       deducted. INV-6 ownership/purity is slice D (T-D02) - the
       builder cannot know either, and the reference tx is
       counterparty-funded.
-- [ ] **T-B08** Assert INV-7: `requiredSigners` excludes the
+- [x] **T-B08** Assert INV-7: `requiredSigners` excludes the
       counterparty and holds two distinct scope owners.
-- [ ] **T-B09** Negative controls for T-B06..T-B08, each shown able to
+- [x] **T-B09** Negative controls for T-B06..T-B08, each shown able to
       fail.
+- [x] **T-B10** Assert `scriptIntegrityHash` equals the reference's.
+      From audit finding T-B04-complete: it is the only body field
+      recording the redeemer, so without it an ADA-only Disburse or a
+      dropped negate still passes.
+- [x] **T-B11** Assert output identity `(address, datum, value)`, not
+      only coin/value.
+- [x] **T-B12** One builder-calling negative control per omitted field.
+- [x] **T-B13** State the completeness rule in the haddock and name the
+      acknowledged encoding artifacts, so a reader can tell an
+      exclusion from an omission.
 
 ## Slice B2 — address-targeted counterparty selection
 

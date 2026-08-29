@@ -149,6 +149,7 @@ library
     Amaru.Treasury.Build.Error.Render
     Amaru.Treasury.Build.Error.Types
     Amaru.Treasury.Build.GovernanceWithdrawalInit
+    Amaru.Treasury.Build.OtcSwap
     Amaru.Treasury.Build.RegistryInit
     Amaru.Treasury.Build.Reorganize
     Amaru.Treasury.Build.Reorganize.Batch
@@ -258,6 +259,7 @@ library
     Amaru.Treasury.Tx.DisburseWizard.Trace
     Amaru.Treasury.Tx.Envelope
     Amaru.Treasury.Tx.GovernanceWithdrawalInitWizard
+    Amaru.Treasury.Tx.OtcSwap
     Amaru.Treasury.Tx.RegistryInitWizard
     Amaru.Treasury.Tx.Reorganize
     Amaru.Treasury.Tx.ReorganizeWizard
@@ -739,6 +741,7 @@ test-suite golden-tests
     EnvelopeOracleSpec
     GovernanceWithdrawalInitIntentSpec
     GraphEffectGoldenSpec
+    OtcSwapGoldenSpec
     PlaceholderSpec
     RegistryInitIntentSpec
     RegistryWalkGoldenSpec

@@ -15,7 +15,7 @@ Reproducing a real on-chain swap against a frozen chain context.
 - **Current target**: the Haskell stack on this PR — `Tx.Swap.swapProgram`
   feeding the unified `Build.runSwap` path against a frozen
   `ChainContext` captured from the local mainnet node socket
-  (`/code/cardano-mainnet/ipc/node.socket`).
+  (`/srv/prod-hot/cardano/mainnet/ipc/node.socket`).
 
 ## Result
 
@@ -78,11 +78,11 @@ script-validity check possible without signatures.
 ## Reproducing
 
 ```bash
-export CARDANO_NODE_SOCKET_PATH=/code/cardano-mainnet/ipc/node.socket
+export CARDANO_NODE_SOCKET_PATH=/srv/prod-hot/cardano/mainnet/ipc/node.socket
 nix develop -c cabal run -O0 exe:capture-swap-context -- \
   --intent /tmp/amaru-swap-fixed-bash-provenance/intent.fixed.json \
   --out-dir /tmp/amaru-swap-capture \
-  --node-socket /code/cardano-mainnet/ipc/node.socket \
+  --node-socket /srv/prod-hot/cardano/mainnet/ipc/node.socket \
   --network-magic 764824073
 
 cmp -s \

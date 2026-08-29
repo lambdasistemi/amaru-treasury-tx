@@ -59,8 +59,17 @@ fixture.
 
 The Cyber Castellum Milestone 1 quickstart uses four IPFS references:
 
+> **Node socket.** Use the `cardano-node-mainnet` container's own mount
+> source, shown below. A dead socket file is still present at the old
+> `/code/cardano-mainnet/ipc/node.socket`, so pointing at it fails with
+> `Connection refused` — which reads like a node outage rather than a
+> wrong path, and silently breaks `tx-validate` and `tx-inspect`.
+> Confirm with
+> `cardano-cli latest query tip --socket-path "$CARDANO_NODE_SOCKET_PATH" --mainnet`
+> before a live run.
+
 ```bash
-export CARDANO_NODE_SOCKET_PATH=/code/cardano-mainnet/ipc/node.socket
+export CARDANO_NODE_SOCKET_PATH=/srv/prod-hot/cardano/mainnet/ipc/node.socket
 RUNDIR=/tmp/attx-cyber-m1
 mkdir -p "$RUNDIR"
 
@@ -117,6 +126,44 @@ with downstream treasury metadata readers.
   "file": "assets/asciinema/disburse-wizard-references.cast"
 }
 ```
+
+## Rationale overrides
+
+The rationale block written into the label-1694 metadata has two
+fields the wizard fills in for you, and both can be overridden:
+
+| Flag | Default | Use it when |
+| --- | --- | --- |
+| `--event` | `disburse` | the transaction belongs to a different event class in your treasury records |
+| `--label` | `Disburse <unit>` | the default label is not what a co-signer or auditor should read |
+
+Both are accepted by `disburse-wizard`, `swap-wizard` and
+`withdraw-wizard`. They change only the recorded rationale — never the
+transaction's value flow, signers, or validity.
+
+```bash
+  --event rebalance \
+  --label "Treasury rebalance - USDM leg" \
+```
+
+## Pinning treasury inputs
+
+By default the wizard selects treasury UTxOs itself, largest-first.
+`--treasury-txin` (alias `--treasury-utxo`) restricts that selection to
+outrefs you name, and is **repeatable**:
+
+```bash
+  --treasury-txin 57faba5b7d213649b118052e5ac4f48d9730f6d1a9f71af1b46d15d09b6c4519#8 \
+  --treasury-txin 4f64f292d2b8d74f9bade3bdcafb92302b79b6589208147c995e55057b7696b4#0 \
+```
+
+Use it when a specific UTxO must be consumed — to retire an awkward
+small output, or to keep a particular UTxO untouched for a transaction
+already in flight. If the named set cannot fund the disbursement the
+build fails rather than quietly widening the selection.
+
+This differs from `--exclude-utxo`, which removes candidates from the
+default pool; see [wizard input control](wizard-input-control.md).
 
 ## What the wizard resolves
 

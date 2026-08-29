@@ -55,6 +55,7 @@ module Amaru.Treasury.IntentJSON
     , DisburseDestination (..)
     , diAmount
     , diBeneficiaryAddress
+    , OtcSwapInputs (..)
     , WithdrawInputs (..)
     , ReorganizeInputs (..)
     , RegistryInitSeedSplitInputs (..)
@@ -125,16 +126,19 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Short qualified as SBS
+import Data.Char (isDigit)
 import Data.Foldable (toList)
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty)
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Ratio ((%))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Word (Word64)
+import Text.Read (readMaybe)
 
 import Cardano.Crypto.Hash.Class (hashToBytes)
 import Cardano.Ledger.Address
@@ -198,6 +202,10 @@ import Amaru.Treasury.Tx.Disburse
     , DisburseIntentFields (..)
     , DisburseUsdmPayload (..)
     )
+import Amaru.Treasury.Tx.OtcSwap
+    ( OtcSwapIntent (..)
+    , OtcSwapPayload (..)
+    )
 import Amaru.Treasury.Tx.Reorganize (ReorganizeIntent (..))
 import Amaru.Treasury.Tx.Swap
     ( SwapIntent (..)
@@ -220,6 +228,7 @@ data Action
     | Disburse
     | Withdraw
     | Reorganize
+    | OtcSwap
     | RegistryInitSeedSplit
     | RegistryInitMint
     | RegistryInitReferenceScripts
@@ -238,6 +247,7 @@ data SAction (a :: Action) where
     SDisburse :: SAction 'Disburse
     SWithdraw :: SAction 'Withdraw
     SReorganize :: SAction 'Reorganize
+    SOtcSwap :: SAction 'OtcSwap
     SRegistryInitSeedSplit :: SAction 'RegistryInitSeedSplit
     SRegistryInitMint :: SAction 'RegistryInitMint
     SRegistryInitReferenceScripts
@@ -268,6 +278,7 @@ type family Payload (a :: Action) :: Type where
     Payload 'Disburse = DisburseInputs
     Payload 'Withdraw = WithdrawInputs
     Payload 'Reorganize = ReorganizeInputs
+    Payload 'OtcSwap = OtcSwapInputs
     Payload 'RegistryInitSeedSplit =
         RegistryInitSeedSplitInputs
     Payload 'RegistryInitMint = RegistryInitMintInputs
@@ -291,6 +302,7 @@ type family Translated (a :: Action) :: Type where
     Translated 'Disburse = DisburseIntent
     Translated 'Withdraw = WithdrawIntent
     Translated 'Reorganize = ReorganizeIntent
+    Translated 'OtcSwap = OtcSwapIntent
     -- Slices 3a–3c ship all seven init rows as the typed
     -- input records consumed by the extracted construction
     -- cores under @lib/Amaru/Treasury/Devnet/*Init.hs@.
@@ -743,6 +755,67 @@ instance ToJSON DisburseInputs where
                 ]
             _ ->
                 ["destinations" .= NE.toList diDestinations]
+
+{- | OTC-swap payload (issue #499). Records the trade the
+operator states: the two legs, the counterparty address
+and the UTxO supplying the incoming asset, and the
+operator-controlled fuel input.
+
+@osiIncomingQuantity@ is stored __positive__: the sign is
+a property of the redeemer encoding, not of the
+operator's intent, and keeping it positive keeps
+negative-number rules out of the JSON schema entirely
+(data-model, @incomingQuantity@). Positivity itself is
+validated at translation, like the withdraw rewards
+amount. @osiCounterpartyAddress@ must parse and match the
+intent's network (checked in 'translateOtcSwap').
+-}
+data OtcSwapInputs = OtcSwapInputs
+    { osiCounterpartyAddress :: !Text
+    -- ^ bech32 @addr1…@ / @addr_test1…@ destination of the ADA leg
+    , osiCounterpartyTxIn :: !Text
+    -- ^ @\<txid hex\>#\<ix\>@ supplying the incoming asset
+    , osiAdaOutLovelace :: !Integer
+    -- ^ ADA leaving the treasury; strictly positive
+    , osiIncomingPolicy :: !Text
+    -- ^ 28-byte hex policy of the incoming asset
+    , osiIncomingAsset :: !Text
+    -- ^ hex asset name; never empty (named asset in)
+    , osiIncomingQuantity :: !Integer
+    -- ^ quantity entering the treasury; strictly positive
+    , osiStatedPriceUsdPerAda :: !Text
+    -- ^ operator-supplied decimal string, e.g. @"47.619047"@
+    , osiFuelTxIn :: !Text
+    -- ^ @\<txid hex\>#\<ix\>@ operator-controlled fuel input
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON OtcSwapInputs where
+    parseJSON = withObject "OtcSwapInputs" $ \o ->
+        OtcSwapInputs
+            <$> o .: "counterpartyAddress"
+            <*> o .: "counterpartyTxIn"
+            <*> o .: "adaOutLovelace"
+            <*> o .: "incomingPolicy"
+            <*> o .: "incomingAsset"
+            <*> o .: "incomingQuantity"
+            <*> o .: "statedPriceUsdPerAda"
+            <*> o .: "fuelTxIn"
+
+instance ToJSON OtcSwapInputs where
+    toJSON OtcSwapInputs{..} =
+        object
+            [ "counterpartyAddress"
+                .= osiCounterpartyAddress
+            , "counterpartyTxIn" .= osiCounterpartyTxIn
+            , "adaOutLovelace" .= osiAdaOutLovelace
+            , "incomingPolicy" .= osiIncomingPolicy
+            , "incomingAsset" .= osiIncomingAsset
+            , "incomingQuantity" .= osiIncomingQuantity
+            , "statedPriceUsdPerAda"
+                .= osiStatedPriceUsdPerAda
+            , "fuelTxIn" .= osiFuelTxIn
+            ]
 
 {- | Withdraw-action payload. Carries the treasury stake
 script hash plus the positive reward balance the wizard
@@ -1420,6 +1493,7 @@ instance Show SomeTreasuryIntent where
                     SDisburse -> showsPrec 11 ti
                     SWithdraw -> showsPrec 11 ti
                     SReorganize -> showsPrec 11 ti
+                    SOtcSwap -> showsPrec 11 ti
                     SRegistryInitSeedSplit -> showsPrec 11 ti
                     SRegistryInitMint -> showsPrec 11 ti
                     SRegistryInitReferenceScripts ->
@@ -1440,6 +1514,7 @@ instance Eq SomeTreasuryIntent where
             (SDisburse, SDisburse) -> ti == tj
             (SWithdraw, SWithdraw) -> ti == tj
             (SReorganize, SReorganize) -> ti == tj
+            (SOtcSwap, SOtcSwap) -> ti == tj
             (SRegistryInitSeedSplit, SRegistryInitSeedSplit) ->
                 ti == tj
             (SRegistryInitMint, SRegistryInitMint) ->
@@ -1513,6 +1588,7 @@ actionToText = \case
     Disburse -> "disburse"
     Withdraw -> "withdraw"
     Reorganize -> "reorganize"
+    OtcSwap -> "otc-swap"
     RegistryInitSeedSplit -> "registry-init-seed-split"
     RegistryInitMint -> "registry-init-mint"
     RegistryInitReferenceScripts ->
@@ -1532,6 +1608,7 @@ instance FromJSON Action where
         "disburse" -> pure Disburse
         "withdraw" -> pure Withdraw
         "reorganize" -> pure Reorganize
+        "otc-swap" -> pure OtcSwap
         "registry-init-seed-split" ->
             pure RegistryInitSeedSplit
         "registry-init-mint" -> pure RegistryInitMint
@@ -1551,6 +1628,7 @@ instance FromJSON Action where
                     <> T.unpack other
                     <> " (expected one of "
                     <> "swap | disburse | withdraw | reorganize"
+                    <> " | otc-swap"
                     <> " | registry-init-seed-split"
                     <> " | registry-init-mint"
                     <> " | registry-init-reference-scripts"
@@ -1638,6 +1716,20 @@ instance FromJSON SomeTreasuryIntent where
                     SomeTreasuryIntent SReorganize $
                         TreasuryIntent
                             SReorganize
+                            schema
+                            network
+                            wallet
+                            scope
+                            signers
+                            ub
+                            rationale
+                            payload
+            OtcSwap -> do
+                payload <- o .: "otc-swap"
+                pure $
+                    SomeTreasuryIntent SOtcSwap $
+                        TreasuryIntent
+                            SOtcSwap
                             schema
                             network
                             wallet
@@ -1787,6 +1879,7 @@ toJSONIntent sa ti =
                 "governance-withdrawal-init-proposal"
             SGovernanceWithdrawalInitMaterialization ->
                 "governance-withdrawal-init-materialization"
+            SOtcSwap -> "otc-swap"
         payloadEntry = case sa of
             SSwap -> "swap" .= tiPayload ti
             SDisburse -> "disburse" .= tiPayload ti
@@ -1811,6 +1904,7 @@ toJSONIntent sa ti =
             SGovernanceWithdrawalInitMaterialization ->
                 "governance-withdrawal-init-materialization"
                     .= tiPayload ti
+            SOtcSwap -> "otc-swap" .= tiPayload ti
     in  object
             [ "schema" .= tiSchema ti
             , "action" .= actionName
@@ -1883,6 +1977,7 @@ translateIntent sa ti = case sa of
     SDisburse -> translateDisburse ti
     SWithdraw -> translateWithdraw ti
     SReorganize -> translateReorganize ti
+    SOtcSwap -> translateOtcSwap ti
     SRegistryInitSeedSplit -> translateRegistryInitSeedSplit ti
     SRegistryInitMint -> translateRegistryInitMint ti
     SRegistryInitReferenceScripts ->
@@ -2173,6 +2268,192 @@ normalizeAssetMap
 normalizeAssetMap =
     Map.filter (not . Map.null)
         . Map.map (Map.filter (/= 0))
+
+{- | OTC-swap-action translator (issue #499). Reads the
+unified 'TreasuryIntent' @otc-swap@ payload and produces
+the typed 'OtcSwapIntent' consumed by the build
+dispatcher.
+
+The wire records the trade the operator states: the two
+legs, the counterparty address and UTxO, the fuel input.
+The typed payload additionally carries the counterparty
+output arrangement ('ospCounterpartyLovelace',
+'ospCounterpartyLeftover'); from intent data alone the
+canonical arrangement is the on-chain reference shape —
+the counterparty output carries the ADA leg alone and no
+routed remainder, their own lovelace and other assets
+reaching balancing. A richer INV-4 arrangement needs
+chain state and belongs to the wizard selection policy
+(slice D), not to this pure lift. The counterparty
+address also fills 'difBeneficiaryAddress', unused by the
+OTC program, so report paths that read the shared fields
+still see the human destination.
+
+The treasury continuing output carries the scope block's
+declared leftover lovelace and other assets, exactly as
+the USDM disburse path does — the treasury's pre-existing
+assets are preserved in full (INV-3).
+
+@adaOutLovelace@ and @incomingQuantity@ are validated
+strictly positive here and @incomingQuantity@ is stored
+positive: the sign is a property of the redeemer encoding
+('Amaru.Treasury.Redeemer.otcSwapRedeemer'), never of the
+recorded intent.
+
+The wallet block remains the shared envelope — its @txIn@
+rides 'tsWalletTxIn' like every other action — but the
+fuel the build actually spends is the otc-swap block's
+@fuelTxIn@, which fills 'difWalletUtxo' (the fuel +
+collateral slot the program consumes). A required wire
+field with no effect would be dead data; slice D's
+selection policy writes the chosen fuel here.
+-}
+translateOtcSwap
+    :: TreasuryIntent 'OtcSwap
+    -> Either String (TranslatedShared, OtcSwapIntent)
+translateOtcSwap ti = do
+    unless
+        (osiAdaOutLovelace osi > 0)
+        (Left "otc swap: adaOutLovelace must be positive")
+    unless
+        (osiIncomingQuantity osi > 0)
+        (Left "otc swap: incomingQuantity must be positive")
+    _ <- parsePositiveDecimal (osiStatedPriceUsdPerAda osi)
+    incomingPolicy <- parsePolicyId (osiIncomingPolicy osi)
+    incomingAsset <-
+        parseIncomingAssetName (osiIncomingAsset osi)
+    counterpartyAddr <- parseAddr (osiCounterpartyAddress osi)
+    intentNetwork <- parseNetwork (tiNetwork ti)
+    unless
+        (getNetwork counterpartyAddr == intentNetwork)
+        (Left "otc swap: counterpartyAddress network mismatch")
+    counterpartyTxIn <- parseTxIn (osiCounterpartyTxIn osi)
+    fuelTxIn <- parseTxIn (osiFuelTxIn osi)
+    walletAddr <- parseAddr (wjAddress wallet)
+    walletTxIn <- parseTxIn (wjTxIn wallet)
+    treasuryAddr <- parseAddr (sjTreasuryAddress scope)
+    treasuryUtxos <-
+        traverse parseTxIn (sjTreasuryUtxos scope)
+    permissionsAcct <-
+        parseRewardAccountForNetwork
+            (tiNetwork ti)
+            (sjPermissionsRewardAccount scope)
+    scopesRef <- parseTxIn (sjScopesDeployedAt scope)
+    permissionsRef <-
+        parseTxIn (sjPermissionsDeployedAt scope)
+    treasuryRef <- parseTxIn (sjTreasuryDeployedAt scope)
+    registryRef <- parseTxIn (sjRegistryDeployedAt scope)
+    registryPolicy <-
+        decodeHexBytes 28 (sjRegistryPolicyId scope)
+    leftoverOtherAssets <-
+        parseMultiAsset (sjTreasuryLeftoverOtherAssets scope)
+    signers <- traverse parseGuardKeyHash (tiSigners ti)
+    let fields =
+            DisburseIntentFields
+                { difWalletUtxo = fuelTxIn
+                , difBeneficiaryAddress = counterpartyAddr
+                , difTreasuryUtxos = treasuryUtxos
+                , difTreasuryAddress = treasuryAddr
+                , difPermissionsRewardAccount =
+                    permissionsAcct
+                , difScopesDeployedAt = scopesRef
+                , difPermissionsDeployedAt = permissionsRef
+                , difTreasuryDeployedAt = treasuryRef
+                , difRegistryDeployedAt = registryRef
+                , difSigners = signers
+                , difUpperBound =
+                    SlotNo (tiValidityUpperBoundSlot ti)
+                }
+        payload =
+            OtcSwapPayload
+                { ospCounterpartyAddress = counterpartyAddr
+                , ospCounterpartyUtxo = counterpartyTxIn
+                , ospCounterpartyLeftover = MultiAsset Map.empty
+                , ospCounterpartyLovelace =
+                    Coin (osiAdaOutLovelace osi)
+                , ospAdaOut = Coin (osiAdaOutLovelace osi)
+                , ospIncomingPolicy = incomingPolicy
+                , ospIncomingAsset = incomingAsset
+                , ospIncomingQuantity =
+                    osiIncomingQuantity osi
+                , ospLeftoverLovelace =
+                    Coin (sjTreasuryLeftoverLovelace scope)
+                , ospLeftoverAssets = leftoverOtherAssets
+                }
+        body =
+            RationaleBody
+                { rbEvent = rjEvent rat
+                , rbLabel = rjLabel rat
+                , rbReferences =
+                    map fromJSONReference (rjReferences rat)
+                , rbDescription = rationaleDescriptionLines rat
+                , rbDestinationLabel = rjDestinationLabel rat
+                , rbJustification =
+                    rationaleJustificationLines rat
+                }
+        shared =
+            TranslatedShared
+                { tsNetwork = tiNetwork ti
+                , tsWalletTxIn = walletTxIn
+                , tsWalletAddr = walletAddr
+                , tsRationale =
+                    rationaleMetadatum body registryPolicy
+                }
+    pure (shared, OtcSwapIntent fields payload)
+  where
+    wallet = tiWallet ti
+    scope = tiScope ti
+    osi = tiPayload ti
+    rat = tiRationale ti
+
+{- | Parse the incoming asset name. The wire contract
+(data-model, @incomingAsset@) tolerates an empty name
+only in the empty-policy pairing, which 'parsePolicyId'
+already rejects; an OTC swap receives a __named__ asset,
+so an empty name under a live policy is a malformed
+record, not a legal asset with a zero-length name.
+-}
+parseIncomingAssetName :: Text -> Either String AssetName
+parseIncomingAssetName text = do
+    asset <- parseAssetName text
+    case asset of
+        AssetName bytes
+            | SBS.null bytes ->
+                Left
+                    "otc swap: incomingAsset must not be empty"
+        _ -> Right asset
+
+{- | Validate the stated price. The wire type is an
+operator-supplied decimal string (never derived; the
+INV-9 agreement check belongs to the wizard). Accepted
+shape: @digits@ or @digits.fraction@ with a non-empty
+fraction when the point is present, value strictly
+positive — the same strings the JSON-schema pattern in
+"Amaru.Treasury.IntentJSON.Schema" admits.
+-}
+parsePositiveDecimal :: Text -> Either String Rational
+parsePositiveDecimal text =
+    case T.splitOn "." text of
+        [whole] -> fromParts whole "0"
+        [whole, frac] -> fromParts whole frac
+        _ -> Left msg
+  where
+    msg =
+        "otc swap: statedPriceUsdPerAda must be a "
+            <> "positive decimal string"
+    fromParts whole frac
+        | T.null whole
+            || T.null frac
+            || not (T.all isDigit whole)
+            || not (T.all isDigit frac) =
+            Left msg
+        | isAllZero whole && isAllZero frac = Left msg
+        | otherwise =
+            maybe (Left msg) Right $ do
+                w <- readMaybe (T.unpack whole)
+                f <- readMaybe (T.unpack frac)
+                pure (fromInteger w + f % 10 ^ T.length frac)
+    isAllZero = T.all (== '0')
 
 {- | Withdraw-action translator. Reads the unified
 'TreasuryIntent' withdraw payload and produces the typed

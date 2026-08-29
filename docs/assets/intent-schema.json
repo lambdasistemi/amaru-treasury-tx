@@ -129,6 +129,49 @@
             "pattern": "^([0-9a-fA-F]{64})$",
             "type": "string"
         },
+        "otc-swap": {
+            "additionalProperties": false,
+            "properties": {
+                "adaOutLovelace": {
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "counterpartyAddress": {
+                    "$ref": "#/$defs/bech32Address"
+                },
+                "counterpartyTxIn": {
+                    "$ref": "#/$defs/txIn"
+                },
+                "fuelTxIn": {
+                    "$ref": "#/$defs/txIn"
+                },
+                "incomingAsset": {
+                    "$ref": "#/$defs/assetNameHex"
+                },
+                "incomingPolicy": {
+                    "$ref": "#/$defs/hex28"
+                },
+                "incomingQuantity": {
+                    "minimum": 1,
+                    "type": "integer"
+                },
+                "statedPriceUsdPerAda": {
+                    "pattern": "^[0-9]+(\\.[0-9]+)?$",
+                    "type": "string"
+                }
+            },
+            "required": [
+                "counterpartyAddress",
+                "counterpartyTxIn",
+                "adaOutLovelace",
+                "incomingPolicy",
+                "incomingAsset",
+                "incomingQuantity",
+                "statedPriceUsdPerAda",
+                "fuelTxIn"
+            ],
+            "type": "object"
+        },
         "rationale": {
             "additionalProperties": false,
             "properties": {
@@ -761,6 +804,64 @@
                 "validityUpperBoundSlot",
                 "rationale",
                 "reorganize"
+            ],
+            "type": "object"
+        },
+        {
+            "additionalProperties": false,
+            "properties": {
+                "action": {
+                    "const": "otc-swap",
+                    "type": "string"
+                },
+                "network": {
+                    "enum": [
+                        "devnet",
+                        "mainnet",
+                        "preprod",
+                        "preview"
+                    ],
+                    "type": "string"
+                },
+                "otc-swap": {
+                    "$ref": "#/$defs/otc-swap"
+                },
+                "rationale": {
+                    "$ref": "#/$defs/rationale"
+                },
+                "schema": {
+                    "enum": [
+                        1
+                    ],
+                    "type": "integer"
+                },
+                "scope": {
+                    "$ref": "#/$defs/scope"
+                },
+                "signers": {
+                    "items": {
+                        "$ref": "#/$defs/hex28"
+                    },
+                    "type": "array"
+                },
+                "validityUpperBoundSlot": {
+                    "minimum": 0,
+                    "type": "integer"
+                },
+                "wallet": {
+                    "$ref": "#/$defs/wallet"
+                }
+            },
+            "required": [
+                "schema",
+                "action",
+                "network",
+                "wallet",
+                "scope",
+                "signers",
+                "validityUpperBoundSlot",
+                "rationale",
+                "otc-swap"
             ],
             "type": "object"
         },

@@ -53,6 +53,7 @@ intentJsonSchema =
                     "reorganize"
                     "reorganize"
                     (ref "reorganize")
+               , actionSchema "otc-swap" "otc-swap" (ref "otc-swap")
                , actionSchema
                     "registry-init-seed-split"
                     "registry-init-seed-split"
@@ -92,6 +93,7 @@ intentJsonSchema =
                 , "disburse" .= disburseSchema
                 , "withdraw" .= withdrawSchema
                 , "reorganize" .= reorganizeSchema
+                , "otc-swap" .= otcSwapSchema
                 , "registry-init-seed-split"
                     .= registryInitSeedSplitSchema
                 , "registry-init-mint"
@@ -391,6 +393,45 @@ reorganizeSchema =
             )
         ]
 
+{- | OTC-swap block (issue #499). Quantities are recorded
+positive — @adaOutLovelace@ and @incomingQuantity@ both
+type as @positiveIntegerSchema@ (@minimum: 1@), so no
+negative-number rules ever appear on the wire; the
+redeemer's negation is an encoding concern, not an
+intent concern. This block is deliberately a sibling of
+@disburse@ (FR-010): the disburse block stays byte-identical,
+which is pinned by the gate and by
+"Amaru.Treasury.IntentJSONOtcSwapSpec".
+
+@incomingAsset@ shares the @assetNameHex@ definition (an
+empty hex string matches its pattern); the emptiness rule
+is cross-field and lives in the translation, which is
+also where the @statedPriceUsdPerAda@ value is checked
+to be a positive decimal — a JSON schema cannot express
+numeric ordering over a string type.
+-}
+otcSwapSchema :: Value
+otcSwapSchema =
+    objectSchema
+        [ "counterpartyAddress"
+        , "counterpartyTxIn"
+        , "adaOutLovelace"
+        , "incomingPolicy"
+        , "incomingAsset"
+        , "incomingQuantity"
+        , "statedPriceUsdPerAda"
+        , "fuelTxIn"
+        ]
+        [ ("counterpartyAddress", ref "bech32Address")
+        , ("counterpartyTxIn", ref "txIn")
+        , ("adaOutLovelace", positiveIntegerSchema)
+        , ("incomingPolicy", ref "hex28")
+        , ("incomingAsset", ref "assetNameHex")
+        , ("incomingQuantity", positiveIntegerSchema)
+        , ("statedPriceUsdPerAda", positiveDecimalStringSchema)
+        , ("fuelTxIn", ref "txIn")
+        ]
+
 emptyPayloadSchema :: Value
 emptyPayloadSchema = objectSchema [] []
 
@@ -543,6 +584,19 @@ nonNegativeIntegerSchema =
     object
         [ "type" .= ("integer" :: Text)
         , "minimum" .= (0 :: Int)
+        ]
+
+{- | Operator-supplied decimal amount as a string:
+@digits@ or @digits.fraction@, e.g. @"10"@ or
+@"47.619047"@. The strictly-positive value rule is
+enforced by 'Amaru.Treasury.IntentJSON.parsePositiveDecimal' —
+a pattern cannot express numeric ordering.
+-}
+positiveDecimalStringSchema :: Value
+positiveDecimalStringSchema =
+    object
+        [ "type" .= ("string" :: Text)
+        , "pattern" .= ("^[0-9]+(\\.[0-9]+)?$" :: Text)
         ]
 
 arrayOf :: Value -> Value

@@ -606,6 +606,7 @@ test-suite unit-tests
     Amaru.Treasury.Inspect.SwapOrderProjectionSpec
     Amaru.Treasury.Inspect.TreasurySpendProjectionSpec
     Amaru.Treasury.InspectorSpec
+    Amaru.Treasury.IntentJSONOtcSwapSpec
     Amaru.Treasury.IntentJSONSchemaSpec
     Amaru.Treasury.IntentJSONSpec
     Amaru.Treasury.LedgerParseSpec

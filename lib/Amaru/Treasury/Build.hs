@@ -66,6 +66,9 @@ import Amaru.Treasury.Build.GovernanceWithdrawalInit
     ( runGovernanceWithdrawalInitMaterializationAction
     , runGovernanceWithdrawalInitProposalAction
     )
+import Amaru.Treasury.Build.OtcSwap
+    ( runOtcSwapAction
+    )
 import Amaru.Treasury.Build.RegistryInit
     ( runRegistryInitMintAction
     , runRegistryInitReferenceScriptsAction
@@ -138,6 +141,18 @@ runBuildExcept ctx shared sa translated = case sa of
         withExceptT
             (nestActionBuildError BuildActionDisburse)
             ( runDisburseAction
+                ctx
+                translated
+                (tsRationale shared)
+                (tsWalletAddr shared)
+            )
+    SOtcSwap ->
+        withExceptT
+            -- The OTC swap spends treasury UTxOs under a
+            -- Disburse redeemer, so an OTC build failure is
+            -- reported under the on-chain action it ran.
+            (nestActionBuildError BuildActionDisburse)
+            ( runOtcSwapAction
                 ctx
                 translated
                 (tsRationale shared)

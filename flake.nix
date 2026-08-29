@@ -330,7 +330,8 @@
               # aiken build writes plutus.json into the checkout, so
               # copy the read-only flake-input source to a writable dir.
               export SUNDAE_CONTRACTS_DIR="$work/sundae-contracts"
-              cp -r ${inputs.sundae-contracts} "$SUNDAE_CONTRACTS_DIR"
+              cp -r --no-preserve=mode \
+                ${inputs.sundae-contracts} "$SUNDAE_CONTRACTS_DIR"
               chmod -R u+w "$SUNDAE_CONTRACTS_DIR"
 
               export DEVNET_SMOKE_RUN_DIR="$work/run"

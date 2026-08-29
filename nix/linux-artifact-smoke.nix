@@ -184,6 +184,9 @@ pkgs.writeShellApplication {
       test -f "$rpm"
       rpm_dir="$workdir/rpm"
       mkdir -p "$rpm_dir"
+      # Do not pass a runner's inherited setgid bit to cpio's
+      # implicit ./bin, ./nix, and ./nix/store directories.
+      chmod g-s "$rpm_dir"
       (
         cd "$rpm_dir"
         rpm2cpio "$rpm" | cpio -idm >/dev/null

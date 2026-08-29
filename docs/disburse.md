@@ -59,8 +59,17 @@ fixture.
 
 The Cyber Castellum Milestone 1 quickstart uses four IPFS references:
 
+> **Node socket.** Use the `cardano-node-mainnet` container's own mount
+> source, shown below. A dead socket file is still present at the old
+> `/code/cardano-mainnet/ipc/node.socket`, so pointing at it fails with
+> `Connection refused` — which reads like a node outage rather than a
+> wrong path, and silently breaks `tx-validate` and `tx-inspect`.
+> Confirm with
+> `cardano-cli latest query tip --socket-path "$CARDANO_NODE_SOCKET_PATH" --mainnet`
+> before a live run.
+
 ```bash
-export CARDANO_NODE_SOCKET_PATH=/code/cardano-mainnet/ipc/node.socket
+export CARDANO_NODE_SOCKET_PATH=/srv/prod-hot/cardano/mainnet/ipc/node.socket
 RUNDIR=/tmp/attx-cyber-m1
 mkdir -p "$RUNDIR"
 

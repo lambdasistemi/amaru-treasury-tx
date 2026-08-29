@@ -205,6 +205,7 @@ library
     Amaru.Treasury.Devnet.DisburseSubmit
     Amaru.Treasury.Devnet.GovernanceWithdrawalInit
     Amaru.Treasury.Devnet.GovernanceWithdrawalInit.Core
+    Amaru.Treasury.Devnet.OtcSwapSubmit
     Amaru.Treasury.Devnet.RegistryInit
     Amaru.Treasury.Devnet.Runner
     Amaru.Treasury.Devnet.StakeRewardInit

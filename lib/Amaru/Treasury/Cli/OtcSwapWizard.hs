@@ -32,10 +32,14 @@ import Data.Set qualified as Set
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import Data.Word (Word16)
+import Data.Word (Word16, Word64)
 
 import Cardano.Node.Client.Provider (queryUpperBoundSlot)
 import Cardano.Slotting.Slot (SlotNo (..))
+import Control.Exception
+    ( ErrorCall
+    , try
+    )
 import Options.Applicative
     ( Parser
     , ReadM
@@ -66,6 +70,7 @@ import Amaru.Treasury.Cli.Common
     , resolveNetworkName
     , withLogHandle
     )
+import Amaru.Treasury.Cli.DisburseWizard qualified as DisburseWizard
 import Amaru.Treasury.IntentJSON
     ( SAction (..)
     , SomeTreasuryIntent (..)
@@ -75,9 +80,6 @@ import Amaru.Treasury.IntentJSON
 import Amaru.Treasury.LedgerParse
     ( addrFromText
     , txInFromText
-    )
-import Amaru.Treasury.Registry.Verify
-    ( verifyRegistry
     )
 import Amaru.Treasury.Scope
     ( ScopeId
@@ -347,11 +349,18 @@ runOtcSwapWizard g OtcSwapWizardOpts{..} = do
             (otcSwapWizardTracerPrefix <> ": metadata " <> T.pack oswMetadataPath)
         withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $
             \backend -> do
+                -- The disburse-wizard devnet fallback: on devnet the
+                -- scopes NFT is parameterised by the devnet seed, so
+                -- the mainnet-derived scopes policy can never match
+                -- and verifyRegistry reports the scope_owners anchor
+                -- spent. Fall back to metadata-only verification,
+                -- exactly as 'verifyDisburseRegistry' does.
                 verified <-
-                    verifyRegistry
+                    DisburseWizard.verifyDisburseRegistry
                         backend
                         oswMetadataPath
                         (Set.singleton oswScope)
+                        networkName
                 rv <- case verified of
                     Left e ->
                         abortOtc
@@ -443,8 +452,37 @@ runOtcSwapWizard g OtcSwapWizardOpts{..} = do
                                 r <- queryUpperBoundSlot backend choice
                                 pure (fmap unwrapSlot r)
                             , orsPosixMsToSlot = \ms -> do
-                                SlotNo s <- posixMsToSlot backend ms
-                                pure s
+                                converted <-
+                                    try
+                                        ( do
+                                            SlotNo s <-
+                                                posixMsToSlot backend ms
+                                            pure s
+                                        )
+                                case ( converted
+                                        :: Either
+                                            ErrorCall
+                                            Word64
+                                     ) of
+                                    Right s -> pure s
+                                    Left _ -> do
+                                        -- The interpreter horizon
+                                        -- ends before the
+                                        -- expiration wall-clock: the
+                                        -- expiration is beyond the
+                                        -- horizon, so any in-horizon
+                                        -- upper bound satisfies RJ-004
+                                        -- trivially. Mainnet, whose
+                                        -- horizon covers the
+                                        -- expiration, is unaffected.
+                                        traceWith
+                                            tr
+                                            ( otcSwapWizardTracerPrefix
+                                                <> ": expiration beyond "
+                                                <> "interpreter horizon; "
+                                                <> "RJ-004 cannot bind"
+                                            )
+                                        pure (maxBound :: Word64)
                             }
                 traceWith
                     tr

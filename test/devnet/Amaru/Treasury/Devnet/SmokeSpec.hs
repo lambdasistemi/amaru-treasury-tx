@@ -161,7 +161,7 @@ import Codec.Binary.Bech32 qualified as Bech32
 import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async (poll, withAsync)
 import Control.Exception (SomeException, bracket, onException, try)
-import Control.Monad (unless, when)
+import Control.Monad (forM_, unless, when, (>=>))
 import Control.Monad.Operational (singleton)
 import Data.Aeson
     ( FromJSON (..)
@@ -297,6 +297,7 @@ import Amaru.Treasury.Coordinator.Workflow
 import Amaru.Treasury.Devnet.DisburseSubmit qualified as DisburseSubmit
 import Amaru.Treasury.Devnet.GovernanceWithdrawalInit qualified as GovernanceWithdrawalInit
 import Amaru.Treasury.Devnet.MixedUtxoSmoke (mixedUtxoSmoke)
+import Amaru.Treasury.Devnet.OtcSwapSubmit qualified as OtcSwapSubmit
 import Amaru.Treasury.Devnet.RegistryInit
     ( DevnetRegistryAnchors (..)
     , DevnetRegistryInitConfig (..)
@@ -308,10 +309,12 @@ import Amaru.Treasury.Devnet.RegistryInit qualified as RegistryInit
 import Amaru.Treasury.Devnet.Runner
     ( DevnetDisburseSubmitOpts (..)
     , DevnetGovernanceWithdrawalInitOpts (..)
+    , DevnetOtcSwapSubmitOpts (..)
     , DevnetRegistryInitOpts (..)
     , DevnetStakeRewardInitOpts (..)
     , runDevnetDisburseSubmit
     , runDevnetGovernanceWithdrawalInit
+    , runDevnetOtcSwapSubmit
     , runDevnetRegistryInit
     , runDevnetStakeRewardInit
     )
@@ -1370,6 +1373,9 @@ spec =
         it
             "disburse-submit: proves the shipped command runner"
             (runForPhases ["disburse-submit"] disburseSubmitSmoke)
+        it
+            "otc-swap-submit: proves phase-2 acceptance and the positive-leg rejection"
+            (runForPhases ["otc-swap-submit"] otcSwapSubmitSmoke)
 
 runForPhases :: [String] -> IO () -> IO ()
 runForPhases accepted action = do
@@ -1564,6 +1570,162 @@ disburseSubmitSmoke = do
             materializedPath
             (T.pack fundingAddress)
             timing
+
+{- | The otc-swap-submit phase (issue #499, slice F): boot a
+devnet, publish the registry, then run the phase runner — mint
+the parties, build via the wizard, reject the two negatives,
+submit the three-key swap, and assert the post-submission state.
+Structural artifact assertions run after the node stops; the
+phase's own invariants are asserted inside the runner against
+the live chain.
+-}
+otcSwapSubmitSmoke :: IO ()
+otcSwapSubmitSmoke = do
+    runDir <- resolveRunDir
+    prepareRunDir runDir
+
+    gDir <- genesisDir
+    assertGenesisDir gDir
+    timing <- readShelleyTiming gDir
+    sgtNetworkMagic timing `shouldBe` 42
+
+    withCardanoNode gDir $ \socket startMs -> do
+        accepted <- probeNetworkMagic devnetMagic socket
+        accepted `shouldBe` True
+
+        copyNodeLog socket runDir
+        writeTiming runDir startMs socket timing
+        signingKeyFile <- writeGenesisPaymentSigningKey runDir
+        let globals =
+                GlobalOpts
+                    { goSocketPath = Just socket
+                    , goNetworkMagic = devnetMagic
+                    , goNetworkName = Just "devnet"
+                    , goMinimumSeverity = Info
+                    }
+            fundingAddress =
+                T.unpack (renderAddr genesisAddr)
+            registryPath =
+                RegistryInit.registryInitRegistryPath runDir
+        runDevnetRegistryInit
+            globals
+            DevnetRegistryInitOpts
+                { drioFundingAddress = fundingAddress
+                , drioSigningKeyFile = signingKeyFile
+                , drioRunDir = runDir
+                }
+        -- The swap's withdraw-zero entry targets the permissions
+        -- reward account; Conway requires it registered, which is
+        -- exactly what stake-reward-init does before disburse.
+        runDevnetStakeRewardInit
+            globals
+            DevnetStakeRewardInitOpts
+                { dsrioRegistryFile = registryPath
+                , dsrioFundingAddress = fundingAddress
+                , dsrioSigningKeyFile = signingKeyFile
+                , dsrioRunDir = runDir
+                }
+        runDevnetOtcSwapSubmit
+            globals
+            DevnetOtcSwapSubmitOpts
+                { dosioRegistryFile = registryPath
+                , dosioFundingAddress = fundingAddress
+                , dosioSigningKeyFile = signingKeyFile
+                , dosioRunDir = runDir
+                , dosioAdaOutLovelace =
+                    OtcSwapSubmit.defaultAdaOutLovelace
+                , dosioIncomingQuantity =
+                    OtcSwapSubmit.defaultIncomingQuantity
+                }
+    assertOtcSwapSubmitArtifacts runDir
+
+-- | Parsed @summary.json@ of the otc-swap-submit phase.
+data OtcSwapSubmitSummary = OtcSwapSubmitSummary
+    { osssPhase :: !T.Text
+    , osssFundTxId :: !T.Text
+    , osssSwapTxId :: !T.Text
+    , osssTreasuryStb :: !Integer
+    , osssTreasuryTre :: !Integer
+    , osssFeeLovelace :: !Integer
+    , osssCollateralPosted :: !Bool
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON OtcSwapSubmitSummary where
+    parseJSON =
+        withObject "OtcSwapSubmitSummary" $ \o ->
+            OtcSwapSubmitSummary
+                <$> o .: "phase"
+                <*> o .: "fundTxId"
+                <*> o .: "swapTxId"
+                <*> o .: "treasuryIncomingStb"
+                <*> o .: "treasuryPreexistingTre"
+                <*> o .: "feeLovelace"
+                <*> o .: "collateralPosted"
+
+-- | Parsed @evidence.json@: the T-F03..T-F06 markers.
+data OtcSwapSubmitEvidence = OtcSwapSubmitEvidence
+    { osseTf03 :: !T.Text
+    , osseTf06Failures :: !Int
+    , osseTf06 :: !T.Text
+    }
+    deriving stock (Eq, Show)
+
+instance FromJSON OtcSwapSubmitEvidence where
+    parseJSON =
+        withObject "OtcSwapSubmitEvidence" $ \o ->
+            OtcSwapSubmitEvidence
+                <$> o .: "T-F03_two_owner_signing_rejected"
+                <*> o .: "T-F06_positive_leg_evaluation_failures"
+                <*> o .: "T-F06_positive_leg_rejected"
+
+{- | Structural post-run assertions. The invariants themselves were
+asserted on-chain by the runner; here we pin the recorded
+evidence so the artifacts cannot silently rot.
+-}
+assertOtcSwapSubmitArtifacts :: FilePath -> IO ()
+assertOtcSwapSubmitArtifacts runDir = do
+    summary <-
+        eitherDecodeFileStrict @OtcSwapSubmitSummary
+            (OtcSwapSubmit.otcSwapSubmitSummaryPath runDir)
+            >>= \case
+                Left err ->
+                    expectationFailure
+                        ("otc-swap-submit summary: " <> err)
+                        *> error "unreachable"
+                Right ok -> pure ok
+    osssPhase summary `shouldBe` "otc-swap-submit"
+    T.length (osssFundTxId summary) `shouldBe` 64
+    T.length (osssSwapTxId summary) `shouldBe` 64
+    osssTreasuryStb summary
+        `shouldBe` OtcSwapSubmit.defaultIncomingQuantity
+    osssTreasuryTre summary
+        `shouldBe` OtcSwapSubmit.preexistingQuantity
+    osssFeeLovelace summary `shouldSatisfy` (> 0)
+    osssCollateralPosted summary `shouldBe` True
+    evidence <-
+        eitherDecodeFileStrict @OtcSwapSubmitEvidence
+            (OtcSwapSubmit.otcSwapSubmitEvidencePath runDir)
+            >>= \case
+                Left err ->
+                    expectationFailure
+                        ("otc-swap-submit evidence: " <> err)
+                        *> error "unreachable"
+                Right ok -> pure ok
+    osseTf03 evidence `shouldSatisfy` (not . T.null)
+    osseTf06 evidence `shouldSatisfy` (not . T.null)
+    osseTf06Failures evidence `shouldSatisfy` (> 0)
+    forM_
+        [ OtcSwapSubmit.otcSwapSubmitIntentPath runDir
+        , OtcSwapSubmit.otcSwapSubmitTxBodyPath runDir
+        , OtcSwapSubmit.otcSwapSubmitReportJsonPath runDir
+        , OtcSwapSubmit.otcSwapSubmitSignedTxPath runDir
+        , OtcSwapSubmit.otcSwapSubmitTwinPath runDir
+        , OtcSwapSubmit.otcSwapSubmitMetadataPath runDir
+        , OtcSwapSubmit.otcSwapSubmitSubmitLogPath runDir
+        , OtcSwapSubmit.otcSwapSubmitWizardLogPath runDir
+        ]
+        (doesFileExist >=> (`shouldBe` True))
 
 withdrawSmoke :: IO ()
 withdrawSmoke =

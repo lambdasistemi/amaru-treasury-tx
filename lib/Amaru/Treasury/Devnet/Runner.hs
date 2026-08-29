@@ -24,11 +24,13 @@ any node connection is opened.
 module Amaru.Treasury.Devnet.Runner
     ( DevnetDisburseSubmitOpts (..)
     , DevnetGovernanceWithdrawalInitOpts (..)
+    , DevnetOtcSwapSubmitOpts (..)
     , DevnetRegistryInitOpts (..)
     , DevnetStakeRewardInitOpts (..)
     , registryInitCommandLines
     , runDevnetDisburseSubmit
     , runDevnetGovernanceWithdrawalInit
+    , runDevnetOtcSwapSubmit
     , runDevnetRegistryInit
     , runDevnetStakeRewardInit
     ) where
@@ -64,6 +66,7 @@ import Amaru.Treasury.Devnet.GovernanceWithdrawalInit
     ( DevnetGovernanceWithdrawalInitConfig (..)
     )
 import Amaru.Treasury.Devnet.GovernanceWithdrawalInit qualified as GovernanceWithdrawalInit
+import Amaru.Treasury.Devnet.OtcSwapSubmit qualified as OtcSwapSubmit
 import Amaru.Treasury.Devnet.RegistryInit
     ( DevnetRegistryInitConfig (..)
     )
@@ -597,3 +600,69 @@ abort :: String -> IO a
 abort message = do
     hPutStrLn stderr message
     exitFailure
+
+-- | Options for the DevNet @otc-swap-submit@ runner.
+data DevnetOtcSwapSubmitOpts = DevnetOtcSwapSubmitOpts
+    { dosioRegistryFile :: !FilePath
+    , dosioFundingAddress :: !String
+    , dosioSigningKeyFile :: !FilePath
+    , dosioRunDir :: !FilePath
+    , dosioAdaOutLovelace :: !Integer
+    , dosioIncomingQuantity :: !Integer
+    }
+    deriving stock (Eq, Show)
+
+{- | Drive the issue #499 slice-F phase: fund the parties, build via
+the wizard, reject the two-owner signing and the positive-leg
+twin, submit the three-key swap, and assert the resulting state.
+-}
+runDevnetOtcSwapSubmit
+    :: GlobalOpts -> DevnetOtcSwapSubmitOpts -> IO ()
+runDevnetOtcSwapSubmit globals DevnetOtcSwapSubmitOpts{..} = do
+    fundingAddress <-
+        parseFundingAddress "otc-swap-submit" dosioFundingAddress
+    signingKey <-
+        readPaymentSigningKey "otc-swap-submit" dosioSigningKeyFile
+    socket <- resolveSocket (goSocketPath globals)
+    let config =
+            OtcSwapSubmit.DevnetOtcSwapSubmitConfig
+                { OtcSwapSubmit.doscNetworkMagic =
+                    fromIntegral
+                        (unNetworkMagic (goNetworkMagic globals))
+                , OtcSwapSubmit.doscSocketPath = socket
+                , OtcSwapSubmit.doscFundingAddress = fundingAddress
+                , OtcSwapSubmit.doscFundingSignKey = signingKey
+                , OtcSwapSubmit.doscRunDir = dosioRunDir
+                , OtcSwapSubmit.doscRegistryPath = dosioRegistryFile
+                , OtcSwapSubmit.doscAdaOutLovelace =
+                    dosioAdaOutLovelace
+                , OtcSwapSubmit.doscIncomingQuantity =
+                    dosioIncomingQuantity
+                }
+    withLocalNodeClient
+        (goNetworkMagic globals)
+        socket
+        (goMinimumSeverity globals)
+        $ \provider submitter ->
+            OtcSwapSubmit.runDevnetOtcSwapSubmit
+                config
+                provider
+                submitter
+                >>= \case
+                    Left failure -> do
+                        hPutStrLn
+                            stderr
+                            ( "otc-swap-submit: "
+                                <> T.unpack (OtcSwapSubmit.osfCode failure)
+                                <> ": "
+                                <> T.unpack
+                                    (OtcSwapSubmit.osfMessage failure)
+                            )
+                        exitFailure
+                    Right result -> do
+                        mapM_
+                            putStrLn
+                            ( OtcSwapSubmit.otcSwapSubmitCommandLines
+                                dosioRunDir
+                                result
+                            )

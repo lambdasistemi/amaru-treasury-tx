@@ -62,6 +62,7 @@ import Amaru.Treasury.ChainContext
 import Amaru.Treasury.Cli.Common (withLogHandle)
 import Amaru.Treasury.IntentJSON
     ( GovernanceWithdrawalInitMaterializationInputs (..)
+    , OtcSwapInputs (..)
     , RegistryInitMintInputs (..)
     , SAction (..)
     , ScopeJSON (..)
@@ -490,6 +491,12 @@ requiredUtxos (SomeTreasuryIntent sa intent) = case sa of
         registryRef <-
             parseTxIn (gwimiRegistryRefTxIn payload)
         Right (Set.union walletSet (Set.fromList [treasuryRef, registryRef]))
+    SOtcSwap -> do
+        base <- genericRequiredUtxos intent
+        counterpartyTxIn <-
+            parseTxIn
+                (osiCounterpartyTxIn (tiPayload intent))
+        Right (Set.insert counterpartyTxIn base)
     _ -> genericRequiredUtxos intent
   where
     -- Exactly @wjTxIn@. No @wjExtraTxIns@: the five init builders

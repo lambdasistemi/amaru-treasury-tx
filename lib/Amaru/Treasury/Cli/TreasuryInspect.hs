@@ -35,7 +35,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
 import Data.Text.IO qualified as TIO
-import Data.Word (Word16)
+import Data.Word (Word16, Word64)
 import Lens.Micro ((^.))
 import Options.Applicative
     ( Parser
@@ -243,10 +243,9 @@ runTreasuryInspect g InspectOpts{..} = do
         Left e -> abort 3 ("node: " <> T.pack (show e))
 
 {- | Re-usable inspect runner for callers that already have an
-open 'Provider IO' backend. Used by the @amaru-treasury-tx-api@
-binary's HTTP handler (#239) to amortise the N2C-session
-open-cost across many incoming requests instead of paying it
-per query.
+open 'Provider IO' backend. The current tip is supplied
+explicitly so API callers can inject the readiness slot
+while the CLI entry point keeps live 'nowTip'.
 -}
 runInspectFromBackend
     :: TreasuryMetadata
@@ -259,26 +258,35 @@ runInspectFromBackend
     -- override)
     -> Maybe ScopeId
     -- ^ filter; 'Nothing' returns every registered scope
+    -> Word64
+    -- ^ current tip slot; the provider is not the tip
+    -- authority on this path
     -> Provider IO
-    -- ^ live backend
+    -- ^ UTxO / pending-order source
     -> IO InspectReport
-runInspectFromBackend metadata anchor swapAddr scope backend = do
-    slot <- nowTip backend
-    treasuryUtxos <- queryAllTreasuries backend metadata scope
-    pending <- queryPendingOrders backend swapAddr
-    let tip =
-            ChainTip
-                { ctSlot = slot
-                , ctBlockHash = Nothing
-                }
-    pure $
-        buildInspectReport
-            metadata
-            tip
-            anchor
-            treasuryUtxos
-            pending
-            scope
+runInspectFromBackend
+    metadata
+    anchor
+    swapAddr
+    scope
+    tipSlot
+    backend = do
+        treasuryUtxos <-
+            queryAllTreasuries backend metadata scope
+        pending <- queryPendingOrders backend swapAddr
+        let tip =
+                ChainTip
+                    { ctSlot = tipSlot
+                    , ctBlockHash = Nothing
+                    }
+        pure $
+            buildInspectReport
+                metadata
+                tip
+                anchor
+                treasuryUtxos
+                pending
+                scope
 
 -- ----------------------------------------------------
 -- Validation steps 2–4

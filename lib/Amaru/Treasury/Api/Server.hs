@@ -605,7 +605,7 @@ mkServer Handlers{..} =
         :<|> liftIO hRegistry
         :<|> liftIO hScripts
         :<|> pendingH
-        :<|> liftIO hTip
+        :<|> tipH
         :<|> liftIO hParams
         :<|> submitH
         :<|> liftIO hHealth
@@ -632,6 +632,23 @@ mkServer Handlers{..} =
         outcome <- liftIO $ try @NowTipTimeout (hInspectReport scope)
         case outcome of
             Right report -> pure report
+            Left (NowTipTimeout secs) ->
+                throwApiError
+                    err503
+                    ApiError
+                        { aeMessage =
+                            "chain-tip query timed out after "
+                                <> T.pack (show secs)
+                                <> "s; try again shortly"
+                        , aeField = Nothing
+                        }
+
+    -- Map a typed tip timeout to structured HTTP 503.
+    tipH :: Handler TipResponse
+    tipH = do
+        outcome <- liftIO $ try @NowTipTimeout hTip
+        case outcome of
+            Right tip -> pure tip
             Left (NowTipTimeout secs) ->
                 throwApiError
                     err503
@@ -787,22 +804,19 @@ mkApplication = serve dashboardAPI . mkServer
 {- | Build the @\/v1\/treasury-inspect@ handler closure that
 the API container uses post-#242. The handler reads
 treasury / swap-order UTxOs from the embedded indexer (via
-the typed indexer provider) instead of from the production node, and
-sources only the @chain_tip@ field from the existing
-'Provider IO' session (via the unchanged 'nowTip' field —
-FR-005).
+the typed indexer provider) instead of from the production
+node, and takes the report @chain_tip@ slot explicitly
+from the caller (readiness-backed in the API binary).
 
-Implementation strategy: rather than touch the existing
-'runInspectFromBackend' (out of #242 Slice 2's owned set), we
-construct a thin **synthetic** 'Provider' that:
+Implementation strategy: we construct a thin **synthetic**
+'Provider' that:
 
-* delegates 'nowTip' to the caller's real provider,
 * routes address UTxO scans through the in-process indexer
   via 'queryUTxOs',
 * routes exact input lookup through the same indexer via
   'queryUTxOByTxIn',
 * keeps the live provider for non-UTxO ledger data such as
-  tip, protocol parameters, evaluation, rewards, votes, and
+  protocol parameters, evaluation, rewards, votes, and
   governance queries.
 
 The rest of the 'Provider' fields are inherited from the
@@ -813,6 +827,8 @@ mkInspectHandler
     :: Severity
     -> ApiIndexer cf op
     -> Provider IO
+    -> Word64
+    -- ^ readiness-derived tip slot for the report
     -> TreasuryMetadata
     -> DeploymentAnchor
     -> Addr
@@ -823,6 +839,7 @@ mkInspectHandler
     minimumSeverity
     apiIdx
     realProvider
+    tipSlot
     metadata
     anchor
     swapAddr
@@ -833,6 +850,7 @@ mkInspectHandler
                 anchor
                 swapAddr
                 (Just scope)
+                tipSlot
                 (indexerProvider minimumSeverity apiIdx realProvider)
 
 {- | Build the provider used by @POST /v1/build/*@
@@ -859,9 +877,10 @@ withIndexerProvider apiIdx realProvider action =
     action (indexerProvider Info apiIdx realProvider)
 
 {- | Build the synthetic 'Provider' described in
-'mkInspectHandler''s Haddock: real provider for 'nowTip',
-indexer-backed 'queryUTxOs' / 'queryUTxOByTxIn', and live
-provider delegation for non-address ledger data.
+'mkInspectHandler''s Haddock: indexer-backed
+'queryUTxOs' / 'queryUTxOByTxIn', and live provider
+delegation for non-address ledger data. API tip
+acquisition is not this provider's job.
 -}
 indexerProvider
     :: Severity -> ApiIndexer cf op -> Provider IO -> Provider IO

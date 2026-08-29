@@ -23,6 +23,7 @@ module Amaru.Treasury.Api.Readiness
       -- * Queries
     , waitReady
     , checkReady
+    , readTipSlot
     ) where
 
 import Cardano.Node.Client.BlockIndexer.Readiness qualified as BlockReadiness
@@ -192,6 +193,15 @@ checkReady rh = do
         classifyReadiness
             (rhLagThresholdSlots rh)
             r
+
+{- | Non-blocking snapshot of the latest readiness tip
+slot. Does not query a live provider or convert wall
+clock time.
+-}
+readTipSlot :: ReadinessHandle -> IO Word64
+readTipSlot rh = do
+    r <- readTVarIO (rhReadiness rh)
+    pure $ slotNoToWord64 (rTipSlot r)
 
 initialReadiness :: UTCTime -> Readiness
 initialReadiness now =

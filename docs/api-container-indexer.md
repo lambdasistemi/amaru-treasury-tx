@@ -3,10 +3,13 @@
 `amaru-treasury-tx-api` — the container that serves the dashboard
 at <https://amaru-treasury.plutimus.com/> — embeds a chain-sync
 follower in-process. Every `GET /v1/treasury-inspect` is served
-from a local RocksDB store; the production `cardano-node` only
-sees a single cheap `GetChainPoint` per request. The container
-boots blocked until the follower catches up to tip and
-fail-closes with HTTP 503 if it drifts.
+from a local RocksDB store. `/v1/tip` and the inspector
+`chain_tip` read the same readiness tip the lag guard already
+holds; they do not ask the live node to convert wall-clock time
+to a slot. The CLI `treasury-inspect` command is different: it
+still acquires tip through the bounded live-provider `nowTip`.
+The container boots blocked until the follower catches up to tip
+and fail-closes with HTTP 503 if it drifts.
 
 This page is the operator's guide to the new shape — what's new
 on the wire, what the new CLI flags do, how the readiness probe
@@ -24,7 +27,7 @@ state needs to be rebuilt. The engineering-side notes live in
 
 | Before #242 | After #242 |
 |---|---|
-| Every dashboard refresh hit `cardano-node` over N2C for `GetUTxOByAddress` × 4 scopes + swap-order. | All UTxO reads served from an in-process RocksDB indexer. `cardano-node` sees only one `GetChainPoint` (cheap) per request. |
+| Every dashboard refresh hit `cardano-node` over N2C for `GetUTxOByAddress` × 4 scopes + swap-order. | All UTxO reads served from an in-process RocksDB indexer. API tip surfaces (`/v1/tip`, inspector `chain_tip`) read the embedded readiness snapshot, not a live `posixMsToSlot` conversion. |
 | Server-side 30 s TTL `IORef` cache hid the per-request cost but could serve stale data after a chain rollback. | No server-side cache. Indexer is rollback-aware via `utxo-indexer-lib`. |
 | Container had no persistent state. | Container needs a persistent volume for the indexer RocksDB. |
 | Boot was fast; first request paid full N2C scan cost. | Cold boot waits for the indexer to catch up. Subsequent requests are microsecond-class. |
@@ -80,8 +83,12 @@ indexer code path.
 ### Ready — HTTP 200
 
 Steady-state. Each request to `/v1/treasury-inspect` takes
-microseconds (a RocksDB prefix scan per scope address + one
-`GetChainPoint` over the N2C socket).
+microseconds (a RocksDB prefix scan per scope address). The
+report's `chain_tip` and `GET /v1/tip` are the readiness
+`tipSlot` already sampled for `/v1/health`. The lag guard
+remains the freshness authority: if the follower drifts past
+`--indexer-lag-threshold-slots`, those routes still return the
+structured `indexer_lagging` HTTP 503 instead of a stale tip.
 
 ### Lagging — HTTP 503 (fail-closed)
 

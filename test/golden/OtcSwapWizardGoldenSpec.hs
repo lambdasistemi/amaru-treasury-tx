@@ -109,19 +109,28 @@ spec = describe "otc-swap-wizard golden (T-D08)" $ do
             B16.encode bytes `shouldBe` B16.encode expected
 
     it
-        "control: encoding twice is byte-identical (INV-10 restated)"
+        "control: invoking the encoder twice yields identical bytes \
+        \(INV-10 restated; T-D09 repair)"
         $ do
             let intent =
                     either
                         (error "golden translation")
                         id
                         (otcSwapToTreasuryIntent goldenEnv goldenAnswers)
-                encode =
+                -- Two SEPARATE invocations of the encoder, the
+                -- slice-C T-C07 shape (encodeStabilityProp): one
+                -- binding compared to itself cannot fail and
+                -- asserts nothing. The two-binder shape was watched
+                -- failing against a non-deterministic encoder
+                -- before this shipped (ticket STATUS, T-D09).
+                encodeIntent i =
                     BSL.toStrict
                         ( encodeSomeTreasuryIntent
-                            (SomeTreasuryIntent SOtcSwap intent)
+                            (SomeTreasuryIntent SOtcSwap i)
                         )
-            encode `shouldBe` encode
+                firstRun = encodeIntent intent
+                secondRun = encodeIntent intent
+            firstRun `shouldBe` secondRun
 
     it
         "control: a mutated stated price is refused, not encoded (RJ-006)"

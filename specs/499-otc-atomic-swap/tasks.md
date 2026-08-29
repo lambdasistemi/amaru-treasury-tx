@@ -80,17 +80,17 @@ correct against its mandate as written. Not a defect; a forward slice.
 
 ## Slice C — intent JSON, schema, translation
 
-- [ ] **T-C01** `OtcSwap` on `Action`, its singleton, and the type-family
+- [x] **T-C01** `OtcSwap` on `Action`, its singleton, and the type-family
       instances.
-- [ ] **T-C02** `OtcSwapInputs` with codec; quantity stored positive.
-- [ ] **T-C03** `translateOtcSwap`.
-- [ ] **T-C04** `otcSwapSchema`; regenerate
+- [x] **T-C02** `OtcSwapInputs` with codec; quantity stored positive.
+- [x] **T-C03** `translateOtcSwap`.
+- [x] **T-C04** `otcSwapSchema`; regenerate
       `docs/assets/intent-schema.json` so `just schema-check` passes.
-- [ ] **T-C05** Assert `disburseSchema` bytes are unchanged (FR-010).
-- [ ] **T-C06** Round-trip property: encode/decode is identity.
-- [ ] **T-C07** Assert INV-10 determinism: same intent, same bytes,
+- [x] **T-C05** Assert `disburseSchema` bytes are unchanged (FR-010).
+- [x] **T-C06** Round-trip property: encode/decode is identity.
+- [x] **T-C07** Assert INV-10 determinism: same intent, same bytes,
       twice.
-- [ ] **T-C08** Reject an unknown action and a malformed asset id.
+- [x] **T-C08** Reject an unknown action and a malformed asset id.
 
 ## Slice D — wizard and CLI
 

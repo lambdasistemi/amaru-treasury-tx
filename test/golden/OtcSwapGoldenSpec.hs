@@ -6,12 +6,35 @@ License     : Apache-2.0
 
 Rebuilds the body of mainnet transaction
 @9ed505b48df617716423f58687283ee5e130684d8b3b6c9f2ed03b473c0154f1@
-(block 13868016, epoch 652) from a frozen 'ChainContext' and asserts
-__byte equality__ with the accepted on-chain body
-(@test\/fixtures\/otc-swap\/reference-body.cbor@). That transaction is
-the load-bearing oracle of this slice: its spend redeemer was accepted
-by the treasury validator, so a builder reproducing its body bytes
-agrees with a body the chain has already ruled on.
+(block 13868016, epoch 652) from a frozen 'ChainContext'.
+
+== Completeness rule (T-B13) ==
+
+The field-equality golden covers __every builder-controlled body
+field on the reference that is not an acknowledged encoding
+artifact__. Asserted: inputs, reference inputs, collateral inputs,
+required signers, validity interval, withdrawals, output identity —
+(address, datum, value) for the counterparty and treasury outputs —
+and @scriptIntegrityHash@ (key 11, the only body field that records
+the redeemer: without it, a builder using an ADA-only @Disburse@, a
+dropped @negate@, or @emptyListRedeemer@ would still pass; slice A
+pins the redeemer as a function, this proves the program calls it),
+plus auxdata presence.
+
+Acknowledged encoding artifacts, excluded __by name__:
+
+1. body map-key __order__ — the counterparty emitter writes keys
+   ascending; the ledger encoder writes them in field order
+   (@0,13,18,1,2,…@);
+2. input __set order__ — the counterparty emitter writes the input
+   set in insertion order (@b98a,cde5,c17a@); the ledger's sorted
+   @Set@ cannot represent that;
+3. auxdata __wrapper__ — the counterparty emitter's aux CBOR is 4
+   bytes shorter than the ledger's encoding of the identical metadata
+   tree, so the aux __hash__ (key 7) differs while presence is
+   asserted, and the __fee__ (key 2) plus fee-scaled __collateral
+   return__ (16) and __totalCollateral__ (17) differ by exactly
+   176 lovelace (4 bytes × 44 lovelace/byte).
 
 The typed 'OtcSwapIntent' is constructed directly in Haskell — the
 intent wire format is slice C and does not exist yet. This golden does
@@ -36,6 +59,7 @@ against @journal\/2026\/metadata.json@):
 module OtcSwapGoldenSpec (spec) where
 
 import Control.Exception (try)
+import Control.Monad (forM_, void)
 import Control.Monad.Trans.Except (runExceptT)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
@@ -57,7 +81,6 @@ import Cardano.Ledger.Address
     , Addr (..)
     , decodeAddr
     , deserialiseAccountAddress
-    , serialiseAddr
     )
 import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.Api.Tx.Body qualified as L
@@ -76,15 +99,9 @@ import Cardano.Ledger.Binary
     )
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
-import Cardano.Ledger.Core (TopTx, TxBody, auxDataTxL, bodyTxL)
-import Cardano.Ledger.Credential
-    ( Credential (..)
-    , PaymentCredential (..)
-    , StakeReference (..)
-    )
+import Cardano.Ledger.Core (TopTx, TxBody, bodyTxL)
 import Cardano.Ledger.Hashes
-    ( Guard
-    , KeyHash (..)
+    ( KeyHash (..)
     , ScriptHash (..)
     , unsafeMakeSafeHash
     )
@@ -97,7 +114,21 @@ import Cardano.Ledger.Mary.Value
     )
 import Cardano.Ledger.Metadata (Metadatum (..))
 import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
-import Cardano.Tx.Ledger (ConwayTx)
+import Cardano.Tx.Build
+    ( InterpretIO (..)
+    , build
+    , collateral
+    , mkPParamsBound
+    , payTo
+    , payTo'
+    , reference
+    , requireSignature
+    , spend
+    , spendScript
+    , validTo
+    , withdrawScript
+    )
+import Cardano.Tx.Build qualified as TxBuild
 import Lens.Micro ((^.))
 import Test.Hspec
     ( Spec
@@ -120,6 +151,13 @@ import Amaru.Treasury.ChainContext.Fixture
     , readSwapFixture
     )
 import Amaru.Treasury.LedgerParse (addrFromText)
+import Amaru.Treasury.Redeemer
+    ( RawPlutusData (..)
+    , disburseAdaRedeemer
+    , emptyListRedeemer
+    , otcSwapRedeemer
+    , reorganizeRedeemer
+    )
 import Amaru.Treasury.Tx.Disburse (DisburseIntentFields (..))
 import Amaru.Treasury.Tx.OtcSwap
     ( OtcSwapIntent (..)
@@ -408,6 +446,107 @@ operatorIntent =
 -- Helpers
 -- ------------------------------------------------------------------
 
+{- | The inline unit datum the treasury continuing output carries
+(@Constr 0 []@, serialised @d87980@; inbox-05 ruling).
+-}
+unitDatum :: RawPlutusData
+unitDatum = RawPlutusData reorganizeRedeemer -- Constr 0 [] = d87980
+
+{- | Build a body through the same frozen context and the same input,
+output, reference, withdrawal, signer and validity shape as the real
+program, but with a caller-chosen spend redeemer and an optional
+inline unit datum on the treasury output. This is the negative-control
+builder: it lets T-B12 call the builder with one field broken (an
+ADA-only redeemer; a missing datum) and watch the new assertions fail.
+-}
+variantBody :: RawPlutusData -> Bool -> IO (TxBody TopTx ConwayEra)
+variantBody spendRedeemer withDatum = do
+    fixture <- readSwapFixture fixtureDir
+    let pp = sfPParams fixture
+        utxos = sfUtxos fixture
+        evaluator _tx = pure (Map.map Right (sfExUnits fixture))
+        inputUtxos =
+            [ (i, utxos Map.! i)
+            | i <-
+                [ referenceFuelUtxo
+                , referenceCounterpartyUtxo
+                , referenceTreasuryTxIn
+                ]
+            ]
+        refUtxos =
+            [ (i, utxos Map.! i)
+            | i <-
+                [ scopesReference
+                , permissionsReference
+                , treasuryReference
+                , registryReference
+                ]
+            ]
+        program = do
+            _ <- spend referenceFuelUtxo
+            collateral referenceFuelUtxo
+            _ <- spend referenceCounterpartyUtxo
+            void (spendScript referenceTreasuryTxIn spendRedeemer)
+            reference scopesReference
+            reference permissionsReference
+            reference treasuryReference
+            reference registryReference
+            withdrawScript
+                permissionsAccount
+                (Coin 0)
+                (RawPlutusData emptyListRedeemer)
+            _ <-
+                payTo
+                    referenceCounterpartyAddress
+                    ( MaryValue
+                        referenceAdaOut
+                        (MultiAsset Map.empty)
+                    )
+            treasuryValue <-
+                if withDatum
+                    then
+                        payTo'
+                            treasuryAddress
+                            ( MaryValue
+                                referenceTreasuryLeftover
+                                ( usdmMultiAsset
+                                    referenceIncomingQuantity
+                                )
+                            )
+                            unitDatum
+                    else
+                        payTo
+                            treasuryAddress
+                            ( MaryValue
+                                referenceTreasuryLeftover
+                                ( usdmMultiAsset
+                                    referenceIncomingQuantity
+                                )
+                            )
+            _ <- pure treasuryValue
+            forM_ (difSigners referenceFields) requireSignature
+            validTo referenceUpperBound
+        noCtxIO :: InterpretIO q
+        noCtxIO =
+            InterpretIO $
+                const (error "variant build: unexpected context request")
+    result <-
+        build
+            (mkPParamsBound pp)
+            noCtxIO
+            evaluator
+            inputUtxos
+            refUtxos
+            counterpartyWalletAddress
+            program
+    case result of
+        Left e ->
+            fail
+                ( "variant build failed: "
+                    <> show (e :: TxBuild.BuildError ())
+                )
+        Right tx -> pure (tx ^. bodyTxL)
+
 mustHex :: Text -> ByteString
 mustHex t =
     case B16.decode (TE.encodeUtf8 (T.strip t)) of
@@ -577,6 +716,30 @@ treasuryConservationErrors utxos treasuryIns body treasuryAddr adaOut (ipid, ias
     valueMA (MaryValue _ ma) = ma
     unMA (MultiAsset m) = m
 
+{- | INV-11 helper: output identity is (address, datum, value).
+Returns human-readable mismatches; @[]@ means identical.
+-}
+outputIdentityErrors
+    :: O.TxOut ConwayEra
+    -- ^ built output
+    -> O.TxOut ConwayEra
+    -- ^ expected output
+    -> [String]
+outputIdentityErrors got want =
+    [ "address: got "
+        <> show (gotAddr, gotDatum, gotValue)
+        <> " want "
+        <> show (wantAddr, wantDatum, wantValue)
+    | (gotAddr, gotDatum, gotValue) /= (wantAddr, wantDatum, wantValue)
+    ]
+  where
+    gotAddr = got ^. O.addrTxOutL
+    wantAddr = want ^. O.addrTxOutL
+    gotDatum = got ^. O.datumTxOutL
+    wantDatum = want ^. O.datumTxOutL
+    gotValue = got ^. O.valueTxOutL
+    wantValue = want ^. O.valueTxOutL
+
 {- | INV-7: the signer roster is exactly the two scope owners and
 never contains the counterparty's payment credential.
 -}
@@ -682,7 +845,15 @@ spec =
                                     cp ^. O.valueTxOutL `shouldBe` ecp ^. O.valueTxOutL
                                     trs ^. O.coinTxOutL `shouldBe` referenceTreasuryLeftover
                                     trs ^. O.valueTxOutL `shouldBe` etrs ^. O.valueTxOutL
+                                    -- T-B11: output identity is (address,
+                                    -- datum, value), not just coin/value.
+                                    outputIdentityErrors cp ecp `shouldBe` []
+                                    outputIdentityErrors trs etrs `shouldBe` []
                                 _ -> expectationFailure "missing outputs"
+                            -- T-B10: scriptIntegrityHash (key 11) is the only
+                            -- body field recording the redeemer — assert it:
+                            body ^. L.scriptIntegrityHashTxBodyL
+                                `shouldBe` expected ^. L.scriptIntegrityHashTxBodyL
                             -- Auxdata present (label 1694); its raw CBOR hash
                             -- differs only by the counterparty emitter's wrapper.
                             body ^. L.auxDataHashTxBodyL
@@ -858,6 +1029,69 @@ spec =
                     counterpartyInputLovelace
                     operatorAdaOut
                     `shouldNotBe` []
+
+            it
+                "T-B12 negative control: an ADA-only Disburse redeemer changes scriptIntegrityHash (T-B10 can fail)"
+                $ do
+                    hacked <-
+                        variantBody
+                            (RawPlutusData (disburseAdaRedeemer 47619047))
+                            True
+                    expected <- expectedBody
+                    let referenceHash =
+                            expected ^. L.scriptIntegrityHashTxBodyL
+                    hacked ^. L.scriptIntegrityHashTxBodyL
+                        `shouldNotBe` referenceHash
+
+            it
+                "T-B12 negative control: a wrong counterparty address fails the output-identity assertion (T-B11 can fail)"
+                $ do
+                    fixture <- readSwapFixture fixtureDir
+                    let hijacked =
+                            OtcSwapIntent
+                                referenceFields
+                                referencePayload
+                                    { ospCounterpartyAddress = treasuryAddress
+                                    }
+                    r <-
+                        buildBody
+                            (otcContext fixture)
+                            counterpartyWalletAddress
+                            hijacked
+                    expected <- expectedBody
+                    case r of
+                        Left e -> expectationFailure ("build failed: " <> e)
+                        Right body -> do
+                            let outs = seqToList (body ^. L.outputsTxBodyL)
+                                expOuts = seqToList (expected ^. L.outputsTxBodyL)
+                            case (outs, expOuts) of
+                                (cp : _, ecp : _) ->
+                                    outputIdentityErrors cp ecp
+                                        `shouldNotBe` []
+                                _ -> expectationFailure "missing outputs"
+
+            it
+                "T-B12 negative control: a missing inline unit datum fails the output-identity assertion (T-B11 can fail)"
+                $ do
+                    datumless <-
+                        variantBody
+                            ( RawPlutusData
+                                ( otcSwapRedeemer
+                                    usdmPolicyBytes
+                                    usdmAssetBytes
+                                    referenceIncomingQuantity
+                                    (unCoin referenceAdaOut)
+                                )
+                            )
+                            False
+                    expected <- expectedBody
+                    let outs = seqToList (datumless ^. L.outputsTxBodyL)
+                        expOuts = seqToList (expected ^. L.outputsTxBodyL)
+                    case (outs, expOuts) of
+                        (_ : trs : _, _ : etrs : _) ->
+                            outputIdentityErrors trs etrs
+                                `shouldNotBe` []
+                        _ -> expectationFailure "missing outputs"
   where
     operatorChangeAddress =
         decodeAddrBytes operatorAddressBytes

@@ -1,0 +1,54 @@
+{
+    "action": "otc-swap",
+    "network": "mainnet",
+    "otc-swap": {
+        "adaOutLovelace": 47619047,
+        "counterpartyAddress": "addr1qy8ac7qqy0vtulyl7wntmsxc6wex80gvcyjy33qffrhm7sh927ysx5sftuw0dlft05dz3c7revpf7jx0xnlcjz3g69mq4afdhv",
+        "counterpartyTxIn": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb#1",
+        "fuelTxIn": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff#1",
+        "incomingAsset": "0014df105553444d",
+        "incomingPolicy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+        "incomingQuantity": 10000000,
+        "statedPriceUsdPerAda": "0.21"
+    },
+    "rationale": {
+        "description": "Acquire 10 USDM for the network compliance treasury",
+        "destinationLabel": "Network Compliance treasury",
+        "event": "otc-swap",
+        "justification": "OTC window at 0.21 USD per ADA; better than the open venue",
+        "label": "OTC swap",
+        "references": []
+    },
+    "schema": 1,
+    "scope": {
+        "id": "network_compliance",
+        "permissionsDeployedAt": "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#0",
+        "permissionsRewardAccount": "03ee9cf951e89fb82c47edbff562ee90be17de85b2c24b451c7e8e39",
+        "registryDeployedAt": "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#0",
+        "registryPolicyId": "1e1ee91b8e2bddc9d583d92fd1ba5ea47b8a3e62c1eacb0ec799b99b",
+        "scopesDeployedAt": "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0",
+        "treasuryAddress": "addr1x8ndhlcfy30t38z0tql64fpg8ply93r37xrgvdagfpsz5nhxm0lsjfz7hzwy7kpl42jzswr7gtz8ruvxscm6sjrq9f8qruq0ae",
+        "treasuryDeployedAt": "87ee53271fb41021efa13c2dbe2998c18ead07d32a6ab6dda184853ed7e39aae#0",
+        "treasuryLeftoverLovelace": 2500000,
+        "treasuryLeftoverOtherAssets": {
+            "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad": {
+                "0014df105553444d": 100
+            }
+        },
+        "treasuryLeftoverUsdm": 100,
+        "treasuryScriptHash": "5fbb3e5295c211c7595ddd23db2e0a0833131e0681cc7ea800f85d34",
+        "treasuryUtxos": [
+            "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc#0"
+        ]
+    },
+    "signers": [
+        "33333333333333333333333333333333333333333333333333333333",
+        "22222222222222222222222222222222222222222222222222222222"
+    ],
+    "validityUpperBoundSlot": 42000000,
+    "wallet": {
+        "address": "addr1q802wxt6cg6aw0nl0vdzfxavu65rxu3yzhvgayw7chfxymduzkt66uw9t5kspx5jwjecx80dz4g33htknafhdhkvzd5st4f9xu",
+        "extraTxIns": [],
+        "txIn": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff#1"
+    }
+}

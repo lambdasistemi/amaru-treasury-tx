@@ -44,6 +44,9 @@ import Amaru.Treasury.Cli.History
     ( runHistory
     , runTxDetail
     )
+import Amaru.Treasury.Cli.OtcSwapWizard
+    ( runOtcSwapWizard
+    )
 import Amaru.Treasury.Cli.RegistryInitWizard
     ( runRegistryInitWizard
     )
@@ -116,6 +119,9 @@ main = withUtf8 . withUpdateCheckMain $ do
         CmdDisburseWizard dwo ->
             withSocket g $ \socket ->
                 runDisburseWizard g{goSocketPath = Just socket} dwo
+        CmdOtcSwapWizard owo ->
+            withSocket g $ \socket ->
+                runOtcSwapWizard g{goSocketPath = Just socket} owo
         CmdWithdrawWizard wo ->
             withSocket g $ \socket ->
                 runWithdrawWizard g{goSocketPath = Just socket} wo

@@ -173,6 +173,7 @@ library
     Amaru.Treasury.Cli.Envelope
     Amaru.Treasury.Cli.GovernanceWithdrawalInitWizard
     Amaru.Treasury.Cli.History
+    Amaru.Treasury.Cli.OtcSwapWizard
     Amaru.Treasury.Cli.Passphrase
     Amaru.Treasury.Cli.RegistryInitWizard
     Amaru.Treasury.Cli.ReorganizeWizard
@@ -260,6 +261,7 @@ library
     Amaru.Treasury.Tx.Envelope
     Amaru.Treasury.Tx.GovernanceWithdrawalInitWizard
     Amaru.Treasury.Tx.OtcSwap
+    Amaru.Treasury.Tx.OtcSwapWizard
     Amaru.Treasury.Tx.RegistryInitWizard
     Amaru.Treasury.Tx.Reorganize
     Amaru.Treasury.Tx.ReorganizeWizard
@@ -571,6 +573,7 @@ test-suite unit-tests
     Amaru.Treasury.Cli.GovernanceWithdrawalInitWizardInputControlSpec
     Amaru.Treasury.Cli.GovernanceWithdrawalInitWizardParserSpec
     Amaru.Treasury.Cli.HistorySpec
+    Amaru.Treasury.Cli.OtcSwapWizardParserSpec
     Amaru.Treasury.Cli.ParserSpec
     Amaru.Treasury.Cli.RegistryInitWizardInputControlSpec
     Amaru.Treasury.Cli.RegistryInitWizardModeSplitSpec
@@ -639,6 +642,7 @@ test-suite unit-tests
     Amaru.Treasury.Tx.GovernanceWithdrawalInitWizardNetworkGuardSpec
     Amaru.Treasury.Tx.GovernanceWithdrawalInitWizardPropertyEnforcementSpec
     Amaru.Treasury.Tx.GovernanceWithdrawalInitWizardSpec
+    Amaru.Treasury.Tx.OtcSwapWizardSpec
     Amaru.Treasury.Tx.RegistryInitWizardBootstrapSpec
     Amaru.Treasury.Tx.RegistryInitWizardNetworkGuardSpec
     Amaru.Treasury.Tx.RegistryInitWizardNoSimulationSpec
@@ -705,6 +709,7 @@ test-suite unit-tests
     , http-types
     , jsonschema
     , microlens
+    , mtl
     , opt-env-conf
     , optparse-applicative
     , ouroboros-network:api
@@ -743,6 +748,7 @@ test-suite golden-tests
     GovernanceWithdrawalInitIntentSpec
     GraphEffectGoldenSpec
     OtcSwapGoldenSpec
+    OtcSwapWizardGoldenSpec
     PlaceholderSpec
     RegistryInitIntentSpec
     RegistryWalkGoldenSpec

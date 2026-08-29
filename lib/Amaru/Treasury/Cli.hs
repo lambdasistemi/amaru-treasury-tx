@@ -90,6 +90,10 @@ import Amaru.Treasury.Cli.History
     , historyOptsP
     , txDetailOptsP
     )
+import Amaru.Treasury.Cli.OtcSwapWizard
+    ( OtcSwapWizardOpts
+    , otcSwapWizardOptsP
+    )
 import Amaru.Treasury.Cli.RegistryInitWizard
     ( RegistryInitWizardOpts
     , registryInitWizardOptsP
@@ -157,6 +161,7 @@ data Cmd
     | CmdSwapCancel SwapCancelOpts
     | CmdSwapRerate SwapRerateOpts
     | CmdDisburseWizard DisburseWizardInput
+    | CmdOtcSwapWizard OtcSwapWizardOpts
     | CmdWithdrawWizard WithdrawOpts
     | CmdRegistryInitWizard RegistryInitWizardOpts
     | CmdStakeRewardInitWizard StakeRewardInitWizardOpts
@@ -245,6 +250,14 @@ cmdP =
                     (CmdDisburseWizard <$> disburseWizardInputP)
                     ( progDesc
                         "Produce a disburse intent.json from registry and treasury UTxO state (--scope contingency --to <scope>:<ada> for contingency disburse)"
+                    )
+                )
+            <> command
+                "otc-swap-wizard"
+                ( info
+                    (CmdOtcSwapWizard <$> otcSwapWizardOptsP)
+                    ( progDesc
+                        "Produce an otc-swap intent.json: a named asset into the treasury, ADA out to a counterparty, at a stated price"
                     )
                 )
             <> command

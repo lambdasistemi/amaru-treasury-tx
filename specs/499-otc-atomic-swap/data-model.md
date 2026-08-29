@@ -5,7 +5,7 @@
 | Field | Type | Required | Validation |
 | --- | --- | --- | --- |
 | `counterpartyAddress` | bech32 address | yes | parses; network matches the intent's network |
-| `counterpartyTxIns` | array of `TxHash#Ix` | yes | non-empty; each resolvable and at `counterpartyAddress`; **combined** holding ≥ `incomingQuantity` (FR-008a) |
+| `counterpartyTxIn`&nbsp;→&nbsp;`counterpartyTxIns` | see below | yes | staged: singular until slice B2, then an array |
 | `adaOutLovelace` | integer | yes | `> 0` |
 | `incomingPolicy` | hex, 28 bytes | yes | `hex28` |
 | `incomingAsset` | hex asset name | yes | `assetNameHex`; may be empty only if `incomingPolicy` is empty, which is rejected here |
@@ -16,6 +16,35 @@
 `incomingQuantity` is stored **positive**. The sign is a property of the
 redeemer encoding, not of the operator's intent. This keeps the JSON
 schema free of negative-number rules and keeps the archive readable.
+
+### The counterparty field is staged across two slices
+
+Target shape (FR-008a): `counterpartyTxIns`, a **non-empty array** —
+each outref resolvable and at `counterpartyAddress`, with a
+**combined** holding ≥ `incomingQuantity`. A fragmented balance is
+ordinary and one UTxO need not cover the trade.
+
+Shipped shape until slice B2 lands: `counterpartyTxIn`, a **single**
+`TxHash#Ix`, mirroring `OtcSwapPayload`'s `ospCounterpartyUtxo :: TxIn`.
+
+This is deliberate staging, not drift. The address-targeting ruling
+arrived after slice B was dispatched, so slice B built the singular
+payload correctly against its mandate; slice C mirrors that payload
+rather than inventing a wire shape the builder cannot consume. **B2
+changes the payload, the JSON, and the golden together**, which keeps
+each commit bisect-safe.
+
+An auditor should read a singular field here as conforming, not as a
+defect, until B2 is merged.
+
+### Entry units versus recorded units
+
+FR-007a/FR-007b govern what an operator **types** — `--incoming 10
+--incoming-asset usdm`, `--ada-out 47.619047`. This wire record stores
+the **resolved** values: policy and asset as hex, amounts in base
+units. The CLI resolves and converts; the intent is a machine record
+and an audit artifact, so it stays unambiguous. The two are not in
+conflict.
 
 The scope block, wallet block, signers, validity bound and rationale
 reuse the existing shared shapes unchanged.

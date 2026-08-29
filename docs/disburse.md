@@ -127,6 +127,44 @@ with downstream treasury metadata readers.
 }
 ```
 
+## Rationale overrides
+
+The rationale block written into the label-1694 metadata has two
+fields the wizard fills in for you, and both can be overridden:
+
+| Flag | Default | Use it when |
+| --- | --- | --- |
+| `--event` | `disburse` | the transaction belongs to a different event class in your treasury records |
+| `--label` | `Disburse <unit>` | the default label is not what a co-signer or auditor should read |
+
+Both are accepted by `disburse-wizard`, `swap-wizard` and
+`withdraw-wizard`. They change only the recorded rationale — never the
+transaction's value flow, signers, or validity.
+
+```bash
+  --event rebalance \
+  --label "Treasury rebalance - USDM leg" \
+```
+
+## Pinning treasury inputs
+
+By default the wizard selects treasury UTxOs itself, largest-first.
+`--treasury-txin` (alias `--treasury-utxo`) restricts that selection to
+outrefs you name, and is **repeatable**:
+
+```bash
+  --treasury-txin 57faba5b7d213649b118052e5ac4f48d9730f6d1a9f71af1b46d15d09b6c4519#8 \
+  --treasury-txin 4f64f292d2b8d74f9bade3bdcafb92302b79b6589208147c995e55057b7696b4#0 \
+```
+
+Use it when a specific UTxO must be consumed — to retire an awkward
+small output, or to keep a particular UTxO untouched for a transaction
+already in flight. If the named set cannot fund the disbursement the
+build fails rather than quietly widening the selection.
+
+This differs from `--exclude-utxo`, which removes candidates from the
+default pool; see [wizard input control](wizard-input-control.md).
+
 ## What the wizard resolves
 
 The wizard verifies the local `metadata.json` hint against the

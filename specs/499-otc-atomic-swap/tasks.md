@@ -94,29 +94,34 @@ correct against its mandate as written. Not a defect; a forward slice.
 
 ## Slice D — wizard and CLI
 
-- [ ] **T-D01** `selectCounterpartyUtxos` — select from the counterparty
+- [x] **T-D01** `selectCounterpartyUtxos` — select from the counterparty
       ADDRESS, returning one or more UTxOs whose combined holding meets
       the incoming quantity. Prefer fewest inputs, then smallest total.
       `--counterparty-txin` is an optional repeatable restrict, mirroring
       `disburse-wizard --treasury-txin`; a shortfall within a restricted
       set is an error, not a widening (FR-008a).
-- [ ] **T-D02** `selectFuelUtxo`, pure-ADA only (INV-6).
-- [ ] **T-D03** `selectTreasuryForAdaOut`, preserving all native assets
+- [x] **T-D02** `selectFuelUtxo`, pure-ADA only (INV-6).
+- [x] **T-D03** `selectTreasuryForAdaOut`, preserving all native assets
       (INV-3).
-- [ ] **T-D04a** Enforce RJ-001 for the incoming leg: reject
+- [x] **T-D04a** Enforce RJ-001 for the incoming leg: reject
       `incomingQuantity <= 0` in the wizard. Ratified from auditor
       candidate invariant CINV-nonpositive-qty (slice A, submission 1):
       `negate 0 = 0` is not strictly negative and a negative input
       double-flips, so INV-1 depends on this guard existing here. The
       encoder stays total by design.
-- [ ] **T-D04** `checkStatedPrice` with a declared tolerance (INV-9).
-- [ ] **T-D05** `otcSwapToTreasuryIntent`.
-- [ ] **T-D06** `otc-swap-wizard` parser and runner; register the
+- [x] **T-D04** `checkStatedPrice` with a declared tolerance (INV-9).
+- [x] **T-D05** `otcSwapToTreasuryIntent`.
+- [x] **T-D06** `otc-swap-wizard` parser and runner; register the
       subcommand.
-- [ ] **T-D07** Rejection tests for RJ-001..RJ-006, each with a
+- [x] **T-D07** Rejection tests for RJ-001..RJ-006, each with a
       negative control.
-- [ ] **T-D08** Wizard golden: fixed env plus answers produce a fixed
+- [x] **T-D08** Wizard golden: fixed env plus answers produce a fixed
       intent.
+- [x] **T-D09** Determinism control invokes the encoder TWICE and
+      compares the two results. From audit finding T-D08: a single
+      binding compared to itself cannot fail.
+- [x] **T-D10** Sweep the golden spec for the same `x `shouldBe` x`
+      shape; state explicitly if none remain.
 
 ## Slice E — reporting, signing, docs
 

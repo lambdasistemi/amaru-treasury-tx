@@ -152,24 +152,24 @@ node, deploys the contracts via `registry-init`, and has a
 already mints a native asset onto treasury UTxOs. This slice composes
 those two capabilities.
 
-- [ ] **T-F01** Mint a test stablecoin on devnet and fund a
+- [x] **T-F01** Mint a test stablecoin on devnet and fund a
       counterparty wallet with it, reusing the `MixedUtxoSmoke` mint
       path.
-- [ ] **T-F02** Add an `otc-swap-submit` phase to
+- [x] **T-F02** Add an `otc-swap-submit` phase to
       `scripts/smoke/devnet-local`, modelled on `disburse-submit`.
-- [ ] **T-F03** Build, sign with all three keys, and submit the swap on
+- [x] **T-F03** Build, sign with all three keys, and submit the swap on
       devnet.
-- [ ] **T-F04** Assert post-submission UTxO state: the treasury holds
+- [x] **T-F04** Assert post-submission UTxO state: the treasury holds
       the incoming asset, the counterparty holds the ADA, and the
       treasury's pre-existing assets are intact (INV-2, INV-3, INV-4).
-- [ ] **T-F05** Assert the operator paid the fee and posted the
+- [x] **T-F05** Assert the operator paid the fee and posted the
       collateral, and that the counterparty's lovelace delta is exactly
       `+adaOut` (INV-5, INV-6).
-- [ ] **T-F06** Negative control: the same swap with a **positive**
+- [x] **T-F06** Negative control: the same swap with a **positive**
       incoming leg must be rejected by the validator. Without this,
       T-F03 passing proves only that some transaction submits, not that
       the sign convention is what makes it valid.
-- [ ] **T-F07** Record the devnet txids and the phase output as
+- [x] **T-F07** Record the devnet txids and the phase output as
       evidence in the PR.
 
 ## Cross-cutting

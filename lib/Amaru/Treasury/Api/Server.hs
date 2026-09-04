@@ -59,8 +59,15 @@ import Cardano.Node.Client.Provider
     )
 import Cardano.Node.Client.Provider qualified as Provider
 import Cardano.Node.Client.UTxOIndexer.Provider qualified as IndexedProvider
-import Control.Exception (try)
-import Control.Monad ((>=>))
+import Control.Concurrent (threadDelay)
+import Control.Concurrent.Async (race)
+import Control.Concurrent.MVar
+    ( newEmptyMVar
+    , readMVar
+    , tryPutMVar
+    )
+import Control.Exception (throwIO, try)
+import Control.Monad (forever, void, (>=>))
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Trans.Except (throwE)
 import Data.Aeson qualified as Aeson
@@ -98,6 +105,7 @@ import Servant.API
     , type (:>)
     )
 import Servant.Server.Internal.Handler (Handler (..))
+import System.Timeout (timeout)
 
 import Amaru.Treasury.Api.BuildContingencyDisburse
     ( ContingencyDisburseBuildRequest
@@ -159,7 +167,11 @@ import Amaru.Treasury.Api.Types
     , VerifyWitnessRequest
     , VerifyWitnessResponse
     )
-import Amaru.Treasury.Cli.Common (NowTipTimeout (..))
+import Amaru.Treasury.Cli.Common
+    ( AcquireTimeout (..)
+    , NowTipTimeout (..)
+    , acquireTimeoutSeconds
+    )
 import Amaru.Treasury.Cli.TreasuryInspect (runInspectFromBackend)
 import Amaru.Treasury.History.Sparql
     ( HistoryFilter (..)
@@ -886,8 +898,9 @@ indexerProvider
     :: Severity -> ApiIndexer cf op -> Provider IO -> Provider IO
 indexerProvider minimumSeverity apiIdx realProvider =
     realProvider
-        { withAcquired = \callback ->
-            Provider.withAcquired realProvider $ \handle ->
+        { withAcquired = \callback -> boundedAcquire $ \deliver ->
+            Provider.withAcquired realProvider $ \handle -> do
+                deliver
                 callback $
                     mkQueryHandle
                         QueryHandleBackend
@@ -950,3 +963,33 @@ indexerProvider minimumSeverity apiIdx realProvider =
         traceInfo "provider.handle.queryUTxOByTxInH"
             . runTransaction
             . IndexedProvider.queryIndexedUTxOByTxIn indexer
+
+{- | Bound the wait for a live provider handle.
+
+'NowTipTimeout' bounds one query on a handle we already hold.
+This bounds being handed the handle at all, which is the
+other way the same jammed N2C session strands a caller: the
+@POST /v1/build/*@ handlers sat in @withAcquired@ for a full
+minute with no bound of their own (#504).
+
+Only the acquire is bounded, never the callback. A build that
+legitimately takes minutes must not be killed for being slow,
+so the watchdog is armed only until the handle is delivered
+and then parks forever, leaving 'race' to resolve to the
+body. On expiry 'race' also cancels the stuck acquire rather
+than leaking the thread.
+-}
+boundedAcquire :: (IO () -> IO a) -> IO a
+boundedAcquire withDeliver = do
+    acquired <- newEmptyMVar
+    let deliver = void (tryPutMVar acquired ())
+        watchdog = do
+            got <-
+                timeout
+                    (acquireTimeoutSeconds * 1_000_000)
+                    (readMVar acquired)
+            case got of
+                Nothing ->
+                    throwIO (AcquireTimeout acquireTimeoutSeconds)
+                Just () -> forever (threadDelay maxBound)
+    either id id <$> race (withDeliver deliver) watchdog

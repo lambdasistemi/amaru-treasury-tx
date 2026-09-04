@@ -10,18 +10,24 @@ default:
 format:
     #!/usr/bin/env bash
     set -euo pipefail
-    find . -type f -name '*.hs' \
-      -not -path '*/dist-newstyle/*' \
-      -exec fourmolu -i {} +
+    # Version-controlled Haskell only: tracked files plus untracked
+    # ones that are not gitignored.  A bare "find ." also reaches
+    # ignored trees such as .orch/, where the commit-auditor freezes
+    # deliberately-mutated seed corpora as evidence -- "fourmolu -i"
+    # would rewrite that evidence in place (#504).
+    git ls-files --cached --others --exclude-standard -z -- '*.hs' \
+      | xargs -0 -r fourmolu -i
     cabal-fmt -i amaru-treasury-tx.cabal
 
 # Check Haskell, Cabal, and Nix file formatting
 format-check:
     #!/usr/bin/env bash
     set -euo pipefail
-    find . -type f -name '*.hs' \
-      -not -path '*/dist-newstyle/*' \
-      -exec fourmolu -m check {} +
+    # Same scope as "just format" -- see the note there.  Checking
+    # ignored trees made this recipe fail on a clean branch while
+    # GitHub CI was green, because CI has no .orch/ (#504).
+    git ls-files --cached --others --exclude-standard -z -- '*.hs' \
+      | xargs -0 -r fourmolu -m check
     cabal-fmt -c amaru-treasury-tx.cabal
 
 # Run hlint

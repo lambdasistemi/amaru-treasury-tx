@@ -28,6 +28,8 @@ module Amaru.Treasury.Cli.Common
     , nowTip
     , NowTipTimeout (..)
     , nowTipTimeoutSeconds
+    , AcquireTimeout (..)
+    , acquireTimeoutSeconds
     ) where
 
 import Control.Applicative ((<|>))
@@ -394,6 +396,36 @@ throwing 'NowTipTimeout'. See #481.
 -}
 nowTipTimeoutSeconds :: Int
 nowTipTimeoutSeconds = 10
+
+{- | Thrown when acquiring a live Provider handle has not
+succeeded within 'acquireTimeoutSeconds'.
+
+'NowTipTimeout' bounds one query on an already-acquired
+handle. This bounds the acquire itself, which is a distinct
+way for the same jammed N2C session to strand a caller: the
+@POST /v1/build/*@ handlers sat for 60s in
+@withAcquired@ with no bound of their own (#504), long
+enough that a reverse proxy could cut the connection before
+the typed failure was ever delivered to the operator.
+-}
+newtype AcquireTimeout = AcquireTimeout Int
+
+instance Show AcquireTimeout where
+    show (AcquireTimeout secs) =
+        "provider acquire timed out after "
+            <> show secs
+            <> "s (the N2C session did not yield a handle; see #504)"
+
+instance Exception AcquireTimeout
+
+{- | Hard ceiling, in seconds, on waiting for a live provider
+handle before throwing 'AcquireTimeout'. Matches
+'nowTipTimeoutSeconds': both bound the same jammed session,
+and a caller should not wait longer to be handed a handle
+than it waits for an answer on one.
+-}
+acquireTimeoutSeconds :: Int
+acquireTimeoutSeconds = nowTipTimeoutSeconds
 
 nowTip :: Provider IO -> IO Word64
 nowTip p = do

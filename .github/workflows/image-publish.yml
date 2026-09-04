@@ -42,6 +42,9 @@ jobs:
 
   deploy:
     needs: publish
+    permissions:
+      contents: read
+      packages: read
     # Runs on the self-hosted runner that lives on the production
     # host itself.  The previous job ran on ubuntu-latest and reached
     # back in over public SSH, which meant every deploy depended on
@@ -56,6 +59,15 @@ jobs:
       # not the operator's, so "~/services/..." would not resolve.
       COMPOSE_DIR: /srv/prod-hot/services/amaru-treasury
     steps:
+      - name: Log in to ghcr so compose can pull the image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          export PATH=/run/current-system/sw/bin:"$PATH"
+          echo "$GITHUB_TOKEN" \
+            | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
       - name: Update amaru-treasury on this host
         run: |
           set -euo pipefail

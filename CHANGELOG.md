@@ -4,6 +4,19 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.21.2](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.21.1...v0.2.21.2) (2026-09-04)
+
+### Bug Fixes
+
+* **api:** bound treasury-inspect against a hung node query ([c6167f3](https://github.com/lambdasistemi/amaru-treasury-tx/commit/c6167f372b2b1ed84163d80dfa6d9f8e7a29541f))
+* **ci:** avoid permission restoration failures ([d44e47b](https://github.com/lambdasistemi/amaru-treasury-tx/commit/d44e47b6199d448780d2545b56bf22a14f9c1c8a))
+* **api:** source tip from indexer readiness ([b5d6999](https://github.com/lambdasistemi/amaru-treasury-tx/commit/b5d69993d245495f88c8ff507d5c7d721fee128e))
+* **ci:** deploy from the production host instead of over inbound SSH ([1bcef93](https://github.com/lambdasistemi/amaru-treasury-tx/commit/1bcef9325082d400eb8b3bb93fed3c0d0969fdd8))
+* **just:** scope format recipes to version-controlled Haskell ([7d24717](https://github.com/lambdasistemi/amaru-treasury-tx/commit/7d24717890fe2a8cd8c58f58d437b90e8cb7292c))
+* **api:** bound the build path's provider acquire ([dfbb59f](https://github.com/lambdasistemi/amaru-treasury-tx/commit/dfbb59f3d08b11e15b75f55b3d3e483bde44409d))
+* **ci:** put the system profile on PATH in the deploy job ([1eeda42](https://github.com/lambdasistemi/amaru-treasury-tx/commit/1eeda428730e964d451a28f723cbda3561123c45))
+* **ci:** authenticate to ghcr before the deploy pull ([2c33bc4](https://github.com/lambdasistemi/amaru-treasury-tx/commit/2c33bc456c1e2dc546e8dec54899a647c08fdb12))
+
 ## [0.2.21.1](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.21.0...v0.2.21.1) (2026-07-20)
 
 ### Bug Fixes

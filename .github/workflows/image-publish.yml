@@ -59,6 +59,10 @@ jobs:
       - name: Update amaru-treasury on this host
         run: |
           set -euo pipefail
+          # The runner service does not inherit the system profile
+          # on PATH, which is why the publish job wraps docker in
+          # "nix shell".  docker and curl both live here on NixOS.
+          export PATH=/run/current-system/sw/bin:"$PATH"
           cd "$COMPOSE_DIR"
           docker compose pull
           docker compose up -d

@@ -24,11 +24,13 @@ import Cardano.Ledger.Api.Tx.Body
     , feeTxBodyL
     , totalCollateralTxBodyL
     )
+import Cardano.Ledger.Api.Tx.Out (valueTxOutL)
 import Cardano.Ledger.BaseTypes (StrictMaybe (..))
 import Cardano.Ledger.Binary (serialize)
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (bodyTxL)
+import Cardano.Ledger.Mary.Value (MaryValue (..))
 import Cardano.Ledger.Metadata (Metadatum)
 import Cardano.Tx.Build
     ( InterpretIO (..)
@@ -149,8 +151,12 @@ runDisburseAdaAction ctx fields payload rationale walletAddr = do
             m <- ccEvaluateTx ctx tx
             pure (fmap (either (Left . show) Right) m)
         program = do
-            disburseAdaProgram fields payload
+            disburseAdaProgram fields payload treasuryAssets
             setMetadata label1694 rationale
+        treasuryAssets = foldMap nativeAssets treasuryInputUtxos
+        nativeAssets (_, out) =
+            let MaryValue _ assets = out ^. valueTxOutL
+            in  assets
         -- Output layout: treasury leftover (0), one output per
         -- beneficiary (1..N), then the wallet change appended
         -- last (N+1). The fee delta is absorbed by the wallet

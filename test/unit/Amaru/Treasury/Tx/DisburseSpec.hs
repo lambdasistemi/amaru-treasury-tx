@@ -29,6 +29,7 @@ import Cardano.Ledger.Address
     , Addr (..)
     , Withdrawals (..)
     )
+import Cardano.Ledger.Alonzo.Plutus.Evaluate (evalTxExUnits)
 import Cardano.Ledger.Alonzo.TxWits (Redeemers (..))
 import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.Api.PParams (emptyPParams)
@@ -77,17 +78,22 @@ import Cardano.Ledger.Mary.Value
     , MultiAsset (..)
     , PolicyID (..)
     )
+import Cardano.Ledger.State (UTxO (..))
 import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
-import Cardano.Slotting.Slot (SlotNo (..))
+import Cardano.Slotting.EpochInfo (fixedEpochInfo)
+import Cardano.Slotting.Slot (EpochSize (..), SlotNo (..))
+import Cardano.Slotting.Time (SystemStart (..), mkSlotLength)
 import Cardano.Tx.Ledger (ConwayTx)
 import Codec.Serialise qualified as Codec
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Short qualified as SBS
+import Data.Either (isRight)
 import Data.Foldable (toList)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromJust)
 import Data.Set qualified as Set
+import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 import Data.Word (Word8)
 import Lens.Micro ((&), (.~), (^.))
 import Test.Hspec
@@ -115,8 +121,10 @@ import Cardano.Tx.Build (draft)
 import Amaru.Treasury.AuxData (label1694)
 import Amaru.Treasury.Build
     ( BuildResult (..)
+    , ScriptResult (..)
     , runFromIntent
     )
+import Amaru.Treasury.ChainContext (ChainContext (..))
 import Amaru.Treasury.ChainContext.Fixture
     ( SwapFixture (..)
     , readSwapFixture
@@ -128,13 +136,15 @@ import Amaru.Treasury.IntentJSON
     , DisburseDestination (..)
     , DisburseInputs (..)
     , SAction (..)
+    , ScopeJSON (..)
     , SomeTreasuryIntent (..)
     , TranslatedShared (..)
-    , TreasuryIntent
+    , TreasuryIntent (..)
     , decodeTreasuryIntentFile
     , encodeSomeTreasuryIntent
     , translateIntent
     )
+import Amaru.Treasury.LedgerParse (txInToText)
 import Amaru.Treasury.PParams (readPParamsFile)
 import Amaru.Treasury.Redeemer
     ( disburseAdaRedeemer
@@ -147,6 +157,11 @@ import Amaru.Treasury.Tx.Disburse
     , DisburseUsdmPayload (..)
     , disburseAdaProgram
     , disburseUsdmProgram
+    )
+import Amaru.Treasury.Tx.DisburseBuild
+    ( DisburseBuildInputs (..)
+    , DisburseBuildResult (..)
+    , runDisburseBuild
     )
 import Amaru.Treasury.Tx.DisburseIntentJSON
     ( DisburseInputsJSON (..)
@@ -318,7 +333,7 @@ spec = do
         let tx =
                 draft
                     emptyPParams
-                    (disburseAdaProgram fields payload)
+                    (disburseAdaProgram fields payload mempty)
             body = tx ^. bodyTxL
         it "spends wallet UTxO + the treasury UTxO" $
             body
@@ -411,7 +426,7 @@ spec = do
         let multiTx =
                 draft
                     emptyPParams
-                    (disburseAdaProgram fields multiPayload)
+                    (disburseAdaProgram fields multiPayload mempty)
             multiBody = multiTx ^. bodyTxL
             multiOuts = toList (multiBody ^. outputsTxBodyL)
         it
@@ -630,26 +645,138 @@ spec = do
                     expectationFailure
                         "expected SDisburse intent"
 
-    describe "Amaru.Treasury.Build.runFromIntent"
-        $ it
-            "builds d6c14625 references intent with golden label-1694 CBOR"
-        $ do
-            some <-
-                expectRight
-                    =<< decodeTreasuryIntentFile
-                        d6c14625IntentPath
-            fixture <-
-                readSwapFixture "test/fixtures/disburse/ada"
-            fundedFixture <-
-                fundD6c14625TreasuryAssets some fixture
-            result <-
-                runFromIntent
-                    (toFrozenContext fundedFixture)
-                    some
-            tx <- expectRight (decodeFinalTx result)
-            actual <- expectRight (label1694Cbor tx)
-            expected <- BS.readFile d6c14625RationalePath
-            actual `shouldBe` expected
+    describe "Amaru.Treasury.Build.runFromIntent" $
+        do
+            it "ADA disburse retains all native assets at the treasury" $
+                adaNativeAssetsCase "ada" [treasuryNativeAssets]
+            it "ADA disburse aggregates assets from multiple treasury inputs" $
+                adaNativeAssetsCase "ada" [treasuryNativeAssets, treasuryNativeAssets]
+            it "multi-destination ADA disburse retains treasury native assets" $
+                adaNativeAssetsCase
+                    "ada-2dest"
+                    [treasuryNativeAssets, treasuryNativeAssets]
+            it
+                "builds d6c14625 references intent with golden label-1694 CBOR"
+                $ do
+                    some <-
+                        expectRight
+                            =<< decodeTreasuryIntentFile
+                                d6c14625IntentPath
+                    fixture <-
+                        readSwapFixture "test/fixtures/disburse/ada"
+                    fundedFixture <-
+                        fundD6c14625TreasuryAssets some fixture
+                    result <-
+                        runFromIntent
+                            (toFrozenContext fundedFixture)
+                            some
+                    tx <- expectRight (decodeFinalTx result)
+                    actual <- expectRight (label1694Cbor tx)
+                    expected <- BS.readFile d6c14625RationalePath
+                    actual `shouldBe` expected
+
+-- | USDM and another policy exercise complete native-asset retention.
+treasuryNativeAssets :: MultiAsset
+treasuryNativeAssets =
+    MultiAsset $
+        Map.fromList
+            [ (usdmPolicy, Map.singleton usdmAsset 2_000_000_000)
+            , (otherPolicy, Map.singleton otherAsset 7)
+            ]
+
+{- | Build against the actual compiled validators with one or more
+mixed-asset treasury inputs. Treasury tokens must never become wallet
+change. The wallet input is ADA-only because it is also collateral.
+-}
+adaNativeAssetsCase :: FilePath -> [MultiAsset] -> IO ()
+adaNativeAssetsCase fixtureName assetBundles = do
+    some <-
+        expectRight
+            =<< decodeTreasuryIntentFile
+                ("test/fixtures/disburse/" <> fixtureName <> "/intent.json")
+    fixture <- readSwapFixture "test/fixtures/disburse/ada"
+    case some of
+        SomeTreasuryIntent SDisburse intent -> do
+            (shared, translated) <- expectRight (translateIntent SDisburse intent)
+            case translated of
+                DisburseAdaIntent originalFields _ -> do
+                    originalInput <- case difTreasuryUtxos originalFields of
+                        [input] -> pure input
+                        _ -> fail "expected one fixture treasury input"
+                    let originalOut = sfUtxos fixture Map.! originalInput
+                        Coin originalCoin = originalOut ^. coinTxOutL
+                        inputCount = length assetBundles
+                        inputs = take inputCount (originalInput : map mkTxIn [240 ..])
+                        (coinPerInput, remainder) = originalCoin `divMod` toInteger inputCount
+                        coins = Coin (coinPerInput + remainder) : repeat (Coin coinPerInput)
+                        treasuryOuts =
+                            [ (input, originalOut & valueTxOutL .~ MaryValue coin assets)
+                            | (input, coin, assets) <- zip3 inputs coins assetBundles
+                            ]
+                        utxos =
+                            Map.union (Map.fromList treasuryOuts) (sfUtxos fixture)
+                        revisedIntent =
+                            intent
+                                { tiScope =
+                                    (tiScope intent)
+                                        { sjTreasuryUtxos = txInToText <$> inputs
+                                        }
+                                }
+                        revisedSome = SomeTreasuryIntent SDisburse revisedIntent
+                        pp = sfPParams fixture
+                        -- Conway mainnet slots have one-second duration.
+                        -- This origin extrapolates slot 0 from Shelley start.
+                        epochInfo = fixedEpochInfo (EpochSize 432_000) (mkSlotLength 1)
+                        systemStart = SystemStart (posixSecondsToUTCTime 1_591_566_291)
+                        ctx =
+                            (toFrozenContext fixture)
+                                { ccUtxos = utxos
+                                , ccEvaluateTx = \tx ->
+                                    pure $
+                                        evalTxExUnits pp tx (UTxO utxos) epochInfo systemStart
+                                }
+                        expectedAssets = mconcat assetBundles
+                    result <- runFromIntent ctx revisedSome
+                    case brTreasuryLeftoverOutput result of
+                        Just (_, out) ->
+                            out ^. valueTxOutL
+                                `shouldBe` MaryValue
+                                    (Coin (sjTreasuryLeftoverLovelace (tiScope intent)))
+                                    expectedAssets
+                        Nothing -> expectationFailure "missing treasury leftover"
+                    case brWalletChangeOutput result of
+                        Just (_, out) -> do
+                            let MaryValue _ actualAssets = out ^. valueTxOutL
+                            actualAssets `shouldBe` mempty
+                        Nothing -> expectationFailure "missing wallet change"
+                    length (brScriptResults result) `shouldBe` inputCount + 1
+                    map srOutcome (brScriptResults result) `shouldSatisfy` all isRight
+                    -- Exercise the legacy direct build entry point as well.
+                    (_, revisedTranslated) <-
+                        expectRight (translateIntent SDisburse revisedIntent)
+                    legacy <-
+                        runDisburseBuild
+                            ctx
+                            DisburseBuildInputs
+                                { dbiIntent = revisedTranslated
+                                , dbiRationale = tsRationale shared
+                                , dbiWalletAddr = tsWalletAddr shared
+                                }
+                    legacyTx <-
+                        expectRight $
+                            decodeFullAnnotator
+                                (eraProtVerLow @ConwayEra)
+                                "ConwayTx"
+                                decCBOR
+                                (dbrCborBytes legacy)
+                    case toList ((legacyTx :: ConwayTx) ^. bodyTxL . outputsTxBodyL) of
+                        out : _ -> do
+                            let MaryValue _ actualAssets = out ^. valueTxOutL
+                            actualAssets `shouldBe` expectedAssets
+                        [] -> expectationFailure "missing legacy treasury leftover"
+                    map srOutcome (dbrScriptResults legacy) `shouldSatisfy` all isRight
+                DisburseUsdmIntent{} -> expectationFailure "expected ADA intent"
+        _ -> expectationFailure "expected disburse intent"
 
 -- ----------------------------------------------------
 -- T020: Pure-translation goldens (ADA + USDM)

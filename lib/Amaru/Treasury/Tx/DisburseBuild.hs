@@ -48,11 +48,13 @@ import Cardano.Ledger.Api.Tx.Body
     ( feeTxBodyL
     , totalCollateralTxBodyL
     )
+import Cardano.Ledger.Api.Tx.Out (valueTxOutL)
 import Cardano.Ledger.BaseTypes (StrictMaybe (..))
 import Cardano.Ledger.Binary (serialize)
 import Cardano.Ledger.Coin (Coin (..))
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core (bodyTxL)
+import Cardano.Ledger.Mary.Value (MaryValue (..))
 import Cardano.Ledger.Metadata (Metadatum)
 import Cardano.Tx.Build
     ( BuildError
@@ -176,8 +178,12 @@ runAda ctx dbi fields payload = do
             m <- ccEvaluateTx ctx tx
             pure (fmap (either (Left . show) Right) m)
         program = do
-            disburseAdaProgram fields payload
+            disburseAdaProgram fields payload treasuryAssets
             setMetadata label1694 (dbiRationale dbi)
+        treasuryAssets = foldMap nativeAssets treasuryInputs
+        nativeAssets input =
+            let MaryValue _ assets = utxoMap Map.! input ^. valueTxOutL
+            in  assets
         noCtxIO :: InterpretIO q
         noCtxIO =
             InterpretIO $

@@ -164,9 +164,13 @@ output per beneficiary in operator order — required
 signers, and the validity upper bound.
 
 The spend redeemer authorizes the @sum@ of the
-beneficiary lovelace amounts leaving the treasury. A
-single-beneficiary payload reproduces the original
+beneficiary lovelace amounts leaving the treasury. With ADA-only
+treasury inputs, a single-beneficiary payload reproduces the original
 two-output build byte-for-byte.
+
+All native assets from the selected treasury inputs remain on the
+treasury leftover output. They are supplied by the build runner from
+the chain context, rather than trusted from the intent JSON.
 
 Takes the shared 'DisburseIntentFields' and the
 ADA-specific 'DisburseAdaPayload' separately so the
@@ -175,8 +179,10 @@ USDM builder can share the same field record.
 disburseAdaProgram
     :: DisburseIntentFields
     -> DisburseAdaPayload
+    -> MultiAsset
+    -- ^ native assets summed over the selected treasury inputs
     -> TxBuild q e ()
-disburseAdaProgram f p = do
+disburseAdaProgram f p treasuryAssets = do
     _ <- spend (difWalletUtxo f)
     collateral (difWalletUtxo f)
     let totalLovelace =
@@ -197,7 +203,7 @@ disburseAdaProgram f p = do
     _ <-
         payTo
             (difTreasuryAddress f)
-            (lovelaceValue (dapLeftoverLovelace p))
+            (MaryValue (dapLeftoverLovelace p) treasuryAssets)
     forM_ (dapBeneficiaries p) $ \(addr, amount) ->
         void (payTo addr (lovelaceValue amount))
     forM_ (difSigners f) requireSignature

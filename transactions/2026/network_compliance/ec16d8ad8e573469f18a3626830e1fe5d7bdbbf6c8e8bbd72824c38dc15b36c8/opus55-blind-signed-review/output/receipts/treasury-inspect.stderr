@@ -1,0 +1,6 @@
+[Info] provider.posixMsToSlot start
+[Info] provider.posixMsToSlot ok after 3 ms
+[Info] provider.queryUTxOs start
+[Info] provider.queryUTxOs ok after 10237 ms
+[Info] provider.queryUTxOs start
+[Info] provider.queryUTxOs ok after 9976 ms

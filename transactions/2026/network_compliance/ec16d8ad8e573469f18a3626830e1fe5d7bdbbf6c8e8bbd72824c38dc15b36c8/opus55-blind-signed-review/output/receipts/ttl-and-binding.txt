@@ -1,0 +1,13 @@
+live tip slot (treasury-inspect, n2c): 199220120 2026-09-30T16:40:11+00:00
+invalidHereafter: 199388149 => last valid slot 199388148 ; expiry instant 2026-10-02T15:20:40+00:00
+remaining at tip: 168029 s = 46.67 h
+superseded ttl 199318513 -> 2026-10-01T20:00:04+00:00
+prev #3528 ttl 196296876 -> 2026-08-27T20:39:27+00:00 ; #3528 inclusion slot 196272442 -> 2026-08-27T13:52:13+00:00
+report.tx-cbor == tx.cbor: True
+report txId: ec16d8ad8e573469f18a3626830e1fe5d7bdbbf6c8e8bbd72824c38dc15b36c8
+fee 448485 vs rough min-fee estimate 444234 (assumed a=44,b=155381,prices .0577/.0000721, refscript 15/B)
+collateral 150% of fee = 672727.5 ; totalCollateral 672728
+ADA in  : 199573786004
+ADA out+fee: 199573786004
+USDM in/out: 40000000000 40000000000
+collateral: 9755740 - 672728 = 9083012 (return 9083012)

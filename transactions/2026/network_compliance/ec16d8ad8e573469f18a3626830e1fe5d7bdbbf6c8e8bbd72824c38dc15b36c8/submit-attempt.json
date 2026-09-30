@@ -1,0 +1,16 @@
+{
+  "command": [
+    "/nix/store/jhxamwzqjf3gdwf71ka9b2m25m1fimbw-amaru-treasury-tx-0.2.21.2-with-ca/bin/amaru-treasury-tx",
+    "--network",
+    "mainnet",
+    "--node-socket",
+    "/srv/prod-hot/cardano/mainnet/ipc/node.socket",
+    "submit",
+    "--tx",
+    "/code/amaru-treasury-tx-cc-september-rebuild-20260930/transactions/2026/network_compliance/2026-09-30-disburse-cyber-castellum-september-rebuild/signed-tx.hex"
+  ],
+  "started_utc": "2026-09-30T17:05:40.623700+00:00",
+  "completed_utc": "2026-09-30T17:05:40.663988+00:00",
+  "exit_code": 0,
+  "signed_file_sha256": "d33ebac0982c045033a96551265149a27b9886d815bd4cb10865bf190387466a"
+}

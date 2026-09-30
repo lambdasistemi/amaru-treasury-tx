@@ -1,0 +1,157 @@
+{
+    "chainTip": {
+        "blockHash": null,
+        "slot": 199220120
+    },
+    "deployment": {
+        "scopeOwnersOutref": {
+            "ix": 0,
+            "txId": "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54"
+        }
+    },
+    "scopes": [
+        {
+            "pendingOrders": [],
+            "scope": "network_compliance",
+            "totals": {
+                "lovelace": 409159011629,
+                "otherAssetsCount": 0,
+                "usdm": 40269421791
+            },
+            "treasuryAddress": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
+            "treasuryScriptHash": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+            "treasuryUtxos": [
+                {
+                    "datumHash": null,
+                    "lovelace": 26181290472,
+                    "otherAssets": [],
+                    "outref": {
+                        "ix": 0,
+                        "txId": "1defcad59b4b67572d0bd6f82d98a35217261e2203bdca6179ff67b8d0ae3df2"
+                    },
+                    "usdm": 0
+                },
+                {
+                    "datumHash": null,
+                    "lovelace": 26181290471,
+                    "otherAssets": [],
+                    "outref": {
+                        "ix": 0,
+                        "txId": "282bebe2ec58fbf28dc9f410e954f577ba2c055b9878d6a46eeac3352b369abf"
+                    },
+                    "usdm": 0
+                },
+                {
+                    "datumHash": null,
+                    "lovelace": 2000000,
+                    "otherAssets": [],
+                    "outref": {
+                        "ix": 1,
+                        "txId": "44454ed0def64621ef645958830f599b488b699b28e3797cc37c4f4dd1463a79"
+                    },
+                    "usdm": 0
+                },
+                {
+                    "datumHash": null,
+                    "lovelace": 26181290471,
+                    "otherAssets": [],
+                    "outref": {
+                        "ix": 0,
+                        "txId": "455310f37032447467dbea62dc63cea8f064880930eb8e0ac118638744f765b9"
+                    },
+                    "usdm": 0
+                },
+                {
+                    "datumHash": null,
+                    "lovelace": 138045595,
+                    "otherAssets": [],
+                    "outref": {
+                        "ix": 0,
+                        "txId": "4f64f292d2b8d74f9bade3bdcafb92302b79b6589208147c995e55057b7696b4"
+                    },
+                    "usdm": 248542293
+                },
+                {
+                    "datumHash": null,
+                    "lovelace": 199564030264,
+                    "otherAssets": [],
+                    "outref": {
+                        "ix": 1,
+                        "txId": "9b1042aa25c7e69b1965e668e6265b3f3e65e0a8c780016d6c56b175986acfb3"
+                    },
+                    "usdm": 40000000000
+                },
+                {
+                    "datumHash": null,
+                    "lovelace": 26181290471,
+                    "otherAssets": [],
+                    "outref": {
+                        "ix": 0,
+                        "txId": "bbc15f8aef9047bb0585f7da13fbf6a25db8e3e0ba2e04ed68e0dd3e798d3c01"
+                    },
+                    "usdm": 0
+                },
+                {
+                    "datumHash": null,
+                    "lovelace": 26181290471,
+                    "otherAssets": [],
+                    "outref": {
+                        "ix": 0,
+                        "txId": "c4bb8f0a23ee7819058da2e3efb52cea0d619ac938e9cbac83bcf7c34d41b364"
+                    },
+                    "usdm": 0
+                },
+                {
+                    "datumHash": null,
+                    "lovelace": 26181290471,
+                    "otherAssets": [],
+                    "outref": {
+                        "ix": 0,
+                        "txId": "c68daf5d1dca04dbcf55f13290b2ab0f17633d5b4d649df4cb4b5ead499b7853"
+                    },
+                    "usdm": 0
+                },
+                {
+                    "datumHash": null,
+                    "lovelace": 2306000,
+                    "otherAssets": [],
+                    "outref": {
+                        "ix": 1,
+                        "txId": "cda0126e9ea7b336bbb338d2bfc7622a41b584e3bebc33c9c320e8895b9bc082"
+                    },
+                    "usdm": 10439974
+                },
+                {
+                    "datumHash": null,
+                    "lovelace": 2306000,
+                    "otherAssets": [],
+                    "outref": {
+                        "ix": 2,
+                        "txId": "cda0126e9ea7b336bbb338d2bfc7622a41b584e3bebc33c9c320e8895b9bc082"
+                    },
+                    "usdm": 10439524
+                },
+                {
+                    "datumHash": null,
+                    "lovelace": 26181290471,
+                    "otherAssets": [],
+                    "outref": {
+                        "ix": 0,
+                        "txId": "db6516918cf6466d9aab7da2772cc9cbb3b5c2f319211e46ddec1ea1a34ebc90"
+                    },
+                    "usdm": 0
+                },
+                {
+                    "datumHash": null,
+                    "lovelace": 26181290472,
+                    "otherAssets": [],
+                    "outref": {
+                        "ix": 0,
+                        "txId": "eef0331268a024513f2fedb7b9d415590dc5860840b3ca868a3a27ecdad8d1f9"
+                    },
+                    "usdm": 0
+                }
+            ]
+        }
+    ]
+}

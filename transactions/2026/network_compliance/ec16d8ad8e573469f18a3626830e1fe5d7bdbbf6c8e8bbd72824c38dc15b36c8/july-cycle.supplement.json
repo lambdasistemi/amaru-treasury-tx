@@ -1,0 +1,153 @@
+{
+  "A": "July cycle, invoice #3522, June work",
+  "B": "September cycle, invoice #3536, August work",
+  "body_fields_equal": {
+    "14": true,
+    "18": true,
+    "5": true
+  },
+  "beneficiary_output_identical": true,
+  "description": {
+    "A": [
+      "Disburse 18750 USDM (CAG payee) for Cyber Castellum July 2026."
+    ],
+    "B": [
+      "Pay 18750 USDM to CAG for Cyber Castellum September 2026."
+    ]
+  },
+  "metadata_references": {
+    "A": [
+      {
+        "uri": [
+          "ipfs://",
+          "bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga"
+        ],
+        "@type": "Other",
+        "label": [
+          "Contract",
+          " - ",
+          "CRYPTO ACCOUNTING GROUP"
+        ]
+      },
+      {
+        "uri": [
+          "ipfs://",
+          "bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm"
+        ],
+        "@type": "Other",
+        "label": [
+          "Address-of-record proof",
+          " - ",
+          "CRYPTO ACCOUNTING GROUP"
+        ]
+      },
+      {
+        "uri": [
+          "ipfs://",
+          "bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da"
+        ],
+        "@type": "Other",
+        "label": [
+          "Contract",
+          " - ",
+          "CYBER CASTELLUM CORPORATION"
+        ]
+      },
+      {
+        "uri": [
+          "ipfs://",
+          "bafybeic6sh4cbftjlr62qcz3ysuivrxqto7zbpnwdgepam5rbbxgvccauu"
+        ],
+        "@type": "Other",
+        "label": [
+          "Invoice #3522",
+          " - ",
+          "CYBER CASTELLUM CORPORATION"
+        ]
+      },
+      {
+        "uri": [
+          "ipfs://",
+          "bafybeihm4umyc5a63djsiuw3nna7txptsnon7sltqpgmjzaecpsjkhjbdi"
+        ],
+        "@type": "Other",
+        "label": [
+          "July2026 cycle review",
+          " - ",
+          "CYBER CASTELLUM CORPORATION"
+        ]
+      }
+    ],
+    "B": [
+      {
+        "uri": [
+          "ipfs://",
+          "bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga"
+        ],
+        "@type": "Other",
+        "label": [
+          "Contract",
+          " - ",
+          "CRYPTO ACCOUNTING GROUP"
+        ]
+      },
+      {
+        "uri": [
+          "ipfs://",
+          "bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm"
+        ],
+        "@type": "Other",
+        "label": [
+          "Address-of-record proof",
+          " - ",
+          "CRYPTO ACCOUNTING GROUP"
+        ]
+      },
+      {
+        "uri": [
+          "ipfs://",
+          "bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da"
+        ],
+        "@type": "Other",
+        "label": [
+          "Contract",
+          " - ",
+          "CYBER CASTELLUM CORPORATION"
+        ]
+      },
+      {
+        "uri": [
+          "ipfs://",
+          "bafybeih2x7djuckim3cnjdox3isp5qnswampvoframvnkdrugcwwyz62se"
+        ],
+        "@type": "Other",
+        "label": [
+          "Invoice #3536",
+          " - ",
+          "CYBER CASTELLUM CORPORATION"
+        ]
+      },
+      {
+        "uri": [
+          "ipfs://",
+          "bafybeiedjrhylujzaujmbbahc5xhjy46hjr5nf2dkc7knpnrate3w2ls34"
+        ],
+        "@type": "Other",
+        "label": [
+          "September2026 cycle review",
+          " - ",
+          "CYBER CASTELLUM CORPORATION"
+        ]
+      }
+    ]
+  },
+  "redeemer_count": {
+    "A": 5,
+    "B": 2
+  },
+  "collateral_return_lovelace": {
+    "A": 17385392,
+    "B": 9083012
+  },
+  "note": "tx-diff 0.2.3.0 omits metadata, redeemers, and collateral return; these supplemental checks decoded the existing signed transactions without modifying them."
+}

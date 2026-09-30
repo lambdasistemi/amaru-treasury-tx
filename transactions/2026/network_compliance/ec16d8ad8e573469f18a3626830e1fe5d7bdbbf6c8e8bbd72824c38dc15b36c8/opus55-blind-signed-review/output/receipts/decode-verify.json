@@ -1,0 +1,1779 @@
+{
+  "signed": {
+    "file": "/tmp/attx-3536-september-opus55-blind-20260930-bih5w886/input/signed-tx.hex",
+    "sha256_file": "d33ebac0982c045033a96551265149a27b9886d815bd4cb10865bf190387466a",
+    "tx_bytes": 2331,
+    "sha256_tx_bytes": "0d1913c981960c6d8a83ff4bc11a4a34af664f887f86020226e3adde4e6f69da",
+    "txid": "ec16d8ad8e573469f18a3626830e1fe5d7bdbbf6c8e8bbd72824c38dc15b36c8",
+    "body_len": 824,
+    "body_keys": [
+      0,
+      1,
+      2,
+      3,
+      5,
+      7,
+      11,
+      13,
+      14,
+      16,
+      17,
+      18
+    ],
+    "is_valid_flag": true,
+    "aux_hash_computed": "e43f898aaabbceea4f3633f998bf92d61055e98cbc9fd2766231915c380f251a",
+    "aux_hash_in_body": "e43f898aaabbceea4f3633f998bf92d61055e98cbc9fd2766231915c380f251a",
+    "witness_keys": [
+      0,
+      5
+    ],
+    "sha256_body": "1c1f3d9dd575ba4f772fffc863fe30695ecbced827015bea2fafd36821b81784",
+    "sha256_aux": "2c4230b62db9532d51c67075e9ccdbc476849f685537b3b7a4fbc4adf92ac36d",
+    "sha256_nonvkey_witness_fields": {
+      "5": "353249637986cbe27ea79ba6e48fcba06f26fa3ecf409b48b2693a7a4c54067d"
+    },
+    "sha256_body_fields": {
+      "0": "a835e1f388bb7296a704126b3af6777a09528e4186820c9c2ac41f1990222859",
+      "13": "5cfd30b1a28cb73ba0874b4cae6e6d89bf142896d2a0e660d9181bdc1593d405",
+      "18": "1562c81ea2184ac74104782fdcd9564dc0488071111797f79725718ef29131f3",
+      "1": "6559ac0658e8ad5db517e9757e266cd3688d3d0fed7b0965dc8b0f3f93571dda",
+      "16": "10600a9d865d2fcc3d6ad35ad7f0446da1657f7c258ae75699b45d1d64112722",
+      "17": "0df7dd3b2b590cc702e3049ba17e80c529ea40b22f02fdc26c5024585e1ee7b4",
+      "2": "d9976389712fca4d74e621720082896ca584ed3f940ff24b93c7db50a4eaa092",
+      "3": "60455ba29bb1b1e80df5310bbc329557eece9d89adad5fdd64348440d0411491",
+      "5": "99ac1731616c89e19a22cdd0b7bbc883d5b5c0d355c55d26b34ee1fac67cb190",
+      "14": "a5d2d7d39a903410af8931c2b5b7e2b47c8b8483d7633ae88c555eaaa745236f",
+      "11": "125b3c41dc44724f757fe6c4b4dba5ffb1eff5f008c3515af7f1280da60b7d3c",
+      "7": "d25c48e7c8990c2a84f122f91aa18f56e65e2bb429486b057e19fd2959bb8c36"
+    },
+    "inputs": [
+      "9b1042aa25c7e69b1965e668e6265b3f3e65e0a8c780016d6c56b175986acfb3#1",
+      "282bebe2ec58fbf28dc9f410e954f577ba2c055b9878d6a46eeac3352b369abf#1"
+    ],
+    "collateral": [
+      "282bebe2ec58fbf28dc9f410e954f577ba2c055b9878d6a46eeac3352b369abf#1"
+    ],
+    "reference_inputs": [
+      "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+      "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+      "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2",
+      "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0"
+    ],
+    "outputs": [
+      {
+        "address": "3132201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+        "lovelace": 199562840704,
+        "assets": {
+          "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad.0014df105553444d": 21250000000
+        }
+      },
+      {
+        "address": "01c036c15399bd8f9a36c042afbf3cad16edb71dbc13c2ede6c38942cb46145907de69e88b3bcb27146b64cdb0ac896f5e1a6cc7d46b2afa50",
+        "lovelace": 1189560,
+        "assets": {
+          "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad.0014df105553444d": 18750000000
+        }
+      },
+      {
+        "address": "018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+        "lovelace": 9307255,
+        "assets": {}
+      }
+    ],
+    "fee": 448485,
+    "ttl": 199388149,
+    "validity_start": null,
+    "withdrawals": {
+      "f1a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094": 0
+    },
+    "script_data_hash": "132eb9707cf721c8dbcd3266ad7c3d08712610d737874a7d7c84a6785f91a676",
+    "required_signers": [
+      "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+      "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+    ],
+    "network_id": null,
+    "collateral_return": {
+      "address": "018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+      "lovelace": 9083012,
+      "assets": {}
+    },
+    "total_collateral": 672728,
+    "mint": null,
+    "certs": null,
+    "voting_procedures": null,
+    "proposals": null,
+    "treasury_donation": null,
+    "current_treasury": null,
+    "vkey_witnesses": [
+      {
+        "vkey": "ab71c52f786d308c65cc4772eac66822e8cd169dc267a74f5ec9f7371895cdd9",
+        "keyhash": "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+        "sig_valid_over_txid": true,
+        "openssl": "Signature Verified Successfully"
+      },
+      {
+        "vkey": "f127c0824564745561896c3ce3e6e5961f2acaab5f5f149c65f2e81ff549360a",
+        "keyhash": "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+        "sig_valid_over_txid": true,
+        "openssl": "Signature Verified Successfully"
+      }
+    ],
+    "redeemers": [
+      {
+        "tag": 0,
+        "index": 1,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          524171,
+          174496675
+        ]
+      },
+      {
+        "tag": 3,
+        "index": 0,
+        "data": "[]",
+        "exunits": [
+          217909,
+          69488224
+        ]
+      }
+    ],
+    "plutus_datums": "None",
+    "witness_scripts_present": {
+      "1": 0,
+      "3": 0,
+      "6": 0,
+      "7": 0
+    },
+    "metadata": {
+      "1694": {
+        "body": {
+          "event": "disburse",
+          "label": "Pay USDM",
+          "references": [
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga"
+              ],
+              "@type": "Other",
+              "label": [
+                "Contract",
+                " - ",
+                "CRYPTO ACCOUNTING GROUP"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm"
+              ],
+              "@type": "Other",
+              "label": [
+                "Address-of-record proof",
+                " - ",
+                "CRYPTO ACCOUNTING GROUP"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da"
+              ],
+              "@type": "Other",
+              "label": [
+                "Contract",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeih2x7djuckim3cnjdox3isp5qnswampvoframvnkdrugcwwyz62se"
+              ],
+              "@type": "Other",
+              "label": [
+                "Invoice #3536",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeiedjrhylujzaujmbbahc5xhjy46hjr5nf2dkc7knpnrate3w2ls34"
+              ],
+              "@type": "Other",
+              "label": [
+                "September2026 cycle review",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            }
+          ],
+          "description": [
+            "Pay 18750 USDM to CAG for Cyber Castellum September 2026."
+          ],
+          "destination": {
+            "label": "Crypto Accounting Group"
+          },
+          "justification": [
+            "Acceptance of the Cyber Castellum September 2026 cycle review."
+          ]
+        },
+        "@context": [
+          "https://github.com/SundaeSwap-finance/treasury-contracts/blob/",
+          "ad4316d0d36cdef780f85fc2ec8b307e645ddc2a",
+          "/offchain/src/metadata/spec.md"
+        ],
+        "instance": "38c627d45835744a2d6c727124f2b5852e5564aeab3f608e0e84ea6d",
+        "hashAlgorithm": "blake2b-256"
+      }
+    }
+  },
+  "unsigned": {
+    "file": "/tmp/attx-3536-september-opus55-blind-20260930-bih5w886/input/tx.cbor",
+    "sha256_file": "8dfbb5f4b13c0c68c7de01c9bd34b02501a18fc5d3039d0aa9e6f719a043f7b1",
+    "tx_bytes": 2124,
+    "sha256_tx_bytes": "60b0e024793f55c5b5125ce40b3f7e9aef51632c65c4816a3d8bc73c935d7019",
+    "txid": "ec16d8ad8e573469f18a3626830e1fe5d7bdbbf6c8e8bbd72824c38dc15b36c8",
+    "body_len": 824,
+    "body_keys": [
+      0,
+      1,
+      2,
+      3,
+      5,
+      7,
+      11,
+      13,
+      14,
+      16,
+      17,
+      18
+    ],
+    "is_valid_flag": true,
+    "aux_hash_computed": "e43f898aaabbceea4f3633f998bf92d61055e98cbc9fd2766231915c380f251a",
+    "aux_hash_in_body": "e43f898aaabbceea4f3633f998bf92d61055e98cbc9fd2766231915c380f251a",
+    "witness_keys": [
+      5
+    ],
+    "sha256_body": "1c1f3d9dd575ba4f772fffc863fe30695ecbced827015bea2fafd36821b81784",
+    "sha256_aux": "2c4230b62db9532d51c67075e9ccdbc476849f685537b3b7a4fbc4adf92ac36d",
+    "sha256_nonvkey_witness_fields": {
+      "5": "353249637986cbe27ea79ba6e48fcba06f26fa3ecf409b48b2693a7a4c54067d"
+    },
+    "sha256_body_fields": {
+      "0": "a835e1f388bb7296a704126b3af6777a09528e4186820c9c2ac41f1990222859",
+      "13": "5cfd30b1a28cb73ba0874b4cae6e6d89bf142896d2a0e660d9181bdc1593d405",
+      "18": "1562c81ea2184ac74104782fdcd9564dc0488071111797f79725718ef29131f3",
+      "1": "6559ac0658e8ad5db517e9757e266cd3688d3d0fed7b0965dc8b0f3f93571dda",
+      "16": "10600a9d865d2fcc3d6ad35ad7f0446da1657f7c258ae75699b45d1d64112722",
+      "17": "0df7dd3b2b590cc702e3049ba17e80c529ea40b22f02fdc26c5024585e1ee7b4",
+      "2": "d9976389712fca4d74e621720082896ca584ed3f940ff24b93c7db50a4eaa092",
+      "3": "60455ba29bb1b1e80df5310bbc329557eece9d89adad5fdd64348440d0411491",
+      "5": "99ac1731616c89e19a22cdd0b7bbc883d5b5c0d355c55d26b34ee1fac67cb190",
+      "14": "a5d2d7d39a903410af8931c2b5b7e2b47c8b8483d7633ae88c555eaaa745236f",
+      "11": "125b3c41dc44724f757fe6c4b4dba5ffb1eff5f008c3515af7f1280da60b7d3c",
+      "7": "d25c48e7c8990c2a84f122f91aa18f56e65e2bb429486b057e19fd2959bb8c36"
+    },
+    "inputs": [
+      "9b1042aa25c7e69b1965e668e6265b3f3e65e0a8c780016d6c56b175986acfb3#1",
+      "282bebe2ec58fbf28dc9f410e954f577ba2c055b9878d6a46eeac3352b369abf#1"
+    ],
+    "collateral": [
+      "282bebe2ec58fbf28dc9f410e954f577ba2c055b9878d6a46eeac3352b369abf#1"
+    ],
+    "reference_inputs": [
+      "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+      "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+      "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2",
+      "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0"
+    ],
+    "outputs": [
+      {
+        "address": "3132201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+        "lovelace": 199562840704,
+        "assets": {
+          "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad.0014df105553444d": 21250000000
+        }
+      },
+      {
+        "address": "01c036c15399bd8f9a36c042afbf3cad16edb71dbc13c2ede6c38942cb46145907de69e88b3bcb27146b64cdb0ac896f5e1a6cc7d46b2afa50",
+        "lovelace": 1189560,
+        "assets": {
+          "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad.0014df105553444d": 18750000000
+        }
+      },
+      {
+        "address": "018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+        "lovelace": 9307255,
+        "assets": {}
+      }
+    ],
+    "fee": 448485,
+    "ttl": 199388149,
+    "validity_start": null,
+    "withdrawals": {
+      "f1a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094": 0
+    },
+    "script_data_hash": "132eb9707cf721c8dbcd3266ad7c3d08712610d737874a7d7c84a6785f91a676",
+    "required_signers": [
+      "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+      "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+    ],
+    "network_id": null,
+    "collateral_return": {
+      "address": "018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+      "lovelace": 9083012,
+      "assets": {}
+    },
+    "total_collateral": 672728,
+    "mint": null,
+    "certs": null,
+    "voting_procedures": null,
+    "proposals": null,
+    "treasury_donation": null,
+    "current_treasury": null,
+    "vkey_witnesses": [],
+    "redeemers": [
+      {
+        "tag": 0,
+        "index": 1,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          524171,
+          174496675
+        ]
+      },
+      {
+        "tag": 3,
+        "index": 0,
+        "data": "[]",
+        "exunits": [
+          217909,
+          69488224
+        ]
+      }
+    ],
+    "plutus_datums": "None",
+    "witness_scripts_present": {
+      "1": 0,
+      "3": 0,
+      "6": 0,
+      "7": 0
+    },
+    "metadata": {
+      "1694": {
+        "body": {
+          "event": "disburse",
+          "label": "Pay USDM",
+          "references": [
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga"
+              ],
+              "@type": "Other",
+              "label": [
+                "Contract",
+                " - ",
+                "CRYPTO ACCOUNTING GROUP"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm"
+              ],
+              "@type": "Other",
+              "label": [
+                "Address-of-record proof",
+                " - ",
+                "CRYPTO ACCOUNTING GROUP"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da"
+              ],
+              "@type": "Other",
+              "label": [
+                "Contract",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeih2x7djuckim3cnjdox3isp5qnswampvoframvnkdrugcwwyz62se"
+              ],
+              "@type": "Other",
+              "label": [
+                "Invoice #3536",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeiedjrhylujzaujmbbahc5xhjy46hjr5nf2dkc7knpnrate3w2ls34"
+              ],
+              "@type": "Other",
+              "label": [
+                "September2026 cycle review",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            }
+          ],
+          "description": [
+            "Pay 18750 USDM to CAG for Cyber Castellum September 2026."
+          ],
+          "destination": {
+            "label": "Crypto Accounting Group"
+          },
+          "justification": [
+            "Acceptance of the Cyber Castellum September 2026 cycle review."
+          ]
+        },
+        "@context": [
+          "https://github.com/SundaeSwap-finance/treasury-contracts/blob/",
+          "ad4316d0d36cdef780f85fc2ec8b307e645ddc2a",
+          "/offchain/src/metadata/spec.md"
+        ],
+        "instance": "38c627d45835744a2d6c727124f2b5852e5564aeab3f608e0e84ea6d",
+        "hashAlgorithm": "blake2b-256"
+      }
+    }
+  },
+  "superseded_unsigned": {
+    "file": "/tmp/attx-3536-september-opus55-blind-20260930-bih5w886/input/superseded/tx.cbor",
+    "sha256_file": "f55197466f5e171fa5988c31ea0f69ef2968a22592fda1c802c93187783050a4",
+    "tx_bytes": 2121,
+    "sha256_tx_bytes": "adebb77bbbe142548c3e4518b2da159b0a0390ffc576da641dc47a9cea3eeeb0",
+    "txid": "9f61306ee964e1655d8438e435983c126c1ab4cb0b500a371b3b66f351d1f51e",
+    "body_len": 824,
+    "body_keys": [
+      0,
+      1,
+      2,
+      3,
+      5,
+      7,
+      11,
+      13,
+      14,
+      16,
+      17,
+      18
+    ],
+    "is_valid_flag": true,
+    "aux_hash_computed": "c015667782d9946e4ab3ac6642aa08c6ad5b9a708276168b03f69727a3cc3732",
+    "aux_hash_in_body": "c015667782d9946e4ab3ac6642aa08c6ad5b9a708276168b03f69727a3cc3732",
+    "witness_keys": [
+      5
+    ],
+    "sha256_body": "a15bb321f8684c574c291b9f20aee66ce46ca5e859ab38043d0e0f1b1738c01a",
+    "sha256_aux": "5a99942ac773f8034867f3e8f9ed7cc2ff62a30e03f829989d4db1af1989293f",
+    "sha256_nonvkey_witness_fields": {
+      "5": "353249637986cbe27ea79ba6e48fcba06f26fa3ecf409b48b2693a7a4c54067d"
+    },
+    "sha256_body_fields": {
+      "0": "a835e1f388bb7296a704126b3af6777a09528e4186820c9c2ac41f1990222859",
+      "13": "5cfd30b1a28cb73ba0874b4cae6e6d89bf142896d2a0e660d9181bdc1593d405",
+      "18": "1562c81ea2184ac74104782fdcd9564dc0488071111797f79725718ef29131f3",
+      "1": "211bf111ad0b25a3bbb2ba6afe1873e6a9181536845c6a4cc978bee38098b6fe",
+      "16": "30fbae9fb2b2ebf2c722b50c25fe9db2c4db9f79db85f0a4f531ea9be185cab0",
+      "17": "b724fdba0a0493a03ce629453a4ad74ff10beb418ba8aaeeae60e76bfc21dd21",
+      "2": "689896aff9954858cf81572de3eb0a5299d2a180ad72b542cb04f30d0ac312f6",
+      "3": "f9b859b4f3c3183257129dceefde3f71e169d596dd6183ad5372e608d81fbd8b",
+      "5": "99ac1731616c89e19a22cdd0b7bbc883d5b5c0d355c55d26b34ee1fac67cb190",
+      "14": "a5d2d7d39a903410af8931c2b5b7e2b47c8b8483d7633ae88c555eaaa745236f",
+      "11": "125b3c41dc44724f757fe6c4b4dba5ffb1eff5f008c3515af7f1280da60b7d3c",
+      "7": "a49db007765ea2e16921f5e6754ba8cb26c65313b71b20837feaca14d85a680f"
+    },
+    "inputs": [
+      "9b1042aa25c7e69b1965e668e6265b3f3e65e0a8c780016d6c56b175986acfb3#1",
+      "282bebe2ec58fbf28dc9f410e954f577ba2c055b9878d6a46eeac3352b369abf#1"
+    ],
+    "collateral": [
+      "282bebe2ec58fbf28dc9f410e954f577ba2c055b9878d6a46eeac3352b369abf#1"
+    ],
+    "reference_inputs": [
+      "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+      "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+      "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2",
+      "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0"
+    ],
+    "outputs": [
+      {
+        "address": "3132201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+        "lovelace": 199562840704,
+        "assets": {
+          "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad.0014df105553444d": 21250000000
+        }
+      },
+      {
+        "address": "01c036c15399bd8f9a36c042afbf3cad16edb71dbc13c2ede6c38942cb46145907de69e88b3bcb27146b64cdb0ac896f5e1a6cc7d46b2afa50",
+        "lovelace": 1189560,
+        "assets": {
+          "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad.0014df105553444d": 18750000000
+        }
+      },
+      {
+        "address": "018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+        "lovelace": 9307387,
+        "assets": {}
+      }
+    ],
+    "fee": 448353,
+    "ttl": 199318513,
+    "validity_start": null,
+    "withdrawals": {
+      "f1a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094": 0
+    },
+    "script_data_hash": "132eb9707cf721c8dbcd3266ad7c3d08712610d737874a7d7c84a6785f91a676",
+    "required_signers": [
+      "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+      "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+    ],
+    "network_id": null,
+    "collateral_return": {
+      "address": "018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+      "lovelace": 9083210,
+      "assets": {}
+    },
+    "total_collateral": 672530,
+    "mint": null,
+    "certs": null,
+    "voting_procedures": null,
+    "proposals": null,
+    "treasury_donation": null,
+    "current_treasury": null,
+    "vkey_witnesses": [],
+    "redeemers": [
+      {
+        "tag": 0,
+        "index": 1,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          524171,
+          174496675
+        ]
+      },
+      {
+        "tag": 3,
+        "index": 0,
+        "data": "[]",
+        "exunits": [
+          217909,
+          69488224
+        ]
+      }
+    ],
+    "plutus_datums": "None",
+    "witness_scripts_present": {
+      "1": 0,
+      "3": 0,
+      "6": 0,
+      "7": 0
+    },
+    "metadata": {
+      "1694": {
+        "body": {
+          "event": "disburse",
+          "label": "Pay USDM",
+          "references": [
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga"
+              ],
+              "@type": "Other",
+              "label": [
+                "Contract",
+                " - ",
+                "CRYPTO ACCOUNTING GROUP"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm"
+              ],
+              "@type": "Other",
+              "label": [
+                "Address-of-record proof",
+                " - ",
+                "CRYPTO ACCOUNTING GROUP"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da"
+              ],
+              "@type": "Other",
+              "label": [
+                "Contract",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeih2x7djuckim3cnjdox3isp5qnswampvoframvnkdrugcwwyz62se"
+              ],
+              "@type": "Other",
+              "label": [
+                "Invoice #3536",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeiedjrhylujzaujmbbahc5xhjy46hjr5nf2dkc7knpnrate3w2ls34"
+              ],
+              "@type": "Other",
+              "label": [
+                "September2026 cycle review",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            }
+          ],
+          "description": [
+            "Pay 18750 USDM to CAG for Cyber Castellum August 2026."
+          ],
+          "destination": {
+            "label": "Crypto Accounting Group"
+          },
+          "justification": [
+            "Acceptance of the Cyber Castellum September 2026 cycle review."
+          ]
+        },
+        "@context": [
+          "https://github.com/SundaeSwap-finance/treasury-contracts/blob/",
+          "ad4316d0d36cdef780f85fc2ec8b307e645ddc2a",
+          "/offchain/src/metadata/spec.md"
+        ],
+        "instance": "38c627d45835744a2d6c727124f2b5852e5564aeab3f608e0e84ea6d",
+        "hashAlgorithm": "blake2b-256"
+      }
+    }
+  },
+  "prev_3528_signed": {
+    "file": "/tmp/attx-3536-september-opus55-blind-20260930-bih5w886/input/payment-history/4f64f292d2b8d74f9bade3bdcafb92302b79b6589208147c995e55057b7696b4/signed-tx.hex",
+    "sha256_file": "a595ed2034127f3af9e83f61d21aa005d15af8b995d291c3c10a5e48c552cb16",
+    "tx_bytes": 2862,
+    "sha256_tx_bytes": "22856a94606ebbd1f2cd6992b2641e8b508ed46af73ddfb84fd42d42524a6724",
+    "txid": "4f64f292d2b8d74f9bade3bdcafb92302b79b6589208147c995e55057b7696b4",
+    "body_len": 996,
+    "body_keys": [
+      0,
+      1,
+      2,
+      3,
+      5,
+      7,
+      11,
+      13,
+      14,
+      16,
+      17,
+      18
+    ],
+    "is_valid_flag": true,
+    "aux_hash_computed": "0d15de7b437dac89a1e67dbe368d5b98dd997fe62e32286224f734ed7dae8d5a",
+    "aux_hash_in_body": "0d15de7b437dac89a1e67dbe368d5b98dd997fe62e32286224f734ed7dae8d5a",
+    "witness_keys": [
+      0,
+      5
+    ],
+    "sha256_body": "71ec875031a0d7efe8e3ad14265728f1c16198100a93786fc34b3929fecf8923",
+    "sha256_aux": "130a432ae18c17c94b5bdda5b45ae32c4159380ca9a20c3274983ca0289ef136",
+    "sha256_nonvkey_witness_fields": {
+      "5": "e551d176abdd1dbe222ba8e4756acb99c29f04727607fe3b92a32735d89811f6"
+    },
+    "sha256_body_fields": {
+      "0": "402c0fdb51022ee7df23c4af1146a68a40cda56b53f64b0243583a965e578adf",
+      "13": "da3aa140e579ab514f5f85b398a3ad288305319f5daddc99d427876ee826a8b5",
+      "18": "1562c81ea2184ac74104782fdcd9564dc0488071111797f79725718ef29131f3",
+      "1": "d38b6946c87383cdc5a4a4bc19f8dc1100241d0fda971a7774c439c46876d588",
+      "16": "79b315cc4caa75c3f07971572a25c62502fe59d7ba1faad9c1b0f801c405be87",
+      "17": "ef0e5948354fff9a2e8d0793b01c9ab82b936e6f493aabd238d3b16579c1a94a",
+      "2": "1d2677f7197e83a7ff0fbe1226fb028831ba21c89977460c8fcd06a87e9479ca",
+      "3": "8c6d927d6999e1f5de63c580ee31f4a2d3739965e85c784ea1e10f742ac31a5a",
+      "5": "99ac1731616c89e19a22cdd0b7bbc883d5b5c0d355c55d26b34ee1fac67cb190",
+      "14": "a5d2d7d39a903410af8931c2b5b7e2b47c8b8483d7633ae88c555eaaa745236f",
+      "11": "213b8e66a1111a0ceb97e8d96c8952dba54cfa69612201b0800eea91f3229745",
+      "7": "cae0013e744bc9ef30bb33f1ef48517346bde1553250dda5bc5e648eb6c16dbc"
+    },
+    "inputs": [
+      "affe90d1fa9a93b3e2a48009ef80634e9de8428640f5d673e85b002a86399982#0",
+      "a5003a714c45d0c25d6d6463f6ac0c1fd059bc6c390388aaf1cea7249e0fe3ab#1",
+      "1defcad59b4b67572d0bd6f82d98a35217261e2203bdca6179ff67b8d0ae3df2#1",
+      "968fd01e074ca33de95087957f59803bb2ee8bacfe922eb81cdf18e8e23ad788#0",
+      "a80f446675b55c8f39a2efadc79d4a5643ed64b13c0750bbc0c4010d335713fa#1",
+      "0abab118fb103b983b177fb80c247803f3b5ff7f5d98202ddd2f071b017cb23d#0",
+      "e95251993c0ed08c52d4063da1aeba193e4327d4900168111fe73f61ed10d3c5#1"
+    ],
+    "collateral": [
+      "1defcad59b4b67572d0bd6f82d98a35217261e2203bdca6179ff67b8d0ae3df2#1"
+    ],
+    "reference_inputs": [
+      "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+      "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+      "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2",
+      "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0"
+    ],
+    "outputs": [
+      {
+        "address": "3132201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+        "lovelace": 138045595,
+        "assets": {
+          "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad.0014df105553444d": 248542293
+        }
+      },
+      {
+        "address": "01c036c15399bd8f9a36c042afbf3cad16edb71dbc13c2ede6c38942cb46145907de69e88b3bcb27146b64cdb0ac896f5e1a6cc7d46b2afa50",
+        "lovelace": 1189560,
+        "assets": {
+          "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad.0014df105553444d": 18750000000
+        }
+      },
+      {
+        "address": "018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+        "lovelace": 8780008,
+        "assets": {}
+      }
+    ],
+    "fee": 975732,
+    "ttl": 196296876,
+    "validity_start": null,
+    "withdrawals": {
+      "f1a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094": 0
+    },
+    "script_data_hash": "41097bfc24c9c41a6c056cadc789435c6e2d0dce67112548fcba11d36d5335f7",
+    "required_signers": [
+      "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+      "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+    ],
+    "network_id": null,
+    "collateral_return": {
+      "address": "018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+      "lovelace": 8292142,
+      "assets": {}
+    },
+    "total_collateral": 1463598,
+    "mint": null,
+    "certs": null,
+    "voting_procedures": null,
+    "proposals": null,
+    "treasury_donation": null,
+    "current_treasury": null,
+    "vkey_witnesses": [
+      {
+        "vkey": "f127c0824564745561896c3ce3e6e5961f2acaab5f5f149c65f2e81ff549360a",
+        "keyhash": "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+        "sig_valid_over_txid": true,
+        "openssl": "Signature Verified Successfully"
+      },
+      {
+        "vkey": "ab71c52f786d308c65cc4772eac66822e8cd169dc267a74f5ec9f7371895cdd9",
+        "keyhash": "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+        "sig_valid_over_txid": true,
+        "openssl": "Signature Verified Successfully"
+      }
+    ],
+    "redeemers": [
+      {
+        "tag": 0,
+        "index": 0,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          1063372,
+          350479838
+        ]
+      },
+      {
+        "tag": 0,
+        "index": 2,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          1071760,
+          355730792
+        ]
+      },
+      {
+        "tag": 0,
+        "index": 3,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          1075954,
+          358356269
+        ]
+      },
+      {
+        "tag": 0,
+        "index": 4,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          1080148,
+          360981746
+        ]
+      },
+      {
+        "tag": 0,
+        "index": 5,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          1084342,
+          363607223
+        ]
+      },
+      {
+        "tag": 0,
+        "index": 6,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          1088536,
+          366232700
+        ]
+      },
+      {
+        "tag": 3,
+        "index": 0,
+        "data": "[]",
+        "exunits": [
+          408589,
+          171075524
+        ]
+      }
+    ],
+    "plutus_datums": "None",
+    "witness_scripts_present": {
+      "1": 0,
+      "3": 0,
+      "6": 0,
+      "7": 0
+    },
+    "metadata": {
+      "1694": {
+        "body": {
+          "event": "disburse",
+          "label": "Pay USDM",
+          "references": [
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga"
+              ],
+              "@type": "Other",
+              "label": [
+                "Contract",
+                " - ",
+                "CRYPTO ACCOUNTING GROUP"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm"
+              ],
+              "@type": "Other",
+              "label": [
+                "Address-of-record proof",
+                " - ",
+                "CRYPTO ACCOUNTING GROUP"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da"
+              ],
+              "@type": "Other",
+              "label": [
+                "Contract",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "QmNQbjmE6B9JvqwrHX4JVnCepqGoVhDpGQuwaSUjwDeP9f"
+              ],
+              "@type": "Other",
+              "label": [
+                "Invoice #3528",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "QmXGGFgD5vt1awuP3ttGgAwL4Rm2CYEuVgFkycgGwmi2xh"
+              ],
+              "@type": "Other",
+              "label": [
+                "August2026 cycle review",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            }
+          ],
+          "description": [
+            "Disburse 18750 USDM (CAG payee) for Cyber Castellum August 2026."
+          ],
+          "destination": {
+            "label": "Crypto Accounting Group"
+          },
+          "justification": [
+            "Acceptance of the Cyber Castellum August 2026 cycle review."
+          ]
+        },
+        "@context": [
+          "https://github.com/SundaeSwap-finance/treasury-contracts/blob/",
+          "ad4316d0d36cdef780f85fc2ec8b307e645ddc2a",
+          "/offchain/src/metadata/spec.md"
+        ],
+        "instance": "38c627d45835744a2d6c727124f2b5852e5564aeab3f608e0e84ea6d",
+        "hashAlgorithm": "blake2b-256"
+      }
+    }
+  },
+  "prev_3522_signed": {
+    "file": "/tmp/attx-3536-september-opus55-blind-20260930-bih5w886/input/payment-history/0abab118fb103b983b177fb80c247803f3b5ff7f5d98202ddd2f071b017cb23d/signed-tx.hex",
+    "sha256_file": "0a9cf1bf3acf820e1e6f69a116f4bb3ab03ce9551b689ef39efbaec615134569",
+    "tx_bytes": 2656,
+    "sha256_tx_bytes": "979bb26de7031f9fc4bf6f4535908fef36cbb176a3982d392f41a6fe896ab934",
+    "txid": "0abab118fb103b983b177fb80c247803f3b5ff7f5d98202ddd2f071b017cb23d",
+    "body_len": 924,
+    "body_keys": [
+      0,
+      1,
+      2,
+      3,
+      5,
+      7,
+      11,
+      13,
+      14,
+      16,
+      17,
+      18
+    ],
+    "is_valid_flag": true,
+    "aux_hash_computed": "6ac0a512b0200ebcbe21f3564449a6b8315057ac2b989b642deceadff59edc2a",
+    "aux_hash_in_body": "6ac0a512b0200ebcbe21f3564449a6b8315057ac2b989b642deceadff59edc2a",
+    "witness_keys": [
+      0,
+      5
+    ],
+    "sha256_body": "69fe02018417579780a58acf13854d7ffea5c8fdf7afce4ceab2a2d34a1ee5ad",
+    "sha256_aux": "e7798576b9bee4eb25fdff557bef9d50c6534d16fd15a475d031376128ca661c",
+    "sha256_nonvkey_witness_fields": {
+      "5": "1d03acaa98e6e28dc13c8c52ec83ce4d1fb9f60e9770b9ed553589706a0393aa"
+    },
+    "sha256_body_fields": {
+      "0": "01a84854e1d042c1052ec41efbe2a34a48c0dd9cb623527291c723c77f1bd8f1",
+      "13": "24c2f52594844ce892fffb2992856cac0cfb17cb5f42eb77a1155efe3228e9ca",
+      "18": "1562c81ea2184ac74104782fdcd9564dc0488071111797f79725718ef29131f3",
+      "1": "ed506418fd3a58b4983a4e1baadf4a773bcef00147aa94bb40063eaf9e6f9f8e",
+      "16": "01434b78875123abdee3b80e860f3c457f7e43bd70970b5ae958aafe2055d847",
+      "17": "037595417917d4a062598390f3f6c23da7c085eccd8510a278874734d98a5a43",
+      "2": "030128522c0c74902897b1f07d82fd2b6fa5fabf9e20ecddd0c7fc7a59074d64",
+      "3": "d7bf1ef0ffdc150fc900db47450185ca0aa608c98d0c3d8199b052a7ed8fe055",
+      "5": "99ac1731616c89e19a22cdd0b7bbc883d5b5c0d355c55d26b34ee1fac67cb190",
+      "14": "a5d2d7d39a903410af8931c2b5b7e2b47c8b8483d7633ae88c555eaaa745236f",
+      "11": "6b2c1157833a26cc3b24bcf177df3d8ff3be271ac50cc633864005c2da55fc1b",
+      "7": "46197e53939e77d5e6104a256710852ae3c645311f2b4dddefa1641382f9a0c5"
+    },
+    "inputs": [
+      "488e5b417aa4f573528057fd1d7ab6de4f7ad06e296f945ee4097d8a94ee62e7#2",
+      "9e3fb6387eebd8f8b6ef962c1bbd9d247fb01334632697406d3497f7836ab728#1",
+      "21654ab5837e186357ffc6436bb9be07554ad694b4965a6e018507be08df77e5#1",
+      "f16ab763f0f5b14fdbcee2b42a7996a43d6a4495aed7793a339b94d5ddbd56f9#1",
+      "68a1277af23755376967e788752c603044f45ea0d99220b3b5dfc7d617642b6b#1"
+    ],
+    "collateral": [
+      "488e5b417aa4f573528057fd1d7ab6de4f7ad06e296f945ee4097d8a94ee62e7#2"
+    ],
+    "reference_inputs": [
+      "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+      "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+      "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2",
+      "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0"
+    ],
+    "outputs": [
+      {
+        "address": "3132201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+        "lovelace": 8391442,
+        "assets": {
+          "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad.0014df105553444d": 1372190916
+        }
+      },
+      {
+        "address": "01c036c15399bd8f9a36c042afbf3cad16edb71dbc13c2ede6c38942cb46145907de69e88b3bcb27146b64cdb0ac896f5e1a6cc7d46b2afa50",
+        "lovelace": 1189560,
+        "assets": {
+          "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad.0014df105553444d": 18750000000
+        }
+      },
+      {
+        "address": "018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+        "lovelace": 17740109,
+        "assets": {}
+      }
+    ],
+    "fee": 709433,
+    "ttl": 192547095,
+    "validity_start": null,
+    "withdrawals": {
+      "f1a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094": 0
+    },
+    "script_data_hash": "27be7611bcc3367524c13a4e4620ef97643fde1248cd31ccfeb0952138f1ac70",
+    "required_signers": [
+      "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+      "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+    ],
+    "network_id": null,
+    "collateral_return": {
+      "address": "018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+      "lovelace": 17385392,
+      "assets": {}
+    },
+    "total_collateral": 1064150,
+    "mint": null,
+    "certs": null,
+    "voting_procedures": null,
+    "proposals": null,
+    "treasury_donation": null,
+    "current_treasury": null,
+    "vkey_witnesses": [
+      {
+        "vkey": "f127c0824564745561896c3ce3e6e5961f2acaab5f5f149c65f2e81ff549360a",
+        "keyhash": "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+        "sig_valid_over_txid": true,
+        "openssl": "Signature Verified Successfully"
+      },
+      {
+        "vkey": "ab71c52f786d308c65cc4772eac66822e8cd169dc267a74f5ec9f7371895cdd9",
+        "keyhash": "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+        "sig_valid_over_txid": true,
+        "openssl": "Signature Verified Successfully"
+      }
+    ],
+    "redeemers": [
+      {
+        "tag": 0,
+        "index": 0,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          846014,
+          279036382
+        ]
+      },
+      {
+        "tag": 0,
+        "index": 2,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          854402,
+          284287336
+        ]
+      },
+      {
+        "tag": 0,
+        "index": 3,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          858596,
+          286912813
+        ]
+      },
+      {
+        "tag": 0,
+        "index": 4,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          862790,
+          289538290
+        ]
+      },
+      {
+        "tag": 3,
+        "index": 0,
+        "data": "[]",
+        "exunits": [
+          322027,
+          122896330
+        ]
+      }
+    ],
+    "plutus_datums": "None",
+    "witness_scripts_present": {
+      "1": 0,
+      "3": 0,
+      "6": 0,
+      "7": 0
+    },
+    "metadata": {
+      "1694": {
+        "body": {
+          "event": "disburse",
+          "label": "Pay USDM",
+          "references": [
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga"
+              ],
+              "@type": "Other",
+              "label": [
+                "Contract",
+                " - ",
+                "CRYPTO ACCOUNTING GROUP"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm"
+              ],
+              "@type": "Other",
+              "label": [
+                "Address-of-record proof",
+                " - ",
+                "CRYPTO ACCOUNTING GROUP"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da"
+              ],
+              "@type": "Other",
+              "label": [
+                "Contract",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeic6sh4cbftjlr62qcz3ysuivrxqto7zbpnwdgepam5rbbxgvccauu"
+              ],
+              "@type": "Other",
+              "label": [
+                "Invoice #3522",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeihm4umyc5a63djsiuw3nna7txptsnon7sltqpgmjzaecpsjkhjbdi"
+              ],
+              "@type": "Other",
+              "label": [
+                "July2026 cycle review",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            }
+          ],
+          "description": [
+            "Disburse 18750 USDM (CAG payee) for Cyber Castellum July 2026."
+          ],
+          "destination": {
+            "label": "Crypto Accounting Group"
+          },
+          "justification": [
+            "Acceptance of the Cyber Castellum July 2026 cycle review."
+          ]
+        },
+        "@context": [
+          "https://github.com/SundaeSwap-finance/treasury-contracts/blob/",
+          "ad4316d0d36cdef780f85fc2ec8b307e645ddc2a",
+          "/offchain/src/metadata/spec.md"
+        ],
+        "instance": "38c627d45835744a2d6c727124f2b5852e5564aeab3f608e0e84ea6d",
+        "hashAlgorithm": "blake2b-256"
+      }
+    }
+  },
+  "prev_3516_signed": {
+    "file": "/tmp/attx-3536-september-opus55-blind-20260930-bih5w886/input/payment-history/968fd01e074ca33de95087957f59803bb2ee8bacfe922eb81cdf18e8e23ad788/signed-tx.hex",
+    "sha256_file": "832d22952be5b8cd8143df3f51b63bc0e25fd92387d0188add7a58635aa88542",
+    "tx_bytes": 2430,
+    "sha256_tx_bytes": "faef5c434ba74c54a59d728fc2d462dc9812cee1236f0f45042b9ed5b9b90f95",
+    "txid": "968fd01e074ca33de95087957f59803bb2ee8bacfe922eb81cdf18e8e23ad788",
+    "body_len": 852,
+    "body_keys": [
+      0,
+      1,
+      2,
+      3,
+      5,
+      7,
+      11,
+      13,
+      14,
+      16,
+      17,
+      18
+    ],
+    "is_valid_flag": true,
+    "aux_hash_computed": "6b7a9c6020311eb50fe54b2ed763e28126122348c8f3fd0cf19830a20213c11f",
+    "aux_hash_in_body": "6b7a9c6020311eb50fe54b2ed763e28126122348c8f3fd0cf19830a20213c11f",
+    "witness_keys": [
+      0,
+      5
+    ],
+    "sha256_body": "8a71c23b08b7061e158fb20c0a72b9bb892efb03a9a6ca7c976520264935afa7",
+    "sha256_aux": "cfc3ea4ebe0b3319cf6b23f56f45d1b551ddcce46b5d14a8e9f2f63a8432c1b0",
+    "sha256_nonvkey_witness_fields": {
+      "5": "e7e589401ba91128ee55367541a287c6f4e90d97b0621c62b93611b2392564a7"
+    },
+    "sha256_body_fields": {
+      "0": "cd627fc440d3bc862ebdbe64effc4d9632b3bc9b751d4153187770a461bd26cc",
+      "13": "c1963b8e728a3ab8d5bc156ea3a903ee21b4dac3c9189ff9d26ba4ac34905644",
+      "18": "1562c81ea2184ac74104782fdcd9564dc0488071111797f79725718ef29131f3",
+      "1": "95f83689bc57e0e2cb73d3b97579f460000a9c97f4289840fd0dc0f9cba9519c",
+      "16": "09c492e021bb1ead1c38da616c7bc827e7a216f93036d780ae0dfb6437a4a7d8",
+      "17": "03c2c9014bb0421d82a674719a03c7a30f70042b4fb63dbd1786fd8555259a0e",
+      "2": "05a7fcf1315619f2b62461020641917cfc4aa68b3bc227f74ea1aab8da800ff5",
+      "3": "dc58843d168529de536b173e29d6b4814463276fcc4acf5112d9535d1c92669e",
+      "5": "99ac1731616c89e19a22cdd0b7bbc883d5b5c0d355c55d26b34ee1fac67cb190",
+      "14": "a5d2d7d39a903410af8931c2b5b7e2b47c8b8483d7633ae88c555eaaa745236f",
+      "11": "a0f29fc25d1ab8cf7510d625203e9e7393e0443a75a084f631ef5ff321b8f168",
+      "7": "461964417bbf6ad6ab9056ecf17935b44f7ad7095d4d942432b52d47640dbb58"
+    },
+    "inputs": [
+      "79fe5d226d87110119d1cb9c5d3eff098fb0e3bb13cdd286fb01121008822261#1",
+      "3f4eec70eb2dd3b69a9d93653b84c86f4185d14a90f87ad822ce47ef43ff4e08#5",
+      "ac8efa10883a3d47b1229f0683705fac6b9ce09386be9a3819365260a773685e#1"
+    ],
+    "collateral": [
+      "3f4eec70eb2dd3b69a9d93653b84c86f4185d14a90f87ad822ce47ef43ff4e08#5"
+    ],
+    "reference_inputs": [
+      "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+      "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+      "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2",
+      "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0"
+    ],
+    "outputs": [
+      {
+        "address": "3132201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+        "lovelace": 3524440,
+        "assets": {
+          "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad.0014df105553444d": 1263115588
+        }
+      },
+      {
+        "address": "01c036c15399bd8f9a36c042afbf3cad16edb71dbc13c2ede6c38942cb46145907de69e88b3bcb27146b64cdb0ac896f5e1a6cc7d46b2afa50",
+        "lovelace": 1189560,
+        "assets": {
+          "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad.0014df105553444d": 18750000000
+        }
+      },
+      {
+        "address": "018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+        "lovelace": 77411622,
+        "assets": {}
+      }
+    ],
+    "fee": 516698,
+    "ttl": 192546286,
+    "validity_start": null,
+    "withdrawals": {
+      "f1a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094": 0
+    },
+    "script_data_hash": "92468a018d7eea2c7cf40d921985bce639c030390cc488b4062f4fac2f090b37",
+    "required_signers": [
+      "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+      "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+    ],
+    "network_id": null,
+    "collateral_return": {
+      "address": "018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+      "lovelace": 77153273,
+      "assets": {}
+    },
+    "total_collateral": 775047,
+    "mint": null,
+    "certs": null,
+    "voting_procedures": null,
+    "proposals": null,
+    "treasury_donation": null,
+    "current_treasury": null,
+    "vkey_witnesses": [
+      {
+        "vkey": "ab71c52f786d308c65cc4772eac66822e8cd169dc267a74f5ec9f7371895cdd9",
+        "keyhash": "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+        "sig_valid_over_txid": true,
+        "openssl": "Signature Verified Successfully"
+      },
+      {
+        "vkey": "f127c0824564745561896c3ce3e6e5961f2acaab5f5f149c65f2e81ff549360a",
+        "keyhash": "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+        "sig_valid_over_txid": true,
+        "openssl": "Signature Verified Successfully"
+      }
+    ],
+    "redeemers": [
+      {
+        "tag": 0,
+        "index": 1,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          632850,
+          210218403
+        ]
+      },
+      {
+        "tag": 0,
+        "index": 2,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          637044,
+          212843880
+        ]
+      },
+      {
+        "tag": 3,
+        "index": 0,
+        "data": "[]",
+        "exunits": [
+          249185,
+          84776168
+        ]
+      }
+    ],
+    "plutus_datums": "None",
+    "witness_scripts_present": {
+      "1": 0,
+      "3": 0,
+      "6": 0,
+      "7": 0
+    },
+    "metadata": {
+      "1694": {
+        "body": {
+          "event": "disburse",
+          "label": "Pay USDM",
+          "references": [
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga"
+              ],
+              "@type": "Other",
+              "label": [
+                "Contract",
+                " - ",
+                "CRYPTO ACCOUNTING GROUP"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm"
+              ],
+              "@type": "Other",
+              "label": [
+                "Address-of-record proof",
+                " - ",
+                "CRYPTO ACCOUNTING GROUP"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da"
+              ],
+              "@type": "Other",
+              "label": [
+                "Contract",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeiarox2hhcb32nrssxrgqrzlubyuh6aupcexfwnopxndr76inuramm"
+              ],
+              "@type": "Other",
+              "label": [
+                "Invoice #3516",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeihtwkgx47q3ylrcnyo737gzs2fhoxqnx7n7xbqie2gcowd65kmjle"
+              ],
+              "@type": "Other",
+              "label": [
+                "June2026 cycle review",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            }
+          ],
+          "description": [
+            "Disburse 18750 USDM (CAG payee) for Cyber Castellum June 2026."
+          ],
+          "destination": {
+            "label": "Crypto Accounting Group"
+          },
+          "justification": [
+            "Acceptance of the Cyber Castellum June 2026 cycle review."
+          ]
+        },
+        "@context": [
+          "https://github.com/SundaeSwap-finance/treasury-contracts/blob/",
+          "ad4316d0d36cdef780f85fc2ec8b307e645ddc2a",
+          "/offchain/src/metadata/spec.md"
+        ],
+        "instance": "38c627d45835744a2d6c727124f2b5852e5564aeab3f608e0e84ea6d",
+        "hashAlgorithm": "blake2b-256"
+      }
+    }
+  },
+  "prev_3508_signed": {
+    "file": "/tmp/attx-3536-september-opus55-blind-20260930-bih5w886/input/payment-history/c150d5c5c67658c8f2a3bc24e16a4852257d46a03224257ac990fcca6f6fde78/signed-tx.hex",
+    "sha256_file": "305c70b4b313653345fbdb892e9fea021e425ad680886cb066823ecfc1c3945e",
+    "tx_bytes": 2427,
+    "sha256_tx_bytes": "70fee2105666b056babb17020a5448e61a4341fd8d81b1039777d0339ab1ccac",
+    "txid": "c150d5c5c67658c8f2a3bc24e16a4852257d46a03224257ac990fcca6f6fde78",
+    "body_len": 852,
+    "body_keys": [
+      0,
+      1,
+      2,
+      3,
+      5,
+      7,
+      11,
+      13,
+      14,
+      16,
+      17,
+      18
+    ],
+    "is_valid_flag": true,
+    "aux_hash_computed": "18d40a5ff26d9aaa02bee904ec165d5bc077450f6e48756603acf0b8d14c58b8",
+    "aux_hash_in_body": "18d40a5ff26d9aaa02bee904ec165d5bc077450f6e48756603acf0b8d14c58b8",
+    "witness_keys": [
+      0,
+      5
+    ],
+    "sha256_body": "d40ac91d1053d078873c3f840d8a54701c278dbd649fe800d1ee76852094da7a",
+    "sha256_aux": "e9e4f566b02de96360d49be2e991f2a3278f4c8abbfc4fa8f154d37f87a33ede",
+    "sha256_nonvkey_witness_fields": {
+      "5": "057cc4ace762fc02b665c55051f6ed53b71a1195afa2407e5b14e73fe17f3bb2"
+    },
+    "sha256_body_fields": {
+      "0": "ae9f86c5e759a781d6fe96efb7bc1097e3c1a435233c36d979c82759aee39f7c",
+      "13": "0248d4ce2e9fe980ac6196ed1ac3349cc6a515d06a38f043fc4495b94539ec3e",
+      "18": "1562c81ea2184ac74104782fdcd9564dc0488071111797f79725718ef29131f3",
+      "1": "0cc4e43bcf1a0786dabde69bec356a38163bc44b2e864ab4686f87622b9e1f16",
+      "16": "60bb2bca0d8ee877aa985cd97f862b3faf44b189ba8994680cb596e95cb35657",
+      "17": "dc30a81afe292933a17e8b3ee947858826589eb7b93fd2f9dbbc474e5562f136",
+      "2": "d107c53f96b5e10c448d99377604eb02c1aae5504a6909da4be06fe84cf6e878",
+      "3": "335c5e08bdf7d38088a02351d47b00f50817dff66dcbb5b542e4e68ff28d2a58",
+      "5": "99ac1731616c89e19a22cdd0b7bbc883d5b5c0d355c55d26b34ee1fac67cb190",
+      "14": "a5d2d7d39a903410af8931c2b5b7e2b47c8b8483d7633ae88c555eaaa745236f",
+      "11": "c3362c903c16ee0838c589d2b6aff6a041635db4ac56cc274ed016c8ea0f4748",
+      "7": "9da760ca6ffb03b21df0e2344999a1debf319b35edc82b9d6c690db59b346065"
+    },
+    "inputs": [
+      "44454ed0def64621ef645958830f599b488b699b28e3797cc37c4f4dd1463a79#2",
+      "77b1b046d1bfb1a09011d4606817ea45d13d8d9e0d02258984d0c6126e4cc9e9#1",
+      "3c3d5332cb159a5f0b42cf48a6f897f1603f94fb4405c6f0c1146d5feb627963#1"
+    ],
+    "collateral": [
+      "44454ed0def64621ef645958830f599b488b699b28e3797cc37c4f4dd1463a79#2"
+    ],
+    "reference_inputs": [
+      "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+      "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+      "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2",
+      "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0"
+    ],
+    "outputs": [
+      {
+        "address": "3132201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+        "lovelace": 3422443,
+        "assets": {
+          "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad.0014df105553444d": 1664173527
+        }
+      },
+      {
+        "address": "01c036c15399bd8f9a36c042afbf3cad16edb71dbc13c2ede6c38942cb46145907de69e88b3bcb27146b64cdb0ac896f5e1a6cc7d46b2afa50",
+        "lovelace": 1189560,
+        "assets": {
+          "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad.0014df105553444d": 18750000000
+        }
+      },
+      {
+        "address": "018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+        "lovelace": 89406649,
+        "assets": {}
+      }
+    ],
+    "fee": 516135,
+    "ttl": 188070688,
+    "validity_start": null,
+    "withdrawals": {
+      "f1a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094": 0
+    },
+    "script_data_hash": "55c437cbbb154a8a8b330e5bd3063028da9886ecd05c1755838bf6bcbd4a6b06",
+    "required_signers": [
+      "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+      "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+    ],
+    "network_id": null,
+    "collateral_return": {
+      "address": "018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+      "lovelace": 89148581,
+      "assets": {}
+    },
+    "total_collateral": 774203,
+    "mint": null,
+    "certs": null,
+    "voting_procedures": null,
+    "proposals": null,
+    "treasury_donation": null,
+    "current_treasury": null,
+    "vkey_witnesses": [
+      {
+        "vkey": "ab71c52f786d308c65cc4772eac66822e8cd169dc267a74f5ec9f7371895cdd9",
+        "keyhash": "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+        "sig_valid_over_txid": true,
+        "openssl": "Signature Verified Successfully"
+      },
+      {
+        "vkey": "f127c0824564745561896c3ce3e6e5961f2acaab5f5f149c65f2e81ff549360a",
+        "keyhash": "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+        "sig_valid_over_txid": true,
+        "openssl": "Signature Verified Successfully"
+      }
+    ],
+    "redeemers": [
+      {
+        "tag": 0,
+        "index": 0,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          628656,
+          207593746
+        ]
+      },
+      {
+        "tag": 0,
+        "index": 2,
+        "data": "CBORTag(124, [{b'': {b'': 1189560}, b'\\xc4\\x8c\\xbb=^W\\xedV\\xe2v\\xbcE\\xf9\\x9a\\xb3\\x9a\\xbe\\x94\\xe6\\xcdz\\xc3\\x9f\\xb4\\x02\\xdaG\\xad': {b'\\x00\\x14\\xdf\\x10USDM': 18750000000}}])",
+        "exunits": [
+          637044,
+          212844700
+        ]
+      },
+      {
+        "tag": 3,
+        "index": 0,
+        "data": "[]",
+        "exunits": [
+          249185,
+          84780965
+        ]
+      }
+    ],
+    "plutus_datums": "None",
+    "witness_scripts_present": {
+      "1": 0,
+      "3": 0,
+      "6": 0,
+      "7": 0
+    },
+    "metadata": {
+      "1694": {
+        "body": {
+          "event": "disburse",
+          "label": "Pay USDM",
+          "references": [
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga"
+              ],
+              "@type": "Other",
+              "label": [
+                "Contract",
+                " - ",
+                "CRYPTO ACCOUNTING GROUP"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm"
+              ],
+              "@type": "Other",
+              "label": [
+                "Address-of-record proof",
+                " - ",
+                "CRYPTO ACCOUNTING GROUP"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da"
+              ],
+              "@type": "Other",
+              "label": [
+                "Contract",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeigy37ui2ikn7bim2vw6cojcbxkcndpjwh7cj5fv3vzs4cszezipxu"
+              ],
+              "@type": "Other",
+              "label": [
+                "Invoice #3508",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            },
+            {
+              "uri": [
+                "ipfs://",
+                "bafybeihdmnitrbu2oir3r2fefnpqy3bk7zdz42olzmltmxyt5xag4i2t5a"
+              ],
+              "@type": "Other",
+              "label": [
+                "May2026 cycle review",
+                " - ",
+                "CYBER CASTELLUM CORPORATION"
+              ]
+            }
+          ],
+          "description": [
+            "Disburse 18750 USDM (CAG payee) for Cyber Castellum May 2026."
+          ],
+          "destination": {
+            "label": "Crypto Accounting Group"
+          },
+          "justification": [
+            "Acceptance of the Cyber Castellum May 2026 cycle review."
+          ]
+        },
+        "@context": [
+          "https://github.com/SundaeSwap-finance/treasury-contracts/blob/",
+          "ad4316d0d36cdef780f85fc2ec8b307e645ddc2a",
+          "/offchain/src/metadata/spec.md"
+        ],
+        "instance": "38c627d45835744a2d6c727124f2b5852e5564aeab3f608e0e84ea6d",
+        "hashAlgorithm": "blake2b-256"
+      }
+    }
+  },
+  "envelope_consistency": {
+    "signed": {
+      "type": "Tx ConwayEra",
+      "cborHex_equals_hexfile": true
+    },
+    "unsigned": {
+      "type": "Tx ConwayEra",
+      "cborHex_equals_hexfile": true
+    },
+    "superseded": {
+      "type": "Tx ConwayEra",
+      "cborHex_equals_hexfile": true
+    }
+  },
+  "signed_vs_unsigned": {
+    "body_bytes_identical": true,
+    "aux_bytes_identical": true,
+    "nonvkey_witness_fields_identical": {
+      "5": true
+    },
+    "unsigned_has_vkey_witnesses": false,
+    "is_valid_identical": true
+  },
+  "signed_vs_superseded_body_field_diff": [
+    "1",
+    "16",
+    "17",
+    "2",
+    "3",
+    "7"
+  ],
+  "signed_vs_superseded_nonvkey_witness_identical": {
+    "5": true
+  },
+  "signed_vs_prev3528_body_field_diff": [
+    "0",
+    "1",
+    "11",
+    "13",
+    "16",
+    "17",
+    "2",
+    "3",
+    "7"
+  ],
+  "signed_vs_prev3528_nonvkey_witness_identical": {
+    "5": false
+  },
+  "intent_addresses_decoded": {
+    "beneficiary": {
+      "bech32": "addr1q8qrds2nnx7clx3kcpp2l0eu45twmdcahsfu9m0xcwy59j6xz3vs0hnfaz9nhje8z34kfnds4jyk7hs6dnrag6e2lfgqtyf4rl",
+      "hrp": "addr",
+      "hex": "01c036c15399bd8f9a36c042afbf3cad16edb71dbc13c2ede6c38942cb46145907de69e88b3bcb27146b64cdb0ac896f5e1a6cc7d46b2afa50",
+      "payment_cred": "c036c15399bd8f9a36c042afbf3cad16edb71dbc13c2ede6c38942cb",
+      "stake_cred": "46145907de69e88b3bcb27146b64cdb0ac896f5e1a6cc7d46b2afa50",
+      "header": "0x1"
+    },
+    "treasury": {
+      "bech32": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
+      "hrp": "addr",
+      "hex": "3132201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+      "payment_cred": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+      "stake_cred": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+      "header": "0x31"
+    },
+    "wallet": {
+      "bech32": "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz",
+      "hrp": "addr",
+      "hex": "018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+      "payment_cred": "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+      "stake_cred": "4c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c3",
+      "header": "0x1"
+    }
+  }
+}

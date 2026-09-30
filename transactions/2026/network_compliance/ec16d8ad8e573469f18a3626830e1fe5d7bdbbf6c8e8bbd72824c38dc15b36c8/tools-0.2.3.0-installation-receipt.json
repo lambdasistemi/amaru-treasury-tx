@@ -1,0 +1,36 @@
+{
+  "release": "https://github.com/lambdasistemi/cardano-tx-tools/releases/tag/v0.2.3.0",
+  "version": "0.2.3.0",
+  "tools": [
+    {
+      "tool": "tx-diff",
+      "version": "tx-diff 0.2.3.0",
+      "asset_sha256": "6f4eb994ae59b3a201e4633ac1416d2109414116095be78775d0f961d9ae863a",
+      "binary_sha256": "c5263a9a27349e28e442a6bad75ab546c39d4525c9d44e1960a5e8e45a996b32",
+      "backup": null
+    },
+    {
+      "tool": "tx-inspect",
+      "version": "tx-inspect 0.2.3.0",
+      "asset_sha256": "f5254b6759cff9df35c8197941d0f20e1243676fa6f633a5c5b66cb17f7dafca",
+      "binary_sha256": "5ed3fa1821ef754a1c88347d5890906ebce271bf249bcf8ecbb8f3223a960b08",
+      "previous_sha256": "4f158fc55996124e41dbfbb40b92b2ce39b141eca4fd2d3ed3eaaadfcd858554",
+      "backup": "/home/paolino/.local/share/cardano-tx-tools/backups/20260930T165923Z/tx-inspect"
+    },
+    {
+      "tool": "tx-validate",
+      "version": "tx-validate 0.2.3.0",
+      "asset_sha256": "cc02b76403998f9579ee00550ee52b30ab5560c552290aae21f73504672918e9",
+      "binary_sha256": "8fe9afc21cf8e29a8557d6eaabd0a573255a5a05da1bc5434ab7667e86298707",
+      "previous_sha256": "e7d112f31d9138b2301a24e3402b175eaf69b3cf44325b7f5441be0f7b9b4955",
+      "backup": "/home/paolino/.local/share/cardano-tx-tools/backups/20260930T165923Z/tx-validate"
+    },
+    {
+      "tool": "tx-sign",
+      "version": "tx-sign 0.2.3.0",
+      "asset_sha256": "99492ac922641717964abca89fe7547ca4e504dc42895fd4a4e862c3726bbf61",
+      "binary_sha256": "ce57ec1f1811db09fa3c992187f01e085756379f964f42361c09e3dd5856e416",
+      "backup": null
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+{
+  "schema": "amaru-treasury-may-references-v2",
+  "scope": "network_compliance",
+  "month": "2026-09",
+  "constitution_principle": "VIII",
+  "constitution_version": "0.6.0",
+  "disbursements": [
+    {
+      "id": "september-2026-cyber-castellum",
+      "amount_usdm": 18750,
+      "payee_id": "crypto_accounting_group",
+      "beneficiary_id": "cyber_castellum_corporation",
+      "references": [
+        {
+          "kind": "payee_contract",
+          "vendor_id": "crypto_accounting_group",
+          "uri": "ipfs://bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga",
+          "type": "Other",
+          "label": "Contract - CRYPTO ACCOUNTING GROUP"
+        },
+        {
+          "kind": "payee_address_proof",
+          "vendor_id": "crypto_accounting_group",
+          "uri": "ipfs://bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm",
+          "type": "Other",
+          "label": "Address-of-record proof - CRYPTO ACCOUNTING GROUP"
+        },
+        {
+          "kind": "beneficiary_contract",
+          "vendor_id": "cyber_castellum_corporation",
+          "uri": "ipfs://bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da",
+          "type": "Other",
+          "label": "Contract - CYBER CASTELLUM CORPORATION"
+        },
+        {
+          "kind": "beneficiary_invoice",
+          "vendor_id": "cyber_castellum_corporation",
+          "uri": "ipfs://bafybeih2x7djuckim3cnjdox3isp5qnswampvoframvnkdrugcwwyz62se",
+          "type": "Other",
+          "label": "Invoice #3536 - CYBER CASTELLUM CORPORATION"
+        },
+        {
+          "kind": "beneficiary_cycle_review",
+          "vendor_id": "cyber_castellum_corporation",
+          "uri": "ipfs://bafybeiedjrhylujzaujmbbahc5xhjy46hjr5nf2dkc7knpnrate3w2ls34",
+          "type": "Other",
+          "label": "September2026 cycle review - CYBER CASTELLUM CORPORATION"
+        }
+      ]
+    }
+  ]
+}

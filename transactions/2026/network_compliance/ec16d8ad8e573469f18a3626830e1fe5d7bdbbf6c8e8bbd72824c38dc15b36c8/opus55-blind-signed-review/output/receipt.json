@@ -1,0 +1,96 @@
+{
+  "reviewer": {
+    "model": "Claude Opus 5.5",
+    "model_id": "claude-opus-5-5",
+    "mode": "blind independent, no prior context"
+  },
+  "started_utc": "2026-09-30T16:38:33Z",
+  "completed_utc": "2026-09-30T16:45:07.553Z",
+  "candidate": {
+    "file": "input/signed-tx.hex",
+    "file_sha256": "d33ebac0982c045033a96551265149a27b9886d815bd4cb10865bf190387466a",
+    "tx_bytes_sha256": "0d1913c981960c6d8a83ff4bc11a4a34af664f887f86020226e3adde4e6f69da",
+    "txid_derived": "ec16d8ad8e573469f18a3626830e1fe5d7bdbbf6c8e8bbd72824c38dc15b36c8"
+  },
+  "input_manifest": {
+    "sha256_of_manifest": "6dcabc8a25265b0b8022168dcc08e3ebd924dea83d39abf9e8ec2cd804f82837",
+    "entry": "49/49 OK exit 0 at 2026-09-30T16:38:33Z",
+    "exit": "exit=0 at 2026-09-30T16:45:07.542Z"
+  },
+  "tools": {
+    "tx-inspect": "0.2.0.0 (/home/paolino/bin/tx-inspect sha256 4f158fc5\u20268554)",
+    "tx-validate": "0.2.0.0 (/home/paolino/bin/tx-validate sha256 e7d112f3\u20264955)",
+    "tx-diff": "0.2.3.0",
+    "amaru-treasury-tx": "0.2.21.2 (treasury-inspect read-only only)",
+    "openssl": "3.4.1",
+    "python": "3.13.11 + cbor2",
+    "rules": "be5d8d9583134f96c82dc56d6bf3ce3d975936c9f14ea9f1335b38105f46bc46  /code/cardano-tx-tools/rules/amaru-treasury.yaml"
+  },
+  "runs": {
+    "tx-inspect_offline": {
+      "start": "2026-09-30T16:39:24.287Z",
+      "end": "2026-09-30T16:39:24.467Z",
+      "exit": 0
+    },
+    "tx-inspect_live_attempt1": {
+      "exit": 1,
+      "note": "CLI arg-order usage error; not an evaluation"
+    },
+    "tx-inspect_live": {
+      "start": "2026-09-30T16:39:37.596Z",
+      "end": "2026-09-30T16:39:37.782Z",
+      "exit": 0
+    },
+    "tx-validate_live": {
+      "start": "2026-09-30T16:39:46.524Z",
+      "end": "2026-09-30T16:39:46.871Z",
+      "exit": 0,
+      "result": "structurally_clean"
+    },
+    "treasury-inspect": {
+      "start": "2026-09-30T16:40:11.857Z",
+      "end": "2026-09-30T16:40:32.115Z",
+      "exit": 0,
+      "tip_slot": 199220120
+    },
+    "tx-diff_signed_vs_unsigned": {
+      "exit": 0
+    },
+    "tx-diff_signed_vs_prev3528": {
+      "exit": 1
+    },
+    "tx-diff_signed_vs_superseded": {
+      "exit": 1
+    }
+  },
+  "findings": {
+    "structural_failures": 0,
+    "witness_completeness_count": 0,
+    "vkey_signatures_valid": 2,
+    "required_signers_covered": true,
+    "signed_unsigned_body_aux_redeemers_identical": true,
+    "ada_conserved": true,
+    "usdm_conserved": true,
+    "document_cids_recomputed_match": [
+      "invoice-3536",
+      "acceptance-2026-09-09",
+      "invoice-3528",
+      "invoice-3508"
+    ],
+    "ttl_slot": 199388149,
+    "ttl_utc": "2026-10-02T15:20:40Z",
+    "phase2_independently_evaluated": false,
+    "offchain_duplicate_payment_excluded": false
+  },
+  "recommendation": "GO conditional on explicit operator authorization, operator confirmation of no other-channel payment of #3536, and submission before expiry",
+  "actions_not_taken": [
+    "no submit",
+    "no sign",
+    "no rebuild",
+    "no candidate modification",
+    "no messages",
+    "no credentials accessed",
+    "no subagents"
+  ],
+  "final_status": "COMPLETE"
+}

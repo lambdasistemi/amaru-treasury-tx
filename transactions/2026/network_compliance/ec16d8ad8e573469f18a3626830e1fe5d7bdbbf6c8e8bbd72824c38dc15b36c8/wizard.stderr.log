@@ -1,0 +1,11 @@
+==> exec: /nix/store/jhxamwzqjf3gdwf71ka9b2m25m1fimbw-amaru-treasury-tx-0.2.21.2-with-ca/bin/amaru-treasury-tx --network mainnet disburse-wizard --scope network_compliance --unit usdm --amount 18750000000 --beneficiary-addr addr1q8qrds2nnx7clx3kcpp2l0eu45twmdcahsfu9m0xcwy59j6xz3vs0hnfaz9nhje8z34kfnds4jyk7hs6dnrag6e2lfgqtyf4rl --validity-hours 48 --wallet-addr addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz --metadata /code/amaru-treasury/journal/2026/metadata.json --out /tmp/attx-cyber-september-20260930-rebuild/intent.json --log /tmp/attx-cyber-september-20260930-rebuild/wizard.log --destination-label Crypto Accounting Group --description Pay 18750 USDM to CAG for Cyber Castellum September 2026. --justification Acceptance of the Cyber Castellum September 2026 cycle review. --label Pay USDM --extra-signer f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e --reference-uri ipfs://bafybeibx32gm7wefhtvvhojoqjrkjbhntknqkgfu7ryrhptbnmjgz7jvga --reference-type Other --reference-label Contract - CRYPTO ACCOUNTING GROUP --reference-uri ipfs://bafkreihl2qvl4coduzqwg4hhh7l7go5ym7y5d7w3flzb5kpxvvquj3i3qm --reference-type Other --reference-label Address-of-record proof - CRYPTO ACCOUNTING GROUP --reference-uri ipfs://bafybeib3jef34ndw6oe24mkmifdvxe5jrv7ulh63rdllovyth27mqfj2da --reference-type Other --reference-label Contract - CYBER CASTELLUM CORPORATION --reference-uri ipfs://bafybeih2x7djuckim3cnjdox3isp5qnswampvoframvnkdrugcwwyz62se --reference-type Other --reference-label Invoice #3536 - CYBER CASTELLUM CORPORATION --reference-uri ipfs://bafybeiedjrhylujzaujmbbahc5xhjy46hjr5nf2dkc7knpnrate3w2ls34 --reference-type Other --reference-label September2026 cycle review - CYBER CASTELLUM CORPORATION
+[Info] provider.withAcquired start
+[Info] provider.handle.queryUTxOByTxInH start
+[Info] provider.handle.queryUTxOByTxInH ok after 1 ms
+[Info] provider.withAcquired ok after 2 ms
+[Info] provider.queryUTxOs start
+[Info] provider.queryUTxOs ok after 10474 ms
+[Info] provider.queryUTxOs start
+[Info] provider.queryUTxOs ok after 10358 ms
+[Info] provider.queryUpperBoundSlot start
+[Info] provider.queryUpperBoundSlot ok after 1 ms

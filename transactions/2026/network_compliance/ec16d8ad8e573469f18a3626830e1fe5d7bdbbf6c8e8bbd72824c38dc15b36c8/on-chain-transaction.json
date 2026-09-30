@@ -1,0 +1,38 @@
+{
+  "hash": "ec16d8ad8e573469f18a3626830e1fe5d7bdbbf6c8e8bbd72824c38dc15b36c8",
+  "block": "b73df0cd467c16ebaa190027af70d5bce039f80a5b07acb7e5435365b1f07b62",
+  "block_height": 14008513,
+  "block_time": 1790787945,
+  "slot": 199221654,
+  "index": 1,
+  "output_amount": [
+    {
+      "unit": "lovelace",
+      "quantity": "199573337519"
+    },
+    {
+      "unit": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad0014df105553444d",
+      "quantity": "21250000000"
+    },
+    {
+      "unit": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad0014df105553444d",
+      "quantity": "18750000000"
+    }
+  ],
+  "fees": "448485",
+  "deposit": "0",
+  "size": 2330,
+  "invalid_before": null,
+  "invalid_hereafter": "199388149",
+  "utxo_count": 5,
+  "withdrawal_count": 1,
+  "mir_cert_count": 0,
+  "delegation_count": 0,
+  "stake_cert_count": 0,
+  "pool_update_count": 0,
+  "pool_retire_count": 0,
+  "asset_mint_or_burn_count": 0,
+  "redeemer_count": 2,
+  "valid_contract": true,
+  "treasury_donation": "0"
+}

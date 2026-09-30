@@ -1,0 +1,2 @@
+tx-inspect: expected exactly one TX positional argument; got 5
+Usage: tx-inspect [--render tree|paths] [--tree-art ascii|unicode] [--rules FILE] [--n2c-socket-path SOCKET --network-magic N] [--web2-url URL [--web2-api-key-file PATH]] TX

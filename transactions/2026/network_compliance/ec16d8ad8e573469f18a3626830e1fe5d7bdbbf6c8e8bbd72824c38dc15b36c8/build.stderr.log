@@ -1,0 +1,20 @@
+[Info] provider.withAcquired start
+[Info] provider.handle.queryProtocolParamsH start
+[Info] provider.handle.queryProtocolParamsH ok after 186 ms
+[Info] provider.handle.queryUTxOByTxInH start
+[Info] provider.handle.queryUTxOByTxInH ok after 1 ms
+[Info] provider.handle.queryLedgerSnapshotH start
+[Info] provider.handle.queryLedgerSnapshotH ok after 2 ms
+[Info] provider.handle.evaluateTxH start
+[Info] provider.handle.evaluateTxH ok after 183 ms
+[Info] provider.handle.evaluateTxH start
+[Info] provider.handle.evaluateTxH ok after 192 ms
+[Info] provider.handle.evaluateTxH start
+[Info] provider.handle.evaluateTxH ok after 166 ms
+[Info] provider.handle.evaluateTxH start
+[Info] provider.handle.evaluateTxH ok after 174 ms
+[Info] provider.handle.evaluateTxH start
+[Info] provider.handle.evaluateTxH ok after 160 ms
+[Info] provider.handle.evaluateTxH start
+[Info] provider.handle.evaluateTxH ok after 159 ms
+[Info] provider.withAcquired ok after 1264 ms

@@ -1,0 +1,17 @@
+{
+    "exit_code": 0,
+    "pparams_source": "n2c",
+    "reward_accounts_source": "n2c",
+    "slot_source": "n2c",
+    "status": "structurally_clean",
+    "structural_failures": [],
+    "utxo_sources": {
+        "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0": "n2c",
+        "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2": "n2c",
+        "282bebe2ec58fbf28dc9f410e954f577ba2c055b9878d6a46eeac3352b369abf#1": "n2c",
+        "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0": "n2c",
+        "9b1042aa25c7e69b1965e668e6265b3f3e65e0a8c780016d6c56b175986acfb3#1": "n2c",
+        "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2": "n2c"
+    },
+    "witness_completeness_count": 0
+}

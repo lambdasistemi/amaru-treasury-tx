@@ -1,0 +1,16 @@
+body
++- fee
+|  +- A: 0.448353 ADA (448353 lovelace)
+|  `- B: 0.448485 ADA (448485 lovelace)
++- outputs
+|  `- 2
+|     `- coin
+|        +- A: 9.307387 ADA (9307387 lovelace)
+|        `- B: 9.307255 ADA (9307255 lovelace)
++- totalCollateral
+|  +- A: 0.672530 ADA (672530 lovelace)
+|  `- B: 0.672728 ADA (672728 lovelace)
+`- validityInterval
+   `- invalidHereafter
+      +- A: 199318513
+      `- B: 199388149

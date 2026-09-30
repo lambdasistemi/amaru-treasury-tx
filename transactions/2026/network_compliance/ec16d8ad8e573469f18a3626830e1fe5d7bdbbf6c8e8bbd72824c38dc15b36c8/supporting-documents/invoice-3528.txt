@@ -1,0 +1,42 @@
+                                                                                                         INVOICE
+Cyber Castellum Corporation
+1924 Central Ave.                                                                      Date               8/7/2026
+Albany, NY 12205                                                                   Invoice #                3528
+(518) 542-6858
+
+
+
+
+                     TO       Amaru Maintainer Committee
+                              Dammstrasse 16, 6300 Zug, Switzerland
+
+
+
+
+           ATTENTION          Accounts Payable Dept.
+
+
+  BILLING PERIOD              July 2026
+
+                     RE      Network compliance & Cardano level Testing: White-Hacking,
+                             Security assessment & Testing
+[42]
+
+
+
+       #                               DESCRIPTION                                    QTY          RATE        LINE TOTAL
+
+            Milestone 4 Completed - Audit support, consensus protocol
+       1                                                                                1         $18,750.00     $18,750.00
+            validation report
+
+
+
+
+                                                                                                   Total Due     $18,750.00
+
+                          If you have any questions about this invoice, please contact us via email at
+                                               invoices@cybercastellum.com
+
+                                            Thank You For Your Business!
+

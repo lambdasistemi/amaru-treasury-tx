@@ -1,0 +1,16 @@
+{
+  "tool_version": "0.2.3.0",
+  "command": [
+    "/home/paolino/bin/tx-diff",
+    "--collapse-rules",
+    "/code/cardano-tx-tools/rules/amaru-treasury.yaml",
+    "/code/amaru-treasury-tx-cc-september-rebuild-20260930/transactions/2026/network_compliance/2026-09-30-disburse-cyber-castellum-september-rebuild/payment-history-20260930/0abab118fb103b983b177fb80c247803f3b5ff7f5d98202ddd2f071b017cb23d/signed-tx.hex",
+    "/code/amaru-treasury-tx-cc-september-rebuild-20260930/transactions/2026/network_compliance/2026-09-30-disburse-cyber-castellum-september-rebuild/signed-tx.hex"
+  ],
+  "exit_code": 1,
+  "inputs_sha256": {
+    "/code/amaru-treasury-tx-cc-september-rebuild-20260930/transactions/2026/network_compliance/2026-09-30-disburse-cyber-castellum-september-rebuild/payment-history-20260930/0abab118fb103b983b177fb80c247803f3b5ff7f5d98202ddd2f071b017cb23d/signed-tx.hex": "0a9cf1bf3acf820e1e6f69a116f4bb3ab03ce9551b689ef39efbaec615134569",
+    "/code/amaru-treasury-tx-cc-september-rebuild-20260930/transactions/2026/network_compliance/2026-09-30-disburse-cyber-castellum-september-rebuild/signed-tx.hex": "d33ebac0982c045033a96551265149a27b9886d815bd4cb10865bf190387466a"
+  },
+  "output_sha256": "24ae36b9bd58b2c2d39119a8b8c5818034726cd512d2c55858ab4b3329b76a0b"
+}

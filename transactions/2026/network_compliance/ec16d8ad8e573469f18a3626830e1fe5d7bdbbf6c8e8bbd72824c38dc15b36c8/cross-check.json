@@ -1,0 +1,48 @@
+{
+  "txId": "ec16d8ad8e573469f18a3626830e1fe5d7bdbbf6c8e8bbd72824c38dc15b36c8",
+  "verifiedAt": "2026-09-30T15:24:59.328255+00:00",
+  "newDescription": "Pay 18750 USDM to CAG for Cyber Castellum September 2026.",
+  "bodyChangedKeys": [
+    1,
+    2,
+    3,
+    7,
+    16,
+    17
+  ],
+  "bodyChangedFields": [
+    "wallet change",
+    "fee",
+    "validity upper bound",
+    "auxiliary data hash",
+    "collateral return",
+    "total collateral"
+  ],
+  "feeLovelace": 448485,
+  "feeDeltaLovelace": 132,
+  "totalCollateralLovelace": 672728,
+  "totalCollateralDeltaLovelace": 198,
+  "collateralReturnLovelace": 9083012,
+  "walletChangeLovelace": 9307255,
+  "validityUpperBoundSlot": 199388149,
+  "validityUpperBoundUtc": "2026-10-02T15:20:40+00:00",
+  "metadataDiff": "description August -> September only",
+  "auxiliaryDataHashVerified": true,
+  "scriptIntegrityHashUnchanged": true,
+  "redeemersAndBudgetsUnchanged": true,
+  "beneficiaryByteIdenticalToPreviousMonth": true,
+  "spendingInputsUnchanged": true,
+  "requiredSignersUnchanged": true,
+  "referencesUnchanged": true,
+  "withdrawalUnchanged": true,
+  "amountMicroUsdm": 18750000000,
+  "staleWitnessesRejectedForNewTx": [
+    "network_compliance",
+    "ops_and_use_cases"
+  ],
+  "newTxFileSha256": "8dfbb5f4b13c0c68c7de01c9bd34b02501a18fc5d3039d0aa9e6f719a043f7b1",
+  "candidateBytesSha256": "60b0e024793f55c5b5125ce40b3f7e9aef51632c65c4816a3d8bc73c935d7019",
+  "oldSignedFileSha256": "bfe4fc49dffed8622fb1c097163a3d975d7ff8344442e8191674e2712e48e70f",
+  "freshInvoiceDownloadSha256": "86e49a5717b4d0132899af4e4ef356b0e5182e94fe8022db13be965f719e1602",
+  "submitted": false
+}

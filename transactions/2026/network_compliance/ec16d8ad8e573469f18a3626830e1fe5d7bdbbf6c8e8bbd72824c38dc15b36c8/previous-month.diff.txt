@@ -1,0 +1,41 @@
+body
++- collateralInputs
+|  `- 0
+|     +- A: {"index":1,"txId":"1defcad59b4b67572d0bd6f82d98a35217261e2203bdca6179ff67b8d0ae3df2"}
+|     `- B: {"index":1,"txId":"282bebe2ec58fbf28dc9f410e954f577ba2c055b9878d6a46eeac3352b369abf"}
++- fee
+|  +- A: 0.975732 ADA (975732 lovelace)
+|  `- B: 0.448485 ADA (448485 lovelace)
++- inputs
+|  +- - 2: {"index":0,"txId":"968fd01e074ca33de95087957f59803bb2ee8bacfe922eb81cdf18e8e23ad788"}
+|  +- - 3: {"index":1,"txId":"a5003a714c45d0c25d6d6463f6ac0c1fd059bc6c390388aaf1cea7249e0fe3ab"}
+|  +- - 4: {"index":1,"txId":"a80f446675b55c8f39a2efadc79d4a5643ed64b13c0750bbc0c4010d335713fa"}
+|  +- - 5: {"index":0,"txId":"affe90d1fa9a93b3e2a48009ef80634e9de8428640f5d673e85b002a86399982"}
+|  +- - 6: {"index":1,"txId":"e95251993c0ed08c52d4063da1aeba193e4327d4900168111fe73f61ed10d3c5"}
+|  +- 0
+|  |  +- A: {"index":0,"txId":"0abab118fb103b983b177fb80c247803f3b5ff7f5d98202ddd2f071b017cb23d"}
+|  |  `- B: {"index":1,"txId":"282bebe2ec58fbf28dc9f410e954f577ba2c055b9878d6a46eeac3352b369abf"}
+|  `- 1
+|     +- A: {"index":1,"txId":"1defcad59b4b67572d0bd6f82d98a35217261e2203bdca6179ff67b8d0ae3df2"}
+|     `- B: {"index":1,"txId":"9b1042aa25c7e69b1965e668e6265b3f3e65e0a8c780016d6c56b175986acfb3"}
++- outputs
+|  +- 0
+|  |  +- assets
+|  |  |  `- c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad
+|  |  |     `- 0014df105553444d
+|  |  |        +- A:   248542293
+|  |  |        `- B: 21250000000
+|  |  `- coin
+|  |     +- A:       138.045595 ADA (138045595 lovelace)
+|  |     `- B: 199562.840704 ADA (199562840704 lovelace)
+|  `- 2
+|     `- coin
+|        +- A: 8.780008 ADA (8780008 lovelace)
+|        `- B: 9.307255 ADA (9307255 lovelace)
++- totalCollateral
+|  +- A: 1.463598 ADA (1463598 lovelace)
+|  `- B:  0.672728 ADA (672728 lovelace)
+`- validityInterval
+   `- invalidHereafter
+      +- A: 196296876
+      `- B: 199388149

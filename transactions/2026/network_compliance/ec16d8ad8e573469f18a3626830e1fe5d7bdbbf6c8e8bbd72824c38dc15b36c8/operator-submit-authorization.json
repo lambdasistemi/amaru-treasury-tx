@@ -1,0 +1,7 @@
+{
+  "authorization": "User explicitly instructed: submit",
+  "timestamp_utc": "2026-09-30T17:05:40.623700+00:00",
+  "candidate_sha256": "d33ebac0982c045033a96551265149a27b9886d815bd4cb10865bf190387466a",
+  "review_recommendation": "GO conditional on explicit operator authorization, operator confirmation of no other-channel payment of #3536, and submission before expiry",
+  "offchain_duplicate_payment_independently_excluded": false
+}

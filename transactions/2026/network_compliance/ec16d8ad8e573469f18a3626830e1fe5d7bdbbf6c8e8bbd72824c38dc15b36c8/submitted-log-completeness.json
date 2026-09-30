@@ -1,0 +1,16 @@
+{
+  "checked_utc": "2026-09-30T17:09:01.830144+00:00",
+  "scope": "Current invoice #3536 operator session and its explicit build/review runtimes",
+  "logs_checked": [
+    "/code/amaru-treasury-tx-cc-september-rebuild-20260930/transactions/2026/network_compliance/ec16d8ad8e573469f18a3626830e1fe5d7bdbbf6c8e8bbd72824c38dc15b36c8/submit.log"
+  ],
+  "transactions": [
+    {
+      "txid": "ec16d8ad8e573469f18a3626830e1fe5d7bdbbf6c8e8bbd72824c38dc15b36c8",
+      "submit_log": "/code/amaru-treasury-tx-cc-september-rebuild-20260930/transactions/2026/network_compliance/ec16d8ad8e573469f18a3626830e1fe5d7bdbbf6c8e8bbd72824c38dc15b36c8/submit.log",
+      "archive": "/code/amaru-treasury-tx-cc-september-rebuild-20260930/transactions/2026/network_compliance/ec16d8ad8e573469f18a3626830e1fe5d7bdbbf6c8e8bbd72824c38dc15b36c8"
+    }
+  ],
+  "missing_archives": [],
+  "missing_count": 0
+}

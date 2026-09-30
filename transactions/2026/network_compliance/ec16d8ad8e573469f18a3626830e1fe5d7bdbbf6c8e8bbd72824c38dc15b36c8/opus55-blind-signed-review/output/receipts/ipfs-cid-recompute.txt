@@ -1,0 +1,24 @@
+input/supporting-documents/invoice-3536.pdf
+  claimed bafybeih2x7djuckim3cnjdox3isp5qnswampvoframvnkdrugcwwyz62se
+  v0/pb-leaves: QmbYgSdSkGpGkqvrMKrdJFtQkZcmmoosaXuCq5pof5iRKu
+  v1/raw-leaves: bafybeih2x7djuckim3cnjdox3isp5qnswampvoframvnkdrugcwwyz62se
+  v1/pb-leaves: bafybeiby22l6bnwlgx4t4xyks3yz55orlj5e7b7llau3zthd4j66fs5zxi
+  MATCH: ['v1/raw-leaves']
+input/supporting-documents/acceptance-2026-09-09.pdf
+  claimed bafybeiedjrhylujzaujmbbahc5xhjy46hjr5nf2dkc7knpnrate3w2ls34
+  v0/pb-leaves: Qme2fLsKF1Vh6XZ9FVoGq7rMgtgmUS5aQFaHCsG9APhSWQ
+  v1/raw-leaves: bafybeiedjrhylujzaujmbbahc5xhjy46hjr5nf2dkc7knpnrate3w2ls34
+  v1/pb-leaves: bafybeidgeyuhg2gu2vuhix7j4efyms5noclsqvptgggt36ixcmk4sxsuiu
+  MATCH: ['v1/raw-leaves']
+input/supporting-documents/invoice-3528.pdf
+  claimed QmNQbjmE6B9JvqwrHX4JVnCepqGoVhDpGQuwaSUjwDeP9f
+  v0/pb-leaves: QmNQbjmE6B9JvqwrHX4JVnCepqGoVhDpGQuwaSUjwDeP9f
+  v1/raw-leaves: bafybeidme6iahz5ugwytdy3x5rzzqpk5nh2vbkd7imgdynbnjxz6yoh7cy
+  v1/pb-leaves: bafybeibjgvftu3ddu6re3kgki3mrmbe6zxphox5etqje2tw43jbexvp2zi
+  MATCH: ['v0/pb-leaves']
+input/payment-history/invoice-3508.pdf
+  claimed bafybeigy37ui2ikn7bim2vw6cojcbxkcndpjwh7cj5fv3vzs4cszezipxu
+  v0/pb-leaves: QmPRsopNqydbbE4P2Yd3naiATsVaST1jW6btCV1N6sNDSK
+  v1/raw-leaves: bafybeigy37ui2ikn7bim2vw6cojcbxkcndpjwh7cj5fv3vzs4cszezipxu
+  v1/pb-leaves: bafybeicsldti4dbdayvm2p53uu27pxe5yhj3ibz3l5jefmoo4mb3owkrey
+  MATCH: ['v1/raw-leaves']

@@ -1,0 +1,82 @@
+{
+  "verifiedAt": "2026-09-30T15:12:41.930064+00:00",
+  "upstreamCommit": "1c61ca757fd935d2f5a80f2a85ceded8f7440979",
+  "source": "freshly fetched origin/main archive; not a fresh full on-chain history query",
+  "submittedPayments": [
+    {
+      "invoice": "3508",
+      "billingMonth": "April",
+      "reviewMonth": "May",
+      "description": "Disburse 18750 USDM (CAG payee) for Cyber Castellum May 2026.",
+      "justification": "Acceptance of the Cyber Castellum May 2026 cycle review.",
+      "paidAt": "2026-05-22T16:57:02Z",
+      "txId": "c150d5c5c67658c8f2a3bc24e16a4852257d46a03224257ac990fcca6f6fde78",
+      "amountUsdm": 18750.0,
+      "invoiceUri": "ipfs://bafybeigy37ui2ikn7bim2vw6cojcbxkcndpjwh7cj5fv3vzs4cszezipxu",
+      "reviewUri": "ipfs://bafybeihdmnitrbu2oir3r2fefnpqy3bk7zdz42olzmltmxyt5xag4i2t5a",
+      "signedBodyTxIdVerified": true,
+      "signedMetadataMatchesIntent": true
+    },
+    {
+      "invoice": "3516",
+      "billingMonth": "May",
+      "reviewMonth": "June",
+      "description": "Disburse 18750 USDM (CAG payee) for Cyber Castellum June 2026.",
+      "justification": "Acceptance of the Cyber Castellum June 2026 cycle review.",
+      "paidAt": "2026-07-13T13:18:02Z",
+      "txId": "968fd01e074ca33de95087957f59803bb2ee8bacfe922eb81cdf18e8e23ad788",
+      "amountUsdm": 18750.0,
+      "invoiceUri": "ipfs://bafybeiarox2hhcb32nrssxrgqrzlubyuh6aupcexfwnopxndr76inuramm",
+      "reviewUri": "ipfs://bafybeihtwkgx47q3ylrcnyo737gzs2fhoxqnx7n7xbqie2gcowd65kmjle",
+      "signedBodyTxIdVerified": true,
+      "signedMetadataMatchesIntent": true
+    },
+    {
+      "invoice": "3522",
+      "billingMonth": "June",
+      "reviewMonth": "July",
+      "description": "Disburse 18750 USDM (CAG payee) for Cyber Castellum July 2026.",
+      "justification": "Acceptance of the Cyber Castellum July 2026 cycle review.",
+      "paidAt": "2026-07-13T13:18:02Z",
+      "txId": "0abab118fb103b983b177fb80c247803f3b5ff7f5d98202ddd2f071b017cb23d",
+      "amountUsdm": 18750.0,
+      "invoiceUri": "ipfs://bafybeic6sh4cbftjlr62qcz3ysuivrxqto7zbpnwdgepam5rbbxgvccauu",
+      "reviewUri": "ipfs://bafybeihm4umyc5a63djsiuw3nna7txptsnon7sltqpgmjzaecpsjkhjbdi",
+      "signedBodyTxIdVerified": true,
+      "signedMetadataMatchesIntent": true
+    },
+    {
+      "invoice": "3528",
+      "billingMonth": "July",
+      "reviewMonth": "August",
+      "description": "Disburse 18750 USDM (CAG payee) for Cyber Castellum August 2026.",
+      "justification": "Acceptance of the Cyber Castellum August 2026 cycle review.",
+      "paidAt": "2026-08-27T13:52:13Z",
+      "txId": "4f64f292d2b8d74f9bade3bdcafb92302b79b6589208147c995e55057b7696b4",
+      "amountUsdm": 18750.0,
+      "invoiceUri": "ipfs://QmNQbjmE6B9JvqwrHX4JVnCepqGoVhDpGQuwaSUjwDeP9f",
+      "reviewUri": "ipfs://QmXGGFgD5vt1awuP3ttGgAwL4Rm2CYEuVgFkycgGwmi2xh",
+      "signedBodyTxIdVerified": true,
+      "signedMetadataMatchesIntent": true
+    }
+  ],
+  "invoice3508PdfSource": "https://gateway.pinata.cloud/ipfs/bafybeigy37ui2ikn7bim2vw6cojcbxkcndpjwh7cj5fv3vzs4cszezipxu",
+  "invoice3508Sha256": "61e09b4bdc62fbd07f57511114c89e701fb81dad8f001e535f2c7187f1514816",
+  "billingPeriodProvenance": {
+    "3508": "fresh download of invoice CID; PDF text April 2026",
+    "3516": "submitted archive summary identifies May 2026",
+    "3522": "submitted archive summary identifies June 2026",
+    "3528": "original invoice PDF independently rechecked; July 2026"
+  },
+  "currentInvoice": "3536",
+  "currentBillingMonth": "August",
+  "currentReviewMonth": "September",
+  "currentDescriptionMonth": "September",
+  "convention": "All four submitted descriptions and the corrected current description use the review/acceptance cycle month.",
+  "formalRule": "Use cycle manifest reference evidence and verify invoice amount. Description month is free text; no explicit mandatory month-name rule was found.",
+  "candidateModified": false,
+  "submittedCurrentCandidate": false,
+  "historyUpdatedAt": "2026-09-30T16:47:44.619945+00:00",
+  "currentTxId": "ec16d8ad8e573469f18a3626830e1fe5d7bdbbf6c8e8bbd72824c38dc15b36c8",
+  "currentCandidateStatus": "signed and verified, not submitted"
+}

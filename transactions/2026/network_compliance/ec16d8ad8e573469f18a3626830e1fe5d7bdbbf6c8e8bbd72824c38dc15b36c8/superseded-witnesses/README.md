@@ -1,0 +1,1 @@
+These files sign the superseded August-worded body, txid 9f61306ee964e1655d8438e435983c126c1ab4cb0b500a371b3b66f351d1f51e. They are retained as evidence only. Do not attach them to the corrected September body. Both signatures must be recollected. Original files are preserved in the prior archive.

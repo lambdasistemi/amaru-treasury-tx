@@ -1,0 +1,10 @@
+{
+  "requestedModel": "claude-opus-5-5",
+  "effort": "high",
+  "createdAt": "2026-09-30T16:37:44.160032+00:00",
+  "noConversationContext": true,
+  "noPriorReviewReports": true,
+  "scope": "fresh read-only independent corrected signed transaction validation and pre-submit brief",
+  "actualModel": "claude-opus-5-5",
+  "sessionId": "6bc9c1f8-e09a-48f5-9ad7-8a006118123c"
+}

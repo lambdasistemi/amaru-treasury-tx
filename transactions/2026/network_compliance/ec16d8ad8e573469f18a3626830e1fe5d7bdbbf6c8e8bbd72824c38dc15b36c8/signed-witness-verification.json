@@ -1,0 +1,34 @@
+{
+  "txId": "ec16d8ad8e573469f18a3626830e1fe5d7bdbbf6c8e8bbd72824c38dc15b36c8",
+  "verifiedAt": "2026-09-30T16:35:01.867799+00:00",
+  "witnesses": [
+    {
+      "scope": "network_compliance",
+      "keyHash": "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+      "signatureValid": true,
+      "wrongBodyHashRejected": true,
+      "witnessSha256": "49826a44020281f4732b913798e81807c6c7760fb1a89d464b517fe8999fb086"
+    },
+    {
+      "scope": "ops_and_use_cases",
+      "keyHash": "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+      "signatureValid": true,
+      "wrongBodyHashRejected": true,
+      "witnessSha256": "1484761f1164a92b23c062208dead7f8eb54634943f5ca23bbb886ffeba0780f"
+    }
+  ],
+  "requiredSignersComplete": true,
+  "bodyBytesUnchanged": true,
+  "nonVkeyWitnessesUnchanged": true,
+  "metadataUnchanged": true,
+  "signedTxFileSha256": "d33ebac0982c045033a96551265149a27b9886d815bd4cb10865bf190387466a",
+  "signedTxBytesSha256": "0d1913c981960c6d8a83ff4bc11a4a34af664f887f86020226e3adde4e6f69da",
+  "submitted": false,
+  "liveValidation": {
+    "validatedAt": "2026-09-30T16:37:44.160032+00:00",
+    "receipt": "signed-validate.json",
+    "status": "structurally_clean",
+    "structuralFailures": [],
+    "missingWitnessCount": 0
+  }
+}

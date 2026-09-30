@@ -1,0 +1,11 @@
+{
+  "startedAt": "2026-09-30T15:20:33.025705+00:00",
+  "scope": "correct description to September acceptance cycle through fresh wizard/build",
+  "supersedesTxId": "9f61306ee964e1655d8438e435983c126c1ab4cb0b500a371b3b66f351d1f51e",
+  "oldSignedFileSha256": "bfe4fc49dffed8622fb1c097163a3d975d7ff8344442e8191674e2712e48e70f",
+  "sourceWorktree": "/code/amaru-treasury-tx-cc-september-rebuild-20260930",
+  "binary": "/nix/store/jhxamwzqjf3gdwf71ka9b2m25m1fimbw-amaru-treasury-tx-0.2.21.2-with-ca/bin/amaru-treasury-tx",
+  "oldCandidatePreserved": true,
+  "signaturesMustBeRecollected": true,
+  "submitted": false
+}

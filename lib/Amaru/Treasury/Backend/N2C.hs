@@ -21,16 +21,29 @@ module Amaru.Treasury.Backend.N2C
     , probeResultAccepted
     , findSocketMagic
     , knownNetworkMagics
+    , superviseConnection
+    , reconnectInitialDelay
+    , reconnectMaxDelay
     ) where
 
+import Control.Concurrent (threadDelay)
 import Control.Concurrent.Async
     ( withAsync
     )
-import Control.Exception (SomeException, throwIO, try)
+import Control.Exception
+    ( SomeAsyncException
+    , SomeException
+    , displayException
+    , fromException
+    , throwIO
+    , try
+    )
 import Control.Monad (void)
 import Data.Text (Text)
 import Data.Word (Word32)
+import GHC.Clock (getMonotonicTime)
 import Ouroboros.Network.Magic (NetworkMagic (..))
+import System.IO (hPutStrLn, stderr)
 import System.Timeout (timeout)
 
 import Cardano.Node.Client.N2C.Connection
@@ -84,11 +97,12 @@ withLocalNodeBackend magic socketPath minimumSeverity action = do
     ltxs <- newLTxSChannel 1
     let tracer = filterSeverity minimumSeverity stderrTracer
         backend = tracedProvider tracer (mkN2CProvider lsq)
-        connect = do
-            r <- runNodeClient magic socketPath lsq ltxs
-            case r of
-                Right () -> pure ()
-                Left e -> throwIO e
+        connect =
+            superviseConnection
+                getMonotonicTime
+                threadDelay
+                reportConnection
+                (runNodeClient magic socketPath lsq ltxs)
     withAsync connect $ \_ -> action backend
 
 {- | Run an 'IO' action with local-node-backed query and submission
@@ -112,12 +126,84 @@ withLocalNodeClient magic socketPath minimumSeverity action = do
     let tracer = filterSeverity minimumSeverity stderrTracer
         provider = tracedProvider tracer (mkN2CProvider lsq)
         submitter = tracedSubmitter tracer (mkN2CSubmitter ltxs)
-        connect = do
-            r <- runNodeClient magic socketPath lsq ltxs
-            case r of
-                Right () -> pure ()
-                Left e -> throwIO e
+        connect =
+            superviseConnection
+                getMonotonicTime
+                threadDelay
+                reportConnection
+                (runNodeClient magic socketPath lsq ltxs)
     withAsync connect $ \_ -> action provider submitter
+
+-- | First reconnect delay, in microseconds.
+reconnectInitialDelay :: Int
+reconnectInitialDelay = 250_000
+
+-- | Longest reconnect delay, in microseconds.
+reconnectMaxDelay :: Int
+reconnectMaxDelay = 30_000_000
+
+{- | A connection that lived at least this many seconds
+was healthy: the next reconnect starts from
+'reconnectInitialDelay' again.
+-}
+reconnectHealthySeconds :: Double
+reconnectHealthySeconds = 60
+
+{- | Keep an N2C connection alive for as long as the caller
+runs. Whenever the connection ends — the node restarted,
+the socket vanished, or the LSQ channel timed a query out
+and invalidated the session — it is started again on the
+same channels after an exponential backoff.
+
+The channels outlive any one connection: callers pending
+on a lost connection fail with a connection-lost error,
+later callers are served by the next one. Without this,
+the first connection loss strands every later query on a
+queue that nothing reads (#508).
+
+Asynchronous exceptions end the loop, so cancelling the
+owning 'withAsync' still tears the connection down.
+-}
+superviseConnection
+    :: IO Double
+    -- ^ monotonic clock, in seconds
+    -> (Int -> IO ())
+    -- ^ sleep, in microseconds
+    -> (String -> IO ())
+    -- ^ report why a connection ended
+    -> IO (Either SomeException ())
+    -- ^ run one connection until it ends
+    -> IO a
+superviseConnection clock sleep report connectOnce =
+    go reconnectInitialDelay
+  where
+    go delay = do
+        started <- clock
+        outcome <- try connectOnce
+        ended <- clock
+        reason <- case outcome of
+            Left e -> synchronousOnly e
+            Right (Left e) -> synchronousOnly e
+            Right (Right ()) -> pure "closed"
+        let wait
+                | ended - started >= reconnectHealthySeconds =
+                    reconnectInitialDelay
+                | otherwise = delay
+        report $
+            "n2c connection ended ("
+                <> reason
+                <> "); reconnecting in "
+                <> show (wait `div` 1_000)
+                <> " ms"
+        sleep wait
+        go $ min reconnectMaxDelay (2 * wait)
+    synchronousOnly e = case fromException e of
+        Just (_ :: SomeAsyncException) -> throwIO e
+        Nothing -> pure $ displayException e
+
+-- | Report a supervised connection's end on stderr.
+reportConnection :: String -> IO ()
+reportConnection = hPutStrLn stderr . ("amaru-treasury: " <>)
 
 {- | Probe whether a Unix socket accepts the given
 'NetworkMagic' on the N2C handshake. Returns 'True' if

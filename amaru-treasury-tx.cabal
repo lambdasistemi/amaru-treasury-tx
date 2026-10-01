@@ -552,6 +552,7 @@ test-suite unit-tests
     Amaru.Treasury.Api.TypesSpec
     Amaru.Treasury.Api.VerifyWitnessSpec
     Amaru.Treasury.AuxDataSpec
+    Amaru.Treasury.Backend.N2CSpec
     Amaru.Treasury.Build.CommonSpec
     Amaru.Treasury.Build.GovernanceWithdrawalInitSpec
     Amaru.Treasury.Build.NetworkGuardSpec

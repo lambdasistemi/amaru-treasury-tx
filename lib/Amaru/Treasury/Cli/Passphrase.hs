@@ -13,13 +13,14 @@ never accepted as command-line arguments.
 module Amaru.Treasury.Cli.Passphrase
     ( readVaultPassphrase
     , readVaultPassphraseConfirmed
+    , readHiddenLine
     ) where
 
 import Control.Exception
     ( IOException
     , bracket
+    , bracket_
     , catch
-    , finally
     )
 import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as BSC
@@ -137,6 +138,13 @@ openTTY = do
     hSetBuffering handle NoBuffering
     pure (fd, handle)
 
+{- | Show a prompt on a terminal and read one line with echo disabled.
+
+Echo is cleared before the first prompt byte is written, and the
+terminal attributes of the given descriptor are restored however the
+prompt write or the read ends. The handle must refer to the same
+terminal.
+-}
 readHiddenLine
     :: Text
     -> Fd
@@ -145,12 +153,14 @@ readHiddenLine
 readHiddenLine prompt fd handle = do
     attrs <- getTerminalAttributes fd
     let hidden = withoutMode attrs EnableEcho
-    hPutStr handle (T.unpack prompt)
-    hFlush handle
-    setTerminalAttributes fd hidden Immediately
     line <-
-        BSC.hGetLine handle
-            `finally` setTerminalAttributes fd attrs Immediately
+        bracket_
+            (setTerminalAttributes fd hidden Immediately)
+            (setTerminalAttributes fd attrs Immediately)
+            $ do
+                hPutStr handle (T.unpack prompt)
+                hFlush handle
+                BSC.hGetLine handle
     hPutStr handle "\n"
     hFlush handle
     pure (Right line)

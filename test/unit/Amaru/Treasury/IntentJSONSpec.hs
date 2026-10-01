@@ -14,6 +14,7 @@ the schema allow-list, and the missing-network failure.
 -}
 module Amaru.Treasury.IntentJSONSpec (spec) where
 
+import Control.Monad (forM_)
 import Data.Aeson (decode, eitherDecode, encode)
 import Data.ByteString.Lazy (ByteString)
 import Data.ByteString.Lazy.Char8 qualified as BSL8
@@ -94,6 +95,7 @@ import Amaru.Treasury.Tx.Disburse
     ( DisburseIntent (..)
     , DisburseIntentFields (..)
     )
+import Amaru.Treasury.Tx.Swap (SwapIntent (..))
 import Amaru.Treasury.Tx.Withdraw (WithdrawIntent (..))
 
 -- ----------------------------------------------------
@@ -298,6 +300,26 @@ spec = describe "Amaru.Treasury.IntentJSON" $ do
                 DisburseUsdmIntent{} ->
                     expectationFailure
                         "expected ADA disburse payload"
+
+    describe "swap contract" $ do
+        forM_ ["preprod", "preview", "devnet"] $ \network ->
+            it
+                ( "translates "
+                    <> T.unpack network
+                    <> " swap reward accounts as Testnet"
+                )
+                $ swapPermissionsAccountMatches network Testnet
+
+        it "translates mainnet swap reward accounts as Mainnet" $
+            swapPermissionsAccountMatches "mainnet" Mainnet
+
+        it "rejects unknown swap reward-account networks" $
+            expectLeftContaining
+                "unknown network for reward account"
+                ( translateIntent
+                    SSwap
+                    (swapIntent "localnet")
+                )
 
 -- ----------------------------------------------------
 -- Round-trip property
@@ -1006,6 +1028,67 @@ rawReorganizeMissingScopesDeployedAtBlock =
         <> ",\"permissionsDeployedAt\":\"4444444444444444444444444444444444444444444444444444444444444444#4\""
         <> ",\"scopeOwnerSigner\":\"44444444444444444444444444444444444444444444444444444444\""
         <> ",\"upperBound\":1}"
+
+{- | The swap translation of an intent on @network@ carries a
+permissions reward account on the expected ledger network,
+equal to the one the network-aware parser yields for the
+intent's own network and hex.
+-}
+swapPermissionsAccountMatches :: Text -> Network -> IO ()
+swapPermissionsAccountMatches network expected = do
+    let ti = swapIntent network
+    (_, si) <- expectRight $ translateIntent SSwap ti
+    rewardAccountNetwork (siPermissionsRewardAccount si)
+        `shouldBe` expected
+    Right (siPermissionsRewardAccount si)
+        `shouldBe` parseRewardAccountForNetwork
+            network
+            (sjPermissionsRewardAccount (tiScope ti))
+
+swapIntent :: Text -> TreasuryIntent 'Swap
+swapIntent network =
+    TreasuryIntent
+        SSwap
+        1
+        network
+        (tiWallet base)
+        (tiScope base)
+        (tiSigners base)
+        (tiValidityUpperBoundSlot base)
+        ( RationaleJSON
+            "swap"
+            "Swap ADA to USDM"
+            "Convert treasury ADA"
+            "Approved budget line"
+            "Network Compliance treasury"
+            []
+        )
+        ( SwapInputs
+            { swiSwapOrderAddress =
+                "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n"
+            , swiChunkSizeLovelace = 12_500_000_000
+            , swiAmountLovelace = 25_000_000_000
+            , swiExtraPerChunkLovelace = 3_280_000
+            , swiRateNumerator = 245
+            , swiRateDenominator = 1000
+            , swiPoolId =
+                "64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef"
+            , swiCoreOwner =
+                "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb"
+            , swiOpsOwner =
+                "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+            , swiNetworkComplianceOwner =
+                "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1"
+            , swiMiddlewareOwner =
+                "97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2"
+            , swiSundaeProtocolFeeLovelace = 1_280_000
+            , swiUsdmPolicy =
+                "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad"
+            , swiUsdmToken = "0014df105553444d"
+            }
+        )
+  where
+    base = withdrawIntent network
 
 withdrawIntentMainnet :: TreasuryIntent 'Withdraw
 withdrawIntentMainnet = withdrawIntent "mainnet"

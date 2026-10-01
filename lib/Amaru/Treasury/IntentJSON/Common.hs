@@ -10,7 +10,6 @@ parser and by every per-action wizard.
 module Amaru.Treasury.IntentJSON.Common
     ( parseAddr
     , parseTxIn
-    , parseRewardAccount
     , parseRewardAccountForNetwork
     , parseGuardKeyHash
     , parseNetwork
@@ -83,15 +82,6 @@ parseTxIn t = case T.splitOn "#" t of
             ( "txIn must be \"<hex>#<ix>\", got "
                 <> T.unpack t
             )
-
-{- | Parse a reward-account credential as the 28-byte hex
-of the stake-script hash. (Bech32 stake addresses are not
-accepted at the JSON layer; the user supplies one hash,
-not a full address.)
--}
-parseRewardAccount :: Text -> Either String AccountAddress
-parseRewardAccount =
-    parseRewardAccountForNetwork "mainnet"
 
 {- | Parse a reward-account credential as a 28-byte hex
 stake-script hash on the ledger network named by the

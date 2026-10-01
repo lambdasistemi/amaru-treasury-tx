@@ -188,7 +188,6 @@ import Amaru.Treasury.IntentJSON.Common
     , parseAddr
     , parseGuardKeyHash
     , parseNetwork
-    , parseRewardAccount
     , parseRewardAccountForNetwork
     , parseTxIn
     )
@@ -1917,7 +1916,9 @@ translateSwap ti = do
     treasuryUtxos <-
         traverse parseTxIn (sjTreasuryUtxos scope)
     permissionsAcct <-
-        parseRewardAccount (sjPermissionsRewardAccount scope)
+        parseRewardAccountForNetwork
+            (tiNetwork ti)
+            (sjPermissionsRewardAccount scope)
     scopesRef <- parseTxIn (sjScopesDeployedAt scope)
     permissionsRef <-
         parseTxIn (sjPermissionsDeployedAt scope)

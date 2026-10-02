@@ -4,6 +4,22 @@ All notable changes to `amaru-treasury-tx` are documented here.
 
 ## Unreleased
 
+## [0.2.22.0](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.21.2...v0.2.22.0) (2026-10-02)
+
+### Features
+
+* **cli:** --in/--out flags for envelope commands ([55ff184](https://github.com/lambdasistemi/amaru-treasury-tx/commit/55ff184949136f821a197e7c0760c95d3772edd5))
+* **vault:** relabel subcommand ([4737f8d](https://github.com/lambdasistemi/amaru-treasury-tx/commit/4737f8d0f3c0fc2eeb42136184e345e09f7aaf94))
+
+### Bug Fixes
+
+* **n2c:** reconnect the provider's node connection when it ends ([936907b](https://github.com/lambdasistemi/amaru-treasury-tx/commit/936907b5f72013896d8bb798ba5b614a303447b9))
+* **disburse:** retain native assets in ADA treasury change ([1c61ca7](https://github.com/lambdasistemi/amaru-treasury-tx/commit/1c61ca757fd935d2f5a80f2a85ceded8f7440979))
+* **intent-json:** swap reward account uses intent network ([e7bf2cd](https://github.com/lambdasistemi/amaru-treasury-tx/commit/e7bf2cd797220963a861ad3b3d45fecfba3c6700))
+* **vault:** clear terminal echo before the passphrase prompt ([771f84a](https://github.com/lambdasistemi/amaru-treasury-tx/commit/771f84a8e9e162181a48734d6daf634e5852fafe))
+* typed errors for byte → hash conversion ([6ac446c](https://github.com/lambdasistemi/amaru-treasury-tx/commit/6ac446c83606f042de792b55b6f0b2fadcb03246))
+* **disburse:** accept multi-paragraph rationale text ([5ed4275](https://github.com/lambdasistemi/amaru-treasury-tx/commit/5ed427551227807018831e1c6dfc78210469ecec))
+
 ## [0.2.21.2](https://github.com/lambdasistemi/amaru-treasury-tx/compare/v0.2.21.1...v0.2.21.2) (2026-09-04)
 
 ### Bug Fixes

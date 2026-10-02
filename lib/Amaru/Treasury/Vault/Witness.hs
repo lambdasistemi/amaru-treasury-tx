@@ -19,6 +19,7 @@ module Amaru.Treasury.Vault.Witness
     , WitnessVault
     , decodeWitnessVault
     , encodeWitnessVault
+    , relabelWitnessVault
     , renderVaultError
     , resolveVaultIdentity
     , vaultIdentityKeyHash
@@ -28,10 +29,10 @@ module Amaru.Treasury.Vault.Witness
     , vaultIdentitySource
     ) where
 
-import Control.Monad (foldM)
+import Control.Monad (foldM, when)
 import Data.Aeson
     ( FromJSON (..)
-    , Value
+    , Value (..)
     , eitherDecodeStrict'
     , encode
     , object
@@ -40,6 +41,8 @@ import Data.Aeson
     , (.:?)
     , (.=)
     )
+import Data.Aeson.Key qualified as Key
+import Data.Aeson.KeyMap qualified as KeyMap
 import Data.ByteString (ByteString)
 import Data.ByteString.Lazy qualified as BSL
 import Data.Foldable (toList)
@@ -100,6 +103,8 @@ data VaultError
     | VaultMalformedKeyHash !Text
     | VaultDuplicateKeyHash !Text !(NonEmpty Text)
     | VaultUnsupportedSource !Text
+    | VaultAmbiguousIdentity ![Text]
+    | VaultLabelTaken !Text
     deriving stock (Eq, Show)
 
 newtype VaultDocument = VaultDocument RawVault
@@ -300,6 +305,64 @@ resolveVaultIdentity selector (WitnessVault identities) =
                             (Map.keys identities)
                         )
 
+{- | Rename one identity of a decrypted v1 witness vault payload.
+
+The payload is validated with 'decodeWitnessVault' and the identity is
+selected with 'resolveVaultIdentity' (or, without a selector, as the
+vault's only identity). The edit is applied to the JSON document
+itself, so every field the typed schema does not carry, such as
+@description@, survives unchanged.
+-}
+relabelWitnessVault
+    :: Maybe Text
+    -- ^ identity label or key hash; 'Nothing' selects the only identity
+    -> Text
+    -- ^ new label
+    -> ByteString
+    -- ^ decrypted v1 payload
+    -> Either VaultError ByteString
+relabelWitnessVault selector newLabel raw = do
+    vault@(WitnessVault identities) <- decodeWitnessVault raw
+    oldLabel <-
+        case selector of
+            Just wanted ->
+                vaultIdentityLabel <$> resolveVaultIdentity wanted vault
+            Nothing ->
+                case Map.keys identities of
+                    [only] -> Right only
+                    labels -> Left (VaultAmbiguousIdentity labels)
+    when (newLabel /= oldLabel && Map.member newLabel identities) $
+        Left (VaultLabelTaken newLabel)
+    document <-
+        case eitherDecodeStrict' raw of
+            Left err -> Left (VaultMalformedJson (T.pack err))
+            Right value -> Right value
+    maybe
+        (Left (VaultMissingIdentity oldLabel (Map.keys identities)))
+        (Right . BSL.toStrict . encode)
+        (moveIdentity oldLabel newLabel document)
+
+moveIdentity :: Text -> Text -> Value -> Maybe Value
+moveIdentity oldLabel newLabel = \case
+    Object root -> do
+        Object vault <- KeyMap.lookup vaultKey root
+        Object identities <- KeyMap.lookup "identities" vault
+        Object selected <- KeyMap.lookup (Key.fromText oldLabel) identities
+        let relabeled =
+                KeyMap.insert "label" (String newLabel) selected
+            identities' =
+                KeyMap.insert (Key.fromText newLabel) (Object relabeled) $
+                    KeyMap.delete (Key.fromText oldLabel) identities
+        pure $
+            Object $
+                KeyMap.insert
+                    vaultKey
+                    (Object (KeyMap.insert "identities" (Object identities') vault))
+                    root
+    _ -> Nothing
+  where
+    vaultKey = "amaruTreasuryWitnessVault"
+
 -- | Render a vault identity key hash as lowercase hex.
 vaultIdentityKeyHashText :: VaultIdentity -> Text
 vaultIdentityKeyHashText =
@@ -338,3 +401,13 @@ renderVaultError = \case
             <> T.intercalate ", " (first : rest)
     VaultUnsupportedSource kind ->
         "unsupported witness vault source: " <> kind
+    VaultAmbiguousIdentity labels ->
+        "witness vault holds "
+            <> T.pack (show (length labels))
+            <> " identities; select one by label or key hash"
+            <> "; available identities: "
+            <> T.intercalate ", " labels
+    VaultLabelTaken label ->
+        "witness vault identity label `"
+            <> label
+            <> "` is already used by another identity"

@@ -169,6 +169,9 @@ verbs and their roles:
   `[vkey, sig]` witness from an age-encrypted vault.
 - `vault create …` — make a new age-encrypted vault from a signing
   key.
+- `vault relabel --in <age> --label <new> --out <age>` — rename one
+  identity of an existing vault (`--identity` when it holds more than
+  one; `--out` may equal `--in`).
 - `attach-witness --tx unsigned-tx.hex --witness HEX --witness HEX …
   --out signed-tx.hex` — merge any number of detached vkey witnesses
   into the unsigned tx. Accepts both raw `[vkey, sig]` and the

@@ -8,19 +8,23 @@ Copyright   : (c) Paolo Veronelli, 2026
 License     : Apache-2.0
 
 The @vault create@ command imports one Cardano payment signing key into
-an age-encrypted witness vault. It never writes the cleartext vault
+an age-encrypted witness vault. The @vault relabel@ command renames one
+identity of an existing vault. Neither writes the cleartext vault
 payload to disk.
 -}
 module Amaru.Treasury.Cli.Vault
     ( VaultCreateOpts (..)
+    , VaultRelabelOpts (..)
     , VaultSigningKeyInput (..)
     , runVaultCreate
+    , runVaultRelabel
     , vaultCreateOptsP
+    , vaultRelabelOptsP
     ) where
 
 import Control.Applicative ((<|>))
 import Control.Exception (IOException, catch, onException)
-import Control.Monad (when)
+import Control.Monad (unless, when)
 import Data.Aeson (eitherDecodeStrict')
 import Data.ByteString qualified as BS
 import Data.List.NonEmpty (NonEmpty (..))
@@ -42,12 +46,14 @@ import Options.Applicative
     , switch
     )
 import System.Directory
-    ( doesFileExist
+    ( canonicalizePath
+    , doesDirectoryExist
+    , doesFileExist
     , removeFile
     , renameFile
     )
 import System.Exit (exitFailure)
-import System.FilePath (takeDirectory)
+import System.FilePath (equalFilePath, takeDirectory)
 import System.IO
     ( hClose
     , hIsTerminalDevice
@@ -70,22 +76,28 @@ import Amaru.Treasury.Cli.Common
     , resolveNetworkName
     )
 import Amaru.Treasury.Cli.Passphrase
-    ( readVaultPassphraseConfirmed
+    ( readVaultPassphrase
+    , readVaultPassphraseConfirmed
     )
 import Amaru.Treasury.Tx.Witness
     ( renderTxWitnessError
     , signingSourceKeyHash
     )
 import Amaru.Treasury.Vault.Age
-    ( defaultVaultWorkFactor
+    ( ageVaultWorkFactor
+    , decryptAgeVault
+    , defaultVaultWorkFactor
     , encryptAgeVault
     , parseVaultWorkFactor
     , renderAgeVaultError
     )
 import Amaru.Treasury.Vault.Witness
     ( SigningSource (..)
+    , VaultError (..)
     , VaultIdentitySpec (..)
     , encodeWitnessVault
+    , relabelWitnessVault
+    , renderVaultError
     )
 
 -- | Secret signing-key input source for @vault create@.
@@ -155,6 +167,63 @@ vaultCreateOptsP =
                 <> help "Overwrite an existing --out path"
             )
 
+-- | Options for @vault relabel@.
+data VaultRelabelOpts = VaultRelabelOpts
+    { vroInPath :: !FilePath
+    , vroLabel :: !Text
+    , vroOutPath :: !FilePath
+    , vroIdentity :: !(Maybe Text)
+    , vroPassphraseFd :: !(Maybe Int)
+    , vroForce :: !Bool
+    }
+    deriving stock (Eq, Show)
+
+-- | Parser for @vault relabel@ options.
+vaultRelabelOptsP :: Parser VaultRelabelOpts
+vaultRelabelOptsP =
+    VaultRelabelOpts
+        <$> strOption
+            ( long "in"
+                <> metavar "PATH"
+                <> help "age-encrypted witness vault to relabel"
+            )
+        <*> ( T.pack
+                <$> strOption
+                    ( long "label"
+                        <> metavar "LABEL"
+                        <> help "New label for the selected identity"
+                    )
+            )
+        <*> strOption
+            ( long "out"
+                <> short 'o'
+                <> metavar "PATH"
+                <> help
+                    "Path to write the relabeled vault; may equal --in to replace it in place"
+            )
+        <*> optional
+            ( T.pack
+                <$> strOption
+                    ( long "identity"
+                        <> metavar "LABEL_OR_KEY_HASH"
+                        <> help
+                            "Identity to relabel, by label or 28-byte key hash (required when the vault holds more than one)"
+                    )
+            )
+        <*> optional
+            ( option
+                auto
+                ( long "vault-passphrase-fd"
+                    <> metavar "FD"
+                    <> help
+                        "Read the vault passphrase from an inherited file descriptor"
+                )
+            )
+        <*> switch
+            ( long "force"
+                <> help "Overwrite an existing --out path other than --in"
+            )
+
 signingKeyInputP :: Parser VaultSigningKeyInput
 signingKeyInputP =
     ( VaultSigningKeyPaste
@@ -187,7 +256,7 @@ runVaultCreate :: GlobalOpts -> VaultCreateOpts -> IO ()
 runVaultCreate g VaultCreateOpts{..} = do
     networkName <-
         either (die . T.pack) pure (resolveNetworkName g)
-    ensureWritableOutput vcoOutPath vcoForce
+    ensureWritableOutput die vcoOutPath vcoForce
     signingSource <- readSigningKeySource vcoSigningKeyInput
     keyHash <-
         either (die . renderTxWitnessError) pure $
@@ -214,6 +283,67 @@ runVaultCreate g VaultCreateOpts{..} = do
                     )
                 )
     writeFileAtomic vcoOutPath encrypted
+
+{- | Run @vault relabel@: decrypt in memory, rename one identity,
+re-encrypt with the same passphrase and work factor, and replace
+@--out@ atomically. Nothing is written on any failure.
+-}
+runVaultRelabel :: GlobalOpts -> VaultRelabelOpts -> IO ()
+runVaultRelabel _ VaultRelabelOpts{..} = do
+    inPlace <- sameFile vroInPath vroOutPath
+    unless inPlace $
+        ensureWritableOutput relabelDie vroOutPath vroForce
+    let outDir = takeDirectory vroOutPath
+    outDirExists <- doesDirectoryExist outDir
+    unless outDirExists $
+        relabelDie ("output directory does not exist: " <> T.pack outDir)
+    encrypted <-
+        BS.readFile vroInPath `catch` \(err :: IOException) ->
+            relabelDie $
+                "failed to read witness vault `"
+                    <> T.pack vroInPath
+                    <> "`: "
+                    <> T.pack (show err)
+    passphrase <-
+        either relabelDie pure
+            =<< readVaultPassphrase "Vault passphrase: " vroPassphraseFd
+    maxWorkFactor <-
+        either (relabelDie . renderAgeVaultError) pure $
+            parseVaultWorkFactor defaultVaultWorkFactor
+    cleartext <-
+        case decryptAgeVault maxWorkFactor passphrase encrypted of
+            Right bytes -> pure bytes
+            Left err ->
+                relabelDie $
+                    "failed to decrypt witness vault `"
+                        <> T.pack vroInPath
+                        <> "`: "
+                        <> renderAgeVaultError err
+    workFactor <-
+        either (relabelDie . renderAgeVaultError) pure $
+            ageVaultWorkFactor encrypted
+    relabeled <-
+        either (relabelDie . renderRelabelError) pure $
+            relabelWitnessVault vroIdentity vroLabel cleartext
+    reencrypted <-
+        either (relabelDie . renderAgeVaultError) pure
+            =<< encryptAgeVault workFactor passphrase relabeled
+    writeFileAtomic vroOutPath reencrypted
+
+renderRelabelError :: VaultError -> Text
+renderRelabelError err =
+    case err of
+        VaultAmbiguousIdentity _ ->
+            renderVaultError err <> " (select one with --identity)"
+        _ -> renderVaultError err
+
+-- | Whether two paths name the same file (both existing) or spell it equally.
+sameFile :: FilePath -> FilePath -> IO Bool
+sameFile a b = do
+    bothExist <- (&&) <$> doesFileExist a <*> doesFileExist b
+    if bothExist
+        then equalFilePath <$> canonicalizePath a <*> canonicalizePath b
+        else pure (equalFilePath a b)
 
 readSigningKeySource :: VaultSigningKeyInput -> IO SigningSource
 readSigningKeySource = \case
@@ -305,11 +435,12 @@ looksLikeJsonObject :: Text -> Bool
 looksLikeJsonObject raw =
     "{" `T.isPrefixOf` T.stripStart raw
 
-ensureWritableOutput :: FilePath -> Bool -> IO ()
-ensureWritableOutput path force = do
+ensureWritableOutput
+    :: (Text -> IO ()) -> FilePath -> Bool -> IO ()
+ensureWritableOutput failWith path force = do
     exists <- doesFileExist path
     when (exists && not force) $
-        die ("output path already exists: " <> T.pack path)
+        failWith ("output path already exists: " <> T.pack path)
 
 writeFileAtomic :: FilePath -> BS.ByteString -> IO ()
 writeFileAtomic path bytes = do
@@ -324,6 +455,12 @@ ignoreRemove path =
     removeFile path `catch` \(_ :: IOException) -> pure ()
 
 die :: Text -> IO a
-die msg = do
-    hPutStrLn stderr ("vault create: " <> T.unpack msg)
+die = dieAs "vault create"
+
+relabelDie :: Text -> IO a
+relabelDie = dieAs "vault relabel"
+
+dieAs :: Text -> Text -> IO a
+dieAs command msg = do
+    hPutStrLn stderr (T.unpack (command <> ": " <> msg))
     exitFailure

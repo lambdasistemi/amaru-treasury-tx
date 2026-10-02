@@ -326,6 +326,21 @@ exec 9<&-
 exec 9<<<"$VAULT_PASSPHRASE"
 ```
 
+If an identity was created under the wrong label, rename it with
+`vault relabel` instead of importing the key again. The vault is
+decrypted in memory, the selected identity gets the new label, and the
+result is encrypted with the same passphrase and work factor. Pass
+`--identity` (label or key hash) when the vault holds more than one
+identity. `--out` may equal `--in`, which replaces the vault
+atomically; any other existing `--out` needs `--force`.
+
+```bash
+amaru-treasury-tx vault relabel \
+    --in treasury.vault.age \
+    --label core_development \
+    --out treasury.vault.age
+```
+
 The transaction passed to `witness --tx` may be either raw Conway CBOR
 hex or a `cardano-cli` `Tx ConwayEra` JSON envelope. If the transaction
 comes from `cardano-cli`, put the full JSON envelope in a file and pass

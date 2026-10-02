@@ -13,6 +13,7 @@ scrypt passphrase recipient and returns redacted errors.
 module Amaru.Treasury.Vault.Age
     ( AgeVaultError (..)
     , VaultPassphrase
+    , ageVaultWorkFactor
     , decryptAgeVault
     , defaultVaultWorkFactor
     , encryptAgeVault
@@ -23,6 +24,11 @@ module Amaru.Treasury.Vault.Age
 
 import Control.Monad.Trans.Except (runExceptT)
 import Crypto.Age.Buffered qualified as Age
+import Crypto.Age.Header
+    ( Header (..)
+    , Stanza (..)
+    , headerParser
+    )
 import Crypto.Age.Identity
     ( Identity (..)
     , ScryptIdentity (..)
@@ -36,8 +42,10 @@ import Crypto.Age.Scrypt
     , WorkFactor
     , bytesToSalt
     , mkWorkFactor
+    , workFactorParser
     )
 import Crypto.Random (getRandomBytes)
+import Data.Attoparsec.ByteString qualified as Atto
 import Data.ByteArray qualified as BA
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
@@ -60,6 +68,7 @@ data AgeVaultError
     | AgeVaultSaltFailure
     | AgeVaultEncryptFailure
     | AgeVaultDecryptFailure
+    | AgeVaultMalformedHeader
     deriving stock (Eq, Show)
 
 -- | Build a passphrase from bytes read at a safe CLI boundary.
@@ -149,3 +158,25 @@ renderAgeVaultError = \case
         "failed to encrypt age vault"
     AgeVaultDecryptFailure ->
         "failed to decrypt age vault"
+    AgeVaultMalformedHeader ->
+        "age vault header is not a single scrypt passphrase recipient"
+
+{- | Read the scrypt work factor an age vault was encrypted with.
+
+The header is parsed with the @age@ library's own parser and must
+carry exactly one @scrypt@ stanza, the only recipient this module
+writes. The value is not authenticated here; decrypt the vault first.
+-}
+ageVaultWorkFactor :: ByteString -> Either AgeVaultError WorkFactor
+ageVaultWorkFactor ciphertext =
+    case Atto.parseOnly headerParser ciphertext of
+        Right
+            Header
+                { hStanzas =
+                    Stanza{sTag = "scrypt", sArgs = [_salt, raw]} :| []
+                } ->
+                either
+                    (const (Left AgeVaultMalformedHeader))
+                    Right
+                    (Atto.parseOnly (workFactorParser <* Atto.endOfInput) raw)
+        _ -> Left AgeVaultMalformedHeader

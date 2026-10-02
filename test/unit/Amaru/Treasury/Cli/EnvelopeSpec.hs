@@ -324,10 +324,10 @@ parseCliFailure args =
 
 cmdTag :: Cmd -> String
 cmdTag = \case
-    CmdEnvelopeTx -> "envelope-tx"
-    CmdEnvelopeWitness -> "envelope-witness"
-    CmdEnvelopeSignedTx -> "envelope-signed-tx"
-    CmdDeEnvelope -> "de-envelope"
+    CmdEnvelopeTx{} -> "envelope-tx"
+    CmdEnvelopeWitness{} -> "envelope-witness"
+    CmdEnvelopeSignedTx{} -> "envelope-signed-tx"
+    CmdDeEnvelope{} -> "de-envelope"
     CmdAttachWitness{} -> "attach-witness"
     CmdSubmit{} -> "submit"
     CmdServe{} -> "serve"

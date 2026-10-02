@@ -372,6 +372,10 @@ uses the raw CBOR-hex contract:
 amaru-treasury-tx de-envelope < cli.tx.body.json > unsigned.cbor.hex
 ```
 
+`de-envelope --in cli.tx.body.json --out unsigned.cbor.hex` writes the
+same bytes without shell redirection; every envelope command takes
+`--in FILE` and `--out FILE`.
+
 If the transaction does not declare required signer hashes, add
 `--expected-key-hash HASH` or the explicit `--allow-unlisted-key`
 acknowledgement. Submit within minutes — the wizard's

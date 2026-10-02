@@ -151,11 +151,11 @@ main = withUtf8 . withUpdateCheckMain $ do
                 runCoordinate (goNetworkMagic g) socket co
         CmdServe so ->
             runServe so
-        CmdEnvelopeTx ->
-            runEnvelope Tx
-        CmdEnvelopeWitness ->
-            runEnvelope Witness
-        CmdEnvelopeSignedTx ->
-            runEnvelope SignedTx
-        CmdDeEnvelope ->
-            runDeEnvelope
+        CmdEnvelopeTx io ->
+            runEnvelope Tx io
+        CmdEnvelopeWitness io ->
+            runEnvelope Witness io
+        CmdEnvelopeSignedTx io ->
+            runEnvelope SignedTx io
+        CmdDeEnvelope io ->
+            runDeEnvelope io

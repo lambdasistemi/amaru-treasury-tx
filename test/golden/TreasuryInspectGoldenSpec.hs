@@ -17,6 +17,8 @@ Set @UPDATE_GOLDENS=1@ to regenerate the golden file.
 -}
 module TreasuryInspectGoldenSpec
     ( spec
+    , goldenPath
+    , regenerateReportGolden
     ) where
 
 import Data.ByteString (ByteString)
@@ -51,6 +53,7 @@ import Amaru.Treasury.Scope
 metadataPath :: FilePath
 metadataPath = "test/fixtures/metadata.json"
 
+-- | The checked-in @treasury-inspect@ report.
 goldenPath :: FilePath
 goldenPath = "test/fixtures/treasury-inspect/report.golden.json"
 
@@ -184,6 +187,20 @@ deployment =
             }
         )
 
+-- | The @treasury-inspect@ golden bytes, rebuilt by the real writer.
+regenerateReportGolden :: IO BSL.ByteString
+regenerateReportGolden = do
+    metadata <- readMetadataFile metadataPath
+    pure
+        . encodeReport
+        $ buildInspectReport
+            metadata
+            chainTip
+            deployment
+            treasuryUtxos
+            [pendingForNc, pendingForNc2, pendingForeign]
+            Nothing
+
 spec :: Spec
 spec =
     describe "TreasuryInspectGolden" $ do
@@ -192,19 +209,7 @@ spec =
                 <> "fixture inputs"
             )
             $ do
-                metadata <- readMetadataFile metadataPath
-                let report =
-                        buildInspectReport
-                            metadata
-                            chainTip
-                            deployment
-                            treasuryUtxos
-                            [ pendingForNc
-                            , pendingForNc2
-                            , pendingForeign
-                            ]
-                            Nothing
-                    actual = encodeReport report
+                actual <- regenerateReportGolden
                 update <- lookupEnv "UPDATE_GOLDENS"
                 case update of
                     Just "1" -> BSL.writeFile goldenPath actual

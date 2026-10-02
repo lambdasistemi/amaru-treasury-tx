@@ -386,6 +386,13 @@ commands. Use the envelope filters only at the boundary where a
 | `envelope-signed-tx` | raw signed transaction hex -> `Tx ConwayEra` JSON |
 | `de-envelope` | any Conway envelope JSON -> raw `cborHex` |
 
+Each filter reads stdin and writes stdout unless given `--in FILE` and
+`--out FILE`, which produce the same bytes without shell redirection:
+
+```bash
+amaru-treasury-tx de-envelope --in cli.tx.body.json --out unsigned.cbor.hex
+```
+
 `de-envelope` parses complete JSON from stdin and writes the extracted
 `cborHex` plus one trailing newline. It does not unwrap terminal
 transcripts or repair line-broken strings. If a long transaction body

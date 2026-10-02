@@ -80,6 +80,10 @@ import Amaru.Treasury.Cli.DisburseWizard
     ( DisburseWizardInput
     , disburseWizardInputP
     )
+import Amaru.Treasury.Cli.Envelope
+    ( EnvelopeIO
+    , envelopeIOP
+    )
 import Amaru.Treasury.Cli.GovernanceWithdrawalInitWizard
     ( GovernanceWithdrawalInitWizardOpts
     , governanceWithdrawalInitWizardOptsP
@@ -174,10 +178,10 @@ data Cmd
     | CmdSubmit SubmitOpts
     | CmdCoordinate CoordinateOpts
     | CmdServe ServeOpts
-    | CmdEnvelopeTx
-    | CmdEnvelopeWitness
-    | CmdEnvelopeSignedTx
-    | CmdDeEnvelope
+    | CmdEnvelopeTx EnvelopeIO
+    | CmdEnvelopeWitness EnvelopeIO
+    | CmdEnvelopeSignedTx EnvelopeIO
+    | CmdDeEnvelope EnvelopeIO
 
 cmdP :: Parser Cmd
 cmdP =
@@ -364,7 +368,7 @@ cmdP =
             <> command
                 "envelope-tx"
                 ( info
-                    (pure CmdEnvelopeTx)
+                    (CmdEnvelopeTx <$> envelopeIOP)
                     ( progDesc
                         "Wrap raw tx CBOR hex as a cardano-cli Conway tx envelope"
                     )
@@ -372,7 +376,7 @@ cmdP =
             <> command
                 "envelope-witness"
                 ( info
-                    (pure CmdEnvelopeWitness)
+                    (CmdEnvelopeWitness <$> envelopeIOP)
                     ( progDesc
                         "Wrap raw witness CBOR hex as a cardano-cli Conway witness envelope"
                     )
@@ -380,7 +384,7 @@ cmdP =
             <> command
                 "envelope-signed-tx"
                 ( info
-                    (pure CmdEnvelopeSignedTx)
+                    (CmdEnvelopeSignedTx <$> envelopeIOP)
                     ( progDesc
                         "Wrap raw signed tx CBOR hex as a cardano-cli Conway tx envelope"
                     )
@@ -388,7 +392,7 @@ cmdP =
             <> command
                 "de-envelope"
                 ( info
-                    (pure CmdDeEnvelope)
+                    (CmdDeEnvelope <$> envelopeIOP)
                     ( progDesc
                         "Extract raw CBOR hex from a cardano-cli Conway envelope"
                     )

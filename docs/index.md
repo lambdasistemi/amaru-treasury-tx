@@ -55,7 +55,7 @@ spend→produce effect), and Books. It builds unsigned transactions only.
 | `treasury-inspect` | Read-only report: treasury balances + pending SundaeSwap orders per scope. |
 | `history` / `tx-detail` | Read-only treasury tx history for a scope / one decoded transaction, from the local chain-sync indexer (`--indexer-db` or `AMARU_TREASURY_API_INDEXER_DB`). |
 | `report-render` | Render a `tx-build` build-output envelope as reviewable Markdown. |
-| `envelope-tx` / `envelope-witness` / `envelope-signed-tx` / `de-envelope` | Wrap raw CBOR hex as `cardano-cli` Conway envelopes and back. |
+| `envelope-tx` / `envelope-witness` / `envelope-signed-tx` / `de-envelope` | Wrap raw CBOR hex as `cardano-cli` Conway envelopes and back. Read `--in FILE` and write `--out FILE` (defaults: stdin, stdout). |
 | `serve` | Run the HTTP API service (same server as the `amaru-treasury-tx-api` executable). |
 | `registry-init-wizard` / `stake-reward-init-wizard` / `governance-withdrawal-init-wizard` | Produce bootstrap `intent.json` files for the DevNet registry, stake-reward, and governance-withdrawal flows (devnet only). |
 

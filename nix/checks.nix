@@ -257,6 +257,7 @@ let
         pkgs.diffutils
         pkgs.expect
         pkgs.gnugrep
+        pkgs.gnused
       ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [
         pkgs.util-linux
       ];
@@ -457,6 +458,153 @@ EOF
           ${pkgs.bash}/bin/bash scripts/smoke/vault-witness
         AMARU_TREASURY_TX_EXE=amaru-treasury-tx \
           ${pkgs.bash}/bin/bash scripts/smoke/vault-witness-tty
+
+        # ---- #226 envelope filters take --in / --out --------------
+        # Every envelope command, over every oracle fixture, must
+        # write the same bytes through --in/--out (together and
+        # each alone) as through stdin/stdout.
+        envelope_fixture="test/fixtures/106-cardano-cli-oracle"
+        envelope_tmp="$helper_tmp/envelope-in-out"
+        mkdir -p "$envelope_tmp"
+
+        envelope_fail() {
+          printf 'smoke: envelope --in/--out: %s\n' "$*" >&2
+          exit 1
+        }
+
+        assert_envelope_io() {
+          local command="$1"
+          local input="$2"
+          local case_dir
+          case_dir="$envelope_tmp/$command.$(basename "$input")"
+          mkdir -p "$case_dir"
+
+          amaru-treasury-tx "$command" <"$input" >"$case_dir/reference"
+          test -s "$case_dir/reference" \
+            || envelope_fail "$command $input: empty stdin/stdout reference"
+
+          amaru-treasury-tx "$command" \
+            --in "$input" --out "$case_dir/both" >"$case_dir/both.stdout"
+          cmp "$case_dir/reference" "$case_dir/both" \
+            || envelope_fail "$command --in --out differs on $input"
+          if [[ -s "$case_dir/both.stdout" ]]; then
+            envelope_fail "$command --out also wrote stdout on $input"
+          fi
+
+          amaru-treasury-tx "$command" --in "$input" >"$case_dir/in-only"
+          cmp "$case_dir/reference" "$case_dir/in-only" \
+            || envelope_fail "$command --in alone differs on $input"
+
+          printf 'stale bytes longer than any envelope output %0512d\n' 0 \
+            >"$case_dir/out-only"
+          amaru-treasury-tx "$command" --out "$case_dir/out-only" \
+            <"$input" >"$case_dir/out-only.stdout"
+          cmp "$case_dir/reference" "$case_dir/out-only" \
+            || envelope_fail "$command --out alone differs on $input"
+          if [[ -s "$case_dir/out-only.stdout" ]]; then
+            envelope_fail "$command --out alone also wrote stdout on $input"
+          fi
+        }
+
+        for command in envelope-tx envelope-witness envelope-signed-tx; do
+          for raw in tx.body.cborHex tx.witness.cborHex tx.signed.cborHex; do
+            assert_envelope_io "$command" "$envelope_fixture/$raw"
+          done
+        done
+        for envelope in tx.body.json tx.witness.json tx.signed.json; do
+          assert_envelope_io de-envelope "$envelope_fixture/$envelope"
+        done
+
+        # The stdin/stdout references above are the cardano-cli
+        # oracle bytes, so the flag runs are bound to them too.
+        for pair in \
+          envelope-tx:tx.body \
+          envelope-witness:tx.witness \
+          envelope-signed-tx:tx.signed
+        do
+          command="''${pair%%:*}"
+          stem="''${pair#*:}"
+          cmp "$envelope_fixture/$stem.json" \
+            "$envelope_tmp/$command.$stem.cborHex/both" \
+            || envelope_fail "$command --out differs from oracle $stem.json"
+          cat "$envelope_fixture/$stem.cborHex" \
+            >"$envelope_tmp/$stem.cborHex.expected"
+          printf '\n' >>"$envelope_tmp/$stem.cborHex.expected"
+          cmp "$envelope_tmp/$stem.cborHex.expected" \
+            "$envelope_tmp/de-envelope.$stem.json/both" \
+            || envelope_fail "de-envelope --out differs from oracle $stem.cborHex"
+        done
+
+        # A rejected envelope keeps its diagnostic and exit 1 and
+        # never creates or touches the --out file.
+        stale="$envelope_fixture/tx.babbage.json"
+        stale_dir="$envelope_tmp/stale"
+        mkdir -p "$stale_dir"
+        if amaru-treasury-tx de-envelope <"$stale" \
+          >"$stale_dir/reference.stdout" 2>"$stale_dir/reference.stderr"; then
+          envelope_fail "stale envelope unexpectedly succeeded on stdin"
+        fi
+        grep -F 'de-envelope: ' "$stale_dir/reference.stderr" >/dev/null \
+          || envelope_fail "stale envelope stdin diagnostic missing"
+
+        for mode in in-out stdin-out; do
+          for preexisting in absent present; do
+            target="$stale_dir/$mode.$preexisting.out"
+            if [[ "$preexisting" == present ]]; then
+              printf 'operator bytes that must survive\n' >"$target"
+              cp "$target" "$target.before"
+            fi
+            set +e
+            if [[ "$mode" == in-out ]]; then
+              amaru-treasury-tx de-envelope --in "$stale" --out "$target" \
+                >"$target.stdout" 2>"$target.stderr" </dev/null
+            else
+              amaru-treasury-tx de-envelope --out "$target" \
+                <"$stale" >"$target.stdout" 2>"$target.stderr"
+            fi
+            status=$?
+            set -e
+            [[ "$status" -eq 1 ]] \
+              || envelope_fail "de-envelope $mode exit $status, expected 1"
+            cmp "$stale_dir/reference.stderr" "$target.stderr" \
+              || envelope_fail "de-envelope $mode changed the diagnostic"
+            if [[ -s "$target.stdout" ]]; then
+              envelope_fail "de-envelope $mode failure wrote stdout"
+            fi
+            if [[ "$preexisting" == present ]]; then
+              cmp "$target.before" "$target" \
+                || envelope_fail "de-envelope $mode failure modified --out"
+            elif [[ -e "$target" ]]; then
+              envelope_fail "de-envelope $mode failure created --out"
+            fi
+          done
+        done
+
+        for command in envelope-tx envelope-witness envelope-signed-tx de-envelope; do
+          envelope_help="$(amaru-treasury-tx "$command" --help)"
+          for needle in '--in FILE' '--out FILE' 'stdin' 'stdout'; do
+            grep -F -- "$needle" >/dev/null <<<"$envelope_help" \
+              || envelope_fail "$command --help missing: $needle"
+          done
+        done
+
+        for doc in \
+          docs/swap.md \
+          docs/quickstart.md \
+          docs/index.md \
+          README.md \
+          skills/amaru-treasury-tx-operator/SKILL.md \
+          skills/amaru-treasury-tx-operator/references/pipeline.md
+        do
+          # Commands shown across "\"-continued lines count as one.
+          sed -e ':a' -e '/\\$/N' -e 's/\\\n/ /' -e 'ta' "$doc" \
+            >"$envelope_tmp/doc.joined"
+          for flag in '--in' '--out'; do
+            grep -E -- "(envelope-(tx|witness|signed-tx)|de-envelope).*$flag\\b" \
+              "$envelope_tmp/doc.joined" >/dev/null \
+              || envelope_fail "$doc never shows an envelope command with $flag"
+          done
+        done
 
         printf 'smoke: OK (swap-wizard --help %ss, withdraw-wizard --help %ss, tx-build --help %ss, report-render --help %ss)\n' \
           "$wizard_elapsed" "$withdraw_elapsed" "$build_elapsed" "$render_elapsed"

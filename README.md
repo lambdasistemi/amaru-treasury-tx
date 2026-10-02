@@ -140,7 +140,7 @@ report review, and creating the vault — is on the
 | `tx-build` | Turn a unified `intent.json` into unsigned Conway CBOR; re-evaluate every redeemer against a live `ChainContext`; optionally write a deterministic report with `--report`. |
 | `report-render` | Render a `tx-build` build-output envelope as reviewable Markdown. |
 | `vault` / `witness` / `attach-witness` / `submit` | Create an age vault, produce a detached vkey witness, merge witnesses, submit signed CBOR via the node socket. |
-| `envelope-tx` / `envelope-witness` / `envelope-signed-tx` / `de-envelope` | Convert raw CBOR hex to/from `cardano-cli` Conway envelopes. |
+| `envelope-tx` / `envelope-witness` / `envelope-signed-tx` / `de-envelope` | Convert raw CBOR hex to/from `cardano-cli` Conway envelopes. Read `--in FILE` and write `--out FILE` (defaults: stdin, stdout). |
 | `treasury-inspect` | Read-only report: treasury balances + pending SundaeSwap orders per scope. |
 | `history` / `tx-detail` | Read-only treasury history / one decoded transaction from the local chain-sync indexer. |
 | `serve` | Run the HTTP API service (same server as the `amaru-treasury-tx-api` executable). |

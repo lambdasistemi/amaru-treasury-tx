@@ -162,6 +162,8 @@ verbs and their roles:
   raw hex into a Conway TextEnvelope (`Tx ConwayEra` /
   `TxWitness ConwayEra`).
 - `de-envelope` — inverse: TextEnvelope → raw CBOR hex on stdout.
+- All four read stdin and write stdout unless given `--in FILE` /
+  `--out FILE`, e.g. `envelope-tx --in unsigned-tx.hex --out unsigned-tx.tx`.
 - `witness --tx <unsigned> --vault <age> --identity <label-or-hash>
   --expected-key-hash <hash> --out <file>` — produce one detached
   `[vkey, sig]` witness from an age-encrypted vault.

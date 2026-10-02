@@ -16,7 +16,7 @@
 
 ## Produced Outputs
 - 1 x treasuryLeftover -> core_development treasury: 2574949000000 lovelace (2574949.000000 ADA)
-- 1 x unknown -> beneficiary: 50000000 lovelace (50.000000 ADA)
+- 1 x beneficiary -> beneficiary: 50000000 lovelace (50.000000 ADA)
 - 1 x walletChange -> beneficiary: 50006838852 lovelace (50006.838852 ADA)
 
 ## Reference Inputs

@@ -31,7 +31,11 @@ payment witness plus required treasury signer witnesses.
 Set @UPDATE_GOLDENS=1@ to regenerate both files from
 the current Haskell builder output.
 -}
-module SwapGoldenSpec (spec) where
+module SwapGoldenSpec
+    ( spec
+    , reportGoldenPath
+    , regenerateReportGolden
+    ) where
 
 import Data.Aeson
     ( FromJSON (..)
@@ -86,6 +90,19 @@ import Amaru.Treasury.Report
 
 fixtureDir :: FilePath
 fixtureDir = "test/fixtures/swap"
+
+-- | The swap fixture's checked-in report.
+reportGoldenPath :: FilePath
+reportGoldenPath = fixtureDir <> "/report.golden.json"
+
+-- | The swap @report.golden.json@ bytes, rebuilt by the real writer.
+regenerateReportGolden :: IO BSL.ByteString
+regenerateReportGolden = do
+    si <- decodeTreasuryIntentFile (fixtureDir <> "/intent.json")
+    some <- either (fail . ("intent JSON: " <>)) pure si
+    fixture <- readSwapFixture fixtureDir
+    result <- runFromIntent (toFrozenContext fixture) some
+    pure (encodeBuildOutput (swapBuildOutput some result))
 
 newtype Target = Target Text
 
@@ -186,12 +203,12 @@ spec =
             case update of
                 Just "1" ->
                     BSL.writeFile
-                        (fixtureDir <> "/report.golden.json")
+                        reportGoldenPath
                         firstReportBytes
                 _ -> pure ()
             expectedReport <-
                 BSL.readFile
-                    (fixtureDir <> "/report.golden.json")
+                    reportGoldenPath
             firstReportBytes `shouldBe` secondReportBytes
             firstReportBytes `shouldBe` expectedReport
             brCborBytes first `shouldBe` brCborBytes second

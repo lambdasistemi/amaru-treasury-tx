@@ -3,30 +3,47 @@ Module      : ReportRenderActionGoldenSpec
 Description : Markdown goldens for non-swap report-render outputs
 License     : Apache-2.0
 
-Renders checked-in disburse and withdraw build-output envelopes through
-the pure Markdown renderer and compares them with checked-in
+Rebuilds every @report.golden.json@ found under @test/fixtures@ with
+the real writer and compares it byte-for-byte with the checked-in
+file; a report golden without a regenerating writer fails. Then
+renders the checked-in disburse and withdraw build-output envelopes
+through the pure Markdown renderer and compares them with checked-in
 operator-facing reports.
+
+Set @UPDATE_GOLDENS=1@ to rewrite the report goldens from the writer.
 -}
 module ReportRenderActionGoldenSpec (spec) where
 
+import Control.Monad (filterM, forM_, when)
 import Data.Aeson
     ( eitherDecodeStrict'
     )
 import Data.ByteString qualified as BS
 import Data.ByteString.Lazy qualified as BSL
+import Data.ByteString.Lazy.Char8 qualified as BSL8
 import Data.Char (isDigit)
+import Data.List (isSuffixOf, sort, uncons)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.IO qualified as TIO
-import System.Directory (doesFileExist)
+import System.Directory
+    ( doesDirectoryExist
+    , doesFileExist
+    , listDirectory
+    )
 import System.Environment (lookupEnv)
 import Test.Hspec
-    ( Spec
+    ( Expectation
+    , Spec
     , describe
     , expectationFailure
     , it
+    , runIO
     , shouldBe
     )
+
+import SwapGoldenSpec qualified as Swap
+import TreasuryInspectGoldenSpec qualified as Inspect
 
 import Amaru.Treasury.Build
     ( BuildResult (..)
@@ -77,9 +94,87 @@ fixtures =
     ]
 
 spec :: Spec
-spec =
+spec = do
+    reportGoldenSpec
     describe "report-render action Markdown goldens" $
         mapM_ fixtureSpec fixtures
+
+fixturesRoot :: FilePath
+fixturesRoot = "test/fixtures"
+
+-- | Each report golden paired with the writer that regenerates it.
+reportGoldenWriters :: [(FilePath, IO BSL.ByteString)]
+reportGoldenWriters =
+    [ (inputPath fixture, encodeBuildOutput <$> regenerate fixture)
+    | fixture <- fixtures
+    ]
+        <> [ (Swap.reportGoldenPath, Swap.regenerateReportGolden)
+           , (Inspect.goldenPath, Inspect.regenerateReportGolden)
+           ]
+  where
+    regenerate fixture =
+        readIntent (rfBuildDir fixture)
+            >>= buildOutput (rfBuildDir fixture)
+
+reportGoldenSpec :: Spec
+reportGoldenSpec =
+    describe "report.golden.json regeneration" $ do
+        found <- runIO (findReportGoldens fixturesRoot)
+        it "every report golden has a regenerating writer" $
+            found `shouldBe` sort (fst <$> reportGoldenWriters)
+        forM_ found $ \path ->
+            it ("regenerates " <> path <> " byte-for-byte") $
+                case lookup path reportGoldenWriters of
+                    Nothing ->
+                        expectationFailure
+                            ("no writer regenerates " <> path)
+                    Just regenerate -> do
+                        actual <- regenerate
+                        update <- lookupEnv "UPDATE_GOLDENS"
+                        when (update == Just "1") $
+                            BSL.writeFile path actual
+                        expected <- BSL.readFile path
+                        shouldMatchGolden path actual expected
+
+-- | Every @report.golden.json@ below a directory, sorted.
+findReportGoldens :: FilePath -> IO [FilePath]
+findReportGoldens dir = do
+    paths <- fmap ((dir <> "/") <>) <$> listDirectory dir
+    dirs <- filterM doesDirectoryExist paths
+    nested <- concat <$> mapM findReportGoldens dirs
+    let here = filter ("/report.golden.json" `isSuffixOf`) paths
+    pure (sort (here <> nested))
+
+{- | Byte equality; on failure name the first differing line and
+how to regenerate.
+-}
+shouldMatchGolden
+    :: FilePath -> BSL.ByteString -> BSL.ByteString -> Expectation
+shouldMatchGolden path actual expected
+    | actual == expected = pure ()
+    | otherwise =
+        expectationFailure $
+            path
+                <> " differs from its regeneration at line "
+                <> show line
+                <> "\n  golden:      "
+                <> golden
+                <> "\n  regenerated: "
+                <> regenerated
+                <> "\nrun UPDATE_GOLDENS=1 just golden;"
+                <> " review the git diff"
+  where
+    (line, golden, regenerated) =
+        firstDiff 1 (BSL8.lines expected) (BSL8.lines actual)
+    firstDiff
+        :: Int
+        -> [BSL.ByteString]
+        -> [BSL.ByteString]
+        -> (Int, String, String)
+    firstDiff n (e : es) (a : as)
+        | e == a = firstDiff (n + 1) es as
+    firstDiff n es as = (n, firstLine es, firstLine as)
+    firstLine = maybe "<end of file>" (BSL8.unpack . fst) . uncons
 
 fixtureSpec :: RenderFixture -> Spec
 fixtureSpec fixture =

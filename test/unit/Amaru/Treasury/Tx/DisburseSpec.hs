@@ -21,6 +21,7 @@ import Cardano.Crypto.Hash.Class
     ( Hash
     , HashAlgorithm
     , hashFromBytes
+    , hashSize
     , hashToBytes
     )
 import Cardano.Ledger.Address
@@ -68,7 +69,9 @@ import Cardano.Ledger.Credential
     , StakeReference (..)
     )
 import Cardano.Ledger.Hashes
-    ( KeyHash (..)
+    ( ADDRHASH
+    , HASH
+    , KeyHash (..)
     , ScriptHash (..)
     , unsafeMakeSafeHash
     )
@@ -88,7 +91,7 @@ import Codec.Serialise qualified as Codec
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Short qualified as SBS
-import Data.Either (isRight)
+import Data.Either (fromLeft, isRight)
 import Data.Foldable (toList)
 import Data.Map.Strict qualified as Map
 import Data.Maybe (fromJust)
@@ -187,8 +190,10 @@ import Data.ByteString.Lazy qualified as BSL
 import System.Directory (doesFileExist)
 import System.Environment (lookupEnv)
 
+import Control.Monad (forM_)
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Map.Strict (Map)
+import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Text qualified as T
 
@@ -615,6 +620,19 @@ spec = do
                     expectationFailure
                         "expected ADA disburse payload"
 
+        describe "wrong-length hash fields" $
+            forM_ hashFieldCases $ \(field, d, corrupt) ->
+                forM_ [d - 1, d + 1] $ \n ->
+                    it ("rejects a " <> show n <> "-byte " <> field) $ do
+                        dij <-
+                            eitherDecodeStrict
+                                "test/fixtures/disburse/ada/intent.json"
+                        leftOf
+                            ( translateDisburseIntent
+                                (corrupt (zeroHex n) dij)
+                            )
+                            `shouldContain` lengthMessage d n
+
     describe "Amaru.Treasury.Tx.DisburseWizard.disburseToTreasuryIntent" $
         do
             it "matches golden expected.intent.ada.json" $
@@ -829,6 +847,65 @@ eitherDecodeStrict p = do
         Right v -> pure v
         Left e ->
             error ("decode " <> p <> ": " <> e)
+
+{- | Hash fields of the disburse intent, each with its
+digest size and a setter replacing it with a given hex.
+-}
+hashFieldCases
+    :: [ ( String
+         , Int
+         , Text -> DisburseIntentJSON -> DisburseIntentJSON
+         )
+       ]
+hashFieldCases =
+    [
+        ( "wallet txid"
+        , txIdLength
+        , \h dij ->
+            dij{dijWallet = (dijWallet dij){dwjTxIn = h <> "#0"}}
+        )
+    ,
+        ( "treasury UTxO txid"
+        , txIdLength
+        , \h dij ->
+            dij
+                { dijScope =
+                    (dijScope dij){dsjTreasuryUtxos = [h <> "#0"]}
+                }
+        )
+    ,
+        ( "permissions reward account"
+        , keyHashLength
+        , \h dij ->
+            dij
+                { dijScope =
+                    (dijScope dij){dsjPermissionsRewardAccount = h}
+                }
+        )
+    ,
+        ( "signer key hash"
+        , keyHashLength
+        , \h dij -> dij{dijSigners = [h]}
+        )
+    ]
+  where
+    txIdLength = fromIntegral (hashSize (Proxy @HASH))
+    keyHashLength = fromIntegral (hashSize (Proxy @ADDRHASH))
+
+-- | The existing hex decoder's length message.
+lengthMessage :: Int -> Int -> String
+lengthMessage expected actual =
+    "expected "
+        <> show expected
+        <> " bytes, got "
+        <> show actual
+
+zeroHex :: Int -> Text
+zeroHex n = T.replicate n "00"
+
+-- | The 'Left' of a translation, or a marker for 'Right'.
+leftOf :: Either String a -> String
+leftOf = fromLeft "<Right>"
 
 expectRight :: (Show e) => Either e a -> IO a
 expectRight =

@@ -21,6 +21,7 @@ import Data.ByteString.Lazy.Char8 qualified as BSL8
 import Data.List.NonEmpty (NonEmpty ((:|)))
 import Data.Map.Strict (Map)
 import Data.Map.Strict qualified as Map
+import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Word (Word64)
@@ -49,10 +50,11 @@ import Test.QuickCheck
     , (===)
     )
 
+import Cardano.Crypto.Hash.Class (HashAlgorithm, hashSize)
 import Cardano.Ledger.Address (AccountAddress (..), Addr)
 import Cardano.Ledger.BaseTypes (Network (..))
 import Cardano.Ledger.Coin (Coin (..))
-import Cardano.Ledger.Hashes (KeyHash)
+import Cardano.Ledger.Hashes (ADDRHASH, HASH, KeyHash)
 import Cardano.Ledger.Keys (KeyRole (Guard))
 import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Slotting.Slot (SlotNo (..))
@@ -320,6 +322,56 @@ spec = describe "Amaru.Treasury.IntentJSON" $ do
                     SSwap
                     (swapIntent "localnet")
                 )
+
+    describe "wrong-length hash fields" $ do
+        let txIdLength = digestLength (Proxy @HASH)
+            keyHashLength = digestLength (Proxy @ADDRHASH)
+        forM_ (wrongLengths txIdLength) $ \n ->
+            it ("rejects a " <> show n <> "-byte wallet txid") $
+                expectLeftContaining
+                    (lengthMessage txIdLength n)
+                    ( translateIntent
+                        SWithdraw
+                        withdrawIntentMainnet
+                            { tiWallet =
+                                (tiWallet withdrawIntentMainnet)
+                                    { wjTxIn = zeroHex n <> "#0"
+                                    }
+                            }
+                    )
+        forM_ (wrongLengths keyHashLength) $ \n -> do
+            it ("rejects a " <> show n <> "-byte signer key hash") $
+                expectLeftContaining
+                    (lengthMessage keyHashLength n)
+                    ( translateIntent
+                        SDisburse
+                        (disburseIntent "mainnet")
+                            { tiSigners = [zeroHex n]
+                            }
+                    )
+            it ("rejects a " <> show n <> "-byte reward account") $
+                expectLeftContaining
+                    (lengthMessage keyHashLength n)
+                    ( translateIntent
+                        SWithdraw
+                        withdrawIntentMainnet
+                            { tiPayload =
+                                WithdrawInputs (zeroHex n) 1
+                            }
+                    )
+            it ("rejects a " <> show n <> "-byte USDM policy id") $
+                expectLeftContaining
+                    (lengthMessage keyHashLength n)
+                    ( translateIntent
+                        SDisburse
+                        (disburseIntent "mainnet")
+                            { tiPayload =
+                                (tiPayload (disburseIntent "mainnet"))
+                                    { diUnit = "usdm"
+                                    , diUsdmPolicy = zeroHex n
+                                    }
+                            }
+                    )
 
 -- ----------------------------------------------------
 -- Round-trip property
@@ -1170,6 +1222,24 @@ withdrawIntent network =
             []
         )
         (WithdrawInputs rewardAccountHex 12_500_000_000)
+
+digestLength :: (HashAlgorithm h) => proxy h -> Int
+digestLength = fromIntegral . hashSize
+
+-- | One byte short of and one byte past a digest size.
+wrongLengths :: Int -> [Int]
+wrongLengths d = [d - 1, d + 1]
+
+-- | The existing @decodeHexBytes@ length message.
+lengthMessage :: Int -> Int -> String
+lengthMessage expected actual =
+    "expected "
+        <> show expected
+        <> " bytes, got "
+        <> show actual
+
+zeroHex :: Int -> Text
+zeroHex n = T.replicate n "00"
 
 rewardAccountHex :: Text
 rewardAccountHex =

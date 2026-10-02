@@ -3,3 +3,39 @@
 - ignore: { name: "Use camelCase" }
 - ignore: { name: "Redundant do" }
 - ignore: { name: "Use record patterns" }
+
+# Byte string -> hash conversion is total in lib/ (#33): a partial
+# composition over hashFromBytes crashes on a wrong-length input
+# instead of yielding a parse error. Test fixtures, golden support
+# modules and executables keep their partial constant builders.
+- error:
+    lhs: "fromJust (hashFromBytes x)"
+    rhs: "hashFromBytes x"
+    name: "Partial hashFromBytes"
+    note: "thread the failure: use Amaru.Treasury.IntentJSON.Common.mkHash"
+- error:
+    lhs: "fromMaybe (error x) (hashFromBytes y)"
+    rhs: "hashFromBytes y"
+    name: "Partial hashFromBytes"
+    note: "thread the failure: use Amaru.Treasury.IntentJSON.Common.mkHash"
+- ignore:
+    name: "Partial hashFromBytes"
+    within: ["**.*Spec", "Support.**", "Main"]
+
+# The class, not the spelling: Maybe-returning hash constructors are
+# eliminated only where the Nothing case is threaded as an error
+# value. Every other lib/ module goes through mkHash.
+- functions:
+    - name: hashFromBytes
+      within:
+        - Amaru.Treasury.IntentJSON.Common
+        - Amaru.Treasury.LedgerParse
+        - Amaru.Treasury.Tx.SwapCancel.Datum
+        - "**.*Spec"
+        - "Support.**"
+        - Main
+    - {name: hashFromBytesShort, within: ["**.*Spec", "Support.**", Main]}
+    - {name: hashFromOffsetBytesShort, within: ["**.*Spec", "Support.**", Main]}
+    - {name: hashFromBytesAsHex, within: ["**.*Spec", "Support.**", Main]}
+    - {name: hashFromTextAsHex, within: ["**.*Spec", "Support.**", Main]}
+    - {name: hashFromStringAsHex, within: ["**.*Spec", "Support.**", Main]}

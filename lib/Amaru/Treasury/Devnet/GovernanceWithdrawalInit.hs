@@ -95,8 +95,9 @@ import Cardano.Crypto.DSIGN.Class
     )
 import Cardano.Crypto.Hash.Class
     ( Hash
-    , HashAlgorithm
-    , hashFromBytes
+    , HashAlgorithm (..)
+    , PackedBytes (PackedBytes32)
+    , hashFromPackedBytes
     )
 import Cardano.Ledger.Address
     ( AccountAddress (..)
@@ -2487,7 +2488,8 @@ parseEitherText label parser input =
         Left err -> fail (label <> ": " <> err)
         Right ok -> pure ok
 
-mkHash32 :: (HashAlgorithm h) => Word8 -> Hash h a
-mkHash32 n =
-    fromJust . hashFromBytes . BS.pack $
-        replicate 31 0 ++ [n]
+{- | The 32-byte hash of 31 zero bytes followed by @n@. Total:
+the packed representation fixes the length at the type.
+-}
+mkHash32 :: (HashSize h ~ 32) => Word8 -> Hash h a
+mkHash32 n = hashFromPackedBytes (PackedBytes32 0 0 0 (fromIntegral n))

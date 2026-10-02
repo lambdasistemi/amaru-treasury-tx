@@ -36,7 +36,6 @@ module Amaru.Treasury.Tx.DisburseIntentJSON
     , translateDisburseIntent
     ) where
 
-import Cardano.Crypto.Hash.Class (Hash, HashAlgorithm, hashFromBytes)
 import Cardano.Ledger.Address
     ( Addr (..)
     , decodeAddrEither
@@ -76,7 +75,6 @@ import Data.ByteString.Base16 qualified as B16
 import Data.ByteString.Lazy qualified as BSL
 import Data.List.NonEmpty qualified as NE
 import Data.Map.Strict (Map)
-import Data.Maybe (fromJust)
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -91,7 +89,8 @@ import Amaru.Treasury.IntentJSON
     , fromJSONReference
     )
 import Amaru.Treasury.IntentJSON.Common
-    ( parseRewardAccountForNetwork
+    ( mkHash
+    , parseRewardAccountForNetwork
     )
 import Amaru.Treasury.Tx.Disburse
     ( DisburseAdaPayload (..)
@@ -499,9 +498,10 @@ parseTxIn t = case T.splitOn "#" t of
     [hHex, ixT] -> do
         ix <- readEither "txix" (T.unpack ixT)
         bs <- decodeHexBytes 32 hHex
+        h <- mkHash bs
         Right
             ( TxIn
-                (TxId (unsafeMakeSafeHash (mkHash32 bs)))
+                (TxId (unsafeMakeSafeHash h))
                 (mkTxIxPartial (ix :: Integer))
             )
     _ ->
@@ -513,7 +513,7 @@ parseTxIn t = case T.splitOn "#" t of
 parseGuardKeyHash :: Text -> Either String (KeyHash Guard)
 parseGuardKeyHash t = do
     bs <- decodeHexBytes 28 t
-    Right (KeyHash (mkHash28 bs))
+    KeyHash <$> mkHash bs
 
 decodeHexBytes :: Int -> Text -> Either String ByteString
 decodeHexBytes expected t =
@@ -528,12 +528,6 @@ decodeHexBytes expected t =
                         <> show (BS.length bs)
                     )
         Left e -> Left ("hex decode: " <> e)
-
-mkHash28 :: (HashAlgorithm h) => ByteString -> Hash h a
-mkHash28 = fromJust . hashFromBytes
-
-mkHash32 :: (HashAlgorithm h) => ByteString -> Hash h a
-mkHash32 = fromJust . hashFromBytes
 
 readEither :: (Read a) => String -> String -> Either String a
 readEither what s = case reads s of

@@ -78,11 +78,11 @@ import Cardano.Ledger.Plutus (ExUnits (..))
 import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 
 import Amaru.Treasury.ChainContext (ChainContext, frozenContext)
+import Amaru.Treasury.IntentJSON.Common (mkHash)
 import Amaru.Treasury.PParams (readPParamsFile)
 
-import Cardano.Crypto.Hash.Class (hashFromBytes, hashToBytes)
+import Cardano.Crypto.Hash.Class (hashToBytes)
 import Data.ByteString (ByteString)
-import Data.Maybe (fromMaybe)
 
 -- ----------------------------------------------------
 -- Types
@@ -294,9 +294,10 @@ parseTxIn t =
         [hHex, ixT] -> do
             ix <- readInt (T.unpack ixT)
             bs <- decodeHex32 hHex
+            h <- mkHash bs
             Right $
                 TxIn
-                    (TxId (unsafeMakeSafeHash (mkH bs)))
+                    (TxId (unsafeMakeSafeHash h))
                     (mkTxIxPartial (toInteger (ix :: Word32)))
         _ ->
             Left
@@ -313,10 +314,6 @@ parseTxIn t =
     readInt s = case reads s of
         [(v, "")] -> Right v
         _ -> Left ("ix: " <> s)
-    mkH bs =
-        fromMaybe
-            (error "fixture: 32-byte hash")
-            (hashFromBytes bs)
 
 -- ----------------------------------------------------
 -- Bridge to ChainContext

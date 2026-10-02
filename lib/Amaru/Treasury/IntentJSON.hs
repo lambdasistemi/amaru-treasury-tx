@@ -184,7 +184,7 @@ import Amaru.Treasury.AuxData
 import Amaru.Treasury.IntentJSON.Common
     ( decodeHexBytes
     , decodeHexBytesAny
-    , mkHash28
+    , mkHash
     , parseAddr
     , parseGuardKeyHash
     , parseNetwork
@@ -2144,7 +2144,7 @@ translateDisburseUsdm scope disb = do
 parsePolicyId :: Text -> Either String PolicyID
 parsePolicyId text = do
     bytes <- decodeHexBytes 28 text
-    pure (PolicyID (ScriptHash (mkHash28 bytes)))
+    PolicyID . ScriptHash <$> mkHash bytes
 
 parseAssetName :: Text -> Either String AssetName
 parseAssetName text = do
@@ -2659,7 +2659,7 @@ parseStakingPubKeyHash
     :: Text -> Either String (KeyHash Staking)
 parseStakingPubKeyHash t = do
     bytes <- decodeHexBytes 28 t
-    Right (KeyHash (mkHash28 bytes))
+    KeyHash <$> mkHash bytes
 
 {- | Reinterpret a 'KeyHash' 'Staking' as a 'KeyHash'
 'DRepRole' — the underlying 28-byte hash is role-free.
@@ -2693,7 +2693,7 @@ parseGovernanceAnchor urlText hashText = do
                     <> T.unpack urlText
                 )
     bytes <- decodeHexBytes 32 hashText
-    Right (Anchor url (unsafeMakeSafeHash (mkHash28 bytes)))
+    Anchor url . unsafeMakeSafeHash <$> mkHash bytes
 
 {- | Parse a 28-byte hex into a stake-role script
 'Credential'.
@@ -2702,13 +2702,13 @@ parseStakingScriptCredential
     :: Text -> Either String (Credential Staking)
 parseStakingScriptCredential t = do
     bytes <- decodeHexBytes 28 t
-    Right (ScriptHashObj (ScriptHash (mkHash28 bytes)))
+    ScriptHashObj . ScriptHash <$> mkHash bytes
 
 -- | Parse a 28-byte hex into a payment-role 'KeyHash'.
 parsePaymentKeyHash :: Text -> Either String (KeyHash Payment)
 parsePaymentKeyHash t = do
     bytes <- decodeHexBytes 28 t
-    Right (KeyHash (mkHash28 bytes))
+    KeyHash <$> mkHash bytes
 
 {- | Per-chunk lovelace values for a swap order. See #91.
 

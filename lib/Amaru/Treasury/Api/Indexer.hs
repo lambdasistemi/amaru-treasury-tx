@@ -46,7 +46,7 @@ module Amaru.Treasury.Api.Indexer
     , toChainSyncCfgWithHistory
     ) where
 
-import Cardano.Crypto.Hash.Class (hashFromBytes, hashToBytes)
+import Cardano.Crypto.Hash.Class (hashToBytes)
 import Cardano.Ledger.Address (Addr, serialiseAddr)
 import Cardano.Ledger.Api.Era (eraProtVerLow)
 import Cardano.Ledger.BaseTypes (TxIx (..))
@@ -57,8 +57,7 @@ import Cardano.Ledger.Binary
 import Cardano.Ledger.Conway (ConwayEra)
 import Cardano.Ledger.Core qualified as Ledger
 import Cardano.Ledger.Hashes
-    ( SafeHash
-    , extractHash
+    ( extractHash
     , unsafeMakeSafeHash
     )
 import Cardano.Ledger.TxIn qualified as Ledger
@@ -103,6 +102,7 @@ import Ouroboros.Network.Magic (NetworkMagic)
 import System.IO (hPutStrLn, stderr)
 
 import Amaru.Treasury.Indexer.Decoder (treasuryDecodeTxWithInterest)
+import Amaru.Treasury.IntentJSON.Common (mkHash)
 import Amaru.Treasury.Scope (ScopeId)
 
 -- ---------------------------------------------------------------------------
@@ -469,7 +469,8 @@ convertEntry
     -> IO (Ledger.TxIn, Ledger.TxOut ConwayEra)
 convertEntry (ixTxIn, IxTypes.TxOut bytes) = do
     txOut <- decodeIndexerTxOut (IxTypes.TxOut bytes)
-    pure (convertTxIn ixTxIn, txOut)
+    txIn <- convertTxIn ixTxIn
+    pure (txIn, txOut)
 
 decodeIndexerTxOut
     :: TxOut
@@ -489,32 +490,27 @@ decodeConwayTxOut
     -> Either DecoderError (Ledger.TxOut ConwayEra)
 decodeConwayTxOut = decodeFull' (eraProtVerLow @ConwayEra)
 
-convertTxIn :: TxIn -> Ledger.TxIn
+{- | Re-wrap the indexer's raw tx-id bytes as a ledger 'TxIn'.
+The indexer writes these bytes from a known-good 'Ledger.TxId'
+via 'extractHash', so a wrong length is an upstream invariant
+violation; it fails like an undecodable TxOut does.
+-}
+convertTxIn :: TxIn -> IO Ledger.TxIn
 convertTxIn (IxTypes.TxIn idBytes ix) =
-    Ledger.TxIn
-        (Ledger.TxId (mkSafeHash idBytes))
-        (TxIx ix)
+    case mkHash idBytes of
+        Right h ->
+            pure
+                ( Ledger.TxIn
+                    (Ledger.TxId (unsafeMakeSafeHash h))
+                    (TxIx ix)
+                )
+        Left err ->
+            ioError $
+                userError $
+                    "snapshotUtxosAt: indexer tx-id: " <> err
 
 toIndexerTxIn :: Ledger.TxIn -> TxIn
 toIndexerTxIn (Ledger.TxIn (Ledger.TxId txIdHash) txIx) =
     IxTypes.TxIn
         (hashToBytes (extractHash txIdHash))
         (unTxIx txIx)
-
-{- | Re-wrap the indexer's 32-byte raw tx-id bytes as a
-ledger 'SafeHash'. 'unsafeMakeSafeHash' is the right
-constructor here: the upstream indexer wrote these exact
-bytes from a known-good 'Ledger.TxId' via
-'extractHash' on the apply path, so reassembling on the
-read path round-trips byte-identically.
--}
-mkSafeHash :: BS.ByteString -> SafeHash a
-mkSafeHash bs =
-    case hashFromBytes bs of
-        Just h -> unsafeMakeSafeHash h
-        Nothing ->
-            error
-                "Amaru.Treasury.Api.Indexer.mkSafeHash: \
-                \indexer wrote a tx-id that is not a \
-                \valid Blake2b_256 digest; this is a \
-                \cardano-node-clients invariant violation"

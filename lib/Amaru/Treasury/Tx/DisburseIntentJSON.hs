@@ -86,7 +86,9 @@ import Amaru.Treasury.AuxData
     )
 import Amaru.Treasury.IntentJSON
     ( RationaleReferenceJSON (..)
+    , RationaleText
     , fromJSONReference
+    , rationaleTextLines
     )
 import Amaru.Treasury.IntentJSON.Common
     ( mkHash
@@ -162,8 +164,10 @@ field to be present.
 data DisburseRationaleJSON = DisburseRationaleJSON
     { drjEvent :: !Text
     , drjLabel :: !Text
-    , drjDescription :: !Text
-    , drjJustification :: !Text
+    , drjDescription :: !RationaleText
+    -- ^ one string, or an array of paragraphs
+    , drjJustification :: !RationaleText
+    -- ^ one string, or an array of paragraphs
     , drjDestinationLabel :: !Text
     , drjReferences :: ![RationaleReferenceJSON]
     -- ^ optional typed external references on the
@@ -466,11 +470,12 @@ buildRationale DisburseIntentJSON{..} = do
                         fromJSONReference
                         (drjReferences dijRationale)
                 , rbDescription =
-                    [drjDescription dijRationale]
+                    rationaleTextLines (drjDescription dijRationale)
                 , rbDestinationLabel =
                     drjDestinationLabel dijRationale
                 , rbJustification =
-                    [drjJustification dijRationale]
+                    rationaleTextLines
+                        (drjJustification dijRationale)
                 }
     pure (rationaleMetadatum body registryPolicy)
 

@@ -138,6 +138,7 @@ import Amaru.Treasury.IntentJSON
     ( Action (..)
     , DisburseDestination (..)
     , DisburseInputs (..)
+    , RationaleText (..)
     , SAction (..)
     , ScopeJSON (..)
     , SomeTreasuryIntent (..)
@@ -1123,10 +1124,22 @@ genRationale =
     DisburseRationaleJSON
         <$> elements ["disburse", "vendor", "rebate"]
         <*> elements ["Disburse ADA", "Disburse USDM"]
-        <*> pure "A description"
-        <*> pure "A justification"
+        <*> genRationaleText "A description"
+        <*> genRationaleText "A justification"
         <*> pure "Beneficiary X"
         <*> pure []
+
+{- | Either accepted shape of a disburse rationale text field: one
+string, or one to three paragraphs.
+-}
+genRationaleText :: Text -> Gen RationaleText
+genRationaleText t = do
+    n <- chooseInt (1, 3)
+    elements
+        [ RationaleTextScalar t
+        , RationaleTextLines
+            [t <> " " <> T.pack (show i) | i <- [1 .. n]]
+        ]
 
 genDisburseIntentJSON :: Gen DisburseIntentJSON
 genDisburseIntentJSON = do

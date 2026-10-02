@@ -86,7 +86,7 @@ import Amaru.Treasury.IntentJSON
     )
 import Amaru.Treasury.IntentJSON.Common
     ( decodeHexBytes
-    , mkHash28
+    , mkHash
     , parseAddr
     , parseGuardKeyHash
     , parseNetwork
@@ -683,15 +683,14 @@ reorganizeToIntent env ans = do
         wrapParse
             "scopesDeployedAt"
             (txInFromText (tmScopeOwners (reMetadata env)))
-    permissionsHashBytes <-
+    permissionsScriptHash <-
         wrapParse
             "permissionsScriptHash"
-            ( decodeHexBytes
-                28
-                (srHash (smPermissions scope))
+            ( ScriptHash
+                <$> ( decodeHexBytes 28 (srHash (smPermissions scope))
+                        >>= mkHash
+                    )
             )
-    let permissionsScriptHash =
-            ScriptHash (mkHash28 permissionsHashBytes)
     rewardAccount <-
         wrapParse
             "permissionsRewardAccount"

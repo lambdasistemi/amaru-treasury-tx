@@ -15,8 +15,7 @@ module Amaru.Treasury.IntentJSON.Common
     , parseNetwork
     , decodeHexBytes
     , decodeHexBytesAny
-    , mkHash28
-    , mkHash32
+    , mkHash
     , readEither
     ) where
 
@@ -24,6 +23,7 @@ import Cardano.Crypto.Hash.Class
     ( Hash
     , HashAlgorithm
     , hashFromBytes
+    , hashSize
     )
 import Cardano.Ledger.Address
     ( AccountAddress (..)
@@ -47,7 +47,7 @@ import Codec.Binary.Bech32 qualified as Bech32
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Base16 qualified as B16
-import Data.Maybe (fromJust)
+import Data.Proxy (Proxy (..))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Encoding qualified as TE
@@ -72,9 +72,10 @@ parseTxIn t = case T.splitOn "#" t of
     [hHex, ixT] -> do
         ix <- readEither "txix" (T.unpack ixT)
         bs <- decodeHexBytes 32 hHex
+        h <- mkHash bs
         Right
             ( TxIn
-                (TxId (unsafeMakeSafeHash (mkHash32 bs)))
+                (TxId (unsafeMakeSafeHash h))
                 (mkTxIxPartial (ix :: Integer))
             )
     _ ->
@@ -94,14 +95,11 @@ parseRewardAccountForNetwork
 parseRewardAccountForNetwork networkText t = do
     network <- parseNetwork networkText
     bs <- decodeHexBytes 28 t
+    h <- mkHash bs
     Right
         ( AccountAddress
             network
-            ( AccountId
-                ( ScriptHashObj
-                    (ScriptHash (mkHash28 bs))
-                )
-            )
+            (AccountId (ScriptHashObj (ScriptHash h)))
         )
 
 parseNetwork :: Text -> Either String Network
@@ -124,7 +122,7 @@ parseGuardKeyHash
     :: Text -> Either String (KeyHash Guard)
 parseGuardKeyHash t = do
     bs <- decodeHexBytes 28 t
-    Right (KeyHash (mkHash28 bs))
+    KeyHash <$> mkHash bs
 
 -- | Decode hex with an exact byte-length expectation.
 decodeHexBytes
@@ -149,11 +147,22 @@ decodeHexBytesAny t =
         Right bs -> Right bs
         Left e -> Left ("hex decode: " <> e)
 
-mkHash28 :: (HashAlgorithm h) => ByteString -> Hash h a
-mkHash28 = fromJust . hashFromBytes
-
-mkHash32 :: (HashAlgorithm h) => ByteString -> Hash h a
-mkHash32 = fromJust . hashFromBytes
+{- | Turn a byte string into a hash of algorithm @h@. A byte
+string whose length differs from the digest size of @h@
+yields a 'Left' naming the expected and the actual length.
+-}
+mkHash
+    :: forall h a
+     . (HashAlgorithm h)
+    => ByteString
+    -> Either String (Hash h a)
+mkHash bs = maybe (Left mismatch) Right (hashFromBytes bs)
+  where
+    mismatch =
+        "hash: expected "
+            <> show (hashSize (Proxy @h))
+            <> " bytes, got "
+            <> show (BS.length bs)
 
 -- | 'reads'-based parse with a typed error message.
 readEither

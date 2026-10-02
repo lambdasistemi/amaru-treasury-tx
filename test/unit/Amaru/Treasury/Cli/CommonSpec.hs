@@ -106,7 +106,7 @@ import Amaru.Treasury.Cli.Common
     , queryFlatFunds
     , queryValues
     )
-import Amaru.Treasury.IntentJSON.Common (mkHash28)
+import Amaru.Treasury.IntentJSON.Common (mkHash)
 import Amaru.Treasury.LedgerParse (txInFromText)
 
 spec :: Spec
@@ -340,7 +340,7 @@ sampleAddr =
 
 sampleScriptHash :: ScriptHash
 sampleScriptHash =
-    ScriptHash (mkHash28 (BS.pack (replicate 28 0x00)))
+    either error ScriptHash (mkHash (BS.pack (replicate 28 0x00)))
 
 {- | Sample 'TxIn' references — plain hex/index strings the
   project's 'txInFromText' accepts.

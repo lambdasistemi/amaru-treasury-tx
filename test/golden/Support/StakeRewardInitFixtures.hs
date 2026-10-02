@@ -105,7 +105,6 @@ import Amaru.Treasury.IntentJSON
     , WalletJSON (..)
     , encodeSomeTreasuryIntent
     )
-import Amaru.Treasury.IntentJSON.Common (mkHash28)
 import Amaru.Treasury.PParams (readPParamsFile)
 import Amaru.Treasury.Registry.Derive (scriptHashToHex)
 

@@ -65,7 +65,7 @@ import Amaru.Treasury.IntentJSON
     )
 import Amaru.Treasury.IntentJSON.Common
     ( decodeHexBytes
-    , mkHash28
+    , mkHash
     , parseNetwork
     )
 import Amaru.Treasury.LedgerParse (txInFromText, txInToText)
@@ -255,7 +255,7 @@ spec = describe "ReorganizeWizard" $ do
             let assets =
                     MultiAsset $
                         Map.singleton
-                            (PolicyID (ScriptHash (mkHash28 assetPolicyBytes)))
+                            (PolicyID assetPolicyHash)
                             ( Map.singleton
                                 (AssetName (SBS.toShort "USDM"))
                                 42
@@ -287,7 +287,7 @@ spec = describe "ReorganizeWizard" $ do
             let assets =
                     MultiAsset $
                         Map.singleton
-                            (PolicyID (ScriptHash (mkHash28 assetPolicyBytes)))
+                            (PolicyID assetPolicyHash)
                             ( Map.singleton
                                 (AssetName (SBS.toShort "USDM"))
                                 42
@@ -446,13 +446,15 @@ expectedPermissionsRewardAccount :: AccountAddress
 expectedPermissionsRewardAccount =
     let network =
             unsafeRight "network" (parseNetwork "devnet")
-        bytes =
+        permissionsHash =
             unsafeRight
                 "permissions script hash"
-                (decodeHexBytes 28 (srHash (smPermissions sampleScope)))
+                ( decodeHexBytes 28 (srHash (smPermissions sampleScope))
+                    >>= mkHash
+                )
     in  AccountAddress
             network
-            (AccountId (ScriptHashObj (ScriptHash (mkHash28 bytes))))
+            (AccountId (ScriptHashObj (ScriptHash permissionsHash)))
 
 sampleHorizonError :: Validity.HorizonError
 sampleHorizonError =
@@ -493,6 +495,10 @@ parsedTreasuryTxRefB =
 
 sampleUpperBound :: Word64
 sampleUpperBound = 1_000_100
+
+assetPolicyHash :: ScriptHash
+assetPolicyHash =
+    unsafeRight "asset policy" (ScriptHash <$> mkHash assetPolicyBytes)
 
 assetPolicyBytes :: ByteString
 assetPolicyBytes =

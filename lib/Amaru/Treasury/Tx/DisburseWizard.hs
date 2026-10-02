@@ -116,7 +116,7 @@ import Amaru.Treasury.IntentJSON
 import Amaru.Treasury.IntentJSON.Common
     ( decodeHexBytes
     , decodeHexBytesAny
-    , mkHash28
+    , mkHash
     )
 import Amaru.Treasury.Registry.Derive (scriptHashToHex)
 import Amaru.Treasury.Scope
@@ -1135,10 +1135,10 @@ resolveConstants nc = do
     pure (policy, asset)
 
 parsePolicyId :: Text -> Either ResolverError PolicyID
-parsePolicyId text = case decodeHexBytes 28 text of
-    Left err -> Left (ResolverUsdmConstantDecodeFailed text err)
-    Right bytes ->
-        Right (PolicyID (ScriptHash (mkHash28 bytes)))
+parsePolicyId text =
+    case decodeHexBytes 28 text >>= mkHash of
+        Left err -> Left (ResolverUsdmConstantDecodeFailed text err)
+        Right h -> Right (PolicyID (ScriptHash h))
 
 parseAssetName :: Text -> Either ResolverError AssetName
 parseAssetName text = case decodeHexBytesAny text of

@@ -108,6 +108,7 @@ import Amaru.Treasury.IntentJSON
     , DisburseInputs (..)
     , RationaleJSON (..)
     , RationaleReferenceJSON (..)
+    , RationaleText (RationaleTextScalar)
     , SAction (..)
     , ScopeJSON (..)
     , TreasuryIntent (..)
@@ -1309,8 +1310,10 @@ mkRationale ans =
                 fromMaybe "disburse" (raEvent r)
             , drjLabel =
                 fromMaybe labelDefault (raLabel r)
-            , drjDescription = raDescription r
-            , drjJustification = raJustification r
+            , drjDescription =
+                RationaleTextScalar (raDescription r)
+            , drjJustification =
+                RationaleTextScalar (raJustification r)
             , drjDestinationLabel = raDestinationLabel r
             , drjReferences = daRationaleReferences ans
             }

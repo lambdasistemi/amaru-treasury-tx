@@ -633,6 +633,7 @@ test-suite unit-tests
     Amaru.Treasury.TraceSpec
     Amaru.Treasury.Tx.AttachWitnessSpec
     Amaru.Treasury.Tx.DisburseBuildSpec
+    Amaru.Treasury.Tx.DisburseRationaleSpec
     Amaru.Treasury.Tx.DisburseSpec
     Amaru.Treasury.Tx.DisburseWizardSpec
     Amaru.Treasury.Tx.EnvelopeSpec

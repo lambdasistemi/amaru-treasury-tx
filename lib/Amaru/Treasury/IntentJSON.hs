@@ -45,6 +45,8 @@ module Amaru.Treasury.IntentJSON
         , rjReferences
         )
     , RationaleReferenceJSON (..)
+    , RationaleText (..)
+    , rationaleTextLines
     , fromJSONReference
     , rationaleDescriptionLines
     , rationaleJustificationLines

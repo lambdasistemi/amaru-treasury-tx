@@ -82,6 +82,7 @@ import Amaru.Treasury.Cli.UpdateCheck
     )
 import Amaru.Treasury.Cli.Vault
     ( runVaultCreate
+    , runVaultRelabel
     )
 import Amaru.Treasury.Cli.WithdrawWizard
     ( runWithdrawWizard
@@ -141,6 +142,8 @@ main = withUtf8 . withUpdateCheckMain $ do
             runAttachWitness ao
         CmdVaultCreate vo ->
             runVaultCreate g vo
+        CmdVaultRelabel ro ->
+            runVaultRelabel g ro
         CmdWitness wo ->
             runWitness g wo
         CmdSubmit so ->

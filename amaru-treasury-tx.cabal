@@ -292,6 +292,7 @@ library
     , aeson-pretty
     , age
     , async
+    , attoparsec
     , base                                         <5
     , base16-bytestring
     , bech32
@@ -584,6 +585,7 @@ test-suite unit-tests
     Amaru.Treasury.Cli.SwapRerateSpec
     Amaru.Treasury.Cli.SwapWizardInputControlSpec
     Amaru.Treasury.Cli.TxBuildRequiredUtxosSpec
+    Amaru.Treasury.Cli.VaultRelabelSpec
     Amaru.Treasury.Cli.VaultSpec
     Amaru.Treasury.Cli.WithdrawWizardInputControlSpec
     Amaru.Treasury.Cli.WitnessSpec

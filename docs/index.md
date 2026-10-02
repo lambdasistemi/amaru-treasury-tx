@@ -47,6 +47,7 @@ spend→produce effect), and Books. It builds unsigned transactions only.
 | `disburse-wizard` | Verify upstream `metadata.json` against the chain, resolve wallet and treasury UTxOs, emit a unified ADA or USDM disburse `intent.json`. USDM is the default unit. With `--scope contingency`, disburses ADA from the contingency treasury to one or more destination scopes via repeatable `--to <scope>:<ada>` (each scope receives its exact amount; fee from the wallet). |
 | `tx-build` | Turn a unified `intent.json` into unsigned Conway CBOR; re-evaluates every redeemer against a live `ChainContext` (typed step trace via `BuildEvent`) and can write a deterministic pre-signing report with `--report PATH`. |
 | `vault create` | Import one pasted or streamed Cardano payment signing key (`cardano-cli` `.skey` JSON or `addr_xsk`) into an encrypted age witness vault. |
+| `vault relabel` | Rename one identity of an encrypted age witness vault in place or to a new file; the signing key, passphrase, work factor and description are kept. |
 | `witness` | Create one detached Conway vkey witness from an encrypted age vault identity. |
 | `attach-witness` | Merge detached vkey witness CBOR hex into an unsigned Conway transaction. |
 | `submit` | Submit signed Conway CBOR hex through a local node socket. |

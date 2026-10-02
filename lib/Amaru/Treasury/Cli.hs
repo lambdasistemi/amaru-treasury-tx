@@ -140,7 +140,9 @@ import Amaru.Treasury.Cli.TxBuild
     )
 import Amaru.Treasury.Cli.Vault
     ( VaultCreateOpts
+    , VaultRelabelOpts
     , vaultCreateOptsP
+    , vaultRelabelOptsP
     )
 import Amaru.Treasury.Cli.WithdrawWizard
     ( WithdrawOpts
@@ -174,6 +176,7 @@ data Cmd
     | CmdTxDetail TxDetailOpts
     | CmdAttachWitness AttachWitnessOpts
     | CmdVaultCreate VaultCreateOpts
+    | CmdVaultRelabel VaultRelabelOpts
     | CmdWitness WitnessOpts
     | CmdSubmit SubmitOpts
     | CmdCoordinate CoordinateOpts
@@ -410,6 +413,14 @@ vaultCmdP =
                     "Create an age-encrypted witness vault from a signing key"
                 )
             )
+            <> command
+                "relabel"
+                ( info
+                    (CmdVaultRelabel <$> vaultRelabelOptsP)
+                    ( progDesc
+                        "Rename one identity of an age-encrypted witness vault"
+                    )
+                )
         )
 
 versionOption :: Parser (a -> a)

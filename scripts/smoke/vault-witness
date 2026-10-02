@@ -226,4 +226,136 @@ fi
 diff -u <(printf 'keep\n') "$tmp/existing.vault.age"
 grep -F 'output path already exists' "$tmp/existing-vault.err" >/dev/null
 
+# ---- #234 vault relabel ---------------------------------------------
+# A mislabeled identity is renamed inside the encrypted vault; the
+# signing key, passphrase and work factor are untouched.
+
+vault_help="$("$exe" vault --help)" \
+  || fail 'vault --help failed'
+grep -E '^[[:space:]]+relabel[[:space:]]' <<<"$vault_help" >/dev/null \
+  || fail 'vault --help does not list relabel'
+relabel_help="$("$exe" vault relabel --help)" \
+  || fail 'vault relabel --help failed'
+for flag in '--in PATH' '--label LABEL' '--out PATH' \
+  '--identity LABEL_OR_KEY_HASH' '--vault-passphrase-fd FD' '--force'; do
+  grep -F -- "$flag" <<<"$relabel_help" >/dev/null \
+    || fail "vault relabel --help does not show $flag"
+done
+
+relabel_out="$tmp/relabel-out"
+relabel_witnesses="$tmp/relabel-witnesses"
+mkdir -p "$relabel_out" "$relabel_witnesses"
+
+# Round trip: the relabeled identity signs exactly as the original did,
+# for both supported signing-key sources.
+with_passphrase "$passphrase" \
+  "$exe" vault relabel \
+  --in "$vault" \
+  --label relabeled_core \
+  --out "$relabel_out/core.vault.age" \
+  || fail 'vault relabel of the .skey vault failed'
+with_passphrase "$passphrase" \
+  "$exe" --network preprod witness \
+  --tx "$fixture/unsigned.cbor.hex" \
+  --vault "$relabel_out/core.vault.age" \
+  --identity relabeled_core \
+  --out "$relabel_witnesses/core.witness.hex" \
+  || fail 'witness with the relabeled .skey identity failed'
+cmp "$tmp/owner.witness.hex" "$relabel_witnesses/core.witness.hex" \
+  || fail 'relabeled .skey identity witness differs from the original'
+
+with_passphrase "$passphrase" \
+  "$exe" vault relabel \
+  --in "$addr_xsk_vault" \
+  --label relabeled_xsk \
+  --out "$relabel_out/addr-xsk.vault.age" \
+  || fail 'vault relabel of the addr_xsk vault failed'
+with_passphrase "$passphrase" \
+  "$exe" --network preprod witness \
+  --tx "test/fixtures/106-cardano-cli-oracle/tx.body.cborHex" \
+  --vault "$relabel_out/addr-xsk.vault.age" \
+  --identity relabeled_xsk \
+  --allow-unlisted-key \
+  --out "$relabel_witnesses/addr-xsk.witness.hex" \
+  || fail 'witness with the relabeled addr_xsk identity failed'
+cmp "$tmp/addr-xsk.witness.hex" "$relabel_witnesses/addr-xsk.witness.hex" \
+  || fail 'relabeled addr_xsk identity witness differs from the original'
+
+# In place: --out equal to --in replaces the vault and leaves no other
+# file in its directory.
+relabel_inplace="$tmp/relabel-inplace"
+mkdir -p "$relabel_inplace"
+cp "$vault" "$relabel_inplace/treasury.vault.age"
+with_passphrase "$passphrase" \
+  "$exe" vault relabel \
+  --in "$relabel_inplace/treasury.vault.age" \
+  --label inplace_core \
+  --out "$relabel_inplace/treasury.vault.age" \
+  || fail 'in-place vault relabel failed'
+inplace_listing="$(ls -A "$relabel_inplace")"
+[[ "$inplace_listing" == "treasury.vault.age" ]] \
+  || fail "in-place relabel left other files: $inplace_listing"
+if cmp -s "$vault" "$relabel_inplace/treasury.vault.age"; then
+  fail 'in-place relabel did not replace the vault'
+fi
+with_passphrase "$passphrase" \
+  "$exe" --network preprod witness \
+  --tx "$fixture/unsigned.cbor.hex" \
+  --vault "$relabel_inplace/treasury.vault.age" \
+  --identity inplace_core \
+  --out "$relabel_witnesses/inplace.witness.hex" \
+  || fail 'witness with the in-place relabeled identity failed'
+cmp "$tmp/owner.witness.hex" "$relabel_witnesses/inplace.witness.hex" \
+  || fail 'in-place relabeled identity witness differs from the original'
+
+# Wrong passphrase: decrypt diagnostic without secrets, input untouched,
+# nothing written.
+relabel_wrong="$tmp/relabel-wrong"
+mkdir -p "$relabel_wrong"
+cp "$vault" "$relabel_wrong/in.vault.age"
+if with_passphrase "wrong passphrase" \
+  "$exe" vault relabel \
+  --in "$relabel_wrong/in.vault.age" \
+  --label relabeled_core \
+  --out "$relabel_wrong/out.vault.age" \
+  >"$tmp/relabel-wrong.out" 2>"$tmp/relabel-wrong.err"; then
+  fail 'wrong-passphrase relabel unexpectedly succeeded'
+fi
+cmp "$vault" "$relabel_wrong/in.vault.age" \
+  || fail 'wrong-passphrase relabel modified --in'
+wrong_listing="$(ls -A "$relabel_wrong")"
+[[ "$wrong_listing" == "in.vault.age" ]] \
+  || fail "wrong-passphrase relabel wrote files: $wrong_listing"
+grep -F 'vault relabel: ' "$tmp/relabel-wrong.err" >/dev/null \
+  || fail 'wrong-passphrase relabel lacks the vault relabel diagnostic'
+grep -F 'failed to decrypt' "$tmp/relabel-wrong.err" >/dev/null \
+  || fail 'wrong-passphrase relabel lacks the decrypt diagnostic'
+if grep -F -e 'wrong passphrase' -e "$passphrase" \
+  "$tmp/relabel-wrong.out" "$tmp/relabel-wrong.err" >/dev/null; then
+  fail 'wrong-passphrase relabel leaked a passphrase'
+fi
+
+# No cleartext vault payload or signing-key material in any file the
+# relabels wrote.
+shopt -s dotglob nullglob
+relabel_written=("$relabel_out"/* "$relabel_inplace"/* "$relabel_wrong"/*)
+shopt -u dotglob nullglob
+[[ "${#relabel_written[@]}" -eq 4 ]] \
+  || fail "expected 4 relabel files to scan, found ${#relabel_written[@]}"
+for written in "${relabel_written[@]}"; do
+  if grep -aF -e 'PaymentSigningKeyShelley_ed25519' \
+    -e 'amaruTreasuryWitnessVault' -e 'addr_xsk1' \
+    "$written" >/dev/null; then
+    fail "relabel output contains cleartext vault material: $written"
+  fi
+done
+
+# Operator docs that list vault commands mention relabel.
+for doc in docs/index.md docs/quickstart.md \
+  skills/amaru-treasury-tx-operator/SKILL.md \
+  .claude/skills/amaru-treasury-tx/SKILL.md; do
+  grep -F 'vault relabel' "$doc" >/dev/null \
+    || fail "$doc does not mention vault relabel"
+done
+
 printf 'vault-witness: OK\n'

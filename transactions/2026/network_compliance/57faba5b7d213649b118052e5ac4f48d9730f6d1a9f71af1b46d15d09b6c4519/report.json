@@ -1,0 +1,276 @@
+{
+    "intent": {
+        "action": "swap",
+        "network": "mainnet",
+        "rationale": {
+            "description": "Swap ADA for 40,000 USDM in 8 chunks at min rate 0.191 (48h TTL)",
+            "destinationLabel": "network_compliance treasury",
+            "event": "disburse",
+            "justification": "Network treasury swap to USDM (8 chunks, rate 0.191)",
+            "label": "Swap ADA<->USDM",
+            "references": []
+        },
+        "schema": 1,
+        "scope": {
+            "id": "network_compliance",
+            "permissionsDeployedAt": "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+            "permissionsRewardAccount": "a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094",
+            "registryDeployedAt": "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2",
+            "registryPolicyId": "38c627d45835744a2d6c727124f2b5852e5564aeab3f608e0e84ea6d",
+            "scopesDeployedAt": "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0",
+            "treasuryAddress": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
+            "treasuryDeployedAt": "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+            "treasuryLeftoverLovelace": 401473182250,
+            "treasuryLeftoverOtherAssets": {},
+            "treasuryLeftoverUsdm": 0,
+            "treasuryScriptHash": "32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d",
+            "treasuryUtxos": [
+                "efff271aa02e9032aba0e5e9020c5840b2aa1b219c59f9f16e1d6e51071bea1e#2"
+            ]
+        },
+        "signers": [
+            "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+            "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e"
+        ],
+        "swap": {
+            "amountLovelace": 209424083770,
+            "chunkSizeLovelace": 26178010471,
+            "coreOwner": "7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffb",
+            "extraPerChunkLovelace": 3280000,
+            "middlewareOwner": "97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2",
+            "networkComplianceOwner": "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+            "opsOwner": "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+            "poolId": "64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540ef",
+            "rateDenominator": 1000000,
+            "rateNumerator": 191000,
+            "sundaeProtocolFeeLovelace": 1280000,
+            "swapOrderAddress": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+            "usdmPolicy": "c48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad",
+            "usdmToken": "0014df105553444d"
+        },
+        "validityUpperBoundSlot": 194526553,
+        "wallet": {
+            "address": "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz",
+            "extraTxIns": [],
+            "txIn": "968fd01e074ca33de95087957f59803bb2ee8bacfe922eb81cdf18e8e23ad788#2"
+        }
+    },
+    "result": {
+        "report": {
+            "identity": {
+                "bodySizeBytes": 4588,
+                "feeLovelace": 553139,
+                "totalCollateralLovelace": 829709,
+                "txId": "57faba5b7d213649b118052e5ac4f48d9730f6d1a9f71af1b46d15d09b6c4519",
+                "validityInterval": {
+                    "invalidBefore": null,
+                    "invalidHereafter": 194526553
+                }
+            },
+            "metadata": {
+                "auxiliaryDataHash": "e2297cd2fabeb23e5cb52df2c317314cf53356ce0a9761b2d5b8156cd7019f4c",
+                "cip1694LabelPresent": true
+            },
+            "network": "mainnet",
+            "outputs": [
+                {
+                    "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+                    "datum": "inlineDatum",
+                    "index": 0,
+                    "role": "swapOrder",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 26181290472
+                    }
+                },
+                {
+                    "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+                    "datum": "inlineDatum",
+                    "index": 1,
+                    "role": "swapOrder",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 26181290472
+                    }
+                },
+                {
+                    "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+                    "datum": "inlineDatum",
+                    "index": 2,
+                    "role": "swapOrder",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 26181290471
+                    }
+                },
+                {
+                    "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+                    "datum": "inlineDatum",
+                    "index": 3,
+                    "role": "swapOrder",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 26181290471
+                    }
+                },
+                {
+                    "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+                    "datum": "inlineDatum",
+                    "index": 4,
+                    "role": "swapOrder",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 26181290471
+                    }
+                },
+                {
+                    "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+                    "datum": "inlineDatum",
+                    "index": 5,
+                    "role": "swapOrder",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 26181290471
+                    }
+                },
+                {
+                    "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+                    "datum": "inlineDatum",
+                    "index": 6,
+                    "role": "swapOrder",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 26181290471
+                    }
+                },
+                {
+                    "address": "addr1x8ax5k9mutg07p2ngscu3chsauktmstq92z9de938j8nqaejyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxst7gy3n",
+                    "datum": "inlineDatum",
+                    "index": 7,
+                    "role": "swapOrder",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 26181290471
+                    }
+                },
+                {
+                    "address": "addr1xyezq8wpaqnssdjvd3p220uf7e6nzjae44w6yu625y965rfjyqwur6p8pqmycmzz55lcnan4x99mnt2a5fe54ggt4gxs8thzgk",
+                    "datum": null,
+                    "index": 8,
+                    "role": "treasuryLeftover",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 401473182250
+                    }
+                },
+                {
+                    "address": "addr1qx9aqvsf6gne2640jec828s25gzhk5wp2day8u24kf8mrs2v0zyuvk80fay35dx008p45ts0u6cdrv9g2maetq8jm8psznjcrz",
+                    "datum": null,
+                    "index": 9,
+                    "role": "walletChange",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 76858483
+                    }
+                }
+            ],
+            "referenceInputs": [
+                "11ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf54#0",
+                "25ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d861095#2",
+                "810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c#0",
+                "e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c#2"
+            ],
+            "schema": 1,
+            "signers": [
+                {
+                    "keyHash": "8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1",
+                    "scope": "network_compliance",
+                    "source": "selectedScopeOwner"
+                },
+                {
+                    "keyHash": "f3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e",
+                    "scope": null,
+                    "source": "extraSigner"
+                }
+            ],
+            "treasuryAccounting": {
+                "inputTotal": {
+                    "assets": {},
+                    "lovelace": 610923506020
+                },
+                "inputs": [
+                    {
+                        "txIn": "efff271aa02e9032aba0e5e9020c5840b2aa1b219c59f9f16e1d6e51071bea1e#2",
+                        "value": {
+                            "assets": {},
+                            "lovelace": 610923506020
+                        }
+                    }
+                ],
+                "netDebit": {
+                    "assets": {},
+                    "lovelace": 209450323770
+                },
+                "perChunkOverheadLovelace": 3280000,
+                "sundaeOrderTotal": {
+                    "assets": {},
+                    "lovelace": 209450323770
+                },
+                "treasuryLeftover": {
+                    "assets": {},
+                    "lovelace": 401473182250
+                }
+            },
+            "validation": {
+                "bodySizeBytes": 4588,
+                "feeLovelace": 553139,
+                "intentNetwork": "mainnet",
+                "networkMatches": true,
+                "redeemerCount": 2,
+                "redeemerFailures": 0,
+                "socketNetworkMagic": 764824073,
+                "validationStatus": "ok",
+                "validityInterval": {
+                    "invalidBefore": null,
+                    "invalidHereafter": 194526553
+                }
+            },
+            "walletAccounting": {
+                "changeOutput": {
+                    "txIn": "57faba5b7d213649b118052e5ac4f48d9730f6d1a9f71af1b46d15d09b6c4519#9",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 76858483
+                    }
+                },
+                "collateralInput": {
+                    "txIn": "968fd01e074ca33de95087957f59803bb2ee8bacfe922eb81cdf18e8e23ad788#2",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 77411622
+                    }
+                },
+                "collateralReturn": {
+                    "txIn": "57faba5b7d213649b118052e5ac4f48d9730f6d1a9f71af1b46d15d09b6c4519#collateral-return",
+                    "value": {
+                        "assets": {},
+                        "lovelace": 76581913
+                    }
+                },
+                "feeLovelace": 553139,
+                "inputs": [
+                    {
+                        "txIn": "968fd01e074ca33de95087957f59803bb2ee8bacfe922eb81cdf18e8e23ad788#2",
+                        "value": {
+                            "assets": {},
+                            "lovelace": 77411622
+                        }
+                    }
+                ],
+                "netSpendLovelace": 553139,
+                "withdrawalLovelace": 0
+            }
+        },
+        "tx-cbor": "84ac00d9010282825820968fd01e074ca33de95087957f59803bb2ee8bacfe922eb81cdf18e8e23ad78802825820efff271aa02e9032aba0e5e9020c5840b2aa1b219c59f9f16e1d6e51071bea1e020dd9010281825820968fd01e074ca33de95087957f59803bb2ee8bacfe922eb81cdf18e8e23ad7880212d901028482582011ace24a7b0caad4a68a38ef2fff18185dc9ea604e84425dab487cae94e4cf540082582025ba96f5deb14bb5c56e7542d6a9ba8450f52cc698ebd74574e1a0525d86109502825820810bfcbde85ae72f27d7e8cd154c03c802de15d3fa0dd83a32a4b0fdba330b3c00825820e7b395a93d49a17994d66df0e4778a01dee05e7711e6612f28d97b63e4e6311c02018aa300583931fa6a58bbe2d0ff05534431c8e2f0ef2cbdc1602a8456e4b13c8f307732201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d011b000000061886c9e8028201d818590157d8799fd8799f581c64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540efffd87c9f029fd8799f581c7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffbffd8799f581cf3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2effd8799f581c8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1ffd8799f581c97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2ffffff1a00138800d8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffd8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffffffffd87980ffd87a9f9f40401b000000061854bd68ff9f581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad480014df105553444d1b000000012a05f201ffffd87980ffa300583931fa6a58bbe2d0ff05534431c8e2f0ef2cbdc1602a8456e4b13c8f307732201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d011b000000061886c9e8028201d818590157d8799fd8799f581c64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540efffd87c9f029fd8799f581c7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffbffd8799f581cf3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2effd8799f581c8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1ffd8799f581c97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2ffffff1a00138800d8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffd8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffffffffd87980ffd87a9f9f40401b000000061854bd68ff9f581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad480014df105553444d1b000000012a05f201ffffd87980ffa300583931fa6a58bbe2d0ff05534431c8e2f0ef2cbdc1602a8456e4b13c8f307732201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d011b000000061886c9e7028201d818590157d8799fd8799f581c64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540efffd87c9f029fd8799f581c7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffbffd8799f581cf3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2effd8799f581c8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1ffd8799f581c97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2ffffff1a00138800d8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffd8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffffffffd87980ffd87a9f9f40401b000000061854bd67ff9f581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad480014df105553444d1b000000012a05f200ffffd87980ffa300583931fa6a58bbe2d0ff05534431c8e2f0ef2cbdc1602a8456e4b13c8f307732201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d011b000000061886c9e7028201d818590157d8799fd8799f581c64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540efffd87c9f029fd8799f581c7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffbffd8799f581cf3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2effd8799f581c8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1ffd8799f581c97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2ffffff1a00138800d8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffd8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffffffffd87980ffd87a9f9f40401b000000061854bd67ff9f581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad480014df105553444d1b000000012a05f200ffffd87980ffa300583931fa6a58bbe2d0ff05534431c8e2f0ef2cbdc1602a8456e4b13c8f307732201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d011b000000061886c9e7028201d818590157d8799fd8799f581c64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540efffd87c9f029fd8799f581c7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffbffd8799f581cf3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2effd8799f581c8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1ffd8799f581c97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2ffffff1a00138800d8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffd8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffffffffd87980ffd87a9f9f40401b000000061854bd67ff9f581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad480014df105553444d1b000000012a05f200ffffd87980ffa300583931fa6a58bbe2d0ff05534431c8e2f0ef2cbdc1602a8456e4b13c8f307732201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d011b000000061886c9e7028201d818590157d8799fd8799f581c64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540efffd87c9f029fd8799f581c7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffbffd8799f581cf3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2effd8799f581c8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1ffd8799f581c97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2ffffff1a00138800d8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffd8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffffffffd87980ffd87a9f9f40401b000000061854bd67ff9f581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad480014df105553444d1b000000012a05f200ffffd87980ffa300583931fa6a58bbe2d0ff05534431c8e2f0ef2cbdc1602a8456e4b13c8f307732201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d011b000000061886c9e7028201d818590157d8799fd8799f581c64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540efffd87c9f029fd8799f581c7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffbffd8799f581cf3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2effd8799f581c8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1ffd8799f581c97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2ffffff1a00138800d8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffd8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffffffffd87980ffd87a9f9f40401b000000061854bd67ff9f581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad480014df105553444d1b000000012a05f200ffffd87980ffa300583931fa6a58bbe2d0ff05534431c8e2f0ef2cbdc1602a8456e4b13c8f307732201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d011b000000061886c9e7028201d818590157d8799fd8799f581c64f35d26b237ad58e099041bc14c687ea7fdc58969d7d5b66e2540efffd87c9f029fd8799f581c7095faf3d48d582fbae8b3f2e726670d7a35e2400c783d992bbdeffbffd8799f581cf3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2effd8799f581c8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1ffd8799f581c97e0f6d6c86dbebf15cc8fdf0981f939b2f2b70928a46511edd49df2ffffff1a00138800d8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffd8799fd8799fd87a9f581c32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0dffffffffd87980ffd87a9f9f40401b000000061854bd67ff9f581cc48cbb3d5e57ed56e276bc45f99ab39abe94e6cd7ac39fb402da47ad480014df105553444d1b000000012a05f200ffffd87980ff8258393132201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d32201dc1e82708364c6c42a53f89f675314bb9ad5da2734aa10baa0d1b0000005d79aa9a2a825839018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c31a0494c47310825839018bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c14c7889c658ef4f491a34cf79c35a2e0fe6b0d1b0a856fb9580f2d9c31a04908c19111a000ca90d021a000870b3031a0b983d5905a1581df1a64d1b9e1aeffe54056034d84977061b45a92691efc282fbee3fc094000ed9010282581c8bd03209d227956aaf9670751e0aa2057b51c1537a43f155b24fb1c1581cf3ab64b0f97dcf0f91232754603283df5d75a1201337432c04d23e2e0b5820fcbb1f14c6b8538579bca5a0172918685064ce5a46c3a26a2c9fbfaf09d31167075820e2297cd2fabeb23e5cb52df2c317314cf53356ce0a9761b2d5b8156cd7019f4ca105a282000182d87c9fa140a1401b00000030c4364f3aff821a000750a91a0a2657268203008280821a000327251a03f4d9cff5d90103a100a119069ea464626f6479a6656576656e74686469736275727365656c6162656c6f53776170204144413c2d3e5553444d6a7265666572656e636573806b6465736372697074696f6e817840537761702041444120666f722034302c303030205553444d20696e2038206368756e6b73206174206d696e207261746520302e31393120283438682054544c296b64657374696e6174696f6ea1656c6162656c781b6e6574776f726b5f636f6d706c69616e63652074726561737572796d6a757374696669636174696f6e8178344e6574776f726b207472656173757279207377617020746f205553444d202838206368756e6b732c207261746520302e313931296840636f6e7465787483783e68747470733a2f2f6769746875622e636f6d2f53756e646165537761702d66696e616e63652f74726561737572792d636f6e7472616374732f626c6f622f782861643433313664306433366364656637383066383566633265633862333037653634356464633261781e2f6f6666636861696e2f7372632f6d657461646174612f737065632e6d6468696e7374616e6365783833386336323764343538333537343461326436633732373132346632623538353265353536346165616233663630386530653834656136646d68617368416c676f726974686d6b626c616b6532622d323536"
+    }
+}

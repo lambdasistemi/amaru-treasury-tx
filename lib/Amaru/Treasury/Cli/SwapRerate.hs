@@ -86,9 +86,6 @@ import System.FilePath
 import Amaru.Treasury.Backend
     ( Provider (..)
     )
-import Amaru.Treasury.Backend.N2C
-    ( withLocalNodeBackend
-    )
 import Amaru.Treasury.Build.Result
     ( BuildResult (..)
     )
@@ -105,6 +102,7 @@ import Amaru.Treasury.ChainContext.Fixture
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , nowTip
+    , withCliBackend
     )
 import Amaru.Treasury.Constants
     ( sundaeOrderAddressMainnet
@@ -589,7 +587,7 @@ data LiveOrderCandidate = LiveOrderCandidate
 runSwapRerateLive :: GlobalOpts -> FilePath -> SwapRerateOpts -> IO ()
 runSwapRerateLive g socket opts@SwapRerateOpts{..} = do
     metadata <- readMetadataFile sroMetadataPath
-    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \provider -> do
+    withCliBackend g socket $ \provider -> do
         resolveLiveRerate g provider metadata opts >>= \case
             LivePassthrough reason ->
                 writeRerateReport sroReportPath (passthroughReport opts reason)

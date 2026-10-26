@@ -286,6 +286,7 @@ import Amaru.Treasury.Api.Types
     , TipResponse (..)
     )
 import Amaru.Treasury.Api.VerifyWitness (verifyWitness)
+import Amaru.Treasury.Backend.Indexer (answerUtxoQuery)
 import Amaru.Treasury.Backend.N2C (withLocalNodeClient)
 import Amaru.Treasury.Cli.Common (GlobalOpts (..))
 import Amaru.Treasury.Cli.History
@@ -398,6 +399,7 @@ runSmoke = do
                 let globalOpts =
                         GlobalOpts
                             { goSocketPath = Just nodeSock
+                            , goIndexerUrl = Nothing
                             , goNetworkMagic = devnetMagic
                             , goNetworkName = Just "devnet"
                             , goMinimumSeverity = Info
@@ -1733,6 +1735,7 @@ smokeHandlers
             , hBuildContingencyDisburse =
                 bhBuildContingencyDisburse buildHandlers
             , hBuildReorganize = bhBuildReorganize buildHandlers
+            , hUtxos = answerUtxoQuery readProvider
             , hRawHandler =
                 Tagged $ \_req respond ->
                     respond $

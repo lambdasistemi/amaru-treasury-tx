@@ -58,7 +58,6 @@ import Ouroboros.Network.Magic (NetworkMagic (..))
 import Control.Exception (SomeException, try)
 
 import Amaru.Treasury.Backend (Backend)
-import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.Build
     ( BuildResult (..)
     , runFromIntentEither
@@ -79,6 +78,7 @@ import Amaru.Treasury.ChainContext
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , resolveNetworkName
+    , withCliBackend
     , withLogHandle
     )
 import Amaru.Treasury.Cli.SwapCommon
@@ -267,7 +267,7 @@ return.  Every former @abortTr@ site is now a 'throwE' of a
 typed 'WizardFailure' constructor.
 
 The caller owns the 'Backend' lifetime — for the CLI, this
-is the 'withLocalNodeBackend' bracket inside the wrapper;
+is the 'withCliBackend' bracket inside the wrapper;
 for an HTTP server, this is a per-process backend handle
 opened at server boot and reused across requests.
 
@@ -547,7 +547,7 @@ runWizard g opts@WizardOpts{..} = do
             tr =
                 eventSeverityTracer $
                     filterSeverity (goMinimumSeverity g) textTracer
-        withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $
+        withCliBackend g socket $
             \backend -> do
                 result <- buildSwapIntent g opts backend tr
                 case result of

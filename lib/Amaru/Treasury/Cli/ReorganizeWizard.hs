@@ -72,14 +72,12 @@ import Cardano.Node.Client.Provider (queryUpperBoundSlot)
 import Cardano.Slotting.Slot (SlotNo (..))
 
 import Amaru.Treasury.Backend (Backend)
-import Amaru.Treasury.Backend.N2C
-    ( withLocalNodeBackend
-    )
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , queryFlat
     , queryFlatFunds
     , resolveNetworkName
+    , withCliBackend
     )
 import Amaru.Treasury.IntentJSON
     ( encodeSomeTreasuryIntent
@@ -435,15 +433,11 @@ runReorganizeWizardEither g opts =
             Right () -> case goSocketPath g of
                 Nothing -> pure (Left ReorganizeMissingNodeSocket)
                 Just socket ->
-                    withLocalNodeBackend
-                        (goNetworkMagic g)
-                        socket
-                        (goMinimumSeverity g)
-                        $ \backend ->
-                            runReorganizeWizardLive
-                                g
-                                opts
-                                (mkLiveEnv backend)
+                    withCliBackend g socket $ \backend ->
+                        runReorganizeWizardLive
+                            g
+                            opts
+                            (mkLiveEnv backend)
 
 {- | Live reorganize pipeline with injectable resolver
 environment.

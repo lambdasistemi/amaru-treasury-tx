@@ -46,6 +46,7 @@ spec = describe "Amaru.Treasury.Config.File" $ do
                                 , tpcNetworkMagic = Nothing
                                 , tpcNodeSocket =
                                     Just "/run/cardano/node.socket"
+                                , tpcIndexerUrl = Nothing
                                 , tpcMetadataPath =
                                     Just "metadata-preprod.json"
                                 , tpcDefaultScope =

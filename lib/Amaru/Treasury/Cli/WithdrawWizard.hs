@@ -57,13 +57,11 @@ import Amaru.Treasury.Backend
     ( Provider
     , rewardAccountLovelace
     )
-import Amaru.Treasury.Backend.N2C
-    ( withLocalNodeBackend
-    )
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , queryFlat
     , resolveNetworkName
+    , withCliBackend
     , withLogHandle
     )
 import Amaru.Treasury.IntentJSON
@@ -265,7 +263,7 @@ runWithdrawWizard g opts@WithdrawOpts{..} = do
                     , Withdraw.waLabel = wdOptsLabel
                     }
 
-        withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $
+        withCliBackend g socket $
             \backend -> do
                 verified <-
                     verifyRegistry

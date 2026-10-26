@@ -73,6 +73,7 @@ envTreasuryConfigOverrides envs =
         , tcoNodeSocket =
             lookupString "AMARU_TREASURY_NODE_SOCKET"
                 <|> lookupString "CARDANO_NODE_SOCKET_PATH"
+        , tcoIndexerUrl = lookupText "AMARU_TREASURY_INDEXER_URL"
         , tcoMetadataPath = lookupString "AMARU_TREASURY_METADATA"
         , tcoDefaultScope = lookupText "AMARU_TREASURY_DEFAULT_SCOPE"
         , tcoTenantId = lookupText "AMARU_TREASURY_TENANT_ID"
@@ -112,6 +113,7 @@ resolveTreasuryConfig input = do
                 { rtcProfileName = selectedProfileName
                 , rtcNetwork = network
                 , rtcNodeSocket = choose profile tcoNodeSocket tpcNodeSocket
+                , rtcIndexerUrl = choose profile tcoIndexerUrl tpcIndexerUrl
                 , rtcMetadataPath =
                     choose profile tcoMetadataPath tpcMetadataPath
                 , rtcDefaultScope =

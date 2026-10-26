@@ -1222,6 +1222,7 @@ buildWithdrawalTransaction
         buildExit <-
             try @ExitCode $
                 TxBuild.runTxBuild
+                    Nothing
                     dgwicSocketPath
                     Info
                     TxBuild.TxBuildOpts

@@ -68,6 +68,7 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                     , arcGlobalOpts =
                         GlobalOpts
                             { goSocketPath = Just "/profile/node.socket"
+                            , goIndexerUrl = Nothing
                             , goNetworkMagic =
                                 NetworkMagic 764824073
                             , goNetworkName = Just "mainnet"
@@ -114,6 +115,7 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                 , arcGlobalOpts =
                     GlobalOpts
                         { goSocketPath = Just "/env/node.socket"
+                        , goIndexerUrl = Nothing
                         , goNetworkMagic = NetworkMagic 764824073
                         , goNetworkName = Just "mainnet"
                         , goMinimumSeverity = Info
@@ -199,6 +201,7 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                     , arcGlobalOpts =
                         GlobalOpts
                             { goSocketPath = Just "/cli/node.socket"
+                            , goIndexerUrl = Nothing
                             , goNetworkMagic =
                                 NetworkMagic 764824073
                             , goNetworkName = Just "mainnet"
@@ -259,6 +262,7 @@ spec = describe "Amaru.Treasury.Api.Config" $ do
                 , arcGlobalOpts =
                     GlobalOpts
                         { goSocketPath = Just "/flag/node.socket"
+                        , goIndexerUrl = Nothing
                         , goNetworkMagic = NetworkMagic 764824073
                         , goNetworkName = Just "mainnet"
                         , goMinimumSeverity = Info

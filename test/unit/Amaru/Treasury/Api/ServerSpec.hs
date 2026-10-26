@@ -137,6 +137,11 @@ import Amaru.Treasury.Backend
     ( Provider (..)
     , singleShotWithAcquired
     )
+import Amaru.Treasury.Backend.Indexer
+    ( UtxoQueryEntry (..)
+    , UtxoQueryRequest (..)
+    , UtxoQueryResponse (..)
+    )
 import Amaru.Treasury.Cli.Common
     ( NowTipTimeout (..)
     , nowTip
@@ -311,6 +316,59 @@ spec = do
     -- The body parses back to the same manifest. We
     -- don't assert byte-identity here (aeson Generic
     -- encoding has no shape guarantee across versions).
+
+    describe "POST /v1/utxos (#522, INV-4)" $ do
+        it "answers a by-address request from hUtxos" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        ( waiPostJson
+                            "/v1/utxos"
+                            "{\"addresses\":[\"addr1a\",\"addr1b\"]}"
+                        )
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res)
+                `shouldBe` Just
+                    ( UtxoQueryResponse
+                        [ UtxoQueryEntry "addr1a" "82"
+                        , UtxoQueryEntry "addr1b" "82"
+                        ]
+                    )
+
+        it "answers a by-input request from hUtxos" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        (waiPostJson "/v1/utxos" "{\"txins\":[\"ab#0\"]}")
+                    )
+                    (mkApplication stubHandlers)
+            WaiTest.simpleStatus res `shouldBe` status200
+            Aeson.decode (WaiTest.simpleBody res)
+                `shouldBe` Just (UtxoQueryResponse [UtxoQueryEntry "ab#0" "83"])
+
+        it "answers 400 with the handler's message on a bad address" $ do
+            res <-
+                runSession
+                    ( WaiTest.srequest
+                        (waiPostJson "/v1/utxos" "{\"addresses\":[\"bad\"]}")
+                    )
+                    (mkApplication stubHandlers)
+            statusCodeOf res `shouldBe` 400
+            Aeson.decode (WaiTest.simpleBody res)
+                `shouldBe` Just
+                    ApiError
+                        { aeMessage = "address bad: bech32"
+                        , aeField = Nothing
+                        }
+
+        it "rejects a body naming neither selector" $ do
+            res <-
+                runSession
+                    (WaiTest.srequest (waiPostJson "/v1/utxos" "{}"))
+                    (mkApplication stubHandlers)
+            statusCodeOf res `shouldSatisfy` is4xx
 
     describe "GET /v1/version" $
         it "returns the embedded build identity verbatim" $ do
@@ -890,6 +948,22 @@ stubHandlers =
         , hBuildContingencyDisburse = \_ ->
             pure disburseIntentFailureResp
         , hBuildReorganize = \_ -> pure reorganizeIntentFailureResp
+        , hUtxos = \case
+            UtxoQueryByAddresses ["bad"] -> pure (Left "address bad: bech32")
+            UtxoQueryByAddresses addrs ->
+                pure
+                    ( Right
+                        ( UtxoQueryResponse
+                            [UtxoQueryEntry a "82" | a <- addrs]
+                        )
+                    )
+            UtxoQueryByTxIns txins ->
+                pure
+                    ( Right
+                        ( UtxoQueryResponse
+                            [UtxoQueryEntry t "83" | t <- txins]
+                        )
+                    )
         , hRawHandler = stubRawHandler
         }
 

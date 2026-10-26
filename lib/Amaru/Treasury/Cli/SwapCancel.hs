@@ -94,7 +94,6 @@ import System.IO qualified as IO
 import Amaru.Treasury.Backend
     ( Provider
     )
-import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.Build.Error
     ( BuildAction (..)
     , buildErrorCode
@@ -114,6 +113,7 @@ import Amaru.Treasury.ChainContext
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , resolveNetworkName
+    , withCliBackend
     , withLogHandle
     )
 import Amaru.Treasury.Constants
@@ -282,7 +282,7 @@ runSwapCancel g opts@SwapCancelOpts{..} = do
                 opts
                 "order-script-ref"
                 orderScriptRefText
-        withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $
+        withCliBackend g socket $
             \backend -> do
                 verified <-
                     verifyRegistry

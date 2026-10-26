@@ -202,7 +202,7 @@ spec = describe "Amaru.Treasury.Cli.SwapRerate" $ do
         src <- readFile "lib/Amaru/Treasury/Cli/SwapRerate.hs"
         src `shouldSatisfyNot` contains "slice 3"
         src `shouldSatisfyNot` contains "live --node-socket discovery"
-        src `shouldContain` "withLocalNodeBackend"
+        src `shouldContain` "withCliBackend"
         src `shouldContain` "withLiveContext"
         src `shouldContain` "rpiOrderScriptRef"
         src `shouldContain` "rpiExtraWalletTxIns"
@@ -466,6 +466,7 @@ mainnetOpts :: GlobalOpts
 mainnetOpts =
     GlobalOpts
         { goSocketPath = Nothing
+        , goIndexerUrl = Nothing
         , goNetworkMagic = NetworkMagic 764_824_073
         , goNetworkName = Just "mainnet"
         , goMinimumSeverity = Info

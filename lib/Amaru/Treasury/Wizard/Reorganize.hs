@@ -117,7 +117,7 @@ of a typed 'WizardFailure' constructor via
 'projectReorganizeError'.
 
 The caller owns the 'Backend' lifetime — for the CLI, this
-is the 'withLocalNodeBackend' bracket inside the wrapper;
+is the 'withCliBackend' bracket inside the wrapper;
 for an HTTP server, this is a per-process backend handle
 opened at server boot and reused across requests.
 

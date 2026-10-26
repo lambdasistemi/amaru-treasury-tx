@@ -144,9 +144,7 @@ import Cardano.Ledger.Address
     , AccountId (..)
     , Addr (..)
     , deserialiseAccountAddress
-    , getNetwork
     , serialiseAccountAddress
-    , serialiseAddr
     )
 import Cardano.Ledger.BaseTypes
     ( Network (..)
@@ -192,6 +190,7 @@ import Amaru.Treasury.IntentJSON.Common
     , parseNetwork
     , parseRewardAccountForNetwork
     , parseTxIn
+    , renderAddrBech32
     )
 import Amaru.Treasury.Tx.Disburse
     ( DisburseAdaPayload (..)
@@ -864,7 +863,7 @@ instance ToJSON ReorganizeInputs where
             [ "walletUtxo" .= renderTxIn riWalletUtxo
             , "treasuryUtxos"
                 .= fmap renderTxIn (NE.toList riTreasuryUtxos)
-            , "treasuryAddress" .= renderAddr riTreasuryAddress
+            , "treasuryAddress" .= renderAddrBech32 riTreasuryAddress
             , "treasuryDeployedAt"
                 .= renderTxIn riTreasuryDeployedAt
             , "registryDeployedAt"
@@ -922,15 +921,6 @@ renderTxIn (TxIn (TxId txIdHash) txIx) =
     hexBytes (hashToBytes (extractHash txIdHash))
         <> "#"
         <> T.pack (show (txIxToInt txIx))
-
-renderAddr :: Addr -> Text
-renderAddr addr =
-    renderBech32 (addrPrefix addr) (serialiseAddr addr)
-
-addrPrefix :: Addr -> Text
-addrPrefix addr = case getNetwork addr of
-    Mainnet -> "addr"
-    Testnet -> "addr_test"
 
 renderRewardAccount :: AccountAddress -> Text
 renderRewardAccount account =

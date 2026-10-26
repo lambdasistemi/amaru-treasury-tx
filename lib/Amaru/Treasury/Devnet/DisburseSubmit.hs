@@ -565,6 +565,7 @@ buildDisburseTransaction
         buildExit <-
             try @ExitCode $
                 TxBuild.runTxBuild
+                    Nothing
                     ddsicSocketPath
                     Info
                     TxBuild.TxBuildOpts

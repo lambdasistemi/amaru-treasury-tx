@@ -485,6 +485,7 @@ globalOptsFromResolved
 globalOptsFromResolved minimumSeverity socket resolved =
     GlobalOpts
         { goSocketPath = Just socket
+        , goIndexerUrl = Nothing
         , goNetworkMagic = NetworkMagic (rnMagic (rtcNetwork resolved))
         , goNetworkName = rnName (rtcNetwork resolved)
         , goMinimumSeverity = minimumSeverity

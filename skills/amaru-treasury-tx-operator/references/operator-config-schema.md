@@ -56,6 +56,12 @@ project_id — both deserve the `umask 077` permission discipline.
 | `cardanoTxToolsPath` | absolute path | no | Local `cardano-tx-tools` checkout for `tx-inspect` / `tx-validate` / `tx-diff`. Empty string = "skip companion-tool steps". |
 | `blockfrostProjectId` | string | no | Used to fetch parent tx CBORs during the post-submission archive refresh. Sensitive — never log or commit. Empty string = skip the `inputs/<parent>.cbor` step. |
 
+An empty `vaults` object with an empty `scopeOwners.local` list is valid,
+but supplies no signing-vault mapping. Do not infer an executable, vault,
+or identity from conventional filenames. A current operator instruction
+can supply the mapping; preserve that executable/vault pairing without
+silently rewriting the cached configuration.
+
 ## Example (preview testnet, single-owner operator)
 
 ```json

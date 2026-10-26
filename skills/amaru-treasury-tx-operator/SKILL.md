@@ -1,6 +1,12 @@
 ---
 name: amaru-treasury-tx-operator
-description: End-to-end operator workflow for driving the `amaru-treasury-tx` CLI against the Amaru treasury contracts on any host. Build → witness → assemble → inspect → validate → submit → archive into the in-repo `transactions/` log. Load this whenever the user invokes `amaru-treasury-tx`, `attach-witness`, `treasury-inspect`, any of the `*-wizard` subcommands (`disburse-wizard` (use `--scope contingency --to <scope>:<ada>` for a contingency disburse), `withdraw-wizard`, `swap-wizard`, `swap-cancel`), mentions disbursing / withdrawing / swapping from a treasury, references age-encrypted witness vaults, or talks about archiving an Amaru treasury tx. The first time this skill runs on a new machine it conducts a one-time first-run interview, writes the operator's answers to `~/.config/amaru-treasury-tx/operator.json`, and reuses them thereafter — so subsequent runs propose complete commands instead of asking for paths and identities again.
+description: >-
+  Operate Amaru treasury transactions with the shipped CLI: build, collect
+  vault-backed witnesses, assemble, inspect, validate, submit, and archive.
+  Use for treasury wizards, signing commands, witness envelopes, live
+  treasury inspection, and transaction archiving. Resolve each signer's
+  executable and vault from current operator instructions or verified
+  configuration.
 ---
 
 # `amaru-treasury-tx` operator workflow
@@ -30,7 +36,14 @@ file — never hardcode paths or identities into proposed commands.
 If the file exists, **read it once** at session start and stop
 re-asking for anything it answers (wallet address, scope-owner
 roster, vault paths, node socket, metadata path). Re-asking is the
-signature of a session that skipped the first-run check.
+signature of a session that skipped the first-run check. Reuse only
+fields actually present: empty `vaults` or local signer entries supply
+no signing-vault mapping. Current operator instructions take priority
+over cached values and examples. For a missing mapping, inspect recent
+successful records for the same key hash and executable; file existence
+alone does not establish identity membership or schema compatibility.
+Ask only for unresolved mapping fields. Never substitute a conventional
+`treasury.vault.age` path.
 
 ## Golden rule
 
@@ -242,6 +255,13 @@ See [references/pipeline.md](references/pipeline.md) for the
 invocations.
 
 ## Age-encrypted vaults
+
+Select the executable and vault together for each identity. Preserve an
+operator-selected `cardano-tx-tools#tx-sign` pairing. Vault schemas can
+differ between executables and versions; do not substitute the treasury
+executable or another vault. The example below applies to a mapping
+compatible with the treasury executable. Resolve its fields before
+emitting an operator command.
 
 Owners hold their signing keys inside age-encrypted *witness
 vaults*. The `witness` subcommand decrypts in memory, signs the tx

@@ -47,6 +47,8 @@ treasuryConfigOverridesParser =
         <*> optional networkSetting
         <*> optional networkMagicSetting
         <*> optional nodeSocketSetting
+        -- The API embeds the indexer: it has no indexer URL (#522).
+        <*> pure Nothing
         <*> optional metadataPathSetting
         <*> optional defaultScopeSetting
         <*> optional tenantIdSetting

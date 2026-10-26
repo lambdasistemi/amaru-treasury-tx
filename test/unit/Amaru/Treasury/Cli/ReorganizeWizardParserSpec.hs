@@ -119,6 +119,7 @@ mkGlobal :: Maybe Text -> GlobalOpts
 mkGlobal n =
     GlobalOpts
         { goSocketPath = Nothing
+        , goIndexerUrl = Nothing
         , goNetworkMagic = NetworkMagic 42
         , goNetworkName = n
         , goMinimumSeverity = Info
@@ -136,6 +137,7 @@ unresolvableGlobal :: GlobalOpts
 unresolvableGlobal =
     GlobalOpts
         { goSocketPath = Nothing
+        , goIndexerUrl = Nothing
         , goNetworkMagic = NetworkMagic 9999999
         , goNetworkName = Nothing
         , goMinimumSeverity = Info

@@ -73,11 +73,11 @@ import Cardano.Ledger.TxIn (TxId (..), TxIn (..))
 import Data.ByteString.Short qualified as SBS
 
 import Amaru.Treasury.Backend (Provider (..))
-import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , filterFundUtxos
     , nowTip
+    , withCliBackend
     )
 import Amaru.Treasury.Constants
     ( sundaeOrderAddressMainnet
@@ -219,7 +219,7 @@ runTreasuryInspect g InspectOpts{..} = do
             fromMaybe sundaeOrderAddressMainnet ioSwapOrderAddress
     swapAddrParsed <- parseSwapAddrOrAbort swapAddr
     result <- try @SomeException $
-        withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
+        withCliBackend g socket $ \backend -> do
             slot <- nowTip backend
             treasuryUtxos <-
                 queryAllTreasuries backend metadata ioScope

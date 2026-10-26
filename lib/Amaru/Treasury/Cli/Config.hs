@@ -151,6 +151,7 @@ globalOverrides globals =
         { tcoConfigPath = gcoConfigPath globals
         , tcoProfile = gcoProfile globals
         , tcoNodeSocket = gcoSocketPath globals
+        , tcoIndexerUrl = gcoIndexerUrl globals
         , tcoNetwork = networkNameArg (gcoNetwork globals)
         , tcoNetworkMagic = networkMagicArg (gcoNetwork globals)
         }
@@ -181,6 +182,7 @@ globalOptsFromResolved
 globalOptsFromResolved globals resolved =
     GlobalOpts
         { goSocketPath = rtcNodeSocket resolved
+        , goIndexerUrl = rtcIndexerUrl resolved
         , goNetworkMagic = NetworkMagic (rnMagic (rtcNetwork resolved))
         , goNetworkName = rnName (rtcNetwork resolved)
         , goMinimumSeverity =

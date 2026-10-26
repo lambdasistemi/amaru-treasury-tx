@@ -74,12 +74,12 @@ import Cardano.Ledger.Mary.Value (MaryValue (..))
 import Cardano.Ledger.TxIn (TxIn)
 
 import Amaru.Treasury.Backend (Provider)
-import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , queryFlat
     , queryValues
     , resolveNetworkName
+    , withCliBackend
     , withLogHandle
     )
 import Amaru.Treasury.Constants (Unit (..))
@@ -913,7 +913,7 @@ runDisburseCommand
                 )
             traceWith tr (DisburseTrace.DweMetadata metadataPath)
 
-            withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $
+            withCliBackend g socket $
                 \backend -> do
                     verified <-
                         verifyDisburseRegistry

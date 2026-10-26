@@ -1432,6 +1432,7 @@ governanceWithdrawalInitSmoke = do
         let globals =
                 GlobalOpts
                     { goSocketPath = Just socket
+                    , goIndexerUrl = Nothing
                     , goNetworkMagic = devnetMagic
                     , goNetworkName = Just "devnet"
                     , goMinimumSeverity = Info
@@ -1502,6 +1503,7 @@ disburseSubmitSmoke = do
         let globals =
                 GlobalOpts
                     { goSocketPath = Just socket
+                    , goIndexerUrl = Nothing
                     , goNetworkMagic = devnetMagic
                     , goNetworkName = Just "devnet"
                     , goMinimumSeverity = Info
@@ -1589,6 +1591,7 @@ registryInitSmoke = do
         runDevnetRegistryInit
             GlobalOpts
                 { goSocketPath = Just socket
+                , goIndexerUrl = Nothing
                 , goNetworkMagic = devnetMagic
                 , goNetworkName = Just "devnet"
                 , goMinimumSeverity = Info
@@ -1620,6 +1623,7 @@ stakeRewardInitSmoke = do
         let globals =
                 GlobalOpts
                     { goSocketPath = Just socket
+                    , goIndexerUrl = Nothing
                     , goNetworkMagic = devnetMagic
                     , goNetworkName = Just "devnet"
                     , goMinimumSeverity = Info
@@ -1946,6 +1950,7 @@ treasurySwapFullE2ESmoke = do
         let globals =
                 GlobalOpts
                     { goSocketPath = Just socket
+                    , goIndexerUrl = Nothing
                     , goNetworkMagic = devnetMagic
                     , goNetworkName = Just "devnet"
                     , goMinimumSeverity = Info
@@ -2319,6 +2324,7 @@ treasurySwapViaCoordinatorSmoke = do
         let globals =
                 GlobalOpts
                     { goSocketPath = Just socket
+                    , goIndexerUrl = Nothing
                     , goNetworkMagic = devnetMagic
                     , goNetworkName = Just "devnet"
                     , goMinimumSeverity = Info

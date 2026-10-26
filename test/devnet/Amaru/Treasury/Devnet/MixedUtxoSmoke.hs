@@ -271,6 +271,7 @@ mixedUtxoSmoke = do
                 globals =
                     GlobalOpts
                         { goSocketPath = Just socket
+                        , goIndexerUrl = Nothing
                         , goNetworkMagic = devnetMagic
                         , goNetworkName = Just "devnet"
                         , goMinimumSeverity = Info

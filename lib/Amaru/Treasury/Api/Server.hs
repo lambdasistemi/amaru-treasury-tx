@@ -24,6 +24,8 @@ Single source of truth for the HTTP surface served by
     — named RDF/SPARQL history analysis.
   * @GET \/v1\/scope\/\<scope\>\/txs\/shacl?name=\<shape\>@
     — named RDF/SHACL history validation.
+  * @POST \/v1\/utxos@ — UTxOs by address or by input from
+    the embedded indexer, for CLI clients (#522).
   * Anything else — static assets served by the 'rawHandler'
     supplied by the caller (typically the PureScript bundle).
 -}
@@ -167,6 +169,10 @@ import Amaru.Treasury.Api.Types
     , VerifyWitnessRequest
     , VerifyWitnessResponse
     )
+import Amaru.Treasury.Backend.Indexer
+    ( UtxoQueryRequest
+    , UtxoQueryResponse
+    )
 import Amaru.Treasury.Cli.Common
     ( AcquireTimeout (..)
     , NowTipTimeout (..)
@@ -305,6 +311,9 @@ type JsonAPI =
                     :> "reorganize"
                     :> ReqBody '[JSON] ReorganizeBuildRequest
                     :> Post '[JSON] ReorganizeBuildResponse
+                :<|> "utxos"
+                    :> ReqBody '[JSON] UtxoQueryRequest
+                    :> Post '[JSON] UtxoQueryResponse
            )
 
 -- | Witness for 'JsonAPI'.
@@ -402,6 +411,13 @@ data Handlers = Handlers
     --   'Amaru.Treasury.Wizard.Reorganize.buildReorganizeIntent'
     --   then 'buildReorganizeTx' against the server's
     --   long-lived 'Backend'.
+    , hUtxos
+        :: UtxoQueryRequest
+        -> IO (Either Text UtxoQueryResponse)
+    -- ^ UTxOs by address or by input for CLI clients (#522).
+    --   The binary answers from the indexer-backed provider
+    --   via 'Amaru.Treasury.Backend.Indexer.answerUtxoQuery';
+    --   'Left' is a malformed request, answered with 400.
     , hRawHandler :: Tagged Handler Application
     -- ^ The static-asset fallback for @\/@. In the binary
     --   this is a 'Servant.Server.StaticFiles'
@@ -631,6 +647,7 @@ mkServer Handlers{..} =
         :<|> buildDisburseH
         :<|> buildContingencyDisburseH
         :<|> buildReorganizeH
+        :<|> utxosH
     )
         :<|> hRawHandler
   where
@@ -803,6 +820,16 @@ mkServer Handlers{..} =
         :: ReorganizeBuildRequest
         -> Handler ReorganizeBuildResponse
     buildReorganizeH req = rateLimited (hBuildReorganize req)
+
+    utxosH :: UtxoQueryRequest -> Handler UtxoQueryResponse
+    utxosH req = do
+        answer <- liftIO (hUtxos req)
+        case answer of
+            Right resp -> pure resp
+            Left message ->
+                throwApiError
+                    err400
+                    ApiError{aeMessage = message, aeField = Nothing}
 
 {- | Bake the 'Handlers' into a WAI 'Application' ready to be
 run by warp.

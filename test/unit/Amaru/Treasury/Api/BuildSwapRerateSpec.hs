@@ -111,6 +111,7 @@ mainnetOpts :: GlobalOpts
 mainnetOpts =
     GlobalOpts
         { goSocketPath = Nothing
+        , goIndexerUrl = Nothing
         , goNetworkMagic = NetworkMagic 764_824_073
         , goNetworkName = Just "mainnet"
         , goMinimumSeverity = Info

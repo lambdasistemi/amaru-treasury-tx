@@ -84,13 +84,11 @@ import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Node.Client.Provider (queryUpperBoundSlot)
 import Cardano.Slotting.Slot (SlotNo (..))
 
-import Amaru.Treasury.Backend.N2C
-    ( withLocalNodeBackend
-    )
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , queryFlat
     , resolveNetworkName
+    , withCliBackend
     )
 import Amaru.Treasury.Devnet.StakeRewardInit
     ( DevnetStakeRewardRegistry
@@ -422,7 +420,7 @@ runScriptAccount g cf = do
                 { sasaValidityHours = cfValidityHours cf
                 , sasaFundingSeedTxIn = cfFundingSeedTxIn cf
                 }
-    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
+    withCliBackend g socket $ \backend -> do
         let input =
                 StakeRewardInitResolverInput
                     { sriNetwork = networkName
@@ -521,7 +519,7 @@ runPlainAccount g cf = do
                 { spaaValidityHours = cfValidityHours cf
                 , spaaFundingSeedTxIn = cfFundingSeedTxIn cf
                 }
-    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
+    withCliBackend g socket $ \backend -> do
         let input =
                 StakeRewardInitResolverInput
                     { sriNetwork = networkName

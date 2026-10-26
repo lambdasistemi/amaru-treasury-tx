@@ -41,7 +41,6 @@ import Cardano.Ledger.TxIn (TxIn)
 import Amaru.Treasury.Backend.N2C
     ( findSocketMagic
     , probeNetworkMagic
-    , withLocalNodeBackend
     )
 import Amaru.Treasury.Build
     ( BuildResult (..)
@@ -59,7 +58,10 @@ import Amaru.Treasury.ChainContext
     ( networkFromMagic
     , withLiveContext
     )
-import Amaru.Treasury.Cli.Common (withLogHandle)
+import Amaru.Treasury.Cli.Common
+    ( withIndexedBackend
+    , withLogHandle
+    )
 import Amaru.Treasury.IntentJSON
     ( GovernanceWithdrawalInitMaterializationInputs (..)
     , RegistryInitMintInputs (..)
@@ -147,8 +149,14 @@ txBuildOptsP =
 @network@ field is the source of truth for the N2C
 network magic.
 -}
-runTxBuild :: FilePath -> Severity -> TxBuildOpts -> IO ()
-runTxBuild socket minimumSeverity TxBuildOpts{..} = do
+runTxBuild
+    :: Maybe Text
+    -- ^ treasury API base URL serving UTxO reads (#522)
+    -> FilePath
+    -> Severity
+    -> TxBuildOpts
+    -> IO ()
+runTxBuild indexerUrl socket minimumSeverity TxBuildOpts{..} = do
     withLogHandle tboLog $ \logH -> do
         let textTracer =
                 Tracer (TIO.hPutStrLn logH . snd)
@@ -182,7 +190,7 @@ runTxBuild socket minimumSeverity TxBuildOpts{..} = do
             tr
             (BuildEventRequiredUtxos (Set.size required))
         assertSocketNetwork tr socket netName magic
-        withLocalNodeBackend magic socket minimumSeverity $ \backend -> do
+        withIndexedBackend indexerUrl magic minimumSeverity socket $ \backend -> do
             withLiveContext
                 (networkFromMagic magic)
                 backend

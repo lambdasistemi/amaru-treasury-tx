@@ -133,6 +133,24 @@ Once `lag_slots` drops back below `threshold_slots`, subsequent
 requests succeed without any operator intervention. No
 container restart is needed.
 
+## UTxO reads for the CLI — `POST /v1/utxos`
+
+The CLI (`--indexer-url URL`, `indexerUrl`, or
+`AMARU_TREASURY_INDEXER_URL`) sends every UTxO read here instead of
+issuing `GetUTxOByAddress` against its node (#522).
+
+```bash
+curl -sS http://localhost:8080/v1/utxos \
+    -H 'Content-Type: application/json' \
+    -d '{"addresses":["addr1x…"]}'
+# or: -d '{"txins":["<txid hex>#<ix>"]}'
+```
+
+The answer is `{"utxos":[{"txIn":"<txid>#<ix>","txOutCborHex":"…"}]}`,
+where `txOutCborHex` is the Conway `TxOut` CBOR (value, datum and
+reference script included). A malformed address or input answers 400;
+the lag guard above answers 503 while the indexer is lagging.
+
 ## Persistent RocksDB volume
 
 The on-disk store lives at

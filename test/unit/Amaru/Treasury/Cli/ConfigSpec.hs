@@ -8,6 +8,7 @@ License     : Apache-2.0
 -}
 module Amaru.Treasury.Cli.ConfigSpec (spec) where
 
+import Data.Text (Text)
 import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.FilePath ((</>))
 import System.IO.Temp (withSystemTempDirectory)
@@ -53,6 +54,7 @@ spec = describe "Amaru.Treasury.Cli.Config" $ do
             resolved
                 `shouldResolveInspect` ( GlobalOpts
                                             { goSocketPath = Just "/profile/node.socket"
+                                            , goIndexerUrl = Nothing
                                             , goNetworkMagic = NetworkMagic 1
                                             , goNetworkName = Just "preprod"
                                             , goMinimumSeverity = Info
@@ -95,6 +97,7 @@ spec = describe "Amaru.Treasury.Cli.Config" $ do
             resolved
                 `shouldResolveInspect` ( GlobalOpts
                                             { goSocketPath = Just "/cli/node.socket"
+                                            , goIndexerUrl = Nothing
                                             , goNetworkMagic = NetworkMagic 2
                                             , goNetworkName = Just "preview"
                                             , goMinimumSeverity = Info
@@ -123,6 +126,7 @@ spec = describe "Amaru.Treasury.Cli.Config" $ do
             resolved
                 `shouldResolveInspect` ( GlobalOpts
                                             { goSocketPath = Just "/profile/node.socket"
+                                            , goIndexerUrl = Nothing
                                             , goNetworkMagic = NetworkMagic 1
                                             , goNetworkName = Just "preprod"
                                             , goMinimumSeverity = Info
@@ -157,6 +161,7 @@ spec = describe "Amaru.Treasury.Cli.Config" $ do
         resolved
             `shouldResolveInspect` ( GlobalOpts
                                         { goSocketPath = Just "/flag/node.socket"
+                                        , goIndexerUrl = Nothing
                                         , goNetworkMagic = NetworkMagic 2
                                         , goNetworkName = Just "preview"
                                         , goMinimumSeverity = Info
@@ -190,6 +195,7 @@ spec = describe "Amaru.Treasury.Cli.Config" $ do
         resolved
             `shouldResolveInspect` ( GlobalOpts
                                         { goSocketPath = Just "/magic/node.socket"
+                                        , goIndexerUrl = Nothing
                                         , goNetworkMagic = NetworkMagic 42
                                         , goNetworkName = Just "devnet"
                                         , goMinimumSeverity = Info
@@ -215,6 +221,7 @@ spec = describe "Amaru.Treasury.Cli.Config" $ do
         resolved
             `shouldResolveInspect` ( GlobalOpts
                                         { goSocketPath = Just "/env/node.socket"
+                                        , goIndexerUrl = Nothing
                                         , goNetworkMagic = NetworkMagic 764824073
                                         , goNetworkName = Just "mainnet"
                                         , goMinimumSeverity = Info
@@ -285,6 +292,76 @@ spec = describe "Amaru.Treasury.Cli.Config" $ do
                 ]
 
         resolved `shouldResolveLogLevel` Error
+
+    describe "indexer URL (#522, INV-5)" $ do
+        let withIndexerConfig k =
+                withSystemTempDirectory "treasury-cli-config" $ \tmp -> do
+                    let configPath = tmp </> "treasury.yaml"
+                    writeFile configPath indexerYaml
+                    k configPath
+            profileArgs configPath command =
+                ["--config", configPath, "--profile", "acme"] <> command
+
+        it "defaults to no indexer URL" $ do
+            resolved <-
+                parseCliArgsWithEnv
+                    []
+                    ["--node-socket", "/n.socket", "tx-build"]
+            resolved `shouldResolveIndexerUrl` Nothing
+
+        it "reads indexerUrl from the profile" $
+            withIndexerConfig $ \configPath -> do
+                resolved <-
+                    parseCliArgsWithEnv [] (profileArgs configPath ["tx-build"])
+                resolved
+                    `shouldResolveIndexerUrl` Just "http://profile:8080"
+
+        it "lets AMARU_TREASURY_INDEXER_URL override the profile" $
+            withIndexerConfig $ \configPath -> do
+                resolved <-
+                    parseCliArgsWithEnv
+                        [("AMARU_TREASURY_INDEXER_URL", "http://env:8080")]
+                        (profileArgs configPath ["tx-build"])
+                resolved `shouldResolveIndexerUrl` Just "http://env:8080"
+
+        it "lets --indexer-url override env and profile" $
+            withIndexerConfig $ \configPath -> do
+                resolved <-
+                    parseCliArgsWithEnv
+                        [("AMARU_TREASURY_INDEXER_URL", "http://env:8080")]
+                        ( "--indexer-url"
+                            : "http://flag:8080"
+                            : profileArgs configPath ["tx-build"]
+                        )
+                resolved `shouldResolveIndexerUrl` Just "http://flag:8080"
+
+        it "carries the indexer URL through treasury-inspect resolution" $
+            withIndexerConfig $ \configPath -> do
+                resolved <-
+                    parseCliArgsWithEnv
+                        []
+                        (profileArgs configPath ["treasury-inspect"])
+                resolved
+                    `shouldResolveIndexerUrl` Just "http://profile:8080"
+
+shouldResolveIndexerUrl
+    :: Either String (GlobalOpts, Cmd)
+    -> Maybe Text
+    -> Expectation
+shouldResolveIndexerUrl resolved expected =
+    case resolved of
+        Right (globals, _) -> goIndexerUrl globals `shouldBe` expected
+        Left err -> expectationFailure ("expected parse success: " <> err)
+
+indexerYaml :: String
+indexerYaml =
+    "profiles:\n\
+    \  acme:\n\
+    \    profileName: acme\n\
+    \    network: preprod\n\
+    \    nodeSocket: /profile/node.socket\n\
+    \    indexerUrl: http://profile:8080\n\
+    \    metadataPath: metadata-profile.json\n"
 
 shouldResolveInspect
     :: Either String (GlobalOpts, Cmd)

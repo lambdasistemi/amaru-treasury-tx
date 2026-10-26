@@ -73,6 +73,7 @@ data TreasuryProfileConfig = TreasuryProfileConfig
     , tpcNetwork :: !(Maybe Text)
     , tpcNetworkMagic :: !(Maybe Word32)
     , tpcNodeSocket :: !(Maybe FilePath)
+    , tpcIndexerUrl :: !(Maybe Text)
     , tpcMetadataPath :: !(Maybe FilePath)
     , tpcDefaultScope :: !(Maybe Text)
     , tpcWalletAddress :: !(Maybe Text)
@@ -89,6 +90,7 @@ instance FromJSON TreasuryProfileConfig where
                 <*> o .:? "network"
                 <*> o .:? "networkMagic"
                 <*> o .:? "nodeSocket"
+                <*> o .:? "indexerUrl"
                 <*> o .:? "metadataPath"
                 <*> o .:? "defaultScope"
                 <*> o .:? "walletAddress"
@@ -115,6 +117,7 @@ data TreasuryConfigOverrides = TreasuryConfigOverrides
     , tcoNetwork :: !(Maybe Text)
     , tcoNetworkMagic :: !(Maybe Word32)
     , tcoNodeSocket :: !(Maybe FilePath)
+    , tcoIndexerUrl :: !(Maybe Text)
     , tcoMetadataPath :: !(Maybe FilePath)
     , tcoDefaultScope :: !(Maybe Text)
     , tcoTenantId :: !(Maybe Text)
@@ -139,6 +142,7 @@ emptyTreasuryConfigOverrides =
         , tcoNetwork = Nothing
         , tcoNetworkMagic = Nothing
         , tcoNodeSocket = Nothing
+        , tcoIndexerUrl = Nothing
         , tcoMetadataPath = Nothing
         , tcoDefaultScope = Nothing
         , tcoTenantId = Nothing
@@ -165,6 +169,9 @@ data ResolvedTreasuryConfig = ResolvedTreasuryConfig
     { rtcProfileName :: !(Maybe Text)
     , rtcNetwork :: !ResolvedNetwork
     , rtcNodeSocket :: !(Maybe FilePath)
+    , rtcIndexerUrl :: !(Maybe Text)
+    -- ^ base URL of a treasury API whose indexer serves UTxO
+    --   reads (#522); 'Nothing' reads UTxOs from the node.
     , rtcMetadataPath :: !(Maybe FilePath)
     , rtcDefaultScope :: !(Maybe Text)
     , rtcTenantId :: !(Maybe Text)

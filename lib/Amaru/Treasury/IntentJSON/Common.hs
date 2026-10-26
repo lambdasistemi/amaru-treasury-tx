@@ -9,6 +9,7 @@ parser and by every per-action wizard.
 -}
 module Amaru.Treasury.IntentJSON.Common
     ( parseAddr
+    , renderAddrBech32
     , parseTxIn
     , parseRewardAccountForNetwork
     , parseGuardKeyHash
@@ -30,6 +31,8 @@ import Cardano.Ledger.Address
     , AccountId (..)
     , Addr (..)
     , decodeAddrEither
+    , getNetwork
+    , serialiseAddr
     )
 import Cardano.Ledger.BaseTypes
     ( Network (..)
@@ -65,6 +68,27 @@ parseAddr t = do
     case decodeAddrEither raw of
         Right a -> Right a
         Left e -> Left ("address: " <> show e)
+
+{- | Bech32-encode a typed 'Addr' with the network's @addr@ /
+@addr_test@ prefix. Inverse of 'parseAddr'.
+-}
+renderAddrBech32 :: Addr -> Text
+renderAddrBech32 addr =
+    Bech32.encodeLenient
+        hrp
+        (Bech32.dataPartFromBytes (serialiseAddr addr))
+  where
+    hrp =
+        either
+            ( errorWithoutStackTrace
+                . ("renderAddrBech32: " <>)
+                . show
+            )
+            id
+            (Bech32.humanReadablePartFromText prefix)
+    prefix = case getNetwork addr of
+        Mainnet -> "addr"
+        Testnet -> "addr_test"
 
 -- | Parse a @\<txid hex\>#\<ix\>@ string into a 'TxIn'.
 parseTxIn :: Text -> Either String TxIn

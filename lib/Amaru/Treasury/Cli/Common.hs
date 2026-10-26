@@ -20,6 +20,8 @@ module Amaru.Treasury.Cli.Common
     , resolveNetworkName
     , resolveSocket
     , withSocket
+    , withCliBackend
+    , withIndexedBackend
     , withLogHandle
     , queryFlat
     , queryFlatFunds
@@ -73,15 +75,26 @@ import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Slotting.Slot (SlotNo (..))
 
 import Amaru.Treasury.Backend (Provider (..))
+import Amaru.Treasury.Backend.Indexer
+    ( httpUtxoSource
+    , tracedUtxoSource
+    , withUtxoSource
+    )
+import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.IntentJSON.Common (parseAddr)
 import Amaru.Treasury.Trace
     ( Severity (..)
+    , filterSeverity
     , parseSeverityText
     )
+import Amaru.Treasury.Trace.Provider (stderrTracer)
 import Amaru.Treasury.Tx.SwapWizard (txInToText)
 
 data GlobalOpts = GlobalOpts
     { goSocketPath :: !(Maybe FilePath)
+    , goIndexerUrl :: !(Maybe Text)
+    -- ^ treasury API base URL serving UTxO reads (#522);
+    --   'Nothing' reads UTxOs from the node.
     , goNetworkMagic :: !NetworkMagic
     , goNetworkName :: !(Maybe Text)
     -- ^ canonical name when known
@@ -102,6 +115,7 @@ data GlobalConfigOpts = GlobalConfigOpts
     { gcoConfigPath :: !(Maybe FilePath)
     , gcoProfile :: !(Maybe Text)
     , gcoSocketPath :: !(Maybe FilePath)
+    , gcoIndexerUrl :: !(Maybe Text)
     , gcoNetwork :: !(Maybe GlobalNetworkArg)
     , gcoLogLevel :: !(Maybe Severity)
     , gcoVerbose :: !Bool
@@ -132,6 +146,14 @@ globalConfigOptsP =
                     <> metavar "PATH"
                     <> help
                         "cardano-node N2C socket (defaults to CARDANO_NODE_SOCKET_PATH)"
+                )
+            )
+        <*> optional
+            ( strOption
+                ( long "indexer-url"
+                    <> metavar "URL"
+                    <> help
+                        "Treasury API base URL whose indexer serves UTxO reads instead of the node (defaults to AMARU_TREASURY_INDEXER_URL)"
                 )
             )
         <*> optional (byName <|> byMagic)
@@ -173,6 +195,7 @@ globalConfigToGlobalOpts config =
     let (magic, name) = networkArgToPair (gcoNetwork config)
     in  GlobalOpts
             { goSocketPath = gcoSocketPath config
+            , goIndexerUrl = gcoIndexerUrl config
             , goNetworkMagic = magic
             , goNetworkName = name
             , goMinimumSeverity = resolveMinimumSeverity config
@@ -258,6 +281,42 @@ withSocket :: GlobalOpts -> (FilePath -> IO a) -> IO a
 withSocket g action = do
     socket <- resolveSocket (goSocketPath g)
     action socket
+
+{- | Open the CLI's provider on the node socket. With
+'goIndexerUrl' set, every UTxO read goes to that treasury API's
+@POST \/v1\/utxos@ instead of N2C (#522); the node keeps serving
+protocol parameters, evaluation, slots and the rest.
+-}
+withCliBackend
+    :: GlobalOpts -> FilePath -> (Provider IO -> IO a) -> IO a
+withCliBackend g =
+    withIndexedBackend
+        (goIndexerUrl g)
+        (goNetworkMagic g)
+        (goMinimumSeverity g)
+
+{- | 'withCliBackend' for callers that resolve the network
+themselves (@tx-build@ reads it from the intent).
+-}
+withIndexedBackend
+    :: Maybe Text
+    -- ^ treasury API base URL serving UTxO reads
+    -> NetworkMagic
+    -> Severity
+    -> FilePath
+    -- ^ node socket
+    -> (Provider IO -> IO a)
+    -> IO a
+withIndexedBackend indexerUrl magic minimumSeverity socket action =
+    withLocalNodeBackend magic socket minimumSeverity (action . indexed)
+  where
+    indexed live = case indexerUrl of
+        Nothing -> live
+        Just url ->
+            withUtxoSource
+                (tracedUtxoSource tracer (httpUtxoSource url))
+                live
+    tracer = filterSeverity minimumSeverity stderrTracer
 
 withLogHandle :: Maybe FilePath -> (IO.Handle -> IO a) -> IO a
 withLogHandle Nothing k = k IO.stderr

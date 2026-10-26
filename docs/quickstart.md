@@ -57,6 +57,27 @@ export CARDANO_NODE_SOCKET_PATH=/path/to/cardano-node.socket
 
 (Or pass `--node-socket PATH` to the CLI.)
 
+### Read UTxOs from the treasury API indexer
+
+By default every command reads UTxOs from the node with address
+queries. On mainnet one such query can outlast the node client's
+60-second local-state-query limit, and the wizard aborts with
+`LocalStateQueryTimeout`. Point the CLI at a running
+`amaru-treasury-tx-api` to read UTxOs from its embedded indexer
+instead:
+
+```bash
+export AMARU_TREASURY_INDEXER_URL=http://127.0.0.1:8080
+```
+
+(Or pass `--indexer-url URL`, or set `indexerUrl` in the profile.)
+
+Every UTxO read — by address and by input — then goes to the API's
+`POST /v1/utxos`; protocol parameters, script evaluation and slot
+conversion still come from the node socket. If the API is
+unreachable, lagging (HTTP 503) or answers anything else than 200,
+the command fails; it never falls back to node address queries.
+
 ## 3. Fetch the upstream metadata
 
 ```bash
@@ -88,6 +109,8 @@ profiles:
     # Or use networkMagic instead of network:
     # networkMagic: 764824073
     nodeSocket: /run/cardano/node.socket
+    # Optional: read UTxOs from a treasury API indexer.
+    # indexerUrl: http://127.0.0.1:8080
     metadataPath: /srv/amaru/metadata-mainnet.json
     defaultScope: network_compliance
     walletAddress: addr1...
@@ -146,6 +169,7 @@ The environment variables accepted today are:
 | `AMARU_TREASURY_NETWORK_MAGIC` | Network magic when selecting by number. |
 | `AMARU_TREASURY_NODE_SOCKET` | Cardano node socket path. |
 | `CARDANO_NODE_SOCKET_PATH` | Compatibility alias for the node socket path. |
+| `AMARU_TREASURY_INDEXER_URL` | Treasury API base URL whose indexer serves UTxO reads. |
 | `AMARU_TREASURY_METADATA` | Treasury metadata JSON path. |
 | `AMARU_TREASURY_DEFAULT_SCOPE` | Default scope for profile-aware commands. |
 | `AMARU_TREASURY_TENANT_ID` | Tenant identifier reserved for future indexer partitioning. |

@@ -76,6 +76,17 @@ export CARDANO_NODE_SOCKET_PATH=<config.nodeSocket>
 
 `--network <config.network>` is the global flag.
 
+When a treasury API is reachable, also export its base URL so every
+UTxO read goes to its indexer instead of a node address query (which
+on mainnet can exceed the 60 s local-state-query limit and abort a
+wizard with `LocalStateQueryTimeout`):
+
+```bash
+export AMARU_TREASURY_INDEXER_URL=<treasury API base URL>
+```
+
+The same setting is `--indexer-url URL` or `indexerUrl` in the profile.
+
 ## Canonical pipeline
 
 See [references/pipeline.md](references/pipeline.md) for the full

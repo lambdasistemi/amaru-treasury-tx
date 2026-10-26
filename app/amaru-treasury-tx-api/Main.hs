@@ -141,6 +141,7 @@ import Amaru.Treasury.Api.Types
     , TipResponse (..)
     )
 import Amaru.Treasury.Api.VerifyWitness (verifyWitness)
+import Amaru.Treasury.Backend.Indexer (answerUtxoQuery)
 import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
@@ -351,6 +352,8 @@ main = do
                                         , hBuildReorganize =
                                             bhBuildReorganize
                                                 buildHandlers
+                                        , hUtxos =
+                                            answerUtxoQuery readProvider
                                         , hRawHandler =
                                             serveDirectoryFileServer
                                                 (arcStatic opts)

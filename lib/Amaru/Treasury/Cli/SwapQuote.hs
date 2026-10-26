@@ -48,10 +48,10 @@ import Ouroboros.Network.Magic (NetworkMagic (..))
 import System.Directory (createDirectoryIfMissing)
 import System.FilePath ((</>))
 
-import Amaru.Treasury.Backend.N2C (withLocalNodeBackend)
 import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , resolveNetworkName
+    , withCliBackend
     , withLogHandle
     )
 import Amaru.Treasury.Cli.SwapCommon
@@ -495,7 +495,7 @@ runSwapQuote g quoteOpts@SwapQuoteOpts{..} = do
         traceWith tr (WeNetwork networkName (fromIntegral magic))
         traceWith tr (WeMetadata sqoMetadataPath)
 
-        withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $
+        withCliBackend g socket $
             \backend -> do
                 verified <-
                     verifyRegistry
@@ -595,6 +595,7 @@ runSwapQuote g quoteOpts@SwapQuoteOpts{..} = do
                                 (SomeTreasuryIntent SSwap intent)
                             )
                         runTxBuild
+                            (goIndexerUrl g)
                             socket
                             (goMinimumSeverity g)
                             TxBuildOpts

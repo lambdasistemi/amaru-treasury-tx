@@ -101,9 +101,6 @@ import Cardano.Ledger.TxIn (TxIn)
 import Cardano.Node.Client.Provider (queryUpperBoundSlot)
 import Cardano.Slotting.Slot (SlotNo (..))
 
-import Amaru.Treasury.Backend.N2C
-    ( withLocalNodeBackend
-    )
 import Amaru.Treasury.ChainContext
     ( ChainContext (..)
     , networkFromMagic
@@ -113,6 +110,7 @@ import Amaru.Treasury.Cli.Common
     ( GlobalOpts (..)
     , queryFlat
     , resolveNetworkName
+    , withCliBackend
     )
 import Amaru.Treasury.Devnet.GovernanceWithdrawalInit
     ( DevnetGovernanceStakeRewardAccounts
@@ -548,7 +546,7 @@ by the structure of this function:
 
 1. Resolve CLI inputs (network name + socket) — pure
    text/file checks, no chain query.
-2. Open the node connection via 'withLocalNodeBackend'.
+2. Open the node connection via 'withCliBackend'.
    This is a socket dial, not a query.
 3. Build the resolver input + 'GovernanceWithdrawalInitResolverEnv'.
    The 'gwireDepositComponents' field is a LAZY @IO@
@@ -608,7 +606,7 @@ runProposal g po = do
                 , gwipaAnchorUrl = poAnchorUrl po
                 , gwipaAnchorHash = poAnchorHash po
                 }
-    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
+    withCliBackend g socket $ \backend -> do
         let input =
                 GovernanceWithdrawalInitResolverInput
                     { gwiriNetwork = networkName
@@ -777,7 +775,7 @@ runMaterialization g mo = do
                 , gwimaFundingSeedTxIn = cfFundingSeedTxIn cf
                 , gwimaRewardsLovelace = moRewardsLovelace mo
                 }
-    withLocalNodeBackend (goNetworkMagic g) socket (goMinimumSeverity g) $ \backend -> do
+    withCliBackend g socket $ \backend -> do
         let input =
                 GovernanceWithdrawalInitResolverInput
                     { gwiriNetwork = networkName

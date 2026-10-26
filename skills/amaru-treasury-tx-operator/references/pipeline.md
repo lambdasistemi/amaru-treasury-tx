@@ -3,8 +3,12 @@
 Build → witness → assemble → inspect → submit → archive. Every
 `<config.field>` placeholder resolves to a value from the operator's
 `~/.config/amaru-treasury-tx/operator.json` — see
-[operator-config-schema.md](operator-config-schema.md). Never
-hardcode paths or identities into proposed commands.
+[operator-config-schema.md](operator-config-schema.md), when present.
+Current explicit operator instructions take priority. For absent
+mappings, use recent successful records for the same key hash and
+executable, or ask for the missing information. Never fill an empty
+vault mapping with a conventional filename. Emit resolved paths and
+identities in the proposed command.
 
 ## 0. Per-session environment
 
@@ -84,6 +88,11 @@ Phase-1 dry-run input must be raw CBOR hex, not a TextEnvelope. See
 for the known false positive on Amaru withdraw-zero txs.
 
 ## 3. Collect detached witnesses
+
+Resolve each signer's executable/vault/identity pairing first. Preserve
+an operator-selected `tx-sign` with its compatible vault; the treasury
+command below applies to a mapping compatible with that executable.
+Include any distinct fee-wallet payment key in the overall witness roster.
 
 For each required signer in the operator's local roster
 (`<config.scopeOwners.local>` ∩ tx required-signers):

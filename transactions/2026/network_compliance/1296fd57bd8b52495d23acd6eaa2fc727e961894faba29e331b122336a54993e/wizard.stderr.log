@@ -1,0 +1,10 @@
+[Info] provider.withAcquired start
+[Info] indexer.queryUTxOByTxIn start
+[Info] indexer.queryUTxOByTxIn ok after 7 ms
+[Info] provider.withAcquired ok after 8 ms
+[Info] indexer.queryUTxOs start
+[Info] indexer.queryUTxOs ok after 1 ms
+[Info] indexer.queryUTxOs start
+[Info] indexer.queryUTxOs ok after 2 ms
+[Info] provider.queryUpperBoundSlot start
+[Info] provider.queryUpperBoundSlot ok after 2 ms

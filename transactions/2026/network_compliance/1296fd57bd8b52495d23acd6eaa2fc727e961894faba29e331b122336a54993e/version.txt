@@ -1,0 +1,1 @@
+amaru-treasury-tx 0.2.21.2

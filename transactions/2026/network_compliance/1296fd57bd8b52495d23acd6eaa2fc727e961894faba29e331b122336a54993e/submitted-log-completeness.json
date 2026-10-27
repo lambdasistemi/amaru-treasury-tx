@@ -1,0 +1,16 @@
+{
+  "checked_utc": "2026-10-27T12:09:26+00:00",
+  "scope": "Invoice #3546 operator session run directories /tmp/attx-cyber-october-20261026 and /tmp/attx-cyber-october-20261026-indexer",
+  "logs_checked": [
+    "/tmp/attx-cyber-october-20261026-indexer/submit.log"
+  ],
+  "transactions": [
+    {
+      "txid": "1296fd57bd8b52495d23acd6eaa2fc727e961894faba29e331b122336a54993e",
+      "submit_log": "/tmp/attx-cyber-october-20261026-indexer/submit.log",
+      "archive": "transactions/2026/network_compliance/1296fd57bd8b52495d23acd6eaa2fc727e961894faba29e331b122336a54993e"
+    }
+  ],
+  "missing_archives": [],
+  "missing_count": 0
+}
